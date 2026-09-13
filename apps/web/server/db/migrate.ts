@@ -5,7 +5,7 @@ import { Config, Effect, Layer, Redacted } from "effect";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { Client } from "pg";
 import { runWebMigrations } from "./effect-migrator.js";
-import { createPool } from "./index.js";
+import { POOL_LIMITS } from "./index.js";
 
 const MIGRATION_LOCK = {
   NAMESPACE: 1_280_654_853,
@@ -17,7 +17,7 @@ type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
 function lockFailure(cause: unknown): Migrator.MigrationError {
   return new Migrator.MigrationError({
     cause,
-    reason: "locked",
+    kind: "Locked",
     message: "Could not hold the migration advisory lock",
   });
 }
@@ -65,13 +65,9 @@ export function withMigrationLock<A, E, R>(
 const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
 const migrateConfiguredDatabase = Effect.gen(function* () {
-  const url = Redacted.value(yield* migrationConnectionString);
-  const client = PgClient.layerFromPool({
-    acquire: Effect.acquireRelease(
-      Effect.sync(() => createPool(url)),
-      (pool) => Effect.promise(() => pool.end()),
-    ),
-  });
+  const redacted = yield* migrationConnectionString;
+  const url = Redacted.value(redacted);
+  const client = PgClient.layer({ url: redacted, maxConnections: POOL_LIMITS.max });
   yield* withMigrationLock(new Client({ connectionString: url }), runWebMigrations()).pipe(
     Effect.provide(Layer.mergeAll(client, NodeServices.layer)),
   );

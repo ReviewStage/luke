@@ -36,10 +36,10 @@ function sentHeaders(headers: HttpClientRequest.HttpClientRequest["headers"]): H
  * platform's fetch client) and a body the response streams rather than
  * buffers.
  *
- * A responder that rejects or throws reaches the caller as a `RequestError`
- * with `reason: "Transport"`, which is what the platform's own fetch client
- * raises for the same failure, so a test over a retrying caller reads one
- * shape.
+ * A responder that rejects or throws reaches the caller as an
+ * `HttpClientError` whose reason is a `TransportError`, which is what the
+ * platform's own fetch client raises for the same failure, so a test over a
+ * retrying caller reads one shape.
  */
 export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
   return HttpClient.make((request, url, signal) => {
@@ -55,7 +55,9 @@ export function fakeHttpClient(respond: FakeResponder): HttpClient.HttpClient {
               signal,
             }),
           catch: (cause) =>
-            new HttpClientError.RequestError({ request, reason: "Transport", cause }),
+            new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({ request, cause }),
+            }),
         }),
         (response) => HttpClientResponse.fromWeb(request, response),
       );

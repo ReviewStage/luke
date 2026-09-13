@@ -25,7 +25,7 @@ export interface JsonStateFileEffectOptions<A, I> {
   /** The file's name within the state root, e.g. `onboarding.json`. */
   readonly fileName: string;
   /** The record's shape, decoding an untrusted JSON value and encoding what persists. */
-  readonly schema: Schema.Schema<A, I>;
+  readonly schema: Schema.Codec<A, I>;
 }
 
 export interface JsonStateFileEffect<A> {
@@ -43,7 +43,7 @@ export interface JsonStateFileEffect<A> {
 export function jsonStateFileEffect<A extends object, I>(
   options: JsonStateFileEffectOptions<A, I>,
 ): JsonStateFileEffect<A> {
-  const decode = Schema.decodeUnknownEither(options.schema);
+  const decode = Schema.decodeUnknownResult(options.schema);
   const encode = Schema.encodeSync(options.schema);
   const filePath = Effect.map(StateRoot, (stateRoot) => path.join(stateRoot, options.fileName));
 

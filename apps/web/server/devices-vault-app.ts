@@ -88,7 +88,7 @@ function bearerUserId(
 
 /** Decodes a wire body through its Effect declaration, refusing anything it does not read. */
 function decodeBody<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   payload: UnparsedWireValue,
 ): Effect.Effect<Value, HostedRefusal> {
   return Result.match(readEither(schema)(payload), {

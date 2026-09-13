@@ -31,8 +31,8 @@ const ADMIN_REFUSAL_STATUS = {
 type AdminRefusalSlug = keyof typeof ADMIN_REFUSAL_STATUS;
 
 function refusalSchema<Slug extends AdminRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).annotations(
-    HttpApiSchema.annotations({ status: ADMIN_REFUSAL_STATUS[slug] }),
+  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
+    HttpApiSchema.status(ADMIN_REFUSAL_STATUS[slug]),
   );
 }
 

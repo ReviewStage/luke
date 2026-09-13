@@ -9,12 +9,12 @@ const SESSION_STATE = {
 
 const SessionRow = Schema.Struct({
   id: Schema.String,
-  state: Schema.Literal(SESSION_STATE.WORKING, SESSION_STATE.WAITING),
+  state: Schema.Literals([SESSION_STATE.WORKING, SESSION_STATE.WAITING]),
   turns: Schema.Int,
-  branch: Schema.optionalWith(Schema.String, { exact: true }),
+  branch: Schema.optionalKey(Schema.String),
 });
 
-const readSessionRow = Schema.decodeUnknownEither(SessionRow);
+const readSessionRow = Schema.decodeUnknownResult(SessionRow);
 
 test("Schema.Struct decodes a well-formed record to the declared shape", () => {
   const decoded = readSessionRow({ id: "session-1", state: "working", turns: 3 });
@@ -91,7 +91,7 @@ test("Effect.gen carries a typed failure to the caller as an Either", async () =
     });
 
   const [accepted, refused] = await Effect.runPromise(
-    Effect.all([Effect.either(refuse("session-1")), Effect.either(refuse(""))]),
+    Effect.all([Effect.result(refuse("session-1")), Effect.result(refuse(""))]),
   );
 
   assert.deepEqual(accepted, Result.succeed("session-1"));

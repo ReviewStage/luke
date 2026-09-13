@@ -82,7 +82,7 @@ export const VOICE_SOURCE = {
 
 export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
 
-export const VoiceSourceSchema = Schema.Literal(...Object.values(VOICE_SOURCE));
+export const VoiceSourceSchema = Schema.Literals(Object.values(VOICE_SOURCE));
 
 const readsVoiceSource = Schema.is(VoiceSourceSchema);
 

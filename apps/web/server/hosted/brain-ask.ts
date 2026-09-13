@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, type ParseResult, Result } from "effect";
+import { Effect, Schema as EffectSchema, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -64,7 +64,7 @@ export type { AskRecord, AskRow } from "./store/asks.js";
  */
 
 /** What a handler or a read here answers: an effect over the ambient client. */
-type AskEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type AskEffect<A> = Effect.Effect<A, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient>;
 
 /** An ask carries a bounded question, an origin, and two ids; a body past this is not one. */
 const MAXIMUM_ASK_BODY_BYTES = 64 * 1024;
@@ -86,9 +86,9 @@ const TURN_ID_QUERY = "id";
 /** How often a held turn read looks again; eve's step boundaries land at a few hundred milliseconds apart. */
 const TURN_WAIT_POLL_MS = 500;
 
-const waitSchema = EffectSchema.Int.pipe(
-  EffectSchema.greaterThanOrEqualTo(0),
-  EffectSchema.lessThanOrEqualTo(ASK_BOUNDS.MAX_WAIT_MS),
+const waitSchema = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(0),
+  EffectSchema.isLessThanOrEqualTo(ASK_BOUNDS.MAX_WAIT_MS),
 );
 
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([

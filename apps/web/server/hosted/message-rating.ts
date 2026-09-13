@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type ParseResult, Result } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -44,12 +44,12 @@ export interface MessageRatingOptions {
     userId: string,
     messageId: string,
     rating: HostedMessageRatingRequest,
-  ) => Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+  ) => Effect.Effect<RatingWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 }
 
 export function handleMessageRating(
   options: MessageRatingOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, rate } = options;
   return Effect.gen(function* () {
     if (request.method !== "PUT") {

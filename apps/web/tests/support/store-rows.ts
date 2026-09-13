@@ -4,7 +4,7 @@ import { Effect, Option, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
-import { EpochMillisColumnSchema } from "../../server/hosted/store/database";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**
@@ -18,6 +18,9 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
  */
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+/** A raw row's `timestamptz` column as the instant it holds, whichever of the two readings the dialect gave it. */
+export const instantColumn = Schema.decodeUnknownSync(InstantColumnSchema);
 
 export interface ConversationRow {
   readonly userId: string;
@@ -182,39 +185,37 @@ export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise
 /** A turn row, decoded to the same camelCase shape the store's own writer builds it under. */
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  userId: Schema.String,
+  conversationId: Schema.String,
   origin: Schema.String,
   status: Schema.String,
-  eveTurnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("eve_turn_id"),
-  ),
+  eveTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
-  reasoningEffort: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("reasoning_effort"),
-  ),
-  promptHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("prompt_hash"),
-  ),
-  toolSetHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("tool_set_hash"),
-  ),
-  responseIds: Schema.propertySignature(Schema.NullOr(Schema.Array(Schema.String))).pipe(
-    Schema.fromKey("response_ids"),
-  ),
+  reasoningEffort: Schema.NullOr(Schema.String),
+  promptHash: Schema.NullOr(Schema.String),
+  toolSetHash: Schema.NullOr(Schema.String),
+  responseIds: Schema.NullOr(Schema.Array(Schema.String)),
   usage: Schema.NullOr(Schema.Unknown),
-  queuedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("queued_at")),
-  startedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("started_at"),
-  ),
-  settledAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("settled_at"),
-  ),
+  queuedAt: InstantColumnSchema,
+  startedAt: Schema.NullOr(InstantColumnSchema),
+  settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("cancel_requested_at"),
-  ),
-});
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    eveTurnId: "eve_turn_id",
+    reasoningEffort: "reasoning_effort",
+    promptHash: "prompt_hash",
+    toolSetHash: "tool_set_hash",
+    responseIds: "response_ids",
+    queuedAt: "queued_at",
+    startedAt: "started_at",
+    settledAt: "settled_at",
+    cancelRequestedAt: "cancel_requested_at",
+  }),
+);
 export type TurnRow = Schema.Schema.Type<typeof TurnRowSchema>;
 const decodeTurnRow = Schema.decodeUnknownSync(TurnRowSchema);
 
@@ -243,27 +244,34 @@ export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnR
 
 /** Every part this build stores carries at least a `type`, the same shape `writer.ts`'s own column schema checks. */
 const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
-const StoredPartsColumnSchema: Schema.Schema<StoredUIMessage["parts"]> = Schema.declare(
+const StoredPartsColumnSchema: Schema.Codec<StoredUIMessage["parts"]> = Schema.declare(
   (input): input is StoredUIMessage["parts"] => readsPartsShape(input),
 );
 
 /** A message row, decoded to the same camelCase shape the store's own writer builds it under. */
 const MessageRowFullSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  userId: Schema.String,
+  conversationId: Schema.String,
   seq: EpochMillisColumnSchema,
-  turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
-  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
+  turnId: Schema.NullOr(Schema.String),
+  clientId: Schema.String,
   role: MessageRoleSchema,
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(Schema.Unknown),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("finished_at"),
-  ),
+  createdAt: InstantColumnSchema,
+  finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
-});
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    turnId: "turn_id",
+    clientId: "client_id",
+    createdAt: "created_at",
+    finishedAt: "finished_at",
+  }),
+);
 export type MessageRowFull = Schema.Schema.Type<typeof MessageRowFullSchema>;
 const decodeMessageRow = Schema.decodeUnknownSync(MessageRowFullSchema);
 
@@ -411,23 +419,25 @@ export function readDevicesByUser(run: HostedStoreTestRun, userId: string) {
 /** A device row, decoded to the same camelCase shape the store's own device seams build it under. */
 export const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  installationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("installation_id")),
+  userId: Schema.String,
+  installationId: Schema.String,
   platform: Schema.String,
-  lastSeenAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("last_seen_at")),
-  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("active_until"),
-  ),
-  quietUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("quiet_until"),
-  ),
-  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_token"),
-  ),
-  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_environment"),
-  ),
-});
+  lastSeenAt: InstantColumnSchema,
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  quietUntil: Schema.NullOr(InstantColumnSchema),
+  pushToken: Schema.NullOr(Schema.String),
+  pushEnvironment: Schema.NullOr(Schema.String),
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    installationId: "installation_id",
+    lastSeenAt: "last_seen_at",
+    activeUntil: "active_until",
+    quietUntil: "quiet_until",
+    pushToken: "push_token",
+    pushEnvironment: "push_environment",
+  }),
+);
 export type DeviceRow = Schema.Schema.Type<typeof DeviceRowSchema>;
 const decodeDeviceRow = Schema.decodeUnknownSync(DeviceRowSchema);
 
@@ -529,21 +539,25 @@ export function insertVoiceSession(
 
 const VoiceSessionRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
-  liveSessionId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("live_session_id")),
-  delegationMode: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("delegation_mode")),
-  startedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("started_at")),
-  closedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("closed_at"),
-  ),
-  closeReason: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("close_reason"),
-  ),
+  userId: Schema.String,
+  deviceId: Schema.NullOr(Schema.String),
+  liveSessionId: Schema.String,
+  delegationMode: Schema.String,
+  startedAt: InstantColumnSchema,
+  closedAt: Schema.NullOr(InstantColumnSchema),
+  closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
-});
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    deviceId: "device_id",
+    liveSessionId: "live_session_id",
+    delegationMode: "delegation_mode",
+    startedAt: "started_at",
+    closedAt: "closed_at",
+    closeReason: "close_reason",
+  }),
+);
 export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
@@ -776,18 +790,20 @@ export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: strin
  * The driver's own refusal code (Postgres's `SQLSTATE`, e.g. `23505` for a
  * unique violation) off a rejected `database.run(...)` promise: a promise door
  * rejects with the squashed `Cause`, which is the `SqlError` itself, nothing
- * wrapping it, and that error carries the driver's error as its own `cause`,
- * the way Drizzle's wrapped error once did.
+ * wrapping it. v4's `SqlError` states what went wrong as a structured `reason`
+ * of its own and aliases its `cause` to that reason, so the driver's own error
+ * — the one carrying the code — is a level further down than it was when the
+ * error wrapped it directly.
  */
 const DriverErrorSchema = Schema.Struct({
-  cause: Schema.Struct({ code: Schema.String }),
+  cause: Schema.Struct({ cause: Schema.Struct({ code: Schema.String }) }),
 });
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Schema.
 function sqlErrorCode(error: unknown): string | undefined {
   return Option.map(
     Schema.decodeUnknownOption(DriverErrorSchema)(error),
-    (decoded) => decoded.cause.code,
+    (decoded) => decoded.cause.cause.code,
   ).pipe(Option.getOrUndefined);
 }
 

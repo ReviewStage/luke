@@ -37,6 +37,7 @@ import {
   liveSessionConfig,
 } from "@sidecar/live";
 import {
+  EXCESS_KEYS,
   HTTP_METHOD,
   HTTP_STATUS,
   positiveInteger,
@@ -356,7 +357,11 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
       const created =
         payload === undefined
           ? undefined
-          : Result.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
+          : Result.getOrUndefined(
+              readEither(liveCreateAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                unparsedWire(payload),
+              ),
+            );
       if (!created) {
         this.#outcome.record(
           LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,

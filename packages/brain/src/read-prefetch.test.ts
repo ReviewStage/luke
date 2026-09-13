@@ -120,9 +120,9 @@ function anticipation(partialAsk: string, id = "1"): BrainAnticipation {
   return { id, partialAsk, recentTurns: `Developer: ${partialAsk}` };
 }
 
-/** A record of any fields, as a fake tool's declared input. */
-const ANY_RECORD: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema.make(
-  EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
+/** A record naming no field, as a fake tool's declared input; what a call carries is read nowhere here. */
+const ANY_RECORD: EffectSchema.Codec<unknown, UnparsedWireValue> = EffectSchema.make(
+  EffectSchema.Struct({}).ast,
 );
 
 /** A notebook whose search answers, standing in for an index that holds something. */

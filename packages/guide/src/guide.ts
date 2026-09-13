@@ -27,7 +27,7 @@ export const APP_SETTING_KIND = {
 
 type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
 
-export const AppSettingKindSchema = Schema.Literal(...Object.values(APP_SETTING_KIND));
+export const AppSettingKindSchema = Schema.Literals(Object.values(APP_SETTING_KIND));
 
 const readsAppSettingKind = Schema.is(AppSettingKindSchema);
 
@@ -105,7 +105,7 @@ export const APP_UPDATE_ACTION = {
 
 export type AppUpdateAction = (typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE_ACTION];
 
-export const AppUpdateActionSchema = Schema.Literal(...Object.values(APP_UPDATE_ACTION));
+export const AppUpdateActionSchema = Schema.Literals(Object.values(APP_UPDATE_ACTION));
 
 const readsAppUpdateAction = Schema.is(AppUpdateActionSchema);
 
@@ -124,12 +124,12 @@ export const APP_UPDATE_WAIT = {
 
 export type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
 
-export const AppUpdateWaitSchema = Schema.Literal(...Object.values(APP_UPDATE_WAIT));
+export const AppUpdateWaitSchema = Schema.Literals(Object.values(APP_UPDATE_WAIT));
 
 /** What the Updates row's button is right now: one action, or one wait. */
 export type AppUpdateButton = AppUpdateAction | AppUpdateWait;
 
-export const AppUpdateButtonSchema = Schema.Union(AppUpdateActionSchema, AppUpdateWaitSchema);
+export const AppUpdateButtonSchema = Schema.Union([AppUpdateActionSchema, AppUpdateWaitSchema]);
 
 const readsAppUpdateButton = Schema.is(AppUpdateButtonSchema);
 
@@ -224,7 +224,7 @@ export const APP_PANEL_TAB = {
 
 export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
 
-export const AppPanelTabSchema = Schema.Literal(...Object.values(APP_PANEL_TAB));
+export const AppPanelTabSchema = Schema.Literals(Object.values(APP_PANEL_TAB));
 
 const readsAppPanelTab = Schema.is(AppPanelTabSchema);
 
@@ -249,7 +249,7 @@ export const FEEDBACK_COMPOSER_KIND = {
 export type FeedbackComposerKind =
   (typeof FEEDBACK_COMPOSER_KIND)[keyof typeof FEEDBACK_COMPOSER_KIND];
 
-export const FeedbackComposerKindSchema = Schema.Literal(...Object.values(FEEDBACK_COMPOSER_KIND));
+export const FeedbackComposerKindSchema = Schema.Literals(Object.values(FEEDBACK_COMPOSER_KIND));
 
 const readsFeedbackComposerKind = Schema.is(FeedbackComposerKindSchema);
 
@@ -271,7 +271,7 @@ export const SESSION_LIST_SORT = {
 
 export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LIST_SORT];
 
-export const SessionListSortSchema = Schema.Literal(...Object.values(SESSION_LIST_SORT));
+export const SessionListSortSchema = Schema.Literals(Object.values(SESSION_LIST_SORT));
 
 const readsSessionListSort = Schema.is(SessionListSortSchema);
 

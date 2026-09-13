@@ -7,6 +7,7 @@ import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { z } from "zod";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertDevice, readDevicesByUser } from "./support/store-rows";
 
@@ -140,9 +141,9 @@ test("the migration keeps every recorded instant, whatever zone the migrating se
 
 const DeviceInstantsRowSchema = Schema.Struct({
   id: Schema.String,
-  last_seen_at: Schema.DateFromSelf,
-  active_until: Schema.NullOr(Schema.DateFromSelf),
-  quiet_until: Schema.NullOr(Schema.DateFromSelf),
+  last_seen_at: InstantColumnSchema,
+  active_until: Schema.NullOr(InstantColumnSchema),
+  quiet_until: Schema.NullOr(InstantColumnSchema),
 });
 
 test("a device's instants round-trip through the schema as points on the timeline, and a hold or an eligibility is compared against now by the instant under any session zone", async () => {

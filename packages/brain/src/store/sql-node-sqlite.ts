@@ -5,11 +5,11 @@ import {
   type StatementResultingChanges,
   type StatementSync,
 } from "node:sqlite";
-import { Cache, Context, Duration, Effect, Layer, Schema, Scope, Stream } from "effect";
+import { Cache, Context, Duration, Effect, Layer, Schema, Scope, Semaphore, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as Client from "effect/unstable/sql/SqlClient";
-import type { Connection } from "effect/unstable/sql/SqlConnection";
-import { SqlError } from "effect/unstable/sql/SqlError";
+import type { Acquirer, Connection } from "effect/unstable/sql/SqlConnection";
+import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
 import * as Statement from "effect/unstable/sql/Statement";
 
 /**
@@ -44,15 +44,15 @@ const INCREMENTAL_AUTO_VACUUM = 2;
 const PREPARED_STATEMENT_CACHE_CAPACITY = 200;
 const PREPARED_STATEMENT_CACHE_TTL = Duration.minutes(10);
 
-const SqliteValue = Schema.Union(
+const SqliteValue = Schema.Union([
   Schema.Null,
   Schema.Number,
-  Schema.BigIntFromSelf,
+  Schema.BigInt,
   Schema.String,
-  Schema.Uint8ArrayFromSelf,
-);
-const decodeParameters = Schema.decodeUnknown(Schema.Array(SqliteValue));
-const decodeValueRows = Schema.decodeUnknown(Schema.Array(Schema.Array(SqliteValue)));
+  Schema.Uint8Array,
+]);
+const decodeParameters = Schema.decodeUnknownEffect(Schema.Array(SqliteValue));
+const decodeValueRows = Schema.decodeUnknownEffect(Schema.Array(Schema.Array(SqliteValue)));
 const readAutoVacuum = Schema.decodeUnknownSync(Schema.Struct({ auto_vacuum: Schema.Number }));
 
 interface NodeSqliteClientOptions {
@@ -89,14 +89,24 @@ function adoptIncrementalVacuum(db: DatabaseSync): void {
   db.exec("VACUUM");
 }
 
-const statementFailed = (cause: unknown) =>
-  new SqlError({ cause, message: "the statement failed" });
+/**
+ * A `node:sqlite` throw as the client's own failure. The driver's own code
+ * names the reason — a unique violation, a locked file, a file that will not
+ * open — so the library's SQLite classifier decides it and the message this
+ * file wrote travels inside it rather than standing in its place.
+ */
+const sqliteFailure = (message: string) => (cause: unknown) =>
+  new SqlError({ reason: classifySqliteError(cause, { message }) });
 
-const cannotBind = (cause: unknown) =>
-  new SqlError({
-    cause,
-    message: "a parameter cannot be bound: SQLite takes null, numbers, bigints, strings, and bytes",
-  });
+const statementFailed = sqliteFailure("the statement failed");
+
+const cannotBind = sqliteFailure(
+  "a parameter cannot be bound: SQLite takes null, numbers, bigints, strings, and bytes",
+);
+
+const cannotPrepare = sqliteFailure("the statement cannot be prepared");
+
+const cannotOpen = sqliteFailure("the database cannot be opened");
 
 const makeConnection = (db: DatabaseSync): Effect.Effect<Connection> =>
   Effect.map(
@@ -106,28 +116,32 @@ const makeConnection = (db: DatabaseSync): Effect.Effect<Connection> =>
       lookup: (sql: string) =>
         Effect.try({
           try: () => db.prepare(sql),
-          catch: (cause) => new SqlError({ cause, message: "the statement cannot be prepared" }),
+          catch: cannotPrepare,
         }),
     }),
     (prepared) => {
+      const unprepared = (sql: string) =>
+        Effect.try({
+          try: () => db.prepare(sql),
+          catch: cannotPrepare,
+        });
+
       const rowsOf = (statement: StatementSync, parameters: ReadonlyArray<SQLInputValue>) =>
-        Effect.withFiberRuntime<ReadonlyArray<Record<string, SQLOutputValue>>, SqlError>(
-          (fiber) => {
-            statement.setReadBigInts(Context.get(fiber.currentContext, Client.SafeIntegers));
-            try {
-              return Effect.succeed(statement.all(...parameters));
-            } catch (cause) {
-              return Effect.fail(statementFailed(cause));
-            }
-          },
-        );
+        Effect.withFiber<ReadonlyArray<Record<string, SQLOutputValue>>, SqlError>((fiber) => {
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers));
+          try {
+            return Effect.succeed(statement.all(...parameters));
+          } catch (cause) {
+            return Effect.fail(statementFailed(cause));
+          }
+        });
 
       const rawOf = (statement: StatementSync, parameters: ReadonlyArray<SQLInputValue>) =>
-        Effect.withFiberRuntime<
+        Effect.withFiber<
           ReadonlyArray<Record<string, SQLOutputValue>> | StatementResultingChanges,
           SqlError
         >((fiber) => {
-          statement.setReadBigInts(Context.get(fiber.currentContext, Client.SafeIntegers));
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers));
           try {
             return Effect.succeed(
               statement.columns().length > 0
@@ -140,22 +154,20 @@ const makeConnection = (db: DatabaseSync): Effect.Effect<Connection> =>
         });
 
       const valuesOf = (statement: StatementSync, parameters: ReadonlyArray<SQLInputValue>) =>
-        Effect.withFiberRuntime<ReadonlyArray<Record<string, SQLOutputValue>>, SqlError>(
-          (fiber) => {
-            statement.setReadBigInts(Context.get(fiber.currentContext, Client.SafeIntegers));
-            statement.setReturnArrays(true);
-            try {
-              return Effect.succeed(statement.all(...parameters));
-            } catch (cause) {
-              return Effect.fail(statementFailed(cause));
-            } finally {
-              statement.setReturnArrays(false);
-            }
-          },
-        ).pipe(Effect.flatMap((rows) => Effect.orDie(decodeValueRows(rows))));
+        Effect.withFiber<ReadonlyArray<Record<string, SQLOutputValue>>, SqlError>((fiber) => {
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers));
+          statement.setReturnArrays(true);
+          try {
+            return Effect.succeed(statement.all(...parameters));
+          } catch (cause) {
+            return Effect.fail(statementFailed(cause));
+          } finally {
+            statement.setReturnArrays(false);
+          }
+        }).pipe(Effect.flatMap((rows) => Effect.orDie(decodeValueRows(rows))));
 
       const bound = (sql: string, parameters: ReadonlyArray<SQLInputValue>) =>
-        Effect.flatMap(prepared.get(sql), (statement) => rowsOf(statement, parameters));
+        Effect.flatMap(Cache.get(prepared, sql), (statement) => rowsOf(statement, parameters));
 
       const connection: Connection = {
         execute: (sql, params, transformRows) => {
@@ -167,26 +179,22 @@ const makeConnection = (db: DatabaseSync): Effect.Effect<Connection> =>
         },
         executeRaw: (sql, params) =>
           Effect.flatMap(decodeParameters(params).pipe(Effect.mapError(cannotBind)), (p) =>
-            Effect.flatMap(prepared.get(sql), (statement) => rawOf(statement, p)),
+            Effect.flatMap(Cache.get(prepared, sql), (statement) => rawOf(statement, p)),
           ),
         executeStream: (sql, params, transformRows) =>
           Stream.fromIterableEffect(connection.execute(sql, params, transformRows)),
         executeValues: (sql, params) =>
           Effect.flatMap(decodeParameters(params).pipe(Effect.mapError(cannotBind)), (p) =>
-            Effect.flatMap(prepared.get(sql), (statement) => valuesOf(statement, p)),
+            Effect.flatMap(Cache.get(prepared, sql), (statement) => valuesOf(statement, p)),
+          ),
+        executeValuesUnprepared: (sql, params) =>
+          Effect.flatMap(decodeParameters(params).pipe(Effect.mapError(cannotBind)), (p) =>
+            Effect.flatMap(unprepared(sql), (statement) => valuesOf(statement, p)),
           ),
         executeUnprepared: (sql, params, transformRows) => {
           const rows = Effect.flatMap(
             decodeParameters(params).pipe(Effect.mapError(cannotBind)),
-            (p) =>
-              Effect.flatMap(
-                Effect.try({
-                  try: () => db.prepare(sql),
-                  catch: (cause) =>
-                    new SqlError({ cause, message: "the statement cannot be prepared" }),
-                }),
-                (statement) => rowsOf(statement, p),
-              ),
+            (p) => Effect.flatMap(unprepared(sql), (statement) => rowsOf(statement, p)),
           );
           return transformRows === undefined ? rows : Effect.map(rows, transformRows);
         },
@@ -217,8 +225,8 @@ const makeFromHandle = (
 ): Effect.Effect<Client.SqlClient, never, Reactivity.Reactivity> =>
   Effect.gen(function* () {
     const connection = yield* makeConnection(db);
-    const permit = yield* Effect.makeSemaphore(1);
-    const acquirer: Connection.Acquirer = Effect.uninterruptibleMask((restore) =>
+    const permit = yield* Semaphore.make(1);
+    const acquirer: Acquirer = Effect.uninterruptibleMask((restore) =>
       restore(permit.take(1)).pipe(
         Effect.andThen(Effect.addFinalizer(() => permit.release(1))),
         Effect.as(connection),
@@ -244,7 +252,7 @@ const makeFromHandle = (
     // handle knows whether a transaction stands, so the rollback runs only
     // when there is one to roll back.
     const withTransaction = Client.makeWithTransaction({
-      transactionTag: Client.TransactionConnection,
+      transactionService: client.transactionService,
       spanAttributes: SPAN_ATTRIBUTES,
       acquireConnection: Effect.flatMap(Scope.make(), (scope) =>
         Effect.map(
@@ -289,7 +297,7 @@ const make = (
     Effect.acquireRelease(
       Effect.try({
         try: () => openDatabaseHandle(options.filename),
-        catch: (cause) => new SqlError({ cause, message: "the database cannot be opened" }),
+        catch: cannotOpen,
       }),
       (db) => Effect.sync(() => db.close()),
     ),

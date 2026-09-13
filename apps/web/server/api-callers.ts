@@ -451,16 +451,27 @@ function moduleExports(source: string, file: string): readonly ModuleExport[] {
   return exports;
 }
 
-/** An exported function is a builder; what it answers is read as a string at the call, since the module is untyped here. */
-const PathBuilder = Schema.declare(Predicate.isFunction);
-const PathTable = Schema.Record({ key: Schema.String, value: Schema.String });
-const ExportedPaths = Schema.Union(Schema.String, PathTable, PathBuilder);
+/**
+ * An exported function is a builder; what it answers is read as a string at
+ * the call, since the module is untyped here. The check is still `typeof` on
+ * a function, but it is stated as the call this module makes of one: v4
+ * narrows through an intersection, and `string & Function` has no call
+ * signature for the probe to reach.
+ */
+// oxlint-disable-next-line anti-slop/no-unknown-returns -- the builder's answer is the untyped module's own; `decodeString` parses it at the call below.
+type PathBuilderCall = (...segments: readonly string[]) => unknown;
+// oxlint-disable-next-line anti-slop/no-unknown-parameters -- Schema.declare's predicate is this boundary's own decoder, called only from Schema.is below.
+const PathBuilder = Schema.declare((input: unknown): input is PathBuilderCall =>
+  Predicate.isFunction(input),
+);
+const PathTable = Schema.Record(Schema.String, Schema.String);
+const ExportedPaths = Schema.Union([Schema.String, PathTable, PathBuilder]);
 const isPathTable = Schema.is(PathTable);
 const isPathBuilder = Schema.is(PathBuilder);
 const decodeExportedPaths = Schema.decodeUnknownOption(ExportedPaths);
 const decodeString = Schema.decodeUnknownOption(Schema.String);
 const decodeModuleNamespace = Schema.decodeUnknownSync(
-  Schema.Record({ key: Schema.String, value: Schema.Unknown }),
+  Schema.Record(Schema.String, Schema.Unknown),
 );
 
 export interface EvaluatedModule {

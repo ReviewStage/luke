@@ -40,8 +40,8 @@ const get = (path: string, expected?: number): PlannedRequest => ({
 
 const answer = (status: number, headers: Readonly<Record<string, string>> = {}) => ({
   status,
-  vercelError: Option.fromNullable(headers["x-vercel-error"]),
-  location: Option.fromNullable(headers.location),
+  vercelError: Option.fromNullishOr(headers["x-vercel-error"]),
+  location: Option.fromNullishOr(headers.location),
 });
 
 test("whose answer it is decides the verdict: the platform's header, the SSO redirect, a 5xx, or the table", () => {

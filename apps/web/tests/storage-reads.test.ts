@@ -26,6 +26,7 @@ import {
   insertEvent as insertEventRow,
   insertMessage as insertMessageRow,
   insertTurn as insertTurnRow,
+  instantColumn,
   type MessageRow as MessageInsertRow,
   POSTGRES_ERROR,
   readConversationById,
@@ -390,9 +391,9 @@ test("a cleared conversation disappears from every read on the next call, and a 
   const [opened] = await readConversationById(database.run, outcome.opened);
   assert.equal(opened?.kind, CONVERSATION_KIND.MAIN);
   assert.equal(opened?.deleted_at, null);
-  assert.deepEqual(opened?.created_at, NOW);
+  assert.deepEqual(instantColumn(opened?.created_at), NOW);
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(stamped?.deleted_at, NOW);
+  assert.deepEqual(instantColumn(stamped?.deleted_at), NOW);
   assert.equal(await countConversations(main), 1);
   assert.equal((await readMessagesByConversation(database.run, main)).length, 3);
 });

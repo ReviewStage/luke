@@ -15,7 +15,7 @@ import {
   type WireValue,
   WireValueSchema,
 } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema, type Layer, ParseResult } from "effect";
+import { Effect, Schema as EffectSchema, type Layer, SchemaGetter, SchemaIssue } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 
@@ -46,7 +46,7 @@ function accountPreferencesAnswerFromWire(
 }
 
 /** A value admitted by its declaration alone, never re-validated once decoded. */
-const carried = <A>(): EffectSchema.Schema<A> =>
+const carried = <A>(): EffectSchema.Codec<A, A> =>
   EffectSchema.declare((_value): _value is A => true);
 
 /**
@@ -56,18 +56,20 @@ const carried = <A>(): EffectSchema.Schema<A> =>
  * through, in place of the caller's hand-written reader `AccountCallEffects.read`
  * used to take.
  */
-const accountPreferencesAnswerSchema: EffectSchema.Schema<AccountPreferencesAnswer, WireValue> =
-  EffectSchema.transformOrFail(WireValueSchema, carried<AccountPreferencesAnswer>(), {
-    strict: true,
-    decode: (value, _options, ast) => {
-      const answer = accountPreferencesAnswerFromWire(unparsedWire(value));
-      return answer === undefined
-        ? ParseResult.fail(new ParseResult.Type(ast, value))
-        : ParseResult.succeed(answer);
-    },
-    encode: (answer, _options, ast) =>
-      ParseResult.fail(new ParseResult.Forbidden(ast, answer, "encoding is not supported")),
-  });
+const accountPreferencesAnswerSchema: EffectSchema.Codec<AccountPreferencesAnswer, WireValue> =
+  WireValueSchema.pipe(
+    EffectSchema.decodeTo(carried<AccountPreferencesAnswer>(), {
+      decode: SchemaGetter.transformEffect((value: WireValue) => {
+        const answer = accountPreferencesAnswerFromWire(unparsedWire(value));
+        return answer === undefined
+          ? Effect.fail(new SchemaIssue.InvalidValue(undefined, value))
+          : Effect.succeed(answer);
+      }),
+      encode: SchemaGetter.transformEffect((answer: AccountPreferencesAnswer) =>
+        Effect.fail(new SchemaIssue.Forbidden({ message: "encoding is not supported" }, answer)),
+      ),
+    }),
+  );
 
 /**
  * Reads and writes the account preference snapshot. The local store decides

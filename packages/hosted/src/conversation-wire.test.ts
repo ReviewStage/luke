@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { test } from "vitest";
 import { hostedConversationAnswerSchema } from "./conversation-wire.js";
 
+/** An answer read: a key a newer service added is dropped rather than refused. */
 function parse(value: UnparsedWireValue) {
-  return Result.getOrUndefined(readEither(hostedConversationAnswerSchema)(value));
+  return Result.getOrUndefined(
+    readEither(hostedConversationAnswerSchema, { excess: EXCESS_KEYS.DROP })(value),
+  );
 }
 
 test("a conversation answer keeps only attributed, non-empty messages", () => {

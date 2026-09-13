@@ -75,7 +75,7 @@ const everyArchiveRow = SqlSchema.findAll({
     ),
 });
 
-const archiveRowAt = SqlSchema.findOne({
+const archiveRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ArchiveRow,
   execute: (archiveId) =>
@@ -87,9 +87,9 @@ const archiveRowAt = SqlSchema.findOne({
     ),
 });
 
-const archivePayloadAt = SqlSchema.findOne({
+const archivePayloadAt = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ payload: Schema.NullOr(Schema.Uint8ArrayFromSelf) }),
+  Result: Schema.Struct({ payload: Schema.NullOr(Schema.Uint8Array) }),
   execute: (archiveId) =>
     Effect.flatMap(
       Client.SqlClient,
@@ -128,7 +128,10 @@ export const archivePayloadEffect = (
   archiveId: string,
 ): Effect.Effect<Uint8Array | undefined, SqlError, Client.SqlClient> =>
   Effect.map(columnsDecoded(archivePayloadAt(archiveId)), (row) =>
-    Option.flatMapNullable(row, ({ payload }) => payload).pipe(Option.getOrUndefined),
+    Option.flatMap(
+      row,
+      Option.liftNullishOr(({ payload }) => payload),
+    ).pipe(Option.getOrUndefined),
   );
 
 export interface ArchiveInsertion {

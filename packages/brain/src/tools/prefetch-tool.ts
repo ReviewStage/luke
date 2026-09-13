@@ -1,8 +1,8 @@
 import { maximumMemoryQueryLength, NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import type { Session, SessionIdentity } from "@sidecar/session";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { toolArguments } from "./tool-module.js";
 
@@ -32,48 +32,40 @@ export const PREFETCH_READ_KIND = {
 
 type PrefetchReadKind = (typeof PREFETCH_READ_KIND)[keyof typeof PREFETCH_READ_KIND];
 
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
 /** A text trimmed, refused when left with nothing, and bounded to `max` characters. */
-function boundedText(description: string, max: number): EffectSchema.Schema<string, string> {
+function boundedText(description: string, max: number): EffectSchema.Codec<string, string> {
   return describeWire(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-      strict: true,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }).pipe(
-      EffectSchema.filter((value) => value.trim().length > 0, {
-        schemaId: EffectSchema.MinLengthSchemaId,
-        jsonSchema: { minLength: 1 },
-      }),
-      EffectSchema.maxLength(max),
+    EffectSchema.String.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.String.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(max)),
+        SchemaTransformation.trim(),
+      ),
     ),
     description,
   );
 }
 
-const TRANSCRIPT_READ = tolerantRecord({
+const TRANSCRIPT_READ = EffectSchema.Struct({
   kind: EffectSchema.Literal(PREFETCH_READ_KIND.TRANSCRIPT),
   session: describeWire(
-    EffectSchema.Number.pipe(
-      EffectSchema.finite(),
-      EffectSchema.int(),
-      EffectSchema.greaterThanOrEqualTo(1),
+    EffectSchema.Number.check(
+      EffectSchema.isFinite(),
+      EffectSchema.isInt(),
+      EffectSchema.isGreaterThanOrEqualTo(1),
     ),
     "The option number of the session in the list you were shown.",
   ),
 });
 
-const MEMORY_READ = tolerantRecord({
+const MEMORY_READ = EffectSchema.Struct({
   kind: EffectSchema.Literal(PREFETCH_READ_KIND.MEMORY),
   query: boundedText("What to search the notebook for.", maximumMemoryQueryLength),
 });
 
-const PLAN_READS_FIELDS = tolerantRecord({
+const PLAN_READS_FIELDS = EffectSchema.Struct({
   reads: describeWire(
-    EffectSchema.Array(EffectSchema.Union(TRANSCRIPT_READ, MEMORY_READ)).pipe(
-      EffectSchema.maxItems(PLAN_READS_MAXIMUM),
+    EffectSchema.Array(EffectSchema.Union([TRANSCRIPT_READ, MEMORY_READ])).check(
+      EffectSchema.isMaxLength(PLAN_READS_MAXIMUM),
     ),
     "The reads the answer will certainly need: at most one session transcript and one " +
       "notebook search. Empty when none is needed.",
@@ -81,17 +73,21 @@ const PLAN_READS_FIELDS = tolerantRecord({
 });
 
 /** Effect's `Schema` is invariant in its decoded type, so the concrete struct is erased to the module shape's type. */
-export const PLAN_READS_INPUT: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema.make(
+export const PLAN_READS_INPUT: EffectSchema.Codec<unknown, UnparsedWireValue> = EffectSchema.make(
   PLAN_READS_FIELDS.ast,
 );
 
-const readPlan = readEither(PLAN_READS_FIELDS);
+/**
+ * A key the plan does not name is dropped rather than refused: a model that
+ * writes one extra field beside the reads still gets the plan it asked for.
+ */
+const readPlan = readEither(PLAN_READS_FIELDS, { excess: EXCESS_KEYS.DROP });
 
 /** The planner's tool as a registry carries it: its name, its words, and the schema its fields are declared in. */
 export interface PlanReadsTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: EffectSchema.Schema<unknown, UnparsedWireValue>;
+  readonly inputSchema: EffectSchema.Codec<unknown, UnparsedWireValue>;
 }
 
 export const PLAN_READS_TOOL = {

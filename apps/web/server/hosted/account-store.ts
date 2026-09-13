@@ -1,9 +1,10 @@
 import { accountPreferencesFromStored } from "@sidecar/settings";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { isRealtimeVoiceSpeed } from "../core.js";
 import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-preferences.js";
+import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, and
@@ -13,7 +14,7 @@ import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-
  * edge and is the only file of the two that reaches the auth session.
  */
 
-type AccountSeamFailure = SqlError | ParseResult.ParseError;
+type AccountSeamFailure = SqlError | Schema.SchemaError;
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
 export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient>;
@@ -44,26 +45,26 @@ export function deleteAccount(
 
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
-  voiceSpeed: Schema.propertySignature(Schema.NullOr(Schema.Number)).pipe(
-    Schema.fromKey("voice_speed"),
-  ),
-  defaultWorkspaceProvider: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("default_workspace_provider"),
-  ),
-  updatedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("updated_at")),
-});
+  voiceSpeed: Schema.NullOr(Schema.Number),
+  defaultWorkspaceProvider: Schema.NullOr(Schema.String),
+  updatedAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    voiceSpeed: "voice_speed",
+    defaultWorkspaceProvider: "default_workspace_provider",
+    updatedAt: "updated_at",
+  }),
+);
 
 const WorkspacePreferenceRowSchema = Schema.Struct({
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
-  defaultProjectId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("default_project_id"),
-  ),
+  providerId: Schema.String,
+  defaultProjectId: Schema.NullOr(Schema.String),
   agent: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Schema.String),
-});
+}).pipe(Schema.encodeKeys({ providerId: "provider_id", defaultProjectId: "default_project_id" }));
 
-const findPreference = SqlSchema.findOne({
+const findPreference = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PreferenceRowSchema,
   execute: (userId) =>
@@ -172,7 +173,7 @@ const PreferenceWriteSchema = Schema.Struct({
   // no longer knows, and the desktop already reads an unknown one as unset.
   // Narrowing this column would refuse that phone's every preference write.
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
-  updatedAt: Schema.DateFromSelf,
+  updatedAt: Schema.Date,
 });
 
 const upsertPreference = SqlSchema.void({
@@ -211,7 +212,7 @@ const WorkspacePreferenceWriteSchema = Schema.Struct({
   agent: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Schema.String),
-  updatedAt: Schema.DateFromSelf,
+  updatedAt: Schema.Date,
 });
 
 const insertWorkspacePreference = SqlSchema.void({

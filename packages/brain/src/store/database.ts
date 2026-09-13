@@ -1,7 +1,7 @@
 import type { DatabaseSync, StatementSync } from "node:sqlite";
 import { Cause, type Context, Effect, Exit, Layer, Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql/SqlClient";
-import { SqlError } from "effect/unstable/sql/SqlError";
+import { classifySqliteError, SqlError } from "effect/unstable/sql/SqlError";
 import { migrateStoreSchema, type StoreSchemaRefused } from "./migration.js";
 import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
 
@@ -72,7 +72,10 @@ export class StoreDatabase {
       Effect.gen(function* () {
         const db = yield* Effect.try({
           try: () => openDatabaseHandle(location),
-          catch: (cause) => new SqlError({ cause, message: "the database cannot be opened" }),
+          catch: (cause) =>
+            new SqlError({
+              reason: classifySqliteError(cause, { message: "the database cannot be opened" }),
+            }),
         });
         const scope = yield* Scope.make();
         const database = yield* Effect.gen(function* () {

@@ -92,7 +92,7 @@ function onlyMessage(messages: ReadonlyArray<unknown>) {
 
 /** A decoded request's headers, as the Rpc runtime types them, read back off the message the parser answered. */
 const carriesHeaders = Schema.is(
-  Schema.Struct({ headers: Schema.Array(Schema.Tuple(Schema.String, Schema.String)) }),
+  Schema.Struct({ headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])) }),
 );
 
 /** The golden's response with its error message redacted the way the golden itself was recorded. */
@@ -124,11 +124,11 @@ it.effect(
       const codes: readonly GatewayErrorCode[] = Object.values(GATEWAY_ERROR);
       assert.equal(tags.size, codes.length);
       for (const code of codes) {
-        const refusal = yield* Schema.decode(GatewayRefusalSchema)({ code, message: "said" });
+        const refusal = yield* Schema.decodeEffect(GatewayRefusalSchema)({ code, message: "said" });
         assert.equal(refusal.code, code);
         assert.equal(refusal.message, "said");
         assert.ok(tags.has(refusal._tag));
-        const encoded = yield* Schema.encode(GatewayRefusalSchema)(refusal);
+        const encoded = yield* Schema.encodeEffect(GatewayRefusalSchema)(refusal);
         assert.deepEqual(encoded, { code, message: "said" });
         assert.deepEqual(Object.keys(encoded), ["code", "message"]);
       }
@@ -224,12 +224,8 @@ it.effect(
       assert.equal(gatewayRequestVersion([]), GATEWAY_PROTOCOL_VERSION);
 
       const exit = Exit.fail(refusal.value);
-      const encodedExit = yield* Schema.encode(
-        Schema.Exit({
-          success: GatewayResultSchema,
-          failure: GatewayRefusalSchema,
-          defect: Schema.Defect,
-        }),
+      const encodedExit = yield* Schema.encodeEffect(
+        Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect()),
       )(exit);
       const written = parser.encode({
         _tag: "Exit",
@@ -272,13 +268,9 @@ test("a defect or an interruption answers as an internal error, and a message th
     _tag: "Exit",
     requestId: "request-1",
     exit: Exit.die(new Error("the handler fell over")).pipe((exit) =>
-      Schema.encodeSync(
-        Schema.Exit({
-          success: GatewayResultSchema,
-          failure: GatewayRefusalSchema,
-          defect: Schema.Defect,
-        }),
-      )(exit),
+      Schema.encodeSync(Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect()))(
+        exit,
+      ),
     ),
   });
   assert.deepEqual(redacted(died), {

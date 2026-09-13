@@ -1,8 +1,9 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
 import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
+import { InstantColumnSchema } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -95,7 +96,7 @@ export interface AskDeliveryBinding {
   stoppedOn(target: ConversationTarget, turnId: string): AskEffect<readonly AskRow[]>;
 }
 
-type AskFailure = SqlError | ParseResult.ParseError;
+type AskFailure = SqlError | Schema.SchemaError;
 
 /** What every method of the record answers: an effect over the ambient client. */
 type AskEffect<A> = Effect.Effect<A, AskFailure, SqlClient.SqlClient>;
@@ -105,22 +106,27 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 const AskRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
-  origin: Schema.Literal(...Object.values(ASK_ORIGIN)),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  sessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("session_id"),
-  ),
-  deliveryId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("delivery_id"),
-  ),
-  turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
-  cancelRequestedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("cancel_requested_at"),
-  ),
-});
+  userId: Schema.String,
+  conversationId: Schema.String,
+  clientId: Schema.String,
+  origin: Schema.Literals(Object.values(ASK_ORIGIN)),
+  createdAt: InstantColumnSchema,
+  sessionId: Schema.NullOr(Schema.String),
+  deliveryId: Schema.NullOr(Schema.String),
+  turnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    clientId: "client_id",
+    createdAt: "created_at",
+    sessionId: "session_id",
+    deliveryId: "delivery_id",
+    turnId: "turn_id",
+    cancelRequestedAt: "cancel_requested_at",
+  }),
+);
 
 type AskRowRead = Schema.Schema.Type<typeof AskRowSchema>;
 
@@ -146,9 +152,9 @@ const AskWriteSchema = Schema.Struct({
   userId: Schema.String,
   conversationId: Schema.String,
   clientId: Schema.String,
-  origin: Schema.Literal(...Object.values(ASK_ORIGIN)),
+  origin: Schema.Literals(Object.values(ASK_ORIGIN)),
   question: Schema.String,
-  createdAt: Schema.DateFromSelf,
+  createdAt: Schema.Date,
 });
 
 /** The insert lands or finds the client id already standing in the conversation; either way the row is read back by that pair. */
@@ -166,7 +172,7 @@ const insertAsk = SqlSchema.void({
 
 const AskByClientSchema = Schema.Struct({ conversationId: Schema.String, clientId: Schema.String });
 
-const findAskByClient = SqlSchema.findOne({
+const findAskByClient = SqlSchema.findOneOption({
   Request: AskByClientSchema,
   Result: AskRowSchema,
   execute: (key) =>
@@ -182,7 +188,7 @@ const findAskByClient = SqlSchema.findOne({
 
 const AskByIdSchema = Schema.Struct({ userId: Schema.String, id: Schema.String });
 
-const findAskById = SqlSchema.findOne({
+const findAskById = SqlSchema.findOneOption({
   Request: AskByIdSchema,
   Result: AskRowSchema,
   execute: (key) =>
@@ -199,10 +205,10 @@ const findAskById = SqlSchema.findOne({
 const LatestSessionSchema = Schema.Struct({ userId: Schema.String, conversationId: Schema.String });
 
 const SessionRowSchema = Schema.Struct({
-  sessionId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("session_id")),
-});
+  sessionId: Schema.String,
+}).pipe(Schema.encodeKeys({ sessionId: "session_id" }));
 
-const findLatestSession = SqlSchema.findOne({
+const findLatestSession = SqlSchema.findOneOption({
   Request: LatestSessionSchema,
   Result: SessionRowSchema,
   execute: (key) =>
@@ -267,7 +273,7 @@ const markDispatched = SqlSchema.void({
     ),
 });
 
-const CancelSchema = Schema.Struct({ id: Schema.String, at: Schema.DateFromSelf });
+const CancelSchema = Schema.Struct({ id: Schema.String, at: Schema.Date });
 
 /** The first Stop stands; a second leaves the first instant in place. */
 const markCancelRequested = SqlSchema.void({
@@ -334,7 +340,7 @@ const ConversationLockSchema = Schema.Struct({
 });
 
 /** The conversation row under its own lock, the lock the writer and Clear take, so one dispatch at a time runs in a conversation. */
-const lockConversation = SqlSchema.findOne({
+const lockConversation = SqlSchema.findOneOption({
   Request: ConversationLockSchema,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (target) =>
@@ -348,7 +354,7 @@ const lockConversation = SqlSchema.findOne({
 });
 
 /** The ask's row, read inside the conversation's lock. */
-const readAsk = SqlSchema.findOne({
+const readAsk = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AskRowSchema,
   execute: (id) =>

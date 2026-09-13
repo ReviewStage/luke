@@ -1,4 +1,4 @@
-import { Effect, type ParseResult, Result } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -34,7 +34,7 @@ import type { HostedVaultRoute } from "./vault-route.js";
  */
 export type HostedActionEffect<Answer> = Effect.Effect<
   Answer,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 >;
 
@@ -234,7 +234,7 @@ function apiKeyOrAnswer(
   secret: string,
 ): Effect.Effect<
   { apiKey: string } | Response,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 > {
   return Effect.gen(function* () {

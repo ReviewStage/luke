@@ -1,22 +1,22 @@
 {
   "type": "object",
   "properties": {
-    "code": {
-      "type": "string",
-      "enum": [
-        "disabled-by-fixture"
-      ]
-    },
     "_tag": {
       "type": "string",
       "enum": [
         "DisabledByFixtureRefusal"
       ]
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "disabled-by-fixture"
+      ]
     }
   },
   "required": [
-    "code",
-    "_tag"
+    "_tag",
+    "code"
   ],
   "additionalProperties": false
 }

@@ -3,14 +3,16 @@ import { Effect, Layer, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
-import { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 const refused = () =>
   Effect.fail(
     new SqlError({
-      cause: new Error("this test's store is a memory fake"),
-      message: "No database is open in this test",
+      reason: new UnknownError({
+        cause: new Error("this test's store is a memory fake"),
+        message: "No database is open in this test",
+      }),
     }),
   );
 
@@ -19,6 +21,7 @@ const refusingConnection: SqlConnection.Connection = {
   executeRaw: refused,
   executeUnprepared: refused,
   executeValues: refused,
+  executeValuesUnprepared: refused,
   executeStream: () => Stream.fromEffect(refused()),
 };
 

@@ -2,7 +2,6 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { withoutTrailingSlash } from "@sidecar/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
-import type { ParseError } from "effect/ParseResult";
 import * as Headers from "effect/unstable/http/Headers";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
@@ -49,10 +48,10 @@ export const PROBE_DOOR = {
   OPTIONS_ALLOWLIST: "options-allowlist",
 } as const;
 export type ProbeDoor = (typeof PROBE_DOOR)[keyof typeof PROBE_DOOR];
-export const ProbeDoorSchema = Schema.Literal(
+export const ProbeDoorSchema = Schema.Literals([
   PROBE_DOOR.BYPASS_SECRET,
   PROBE_DOOR.OPTIONS_ALLOWLIST,
-);
+]);
 
 export const PROBE_METHOD = {
   GET: "GET",
@@ -145,17 +144,17 @@ export function planProbes(door: ProbeDoor, paths: ProbePaths): readonly Planned
 
 const VERCEL_CONFIG_FILE = "vercel.json";
 const VercelCrons = Schema.Struct({
-  crons: Schema.optionalWith(Schema.Array(Schema.Struct({ path: Schema.String })), {
-    default: () => [],
-  }),
+  crons: Schema.Array(Schema.Struct({ path: Schema.String })).pipe(
+    Schema.withDecodingDefaultType(Effect.succeed([])),
+  ),
 });
-const decodeVercelCrons = Schema.decodeUnknown(Schema.parseJson(VercelCrons));
+const decodeVercelCrons = Schema.decodeUnknownEffect(Schema.fromJsonString(VercelCrons));
 
 /** The caller paths of the checkout, read the way the callers check reads them, and the cron paths of its `vercel.json`. */
 export function readProbePaths(input: {
   readonly repoRoot: string;
   readonly web: string;
-}): Effect.Effect<ProbePaths, ParseError> {
+}): Effect.Effect<ProbePaths, Schema.SchemaError> {
   return Effect.gen(function* () {
     const report = yield* Effect.promise(() => checkApiCallers(input));
     const config = yield* decodeVercelCrons(

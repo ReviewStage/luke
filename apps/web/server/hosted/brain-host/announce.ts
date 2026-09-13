@@ -1,4 +1,4 @@
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -32,7 +32,7 @@ export function offerBriefing(
   seams: BriefingOfferSeams,
   target: ConversationTarget,
   turnId: string,
-): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const journal = yield* findMessageByClientId(target.userId, target.conversationId, turnId);
     if (!journal) return false;

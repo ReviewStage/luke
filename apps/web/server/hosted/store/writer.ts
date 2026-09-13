@@ -8,9 +8,10 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as Statement from "effect/unstable/sql/Statement";
 import {
   type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,
@@ -50,7 +51,7 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema, nullable } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
  * The store writer: the one path by which a `messages`, `turns`, or `events`
@@ -477,7 +478,7 @@ type Parts = StoredUIMessage["parts"];
 const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
 
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type WriteFailure = SqlError | ParseResult.ParseError;
+type WriteFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -493,7 +494,7 @@ function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
   return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
 }
 
-const readsJsonObject = Schema.is(Schema.Record({ key: Schema.String, value: Schema.Unknown }));
+const readsJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
 
@@ -511,11 +512,11 @@ const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.Stri
  * names `Schema.parseJson` over these and a read names them directly,
  * because a `jsonb` column answers a parsed value.
  */
-const StoredPartsColumnSchema: Schema.Schema<Parts> = Schema.declare((input): input is Parts =>
+const StoredPartsColumnSchema: Schema.Codec<Parts> = Schema.declare((input): input is Parts =>
   readsPartsShape(input),
 );
 
-const MessageMetadataColumnSchema: Schema.Schema<StoredMessageMetadata> = Schema.declare(
+const MessageMetadataColumnSchema: Schema.Codec<StoredMessageMetadata> = Schema.declare(
   (input): input is StoredMessageMetadata => readsJsonObject(input),
 );
 
@@ -527,15 +528,13 @@ const TurnUsageColumnSchema = Schema.Struct({
   reasoningTokens: Schema.Number,
 });
 
-export const ConversationEventKindSchema = Schema.Literal(
-  ...Object.values(CONVERSATION_EVENT_KIND),
-);
+export const ConversationEventKindSchema = Schema.Literals(Object.values(CONVERSATION_EVENT_KIND));
 
-const MessageRoleSchema = Schema.Literal(...Object.values(MESSAGE_ROLE));
+const MessageRoleSchema = Schema.Literals(Object.values(MESSAGE_ROLE));
 
-const TurnStatusSchema = Schema.Literal(...Object.values(TURN_STATUS));
+const TurnStatusSchema = Schema.Literals(Object.values(TURN_STATUS));
 
-const TurnOriginSchema = Schema.Literal(...Object.values(TURN_ORIGIN));
+const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
 
 const RowIdSchema = Schema.Struct({ id: Schema.String });
 
@@ -547,9 +546,10 @@ const ConversationTargetSchema = Schema.Struct({
 /**
  * The counter's value after an allocation moved it, which is one past the
  * position handed out. It is a 64-bit column like every instant here, so it
- * is read through the same schema they are: `pg` hands an `int8` back as a
- * string and PGlite as a number, and a sequence position is as far inside the
- * safe integer range as a millisecond is.
+ * is read through the same schema they are: `@effect/sql-pg` hands an `int8`
+ * back as a JS `bigint`, the `pg` driver before it as a string, PGlite as a
+ * number, and a sequence position is as far inside the safe integer range as
+ * a millisecond is.
  */
 const SequenceSchema = Schema.Struct({ next: EpochMillisColumnSchema });
 
@@ -558,10 +558,8 @@ const MessageRowSchema = Schema.Struct({
   id: Schema.String,
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(MessageMetadataColumnSchema),
-  finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("finished_at"),
-  ),
-});
+  finishedAt: Schema.NullOr(InstantColumnSchema),
+}).pipe(Schema.encodeKeys({ finishedAt: "finished_at" }));
 
 type MessageRow = Schema.Schema.Type<typeof MessageRowSchema>;
 
@@ -574,13 +572,13 @@ const MessageInsertSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   clientId: Schema.String,
   role: MessageRoleSchema,
-  parts: Schema.parseJson(StoredPartsColumnSchema),
-  metadata: Schema.NullOr(Schema.parseJson(MessageMetadataColumnSchema)),
-  createdAt: Schema.DateFromSelf,
-  finishedAt: Schema.NullOr(Schema.DateFromSelf),
+  parts: Schema.fromJsonString(StoredPartsColumnSchema),
+  metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+  createdAt: Schema.Date,
+  finishedAt: Schema.NullOr(Schema.Date),
 });
 
-const lockConversation = SqlSchema.findOne({
+const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: RowIdSchema,
   execute: (target) =>
@@ -596,8 +594,8 @@ const lockConversation = SqlSchema.findOne({
     ),
 });
 
-const allocateMessageSequence = SqlSchema.findOne({
-  Request: Schema.Struct({ conversationId: Schema.String, now: Schema.DateFromSelf }),
+const allocateMessageSequence = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, now: Schema.Date }),
   Result: SequenceSchema,
   execute: (request) =>
     statement(
@@ -614,7 +612,7 @@ const allocateMessageSequence = SqlSchema.findOne({
     ),
 });
 
-const allocateEventSequence = SqlSchema.findOne({
+const allocateEventSequence = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: SequenceSchema,
   execute: (conversationId) =>
@@ -631,7 +629,7 @@ const allocateEventSequence = SqlSchema.findOne({
     ),
 });
 
-const findTurn = SqlSchema.findOne({
+const findTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
   Result: TurnRowSchema,
   execute: (request) =>
@@ -644,7 +642,7 @@ const findTurn = SqlSchema.findOne({
     ),
 });
 
-const findMessageByClientId = SqlSchema.findOne({
+const findMessageByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: MessageRowSchema,
   execute: (request) =>
@@ -657,7 +655,7 @@ const findMessageByClientId = SqlSchema.findOne({
     ),
 });
 
-const insertMessageRow = SqlSchema.findOne({
+const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
   Result: RowIdSchema,
   execute: (row) =>
@@ -697,7 +695,7 @@ const updateMessageParts = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
   }),
   execute: (row) =>
     statement(
@@ -714,8 +712,8 @@ const finishMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    finishedAt: Schema.DateFromSelf,
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    finishedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -734,9 +732,9 @@ const completeMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    metadata: Schema.NullOr(Schema.parseJson(MessageMetadataColumnSchema)),
-    finishedAt: Schema.DateFromSelf,
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+    finishedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -758,7 +756,7 @@ const insertStartedTurn = SqlSchema.void({
     userId: Schema.String,
     conversationId: Schema.String,
     origin: TurnOriginSchema,
-    startedAt: Schema.DateFromSelf,
+    startedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -783,7 +781,7 @@ const insertQueuedTurn = SqlSchema.void({
     reasoningEffort: Schema.NullOr(Schema.String),
     promptHash: Schema.NullOr(Schema.String),
     toolSetHash: Schema.NullOr(Schema.String),
-    queuedAt: Schema.DateFromSelf,
+    queuedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -802,7 +800,7 @@ const insertQueuedTurn = SqlSchema.void({
 });
 
 const startTurn = SqlSchema.void({
-  Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.DateFromSelf }),
+  Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.Date }),
   execute: (row) =>
     statement(
       (sql) => sql`
@@ -813,13 +811,27 @@ const startTurn = SqlSchema.void({
     ),
 });
 
+/**
+ * A `text[]` column's value, as the two drivers will take it. A driver infers
+ * a parameter's Postgres type from the value it is handed, and an empty array
+ * offers no element to infer one from, so the empty case is written as the
+ * literal it is rather than bound. A turn that called nothing settles with no
+ * response ids, which is why this is the ordinary case and not an edge.
+ */
+function emptyTextArray(
+  sql: SqlClient.SqlClient,
+  values: readonly string[],
+): Statement.Fragment | readonly string[] {
+  return values.length === 0 ? sql.literal("'{}'::text[]") : values;
+}
+
 const settleTurn = SqlSchema.void({
   Request: Schema.Struct({
     turnId: Schema.String,
     status: TurnStatusSchema,
-    settledAt: Schema.DateFromSelf,
+    settledAt: Schema.Date,
     failure: Schema.NullOr(Schema.String),
-    usage: Schema.NullOr(Schema.parseJson(TurnUsageColumnSchema)),
+    usage: Schema.NullOr(Schema.fromJsonString(TurnUsageColumnSchema)),
     responseIds: Schema.Array(Schema.String),
   }),
   execute: (row) =>
@@ -830,7 +842,7 @@ const settleTurn = SqlSchema.void({
             settled_at = ${row.settledAt},
             failure = ${row.failure},
             usage = ${row.usage}::jsonb,
-            response_ids = ${row.responseIds}
+            response_ids = ${emptyTextArray(sql, row.responseIds)}
         where id = ${row.turnId}
       `,
     ),
@@ -841,7 +853,7 @@ const settleTurn = SqlSchema.void({
  * session's clock: the metadata's own `to_ms`, read out of the `jsonb`
  * column, over every ask of that session but the one being cut.
  */
-const findSpokenAskEnd = SqlSchema.findOne({
+const findSpokenAskEnd = SqlSchema.findOneOption({
   Request: Schema.Struct({
     conversationId: Schema.String,
     delegationId: Schema.String,
@@ -849,8 +861,8 @@ const findSpokenAskEnd = SqlSchema.findOne({
     voiceSessionId: Schema.String,
   }),
   Result: Schema.Struct({
-    toMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("to_ms")),
-  }),
+    toMs: Schema.Number,
+  }).pipe(Schema.encodeKeys({ toMs: "to_ms" })),
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -878,16 +890,21 @@ const SpokenLineRequestSchema = Schema.Struct({
 
 const SpokenLineRowSchema = Schema.Struct({
   id: Schema.String,
-  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
-  delegationId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("delegation_id"),
-  ),
-  fromMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("from_ms")),
-  toMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("to_ms")),
-});
+  clientId: Schema.String,
+  delegationId: Schema.NullOr(Schema.String),
+  fromMs: Schema.Number,
+  toMs: Schema.Number,
+}).pipe(
+  Schema.encodeKeys({
+    clientId: "client_id",
+    delegationId: "delegation_id",
+    fromMs: "from_ms",
+    toMs: "to_ms",
+  }),
+);
 
 /** The latest line whose end is at or before the instant: the line Luke's words could be answering. */
-const findLatestSpokenLineEndingBy = SqlSchema.findOne({
+const findLatestSpokenLineEndingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
@@ -907,7 +924,7 @@ const findLatestSpokenLineEndingBy = SqlSchema.findOne({
 });
 
 /** The latest line whose start is at or before the instant: the line a delegation at that offset is about, its end past the offset or not. */
-const findLatestSpokenLineStartingBy = SqlSchema.findOne({
+const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
@@ -932,12 +949,12 @@ const FIND_LATEST_SPOKEN_LINE = {
 } as const;
 
 /** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, its words and span the ask's cut, while no turn owns it. */
-const rekeySpokenLine = SqlSchema.findOne({
+const rekeySpokenLine = SqlSchema.findOneOption({
   Request: Schema.Struct({
     id: Schema.String,
     delegationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    metadata: Schema.parseJson(MessageMetadataColumnSchema),
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    metadata: Schema.fromJsonString(MessageMetadataColumnSchema),
   }),
   Result: RowIdSchema,
   execute: (row) =>
@@ -953,7 +970,7 @@ const rekeySpokenLine = SqlSchema.findOne({
     ),
 });
 
-const findMessageInConversation = SqlSchema.findOne({
+const findMessageInConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ messageId: Schema.String, conversationId: Schema.String }),
   Result: RowIdSchema,
   execute: (request) =>
@@ -982,7 +999,7 @@ const findEventKinds = SqlSchema.findAll({
     ),
 });
 
-const insertEvent = SqlSchema.findOne({
+const insertEvent = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
@@ -990,8 +1007,8 @@ const insertEvent = SqlSchema.findOne({
     messageId: Schema.String,
     kind: ConversationEventKindSchema,
     deviceId: Schema.NullOr(Schema.String),
-    payload: Schema.NullOr(Schema.parseJson(WireValueSchema)),
-    createdAt: Schema.DateFromSelf,
+    payload: Schema.NullOr(Schema.fromJsonString(WireValueSchema)),
+    createdAt: Schema.Date,
   }),
   Result: RowIdSchema,
   execute: (row) =>
@@ -1514,7 +1531,7 @@ function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEn
  * and is not the opener's to remove, and a row a message names is a record
  * whatever its status; both are left as they stand.
  */
-const findMessageNamingTurn = SqlSchema.findOne({
+const findMessageNamingTurn = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RowIdSchema,
   execute: (turnId) =>
@@ -1538,7 +1555,7 @@ const stampTurnCancel = SqlSchema.findAll({
   Request: Schema.Struct({
     turnId: Schema.String,
     conversationId: Schema.String,
-    at: Schema.DateFromSelf,
+    at: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
@@ -1795,17 +1812,17 @@ function adoptSpokenLine(
 function askTurnOf(key: {
   readonly conversationId: string;
   readonly clientId: string;
-}): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+}): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(findAskTurn(key), (found) =>
     Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
   );
 }
 
-const findAskTurn = SqlSchema.findOne({
+const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: Schema.Struct({
-    turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
-  }),
+    turnId: Schema.NullOr(Schema.String),
+  }).pipe(Schema.encodeKeys({ turnId: "turn_id" })),
   execute: (key) =>
     statement(
       (sql) => sql`

@@ -61,17 +61,15 @@ export function encodeObservedRoster(roster: ObservedRoster): string {
  * whether the value is admissible.
  */
 function admitted<Value>(
-  schema: EffectSchema.Schema<Value, UnparsedWireValue>,
+  schema: EffectSchema.Codec<Value, UnparsedWireValue>,
   value: UnparsedWireValue,
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /** A declaration handed the interface it decodes into, matching the assembled struct's shape. */
-function schemaAs<Value>(
-  schema: EffectSchema.Schema.Any,
-): EffectSchema.Schema<Value, UnparsedWireValue> {
-  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: EffectSchema.Top): EffectSchema.Codec<Value, UnparsedWireValue> {
+  return EffectSchema.make<EffectSchema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
 
 /**
@@ -80,23 +78,22 @@ function schemaAs<Value>(
  * nothing and refuses only what is not a string at all.
  */
 const storedText = EffectSchema.String;
-const optionalText = EffectSchema.optionalWith(storedText, { exact: true });
+const optionalText = EffectSchema.optionalKey(storedText);
 
-export const cloudProviderIdSchema: EffectSchema.Schema<CloudAgentProviderId, UnparsedWireValue> =
-  schemaAs(EffectSchema.Literal(...Object.values(CLOUD_AGENT_PROVIDER_ID)));
+export const cloudProviderIdSchema: EffectSchema.Codec<CloudAgentProviderId, UnparsedWireValue> =
+  schemaAs(EffectSchema.Literals(Object.values(CLOUD_AGENT_PROVIDER_ID)));
 
-export const sessionStatusSchema = EffectSchema.Literal(...Object.values(SESSION_STATUS));
+export const sessionStatusSchema = EffectSchema.Literals(Object.values(SESSION_STATUS));
 
-const advertisedActionSchema: EffectSchema.Schema<AdvertisedAction, UnparsedWireValue> = schemaAs(
-  EffectSchema.Union(
+const advertisedActionSchema: EffectSchema.Codec<AdvertisedAction, UnparsedWireValue> = schemaAs(
+  EffectSchema.Union([
     EffectSchema.Struct({ kind: EffectSchema.Literal(ACTION_KIND.MESSAGE) }),
     EffectSchema.Struct({
       kind: EffectSchema.Literal(ACTION_KIND.CONTROL),
       id: storedText,
       label: storedText,
-      controlKind: EffectSchema.optionalWith(
-        EffectSchema.Literal(...Object.values(SESSION_CONTROL_KIND)),
-        { exact: true },
+      controlKind: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(SESSION_CONTROL_KIND)),
       ),
       target: optionalText,
     }),
@@ -110,10 +107,10 @@ const advertisedActionSchema: EffectSchema.Schema<AdvertisedAction, UnparsedWire
       kind: EffectSchema.Literal(ACTION_KIND.RENAME_WORKSPACE),
       target: storedText,
     }),
-  ),
+  ]),
 );
 
-const observationSchema: EffectSchema.Schema<ProviderSessionObservation, UnparsedWireValue> =
+const observationSchema: EffectSchema.Codec<ProviderSessionObservation, UnparsedWireValue> =
   schemaAs(
     EffectSchema.Struct({
       providerSessionId: storedText,
@@ -121,33 +118,27 @@ const observationSchema: EffectSchema.Schema<ProviderSessionObservation, Unparse
       parentProviderSessionId: optionalText,
       title: storedText,
       status: sessionStatusSchema,
-      completionCause: EffectSchema.optionalWith(
-        EffectSchema.Literal(...Object.values(SESSION_COMPLETION_CAUSE)),
-        { exact: true },
+      completionCause: EffectSchema.optionalKey(
+        EffectSchema.Literals(Object.values(SESSION_COMPLETION_CAUSE)),
       ),
       lastActivityAt: EffectSchema.Number,
-      realtimeVoice: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
-      realtimeVoiceLive: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
-      standing: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
-      holdingForDeveloper: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
-      agent: EffectSchema.optionalWith(
+      realtimeVoice: EffectSchema.optionalKey(EffectSchema.Boolean),
+      realtimeVoiceLive: EffectSchema.optionalKey(EffectSchema.Boolean),
+      standing: EffectSchema.optionalKey(EffectSchema.Boolean),
+      holdingForDeveloper: EffectSchema.optionalKey(EffectSchema.Boolean),
+      agent: EffectSchema.optionalKey(
         EffectSchema.Struct({ id: storedText, displayName: storedText }),
-        { exact: true },
       ),
-      workspace: EffectSchema.optionalWith(
+      workspace: EffectSchema.optionalKey(
         EffectSchema.Struct({
           providerWorkspaceId: storedText,
           scopeId: optionalText,
           managerName: optionalText,
           name: optionalText,
         }),
-        { exact: true },
       ),
-      location: EffectSchema.optionalWith(
-        EffectSchema.Literal(...Object.values(SESSION_LOCATION)),
-        { exact: true },
-      ),
-      detail: EffectSchema.optionalWith(
+      location: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(SESSION_LOCATION))),
+      detail: EffectSchema.optionalKey(
         EffectSchema.Struct({
           activity: optionalText,
           repository: optionalText,
@@ -156,44 +147,39 @@ const observationSchema: EffectSchema.Schema<ProviderSessionObservation, Unparse
           error: optionalText,
           link: optionalText,
           change: optionalText,
-          diff: EffectSchema.optionalWith(
+          diff: EffectSchema.optionalKey(
             EffectSchema.Struct({
-              filesChanged: EffectSchema.Number.pipe(EffectSchema.int()),
-              linesAdded: EffectSchema.Number.pipe(EffectSchema.int()),
-              linesRemoved: EffectSchema.Number.pipe(EffectSchema.int()),
+              filesChanged: EffectSchema.Number.check(EffectSchema.isInt()),
+              linesAdded: EffectSchema.Number.check(EffectSchema.isInt()),
+              linesRemoved: EffectSchema.Number.check(EffectSchema.isInt()),
             }),
-            { exact: true },
           ),
         }),
-        { exact: true },
       ),
-      applications: EffectSchema.optionalWith(
+      applications: EffectSchema.optionalKey(
         EffectSchema.Array(
           EffectSchema.Struct({
             id: storedText,
             displayName: storedText,
-            scope: EffectSchema.Literal(...Object.values(SESSION_APPLICATION_SCOPE)),
+            scope: EffectSchema.Literals(Object.values(SESSION_APPLICATION_SCOPE)),
             link: optionalText,
           }),
         ),
-        { exact: true },
       ),
-      advertises: EffectSchema.optionalWith(EffectSchema.Array(advertisedActionSchema), {
-        exact: true,
-      }),
+      advertises: EffectSchema.optionalKey(EffectSchema.Array(advertisedActionSchema)),
     }),
   );
 
-const projectSchema: EffectSchema.Schema<WorkspaceProject, UnparsedWireValue> = schemaAs(
+const projectSchema: EffectSchema.Codec<WorkspaceProject, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     providerProjectId: storedText,
     repository: storedText,
-    taskSupport: EffectSchema.Literal(...Object.values(WORKSPACE_TASK_SUPPORT)),
+    taskSupport: EffectSchema.Literals(Object.values(WORKSPACE_TASK_SUPPORT)),
     providerTargetId: optionalText,
     targetName: optionalText,
-    spawnableAgents: EffectSchema.optionalWith(EffectSchema.Array(storedText), { exact: true }),
+    spawnableAgents: EffectSchema.optionalKey(EffectSchema.Array(storedText)),
     defaultAgent: optionalText,
-    namesItself: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+    namesItself: EffectSchema.optionalKey(EffectSchema.Boolean),
   }),
 );
 
@@ -202,7 +188,7 @@ const projectSchema: EffectSchema.Schema<WorkspaceProject, UnparsedWireValue> = 
  * build does not know is a body another build wrote, and is read as no
  * snapshot rather than as a roster with something missing from it.
  */
-const observedRosterSchema: EffectSchema.Schema<ObservedRoster, UnparsedWireValue> = schemaAs(
+const observedRosterSchema: EffectSchema.Codec<ObservedRoster, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     version: EffectSchema.Literal(OBSERVED_ROSTER_VERSION),
     providers: EffectSchema.Array(

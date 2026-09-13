@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
@@ -18,11 +18,20 @@ import {
   PUSH_ENVIRONMENT,
 } from "./device-wire.js";
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** A request read: a key the declaration does not name refuses it. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
+): S["Type"] | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
+}
+
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parseAnswer<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
@@ -146,13 +155,13 @@ test("a forget names the device and nothing else", () => {
 });
 
 test("device answers read only their documented shapes", () => {
-  assert.deepEqual(parse(deviceRegisterAnswerSchema, { deviceId: DEVICE_ID, extra: 1 }), {
+  assert.deepEqual(parseAnswer(deviceRegisterAnswerSchema, { deviceId: DEVICE_ID, extra: 1 }), {
     deviceId: DEVICE_ID,
   });
-  assert.equal(parse(deviceRegisterAnswerSchema, { deviceId: "row-1" }), undefined);
-  assert.equal(parse(deviceRegisterAnswerSchema, { stored: true }), undefined);
-  assert.deepEqual(parse(deviceHeartbeatAnswerSchema, { seen: false }), { seen: false });
-  assert.equal(parse(deviceHeartbeatAnswerSchema, { seen: "yes" }), undefined);
-  assert.deepEqual(parse(deviceForgetAnswerSchema, { deleted: true }), { deleted: true });
-  assert.equal(parse(deviceForgetAnswerSchema, "deleted"), undefined);
+  assert.equal(parseAnswer(deviceRegisterAnswerSchema, { deviceId: "row-1" }), undefined);
+  assert.equal(parseAnswer(deviceRegisterAnswerSchema, { stored: true }), undefined);
+  assert.deepEqual(parseAnswer(deviceHeartbeatAnswerSchema, { seen: false }), { seen: false });
+  assert.equal(parseAnswer(deviceHeartbeatAnswerSchema, { seen: "yes" }), undefined);
+  assert.deepEqual(parseAnswer(deviceForgetAnswerSchema, { deleted: true }), { deleted: true });
+  assert.equal(parseAnswer(deviceForgetAnswerSchema, "deleted"), undefined);
 });

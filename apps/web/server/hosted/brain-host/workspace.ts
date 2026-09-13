@@ -1,4 +1,4 @@
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -40,7 +40,7 @@ import { BRAIN_HOST } from "./bounds.js";
 export type WorkspaceStore = Pick<HostedStore, "workspace">;
 
 /** What a read or write of the rows answers: an effect over the ambient client. */
-type WorkspaceEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type WorkspaceEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
 
@@ -88,7 +88,7 @@ export function hostedWorkspaceAccess(
   now: () => number,
 ): BrainWorkspaceAccess {
   const run = <A>(
-    effect: Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>,
+    effect: Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>,
   ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
   return {
     read: (name) =>

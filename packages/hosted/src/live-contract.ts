@@ -7,9 +7,14 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "@sidecar/live";
-import { SCHEMA_REFUSAL, type SchemaRead, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  EXCESS_KEYS,
+  SCHEMA_REFUSAL,
+  type SchemaRead,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Result, Schema } from "effect";
+import { Result, Schema, SchemaGetter } from "effect";
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
 
 /**
@@ -181,18 +186,9 @@ export type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
  * only agrees with that interface rather than restating it. The same claim
  * the facade's own `schemaOver` made over its assembled AST.
  */
-function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
-  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: Schema.Top): Schema.Codec<Value, UnparsedWireValue> {
+  return Schema.make<Schema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
-
-/**
- * A record that ignores a key a newer service added, which is what an answer
- * does and a request never does. Each record states its own rule, because
- * Effect hands a struct's parse options down to the structs inside it and a
- * read is strict wherever nothing says otherwise.
- */
-const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 /**
  * A key a `dropRefused` field left holding `undefined` is dropped entirely,
@@ -201,24 +197,25 @@ const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
  * `quota` it can ask `in` about unless one actually read.
  */
 function omittingUndefinedKeys<Fields extends object, Encoded>(
-  schema: Schema.Schema<Fields, Encoded>,
+  schema: Schema.Codec<Fields, Encoded>,
 ) {
-  return Schema.transform(schema, Schema.Unknown, {
-    strict: false,
-    decode: (value) =>
-      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
-    encode: (value) => value,
-  });
+  return schema.pipe(
+    Schema.decodeTo(Schema.Unknown, {
+      decode: SchemaGetter.transform((value) =>
+        Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+      ),
+      // Nothing here encodes a frame, and the shape the decode answers with
+      // is `unknown`, so the way back is a passthrough that states it cannot
+      // narrow.
+      encode: SchemaGetter.passthrough({ strict: false }),
+    }),
+  );
 }
 
 /** A trimmed text, refused when only whitespace remains, and bounded past a maximum. */
-function text(maximumChars?: number): Schema.Schema<string, string> {
-  const trimmed = Schema.transform(Schema.String, Schema.String, {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  }).pipe(Schema.minLength(1));
-  return maximumChars === undefined ? trimmed : trimmed.pipe(Schema.maxLength(maximumChars));
+function text(maximumChars?: number): Schema.Codec<string, string> {
+  const trimmed = Schema.Trim.check(Schema.isNonEmpty());
+  return maximumChars === undefined ? trimmed : trimmed.check(Schema.isMaxLength(maximumChars));
 }
 
 /**
@@ -230,10 +227,10 @@ function text(maximumChars?: number): Schema.Schema<string, string> {
  * "not only whitespace" without also claiming a character count it does not
  * enforce.
  */
-function verbatimText(maximumChars: number): Schema.Schema<string, string> {
-  return Schema.String.pipe(
-    Schema.maxLength(maximumChars),
-    Schema.filter((value) => value.trim().length > 0, wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
+function verbatimText(maximumChars: number): Schema.Codec<string, string> {
+  return Schema.String.check(
+    Schema.isMaxLength(maximumChars),
+    Schema.makeFilter((value) => value.trim().length > 0, wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
   );
 }
 
@@ -245,9 +242,9 @@ const itemText = verbatimText(SESSION_CREATE_BOUNDS.ITEM_CHARS);
  * refuses any other count; the reader is what lets the type say so.
  */
 function onlyPart<Part, Encoded>(
-  part: Schema.Schema<Part, Encoded>,
-): Schema.Schema<readonly [Part], UnparsedWireValue> {
-  const list = Schema.Array(part).pipe(Schema.minItems(1), Schema.maxItems(1));
+  part: Schema.Codec<Part, Encoded>,
+): Schema.Codec<readonly [Part], UnparsedWireValue> {
+  const list = Schema.Array(part).check(Schema.isMinLength(1), Schema.isMaxLength(1));
   const read = readEither(list);
   return declareReader<readonly [Part]>((value) => {
     const result = read(value);
@@ -279,18 +276,20 @@ function seedMessage<
   });
 }
 
-const liveInitialItemSchema = Schema.Union(
+const liveInitialItemSchema = Schema.Union([
   seedMessage(SEED_ROLE.DEVELOPER, SEED_CONTENT_TYPE.INPUT_TEXT),
   seedMessage(SEED_ROLE.USER, SEED_CONTENT_TYPE.INPUT_TEXT),
   seedMessage(SEED_ROLE.ASSISTANT, SEED_CONTENT_TYPE.OUTPUT_TEXT),
-).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 export const sessionCreateFrameSchema = schemaAs<SessionCreateFrame>(
   Schema.Struct({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
     sdp: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
-    voice: Schema.Literal(...LIVE_VOICE_LIST),
-    input: Schema.Array(liveInitialItemSchema).pipe(Schema.maxItems(LIVE_INPUT_BOUNDS.MESSAGES)),
+    voice: Schema.Literals(LIVE_VOICE_LIST),
+    input: Schema.Array(liveInitialItemSchema).check(
+      Schema.isMaxLength(LIVE_INPUT_BOUNDS.MESSAGES),
+    ),
   }),
 );
 
@@ -307,13 +306,13 @@ export const sessionAttachFrameSchema = schemaAs<SessionAttachFrame>(
 );
 
 export const sessionOpeningFrameSchema = schemaAs<SessionOpeningFrame>(
-  Schema.Union(sessionCreateFrameSchema, sessionAttachFrameSchema).annotations(
+  Schema.Union([sessionCreateFrameSchema, sessionAttachFrameSchema]).annotate(
     wireRefusal(SCHEMA_REFUSAL.MALFORMED),
   ),
 );
 
 export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
-  tolerantRecord({
+  Schema.Struct({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
     sessionId,
   }),
@@ -324,21 +323,34 @@ const CREATED_FIELDS = {
   sdpAnswer: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
 } as const;
 
-export const liveSessionCreatedSchema = schemaAs<LiveSessionCreated>(
-  tolerantRecord(CREATED_FIELDS),
-);
+export const liveSessionCreatedSchema = schemaAs<LiveSessionCreated>(Schema.Struct(CREATED_FIELDS));
 
-/** The value a schema admitted, or nothing, for a caller that only cares whether the value is admissible. */
+/**
+ * The value a frame's schema admitted, or nothing. A frame the desktop sends
+ * is read as declared, refusing a key it does not name; a frame the service
+ * answers with is read through {@link admittedAnswer}, which drops one a
+ * newer service added rather than refusing the whole frame. That grain is
+ * the read's now rather than the declaration's, and the option reaches every
+ * record nested inside.
+ */
 function admitted<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
 }
 
+/** The same read, for a frame the service answers with. */
+function admittedAnswer<Value, Encoded>(
+  schema: Schema.Codec<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
+}
+
 /** The value a schema admitted, or the refusal and where it happened. */
 function read<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): SchemaRead<Value> {
   return Result.match(readEither(schema)(value), {
@@ -372,31 +384,31 @@ export function sessionOpeningFrameFromWire(
 export function sessionAttachedFrameFromWire(
   value: UnparsedWireValue,
 ): SessionAttachedFrame | undefined {
-  return admitted(sessionAttachedFrameSchema, value);
+  return admittedAnswer(sessionAttachedFrameSchema, value);
 }
 
 export function liveSessionCreatedFromWire(
   value: UnparsedWireValue,
 ): LiveSessionCreated | undefined {
-  return admitted(liveSessionCreatedSchema, value);
+  return admittedAnswer(liveSessionCreatedSchema, value);
 }
 
 /** The value a `dropRefused` field admits: whatever the schema read, or nothing. */
 function droppedField<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
-): Schema.Schema<Value | undefined, UnparsedWireValue> {
+  schema: Schema.Codec<Value, Encoded>,
+): Schema.Codec<Value | undefined, UnparsedWireValue> {
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: admitted(schema, value) }),
+    (value) => ({ ok: true, value: admittedAnswer(schema, value) }),
     emitJsonSchema(schema),
   );
 }
 
 export const sessionCreatedFrameSchema = schemaAs<SessionCreatedFrame>(
   omittingUndefinedKeys(
-    tolerantRecord({
+    Schema.Struct({
       type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
       ...CREATED_FIELDS,
-      quota: Schema.optionalWith(droppedField(hostedQuotaSchema), { exact: true }),
+      quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
     }),
   ),
 );
@@ -404,5 +416,5 @@ export const sessionCreatedFrameSchema = schemaAs<SessionCreatedFrame>(
 export function sessionCreatedFrameFromWire(
   value: UnparsedWireValue,
 ): SessionCreatedFrame | undefined {
-  return admitted(sessionCreatedFrameSchema, value);
+  return admittedAnswer(sessionCreatedFrameSchema, value);
 }

@@ -66,15 +66,15 @@ it.effect("a fake client hands a refused status back rather than failing", () =>
   }),
 );
 
-it.effect("a rejected responder reaches the caller as a transport request error", () =>
+it.effect("a rejected responder reaches the caller as a transport error", () =>
   Effect.gen(function* () {
     const failure = new Error("socket closed");
     const client = fakeHttpClient(() => Promise.reject(failure));
 
     const error = yield* Effect.flip(client.get(ADDRESS));
 
-    assert.equal(error._tag, "RequestError");
-    assert.equal(error.reason, "Transport");
+    assert.equal(error._tag, "HttpClientError");
+    assert.equal(error.reason._tag, "TransportError");
     assert.equal(error.cause, failure);
   }),
 );

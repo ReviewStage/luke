@@ -1,5 +1,7 @@
-import { Schema } from "effect";
+import { Result, Schema } from "effect";
+import { readEither } from "./effect/json-schema.js";
 import type { UnparsedWireValue } from "./json.js";
+import { EXCESS_KEYS } from "./schema-vocabulary.js";
 
 export const ACTION_RESULT_STATUS = {
   ACCEPTED: "accepted",
@@ -9,7 +11,7 @@ export const ACTION_RESULT_STATUS = {
 
 export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTION_RESULT_STATUS];
 
-export const ActionResultStatusSchema = Schema.Literal(...Object.values(ACTION_RESULT_STATUS));
+export const ActionResultStatusSchema = Schema.Literals(Object.values(ACTION_RESULT_STATUS));
 
 const readsActionResultStatus = Schema.is(ActionResultStatusSchema);
 
@@ -40,33 +42,35 @@ export type UnknownActionResult = {
   readonly reason: string;
 };
 
-/** A record whose keys stop at the ones its fields name, the way a strict wire record does. */
-const strict = { parseOptions: { onExcessProperty: "error" as const } };
-
 const ACCEPTED_ACTION_RESULT = Schema.Struct({
   status: Schema.Literal(ACTION_RESULT_STATUS.ACCEPTED),
-}).annotations(strict);
+});
 
 const REJECTED_ACTION_RESULT = Schema.Struct({
   status: Schema.Literal(ACTION_RESULT_STATUS.REJECTED),
   reason: Schema.String,
-}).annotations(strict);
+});
 
 const UNSUPPORTED_ACTION_RESULT = Schema.Struct({
   status: Schema.Literal(ACTION_RESULT_STATUS.UNSUPPORTED),
   reason: Schema.String,
-}).annotations(strict);
+});
 
-export const ActionResultSchema = Schema.Union(
+export const ActionResultSchema = Schema.Union([
   ACCEPTED_ACTION_RESULT,
   REJECTED_ACTION_RESULT,
   UNSUPPORTED_ACTION_RESULT,
-);
+]);
 
 export type ActionResult = Schema.Schema.Type<typeof ActionResultSchema>;
 
-const readsActionResult = Schema.is(ActionResultSchema);
+/**
+ * The read stops at the keys the three records name, the way a strict wire
+ * record does. Effect v4 settles that at the read rather than on the
+ * declaration, so it is stated here rather than annotated onto each member.
+ */
+const readsActionResult = readEither(ActionResultSchema, { excess: EXCESS_KEYS.REFUSE });
 
 export function isActionResult(value: UnparsedWireValue): value is ActionResult {
-  return readsActionResult(value);
+  return Result.isSuccess(readsActionResult(value));
 }

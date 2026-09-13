@@ -1,6 +1,7 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * The encrypted provider-key vault over `effect/unstable/sql`: one ciphertext row
@@ -10,7 +11,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
  * the plaintext anywhere in this module.
  */
 
-type VaultKeyFailure = SqlError | ParseResult.ParseError;
+type VaultKeyFailure = SqlError | Schema.SchemaError;
 
 /** What a vault seam answers: an effect over the ambient client, composed into the request that read or wrote it. */
 export type VaultKeyEffect<A> = Effect.Effect<A, VaultKeyFailure, SqlClient.SqlClient>;
@@ -23,7 +24,7 @@ const KeySchema = Schema.Struct({ userId: Schema.String, providerId: Schema.Stri
 
 const CiphertextRowSchema = Schema.Struct({ ciphertext: Schema.String });
 
-const findKey = SqlSchema.findOne({
+const findKey = SqlSchema.findOneOption({
   Request: KeySchema,
   Result: CiphertextRowSchema,
   execute: (key) =>
@@ -45,9 +46,9 @@ export function readVaultKey(
 }
 
 const StoredKeyRowSchema = Schema.Struct({
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
+  providerId: Schema.String,
   ciphertext: Schema.String,
-});
+}).pipe(Schema.encodeKeys({ providerId: "provider_id" }));
 
 const findKeysForDecryption = SqlSchema.findAll({
   Request: Schema.String,
@@ -70,9 +71,9 @@ export function readStoredVaultKeys(
 }
 
 const KeyListingRowSchema = Schema.Struct({
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
-  updatedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("updated_at")),
-});
+  providerId: Schema.String,
+  updatedAt: InstantColumnSchema,
+}).pipe(Schema.encodeKeys({ providerId: "provider_id", updatedAt: "updated_at" }));
 
 const findKeyListing = SqlSchema.findAll({
   Request: Schema.String,
@@ -94,7 +95,7 @@ const StoreKeySchema = Schema.Struct({
   userId: Schema.String,
   providerId: Schema.String,
   ciphertext: Schema.String,
-  updatedAt: Schema.DateFromSelf,
+  updatedAt: Schema.Date,
 });
 
 const upsertKey = SqlSchema.void({
@@ -120,8 +121,8 @@ export function storeVaultKey(
 }
 
 const UserIdRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
 const deleteKeyRow = SqlSchema.findAll({
   Request: KeySchema,

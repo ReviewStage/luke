@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
@@ -45,7 +45,7 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 const RecordToolSetSchema = Schema.Struct({
   hash: Schema.String,
   schemas: Schema.String,
-  createdAt: Schema.DateFromSelf,
+  createdAt: Schema.Date,
 });
 
 const insertToolSet = SqlSchema.void({
@@ -64,7 +64,7 @@ const insertToolSet = SqlSchema.void({
 export function recordToolSet(
   schemas: readonly OfferedToolSchema[],
   now: Date,
-): Effect.Effect<string, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<string, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const hash = toolSetHashOf(schemas);
   return Effect.as(insertToolSet({ hash, schemas: JSON.stringify(schemas), createdAt: now }), hash);
 }

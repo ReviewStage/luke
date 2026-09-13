@@ -46,7 +46,7 @@ export interface ToolModule<Output extends WireRecord, Context extends ToolConte
   readonly name: string;
   readonly description: string;
   /** The tool's fields as the model is offered them and as a call is read; declared once, as an Effect `Schema`. */
-  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
+  readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   /**
    * Carries one call whose arguments parsed as a record; everything the call
    * may do runs inside, on the fiber of the loop that dispatched it.

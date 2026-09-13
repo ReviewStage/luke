@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { HOSTED_API_ERROR, hostedErrorSchema, hostedQuotaSchema } from "./service-wire.js";
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** The tolerant read every answer of this module is taken through. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
-  return Result.getOrUndefined(readEither(schema)(value));
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 test("a quota is four counts at or above zero, and anything else is no quota", () => {

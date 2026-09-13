@@ -1,5 +1,5 @@
 import type { LiveRecord } from "@sidecar/voice/live-session";
-import { Deferred, Effect, type ParseResult, Queue, type Scope } from "effect";
+import { Deferred, Effect, Queue, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_ENTRY_KIND } from "../core.js";
@@ -56,9 +56,7 @@ export interface HostedLiveRecordOptions {
 
 export interface HostedLiveRecord extends LiveRecord {
   /** One server event of the session's stream, in arrival order; answers what the writer did with it. */
-  observe(
-    event: LiveServerEvent,
-  ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>;
+  observe(event: LiveServerEvent): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>;
   /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */
   drained(): Effect.Effect<void>;
 }
@@ -66,16 +64,12 @@ export interface HostedLiveRecord extends LiveRecord {
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
 const HELD: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
 
-type Write = Effect.Effect<
-  VoiceWriteResult,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient
->;
+type Write = Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 /** One write waiting its turn at the writer, and what the caller that handed it over is waiting on. */
 interface PendingWrite {
   readonly write: Write;
-  readonly landed: Deferred.Deferred<VoiceWriteResult, SqlError | ParseResult.ParseError>;
+  readonly landed: Deferred.Deferred<VoiceWriteResult, SqlError | Schema.SchemaError>;
 }
 
 export function hostedLiveRecord({
@@ -106,10 +100,8 @@ export function hostedLiveRecord({
      * sequence is its arrival: the write is put on the queue where it is
      * called for, and the effect handed back is the wait on that write alone.
      */
-    function enqueue(
-      write: Write,
-    ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError> {
-      const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | ParseResult.ParseError>();
+    function enqueue(write: Write): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError> {
+      const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | Schema.SchemaError>();
       last = landed;
       Queue.unsafeOffer(waiting, { write, landed });
       return Deferred.await(landed);
@@ -118,7 +110,7 @@ export function hostedLiveRecord({
     const consume = (event: LiveServerEvent) => enqueue(writer.consume(target, event));
 
     /** Whether the record took an utterance: landed, found standing, or owed nothing; a refusal or a failure is not taken. */
-    const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>) =>
+    const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>) =>
       write.pipe(
         Effect.map((written) => written.ok),
         Effect.catchAll(() => Effect.succeed(false)),

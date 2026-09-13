@@ -92,24 +92,16 @@ const SESSION_LIST_SORT_DESCRIPTION =
  * whitespace, past `max` too: the request field shape every action here
  * takes, with no combinator between the declaration and the AST it decodes.
  */
-function boundedText(options: { max?: number; description?: string } = {}): Schema.Schema<string> {
+function boundedText(
+  options: { max?: number; description?: string } = {},
+): Schema.Codec<string, string> {
   const { max, description } = options;
-  const trimmed = Schema.transform(Schema.String, Schema.String, {
-    strict: true,
-    decode: (value: string) => value.trim(),
-    encode: (value: string) => value,
-  });
-  const nonBlank = trimmed.pipe(
-    Schema.filter((value) => value.length > 0, {
-      schemaId: Schema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-  );
-  const bounded = max === undefined ? nonBlank : nonBlank.pipe(Schema.maxLength(max));
+  const nonBlank = Schema.Trim.check(Schema.isNonEmpty());
+  const bounded = max === undefined ? nonBlank : nonBlank.check(Schema.isMaxLength(max));
   return description === undefined ? bounded : describeWire(bounded, description);
 }
 
-const identifier = (description: string): Schema.Schema<string> =>
+const identifier = (description: string): Schema.Codec<string, string> =>
   boundedText({ max: maximumIdentifierLength, description });
 
 /** The identity fields every session action names its target by. */
@@ -138,7 +130,7 @@ export const WORKSPACE_NAME = boundedText({ max: maximumWorkspaceNameLength });
 function filterValuesReader(
   values: readonly string[],
   description: string,
-): Schema.Schema<readonly string[] | undefined, UnparsedWireValue> {
+): Schema.Codec<readonly string[] | undefined, UnparsedWireValue> {
   const node: JsonSchemaNode = {
     type: "array",
     items: { type: "string", enum: values },
@@ -162,8 +154,8 @@ const PANEL_QUERY = boundedText({
 function enumLiteral<const Member extends string>(
   members: readonly Member[],
   description: string,
-): Schema.Schema<Member> {
-  return describeWire(Schema.Literal(...members), description);
+): Schema.Codec<Member> {
+  return describeWire(Schema.Literals(members), description);
 }
 
 export const PANEL_SORT = enumLiteral(
@@ -188,29 +180,34 @@ const AGENT_KIND = boundedText({ description: "The agent kind." });
 const MODEL_TEXT = boundedText({ description: "An optional model." });
 const EFFORT_TEXT = boundedText({ description: "An optional effort level." });
 
+/** A field the model may leave out entirely, rather than send holding nothing. */
+const optional = <Field extends Schema.Top>(field: Field) => Schema.optionalKey(field);
+
 /**
- * A request's field table. Extra keys are ignored rather than refused: a model
- * that adds a field admission does not read has not asked for something wider,
- * and the emitted node still declines to invite one. Declared with the field
- * table's own concrete type — never erased here — so a caller that reads a
- * particular request directly, rather than through a `ToolSpec`, still reads
- * a typed record back; `actions.ts` erases it to the vocabulary `ToolSpec.request`
- * itself is declared in only where it is stored beside every other tool's.
+ * Every request below is a plain struct declared with its own concrete field
+ * table — never erased here — so a caller that reads a particular request
+ * directly, rather than through a `ToolSpec`, still reads a typed record back;
+ * `actions.ts` erases it to the vocabulary `ToolSpec.request` itself is
+ * declared in only where it is stored beside every other tool's.
+ *
+ * Extra keys are ignored rather than refused — a model that adds a field
+ * admission does not read has not asked for something wider, and the emitted
+ * node still declines to invite one — but that is the read's grain rather than
+ * the declaration's, since parse options are stated at the decode and nowhere
+ * else. Admission reads these fields one at a time and never the record, so
+ * the grain matters only where a whole request is read back, which is the
+ * conversation row's read of a tool call's own arguments; it passes
+ * `{ excess: EXCESS_KEYS.DROP }`.
  */
-function record<Fields extends Schema.Struct.Fields>(fields: Fields) {
-  return Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-}
 
-const optional = <A, I>(field: Schema.Schema<A, I>) => Schema.optionalWith(field, { exact: true });
+export const MESSAGE_REQUEST = Schema.Struct({ ...SESSION_IDENTITY_FIELDS, text: MESSAGE_TEXT });
 
-export const MESSAGE_REQUEST = record({ ...SESSION_IDENTITY_FIELDS, text: MESSAGE_TEXT });
-
-export const CONTROL_REQUEST = record({
+export const CONTROL_REQUEST = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
   control_id: boundedText({ description: "The control ID." }),
 });
 
-export const OPEN_REQUEST = record({
+export const OPEN_REQUEST = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
   application: optional(
     boundedText({
@@ -221,9 +218,9 @@ export const OPEN_REQUEST = record({
   ),
 });
 
-export const REMOTE_OPEN_REQUEST = record({ ...SESSION_IDENTITY_FIELDS });
+export const REMOTE_OPEN_REQUEST = Schema.Struct({ ...SESSION_IDENTITY_FIELDS });
 
-export const CREATE_WORKSPACE_REQUEST = record({
+export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
   provider_id: optional(
     boundedText({ description: "The provider ID; omit it to create in the default provider." }),
   ),
@@ -254,7 +251,7 @@ export const CREATE_WORKSPACE_REQUEST = record({
   effort: optional(EFFORT_TEXT),
 });
 
-export const ADD_AGENT_REQUEST = record({
+export const ADD_AGENT_REQUEST = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
   agent: AGENT_KIND,
   name: optional(describeWire(WORKSPACE_NAME, "An optional agent name.")),
@@ -263,7 +260,7 @@ export const ADD_AGENT_REQUEST = record({
   effort: optional(EFFORT_TEXT),
 });
 
-export const RENAME_WORKSPACE_REQUEST = record({
+export const RENAME_WORKSPACE_REQUEST = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
   name: describeWire(
     WORKSPACE_NAME,
@@ -271,12 +268,12 @@ export const RENAME_WORKSPACE_REQUEST = record({
   ),
 });
 
-export const RENAME_SESSION_REQUEST = record({
+export const RENAME_SESSION_REQUEST = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
   name: describeWire(WORKSPACE_NAME, "The chat's new name, exactly as the developer chose it."),
 });
 
-export const SETTING_REQUEST = record({
+export const SETTING_REQUEST = Schema.Struct({
   setting_id: boundedText({ description: "The setting ID." }),
   value: boundedText({ description: "The new value." }),
   effort: optional(
@@ -295,7 +292,7 @@ const PANEL_FILTERS_READER = filterValuesReader(
 );
 
 /** Read standalone (admission reads `fields.filters` directly), so a missing key decodes at once. */
-export const PANEL_FILTERS: Schema.Schema<readonly string[] | undefined, UnparsedWireValue> =
+export const PANEL_FILTERS: Schema.Codec<readonly string[] | undefined, UnparsedWireValue> =
   Schema.UndefinedOr(PANEL_FILTERS_READER);
 
 const REMOTE_PANEL_FILTERS_READER = filterValuesReader(
@@ -303,27 +300,27 @@ const REMOTE_PANEL_FILTERS_READER = filterValuesReader(
   REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
 );
 
-export const PANEL_REQUEST = record({
+export const PANEL_REQUEST = Schema.Struct({
   tab: optional(PANEL_TAB),
   filters: optional(PANEL_FILTERS_READER),
   sort: optional(PANEL_SORT),
   query: optional(PANEL_QUERY),
 });
 
-export const REMOTE_PANEL_REQUEST = record({
+export const REMOTE_PANEL_REQUEST = Schema.Struct({
   filters: optional(REMOTE_PANEL_FILTERS_READER),
   sort: optional(PANEL_SORT),
   query: optional(PANEL_QUERY),
 });
 
-export const FEEDBACK_REQUEST = record({
+export const FEEDBACK_REQUEST = Schema.Struct({
   kind: FEEDBACK_KIND,
   draft: optional(boundedText({ description: "An optional draft." })),
 });
 
-export const UPDATE_REQUEST = record({ action: UPDATE_ACTION });
+export const UPDATE_REQUEST = Schema.Struct({ action: UPDATE_ACTION });
 
-export const REMEMBER_REQUEST = record({
+export const REMEMBER_REQUEST = Schema.Struct({
   // The words are flattened and cut to their bound rather than refused past
   // it, which no text combinator says, so the bound stays `rememberedFactText`'s.
   words: boundedText({ description: "A concise durable fact about the developer." }),
@@ -334,6 +331,6 @@ export const REMEMBER_REQUEST = record({
   ),
 });
 
-export const FORGET_REQUEST = record({
+export const FORGET_REQUEST = Schema.Struct({
   id: boundedText({ description: "The remembered entry's id." }),
 });

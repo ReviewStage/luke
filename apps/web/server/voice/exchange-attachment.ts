@@ -1,4 +1,4 @@
-import { Effect, Exit, type ParseResult, Scope } from "effect";
+import { Effect, Exit, type Schema, Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
@@ -63,7 +63,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     session: Parameters<ExchangeAttachment>[0],
   ): Effect.Effect<
     HostedLiveExchange,
-    SqlError | ParseResult.ParseError | ExchangeCannotStand,
+    SqlError | Schema.SchemaError | ExchangeCannotStand,
     Scope.Scope | SqlClient.SqlClient
   > =>
     Effect.gen(function* () {

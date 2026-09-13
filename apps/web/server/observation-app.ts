@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Redacted, Schema } from "effect";
+import { Effect, Option, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -64,7 +64,7 @@ const NOTHING_PUSHED: SpeechPushOutcome = {
 };
 
 /** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
-type ObservationAppFailure = SqlError | ParseResult.ParseError;
+type ObservationAppFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -72,7 +72,7 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
 
-const findPerson = SqlSchema.findOne({
+const findPerson = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PersonRowSchema,
   execute: (userId) =>
@@ -88,12 +88,12 @@ export function readPerson(
 
 const EligibleAccountRequestSchema = Schema.Struct({
   limit: Schema.Number,
-  seenAfter: Schema.DateFromSelf,
+  seenAfter: Schema.Date,
 });
 
 const EligibleAccountRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
 const findEligibleAccounts = SqlSchema.findAll({
   Request: EligibleAccountRequestSchema,
@@ -182,11 +182,7 @@ function effectPassthrough<R>(
 /** Reads one observed session's conversation for the caller who opened its screen. */
 function sessionsMessagesEffect(
   request: Request,
-): Effect.Effect<
-  Response,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
   return Effect.gen(function* () {
     const encryptionSecret = yield* hostedEncryptionSecretEffect;
     return yield* handleConversationRead({
@@ -201,11 +197,7 @@ function sessionsMessagesEffect(
 /** Lists where the signed-in user's keys can create a workspace. */
 function projectsEffect(
   request: Request,
-): Effect.Effect<
-  Response,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
   return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
     handleProjects({ ...hostedVaultSeams, encryptionSecret, request }),
   );
@@ -214,11 +206,7 @@ function projectsEffect(
 /** Observes the signed-in user's cloud sessions on demand. */
 function observeEffect(
   request: Request,
-): Effect.Effect<
-  Response,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
   return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
     handleObserve({ ...hostedVaultSeams, encryptionSecret, request }),
   );

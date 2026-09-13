@@ -7,7 +7,7 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { Effect, Layer, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
+import { Effect, Layer, Option, Queue, Schema, type Scope } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
@@ -138,12 +138,10 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
   Effect.flatMap(SqlClient.SqlClient, build);
 
 const VoiceSessionDeviceIdRowSchema = Schema.Struct({
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
-});
+  deviceId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ deviceId: "device_id" }));
 
-const findVoiceSessionDeviceId = SqlSchema.findOne({
+const findVoiceSessionDeviceId = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: VoiceSessionDeviceIdRowSchema,
   execute: (liveSessionId) =>
@@ -158,7 +156,7 @@ const findVoiceSessionDeviceId = SqlSchema.findOne({
  * the write landed.
  */
 function writeReport(
-  write: Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>,
+  write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>,
 ): Effect.Effect<string | undefined> {
   return write.pipe(
     Effect.map((result) =>
@@ -219,7 +217,7 @@ export function hostedLiveExchange(
 
     /** The device the session's row names now, read at each look so a row completed after creation is seen. */
     const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
-      Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
+      Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullishOr(found.deviceId))),
     );
 
     const briefings = yield* hostedBriefings({

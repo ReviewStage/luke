@@ -1,5 +1,5 @@
 import { pbkdf2Sync } from "node:crypto";
-import { Effect, Option, type ParseResult } from "effect";
+import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
@@ -38,11 +38,7 @@ import type { VaultKeyRow } from "./vault-route.js";
 export type ObservationStore = Pick<HostedStore, "roster">;
 
 /** What a pass answers: an effect over the ambient client, which the edge that owns the connection runs. */
-type ObservationEffect<A> = Effect.Effect<
-  A,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient
->;
+type ObservationEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 /**
  * A read whose answer is optional however it failed. The payload envelope
@@ -174,9 +170,7 @@ export function storedRoster(
     const read = yield* optionally(store.roster.read(userId));
     if (Option.isNone(read)) {
       const observedAt = yield* optionally(store.roster.observedAt(userId));
-      const instant = Option.getOrUndefined(
-        Option.flatten(Option.map(observedAt, Option.fromNullable)),
-      );
+      const instant = Option.getOrUndefined(Option.flatMapNullishOr(observedAt, (found) => found));
       return instant === undefined ? undefined : { observedAt: instant };
     }
     const snapshot: RosterSnapshotRecord | undefined = read.value;

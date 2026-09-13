@@ -130,7 +130,7 @@ export class HostedDeviceClient {
    */
   #ask<Answer, Encoded>(
     request: DeviceRequest,
-    answer: EffectSchema.Schema<Answer, Encoded>,
+    answer: EffectSchema.Codec<Answer, Encoded>,
     departing?: DepartingCredential,
   ): Effect.Effect<Answer | undefined> {
     const call = departing ? this.#callOn(fixedBearer(departing.accessToken)) : this.#call;

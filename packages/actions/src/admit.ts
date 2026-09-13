@@ -233,7 +233,7 @@ export class AdmitRefusal extends Data.TaggedError("AdmitRefusal")<{
 
 /** The guard's revocation as an effect: it answers nothing, the moment the signal fires. */
 function revocation(signal: AbortSignal): Effect.Effect<undefined> {
-  return Effect.async<undefined>((resume) => {
+  return Effect.callback<undefined>((resume) => {
     if (signal.aborted) {
       resume(Effect.succeed(undefined));
       return;
@@ -311,7 +311,10 @@ function textArgument(fields: WireRecord, key: string): string | undefined {
 }
 
 /** A field schema read the way the old `.parse()` did: the value, or nothing it refused. */
-function wireParse<A, I>(schema: Schema.Schema<A, I>, value: UnparsedWireValue): A | undefined {
+function wireParse<Value, Encoded>(
+  schema: Schema.Codec<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
 }
 

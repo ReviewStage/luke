@@ -64,10 +64,10 @@ const TOOL_NAME = "read_transcript";
 const TOOLS: ToolSet = {
   [TOOL_NAME]: tool({
     description: "Reads the tail of an observed session's transcript.",
-    inputSchema: Schema.standardSchemaV1(
+    inputSchema: Schema.toStandardSchemaV1(
       Schema.Struct({ providerId: Schema.String, providerSessionId: Schema.String }),
     ),
-    outputSchema: Schema.standardSchemaV1(Schema.Struct({ lines: Schema.Array(Schema.String) })),
+    outputSchema: Schema.toStandardSchemaV1(Schema.Struct({ lines: Schema.Array(Schema.String) })),
   }),
 };
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -241,7 +241,7 @@ export function hostedFactsWriter(
   now: () => number,
 ): HostedFactsWriter {
   const run = <A>(
-    effect: Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>,
+    effect: Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>,
   ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
   const list = () => run(store.facts.list(userId));
   return {

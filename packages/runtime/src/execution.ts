@@ -147,7 +147,7 @@ export const REASONING_EFFORT = {
 
 export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_EFFORT];
 
-export const ReasoningEffortSchema = Schema.Literal(...Object.values(REASONING_EFFORT));
+export const ReasoningEffortSchema = Schema.Literals(Object.values(REASONING_EFFORT));
 
 const readsReasoningEffort = Schema.is(ReasoningEffortSchema);
 

@@ -1,7 +1,8 @@
-import { Duration, Effect, Option, type ParseResult, Result, Schema } from "effect";
+import { Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
+import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
@@ -27,29 +28,34 @@ import { ADMIN_METRICS_SCOPE, type AdminMetricsScope, type AdminMetricsWindow } 
 /** How many of the most active hosted-tier accounts the overview names. */
 const ADMIN_TOP_USERS_LIMIT = 10;
 
-type AdminQueryFailure = SqlError | ParseResult.ParseError;
+type AdminQueryFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
 /**
- * An aggregate as the two drivers hand it back: `count` and `sum` answer a
- * bigint, which `pg` reads as a string because a 64-bit value need not fit a
- * JS number, while PGlite parses it to one. Every aggregate here counts rows
- * or sums a day's calls, well inside the safe integer range, so both readings
- * decode to the same number. A `sum` over no rows is null, which is the zero
- * the dashboard shows.
+ * An aggregate as the three drivers hand it back: `count` and `sum` answer a
+ * bigint, which `@effect/sql-pg` reads as a JS `bigint` and the `pg` driver
+ * before it read as a string, each because a 64-bit value need not fit a JS
+ * number, while PGlite parses it to one. Every aggregate here counts rows or
+ * sums a day's calls, well inside the safe integer range, so all three
+ * readings decode to the same number. A `sum` over no rows is null, which is
+ * the zero the dashboard shows.
  */
-const AggregateColumnSchema = Schema.Union(Schema.Number, Schema.NumberFromString);
+const AggregateColumnSchema = Schema.Union([
+  Schema.Number,
+  Schema.NumberFromString,
+  NumberFromBigIntColumn,
+]);
 const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
 const CountRowSchema = Schema.Struct({ value: AggregateColumnSchema });
 
-const AdminMetricsScopeSchema = Schema.Literal(
+const AdminMetricsScopeSchema = Schema.Literals([
   ADMIN_METRICS_SCOPE.NON_ADMINS,
   ADMIN_METRICS_SCOPE.ALL,
-);
+]);
 
 /**
  * The accounts a scope keeps. The default keeps every account whose role is not
@@ -84,7 +90,7 @@ const probeDatabase = Effect.map(
   }),
 );
 
-const findUserTotal = SqlSchema.findOne({
+const findUserTotal = SqlSchema.findOneOption({
   Request: AdminMetricsScopeSchema,
   Result: Schema.Struct({ value: AggregateColumnSchema }),
   execute: (scope) =>
@@ -92,9 +98,9 @@ const findUserTotal = SqlSchema.findOne({
 });
 
 const SignInLinkRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
-});
+  userId: Schema.String,
+  providerId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id", providerId: "provider_id" }));
 
 /**
  * Distinct pairs rather than a count of linked rows: the chart states
@@ -118,7 +124,7 @@ const findSignInLinks = SqlSchema.findAll({
 const DayCountRowSchema = Schema.Struct({ day: Schema.String, value: AggregateColumnSchema });
 
 const findSignupsByDay = SqlSchema.findAll({
-  Request: Schema.Struct({ fetchStart: Schema.DateFromSelf, scope: AdminMetricsScopeSchema }),
+  Request: Schema.Struct({ fetchStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: DayCountRowSchema,
   execute: (request) =>
     statement((sql) => {
@@ -178,7 +184,7 @@ const findUsageByDay = SqlSchema.findAll({
     ),
 });
 
-const findActiveUsersOnDay = SqlSchema.findOne({
+const findActiveUsersOnDay = SqlSchema.findOneOption({
   Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
@@ -196,7 +202,7 @@ const findActiveUsersOnDay = SqlSchema.findOne({
  * Distinct rather than a row count: the window holds one row per account per
  * day, so counting rows would answer account-days, not accounts.
  */
-const findActiveUsersInWindow = SqlSchema.findOne({
+const findActiveUsersInWindow = SqlSchema.findOneOption({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
@@ -216,10 +222,10 @@ const TopUserRowSchema = Schema.Struct({
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
-  activeDays: Schema.propertySignature(AggregateColumnSchema).pipe(Schema.fromKey("active_days")),
-  lastActiveDay: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("last_active_day")),
+  activeDays: AggregateColumnSchema,
+  lastActiveDay: Schema.String,
   calls: NullableAggregateColumnSchema,
-});
+}).pipe(Schema.encodeKeys({ activeDays: "active_days", lastActiveDay: "last_active_day" }));
 
 /**
  * Ordered by days present before volume spent: the table asks who shows up
@@ -313,7 +319,7 @@ const CohortSizeRowSchema = Schema.Struct({
 });
 
 const findCohortSizes = SqlSchema.findAll({
-  Request: Schema.Struct({ oldestWeekStart: Schema.DateFromSelf, scope: AdminMetricsScopeSchema }),
+  Request: Schema.Struct({ oldestWeekStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: CohortSizeRowSchema,
   execute: (request) =>
     statement((sql) => {
@@ -329,10 +335,10 @@ const findCohortSizes = SqlSchema.findAll({
 });
 
 const CohortActivityRowSchema = Schema.Struct({
-  signupWeek: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("signup_week")),
-  activityWeek: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("activity_week")),
+  signupWeek: Schema.String,
+  activityWeek: Schema.String,
   value: AggregateColumnSchema,
-});
+}).pipe(Schema.encodeKeys({ signupWeek: "signup_week", activityWeek: "activity_week" }));
 
 /**
  * Distinct accounts per (signup week, activity week) pair: a cohort member
@@ -340,7 +346,7 @@ const CohortActivityRowSchema = Schema.Struct({
  */
 const findCohortActivity = SqlSchema.findAll({
   Request: Schema.Struct({
-    oldestWeekStart: Schema.DateFromSelf,
+    oldestWeekStart: Schema.Date,
     oldestWeekStartDay: Schema.String,
     scope: AdminMetricsScopeSchema,
   }),
@@ -406,7 +412,7 @@ function ceilingReached(sql: SqlClient.SqlClient) {
   return sql`hosted_usage.calls > ${HOSTED_DAILY_LIMIT}`;
 }
 
-const findQuotaLimitedOnDay = SqlSchema.findOne({
+const findQuotaLimitedOnDay = SqlSchema.findOneOption({
   Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
@@ -422,7 +428,7 @@ const findQuotaLimitedOnDay = SqlSchema.findOne({
     ),
 });
 
-const findQuotaLimitedInWindow = SqlSchema.findOne({
+const findQuotaLimitedInWindow = SqlSchema.findOneOption({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
@@ -540,10 +546,10 @@ const AccountRowSchema = Schema.Struct({
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: InstantColumnSchema,
+}).pipe(Schema.encodeKeys({ createdAt: "created_at" }));
 
-const findAccount = SqlSchema.findOne({
+const findAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AccountRowSchema,
   execute: (userId) =>
@@ -560,8 +566,8 @@ const findAccount = SqlSchema.findOne({
 const findSignInMethods = SqlSchema.findAll({
   Request: Schema.String,
   Result: Schema.Struct({
-    providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
-  }),
+    providerId: Schema.String,
+  }).pipe(Schema.encodeKeys({ providerId: "provider_id" })),
   execute: (userId) =>
     statement((sql) => sql`select provider_id from account where user_id = ${userId}`),
 });
@@ -579,18 +585,20 @@ const findUsageSince = SqlSchema.findAll({
     ),
 });
 
-const findAllTimeUsage = SqlSchema.findOne({
+const findAllTimeUsage = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({
-    activeDays: Schema.propertySignature(AggregateColumnSchema).pipe(Schema.fromKey("active_days")),
-    firstActiveDay: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-      Schema.fromKey("first_active_day"),
-    ),
-    lastActiveDay: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-      Schema.fromKey("last_active_day"),
-    ),
+    activeDays: AggregateColumnSchema,
+    firstActiveDay: Schema.NullOr(Schema.String),
+    lastActiveDay: Schema.NullOr(Schema.String),
     calls: NullableAggregateColumnSchema,
-  }),
+  }).pipe(
+    Schema.encodeKeys({
+      activeDays: "active_days",
+      firstActiveDay: "first_active_day",
+      lastActiveDay: "last_active_day",
+    }),
+  ),
   execute: (userId) =>
     statement(
       (sql) => sql`
@@ -605,7 +613,7 @@ const findAllTimeUsage = SqlSchema.findOne({
     ),
 });
 
-const findQuotaLimitedDays = SqlSchema.findOne({
+const findQuotaLimitedDays = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, windowStartDay: Schema.String }),
   Result: CountRowSchema,
   execute: (request) =>
@@ -647,7 +655,7 @@ const findDayAccounts = SqlSchema.findAll({
     ),
 });
 
-const findDayTotals = SqlSchema.findOne({
+const findDayTotals = SqlSchema.findOneOption({
   Request: DayScopeSchema,
   Result: Schema.Struct({
     accounts: AggregateColumnSchema,
@@ -693,7 +701,7 @@ function nullableSearch(search: string | undefined): string | null {
   return search === undefined ? null : search;
 }
 
-const findRosterTotal = SqlSchema.findOne({
+const findRosterTotal = SqlSchema.findOneOption({
   Request: RosterFilterSchema,
   Result: CountRowSchema,
   execute: (request) =>
@@ -705,11 +713,9 @@ const findRosterTotal = SqlSchema.findOne({
 const findSessionsSeen = SqlSchema.findAll({
   Request: RosterFilterSchema,
   Result: Schema.Struct({
-    userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-    seenAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-      Schema.fromKey("seen_at"),
-    ),
-  }),
+    userId: Schema.String,
+    seenAt: Schema.NullOr(InstantColumnSchema),
+  }).pipe(Schema.encodeKeys({ userId: "user_id", seenAt: "seen_at" })),
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -725,11 +731,9 @@ const findSessionsSeen = SqlSchema.findAll({
 const findUsageSeen = SqlSchema.findAll({
   Request: RosterFilterSchema,
   Result: Schema.Struct({
-    userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-    lastUsageDay: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-      Schema.fromKey("last_usage_day"),
-    ),
-  }),
+    userId: Schema.String,
+    lastUsageDay: Schema.NullOr(Schema.String),
+  }).pipe(Schema.encodeKeys({ userId: "user_id", lastUsageDay: "last_usage_day" })),
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -748,14 +752,18 @@ const RosterRowSchema = Schema.Struct({
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  activeDays: Schema.propertySignature(AggregateColumnSchema).pipe(Schema.fromKey("active_days")),
-  lastActiveDay: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("last_active_day"),
-  ),
+  createdAt: InstantColumnSchema,
+  activeDays: AggregateColumnSchema,
+  lastActiveDay: Schema.NullOr(Schema.String),
   calls: NullableAggregateColumnSchema,
   favorite: Schema.NullOr(Schema.Boolean),
-});
+}).pipe(
+  Schema.encodeKeys({
+    createdAt: "created_at",
+    activeDays: "active_days",
+    lastActiveDay: "last_active_day",
+  }),
+);
 
 const findRosterRows = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -801,7 +809,7 @@ const FavoriteSchema = Schema.Struct({
   favorite: Schema.Boolean,
 });
 
-const findFavoriteTarget = SqlSchema.findOne({
+const findFavoriteTarget = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (userId) => statement((sql) => sql`select id from "user" where id = ${userId} limit 1`),

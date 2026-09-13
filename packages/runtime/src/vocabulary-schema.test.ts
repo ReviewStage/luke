@@ -34,10 +34,10 @@ const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
 ];
 
 function settlesVocabulary<Member extends string>(
-  schema: Schema.Schema<Member>,
+  schema: Schema.Codec<Member>,
   members: readonly Member[],
 ): void {
-  const decode = Schema.decodeUnknownEither(schema);
+  const decode = Schema.decodeUnknownResult(schema);
   for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
   for (const refused of NOTHING_ANY_VOCABULARY_HOLDS) {
     assert.equal(Result.isFailure(decode(refused)), true);

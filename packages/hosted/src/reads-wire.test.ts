@@ -9,6 +9,7 @@ import {
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  EXCESS_KEYS,
   isRecord,
   MESSAGE_RATING,
   SCHEMA_REFUSAL,
@@ -59,21 +60,40 @@ async function fixture(name: (typeof FIXTURE)[keyof typeof FIXTURE]): Promise<Un
   ) as UnparsedWireValue;
 }
 
-function expectRead<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** A cursor's or a request's read: a key the declaration does not name refuses it. */
+function expectRead<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value {
+): S["Type"] {
   const read = readEither(schema)(value);
   if (Result.isFailure(read))
     assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
   return read.success;
 }
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** The same, for an answer: a key a newer service added is dropped rather than refused. */
+function expectReadAnswer<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
+): S["Type"] {
+  const read = readEither(schema, { excess: EXCESS_KEYS.DROP })(value);
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
+}
+
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
+}
+
+function parseAnswer<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 test("a sequence cursor round-trips in one canonical string whatever order its positions arrived in", () => {
@@ -210,7 +230,10 @@ test("a page bound is a whole number inside the page's own maximum", () => {
 });
 
 test("the messages answer fixture reads as the view's groups, each message's tools decided, under a cursor that decodes to the page's positions", async () => {
-  const answer = expectRead(conversationMessagesAnswerSchema, await fixture(FIXTURE.MESSAGES));
+  const answer = expectReadAnswer(
+    conversationMessagesAnswerSchema,
+    await fixture(FIXTURE.MESSAGES),
+  );
   assert.deepEqual(
     answer.conversations.map((conversation) => [conversation.id, conversation.kind]),
     [
@@ -226,7 +249,7 @@ test("the messages answer fixture reads as the view's groups, each message's too
   const raw = await fixture(FIXTURE.MESSAGES);
   assert.ok(isRecord(raw));
   assert.equal(
-    parse(conversationMessagesAnswerSchema, {
+    parseAnswer(conversationMessagesAnswerSchema, {
       ...raw,
       conversations: [{ id: MAIN, kind: CONVERSATION_VIEW_SOURCE.MAIN }],
     }),
@@ -274,7 +297,7 @@ test("the messages answer fixture reads as the view's groups, each message's too
 test("a messages answer whose group holds a message that is not a record, or a cursor that does not decode, is refused whole rather than thinned", async () => {
   const raw = await fixture(FIXTURE.MESSAGES);
   assert.ok(isRecord(raw));
-  assert.notEqual(parse(conversationMessagesAnswerSchema, raw), undefined);
+  assert.notEqual(parseAnswer(conversationMessagesAnswerSchema, raw), undefined);
   const groups = raw.groups;
   assert.ok(Array.isArray(groups));
   const [firstGroup, ...otherGroups] = groups;
@@ -287,12 +310,12 @@ test("a messages answer whose group holds a message that is not a record, or a c
       ...otherGroups,
     ],
   };
-  assert.equal(parse(conversationMessagesAnswerSchema, thinned), undefined);
-  assert.equal(parse(conversationMessagesAnswerSchema, { ...raw, next: "%%%" }), undefined);
+  assert.equal(parseAnswer(conversationMessagesAnswerSchema, thinned), undefined);
+  assert.equal(parseAnswer(conversationMessagesAnswerSchema, { ...raw, next: "%%%" }), undefined);
 });
 
 test("the events answer fixture reads each event's kind, device, and payload as written", async () => {
-  const answer = expectRead(conversationEventsAnswerSchema, await fixture(FIXTURE.EVENTS));
+  const answer = expectReadAnswer(conversationEventsAnswerSchema, await fixture(FIXTURE.EVENTS));
   assert.deepEqual(
     answer.events.map((event) => [event.seq, event.kind]),
     [
@@ -311,7 +334,7 @@ test("the events answer fixture reads each event's kind, device, and payload as 
 });
 
 test("the turns answer fixture reads each turn with its own cursor, and the answer's cursor is the last turn's", async () => {
-  const answer = expectRead(brainTurnsAnswerSchema, await fixture(FIXTURE.TURNS));
+  const answer = expectReadAnswer(brainTurnsAnswerSchema, await fixture(FIXTURE.TURNS));
   assert.deepEqual(
     answer.turns.map((turn) => [turn.origin, turn.status, turn.conversationId]),
     [
@@ -345,7 +368,7 @@ test("the change-signal request names the device and carries each instant as a n
 });
 
 test("the change-signal answer fixture reads every head as the cursor a caught-up device would hold", async () => {
-  const answer = expectRead(changesAnswerSchema, await fixture(FIXTURE.CHANGES_ANSWER));
+  const answer = expectReadAnswer(changesAnswerSchema, await fixture(FIXTURE.CHANGES_ANSWER));
   assert.equal(answer.seen, true);
   assert.deepEqual(
     parse(sequenceReadCursorSchema, answer.messages)?.positions.map((p) => p.seq),
@@ -358,35 +381,39 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
   assert.equal(parse(turnReadCursorSchema, answer.turns ?? "")?.id, TURN);
   assert.equal(answer.rosterObservedAt, 1757505780000);
   assert.deepEqual(
-    parse(changesAnswerSchema, { seen: false, messages: answer.messages, events: answer.events }),
+    parseAnswer(changesAnswerSchema, {
+      seen: false,
+      messages: answer.messages,
+      events: answer.events,
+    }),
     { seen: false, messages: answer.messages, events: answer.events },
   );
 });
 
 test("the unreadable-row refusal reads to the row it names and nothing else reads as one", () => {
   assert.deepEqual(
-    parse(unreadableRowRefusalSchema, {
+    parseAnswer(unreadableRowRefusalSchema, {
       error: HOSTED_API_ERROR.UNREADABLE_ROW,
       unreadableRow: { conversationId: MAIN.toUpperCase(), seq: 4 },
     }),
     { conversationId: MAIN, seq: 4 },
   );
   assert.equal(
-    parse(unreadableRowRefusalSchema, {
+    parseAnswer(unreadableRowRefusalSchema, {
       error: HOSTED_API_ERROR.UNAVAILABLE,
       unreadableRow: { conversationId: MAIN, seq: 4 },
     }),
     undefined,
   );
   assert.equal(
-    parse(unreadableRowRefusalSchema, {
+    parseAnswer(unreadableRowRefusalSchema, {
       error: HOSTED_API_ERROR.UNREADABLE_ROW,
       unreadableRow: { conversationId: MAIN, seq: 0 },
     }),
     undefined,
   );
   assert.equal(
-    parse(unreadableRowRefusalSchema, { error: HOSTED_API_ERROR.UNREADABLE_ROW }),
+    parseAnswer(unreadableRowRefusalSchema, { error: HOSTED_API_ERROR.UNREADABLE_ROW }),
     undefined,
   );
 });

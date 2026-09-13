@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, type Schema as EffectSchema, type ParseResult, Result } from "effect";
+import { Data, Effect, type Schema as EffectSchema, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -84,7 +84,7 @@ export interface ResourceReadOptions {
 }
 
 /** What a read answers: an effect over the ambient client, run by the store route's own edge. */
-type ReadEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type ReadEffect<A> = Effect.Effect<A, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient>;
 
 type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | Response;
 
@@ -122,7 +122,7 @@ interface ReadPage<Cursor> {
  */
 function readPage<Cursor>(
   query: URLSearchParams,
-  cursorSchema: EffectSchema.Schema<Cursor, UnparsedWireValue>,
+  cursorSchema: EffectSchema.Codec<Cursor, UnparsedWireValue>,
 ): ReadPage<Cursor> | undefined {
   const afterText = query.get(READ_QUERY.AFTER);
   const after =

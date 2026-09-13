@@ -511,7 +511,7 @@ export function layerGatewayLedger(options: GatewayServerLayerOptions): Layer.La
             capacity,
             timeToLive: Duration.infinity,
             lookup: (asked: LedgerEntry) =>
-              Effect.map(Effect.either(asked.run), (answer) => ({
+              Effect.map(Effect.result(asked.run), (answer) => ({
                 paramsText: asked.paramsText,
                 answer,
               })),

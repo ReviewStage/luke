@@ -425,12 +425,12 @@ export type MarkId =
   | typeof GOOGLE_CALENDAR_ID
   | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
 
-export const MarkIdSchema = Schema.Union(
+export const MarkIdSchema = Schema.Union([
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,
-  Schema.Literal(APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID, CREDENTIAL_PROVIDER_ID.OPENAI),
-);
+  Schema.Literals([APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID, CREDENTIAL_PROVIDER_ID.OPENAI]),
+]);
 
 const PROVIDER_MARKS = {
   [APPLE_CALENDAR_ID]: AppleCalendarMark,

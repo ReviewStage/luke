@@ -8,7 +8,7 @@ import {
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
-import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { EXCESS_KEYS, isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
@@ -106,7 +106,9 @@ function record(text: string): WireRecord {
 }
 
 function hostedError(text: WireRecord): string | undefined {
-  return Result.getOrUndefined(readEither(hostedErrorSchema)(text));
+  // The hosted error record was declared tolerant, so the read drops a key a
+  // newer service may have added.
+  return Result.getOrUndefined(readEither(hostedErrorSchema, { excess: EXCESS_KEYS.DROP })(text));
 }
 
 interface Stand {

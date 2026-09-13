@@ -55,7 +55,7 @@ const Journal = Schema.Struct({
 });
 type JournalEntry = Schema.Schema.Type<typeof Journal>["entries"][number];
 
-const decodeJournal = Schema.decodeUnknownSync(Schema.parseJson(Journal));
+const decodeJournal = Schema.decodeUnknownSync(Schema.fromJsonString(Journal));
 
 async function journal(): Promise<readonly JournalEntry[]> {
   return decodeJournal(await readFile(`${MIGRATIONS}/meta/_journal.json`, "utf8")).entries;

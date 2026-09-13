@@ -16,7 +16,7 @@ const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
 ];
 
 test("the panel form factor schema holds exactly the shapes this build draws", () => {
-  const decode = Schema.decodeUnknownEither(PanelFormFactorSchema);
+  const decode = Schema.decodeUnknownResult(PanelFormFactorSchema);
   for (const member of Object.values(PANEL_FORM_FACTOR)) {
     assert.deepEqual(decode(member), Result.succeed(member));
   }

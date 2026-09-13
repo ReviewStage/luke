@@ -7,7 +7,7 @@ import { Reporter, StateRoot } from "./effect/seams.js";
 export const ONBOARDING_STATE_FILE = "onboarding.json";
 
 /** One moment, as every field of the record holds it: an instant in words, or nothing. */
-const moment = Schema.optionalWith(Schema.String, { exact: true });
+const moment = Schema.optionalKey(Schema.String);
 
 /**
  * The one-time onboarding moments Luke remembers per install: the spoken

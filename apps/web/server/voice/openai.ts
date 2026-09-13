@@ -6,6 +6,7 @@ import { WebSocket } from "ws";
 import {
   accountCall,
   callAnswered,
+  EXCESS_KEYS,
   fixedBearer,
   HTTP_METHOD,
   withoutTrailingSlash,
@@ -107,7 +108,11 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
           Effect.tryPromise(() => answer.response.json()),
           () => undefined,
         );
-        const created = Result.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
+        // The provider names more of a created session than the two fields
+        // this build reads, so the read drops what it does not name.
+        const created = Result.getOrUndefined(
+          readEither(liveCreateAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
+        );
         return created
           ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
           : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };

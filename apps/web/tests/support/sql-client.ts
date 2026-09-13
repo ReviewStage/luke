@@ -5,9 +5,9 @@ import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
-import { SqlError } from "effect/unstable/sql/SqlError";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { runWebMigrations } from "../../server/db/effect-migrator.js";
-import { createPool } from "../../server/db/index.js";
+import { sqlClientOverUrl } from "../../server/db/sql-client.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
 
 /**
@@ -28,7 +28,11 @@ const ROW_MODE = {
 } as const;
 
 function pgliteConnection(client: PGlite): SqlConnection.Connection {
-  const fail = (cause: unknown) => new SqlError({ cause, message: "Failed to execute statement" });
+  // PGlite's own failures are not classified here: the store's tests read the
+  // failure as one refusal whatever the database said, and no classifier for
+  // this driver ships with the library.
+  const fail = (cause: unknown) =>
+    new SqlError({ reason: new UnknownError({ cause, message: "Failed to execute statement" }) });
   const objectRows = (sql: string, params: ReadonlyArray<unknown>) =>
     Effect.tryPromise({
       try: () => client.query<SqlConnection.Row>(sql, [...params]),
@@ -42,18 +46,20 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
     objectRows(sql, params).pipe(
       Effect.map((result) => (transformRows ? transformRows(result.rows) : result.rows)),
     );
+  const values = (sql: string, params: ReadonlyArray<unknown>) =>
+    Effect.tryPromise({
+      try: () =>
+        client.query<ReadonlyArray<unknown>>(sql, [...params], { rowMode: ROW_MODE.ARRAY }),
+      catch: fail,
+    }).pipe(Effect.map((result) => result.rows));
   return {
     execute: rows,
     executeRaw: (sql, params) => objectRows(sql, params),
     executeUnprepared: rows,
     executeStream: (sql, params, transformRows) =>
       Stream.fromIterableEffect(rows(sql, params, transformRows)),
-    executeValues: (sql, params) =>
-      Effect.tryPromise({
-        try: () =>
-          client.query<ReadonlyArray<unknown>>(sql, [...params], { rowMode: ROW_MODE.ARRAY }),
-        catch: fail,
-      }).pipe(Effect.map((result) => result.rows)),
+    executeValues: values,
+    executeValuesUnprepared: values,
   };
 }
 
@@ -131,13 +137,7 @@ function postgresSqlClient(connectionString: string) {
         Effect.promise(() => cloneStoreTestPostgres(connectionString)),
         (clone) => Effect.promise(() => clone.drop()),
       ),
-      (clone) =>
-        PgClient.layerFromPool({
-          acquire: Effect.acquireRelease(
-            Effect.sync(() => createPool(clone.connectionString)),
-            (pool) => Effect.promise(() => pool.end()),
-          ),
-        }),
+      (clone) => sqlClientOverUrl(clone.connectionString),
     ),
   );
 }

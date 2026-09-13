@@ -68,7 +68,7 @@ export const appendTranscriptEffect = (
     );
   });
 
-const takenTranscriptSequence = SqlSchema.findOne({
+const takenTranscriptSequence = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ sequence: Schema.Number }),
   execute: (key) =>

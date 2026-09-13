@@ -171,7 +171,7 @@ const listIndexedSourcesEffect: Effect.Effect<
   })),
 );
 
-const vectorCountRow = SqlSchema.findOne({
+const vectorCountRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ filePath: Schema.String, model: Schema.String }),
   Result: Schema.Struct({ count: Schema.Number }),
   execute: ({ filePath, model }) =>
@@ -192,7 +192,7 @@ const lacksVectorsEffect = (
     Option.match(row, { onNone: () => false, onSome: ({ count }) => count > 0 }),
   );
 
-const cachedEmbeddingRow = SqlSchema.findOne({
+const cachedEmbeddingRow = SqlSchema.findOneOption({
   Request: Schema.Struct({ provider: Schema.String, model: Schema.String, hash: Schema.String }),
   Result: Schema.Struct({ embedding: Schema.String }),
   execute: ({ provider, model, hash }) =>
@@ -415,7 +415,7 @@ export interface MemoryIndexStatus {
 
 const CountRow = Schema.Struct({ count: Schema.Number });
 
-const sourcesCountRow = SqlSchema.findOne({
+const sourcesCountRow = SqlSchema.findOneOption({
   Request: Schema.Void,
   Result: CountRow,
   execute: () =>
@@ -425,7 +425,7 @@ const sourcesCountRow = SqlSchema.findOne({
     ),
 });
 
-const chunksCountRow = SqlSchema.findOne({
+const chunksCountRow = SqlSchema.findOneOption({
   Request: Schema.Void,
   Result: CountRow,
   execute: () =>
@@ -435,7 +435,7 @@ const chunksCountRow = SqlSchema.findOne({
     ),
 });
 
-const embeddedChunksCountRow = SqlSchema.findOne({
+const embeddedChunksCountRow = SqlSchema.findOneOption({
   Request: Schema.Void,
   Result: CountRow,
   execute: () =>
@@ -445,7 +445,7 @@ const embeddedChunksCountRow = SqlSchema.findOne({
     ),
 });
 
-const cachedEmbeddingsCountRow = SqlSchema.findOne({
+const cachedEmbeddingsCountRow = SqlSchema.findOneOption({
   Request: Schema.Void,
   Result: CountRow,
   execute: () =>
@@ -506,7 +506,7 @@ const CHUNK_COLUMNS = `c.id, c.path, c.start_line, c.end_line, c.text, c.embeddi
 
 const keywordChunkRows = SqlSchema.findAll({
   Request: Schema.Struct({ fts: Schema.String, limit: Schema.Number }),
-  Result: Schema.extend(ChunkRow, Schema.Struct({ rank: Schema.Number })),
+  Result: ChunkRow.pipe(Schema.fieldsAssign({ rank: Schema.Number })),
   execute: ({ fts, limit }) =>
     Effect.flatMap(
       Client.SqlClient,

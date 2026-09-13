@@ -1,5 +1,4 @@
 import { Duration, Effect, type Redacted, Schedule, Schema } from "effect";
-import type { ParseError } from "effect/ParseResult";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -58,7 +57,7 @@ export type DeploymentRecord = typeof DeploymentRecord.Type;
 const DeploymentRecords = Schema.Array(DeploymentRecord);
 
 export const DeploymentStatus = Schema.Struct({
-  state: Schema.Literal(...Object.values(DEPLOYMENT_STATE)),
+  state: Schema.Literals(Object.values(DEPLOYMENT_STATE)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
   environment_url: Schema.optional(Schema.NullOr(Schema.String)),
   target_url: Schema.optional(Schema.NullOr(Schema.String)),
@@ -151,7 +150,7 @@ function readPreview(
   source: PreviewSource,
 ): Effect.Effect<
   PreviewReading,
-  HttpClientError.HttpClientError | ParseError,
+  HttpClientError.HttpClientError | Schema.SchemaError,
   HttpClient.HttpClient
 > {
   return Effect.gen(function* () {
@@ -214,7 +213,7 @@ export function waitForPreview(
   } = {},
 ): Effect.Effect<
   Exclude<PreviewReading, { readonly kind: typeof PREVIEW_STATE.WAITING }>,
-  PreviewNotReady | HttpClientError.HttpClientError | ParseError,
+  PreviewNotReady | HttpClientError.HttpClientError | Schema.SchemaError,
   HttpClient.HttpClient
 > {
   const wait = options.wait ?? DEFAULT_PREVIEW_WAIT;

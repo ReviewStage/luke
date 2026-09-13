@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { Effect, FiberSet, type Layer, Option, type ParseResult, type Scope } from "effect";
+import { Effect, FiberSet, type Layer, Option, type Schema, type Scope } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -324,7 +324,7 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
  * the service makes on the session's behalf, and nothing else — every other
  * refusal is a frame the desktop is answered with.
  */
-type SessionFailure = SqlError | ParseResult.ParseError;
+type SessionFailure = SqlError | Schema.SchemaError;
 
 type SessionEffect<A> = Effect.Effect<A, SessionFailure, SqlClient.SqlClient | Scope.Scope>;
 
@@ -870,7 +870,7 @@ export class VoiceService {
     const timeoutMs = this.#options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS;
     return desktop.next.pipe(
       Effect.map((frame) => {
-        const text = Option.flatMapNullable(frame, frameText);
+        const text = Option.flatMapNullishOr(frame, frameText);
         if (Option.isNone(text)) return undefined;
         const payload = decodeLivePayload(text.value);
         return payload === undefined ? undefined : sessionOpeningFrameFromWire(payload);
