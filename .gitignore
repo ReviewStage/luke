@@ -36,6 +36,10 @@ artifacts/
 # Local agent context is not a repository input.
 .context/
 
+# The upstream Effect checkouts the v3-to-v4 migration skill clones for
+# reference are a reader's copy of another repository, never an input to this one.
+.repos/
+
 # Local build and agent state, never inputs
 .vercel/
 .eve/
