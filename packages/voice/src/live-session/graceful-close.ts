@@ -4,7 +4,7 @@ import {
   type LiveServerEvent,
   type LiveSessionClosed,
 } from "@sidecar/live";
-import { Duration, Effect } from "effect";
+import { Deferred, Duration, Effect, Exit } from "effect";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
 
 /**
@@ -40,46 +40,47 @@ export interface GracefulCloseOptions {
  * Closes a session the way the guide says to: the `session.closed` listener
  * is registered first, then `session.close` is sent, and the sideband is held
  * open until the final event, the socket's own end, or the timeout. The
- * transport is released only after one of those; a socket closed first would
+ * listeners and the transport are a scope of this close's own, released in
+ * that order and only after one of those three; a socket closed first would
  * leave the final usage unconfirmed by the caller's own hand. The wait is the
  * ambient `Clock`'s, so whoever runs this close runs its timeout too: a test
  * on a `TestClock` gives up when it says so, and the fiber that gave up
- * releases the transport on its way out exactly as the timeout does.
+ * closes the scope on its way out exactly as the timeout does.
  */
 export function closeGracefully(
   sideband: LiveSideband,
   options: GracefulCloseOptions,
 ): Effect.Effect<SidebandCloseResult> {
-  return Effect.async<SidebandCloseResult>((resume) => {
-    let settled = false;
-    const release = (): boolean => {
-      if (settled) return false;
-      settled = true;
-      stopEvents();
-      stopClose();
-      sideband.close();
-      return true;
-    };
-    const finish = (result: SidebandCloseResult) => {
-      if (release()) resume(Effect.succeed(result));
-    };
-    const stopEvents = sideband.onEvent((event: LiveServerEvent) => {
-      if (event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
-        finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: event });
-      }
-    });
-    const stopClose = sideband.onClose((close) =>
-      finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST, close }),
-    );
-    sideband.send(closeEvent(options.eventId));
-    return Effect.sync(() => {
-      release();
-    });
-  }).pipe(
-    Effect.timeoutTo({
-      duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
-      onSuccess: (result: SidebandCloseResult) => result,
-      onTimeout: (): SidebandCloseResult => ({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const settled = yield* Deferred.make<SidebandCloseResult>();
+      const finish = (result: SidebandCloseResult) => {
+        Deferred.unsafeDone(settled, Exit.succeed(result));
+      };
+      yield* Effect.addFinalizer(() => sideband.close);
+      yield* Effect.acquireRelease(
+        Effect.sync(() => ({
+          stopEvents: sideband.onEvent((event: LiveServerEvent) => {
+            if (event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
+              finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: event });
+            }
+          }),
+          stopClose: sideband.onClose((close) =>
+            finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST, close }),
+          ),
+        })),
+        ({ stopEvents, stopClose }) =>
+          Effect.sync(() => {
+            stopEvents();
+            stopClose();
+          }),
+      );
+      yield* sideband.send(closeEvent(options.eventId));
+      return yield* Effect.timeoutTo(Deferred.await(settled), {
+        duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
+        onSuccess: (result: SidebandCloseResult) => result,
+        onTimeout: (): SidebandCloseResult => ({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
+      });
     }),
   );
 }

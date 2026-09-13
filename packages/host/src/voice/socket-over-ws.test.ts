@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { it } from "@effect/vitest";
 import { SOCKET_OPEN_FAULT, socketOpened } from "@sidecar/voice";
-import { Effect, Exit, Fiber } from "effect";
+import { Effect, Exit, Fiber, Stream } from "effect";
 import { WebSocketServer } from "ws";
 import { openSocketOverWs } from "./socket-over-ws.js";
 
@@ -71,12 +71,19 @@ it.effect(
         ]);
         const messages: string[] = [];
         const closes: number[] = [];
-        opening.socket.onMessage((data) => messages.push(data));
         let ended = false;
-        opening.socket.onClose((close) => {
-          closes.push(close.code ?? -1);
-          ended = true;
-        });
+        yield* Effect.fork(
+          Stream.runForEach(opening.socket.arrivals, (arrival) =>
+            Effect.sync(() => {
+              if ("frame" in arrival) {
+                messages.push(arrival.frame);
+                return;
+              }
+              closes.push(arrival.close.code ?? -1);
+              ended = true;
+            }),
+          ),
+        );
         opening.socket.send("hello");
         yield* waitFor(() => messages.length > 0);
         assert.deepEqual(messages, [JSON.stringify({ echoed: "hello" })]);
@@ -233,10 +240,16 @@ it.effect(
         });
         yield* waitFor(() => tickPassed);
         const types: string[] = [];
-        opening.socket.onMessage((data) => {
-          // SAFETY: the test wrote these frames as JSON objects with a string type.
-          types.push((JSON.parse(data) as { type: string }).type);
-        });
+        yield* Effect.fork(
+          Stream.runForEach(opening.socket.arrivals, (arrival) =>
+            Effect.sync(() => {
+              if (!("frame" in arrival)) return;
+              // SAFETY: the test wrote these frames as JSON objects with a string type.
+              types.push((JSON.parse(arrival.frame) as { type: string }).type);
+            }),
+          ),
+        );
+        yield* waitFor(() => types.length > 1);
         assert.deepEqual(types, ["session.started", "session.input_audio.muted"]);
         opening.socket.close();
       } finally {

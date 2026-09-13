@@ -750,9 +750,10 @@ each arrival puts one on, so where an event lands in the sequence is decided
 where it arrives rather than by whichever fiber reached the store first. The write answers true
 only when the ask is on record, which is what keeps the service's own rule —
 the record precedes the speech — over Postgres. `server/voice/live-sideband.ts`
-reads the upstream socket as the `LiveSideband` the service consumes, and
-`observedSideband` hands each event to the record once, ahead of every
-listener, replay included.
+reads the upstream socket as the `LiveSideband` the service consumes — the
+`ws` listeners it registers are the acquire of the session's own scope and are
+taken off at its close — and `observedSideband` hands each event to the record
+once, ahead of every listener, replay included.
 
 ### The brain answered in process
 

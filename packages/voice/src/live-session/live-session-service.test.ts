@@ -90,16 +90,18 @@ class FakeSideband implements LiveSideband {
     };
   }
 
-  send(event: LiveClientEvent): void {
-    this.sent.push(event);
-    if (this.acknowledgeThinkingAtOnce && event.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
-      this.acknowledge(this.sent.length - 1, 0, 0);
-    }
+  send(event: LiveClientEvent): Effect.Effect<void> {
+    return Effect.sync(() => {
+      this.sent.push(event);
+      if (this.acknowledgeThinkingAtOnce && event.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
+        this.acknowledge(this.sent.length - 1, 0, 0);
+      }
+    });
   }
 
-  close(): void {
+  readonly close = Effect.sync(() => {
     this.closed = true;
-  }
+  });
 
   /** Delivers one server event as the socket would, through the same parser the real sideband uses. */
   receive(payload: WireRecord): void {

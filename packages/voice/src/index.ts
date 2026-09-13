@@ -7,7 +7,7 @@ export {
   type VoiceCapabilityPolicy,
   type VoiceSettings,
 } from "./capability-assembler.js";
-export { HELD_SOCKET, type HeldArrival, type HeldSocket, holdSocket } from "./held-socket.js";
+export { HELD_SOCKET, type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
 export {
   environmentLiveVoice,
   HOSTED_REATTACH_DELAYS_MS,
@@ -32,10 +32,12 @@ export {
   type LiveSocket,
   type OpenSocket,
   SOCKET_OPEN_FAULT,
+  type SocketArrival,
   type SocketClose,
   type SocketOpenFailure,
   type SocketOpenFault,
   type SocketOpening,
+  type SocketVerbs,
   sidebandOverSocket,
   socketOpened,
 } from "./live-socket.js";

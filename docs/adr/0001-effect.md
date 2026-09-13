@@ -376,11 +376,25 @@ transport — are socket callbacks, which can only offer that effect to the
 service's task queue. Releasing the sideband from a scope would put its close
 in the deferred half while `ended` and `#standing` are cleared in the eager
 one, so a `stop` arriving between the two would find no session standing and
-leave the socket open. The listeners and the close become a scope's to release
-when those callbacks can yield instead of offer, which is the same change that
-makes the socket's frames a `Stream` (P12-20i2b, over P12-20i3's `attach`
-door); until then the hand-written unwind is what keeps the session over at
-the instant it is declared over.
+leave the socket open. P12-20i2b took the socket's own frames onto a `Stream`
+beneath the sideband, and those three callers are still callbacks all the
+same, because what the service reads is `LiveSideband`'s `onEvent` and
+`onClose`: the pump that reads the socket dispatches to them from a fiber, and
+a fiber's dispatch into a callback is still a callback at the far end.
+P12-20i2c is the sideband's own events and closes as a stream the service
+consumes, and P12-18h4 follows it; until then the hand-written unwind is what
+keeps the session over at the instant it is declared over.
+
+What P12-20i2b did settle is which scope a session stands in. A sideband now
+leaves a fiber reading its socket behind it, and the graceful close speaks to
+the session and reads the final event back through that fiber, so a sideband
+released with the scope the close is itself a finalizer of would be dead
+before the close it is for. `LiveSessionService.make` forks a child scope (`#sessions`) for
+what a session leaves standing — the reading, and the hosted source's
+re-attaching tries — as the service is built, which is before any composition
+registers whatever runs `stop`, so the reverse order that scope closes in puts
+the reading after the close that needs it. `create` and `attach` are extended
+over that child rather than over the service's own.
 
 P12-20h took the service's two collaborators out of its options and into its
 context. `LiveSessionService.make` yields `LiveBrainTag` and `LiveRecordTag`,
@@ -1118,21 +1132,44 @@ tagged error where the promise rejected with an `Error`, keeping that error's
 own words as its `message`, which is the sentence the live session service
 still reports. The introduction's source asks for no scope, since nothing of
 its session stands on a fiber on this side. What the scope is for is the
-re-attaching socket: its recovery is a fiber of a `FiberSet` the hosted
-`create` makes in the scope it was yielded in, forked from the socket's close
-callback through that set's own runtime — the fork a callback still needs,
-now owned by a scope rather than by a runtime the source was handed — and
-interrupted by hand on a hang-up as before. Closing that scope interrupts it
-too, so a composition that has gone leaves nothing trying. The callers yield
-where they awaited: `live-session-service.ts` extends the scope it was built
-in over both the create and the attach, because the session is what that
-scope stands for, so its own verbs still ask for no scope of their caller;
-the desktop's `IntroductionSession#open` answers an effect, run by the act
-row on the desktop's runtime through the `run` every other act uses rather
+re-attaching socket: its recovery was a fiber of a `FiberSet` the hosted
+`create` made in the scope it was yielded in, forked from the socket's close
+callback through that set's own runtime — the fork a callback still needed,
+owned by a scope rather than by a runtime the source was handed — and
+P12-20i2b took the set away with the callback it was for. Closing that scope
+interrupts what is left the same way, so a composition that has gone leaves
+nothing trying. The callers yield
+where they awaited: `live-session-service.ts` extends a child of the scope it
+was built in over both the create and the attach, because the session is what
+that child stands for, so its own verbs still ask for no scope of their
+caller; the desktop's `IntroductionSession#open` answers an effect, run by the
+act row on the desktop's runtime through the `run` every other act uses rather
 than at a door of its own; and the hosted voice service's exchange maps over
-the two seams where it awaited them. What is still a callback is the frames a
-`LiveSocket` hands out, which P12-20i2b makes a `Stream` pumped into the
-scope this PR gave `attach`.
+the two seams where it awaited them.
+
+P12-20i2b took the frames themselves off callbacks. A `LiveSocket` hands up
+one `Stream` of arrivals — every frame the far side sent and then the close
+that ended it — which one consumer runs in its own scope, and
+`sidebandOverSocket` answers `Effect<LiveSideband, never, Scope>`: it forks
+the fiber that reads that stream into the scope `attach` was yielded in, so
+closing the scope ends the reading. The hold is what makes a stream safe
+there. `holdSocket` no longer wraps a socket; it is what a transport makes one
+from, taking the two verbs it answers for and handing back the socket and the
+one hand — `hear` — the transport calls from inside its own handler, where no
+fiber runs. That keeps the guarantee `ws` forces: the bytes that followed the
+handshake response flush on the next tick, ahead of any fiber a consumer could
+fork, so the hand that hears them stands in the same turn the socket is
+constructed in (`socket-over-ws.ts`), and what arrived before a consumer came
+is replayed to the first one to run the stream rather than emitted to nobody.
+`takeFirst` is unchanged in kind: it takes the arrival at the head of the hold
+without releasing it, and interrupting the wait withdraws it. The re-attaching
+socket is a function rather than a class with a fork seam: one fiber of the
+session's scope reads each connection to its end, and because a connection's
+close is the arrival that ends its stream, standing the next one up is the
+next step of that same fiber rather than something a callback forks. A hang-up
+is a `Deferred` the recovery races, so the attempt in flight is interrupted
+and closes what it opened. What is still a callback is what the sideband
+itself hands out, which P12-20i2c is for.
 
 `fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` was on this
 allowlist from P10-16, the PR that deleted `HostedStoreRun` and
@@ -1797,7 +1834,7 @@ design decision stated as such:
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
 | `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | P12-20d — deleted; `exchangeGoogleCode` answers the effect and the consent trip yields it |
-| `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
+| `ReattachingSocket`'s recovery fiber over its own runtime, a `FiberSet`'s since P12-20i3 | P6-07 | P12-20i2b — deleted; the socket's arrivals are a `Stream`, so the recovery is the next step of the one fiber reading it rather than a fork a close callback makes |
 | `detachOn`, the brain's synchronous-start door onto the same runtime | P12-16j | never — P12-16m named it permanent as the detach door: only a run begins the effect on the calling stack, and `AgentSeam#detach`'s queue registration, `BrainHost`'s retirement revocation, and the brain wiring's close and open (P12-16n) must each stand in the step that asked for them |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |

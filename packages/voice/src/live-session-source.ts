@@ -50,18 +50,18 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import {
   Data,
+  Deferred,
   Duration,
   Effect,
   Either,
-  type Fiber,
-  FiberId,
-  FiberSet,
+  Exit,
   type Layer,
   Option,
   Schedule,
   type Scope,
+  Stream,
 } from "effect";
-import type { HeldSocket } from "./held-socket.js";
+import { type HeldSocket, holdSocket } from "./held-socket.js";
 import {
   type LiveSideband,
   type LiveSocket,
@@ -240,6 +240,23 @@ const HOSTED_ERROR_OUTCOME: ReadonlyMap<HostedApiError, LiveSessionOutcome> = ne
   [HOSTED_API_ERROR.UPSTREAM_THROTTLED, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE],
 ]);
 
+/**
+ * The same socket with its close seen on the way past. A socket's arrivals
+ * are one consumer's, and that consumer is the sideband, so what once stood
+ * as a close listener of its own rides on the stream instead.
+ */
+function watchingClose(socket: LiveSocket, closed: () => void): LiveSocket {
+  return {
+    send: (data) => socket.send(data),
+    close: () => socket.close(),
+    arrivals: Stream.tap(socket.arrivals, (arrival) =>
+      Effect.sync(() => {
+        if ("close" in arrival) closed();
+      }),
+    ),
+  };
+}
+
 export interface KeyedLiveSessionOptions {
   apiKey: string;
   openSocket: OpenSocket;
@@ -373,7 +390,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
    * with the id kept unchanged, and the handshake carries the same project
    * key that created the session, as the server-controls guide requires.
    */
-  #attach(sessionId: string): Effect.Effect<LiveSideband, SidebandAttachFailed> {
+  #attach(sessionId: string): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope> {
     return Effect.gen(this, function* () {
       const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
       address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
@@ -386,10 +403,11 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
         return yield* new SidebandAttachFailed({ detail });
       }
       this.#sidebandAttached = true;
-      opening.socket.onClose(() => {
-        this.#sidebandAttached = false;
-      });
-      return sidebandOverSocket(opening.socket);
+      return yield* sidebandOverSocket(
+        watchingClose(opening.socket, () => {
+          this.#sidebandAttached = false;
+        }),
+      );
     });
   }
 
@@ -498,7 +516,7 @@ class ServiceLiveSessionSource {
    */
   protected createSession(
     input: LiveSessionCreateInput,
-  ): Effect.Effect<{ created: LiveSessionCreated; socket: LiveSocket } | undefined> {
+  ): Effect.Effect<{ created: LiveSessionCreated; socket: HeldSocket } | undefined> {
     return Effect.gen(this, function* () {
       this.#outcome.attempt();
       this.#sidebandAttached = false;
@@ -565,12 +583,15 @@ class ServiceLiveSessionSource {
     );
   }
 
-  protected holdSideband(socket: LiveSocket): LiveSideband {
-    this.#sidebandAttached = true;
-    socket.onClose(() => {
-      this.#sidebandAttached = false;
+  protected holdSideband(socket: LiveSocket): Effect.Effect<LiveSideband, never, Scope.Scope> {
+    return Effect.suspend(() => {
+      this.#sidebandAttached = true;
+      return sidebandOverSocket(
+        watchingClose(socket, () => {
+          this.#sidebandAttached = false;
+        }),
+      );
     });
-    return sidebandOverSocket(socket);
   }
 
   /**
@@ -768,173 +789,130 @@ function reattachRetrySchedule(
  * whenever it closes for any reason but the session's own end: a new socket
  * opens with `session.attach`, and the pipe resumes on it. What the session
  * said between the two connections is lost — the service replays nothing,
- * and no event that crossed in the gap reaches a listener — which is
+ * and no event that crossed in the gap reaches the stream — which is
  * accepted: the WebRTC media never crossed this socket, and the host reads a
  * sideband that went quiet the same way it reads any other silence. Sends
  * made during the gap are held and sent on the next connection. Only when
  * every try fails, or the service refuses the attachment, does the close
- * reach the listeners, as the connection loss the host already handles.
+ * reach the consumer, as the connection loss the host already handles.
  *
- * The tries themselves are one fiber of the scope the session was created in:
- * closing the socket while it stands is that fiber's interruption, which
- * abandons whichever wait or attempt was in flight rather than polling a flag
- * for it, and an attempt that still lands the instant after is the one race
- * interruption cannot reach, so it is still closed by hand. Closing that scope
- * interrupts the fiber the same way, so a source whose composition has gone
- * leaves nothing trying.
+ * One fiber of the scope the session was created in reads each connection in
+ * turn and stands the next one up: the close that ends a connection is the
+ * arrival that ends its stream, so the recovery is the next step of the same
+ * fiber rather than something a callback forks. A hang-up while a try is in
+ * flight is a race the fiber loses on purpose — the wait it abandons
+ * interrupts whichever attempt was standing, and an attempt that still lands
+ * the instant after is closed by hand — and closing the scope interrupts the
+ * fiber the same way, so a source whose composition has gone leaves nothing
+ * trying. What the consumer reads is the hold's own stream, so nothing said
+ * between this socket's making and the sideband over it is lost either.
  */
-class ReattachingSocket implements LiveSocket {
-  #inner: LiveSocket;
-  readonly #attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
-  readonly #sessionId: string;
-  readonly #delaysMs: readonly number[];
-  /** Begins the recovery on a fiber of the session's scope, which is where a socket callback can start one at all. */
-  readonly #fork: (effect: Effect.Effect<void>) => Fiber.RuntimeFiber<void>;
-  readonly #messageListeners = new Set<(data: string) => void>();
-  readonly #closeListeners = new Set<(close: SocketClose) => void>();
-  /** Frames heard before the first listener stands, replayed to it in order; the sideband over this socket subscribes only after construction. */
-  #heldForListener: string[] | undefined = [];
-  #held: string[] | undefined;
-  #closedByClient = false;
-  #ended = false;
-  /** The close this socket ended with, told to every close listener that registers after it. */
-  #endedWith: SocketClose | undefined;
-  #recovery: Fiber.RuntimeFiber<void> | undefined;
-
-  constructor(options: {
-    socket: LiveSocket;
-    sessionId: string;
-    attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
-    delaysMs: readonly number[];
-    fork: (effect: Effect.Effect<void>) => Fiber.RuntimeFiber<void>;
-  }) {
-    this.#inner = options.socket;
-    this.#sessionId = options.sessionId;
-    this.#attach = options.attach;
-    this.#delaysMs = options.delaysMs;
-    this.#fork = options.fork;
-    this.#adopt(options.socket);
-  }
-
-  send(data: string): void {
-    if (this.#held !== undefined) {
-      this.#held.push(data);
-      return;
-    }
-    this.#inner.send(data);
-  }
-
-  close(): void {
-    this.#closedByClient = true;
-    this.#recovery?.unsafeInterruptAsFork(FiberId.none);
-    this.#inner.close();
-  }
-
-  onMessage(listener: (data: string) => void): () => void {
-    this.#messageListeners.add(listener);
-    if (this.#heldForListener !== undefined) {
-      const replay = this.#heldForListener;
-      this.#heldForListener = undefined;
-      for (const data of replay) listener(data);
-    }
-    return () => {
-      this.#messageListeners.delete(listener);
-    };
-  }
-
-  onClose(listener: (close: SocketClose) => void): () => void {
-    this.#closeListeners.add(listener);
-    if (this.#endedWith !== undefined) listener(this.#endedWith);
-    return () => {
-      this.#closeListeners.delete(listener);
-    };
-  }
-
-  #adopt(socket: LiveSocket): void {
-    socket.onMessage((data) => {
-      if (socket !== this.#inner || this.#ended) return;
-      if (this.#heldForListener !== undefined) {
-        this.#heldForListener.push(data);
-        return;
-      }
-      for (const listener of [...this.#messageListeners]) listener(data);
+function reattachingSocket(options: {
+  socket: LiveSocket;
+  sessionId: string;
+  attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
+  delaysMs: readonly number[];
+}): Effect.Effect<LiveSocket, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    let inner = options.socket;
+    /** Sends made while no connection stands, sent on the next one. */
+    let heldSends: string[] | undefined;
+    let closedByClient = false;
+    const hungUp = yield* Deferred.make<void>();
+    const hold = holdSocket({
+      send: (data) => {
+        if (heldSends !== undefined) {
+          heldSends.push(data);
+          return;
+        }
+        inner.send(data);
+      },
+      close: () => {
+        if (closedByClient) return;
+        closedByClient = true;
+        Deferred.unsafeDone(hungUp, Exit.void);
+        inner.close();
+      },
     });
-    socket.onClose((close) => {
-      if (socket !== this.#inner || this.#ended) return;
-      if (this.#closedByClient || close.code === NORMAL_CLOSE_CODE) {
-        this.#end(close);
-        return;
+
+    /** Reads one connection to its end and answers the close that ended it. */
+    const readConnection = (socket: LiveSocket): Effect.Effect<SocketClose> =>
+      Effect.gen(function* () {
+        let ended: SocketClose | undefined;
+        yield* Stream.runForEach(socket.arrivals, (arrival) =>
+          Effect.sync(() => {
+            if ("close" in arrival) {
+              ended = arrival.close;
+              return;
+            }
+            hold.hear(arrival);
+          }),
+        );
+        return ended ?? {};
+      });
+
+    const attempted = (
+      outcome: ReattachAttempt,
+    ): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> => {
+      if (closedByClient) {
+        if (outcome.outcome === REATTACH_ATTEMPT.ATTACHED) outcome.socket.close();
+        return Effect.fail(new ReattachRefused());
       }
-      this.#recovery = this.#fork(
-        this.#recoverEffect(close).pipe(
-          Effect.ensuring(
-            Effect.sync(() => {
-              this.#recovery = undefined;
-            }),
-          ),
-        ),
-      );
-    });
-  }
+      if (outcome.outcome === REATTACH_ATTEMPT.ATTACHED) return Effect.succeed(outcome.socket);
+      if (outcome.outcome === REATTACH_ATTEMPT.REFUSED) return Effect.fail(new ReattachRefused());
+      return Effect.fail(new ReattachFailed());
+    };
 
-  #outcomeEffect(
-    attempt: ReattachAttempt,
-  ): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> {
-    if (this.#closedByClient) {
-      if (attempt.outcome === REATTACH_ATTEMPT.ATTACHED) attempt.socket.close();
-      return Effect.fail(new ReattachRefused());
-    }
-    if (attempt.outcome === REATTACH_ATTEMPT.ATTACHED) return Effect.succeed(attempt.socket);
-    if (attempt.outcome === REATTACH_ATTEMPT.REFUSED) return Effect.fail(new ReattachRefused());
-    return Effect.fail(new ReattachFailed());
-  }
-
-  #attemptEffect(): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> {
     // An attempt that landed the instant a hang-up interrupted this fiber is read to its end all
     // the same, because reading it is what closes the socket it stood up.
-    return Effect.uninterruptibleMask((restore) =>
-      Effect.flatMap(restore(this.#attach(this.#sessionId)), (attempt) =>
-        this.#outcomeEffect(attempt),
-      ),
+    const attempt = Effect.uninterruptibleMask((restore) =>
+      Effect.flatMap(restore(options.attach(options.sessionId)), attempted),
     );
-  }
 
-  #recoverEffect(close: SocketClose): Effect.Effect<void> {
-    return Effect.suspend(() => {
-      this.#held = [];
-      const schedule = reattachRetrySchedule(this.#delaysMs);
-      if (schedule === undefined) {
-        this.#held = undefined;
-        this.#end(close);
-        return Effect.void;
+    const schedule = reattachRetrySchedule(options.delaysMs);
+    /** The next connection, or nothing where every try failed, the service refused, or the client hung up meanwhile. */
+    const recover: Effect.Effect<LiveSocket | undefined> =
+      schedule === undefined
+        ? Effect.succeed(undefined)
+        : Effect.raceFirst(
+            Effect.orElseSucceed(
+              Effect.retry(attempt, {
+                schedule,
+                while: (error) => error._tag === "ReattachFailed",
+              }),
+              () => undefined,
+            ),
+            Effect.as(Deferred.await(hungUp), undefined),
+          );
+
+    const serve = Effect.gen(function* () {
+      for (;;) {
+        const close = yield* readConnection(inner);
+        if (closedByClient || close.code === NORMAL_CLOSE_CODE) {
+          hold.hear({ close });
+          return;
+        }
+        heldSends = [];
+        const recovered = yield* recover;
+        // A hang-up that landed while this fiber was resuming is the one instant the race cannot
+        // reach: the close it ran found the dying connection standing, so the one just stood up is
+        // this step's to close, in the same step it would otherwise have been adopted in.
+        if (recovered === undefined || closedByClient) {
+          heldSends = undefined;
+          recovered?.close();
+          hold.hear({ close });
+          return;
+        }
+        inner = recovered;
+        const pending = heldSends ?? [];
+        heldSends = undefined;
+        for (const data of pending) recovered.send(data);
       }
-      return Effect.retry(this.#attemptEffect(), {
-        schedule,
-        while: (error) => error._tag === "ReattachFailed",
-      }).pipe(
-        Effect.match({
-          onFailure: () => {
-            this.#held = undefined;
-            this.#end(close);
-          },
-          onSuccess: (socket) => {
-            this.#inner = socket;
-            this.#adopt(socket);
-            const held = this.#held ?? [];
-            this.#held = undefined;
-            for (const data of held) socket.send(data);
-          },
-        }),
-      );
     });
-  }
 
-  #end(close: SocketClose): void {
-    if (this.#ended) return;
-    this.#ended = true;
-    this.#endedWith = close;
-    for (const listener of [...this.#closeListeners]) listener(close);
-  }
+    yield* Effect.forkScoped(serve);
+    return hold.socket;
+  });
 }
 
 type ServiceSourceOptions = Omit<
@@ -970,11 +948,11 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
   }
 
   /**
-   * The re-attaching socket's tries are fibers of the scope this creation was
-   * yielded in — its caller's, which the session it hands back stands for —
-   * so the recovery a socket's close begins is begun by that scope's own
-   * runtime rather than one this source holds, and closing the scope ends
-   * every try still in flight.
+   * The re-attaching socket reads its connections on a fiber of the scope
+   * this creation was yielded in — its caller's, which the session it hands
+   * back stands for — so the recovery a lost connection begins is begun by
+   * that scope rather than by a runtime this source holds, and closing the
+   * scope ends whatever try is in flight.
    */
   create(
     input: LiveSessionCreateInput,
@@ -982,16 +960,14 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
     return Effect.gen(this, function* () {
       const opened = yield* this.createSession(input);
       if (!opened) return undefined;
-      const fork = yield* FiberSet.makeRuntime<never, void, never>();
       // The socket that answered is already the session's: the sideband is held
       // now, so nothing the session says before the host attaches is lost.
-      const sideband = this.holdSideband(
-        new ReattachingSocket({
+      const sideband = yield* this.holdSideband(
+        yield* reattachingSocket({
           socket: opened.socket,
           sessionId: opened.created.sessionId,
           attach: (sessionId) => this.attachOnce(sessionId),
           delaysMs: this.#reattachDelaysMs,
-          fork,
         }),
       );
       return { ...opened.created, attach: () => Effect.succeed(sideband) };
@@ -1026,9 +1002,9 @@ export class IntroductionLiveSessionSource
     return Effect.gen(this, function* () {
       const opened = yield* this.createSession(input);
       if (!opened) return undefined;
-      // Kept open and never read: the frames the service might send are heard and dropped, so the
-      // hold on this socket releases at once rather than filling toward its bound.
-      opened.socket.onMessage(() => undefined);
+      // Kept open and never read: the frames the service might send are dropped rather than held,
+      // so the hold on this socket cannot fill toward its bound and close it.
+      opened.socket.ignore();
       return { ...opened.created, close: () => opened.socket.close() };
     });
   }

@@ -1,5 +1,6 @@
+export { holdSocket } from "../held-socket.js";
 export type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
-export { type LiveSideband, type LiveSocket, sidebandOverSocket } from "../live-socket.js";
+export { type LiveSideband, sidebandOverSocket } from "../live-socket.js";
 export {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,

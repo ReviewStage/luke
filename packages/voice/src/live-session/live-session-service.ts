@@ -46,6 +46,7 @@ import {
   Deferred,
   Duration,
   Effect,
+  ExecutionStrategy,
   Exit,
   FiberId,
   FiberSet,
@@ -362,8 +363,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** The clock the session keeps: the one the scope it was built in stands on, read where a callback cannot wait for an effect. */
   readonly #clock: Clock.Clock;
 
-  /** The scope the service was built in, which a session it creates or attaches stands for. */
-  readonly #scope: Scope.Scope;
+  /**
+   * The scope a session it creates or attaches stands in: a child of the one
+   * the service was built in, forked as it is built and so before the
+   * composition registers whatever runs `stop`, which is what puts this
+   * scope's close after that stop. A graceful close speaks to the session it
+   * is closing and reads the final event back, so the fiber reading the
+   * socket and the tries standing a lost connection up again must outlive the
+   * close rather than end with the scope the close itself is a finalizer of.
+   */
+  readonly #sessions: Scope.Scope;
 
   /** The brain this session delegates to and the record it writes through, read from the context it was built in. */
   readonly #brain: LiveBrain;
@@ -374,14 +383,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
     tasks: Queue.Queue<Effect.Effect<void>>,
     clock: Clock.Clock,
-    scope: Scope.Scope,
+    sessions: Scope.Scope,
   ) {
     this.#options = options;
     this.#brain = collaborators.brain;
     this.#record = collaborators.record;
     this.#tasks = tasks;
     this.#clock = clock;
-    this.#scope = scope;
+    this.#sessions = sessions;
     this.#queue = new ProactiveQueue({ now: () => this.#now(), trace: this.#trace });
     this.#stopRunEvents = this.#brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
@@ -412,12 +421,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
       const fibers = yield* FiberSet.make();
       const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
+      const scope = yield* Effect.scope;
       const service = new LiveSessionService(
         options,
         collaborators,
         tasks,
         yield* Effect.clock,
-        yield* Effect.scope,
+        yield* Scope.fork(scope, ExecutionStrategy.sequential),
       );
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
@@ -494,7 +504,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#dropPendingRoster();
       const opened = yield* Scope.extend(
         source.create({ sdpOffer, input: this.#seedInput(seeded) }),
-        this.#scope,
+        this.#sessions,
       );
       if (!opened) return undefined;
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
@@ -798,14 +808,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * The attach runs in the service's own scope rather than the caller's: what
-   * the sideband leaves standing — the hosted source's re-attaching tries —
-   * belongs to the session, and the session belongs to this service.
+   * The attach runs in the service's own sideband scope rather than the
+   * caller's: what the sideband leaves standing — the fiber reading the
+   * socket, the hosted source's re-attaching tries — belongs to the session,
+   * and the session belongs to this service.
    */
   #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
   ): Effect.Effect<LiveSideband | undefined> {
-    return Scope.extend(opened.attach(), this.#scope).pipe(
+    return Scope.extend(opened.attach(), this.#sessions).pipe(
       Effect.catchAll((failure) =>
         Effect.sync(() => {
           this.#options.report(`Live sideband could not attach: ${failure.message}`);
@@ -1439,10 +1450,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * The session is over, and it is over the instant this is called: the
    * listeners, the timers, the channel, and the phase are all settled here,
    * so a caller that reads the service back sees no session standing. What it
-   * hands back is what the end began and nothing waits on inside it — the
-   * read made ahead forgotten, and whatever either speaker said last written
-   * down — so the drain, which is the one caller that waits, closes with
-   * those writes in rather than racing them.
+   * hands back is the sideband's own close, which is an effect, and then what
+   * the end began and nothing waits on inside it — the read made ahead
+   * forgotten, and whatever either speaker said last written down — so the
+   * drain, which is the one caller that waits, closes with those writes in
+   * rather than racing them.
    */
   #tearDown(session: StandingSession, reason: string): Effect.Effect<void> {
     session.ended = true;
@@ -1461,10 +1473,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#drop(),
       ...Object.values(TRANSCRIPT_SPEAKER).map((speaker) => this.#writeSettled(session, speaker)),
     ];
-    session.sideband.close();
     if (this.#standing === session) this.#standing = undefined;
     this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
-    return Effect.all(ended, { concurrency: "unbounded", discard: true });
+    return Effect.zipRight(
+      session.sideband.close,
+      Effect.all(ended, { concurrency: "unbounded", discard: true }),
+    );
   }
 
   #setPhase(change: VoiceLiveSessionChanged): void {

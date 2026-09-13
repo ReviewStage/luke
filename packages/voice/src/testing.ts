@@ -1,22 +1,30 @@
 import type { WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
-import { holdSocket } from "./held-socket.js";
-import type { LiveSocket, OpenSocket, SocketClose, SocketOpening } from "./live-socket.js";
+import { Effect, type Stream } from "effect";
+import { type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
+import type { OpenSocket, SocketArrival, SocketClose, SocketOpening } from "./live-socket.js";
 
 /**
  * A scripted socket for the sources' tests: what the source sent is kept,
- * and the test feeds frames and closes from the far side.
+ * and the test feeds frames and closes from the far side. It holds what it
+ * hears exactly as a real socket does, so it is the held socket an opening
+ * answers with rather than something a hold is put around.
  */
-export class FakeLiveSocket implements LiveSocket {
+export class FakeLiveSocket implements HeldSocket {
   readonly sent: string[] = [];
   closedByClient = false;
   readonly #sentListeners = new Set<(data: string) => void>();
-  readonly #messageListeners = new Set<(data: string) => void>();
-  readonly #closeListeners = new Set<(close: SocketClose) => void>();
+  readonly #hold: SocketHold = holdSocket({
+    send: (data) => {
+      this.sent.push(data);
+      for (const listener of [...this.#sentListeners]) listener(data);
+    },
+    close: () => {
+      this.closedByClient = true;
+    },
+  });
 
   send(data: string): void {
-    this.sent.push(data);
-    for (const listener of [...this.#sentListeners]) listener(data);
+    this.#hold.socket.send(data);
   }
 
   /** Hears what the source sends, so a script can answer the frame it was sent. */
@@ -28,21 +36,19 @@ export class FakeLiveSocket implements LiveSocket {
   }
 
   close(): void {
-    this.closedByClient = true;
+    this.#hold.socket.close();
   }
 
-  onMessage(listener: (data: string) => void): () => void {
-    this.#messageListeners.add(listener);
-    return () => {
-      this.#messageListeners.delete(listener);
-    };
+  get arrivals(): Stream.Stream<SocketArrival> {
+    return this.#hold.socket.arrivals;
   }
 
-  onClose(listener: (close: SocketClose) => void): () => void {
-    this.#closeListeners.add(listener);
-    return () => {
-      this.#closeListeners.delete(listener);
-    };
+  get takeFirst(): Effect.Effect<SocketArrival> {
+    return this.#hold.socket.takeFirst;
+  }
+
+  ignore(): void {
+    this.#hold.socket.ignore();
   }
 
   /** Delivers one frame from the far side, encoded as the service would send it. */
@@ -52,22 +58,12 @@ export class FakeLiveSocket implements LiveSocket {
 
   /** Delivers raw text from the far side, for a frame that is not JSON at all. */
   receiveText(data: string): void {
-    for (const listener of [...this.#messageListeners]) listener(data);
+    this.#hold.hear({ frame: data });
   }
 
   closeFromServer(close: SocketClose = {}): void {
-    for (const listener of [...this.#closeListeners]) listener(close);
+    this.#hold.hear({ close });
   }
-
-  get listenerCounts(): ListenerCounts {
-    return { messages: this.#messageListeners.size, closes: this.#closeListeners.size };
-  }
-}
-
-/** How many listeners still stand on a socket, so a test can see a settled wait let go of it. */
-export interface ListenerCounts {
-  messages: number;
-  closes: number;
 }
 
 interface RecordedOpen {
@@ -84,7 +80,7 @@ export interface ScriptedSocketSeam {
   sockets: FakeLiveSocket[];
 }
 
-/** An `openSocket` seam that answers each open from a script and records what it was asked; the socket it answers with is held, as the seam's contract has it, and the script drives the raw socket beneath. */
+/** An `openSocket` seam that answers each open from a script and records what it was asked; the socket it answers with holds what it hears, as the seam's contract has it, and the script drives it from the far side. */
 export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSeam {
   const opens: RecordedOpen[] = [];
   const sockets: FakeLiveSocket[] = [];
@@ -97,7 +93,7 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
       const answer = answers[Math.min(call, answers.length - 1)];
       call += 1;
       if (!answer) throw new Error("no scripted opening");
-      return answer(socket) ?? { socket: holdSocket(socket) };
+      return answer(socket) ?? { socket };
     });
   return { openSocket, opens, sockets };
 }
