@@ -66,6 +66,8 @@ export interface LiveVoiceBridge {
 export interface LiveVoiceOrchestratorOptions {
   bridge: LiveVoiceBridge;
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
+  /** The runtime the notice strip's clocks are forked on, ahead of any call standing to fork the lifecycle on instead. */
+  runtime: Runtime.Runtime<never>;
 }
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
@@ -115,7 +117,11 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
   readonly #createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
-  readonly #strip = new NoticeStrip({ onChanged: () => this.#touch() });
+  readonly #runtime: Runtime.Runtime<never>;
+  readonly #strip = new NoticeStrip({
+    onChanged: () => this.#touch(),
+    fork: (effect) => Runtime.runFork(this.#runtime)(effect),
+  });
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
     voiceAvailable: undefined,
@@ -158,6 +164,7 @@ export class LiveVoiceOrchestrator {
   constructor(options: LiveVoiceOrchestratorOptions) {
     this.#bridge = options.bridge;
     this.#createCall = options.createCall;
+    this.#runtime = options.runtime;
   }
 
   surround(surroundings: LiveVoiceSurroundings): void {

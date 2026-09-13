@@ -6,7 +6,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { Effect } from "effect";
+import { Effect, Runtime } from "effect";
 import { test } from "vitest";
 import type {
   LiveCaptionRow,
@@ -123,6 +123,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
+    runtime: Runtime.defaultRuntime,
     bridge: {
       reportView: (view, exchange) => {
         views.push(view);
