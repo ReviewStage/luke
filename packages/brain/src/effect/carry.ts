@@ -57,8 +57,8 @@
  * its capture already was. `AgentSeam#detach` went in P12-16m, onto the
  * detach door above.
  *
- * What keeps this file on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md` is `runtimeExit`, whose two callers are permanent
+ * What keeps this file on the run allowlist, permanent in root AGENTS.md's
+ * "Effect idioms" section, is `runtimeExit`, whose two callers are permanent
  * rows there because the `ModelAdapter` each answers is a promise, not a
  * fiber; the detach door is named permanent on the same list.
  */

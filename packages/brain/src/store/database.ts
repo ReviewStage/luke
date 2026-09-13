@@ -99,8 +99,8 @@ export class StoreDatabase {
    * synchronous surface throws. Every statement underneath is one
    * synchronous call into `node:sqlite`, so the run waits on nothing.
    *
-   * @deprecated A strangler shim on the `Effect.runSync` allowlist in
-   * `docs/adr/0001-effect.md`: the synchronous reach of the two OpenClaw
+   * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect
+   * idioms" section: the synchronous reach of the two OpenClaw
    * ports, `archives.ts` and `maintenance-run.ts`, into the tables, which
    * import nothing from `effect` and so call the tables' synchronous doors.
    * It goes when those ports are handed a synchronous accessor of their own.

@@ -67,9 +67,9 @@ function errorName(cause: unknown): string | undefined {
  * request, so its end is read back here, named by the reason their signal
  * carried, exactly as an aborted fetch named it.
  *
- * @deprecated `BrainTransport#send` is a promise-facing strangler shim on the
- * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`, permanent
- * alongside it: it runs the call effect here because every caller still
+ * @deprecated `BrainTransport#send` is a promise-facing adaptor, permanent
+ * in root AGENTS.md's "Effect idioms" section alongside `tracedModelAdapter`:
+ * it runs the call effect here because every caller still
  * holds a promise, not a fiber, and what keeps it there is the `ModelAdapter`
  * promise above it, which `compaction.ts` — an OpenClaw port that imports
  * nothing from `effect` — awaits, so this door never closes while that port

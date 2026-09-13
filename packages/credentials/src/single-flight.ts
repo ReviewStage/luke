@@ -16,7 +16,8 @@ import { Deferred, Effect, FiberId } from "effect";
  * when — or whether — a caller runs the await that follows. That is what both
  * runs here are for — the `Effect.runSync` of the decision and the
  * `Effect.runFork` of the flight it decided on — and it is why this file is on
- * the allowlist in `docs/adr/0001-effect.md`. The flight is a daemon of the
+ * the permanent-adaptor list in root AGENTS.md's "Effect idioms" section.
+ * The flight is a daemon of the
  * default runtime rather than a fiber of whoever asked first, because a caller
  * that gives up on its await must not take the rotation the other callers are
  * waiting on with it. What ends a flight is that fiber's own end, so a body
