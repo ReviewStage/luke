@@ -1097,11 +1097,9 @@ left it with the queue beneath it, so an ask, a wait, a cancel, a mark, a
 context snapshot, a stop, the four child verbs, and a run-event subscription
 are each an `Effect` its caller runs. What holds a promise is the host above
 the agent — `BrainHost`'s transition chain, the publication chain's marks,
-the child service's four executor seams, the live brain adapter's spoken ask
-and its subscription, and `resetConversation`'s capture, which
-`packages/host/src/brain/wiring.ts` awaits because the reset answers the host
-a promise rather than because the capture is one — and the two edges inside
-the agent that a timer calls with nowhere to answer, which `AgentSeam#detach`
+the child service's four executor seams, and the live brain adapter's spoken
+ask and its subscription — and the two edges inside the agent that a timer
+calls with nowhere to answer, which `AgentSeam#detach`
 carries in one place rather than in each. The wake face left that surface in
 P12-16c, named below. The
 `MemoryProvider` seam left that list in P12-16a:
@@ -1123,11 +1121,27 @@ that supersede a slot must leave a read already out to finish into the memo
 for the plan that follows. A defect is squashed back to the error that
 caused it, so a store, a listener, or an engine that threw reaches the caller
 as the error it threw rather than as the fiber failure that carried it.
-P12-04 deletes it with those seams. What still awaits this door after P12-16g
-is these and nothing else: the generation's context open, which
-`generationFrom` must hold as a promise so the object is built in one
-synchronous statement; `AgentSeam#detach`, which every turn nobody waits for
-is begun through — the ask ledger's drain, the wake window's flush and its
+The generation's context open and the host's reset left this door in P12-16i.
+`Generation.opened` is an `Effect<OpenedContext>` rather than a promise the
+agent carried into it: `generationFrom` still builds the generation in one
+synchronous statement, because the fence a replacement raises must stand
+before any disk is waited on, and what that statement now holds is the open
+itself, begun on the first fiber that asks the generation for its context and
+joined by every fiber after (`joinedOnce` in
+`packages/brain/src/effect/once.ts`, which the agent's own restore is
+memoized by too). The fiber is a daemon, so a turn interrupted while it waits
+leaves the open standing for the turn behind it, and it is `interruptible`
+whatever the fiber that forked it was, because a fork inherits its parent's
+runtime flags and an open begun inside the wake capture's uninterruptible
+region would otherwise wait forever on a race of its own it could not end.
+The context the open installs is retired by a scope forked from the
+generation's before the signal's finalizer, so one close still fires the
+signal first and lets go of the context behind it, and an open that settles
+after that close adds its finalizer to a scope already closed, which runs it
+there and then. `resetConversation` answers an `Effect<boolean>`, which is
+what its capture and its context snapshot already were. What still awaits
+this door is these and nothing else: `AgentSeam#detach`, which every turn
+nobody waits for is begun through — the ask ledger's drain, the wake window's flush and its
 roster look, the housekeeping a settled turn leaves behind, and a hold's
 release — because a run begins the work on the calling stack while
 `Effect.forkDaemon` only schedules a fiber, and a turn must stand in the
@@ -1135,8 +1149,8 @@ conversation's queue, counted busy, in the step that asked for it rather than
 a scheduler task later, or a stop arriving between the two would drain a queue
 the turn had not yet joined; and, in the host,
 `BrainHost`'s build and stop, `followBrainRequests`' marks, `wireChildren`'s
-four executor seams, `brainAgentLiveBrain`'s ask and subscription, and
-`resetConversation`'s capture. The turn runner's `runAsk` and `turn` and
+four executor seams, and `brainAgentLiveBrain`'s ask and subscription. The
+turn runner's `runAsk` and `turn` and
 `Maintenance`'s housekeeping turn came off it in P12-16g with the queue they
 rode: `BrainAgent#enqueue`, `#queueTurn`, and the host's `BrainLane` each take
 an `Effect` now — the lane is `@sidecar/runtime/effect`'s `withLane` over the
@@ -1307,8 +1321,9 @@ back the latency it exists to avoid. `state-store.ts` keeps its own compare-and-
 it last observed standing, because it is ported from OpenClaw `b7528507` and
 imports nothing from `effect`; its Effect surface stays in
 `state-store.effect.ts`. What P12-02 took out of this file is the open: the
-context the runtime answers is an effect now, carried to the promise the
-generation holds by the agent's own door rather than run here. The close
+context the runtime answers is an effect, and since P12-16i it is the effect
+the generation holds rather than a promise the agent's door carried it to, so
+nothing of the open is run here either. The close
 stays, because the fence has to: the store announces a replacement in a
 synchronous callback, and the dead generation must stand nowhere before the
 caller's next statement. P12-16c settled that this is where it ends rather

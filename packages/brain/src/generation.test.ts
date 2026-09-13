@@ -10,14 +10,21 @@ import { Effect } from "effect";
 import { test } from "vitest";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { freshBrainState } from "./envelope.js";
-import { CONTEXT_OPENING, generationFrom } from "./generation.js";
+import {
+  CONTEXT_OPENING,
+  type Generation,
+  generationFrom,
+  type OpenedContext,
+} from "./generation.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 
 const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
 
 const NOW = 1_800_000_000_000;
 
-const carry = <A>(effect: Effect.Effect<A>): Promise<A> => Effect.runPromise(effect);
+/** The open as a turn's fiber would take it, on a fiber of the test's own. */
+const opened = (generation: Generation): Promise<OpenedContext> =>
+  Effect.runPromise(generation.opened);
 
 function heldRuntime() {
   const context = new ResponsesContextEngine(TOOL_LOOP_IDENTITY);
@@ -28,6 +35,7 @@ function heldRuntime() {
     },
   });
   let release: (() => void) | undefined;
+  let opens = 0;
   const opening = new Promise<ContextOpening>((resolve) => {
     release = () => resolve({ context, bootstrap: { loaded: true, repaired: 0 } });
   });
@@ -36,13 +44,23 @@ function heldRuntime() {
     quietUntil: () => undefined,
     capabilities: () => Effect.succeed(undefined),
     compact: () => Effect.succeed({ compacted: false, reason: "not compacted here" }),
-    openContext: () => Effect.promise(() => opening),
+    openContext: () =>
+      Effect.suspend(() => {
+        opens += 1;
+        return Effect.promise(() => opening);
+      }),
     start: () => {
       throw new Error("not started here");
     },
     resume: () => Effect.fail(new RuntimeResumeRefused({ reason: "not resumed here" })),
   };
-  return { runtime, context, release: () => release?.(), disposed: () => disposed };
+  return {
+    runtime,
+    context,
+    release: () => release?.(),
+    disposed: () => disposed,
+    opens: () => opens,
+  };
 }
 
 async function tick(): Promise<void> {
@@ -55,11 +73,10 @@ test("an abort and the open's resolution in the same turn leave the context disc
     freshBrainState("gen-1", NOW),
     abortFirst.runtime,
     UNKNOWN_ACTION_RESULT,
-    carry,
   );
   first.abort.abort();
   abortFirst.release();
-  const firstOpened = await first.opened;
+  const firstOpened = await opened(first);
   await tick();
   assert.equal(firstOpened.kind, CONTEXT_OPENING.INCOMPATIBLE);
   assert.equal(abortFirst.disposed(), 1);
@@ -69,24 +86,18 @@ test("an abort and the open's resolution in the same turn leave the context disc
     freshBrainState("gen-2", NOW),
     releaseFirst.runtime,
     UNKNOWN_ACTION_RESULT,
-    carry,
   );
   releaseFirst.release();
   second.abort.abort();
-  assert.equal((await second.opened).kind, CONTEXT_OPENING.INCOMPATIBLE);
+  assert.equal((await opened(second)).kind, CONTEXT_OPENING.INCOMPATIBLE);
   await tick();
   assert.equal(releaseFirst.disposed(), 1);
 
   // Released later, across turns: still discarded, still once.
   const later = heldRuntime();
-  const third = generationFrom(
-    freshBrainState("gen-3", NOW),
-    later.runtime,
-    UNKNOWN_ACTION_RESULT,
-    carry,
-  );
+  const third = generationFrom(freshBrainState("gen-3", NOW), later.runtime, UNKNOWN_ACTION_RESULT);
   third.abort.abort();
-  await third.opened;
+  await opened(third);
   assert.equal(later.disposed(), 0);
   later.release();
   await tick();
@@ -101,17 +112,37 @@ test("an open that resolves while the generation stands installs the context and
     freshBrainState("gen-4", NOW),
     standing.runtime,
     UNKNOWN_ACTION_RESULT,
-    carry,
   );
   standing.release();
-  const opened = await generation.opened;
-  assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
+  const loaded = await opened(generation);
+  assert.equal(loaded.kind, CONTEXT_OPENING.LOADED);
   // The generation holds the runtime's engine behind the transcript recorder:
   // what is ingested through the one lands in the other, and is on record.
-  assert.ok(opened.kind === CONTEXT_OPENING.LOADED);
-  await opened.context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "hello" });
+  assert.ok(loaded.kind === CONTEXT_OPENING.LOADED);
+  await loaded.context.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: "hello" });
   assert.equal(standing.context.checkpoint().items.length, 1);
-  assert.equal(opened.context.pending().length, 1);
+  assert.equal(loaded.context.pending().length, 1);
   await tick();
   assert.equal(standing.disposed(), 0);
+});
+
+test("the context is opened by the first fiber that asks for it, once, and shared with every fiber after", async () => {
+  const shared = heldRuntime();
+  const generation = generationFrom(
+    freshBrainState("gen-5", NOW),
+    shared.runtime,
+    UNKNOWN_ACTION_RESULT,
+  );
+  await tick();
+  assert.equal(shared.opens(), 0, "a generation nobody has asked has opened nothing");
+
+  const first = opened(generation);
+  const second = opened(generation);
+  shared.release();
+  const [asked, again] = await Promise.all([first, second]);
+  assert.equal(shared.opens(), 1);
+  assert.equal(asked.kind, CONTEXT_OPENING.LOADED);
+  assert.equal(asked, again, "both fibers were handed the one open");
+  assert.equal(await opened(generation), asked, "and so is a fiber that asks after it settled");
+  assert.equal(shared.opens(), 1);
 });

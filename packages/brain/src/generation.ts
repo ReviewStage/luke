@@ -7,9 +7,9 @@ import {
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
 import type { UnknownActionResult } from "@sidecar/wire";
-import { Effect, Exit, Option, Scope } from "effect";
+import { Effect, ExecutionStrategy, Exit, Option, Scope } from "effect";
 import { TranscriptCursors } from "./cursors.js";
-import type { Carry } from "./effect/carry.js";
+import { joinedOnce } from "./effect/once.js";
 import { claimedUnlessAborted } from "./effect/settled.js";
 import type { BrainPersistedState } from "./envelope.js";
 import { BrainJournal } from "./journal.js";
@@ -36,8 +36,13 @@ import { RecordingContextEngine } from "./transcript-recorder.js";
 export interface Generation {
   id: string;
   expiresAt: number;
-  /** Settles once the checkpoint has been offered to the runtime, with the context it gave or the reason it gave none. */
-  opened: Promise<OpenedContext>;
+  /**
+   * The checkpoint as the runtime answered it, or the reason it answered
+   * none: opened on the first fiber that asks for it and joined by every
+   * fiber after, so the turns of one generation open one context between
+   * them and a turn interrupted while it waits leaves the open standing.
+   */
+  opened: Effect.Effect<OpenedContext>;
   cursors: TranscriptCursors;
   /** Where the inbox has captured each transcript to; moves at capture, never with a turn. */
   captureCursors: TranscriptCursors;
@@ -146,47 +151,40 @@ export function claimOpenedContext(
 /**
  * The generation as the agent adopts it: built in one synchronous statement,
  * because the fence a replacement raises must stand before any disk is waited
- * on, so the open the runtime answers as an effect is carried to the promise
- * this object holds by the agent's own door rather than run here.
+ * on, so the open the runtime answers is held here as the effect it is, begun
+ * on the first fiber that asks the generation for its context rather than run
+ * here.
  */
 export function generationFrom(
   state: BrainPersistedState,
   runtime: AgentRuntimeEffect,
   lostResult: UnknownActionResult,
-  carry: Carry,
   now: () => number = Date.now,
 ): Generation {
   const abort = new AbortController();
   const checkpoint = storedCheckpoint(state);
-  const opened =
-    state.checkpointFormat !== undefined && !checkpoint
-      ? Promise.resolve(
-          incompatibleContext(
-            `checkpoint stamp ${state.checkpointFormat} is not one this build reads`,
-          ),
-        )
-      : carry(
-          claimOpenedContext(
-            runtime.openContext(checkpoint, lostResult, { signal: abort.signal }),
-            abort.signal,
-            `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
-            now,
-          ).pipe(Effect.map(Option.getOrElse(() => incompatibleContext(REPLACED_WHILE_OPENING)))),
-        ).catch((error: Error) =>
-          incompatibleContext(`the runtime could not open the context: ${error.message}`),
-        );
   const scope = Effect.runSync(Scope.make());
-  Effect.runSync(
-    Scope.addFinalizer(
-      scope,
-      Effect.sync(() => retireOpenedContext(opened)),
-    ),
-  );
+  // The context has a scope of its own, forked from the generation's before
+  // the signal's finalizer is added, so one close still fires the signal
+  // first and retires the context behind it. An open that settles after that
+  // close adds its finalizer to a scope already closed, which runs it there
+  // and then, so a context nobody will read again is retired however late it
+  // arrives.
+  const opening = Effect.runSync(Scope.fork(scope, ExecutionStrategy.sequential));
   Effect.runSync(
     Scope.addFinalizer(
       scope,
       Effect.sync(() => abort.abort()),
     ),
+  );
+  const opened = joinedOnce(
+    state.checkpointFormat !== undefined && !checkpoint
+      ? Effect.succeed(
+          incompatibleContext(
+            `checkpoint stamp ${state.checkpointFormat} is not one this build reads`,
+          ),
+        )
+      : openStoredContext({ runtime, checkpoint, lostResult, abort, opening, now }),
   );
   return {
     id: state.generationId,
@@ -206,6 +204,50 @@ export function generationFrom(
 }
 
 /**
+ * The open itself: the runtime's, asked for on the fiber that runs this and
+ * not before, claimed against the generation's signal, and the context it
+ * answered owned by the scope forked for it — so the
+ * retirement of a context that was installed is one finalizer rather than a
+ * promise nobody holds. An engine that threw is the reason this generation
+ * cannot be run, never this fiber's failure.
+ */
+function openStoredContext(options: {
+  readonly runtime: AgentRuntimeEffect;
+  readonly checkpoint: RuntimeCheckpoint | undefined;
+  readonly lostResult: UnknownActionResult;
+  readonly abort: AbortController;
+  readonly opening: Scope.CloseableScope;
+  readonly now: () => number;
+}): Effect.Effect<OpenedContext> {
+  const { runtime, checkpoint, lostResult, abort, opening, now } = options;
+  return Effect.suspend(() =>
+    claimOpenedContext(
+      runtime.openContext(checkpoint, lostResult, { signal: abort.signal }),
+      abort.signal,
+      `checkpoint ${checkpoint ? checkpointFormatTag(checkpoint.format) : "(none)"} could not be loaded`,
+      now,
+    ),
+  ).pipe(
+    Effect.map(Option.getOrElse(() => incompatibleContext(REPLACED_WHILE_OPENING))),
+    Effect.catchAllDefect((defect) =>
+      Effect.succeed(
+        incompatibleContext(
+          `the runtime could not open the context: ${defect instanceof Error ? defect.message : String(defect)}`,
+        ),
+      ),
+    ),
+    Effect.tap((standing) =>
+      standing.kind === CONTEXT_OPENING.LOADED
+        ? Scope.addFinalizer(
+            opening,
+            Effect.sync(() => retireContext(standing.context)),
+          )
+        : Effect.void,
+    ),
+  );
+}
+
+/**
  * Lets go of everything the generation owns, in one close and in reverse
  * order: the signal fires first, so every wait of the generation settles,
  * and the context the runtime opened is retired behind it. Nothing here
@@ -216,13 +258,6 @@ export function generationFrom(
  */
 export function retireGeneration(generation: Generation): void {
   Effect.runSync(Scope.close(generation.scope, Exit.void));
-}
-
-/** Retires the context once the open is known, when it was loaded; nothing else holds one. */
-function retireOpenedContext(opened: Promise<OpenedContext>): void {
-  void opened.then((standing) => {
-    if (standing.kind === CONTEXT_OPENING.LOADED) retireContext(standing.context);
-  });
 }
 
 /**

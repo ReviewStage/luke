@@ -79,14 +79,8 @@ async function openGeneration(
     itemFormat: RESPONSES_ITEM_FORMAT,
     createContext: () => new ResponsesContextEngine(RUNTIME_IDENTITY),
   });
-  const generation = generationFrom(
-    state,
-    runtime,
-    UNKNOWN_ACTION_RESULT,
-    (effect) => Effect.runPromise(effect),
-    () => NOW,
-  );
-  const opened = await generation.opened;
+  const generation = generationFrom(state, runtime, UNKNOWN_ACTION_RESULT, () => NOW);
+  const opened = await Effect.runPromise(generation.opened);
   assert.equal(opened.kind, CONTEXT_OPENING.LOADED);
   if (opened.kind !== CONTEXT_OPENING.LOADED) throw new Error("unreachable");
   return { generation, context: opened.context };

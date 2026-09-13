@@ -8,9 +8,6 @@
  * rather than inside it, so the carrying happens once, here, rather than in
  * each file that holds one:
  *
- * - the generation's context open, which `generationFrom` must hold as a
- *   promise so the generation object is built in one synchronous statement
- *   and the store's fence stands before anything reaches disk;
  * - the agent's own `#detach`, which is how every turn nobody waits for is
  *   begun — the ask queue's drain, the wake window's flush and its roster
  *   look, the housekeeping a settled turn leaves behind, and a hold's release
@@ -18,16 +15,19 @@
  *   its place in the conversation's queue in the same step that asked for it;
  * - and the host's side, where the promises are the seams above the agent:
  *   `BrainHost`'s transition chain (a build and a stop), the publication
- *   chain's marks, the child service's four executor seams, the live brain
- *   adapter's spoken ask and its subscription, and `resetConversation`'s
- *   capture.
+ *   chain's marks, the child service's four executor seams, and the live
+ *   brain adapter's spoken ask and its subscription.
  *
  * The wake face left that surface in P12-16c: `wake`, `rosterLook`, and
  * `releaseHeld` are effects the host's composers run, and the capture behind
  * them reads its transcript delta on the caller's own fiber. The read
  * prefetch left it in P12-16h: a slot is a fiber from the words that open it,
  * forked inside `anticipateAsk`'s own effect since P12-16g, so its plan, its
- * reads, and its summary carry nothing.
+ * reads, and its summary carry nothing. The generation's context open and
+ * the host's reset left it in P12-16i: the open is the effect the generation
+ * holds, begun on the first fiber that asks it for a context and joined by
+ * every fiber after (`once.ts`), and `resetConversation` answers the effect
+ * its capture already was.
  *
  * A defect is squashed back to the error that caused it, so a store, a
  * listener, or an engine that threw reaches the caller as the error it threw

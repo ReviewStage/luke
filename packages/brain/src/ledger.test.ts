@@ -239,6 +239,30 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a caller interrupted while its acceptance is being written leaves the entry a retry joins",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      yield* h.agent.ready();
+      const releaseWrite = h.repository.hold();
+      h.client.answers.push(answered([message("once")]));
+
+      const abandoned = yield* Effect.fork(submit(h, "send", "sub-1"));
+      yield* Effect.promise(() => settle());
+      // The caller is gone, the write is still out: the acceptance it started
+      // is the one a retry of that id must be given, never a second run.
+      yield* Fiber.interrupt(abandoned);
+      const retry = yield* Effect.fork(submit(h, "send", "sub-1"));
+      yield* Effect.promise(() => settle());
+      releaseWrite?.(true);
+      assert.equal((yield* Fiber.join(retry)).outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.requests().length, 1);
+      assert.equal(h.client.inputs.length, 1);
+    }),
+);
+
 it.effect("a stop while an acceptance is being written interrupts the run it accepted", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
