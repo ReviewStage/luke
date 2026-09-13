@@ -138,9 +138,10 @@ export interface AccountCallEffects {
    * The same reading, through a caller's own reader rather than the schema
    * beneath it.
    *
-   * @deprecated Kept while a client here still holds a `Schema<Value>` facade
-   * rather than the Effect schema {@link AccountCallEffects.ask} decodes with;
-   * deleted with the last reader-taking client of this package.
+   * @deprecated Kept for `packages/host/src/account-preferences-client.ts`,
+   * the one caller left that still hands over a hand-written reader rather
+   * than the Effect schema {@link AccountCallEffects.ask} decodes with;
+   * deleted once that client reads with a schema instead.
    */
   read<Answer>(
     request: CallRequest,

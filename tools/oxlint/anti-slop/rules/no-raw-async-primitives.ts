@@ -110,14 +110,15 @@ function isBareReference(node: ESTree.Identifier): boolean {
  * The raw primitives Effect replaces: a delay is `Effect.sleep`, a cadence a
  * `Schedule`, a value another fiber completes a `Deferred`, a cancellation a
  * fiber's interruption, and a watched directory a `Stream`. The allowlist this
- * reads is the ADR's, and every entry on it is a file some later PR converts.
+ * reads is root AGENTS.md's twin: some entries are the permanent adaptors
+ * named there, and the rest are files a later PR still converts.
  */
 export const noRawAsyncPrimitivesRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow setTimeout, setInterval, new Promise, new AbortController, and fs.watch outside the ADR's runtime edges and the files still awaiting conversion.",
+        "Disallow setTimeout, setInterval, new Promise, new AbortController, and fs.watch outside the files on that allowlist.",
     },
     messages: {
       timer:

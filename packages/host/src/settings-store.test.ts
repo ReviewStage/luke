@@ -148,10 +148,10 @@ const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
 /**
  * The runtime this suite's own promise face runs the store's effects on: the
  * store's own methods are effects, and this suite holds them as the promises
- * its assertions are written against. `settings-store-awaited.ts` answered
- * production callers the same shape by name until P12-14i deleted it; this is
- * that shape kept for the suite alone, where the run-outside-an-edge rule
- * does not reach (tests are exempt by extension).
+ * its assertions are written against. `settings-store-awaited.ts` once
+ * answered production callers the same shape by name and is now deleted;
+ * this is that shape kept for the suite alone, where the run-outside-an-edge
+ * rule does not reach (tests are exempt by extension).
  */
 const RUNTIME: Runtime.Runtime<never> = Runtime.defaultRuntime;
 

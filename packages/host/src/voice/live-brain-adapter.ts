@@ -82,11 +82,11 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  * Following the same agent twice is one subscription.
  *
  * Built as a scoped effect, and answering effects: `LiveBrain`'s own faces
- * are effects since P12-18h, so everything the agent is asked for — its
- * `submitAsk`, its `anticipateAsk` — is yielded inside the effect the service
- * runs, and the adapter runs nothing itself. Since P12-20h the run events are
- * read as the `Stream` the agent publishes rather than through a subscription
- * face of its own: following an agent takes its subscription on the fiber
+ * are effects, so everything the agent is asked for — its `submitAsk`, its
+ * `anticipateAsk` — is yielded inside the effect the service runs, and the
+ * adapter runs nothing itself. The run events are read as the `Stream` the
+ * agent publishes rather than through a subscription face of its own:
+ * following an agent takes its subscription on the fiber
  * that asked — which is why an ask follows before it submits, rather than
  * racing a subscription started beside it — and then pumps it into this
  * adapter's listeners on a fiber of the adapter's own scope. Closing that

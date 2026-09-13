@@ -10,10 +10,11 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
 /**
  * Raw rows over the ambient `SqlClient`, for the setup and assertions a test
  * still needs beneath the store's own effects: the same tables `writer.ts`
- * and its neighbors write, reached by name rather than by the Drizzle handle
- * P10-14c2 removed. Every insert answers the row's minted id where the table
- * has one; every read answers the row (or rows) as the driver hands them
- * back, undecoded beyond what a caller's own assertion needs.
+ * and its neighbors write, reached by name rather than by a Drizzle handle —
+ * there is none left in this app. Every insert answers the row's minted id
+ * where the table has one; every read answers the row (or rows) as the
+ * driver hands them back, undecoded beyond what a caller's own assertion
+ * needs.
  */
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });

@@ -167,8 +167,10 @@ and `packages/brain/src/store/worker-entry.ts` (the store's worker thread, its
 own edge because a worker starts from its own file), the two renderer roots
 `apps/desktop/src/renderer/index.tsx` and `apps/desktop/src/renderer/voice/index.tsx`
 (one browser `ManagedRuntime` each, so the panel and the voice window never
-share a registry), `apps/desktop/src/renderer/renderer-runtime.ts` (the module
-each root's runtime is built from), the renderer's own fiber sites —
+share a registry), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's
+runtime is built from: `Atom.runtime`'s layer is built, and `Registry.get`
+reads it, the moment a root first reaches it, so the edge is here rather than
+at each of the two roots that import it), the renderer's own fiber sites —
 `apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
 panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
 strip forks its own clock the same way the voice window's does), and the
@@ -204,6 +206,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   is a port of OpenClaw `b7528507` that awaits `model.respond` and imports
   nothing from `effect`, so no adapter above this transport can answer an
   effect while that port stands.
+- **`packages/runtime/src/execution.ts`**'s `ModelAdapter`, `EmbeddingAdapter`,
+  and `MaybePromise` vocabulary, and **`packages/brain/src/transcript-recorder.ts`**'s
+  `RecordingContextEngine` — each answers in a `Promise` or a bare value
+  because the ports beneath them do: `compaction.ts`'s adapters await
+  `model.respond`, and `context-engine.ts`'s engines await their lifecycle
+  hooks, both OpenClaw ports of `b7528507` that import nothing from `effect`.
 - **`packages/brain/src/store/store-client.ts`** — `StoreClient`'s promise
   face over the store's Rpc client. The client's own door is `request`, an
   effect over that Rpc client that runs nothing, and what still stands on the
@@ -221,6 +229,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   `archives.ts` and `maintenance-run.ts` import nothing from `effect` and hold
   a database handle, so the tables they read answer through the door's old
   synchronous signature rather than an effect.
+- **`packages/host/src/store-wiring.ts`** and **`packages/brain/src/ledger.ts`**
+  — promise faces downstream of the ports above: `store-wiring.ts` composes
+  the host's store over `StoreClient`'s promises directly, and `ledger.ts`
+  holds `Promise`s of its own over `BrainStateStore` (`state-store.ts`'s
+  port). Neither imports `effect`; each stays a promise face because the port
+  it stands on does.
 - **`packages/brain/src/generation.ts`** — `retireGeneration`'s `Scope.close`
   over `Effect.runSync`: which generation stands is a `MutableRef`, so the
   fence a replacement raises is up before the caller's next statement with no

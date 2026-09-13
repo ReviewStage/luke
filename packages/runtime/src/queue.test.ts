@@ -73,6 +73,7 @@ test("the other overflow policies drop the oldest or refuse the newest", () => {
   assert.deepEqual(refused.evicted, [input("d")]);
 });
 
+/** Not `TestClock`: this drives `PendingInputQueue`'s own injected `schedule` callback directly, and the port beneath it imports nothing from `effect`. */
 interface FakeClock {
   timers: Map<number, () => void>;
   next: number;

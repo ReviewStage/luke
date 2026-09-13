@@ -36,6 +36,7 @@ import {
 
 const NOW = 1_800_000_000_000;
 
+/** Not `TestClock`: this drives `children.ts`'s own `schedule`/`cancel` seam directly, and that port imports nothing from `effect`. */
 class FakeClock {
   now = NOW;
   readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();

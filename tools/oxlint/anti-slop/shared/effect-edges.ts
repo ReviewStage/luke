@@ -50,9 +50,9 @@ function allowlist(wanted: readonly AllowlistGroup[]): ReadonlySet<string> {
 }
 
 /**
- * Files that may run an Effect: the ADR's runtime edges, the shims on its run
- * allowlist, and the few it records as running on a runtime an edge handed
- * them rather than one they built.
+ * Files that may run an Effect: root AGENTS.md's runtime edges, the shims on
+ * its run allowlist, and the few it records as running on a runtime an edge
+ * handed them rather than one they built.
  */
 export const RUN_ALLOWLIST = allowlist([
   ALLOWLIST_GROUP.RUNTIME_EDGES,
