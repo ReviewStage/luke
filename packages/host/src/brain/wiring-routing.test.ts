@@ -35,8 +35,8 @@ import {
   type SessionProvider,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Fiber, Runtime } from "effect";
+import { temporaryDirectory, temporaryScope } from "@sidecar/wire/testing";
+import { Effect, Fiber, Runtime, Scope } from "effect";
 import { type TestContext, test } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
@@ -177,7 +177,7 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
   let ids = 0;
   let builds = 0;
   const workspace = await temporaryDirectory(t, "luke-wiring-");
-  const wiring = wireBrain({
+  const building = wireBrain({
     execution: Runtime.defaultRuntime,
     repositoryFor: (sessionKey) => {
       repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
@@ -279,6 +279,13 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     runnable: () => true,
     dropBriefings: () => undefined,
   });
+  // The wiring's generation clocks read the clock and arm their waits in the
+  // scope it is built in, which ends with this test. No store here enables
+  // automatic reset, so what those clocks arm is nothing and the default
+  // runtime this is built on is the only clock they would have asked.
+  const wiring = await Effect.runPromise(
+    Effect.provideService(building, Scope.Scope, await temporaryScope(t)),
+  );
   return {
     wiring,
     inputs,

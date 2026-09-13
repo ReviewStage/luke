@@ -81,7 +81,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { SESSION_STATUS, type Session, type SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Cause, Effect, Fiber } from "effect";
+import { Cause, type Clock, Effect, Fiber, type Scope } from "effect";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -318,7 +318,26 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
 /** A reset's capture is cut by the capture's own timeout and by nothing of the reset's, so the signal it is handed never fires. */
 const RESET_CAPTURE_SIGNAL = new AbortController().signal;
 
-export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
+export function wireBrain(
+  dependencies: BrainWiringDependencies,
+): Effect.Effect<BrainWiring, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    return buildBrainWiring(dependencies, yield* Effect.clock, yield* Effect.scope);
+  });
+}
+
+/**
+ * The wiring itself, built in one synchronous step from the two things only a
+ * fiber hands it: the clock every generation clock reads its expiry instant
+ * and sleeps its one wait on, and the scope those waits are forked into, so a
+ * conversation whose clock was never stopped ends with the composition that
+ * built it.
+ */
+function buildBrainWiring(
+  dependencies: BrainWiringDependencies,
+  generationTime: Clock.Clock,
+  generationWaits: Scope.Scope,
+): BrainWiring {
   // Every transition this wiring answers with is an effect its caller runs.
   // What is begun on a fiber of its own rather than on the caller's is a
   // conversation's close and its open, so the retirement each opens with
@@ -400,9 +419,14 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     // store whose automatic reset is enabled sees the generation die on time
     // through a launch with no key or account, and after its agent was
     // retired. Under the default policy of no automatic reset it arms nothing.
-    const clock = new BrainGenerationClock({ store });
-    void clock.start();
-    const opened: OpenConversation = { host, store, clock, unsubscribe };
+    const generationClock = new BrainGenerationClock({
+      store,
+      clock: generationTime,
+      detach,
+      scope: generationWaits,
+    });
+    detach(generationClock.start(), { scope: generationWaits });
+    const opened: OpenConversation = { host, store, clock: generationClock, unsubscribe };
     conversations.set(sessionKey, opened);
     return opened;
   };

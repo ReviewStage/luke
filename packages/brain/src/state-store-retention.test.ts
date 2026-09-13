@@ -1,50 +1,15 @@
 import assert from "node:assert/strict";
-import { setImmediate as immediate } from "node:timers/promises";
-import { test } from "vitest";
+import { it } from "@effect/vitest";
+import { Chunk, Effect, type Scope, TestClock } from "effect";
+import { detachOn } from "./effect/carry.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
   freshBrainState,
 } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
-import type { ScheduledTimer } from "./scheduled-timer.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
-
-/** A clock this test drives by hand: nothing is due until it advances or fires. */
-class FakeClock {
-  now: number;
-  readonly timers = new Map<ScheduledTimer, { callback: () => void; at: number }>();
-
-  constructor(now: number) {
-    this.now = now;
-  }
-
-  schedule = (callback: () => void, delayMs: number): ScheduledTimer => {
-    const handle: ScheduledTimer = {};
-    this.timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-
-  cancel = (timer: ScheduledTimer): void => {
-    this.timers.delete(timer);
-  };
-
-  /** Runs every timer due at or before `untilMs`, in due order, draining between each. */
-  async advance(untilMs: number): Promise<void> {
-    for (;;) {
-      const due = [...this.timers.entries()]
-        .filter(([, timer]) => timer.at <= untilMs)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      this.timers.delete(due[0]);
-      this.now = Math.max(this.now, due[1].at);
-      due[1].callback();
-      for (let turn = 0; turn < 20; turn += 1) await immediate();
-    }
-    this.now = Math.max(this.now, untilMs);
-  }
-}
 
 /**
  * Retention as the shipped policy has it: the store and its clock stand from
@@ -56,41 +21,58 @@ class FakeClock {
 const NOW = 1_800_000_000_000;
 const EXPIRED_SECRET = "EXPIRED_SECRET_MARKER";
 
-function launch(repository: FakeBrainStateRepository, clock: FakeClock) {
-  const reports: string[] = [];
-  let generations = 0;
-  const store = new BrainStateStore({
-    automaticReset: false,
-    repository,
-    createGenerationId: () => `gen-${++generations}`,
-    now: () => clock.now,
-    report: (message) => reports.push(message),
+/**
+ * The store and its generation clock as a launch builds them, on this test's
+ * own `TestClock`: nothing is due until the test advances it, and the wait the
+ * clock would arm is a fiber in the test's own scope.
+ */
+const launch = (
+  repository: FakeBrainStateRepository,
+): Effect.Effect<
+  { store: BrainStateStore; generationClock: BrainGenerationClock; reports: string[] },
+  never,
+  Scope.Scope
+> =>
+  Effect.gen(function* () {
+    const clock = yield* Effect.clock;
+    const reports: string[] = [];
+    let generations = 0;
+    const store = new BrainStateStore({
+      automaticReset: false,
+      repository,
+      createGenerationId: () => `gen-${++generations}`,
+      now: () => clock.unsafeCurrentTimeMillis(),
+      report: (message) => reports.push(message),
+    });
+    const generationClock = new BrainGenerationClock({
+      store,
+      clock,
+      detach: detachOn(yield* Effect.runtime<never>()),
+      scope: yield* Effect.scope,
+    });
+    return { store, generationClock, reports };
   });
-  const generationClock = new BrainGenerationClock({
-    store,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
-  });
-  return { store, generationClock, reports };
-}
 
-test("a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock", async () => {
-  const stale: BrainPersistedState = {
-    ...freshBrainState("gen-old", NOW - BRAIN_GENERATION_LIFETIME_MS - 1),
-    items: [{ type: "message", role: "user", content: EXPIRED_SECRET }],
-  };
-  const repository = fakeBrainStateRepository(stale);
-  const clock = new FakeClock(NOW);
-  const { store, generationClock, reports } = launch(repository, clock);
-  await generationClock.start();
-  assert.equal(store.generationId(), "gen-old");
-  assert.deepEqual(store.current()?.items, stale.items);
-  assert.equal(reports.length, 0);
-  assert.equal(clock.timers.size, 0);
-  // Nothing was armed, so advancing past the deadline fires nothing and the
-  // generation stands: only a store with automatic reset has a clock to keep.
-  await clock.advance(NOW + BRAIN_GENERATION_LIFETIME_MS);
-  assert.equal(store.generationId(), "gen-old");
-  generationClock.stop();
-});
+it.scoped(
+  "a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const stale: BrainPersistedState = {
+        ...freshBrainState("gen-old", NOW - BRAIN_GENERATION_LIFETIME_MS - 1),
+        items: [{ type: "message", role: "user", content: EXPIRED_SECRET }],
+      };
+      const repository = fakeBrainStateRepository(stale);
+      const { store, generationClock, reports } = yield* launch(repository);
+      yield* generationClock.start();
+      assert.equal(store.generationId(), "gen-old");
+      assert.deepEqual(store.current()?.items, stale.items);
+      assert.equal(reports.length, 0);
+      assert.deepEqual(Chunk.toReadonlyArray(yield* TestClock.sleeps()), []);
+      // Nothing was armed, so advancing past the deadline fires nothing and the
+      // generation stands: only a store with automatic reset has a clock to keep.
+      yield* TestClock.setTime(NOW + BRAIN_GENERATION_LIFETIME_MS);
+      assert.equal(store.generationId(), "gen-old");
+      generationClock.stop();
+    }),
+);

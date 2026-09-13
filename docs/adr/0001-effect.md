@@ -203,11 +203,23 @@ scope with `Runtime.RunForkOptions`' `scope`, so `stop()` closing the scope
 ends a wait no collaborator disarmed. `packages/brain/src/agent.ts` left
 `rawAsyncPrimitives` in the same PR: the `globalThis.setTimeout` fallback it
 held for a caller that passed no seam went with the options. The closures
-outlive the seam in two places this PR does not reach: `PendingInputQueue` is
-an OpenClaw port that may not import `effect`, so `AskLedger` hands it two
-closures over one of the agent's own armed waits; and `BrainGenerationClock`
-still takes `now`/`schedule`/`cancel`, with the last bridge for it built
-inside `agent.test.ts`, where a test body is its own edge by extension.
+outlive the seam in one place: `PendingInputQueue` is an OpenClaw port that may
+not import `effect`, so `AskLedger` hands it two closures over one of the
+agent's own armed waits. `BrainGenerationClock` was the other until P12-20f2,
+which took its `now`/`schedule`/`cancel` triple away and with it the last
+bridge in `agent.test.ts`: the clock is handed a `Clock`, the detach door, and
+a scope, so the instant it judges a generation by and the wait it arms for that
+generation's expiry are one clock's, and a wait nobody disarmed ends when the
+scope closes. `wireBrain` is what yields those two — it answers an
+`Effect<BrainWiring, never, Scope>` rather than a wiring, and every
+conversation's clock arms in the scope the composition built it in — and
+`packages/brain/src/generation-clock.ts` left `rawAsyncPrimitives` in the same
+PR, since the `globalThis.setTimeout(...).unref()` fallback it held for a
+caller that passed no seam went with the options. The wait is referenced where
+that timer was not: nothing of Effect's clock unrefs, so a store with automatic
+reset enabled now holds its host's loop for as long as its generation stands.
+The shipped policy arms nothing, and the only host that arms one is Electron's
+main process, which its own event loop holds open regardless.
 `forkOn` in `packages/brain/src/effect/fork.ts` was on the same list for one
 release and P12-16g deleted the file: `anticipateAsk` answers an
 `Effect<void>` now, so the slot's fiber is an `Effect.forkDaemon` inside the
@@ -228,7 +240,9 @@ phantom property (`{ readonly opaque?: never }`) even though it assigns
 cleanly into a bare `object`. Both constraints are satisfied the same way
 `scheduled-timer.ts` always was: one file per package that only declares the
 alias and touches no function signature of its own, imported by every
-sibling that needs the shape rather than redeclaring it — `packages/runtime/src/scheduled-timer.ts`
+sibling that needs the shape rather than redeclaring it. `packages/brain`'s own
+copy went with P12-20f2, which left the generation clock as the package's last
+reader of it; what still declares one is `packages/runtime/src/scheduled-timer.ts`
 (kept, since `children.ts`/`queue.ts` are OpenClaw ports whose constructor
 option this is, and `packages/host/src/brain/wiring-children.ts` imports the
 same one from `@sidecar/runtime` to build a `ChildRunService`) and
@@ -1590,8 +1604,15 @@ same shape `read-prefetch.ts` and `apps/web`'s `since` already hold.
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
 `it.effect` holds a `Promise`, so the effect is run to one here, over the layer
-the caller supplied or none. It goes when the last such suite is an
-`it.effect`; no PR in this plan is that one yet.
+the caller supplied or none. `temporaryScope` beside it is the second run in
+that file and the same door one step further: a promise-shaped suite that must
+build something scoped and then read it across several `await`s cannot use
+`Effect.scoped`, which would close the scope the moment the build answered, so
+this runs `Scope.make` to a promise and registers the close on the test's own
+teardown. `wiring-routing.test.ts` and `wiring-children.test.ts` are its
+callers, each building a `wireBrain` whose generation clocks arm their waits in
+that scope. Both go when the last such suite is an `it.effect` or an
+`it.scoped`; no PR in this plan is that one yet.
 
 Some entries are a suite's edge or a command's rather than the product's.
 `openMigratedPglite` in `apps/web/tests/support/sql-client.ts` builds a
