@@ -1,7 +1,8 @@
 import type { RememberedFact } from "@sidecar/actions";
 import { notebookMemoryProvider } from "@sidecar/memory";
-import { recentDailyNotes } from "@sidecar/runtime";
+import { recentDailyNotesEffect } from "@sidecar/runtime/effect";
 import type { MemoryDefinition, MemoryScope, SessionKey } from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 import type { MemoryMaintenance } from "./memory-maintenance.js";
 import type { MemoryWiring } from "./notebook-memory.js";
 
@@ -35,7 +36,10 @@ export function wireMemoryDefinitions(dependencies: MemoryDefinitionDependencies
         scope: dependencies.scope,
         access: dependencies.index.accessFor(sessionKey),
         facts: dependencies.facts,
-        recentNotes: () => recentDailyNotes(dependencies.workspaceDirectory(), dependencies.now()),
+        recentNotes: () =>
+          recentDailyNotesEffect(dependencies.workspaceDirectory(), dependencies.now()).pipe(
+            Effect.orDie,
+          ),
         ...(capture ? { capture } : undefined),
       }),
     };

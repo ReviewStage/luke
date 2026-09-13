@@ -65,7 +65,7 @@ export const lateService = <A>(): Effect.Effect<LateService<A>> =>
  * `compose-host.ts` supplies the service — and reaches it the moment the
  * fork below resumes; every call after the service stands reaches it
  * directly. The fork itself and the closure it returns never run an Effect
- * from outside an edge, so this needs no entry on the strangler-shim list:
+ * from outside an edge, so this needs no entry on the run allowlist:
  * the queue is plain state a synchronous callback reads and writes, held for
  * the kernel's own life rather than a scope's.
  *

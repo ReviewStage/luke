@@ -401,13 +401,13 @@ function conversationEntryFromPayload(payload: string): ConversationEntry | unde
 
 /**
  * The synchronous doors onto the effects above, for the callers that still
- * hold a handle rather than a client: the store's own tests today, and
- * whatever the operations table has not moved yet.
+ * hold a handle rather than a client: the store's own tests today, and no
+ * production caller — `worker-host.ts` reads the effect siblings directly.
  *
- * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
- * section beside `StoreDatabase#run`: what would end this row is a decision
- * about those callers themselves, not an implementation detail of this
- * migration.
+ * @deprecated A permanent adaptor, one of the doors root AGENTS.md's
+ * `StoreDatabase#run` row in "Effect idioms" covers: what would end this row
+ * is a decision about those callers themselves, not an implementation detail
+ * of this migration.
  */
 export function conversationClearedAt(
   database: StoreDatabase,

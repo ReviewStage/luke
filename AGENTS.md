@@ -191,9 +191,14 @@ its own process), the eve project's authored files —
 `apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
 `apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
-an authored file is where this deployment runs what it hands eve, which is
-what keeps every seam under `apps/web/server/hosted/` an effect,
-`apps/web/server/db/migrate.ts` (the migration command, through
+an authored file is where this deployment runs what it hands eve. Not
+every seam under `apps/web/server/hosted/` is an effect down to its floor:
+`hosted/store/asks.ts`'s `dispatchAskOnce` awaits eve's own HTTP client
+inside an `Effect.promise`, `hosted/brain-host/production.ts`'s `spend` is
+the AI SDK's async middleware, and `hosted/brain-host/door.ts`'s
+`SessionOwnership` speaks eve's own `AuthFn<Request>` — three promise-shaped
+foreign boundaries the effects around them compose over rather than
+replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
 probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, and `Effect.runFork` belong nowhere
@@ -217,7 +222,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   door: `Runtime.runFork` starts on the calling stack while `Effect.fork`,
   `forkIn`, and `forkDaemon` hand the work to the scheduler instead, and only
   a run makes `BrainAgent#enqueue`'s acquisition (what `busy()` reads) stand in
-  the step that detached. The same file's `runtimeExit` is the shared door
+  the step that detached. `packages/brain/src/agent.ts`'s `BrainAgent#enqueue`
+  and `packages/host/src/brain/wiring.ts`'s composition each hold `detachOn`'s
+  returned door on the runtime the caller handed them and start a turn on the
+  calling stack through it, which is why both are named on the run
+  allowlist's `runOnHandedRuntime` rows rather than left for a new file to
+  fork through unseen. The same file's `runtimeExit` is the shared door
   `packages/brain/src/client.ts`'s `BrainTransport#send` (`runCall`) and
   `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` both run
   through, because every caller of the brain's model transport still holds a

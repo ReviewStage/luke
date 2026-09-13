@@ -1,4 +1,4 @@
-import { runtimeExit } from "@sidecar/brain";
+import { detachOn, runtimeExit } from "@sidecar/brain";
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
 import { Effect } from "effect";
 import { runWeb } from "../../../../apps/web/server/runtime.js";
@@ -11,6 +11,11 @@ export function greeting(name: string): Effect.Effect<string> {
 /** Handing the runner on is not running: only the second call would run one. */
 export function runnerFor(execution: ExecutionRuntime): ReturnType<typeof runtimeExit> {
   return runtimeExit(execution);
+}
+
+/** Holding the brain's fork door on a handed runtime is not running one either. */
+export function detachFor(execution: ExecutionRuntime): ReturnType<typeof detachOn> {
+  return detachOn(execution);
 }
 
 /** Handing the web edge's runner on is not running one either. */

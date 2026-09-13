@@ -248,8 +248,8 @@ function transcriptEventFromRow(
  * hold a handle rather than a client: the recoverable deletion and the
  * store's own tests.
  *
- * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
- * section beside `StoreDatabase#run`: what would end this row is a decision
+ * @deprecated A permanent adaptor, one of the doors root AGENTS.md's
+ * `StoreDatabase#run` row in "Effect idioms" covers: what would end this row is a decision
  * about those callers themselves, not an implementation detail of this
  * migration.
  */

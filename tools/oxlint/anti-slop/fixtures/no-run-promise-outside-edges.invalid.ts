@@ -1,4 +1,4 @@
-import { runtimeExit } from "@sidecar/brain";
+import { detachOn, runtimeExit } from "@sidecar/brain";
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
 import { Effect, type Exit } from "effect";
 import { runWeb, webRuntime } from "../../../../apps/web/server/runtime.js";
@@ -19,6 +19,11 @@ export function greetingExit(
   name: string,
 ): Promise<Exit.Exit<string>> {
   return runtimeExit(execution)(Effect.sync(() => `hello ${name}`));
+}
+
+/** The brain's fork door, called where the work lives rather than at the edge. */
+export function detached(execution: ExecutionRuntime, name: string): void {
+  detachOn(execution)(Effect.sync(() => `hello ${name}`));
 }
 
 /** The web edge's own runner, called where the work lives rather than at the edge. */
