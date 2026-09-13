@@ -50,9 +50,9 @@ import { observedSideband } from "./live-sideband.js";
  * The composition is a scope's, not a socket callback's: it is built in the
  * `Scope` its caller opened for the socket, and every fiber it runs is forked
  * into that scope — the one that reports what the record made of each live
- * event, the brain's follow of each accepted ask, and the briefing look on
- * its schedule — so closing the scope when the socket detaches interrupts
- * each of them. The session's graceful close and the wait on every record
+ * event, the brain's follow of each accepted ask, the briefing look on its
+ * schedule, and the service's own — so closing the scope when the socket
+ * detaches interrupts each of them. The session's graceful close and the wait on every record
  * write already started are finalizers of the same scope, added so their
  * reverse order is the order the old `stop` ran them.
  */
@@ -259,17 +259,13 @@ export function hostedLiveExchange(
       };
     };
 
-    const service = new LiveSessionService<HostedBriefingDelivery>({
+    const service = yield* LiveSessionService.make<HostedBriefingDelivery>({
       source,
       brain,
       record,
-      // The two doors answer effects and the service is a promise-shaped
-      // class, so it runs each of them on this composition's own runtime,
-      // which is the socket scope's and carries its `SqlClient`.
-      runtime: yield* Effect.runtime<never>(),
       conversationEntries: options.conversationEntries,
-      quietNow: async () => false,
-      releaseHeldBriefings: () => undefined,
+      quietNow: () => Effect.succeed(false),
+      releaseHeldBriefings: () => Effect.void,
       emit: options.emit,
       now: options.now,
       schedule: options.schedule,
@@ -281,7 +277,7 @@ export function hostedLiveExchange(
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
     });
 
-    yield* Effect.addFinalizer(() => Effect.promise(() => service.stop()));
+    yield* Effect.addFinalizer(() => service.stop());
 
     return {
       service,
@@ -289,13 +285,11 @@ export function hostedLiveExchange(
       briefings,
       store,
       adopt: (opened) =>
-        Effect.promise(() =>
-          service.adoptSession({
-            sessionId: opened.sessionId,
-            attach: observing(() => opened.attach()),
-            started: opened.started,
-          }),
-        ),
+        service.adoptSession({
+          sessionId: opened.sessionId,
+          attach: observing(() => opened.attach()),
+          started: opened.started,
+        }),
     };
   });
 }

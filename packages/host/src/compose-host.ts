@@ -230,9 +230,7 @@ export const hostAssemblyLayer: Layer.Layer<
       cloudKeyHeld: () => calendars.settleKeyGate(),
       applyVoiceCredential: account.applyVoiceCredential,
       setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
-      reconcileSpeech: () => {
-        void live.service.reconcile();
-      },
+      reconcileSpeech: () => live.service.reconcile(),
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
       workspaceProjectOffered: observation.workspaceProjectOffered,
     });
@@ -249,9 +247,7 @@ export const hostAssemblyLayer: Layer.Layer<
     });
     observation.link({ rosterLook: () => brain.wiring.rosterLook() });
     calendars.link({
-      reconcileSpeech: () => {
-        void live.service.reconcile();
-      },
+      reconcileSpeech: () => live.service.reconcile(),
       withdrawBeat: (kind) => live.service.withdrawBeat(kind),
       dropBriefings: () => live.service.dropBriefings(),
       requestOnboardingBeat: () => void live.requestOnboardingBeat(),
@@ -404,10 +400,7 @@ export const hostAssemblyLayer: Layer.Layer<
     );
     // The live session's graceful close rides inside the same drain, so a quit
     // mid-call ends the session within the deadline and never after it.
-    const shutdownSteps = yield* shutdownStepsClosingLiveSession(
-      drainSteps,
-      Effect.promise(() => live.service.stop()),
-    );
+    const shutdownSteps = yield* shutdownStepsClosingLiveSession(drainSteps, live.service.stop());
 
     const drain = yield* hostDrain(shutdownSteps, report);
 

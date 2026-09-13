@@ -206,21 +206,25 @@ async function stand(live: VoiceTarget) {
     },
   };
   let ids = 0;
-  const service = new LiveSessionService({
-    source: () => source,
-    brain,
-    record,
-    runtime: await database.run(Effect.runtime<never>()),
-    conversationEntries: () => [],
-    quietNow: async () => false,
-    releaseHeldBriefings: () => undefined,
-    emit: () => undefined,
-    now: () => clock.now,
-    schedule: clock.schedule,
-    cancel: clock.cancel,
-    createId: () => `id-${++ids}`,
-    report: () => undefined,
-  });
+  const service = await database.run(
+    Scope.extend(
+      LiveSessionService.make({
+        source: () => source,
+        brain,
+        record,
+        conversationEntries: () => [],
+        quietNow: () => Effect.succeed(false),
+        releaseHeldBriefings: () => Effect.void,
+        emit: () => undefined,
+        now: () => clock.now,
+        schedule: clock.schedule,
+        cancel: clock.cancel,
+        createId: () => `id-${++ids}`,
+        report: () => undefined,
+      }),
+      scope,
+    ),
+  );
   return {
     clock,
     brain,
@@ -228,7 +232,7 @@ async function stand(live: VoiceTarget) {
     service,
     observed,
     async open() {
-      const created = await service.createSession("offer");
+      const created = await database.run(service.createSession("offer"));
       assert.ok(created);
       socket.receive(sessionStarted(live.liveSessionId));
     },
