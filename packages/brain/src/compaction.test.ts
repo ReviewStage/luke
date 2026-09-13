@@ -14,7 +14,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Scope, Stream } from "effect";
 import { test } from "vitest";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import {
@@ -400,7 +400,15 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   });
   const { agent } = agentOver(model, repository);
   const events: BrainRunEvent[] = [];
-  Effect.runSync(agent.onRunEvent((event) => events.push(event)));
+  Effect.runSync(
+    Effect.gen(function* () {
+      const scope = yield* Scope.make();
+      const stream = yield* Scope.extend(agent.runEvents, scope);
+      yield* Effect.forkDaemon(
+        Stream.runForEach(stream, (event) => Effect.sync(() => events.push(event))),
+      );
+    }),
+  );
   const accepted = await Effect.runPromise(
     agent.submitAsk({
       submissionId: "s1",

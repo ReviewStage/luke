@@ -1,5 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
+import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
   type BriefingDelivery,
@@ -8,7 +9,7 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { Effect, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
+import { Effect, Layer, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
@@ -257,20 +258,23 @@ export function hostedLiveExchange(
       };
     };
 
-    const service = yield* LiveSessionService.make<HostedBriefingDelivery>({
-      source,
-      brain,
-      record,
-      conversationEntries: options.conversationEntries,
-      quietNow: () => Effect.succeed(false),
-      releaseHeldBriefings: () => Effect.void,
-      emit: options.emit,
-      createId: options.createId,
-      report,
-      ...(options.trace ? { trace: options.trace } : undefined),
-      onBriefingAppend: (delivery, eventId) =>
-        voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
-    });
+    // The brain and the record are built beside the service here rather than
+    // by a caller, so the layers that name them are provided on the spot.
+    const service = yield* Effect.provide(
+      LiveSessionService.make<HostedBriefingDelivery>({
+        source,
+        conversationEntries: options.conversationEntries,
+        quietNow: () => Effect.succeed(false),
+        releaseHeldBriefings: () => Effect.void,
+        emit: options.emit,
+        createId: options.createId,
+        report,
+        ...(options.trace ? { trace: options.trace } : undefined),
+        onBriefingAppend: (delivery, eventId) =>
+          voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
+      }),
+      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+    );
 
     yield* Effect.addFinalizer(() => service.stop());
 

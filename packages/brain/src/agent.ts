@@ -290,46 +290,21 @@ export class BrainAgent {
    * every turn tells its start, each tool call before and after it runs, each
    * reasoning item, each message it completed, each compaction it folded, and
    * its end, each event stamped with the conversation, the turn, and its
-   * place in the turn's sequence. A listener that throws ends no turn.
+   * place in the turn's sequence.
    *
-   * Published from `#fireRunEvent` into `#runEvents`; subscribing is an
-   * effect its caller runs, which takes the subscription on the caller's own
-   * fiber and then forks a fiber pumping it, so a listener hears everything
-   * published after the effect it ran and nothing before it: a fork alone
-   * would take the subscription a scheduler task later, and the events of
-   * that gap would reach nobody. The pump is what keeps delivery order.
-   * Unsubscribing interrupts that fiber, which closes the subscription's own
-   * scope, so no subscription outlives its listener and nothing here needs a
-   * scope of the agent's own; stopping the agent shuts the pubsub down
-   * instead, which ends every pump whether or not its subscriber ever
-   * unsubscribed. A thrower stops none of the rest, the same guarantee
-   * `Emitter#fire` gave: the failure is logged rather than left to end that
-   * subscription's own pump.
+   * The stream itself, since P12-20h: a subscriber yields this in a scope of
+   * its own, which takes the subscription on that subscriber's own fiber, and
+   * then reads it however it likes — `Stream.runForEach` on a fiber of the
+   * same scope is what the live brain adapter does. Closing that scope is the
+   * whole of the unsubscribe, so no subscription outlives its reader and
+   * nothing here needs a scope of the agent's own; stopping the agent shuts
+   * the pubsub down instead, which ends every reader whether or not it
+   * unsubscribed. What a reader does with a listener that throws is the
+   * reader's own decision now — the adapter logs the defect and carries on,
+   * which is the guarantee `Emitter#fire` gave — because a fan-out the agent
+   * cannot see is not a failure the agent can rule on.
    */
-  onRunEvent(listener: (event: BrainRunEvent) => void): Effect.Effect<() => void> {
-    return Effect.gen(this, function* () {
-      const scope = yield* Scope.make();
-      const events = yield* Scope.extend(
-        Stream.fromPubSub(this.#runEvents, { scoped: true }),
-        scope,
-      );
-      const fiber = yield* Effect.forkDaemon(
-        Effect.ensuring(
-          Stream.runForEach(events, (event) =>
-            Effect.catchAllDefect(
-              Effect.sync(() => listener(event)),
-              (defect) =>
-                Effect.logError("a listener failed while a run event was delivered", defect),
-            ),
-          ),
-          Scope.close(scope, Exit.void),
-        ),
-      );
-      return () => {
-        fiber.unsafeInterruptAsFork(fiber.id());
-      };
-    });
-  }
+  readonly runEvents: Effect.Effect<Stream.Stream<BrainRunEvent>, never, Scope.Scope>;
 
   /**
    * The agent as an effect: everything of it is built synchronously except
@@ -356,6 +331,7 @@ export class BrainAgent {
   ) {
     this.#options = options;
     this.#runEvents = runEvents;
+    this.runEvents = Stream.fromPubSub(runEvents, { scoped: true });
     this.#clock = clock;
     this.#scope = scope;
     this.#now = () => clock.unsafeCurrentTimeMillis();

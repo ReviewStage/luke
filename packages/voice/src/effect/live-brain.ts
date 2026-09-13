@@ -1,16 +1,15 @@
 /**
- * `LiveBrain` restated as a service, for a caller that reaches for it
- * through `Effect`'s environment rather than the live session service's
- * constructor argument. `../live-session/live-brain.js`'s interface is
- * untouched, and so is `LiveSessionService` itself, so this is a second
- * door onto the same value, not a replacement for the first.
+ * `LiveBrain` as `LiveSessionService` takes it: since P12-20h the session reads
+ * its brain from the context it is built in rather than from a field of its
+ * options, so this tag is how a composition states which one it speaks
+ * through. `../live-session/live-brain.js`'s interface is untouched, and so is every
+ * object implementing it, so what changed is where the session looks, not
+ * what it finds.
  *
- * `liveBrainLayer` is a strangler shim: P7-07 (`compose-live.ts`) is its
- * first real caller, building the plain brain in `compose-host.ts` and
- * handing it to the live composer through this tag, but the shim itself
- * stands until `LiveSessionService`'s own constructor reads the tag rather
- * than taking a plain `brain` field, a `packages/voice` change beyond a
- * host composer.
+ * `liveBrainLayer` is how a caller that built its brain imperatively hands it
+ * over: `compose-host.ts` builds the plain one where the brain composer
+ * stands and provides it to `compose-live.ts`, and `apps/web`'s hosted
+ * exchange provides the one it built beside the service.
  */
 import { Context, Layer } from "effect";
 import type { LiveBrain } from "../live-session/live-brain.js";
@@ -20,6 +19,6 @@ export class LiveBrainTag extends Context.Tag("@sidecar/voice/LiveBrain")<
   LiveBrain
 >() {}
 
-/** @deprecated Wraps the existing brain object as a `Layer`; stands until `LiveSessionService`'s constructor reads the tag itself. */
+/** Hands a brain built imperatively to the session that reads `LiveBrainTag`. */
 export const liveBrainLayer = (brain: LiveBrain): Layer.Layer<LiveBrainTag> =>
   Layer.succeed(LiveBrainTag, brain);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
+import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   ASK_UNRECORDED_NOTE,
   LIVE_BRAIN_RUN_END,
@@ -16,7 +17,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Layer, Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -180,17 +181,18 @@ async function stand(live: VoiceTarget) {
   let ids = 0;
   const service = await database.run(
     Scope.extend(
-      LiveSessionService.make({
-        source: () => source,
-        brain,
-        record,
-        conversationEntries: () => [],
-        quietNow: () => Effect.succeed(false),
-        releaseHeldBriefings: () => Effect.void,
-        emit: () => undefined,
-        createId: () => `id-${++ids}`,
-        report: () => undefined,
-      }),
+      Effect.provide(
+        LiveSessionService.make({
+          source: () => source,
+          conversationEntries: () => [],
+          quietNow: () => Effect.succeed(false),
+          releaseHeldBriefings: () => Effect.void,
+          emit: () => undefined,
+          createId: () => `id-${++ids}`,
+          report: () => undefined,
+        }),
+        Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+      ),
       scope,
     ),
   );

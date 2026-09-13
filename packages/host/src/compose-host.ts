@@ -207,7 +207,7 @@ export const hostAssemblyLayer: Layer.Layer<
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
       yield* capabilities.arm;
-      void live.requestOnboardingBeat();
+      live.requestOnboardingBeat();
     });
 
     /** The gate closing: the cadences disarmed, and then what a sign-out alone means. */
@@ -250,7 +250,7 @@ export const hostAssemblyLayer: Layer.Layer<
       reconcileSpeech: () => live.service.reconcile(),
       withdrawBeat: (kind) => live.service.withdrawBeat(kind),
       dropBriefings: () => live.service.dropBriefings(),
-      requestOnboardingBeat: () => void live.requestOnboardingBeat(),
+      requestOnboardingBeat: live.requestOnboardingBeat,
     });
     live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
 
@@ -427,7 +427,7 @@ export const hostAssemblyLayer: Layer.Layer<
           yield* openCapabilities;
         } else {
           yield* account.applyVoiceCredential;
-          void live.requestOnboardingBeat();
+          live.requestOnboardingBeat();
         }
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),

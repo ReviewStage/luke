@@ -53,6 +53,8 @@ import {
   Queue,
   type Scope,
 } from "effect";
+import { LiveBrainTag } from "../effect/live-brain.js";
+import { LiveRecordTag } from "../effect/live-record.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel } from "./append-channel.js";
@@ -189,8 +191,6 @@ export interface LiveSessionStatus {
 export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   /** Where a session comes from now, or nothing while voice is unavailable. */
   source: () => LiveSessionSource | undefined;
-  brain: LiveBrain;
-  record: LiveRecord;
   /** The retained conversation the next session is seeded from. */
   conversationEntries: () => readonly ConversationEntry[];
   /**
@@ -362,18 +362,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** The clock the session keeps: the one the scope it was built in stands on, read where a callback cannot wait for an effect. */
   readonly #clock: Clock.Clock;
 
+  /** The brain this session delegates to and the record it writes through, read from the context it was built in. */
+  readonly #brain: LiveBrain;
+  readonly #record: LiveRecord;
+
   private constructor(
     options: LiveSessionServiceOptions<Delivery>,
+    collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
     tasks: Queue.Queue<Effect.Effect<void>>,
     clock: Clock.Clock,
   ) {
     this.#options = options;
+    this.#brain = collaborators.brain;
+    this.#record = collaborators.record;
     this.#tasks = tasks;
     this.#clock = clock;
     this.#queue = new ProactiveQueue({ now: () => this.#now(), trace: this.#trace });
-    this.#stopRunEvents = options.brain.onRunEvent((event) => this.#onRunEvent(event));
+    this.#stopRunEvents = this.#brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
-      options.brain.onAnticipationFacts?.((facts) => this.#anticipationFacts(facts)) ??
+      this.#brain.onAnticipationFacts?.((facts) => this.#anticipationFacts(facts)) ??
       (() => undefined);
   }
 
@@ -391,11 +398,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   static make<Delivery extends BriefingDelivery>(
     options: LiveSessionServiceOptions<Delivery>,
-  ): Effect.Effect<LiveSessionService<Delivery>, never, Scope.Scope> {
+  ): Effect.Effect<
+    LiveSessionService<Delivery>,
+    never,
+    Scope.Scope | LiveBrainTag | LiveRecordTag
+  > {
     return Effect.gen(function* () {
       const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
       const fibers = yield* FiberSet.make();
-      const service = new LiveSessionService(options, tasks, yield* Effect.clock);
+      const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
+      const service = new LiveSessionService(options, collaborators, tasks, yield* Effect.clock);
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
       );
@@ -932,7 +944,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * syllable, and a brain that reads nothing ahead arms nothing.
    */
   #armAnticipation(session: StandingSession): void {
-    if (!this.#options.brain.anticipate) return;
+    if (!this.#brain.anticipate) return;
     this.#cancelAnticipation(session);
     session.anticipateTimer = this.#after(PREFETCH_DEBOUNCE_MS, () => {
       session.anticipateTimer = undefined;
@@ -948,7 +960,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** The words so far, once: the same row with the same words is not handed over again. */
   #anticipate(session: StandingSession): void {
-    const brain = this.#options.brain;
+    const brain = this.#brain;
     if (!brain.anticipate || session.ended) return;
     const anticipation = anticipationOf(session.ledger.askContext(session.lastDelegationOffsetMs));
     if (!anticipation || session.askedRows.has(anticipation.rowId)) return;
@@ -1031,7 +1043,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#now();
       const written =
         utterance.speaker === TRANSCRIPT_SPEAKER.USER
-          ? yield* this.#options.record.writeDeveloperUtterance({
+          ? yield* this.#record.writeDeveloperUtterance({
               rowId: utterance.rowId,
               text: utterance.text,
               voiceSessionId: session.sessionId,
@@ -1042,7 +1054,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
               ...(write.runId !== undefined ? { runId: write.runId } : undefined),
               recordedAt,
             })
-          : yield* this.#options.record.writeLukeUtterance({
+          : yield* this.#record.writeLukeUtterance({
               role: CONVERSATION_ENTRY_KIND.REPLY,
               text: utterance.text,
               voiceSessionId: session.sessionId,
@@ -1109,7 +1121,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // The delegation's id is the submission's: the record writes the developer's
       // utterance under it, so an ask and the line it leaves share one id and a
       // record that learns the ask's turn can attach the line to it.
-      const submission = yield* this.#options.brain.submitAsk({
+      const submission = yield* this.#brain.submitAsk({
         submissionId: delegationId,
         question,
       });
@@ -1406,7 +1418,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** Whatever the brain read ahead is forgotten; a brain that reads nothing ahead is asked nothing. */
   #drop(): Effect.Effect<void> {
-    return this.#options.brain.dropAnticipation?.() ?? Effect.void;
+    return this.#brain.dropAnticipation?.() ?? Effect.void;
   }
 
   /**

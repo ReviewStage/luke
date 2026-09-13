@@ -24,7 +24,8 @@ import {
   valueFromJsonText,
 } from "@sidecar/wire";
 import { type ToolSet, tool, type UIMessage } from "ai";
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Scope, Stream } from "effect";
+import type { BrainAgent } from "./agent.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
   ABC,
@@ -78,10 +79,33 @@ import {
   userMetadataOf,
 } from "./ui-messages.js";
 
+/**
+ * A reader of the agent's own stream, shaped the way the live brain adapter
+ * shapes one: the subscription is taken on the calling fiber, so everything
+ * published after this effect is heard in order, and what pumps it is a fiber
+ * of its own that the pubsub's shutdown ends. A body that throws is logged
+ * and the pump carries on, which is the reader's guarantee since P12-20h and
+ * no longer the agent's.
+ */
+function reading(agent: BrainAgent, body: (event: BrainRunEvent) => void): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const stream = yield* Scope.extend(agent.runEvents, scope);
+    yield* Effect.forkDaemon(
+      Stream.runForEach(stream, (event) =>
+        Effect.catchAllDefect(
+          Effect.sync(() => body(event)),
+          () => Effect.void,
+        ),
+      ),
+    );
+  });
+}
+
 function listen(h: Harness): Effect.Effect<BrainRunEvent[]> {
   return Effect.gen(function* () {
     const events: BrainRunEvent[] = [];
-    yield* h.agent.onRunEvent((event) => events.push(event));
+    yield* reading(h.agent, (event) => events.push(event));
     return events;
   });
 }
@@ -1127,18 +1151,18 @@ it.effect("a listener that throws ends no run, and stops hearing nothing further
   Effect.gen(function* () {
     const h = yield* effectHarness();
     let heardByThrower = 0;
-    yield* h.agent.onRunEvent(() => {
+    yield* reading(h.agent, () => {
       heardByThrower += 1;
       throw new Error("listener");
     });
-    const heardByOthers: BrainRunEvent[] = [];
-    yield* h.agent.onRunEvent((event) => heardByOthers.push(event));
+    const heardByOthers = yield* listen(h);
     h.client.answers.push(answered([message("Fine.")]));
     const record = yield* ask(h, "hello");
     assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
     assert.equal(record?.text, "Fine.");
-    // A throw stops none of the rest: the thrower keeps hearing every event
-    // that follows its own throw, and a sibling subscription is unaffected.
+    // A throw stops none of the rest: the reader that throws keeps hearing
+    // every event after its own throw, and a sibling subscription of the same
+    // stream is unaffected.
     assert.ok(heardByThrower > 1);
     assert.ok(heardByOthers.length >= heardByThrower);
     yield* h.agent.stop();

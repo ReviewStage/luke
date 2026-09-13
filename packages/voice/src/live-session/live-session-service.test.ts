@@ -30,7 +30,9 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { type Clock, Duration, Effect, Fiber, Option, type Scope, TestClock } from "effect";
+import { type Clock, Duration, Effect, Fiber, Layer, Option, type Scope, TestClock } from "effect";
+import { liveBrainLayer } from "../effect/live-brain.js";
+import { liveRecordLayer } from "../effect/live-record.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
@@ -366,24 +368,25 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     };
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
-    const service = yield* LiveSessionService.make({
-      source: () => (state.sourceAvailable ? source : undefined),
-      brain,
-      record,
-      conversationEntries: () => entries,
-      roster: () => roster,
-      quietNow: () => Effect.sync(() => state.quiet),
-      releaseHeldBriefings: (held) =>
-        Effect.sync(() => {
-          released.push([...held]);
-        }),
-      emit: (change) => changes.push(change),
-      createId: () => `id-${++ids}`,
-      report: () => undefined,
-      trace: (trace) => traces.push(trace),
-      onProactiveSpoken: (kind) => spoken.push(kind),
-      onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
-    });
+    const service = yield* Effect.provide(
+      LiveSessionService.make({
+        source: () => (state.sourceAvailable ? source : undefined),
+        conversationEntries: () => entries,
+        roster: () => roster,
+        quietNow: () => Effect.sync(() => state.quiet),
+        releaseHeldBriefings: (held) =>
+          Effect.sync(() => {
+            released.push([...held]);
+          }),
+        emit: (change) => changes.push(change),
+        createId: () => `id-${++ids}`,
+        report: () => undefined,
+        trace: (trace) => traces.push(trace),
+        onProactiveSpoken: (kind) => spoken.push(kind),
+        onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
+      }),
+      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+    );
     const fixtureState: Fixture = {
       clock,
       brain,

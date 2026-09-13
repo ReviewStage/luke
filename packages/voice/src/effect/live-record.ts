@@ -1,16 +1,15 @@
 /**
- * `LiveRecord` restated as a service, for a caller that reaches for it
- * through `Effect`'s environment rather than the live session service's
- * constructor argument. `../live-session/live-record.js`'s interface is
- * untouched, and so is `LiveSessionService` itself, so this is a second
- * door onto the same value, not a replacement for the first.
+ * `LiveRecord` as `LiveSessionService` takes it: since P12-20h the session reads
+ * its record from the context it is built in rather than from a field of its
+ * options, so this tag is how a composition states which one it speaks
+ * through. `../live-session/live-record.js`'s interface is untouched, and so is every
+ * object implementing it, so what changed is where the session looks, not
+ * what it finds.
  *
- * `liveRecordLayer` is a strangler shim: P7-07 (`compose-live.ts`) is its
- * first real caller, building the plain record in `compose-host.ts` and
- * handing it to the live composer through this tag, but the shim itself
- * stands until `LiveSessionService`'s own constructor reads the tag rather
- * than taking a plain `record` field, a `packages/voice` change beyond a
- * host composer.
+ * `liveRecordLayer` is how a caller that built its record imperatively hands it
+ * over: `compose-host.ts` builds the plain one where the brain composer
+ * stands and provides it to `compose-live.ts`, and `apps/web`'s hosted
+ * exchange provides the one it built beside the service.
  */
 import { Context, Layer } from "effect";
 import type { LiveRecord } from "../live-session/live-record.js";
@@ -20,6 +19,6 @@ export class LiveRecordTag extends Context.Tag("@sidecar/voice/LiveRecord")<
   LiveRecord
 >() {}
 
-/** @deprecated Wraps the existing record object as a `Layer`; stands until `LiveSessionService`'s constructor reads the tag itself. */
+/** Hands a record built imperatively to the session that reads `LiveRecordTag`. */
 export const liveRecordLayer = (record: LiveRecord): Layer.Layer<LiveRecordTag> =>
   Layer.succeed(LiveRecordTag, record);
