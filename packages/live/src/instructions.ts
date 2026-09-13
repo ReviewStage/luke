@@ -119,6 +119,31 @@ export function greetingInstruction(): string {
 }
 
 /**
+ * The launch greeting's instruction, the same guide form as the introduction's
+ * and sent the same way, by the host once a signed-in launch's session
+ * starts: the welcome's language, its exact words, and the instruction to
+ * speak first and then listen. The developer's first name is the one value
+ * that enters it, already bounded, and it stands inside the quoted welcome
+ * as a name to say, not a sentence to follow. Without one the welcome is the
+ * same line unaddressed. Unlike the introduction's, this session stays open
+ * to listen, and an instructions append is standing text, so the instruction
+ * says in as many words that it shapes the greeting alone and nothing after
+ * it.
+ */
+export function launchGreetingInstruction(firstName: string | undefined): string {
+  const welcome =
+    firstName === undefined
+      ? "Hey, I'm here and ready to help out. Anything you need me to do?"
+      : `Hey ${firstName}, I'm here and ready to help out. Anything you need me to do?`;
+  return [
+    "Greet the developer now, in English, without waiting for them to speak. The greeting is",
+    `exactly these words: "${welcome}"`,
+    "Then pause and listen. This shapes the greeting alone: once it is said, answer whatever",
+    "the developer says as you normally would.",
+  ].join(" ");
+}
+
+/**
  * The cue that follows the greeting's acknowledgment, sent as one
  * `session.commentary.append` with a null delegation. It is the guide's own
  * sentence for a greeting that has to follow application instructions, kept

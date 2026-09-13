@@ -1,15 +1,18 @@
 import { Schema } from "effect";
 import { chunkForAppend } from "./chunks.js";
+import { greetingCue, launchGreetingInstruction } from "./instructions.js";
 import { trimmedText } from "./trimmed-text.js";
 
 /**
- * What Luke says first: the briefing the brain decided to give, and the two
- * onboarding beats whose trigger is deterministic and whose words are a
- * script fixed by the build. Each becomes commentary appends with a null
- * delegation into the standing session, or one opened muted for it, so Luke
- * phrases them in his own voice. This is the contract between the host that
- * decides a turn and the session that speaks it; the appends are built here
- * and nowhere else.
+ * What Luke says first: the briefing the brain decided to give, and the
+ * beats whose trigger is deterministic and whose words are a script fixed by
+ * the build. A briefing and the onboarding beats become commentary appends
+ * with a null delegation into the standing session, or one opened muted for
+ * it, so Luke phrases them in his own voice; the launch greeting is the
+ * Live conversations guide's greeting before the caller speaks, an
+ * instructions append carrying the welcome and the cue that has the model
+ * begin. This is the contract between the host that decides a turn and the
+ * session that speaks it; the appends are built here and nowhere else.
  */
 
 export const PROACTIVE_SPEECH_KIND = {
@@ -19,6 +22,8 @@ export const PROACTIVE_SPEECH_KIND = {
   ARRIVAL: "arrival",
   /** The line beside the calendar step of onboarding, carrying nothing observed. */
   CALENDAR_ONBOARDING: "calendar-onboarding",
+  /** The greeting of every signed-in launch, spoken before the developer says a word. */
+  LAUNCH: "launch",
 } as const;
 
 export type ProactiveSpeechKind =
@@ -52,7 +57,32 @@ export interface CalendarOnboardingSpeech {
   decidedAt: number;
 }
 
-export type ProactiveSpeechTurn = BriefingSpeech | ArrivalSpeech | CalendarOnboardingSpeech;
+/**
+ * The launch greeting names the developer, and the name is the one observed
+ * value it carries, bounded here before it enters the instruction.
+ */
+export interface LaunchSpeech {
+  kind: typeof PROACTIVE_SPEECH_KIND.LAUNCH;
+  /** The signed-in account's first name, as the account service reported it. */
+  firstName?: string;
+  decidedAt: number;
+}
+
+export type ProactiveSpeechTurn =
+  | BriefingSpeech
+  | ArrivalSpeech
+  | CalendarOnboardingSpeech
+  | LaunchSpeech;
+
+/**
+ * A greeting spoken the way the Live conversations guide has it: the
+ * instruction appended once the session starts, acknowledged before the cue
+ * that asks the model to begin. Only the launch greeting speaks this way.
+ */
+export interface SpeechOpening {
+  instruction: string;
+  cue: string;
+}
 
 /**
  * How much of an observed value an append may carry: a title is a few words,
@@ -63,6 +93,11 @@ export const OBSERVED_VALUE_LENGTH = 200;
 
 function observedValue(value: string | undefined): string | undefined {
   return trimmedText(value?.replace(/\s+/gu, " "))?.slice(0, OBSERVED_VALUE_LENGTH);
+}
+
+/** A value that stands inside the instruction's quoted welcome: bounded, and without the quote that would close it early. */
+function quotableValue(value: string | undefined): string | undefined {
+  return trimmedText(observedValue(value)?.replace(/"/gu, ""));
 }
 
 /**
@@ -99,8 +134,10 @@ const CALENDAR_ONBOARDING_CONTENT =
 /**
  * The commentary appends that speak one turn, in order, each under the
  * append bound. A briefing is the brain's own words, cut at sentence ends; the
- * beats are the build's script with their observed values bounded. A briefing
- * with nothing to say builds nothing.
+ * onboarding beats are the build's script with their observed values
+ * bounded. A briefing with nothing to say builds nothing, and the launch
+ * greeting speaks through its opening instead, so it has no commentary of
+ * its own.
  */
 export function speechAppends(turn: ProactiveSpeechTurn): readonly string[] {
   switch (turn.kind) {
@@ -110,5 +147,16 @@ export function speechAppends(turn: ProactiveSpeechTurn): readonly string[] {
       return chunkForAppend(arrivalContent(turn));
     case PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING:
       return chunkForAppend(CALENDAR_ONBOARDING_CONTENT);
+    case PROACTIVE_SPEECH_KIND.LAUNCH:
+      return [];
   }
+}
+
+/** The instruction-and-cue pair a turn opens with, for the one kind that greets. */
+export function speechOpening(turn: ProactiveSpeechTurn): SpeechOpening | undefined {
+  if (turn.kind !== PROACTIVE_SPEECH_KIND.LAUNCH) return undefined;
+  return {
+    instruction: launchGreetingInstruction(quotableValue(turn.firstName)),
+    cue: greetingCue(),
+  };
 }
