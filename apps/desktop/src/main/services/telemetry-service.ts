@@ -7,6 +7,7 @@ import {
 import type { FeedbackResult, FeedbackSubmission } from "@sidecar/feedback";
 import { feedbackDeliveryFromEnvironment } from "@sidecar/feedback";
 import { type RunMode, sentryReportingEnabled } from "@sidecar/host";
+import type { Effect } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 import type { DesktopService } from "./service";
 
@@ -44,9 +45,15 @@ export interface TelemetryServiceDependencies {
   config: DesktopConfig;
   /** The one way a counted event leaves this process: the host's own stream, through the operator. */
   recordEvent: RecordProductEvent;
+  /**
+   * The launch's own runtime edge, from `compose-desktop.ts`. A feedback send
+   * is an effect the delivery answers, and this is where it begins rather
+   * than on a runtime this service built for itself.
+   */
+  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
 
-/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback courier. */
+/** Everything that leaves this process and is not the Gateway: the crash stream, the counted events, the feedback delivery. */
 export function createTelemetryService(
   dependencies: TelemetryServiceDependencies,
 ): TelemetryService {
@@ -62,7 +69,7 @@ export function createTelemetryService(
       if (!config.runMode.sendsNetwork) {
         return { delivered: false, reason: "A fixture run sends nothing." };
       }
-      const result = await feedbackDelivery.deliver(submission);
+      const result = await dependencies.run(feedbackDelivery.deliver(submission));
       if (result.delivered) {
         recordProductEvent(PRODUCT_EVENT.FEEDBACK_SEND, {
           image_count: productSessionCountBucket(submission.images.length),

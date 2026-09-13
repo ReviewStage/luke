@@ -138,24 +138,24 @@ export interface FeedbackDeliveryFetchOptions extends FeedbackDeliveryOptions {
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
 }
 
-/** The promise-answering face of {@link FeedbackDeliveryEffects}. */
-export interface FeedbackDeliveryCourier {
-  deliver(submission: FeedbackSubmission): Promise<FeedbackResult>;
+/**
+ * {@link FeedbackDeliveryEffects} with its `HttpClient` already provided, so
+ * what a caller holds is one effect per submission and nothing left to hand
+ * it. The run is the caller's own runtime edge.
+ */
+export interface AmbientFeedbackDelivery {
+  deliver(submission: FeedbackSubmission): Effect.Effect<FeedbackResult>;
 }
 
 /**
- * Builds the courier every run gets. There is no key to be missing — the
+ * Builds the delivery every run gets. There is no key to be missing — the
  * endpoint is public and the destination is fixed — so unlike the evaluator
  * this never answers with nothing; only the address can be overridden, for
  * testing the path against a local server.
- *
- * @deprecated Runs the effect over the caller's own `HttpClient`; superseded
- * by {@link feedbackDelivery}, which answers effects over the ambient
- * `HttpClient` directly.
  */
 export function feedbackDeliveryFromEnvironment(
   options: FeedbackDeliveryFetchOptions = {},
-): FeedbackDeliveryCourier {
+): AmbientFeedbackDelivery {
   const url = text(options.url) ?? text(process.env[FEEDBACK_ENVIRONMENT.URL]);
   const delivery = feedbackDelivery({
     ...(url === undefined ? undefined : { url }),
@@ -165,7 +165,6 @@ export function feedbackDeliveryFromEnvironment(
   });
   const client = options.httpClient ?? FetchHttpClient.layer;
   return {
-    deliver: (submission) =>
-      Effect.runPromise(Effect.provide(delivery.deliver(submission), client)),
+    deliver: (submission) => Effect.provide(delivery.deliver(submission), client),
   };
 }

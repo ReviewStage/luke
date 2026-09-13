@@ -1,10 +1,11 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Either, type Layer } from "effect";
 import { WebSocket } from "ws";
 import {
+  accountCall,
   callAnswered,
-  createAccountCall,
   fixedBearer,
   HTTP_METHOD,
   withoutTrailingSlash,
@@ -66,21 +67,29 @@ function attachAddress(baseUrl: string, sessionId: string): string {
 export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
   const baseUrl = options.baseUrl ?? OPENAI_DEFAULTS.BASE_URL;
   const credential = fixedBearer(options.apiKey);
-  const call = createAccountCall({
+  const call = accountCall({
     baseUrl,
     credential,
-    ...(options.httpClient ? { httpClient: options.httpClient } : undefined),
     requestTimeoutMs: options.createTimeoutMs ?? OPENAI_DEFAULTS.CREATE_TIMEOUT_MS,
   });
+  const client = options.httpClient ?? FetchHttpClient.layer;
   const attachTimeoutMs = options.attachTimeoutMs ?? OPENAI_DEFAULTS.ATTACH_TIMEOUT_MS;
 
   return {
     async create(config, sdpOffer) {
-      const answer = await call.send({
-        method: HTTP_METHOD.POST,
-        path: LIVE_SESSIONS_PATH,
-        body: JSON.stringify(liveCreateRequest(config, sdpOffer)),
-      });
+      // The upstream this file builds is plain `ws` callback code rather than
+      // an Effect composition, so the one request it makes is run here, where
+      // the promise it answers begins.
+      const answer = await Effect.runPromise(
+        Effect.provide(
+          call.send({
+            method: HTTP_METHOD.POST,
+            path: LIVE_SESSIONS_PATH,
+            body: JSON.stringify(liveCreateRequest(config, sdpOffer)),
+          }),
+          client,
+        ),
+      );
       if (!callAnswered(answer)) {
         return { outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR, errorName: answer.errorName };
       }

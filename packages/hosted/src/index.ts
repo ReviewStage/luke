@@ -1,5 +1,4 @@
 export {
-  type AccountCall,
   type AccountCallEffects,
   accountBearer,
   accountCall,
@@ -8,7 +7,6 @@ export {
   type CallCredential,
   type CallFailure,
   callAnswered,
-  createAccountCall,
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";

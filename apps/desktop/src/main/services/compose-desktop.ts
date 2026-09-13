@@ -165,6 +165,7 @@ export function composeDesktop(
       const telemetry = createTelemetryService({
         config,
         recordEvent: (name, properties) => operator.host.recordEvent(name, properties),
+        run,
       });
       const windows = createWindowService({
         config,
