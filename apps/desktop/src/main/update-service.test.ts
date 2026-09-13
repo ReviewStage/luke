@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect, Scope } from "effect";
 import { test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import {
@@ -47,14 +48,28 @@ function fakeEngine() {
   };
 }
 
+/**
+ * `UpdateService.make` demands the ambient `Scope.Scope` its forked fibers
+ * land in; a test owns one of its own here, exactly as the launch's own
+ * assembly scope stands in for it in production, and never closes it —
+ * `stop()` interrupts the tracked fibers directly and does not depend on the
+ * scope's own closing to do it.
+ */
 function service(options: Partial<UpdateServiceOptions> & { states?: UpdateSnapshot[] }) {
   const states = options.states ?? [];
-  return new UpdateService({
-    currentVersion: "0.1.0",
-    onChange: (update) => states.push(update),
-    report: () => undefined,
-    ...options,
-  });
+  const scope = Effect.runSync(Scope.make());
+  return Effect.runSync(
+    Effect.provideService(
+      UpdateService.make({
+        currentVersion: "0.1.0",
+        onChange: (update) => states.push(update),
+        report: () => undefined,
+        ...options,
+      }),
+      Scope.Scope,
+      scope,
+    ),
+  );
 }
 
 test("a found update downloads at once and installs only at the one restart press", async () => {
@@ -361,10 +376,9 @@ test("the first launch after an install says what happened before checking again
   const { calls, engine } = fakeEngine();
   let stored: string | undefined = "0.1.0";
   const states: UpdateSnapshot[] = [];
-  const updates = new UpdateService({
+  const updates = service({
     currentVersion: "0.2.0",
     onChange: (update) => states.push(update),
-    report: () => undefined,
     engine,
     lastRunVersion: {
       read: () => stored,
@@ -393,12 +407,10 @@ test("the first launch after an install says what happened before checking again
 
 test("a listener that throws does not fail the transition", () => {
   const { fire, engine } = fakeEngine();
-  const updates = new UpdateService({
-    currentVersion: "0.1.0",
+  const updates = service({
     onChange: () => {
       throw new Error("window already torn down");
     },
-    report: () => undefined,
     engine,
   });
 
