@@ -152,15 +152,21 @@ export const composeCalendars = (
      * the reader answers by standing what it last showed, never by emptying
      * a calendar on the strength of an absent desktop.
      */
-    const runAppleCalendarHelper: AppleCalendarHelperRun = async (helperArguments, timeoutMs) => {
-      const result = await kernel.nodes.invoke(HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER, {
-        arguments: [...helperArguments],
-        timeoutMs,
-      });
-      if (result.status !== NODE_CAPABILITY_STATUS.OK) throw new Error(result.reason);
-      if (!isWireString(result.value)) throw new Error("the helper answered no text");
-      return result.value;
-    };
+    const runAppleCalendarHelper: AppleCalendarHelperRun = (helperArguments, timeoutMs) =>
+      Effect.flatMap(
+        kernel.nodes.invoke(HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER, {
+          arguments: [...helperArguments],
+          timeoutMs,
+        }),
+        (result) => {
+          if (result.status !== NODE_CAPABILITY_STATUS.OK) {
+            return Effect.fail(new Error(result.reason));
+          }
+          return isWireString(result.value)
+            ? Effect.succeed(result.value)
+            : Effect.fail(new Error("the helper answered no text"));
+        },
+      );
     const appleCalendar = new AppleCalendarReader({
       readConnection: () => Effect.orDie(settingsStore.readAppleCalendarConnection()),
       runHelper: runAppleCalendarHelper,

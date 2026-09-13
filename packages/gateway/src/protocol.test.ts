@@ -65,16 +65,13 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
           return Effect.succeed({ outcome: "complete" });
         },
         [GATEWAY_METHOD.NODE_INVOKE]: (params) =>
-          Effect.map(
-            Effect.promise(() => nodes.invoke(String(params.capability), {})),
-            (result) => {
-              if (result.status === NODE_CAPABILITY_STATUS.OK) {
-                effects.push(`invoked ${String(params.capability)}`);
-                return { status: result.status };
-              }
-              return { status: result.status, reason: result.reason };
-            },
-          ),
+          Effect.map(nodes.invoke(String(params.capability), {}), (result) => {
+            if (result.status === NODE_CAPABILITY_STATUS.OK) {
+              effects.push(`invoked ${String(params.capability)}`);
+              return { status: result.status };
+            }
+            return { status: result.status, reason: result.reason };
+          }),
         [GATEWAY_METHOD.MEMORY_STATUS]: () => {
           throw new Error("the index fell over");
         },

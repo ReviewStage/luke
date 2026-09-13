@@ -1,5 +1,6 @@
 import type { MaybePromise } from "@sidecar/runtime/vocabulary";
 import type { WireRecord, WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
 
 export type NodeCapabilityHandler = (params: WireRecord) => MaybePromise<WireValue | undefined>;
@@ -13,7 +14,7 @@ export interface NodeRegistration {
 export type RemoteNodeInvoker = (
   capability: string,
   params: WireRecord,
-) => Promise<NodeCapabilityResult>;
+) => Effect.Effect<NodeCapabilityResult>;
 
 export interface RemoteNodeRegistration {
   nodeId: string;
@@ -25,7 +26,7 @@ interface HeldNode {
   nodeId: string;
   capabilities: readonly string[];
   /** Performs one capability in this process, or asks the connection the node registered on. */
-  perform: (capability: string, params: WireRecord) => Promise<NodeCapabilityResult>;
+  perform: (capability: string, params: WireRecord) => Effect.Effect<NodeCapabilityResult>;
   connected: boolean;
 }
 
@@ -55,18 +56,23 @@ export class NodeRegistry {
     this.#nodes.set(registration.nodeId, {
       nodeId: registration.nodeId,
       capabilities: Object.keys(registration.capabilities),
-      perform: async (capability, params) => {
+      perform: (capability, params) => {
         const handler = registration.capabilities[capability];
-        if (!handler) return this.#unknown(capability);
-        try {
-          return { status: NODE_CAPABILITY_STATUS.OK, value: await handler(params) };
-        } catch (error) {
-          return {
-            status: NODE_CAPABILITY_STATUS.FAILED,
-            capability,
-            reason: error instanceof Error ? error.message : String(error),
-          };
-        }
+        if (!handler) return Effect.succeed(this.#unknown(capability));
+        return Effect.match(
+          Effect.tryPromise({ try: async () => await handler(params), catch: (error) => error }),
+          {
+            onSuccess: (value): NodeCapabilityResult => ({
+              status: NODE_CAPABILITY_STATUS.OK,
+              value,
+            }),
+            onFailure: (error): NodeCapabilityResult => ({
+              status: NODE_CAPABILITY_STATUS.FAILED,
+              capability,
+              reason: error instanceof Error ? error.message : String(error),
+            }),
+          },
+        );
       },
       connected: true,
     });
@@ -87,7 +93,7 @@ export class NodeRegistry {
       perform: (capability, params) =>
         registration.capabilities.includes(capability)
           ? registration.invoke(capability, params)
-          : Promise.resolve(this.#unknown(capability)),
+          : Effect.succeed(this.#unknown(capability)),
       connected: true,
     });
     this.#changed();
@@ -129,21 +135,28 @@ export class NodeRegistry {
     }));
   }
 
-  async invoke(capability: string, params: WireRecord = {}): Promise<NodeCapabilityResult> {
-    const provider = this.#provider(capability);
-    if (!provider) {
-      const known = [...this.#nodes.values()].some((node) =>
-        node.capabilities.includes(capability),
-      );
-      return {
-        status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
-        capability,
-        reason: known
-          ? "the node offering that capability is not connected"
-          : "no node offers that capability",
-      };
-    }
-    return provider.perform(capability, params);
+  /**
+   * Asks for one capability by name. Which node answers is decided when the
+   * effect runs and not when it is described, so an ask held and run later
+   * reaches whatever is connected then.
+   */
+  invoke(capability: string, params: WireRecord = {}): Effect.Effect<NodeCapabilityResult> {
+    return Effect.suspend(() => {
+      const provider = this.#provider(capability);
+      if (!provider) {
+        const known = [...this.#nodes.values()].some((node) =>
+          node.capabilities.includes(capability),
+        );
+        return Effect.succeed<NodeCapabilityResult>({
+          status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+          capability,
+          reason: known
+            ? "the node offering that capability is not connected"
+            : "no node offers that capability",
+        });
+      }
+      return provider.perform(capability, params);
+    });
   }
 
   onChange(listener: NodeRegistryListener): () => void {

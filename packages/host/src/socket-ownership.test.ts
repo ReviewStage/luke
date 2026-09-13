@@ -232,15 +232,15 @@ it.live("while no client stands, a native capability the host needs answers unav
           capabilities: [HOST_NODE_CAPABILITY.OPEN_EXTERNAL],
         })).ok,
       );
-      const served = yield* Effect.promise(() =>
-        f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url: "https://a" }),
-      );
+      const served = yield* f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
+        url: "https://a",
+      });
       assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
       desktop.connection.close();
       yield* Effect.sleep("20 millis");
-      const absent = yield* Effect.promise(() =>
-        f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url: "https://b" }),
-      );
+      const absent = yield* f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
+        url: "https://b",
+      });
       assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     }),
   ),

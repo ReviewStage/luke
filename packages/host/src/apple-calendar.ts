@@ -82,7 +82,7 @@ export interface AppleCalendarAccessOutcome {
 export type AppleCalendarHelperRun = (
   helperArguments: readonly string[],
   timeoutMs: number,
-) => Promise<string>;
+) => Effect.Effect<string, unknown>;
 
 export interface AppleCalendarReaderOptions {
   /**
@@ -321,10 +321,7 @@ export class AppleCalendarReader {
     helperArguments: readonly string[],
     timeoutMs: number,
   ): Effect.Effect<ParsedHelperReport, unknown> {
-    return Effect.tryPromise({
-      try: () => this.#runHelper(helperArguments, timeoutMs),
-      catch: (error) => error,
-    }).pipe(
+    return this.#runHelper(helperArguments, timeoutMs).pipe(
       Effect.flatMap((output) =>
         Effect.try({ try: () => parseHelperReport(output), catch: (error) => error }),
       ),

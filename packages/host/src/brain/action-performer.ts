@@ -76,7 +76,7 @@ export interface BrainActionPerformerDependencies {
    */
   notebook: BrainNotebookWriter;
   /** Carries an app action only a renderer can perform, and answers what became of it. */
-  performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
+  performAppAction: (action: BrainAppActionRequest["action"]) => Effect.Effect<WireRecord>;
   /** Records the ask a carried session action was, so the thread holds it. */
   recordConversationEntry: (entry: ConversationEntry) => void;
 }
@@ -231,15 +231,12 @@ export function createBrainActionPerformer(
   const carryAppAction = (
     action: BrainAppActionRequest["action"],
   ): Effect.Effect<ActionOutputEnvelope> =>
-    Effect.map(
-      Effect.promise(() => dependencies.performAppAction(action)),
-      (answered) => {
-        const result = panelResult(answered);
-        return result === undefined
-          ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
-          : actionOutputFromResult(result);
-      },
-    );
+    Effect.map(dependencies.performAppAction(action), (answered) => {
+      const result = panelResult(answered);
+      return result === undefined
+        ? refusedActionOutput(REFUSAL.UNREADABLE_PANEL_ANSWER)
+        : actionOutputFromResult(result);
+    });
 
   const carry = (
     action: ValidatedAction,

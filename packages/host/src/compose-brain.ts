@@ -199,22 +199,24 @@ export const composeBrain = (
      * answers what became of it. No node connected, or one that answers in a
      * shape this build cannot read, is a refusal, and the action is left undone.
      */
-    async function performAppAction(action: BrainAppActionRequest["action"]): Promise<WireRecord> {
-      const result = await kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACTION, {
-        action: carried(action),
-      });
-      if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value))
-        return result.value;
-      if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-        return { status: UNKNOWN_ACTION_STATUS, reason: result.reason };
-      }
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason:
-          result.status === NODE_CAPABILITY_STATUS.OK
-            ? "The panel answered in a shape this build cannot read."
-            : result.reason,
-      };
+    function performAppAction(action: BrainAppActionRequest["action"]): Effect.Effect<WireRecord> {
+      return Effect.map(
+        kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACTION, { action: carried(action) }),
+        (result) => {
+          if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value))
+            return result.value;
+          if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
+            return { status: UNKNOWN_ACTION_STATUS, reason: result.reason };
+          }
+          return {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason:
+              result.status === NODE_CAPABILITY_STATUS.OK
+                ? "The panel answered in a shape this build cannot read."
+                : result.reason,
+          };
+        },
+      );
     }
 
     const wiring = yield* wireBrain({

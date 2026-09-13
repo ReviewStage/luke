@@ -51,7 +51,7 @@ export interface GatewayTransport {
  */
 export interface GatewayHostConnection {
   connectionId: string;
-  invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult>;
+  invoke(invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult>;
   onClosed(listener: () => void): () => void;
 }
 
@@ -102,13 +102,21 @@ export abstract class ServerBoundTransport implements GatewayTransport {
     };
   }
 
-  async #invoke(invocation: NodeInvocation): Promise<NodeCapabilityResult> {
-    if (!this.#connected) {
-      return unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED);
-    }
-    const memory = this.#memory;
-    if (!memory) return unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING);
-    return this.carryInvocation(invocation, (carried) => memory.take(carried));
+  #invoke(invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> {
+    return Effect.suspend(() => {
+      if (!this.#connected) {
+        return Effect.succeed(
+          unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+        );
+      }
+      const memory = this.#memory;
+      if (!memory) {
+        return Effect.succeed(
+          unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.NOT_SERVING),
+        );
+      }
+      return this.carryInvocation(invocation, (carried) => memory.take(carried));
+    });
   }
 
   request(request: GatewayRequest): Effect.Effect<GatewayResponse> {
@@ -213,7 +221,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   protected abstract carryInvocation(
     invocation: NodeInvocation,
     take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
-  ): Promise<NodeCapabilityResult>;
+  ): Effect.Effect<NodeCapabilityResult>;
 }
 
 /**
@@ -232,10 +240,13 @@ export class InProcessTransport extends ServerBoundTransport {
     if (this.connected()) this.deliver(event);
   }
 
-  protected async carryInvocation(
+  protected carryInvocation(
     invocation: NodeInvocation,
     take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
-  ): Promise<NodeCapabilityResult> {
-    return (await take(invocation)).result;
+  ): Effect.Effect<NodeCapabilityResult> {
+    return Effect.map(
+      Effect.promise(() => take(invocation)),
+      (answer) => answer.result,
+    );
   }
 }

@@ -441,15 +441,13 @@ export function createGatewayService(
     [GATEWAY_METHOD.NODE_INVOKE]: reading((read) => {
       const capability = read.string("capability");
       const params = read.optionalRecord("params") ?? {};
-      return Effect.map(
-        Effect.promise(() => nodes.invoke(capability, params)),
-        (result) =>
-          result.status === NODE_CAPABILITY_STATUS.OK
-            ? {
-                status: result.status,
-                ...(result.value !== undefined ? { value: result.value } : undefined),
-              }
-            : { status: result.status, capability: result.capability, reason: result.reason },
+      return Effect.map(nodes.invoke(capability, params), (result) =>
+        result.status === NODE_CAPABILITY_STATUS.OK
+          ? {
+              status: result.status,
+              ...(result.value !== undefined ? { value: result.value } : undefined),
+            }
+          : { status: result.status, capability: result.capability, reason: result.reason },
       );
     }),
   };

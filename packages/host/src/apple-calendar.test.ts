@@ -25,12 +25,12 @@ function readerFor(options: {
   const runs: RecordedRun[] = [];
   const reader = new AppleCalendarReader({
     readConnection: () => Effect.succeed(options.connection),
-    runHelper: async (helperArguments, timeoutMs) => {
-      runs.push({ helperArguments, timeoutMs });
-      const answer = options.answer(helperArguments);
-      if (answer instanceof Error) throw answer;
-      return answer;
-    },
+    runHelper: (helperArguments, timeoutMs) =>
+      Effect.suspend(() => {
+        runs.push({ helperArguments, timeoutMs });
+        const answer = options.answer(helperArguments);
+        return answer instanceof Error ? Effect.fail(answer) : Effect.succeed(answer);
+      }),
     now: () => NOW,
   });
   return { reader, runs };

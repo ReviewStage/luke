@@ -237,17 +237,13 @@ for (const kind of ["in-process", "loopback"] as const) {
         });
         assert.ok(registered.ok);
         if (transport instanceof TextLoopbackTransport) transport.repeatNextInvocation(2);
-        const result = yield* Effect.promise(() =>
-          nodes.invoke(CAPABILITY, { url: "https://one.test" }),
-        );
+        const result = yield* nodes.invoke(CAPABILITY, { url: "https://one.test" });
         assert.equal(result.status, NODE_CAPABILITY_STATUS.OK);
         assert.deepEqual(opened, ["https://one.test"]);
         // The connection closing disconnects the node: the next ask is never
         // dispatched and says so, distinctly from an ask whose answer was lost.
         yield* transport.close();
-        const afterClose = yield* Effect.promise(() =>
-          nodes.invoke(CAPABILITY, { url: "https://two.test" }),
-        );
+        const afterClose = yield* nodes.invoke(CAPABILITY, { url: "https://two.test" });
         assert.equal(afterClose.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
         assert.deepEqual(opened, ["https://one.test"]);
       }),
@@ -271,7 +267,9 @@ it.live(
             "the registration answered",
           );
           // The host asks; the node has performed the effect and dies before answering.
-          const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://effect.test" });
+          const pending = Effect.runPromise(
+            hosted.nodes.invoke(CAPABILITY, { url: "https://effect.test" }),
+          );
           await until(
             () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
             "the invocation reached the node",
@@ -287,7 +285,9 @@ it.live(
             assert.equal(lost.reason, NODE_INVOCATION_REFUSAL.ANSWER_LOST);
           }
           // Nothing connected offers the capability now: never dispatched.
-          const undispatched = await hosted.nodes.invoke(CAPABILITY, { url: "https://later.test" });
+          const undispatched = await Effect.runPromise(
+            hosted.nodes.invoke(CAPABILITY, { url: "https://later.test" }),
+          );
           assert.equal(undispatched.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
           // A relaunched client registers again and hears no frame for the lost ask;
           // its reconnect replay carries no invocation either, because none is an event.
@@ -327,7 +327,9 @@ it.live(
             }),
           );
           // And a fresh ask is dispatched to the new connection alone, once.
-          const fresh = hosted.nodes.invoke(CAPABILITY, { url: "https://fresh.test" });
+          const fresh = Effect.runPromise(
+            hosted.nodes.invoke(CAPABILITY, { url: "https://fresh.test" }),
+          );
           await until(
             () => seenBySecond.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
             "the fresh invocation reached the second client",
@@ -371,7 +373,9 @@ it.live(
             () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
             "registered",
           );
-          const pending = hosted.nodes.invoke(CAPABILITY, { url: "https://guarded.test" });
+          const pending = Effect.runPromise(
+            hosted.nodes.invoke(CAPABILITY, { url: "https://guarded.test" }),
+          );
           await until(
             () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
             "dispatched",
@@ -506,9 +510,7 @@ it.live(
             capabilities: [CAPABILITY],
           })).ok,
         );
-        const unserved = yield* Effect.promise(() =>
-          hosted.nodes.invoke(CAPABILITY, { url: "https://none.test" }),
-        );
+        const unserved = yield* hosted.nodes.invoke(CAPABILITY, { url: "https://none.test" });
         assert.equal(unserved.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
         if (unserved.status === NODE_CAPABILITY_STATUS.UNAVAILABLE) {
           assert.equal(unserved.reason, NODE_INVOCATION_REFUSAL.NOT_SERVING);
@@ -518,9 +520,7 @@ it.live(
           opened.push(String(invocation.params.url));
           return Promise.resolve({ status: NODE_CAPABILITY_STATUS.OK, value: undefined });
         });
-        const served = yield* Effect.promise(() =>
-          hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" }),
-        );
+        const served = yield* hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" });
         assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
         assert.deepEqual(opened, ["https://served.test"]);
         connected.connection.close();

@@ -2,6 +2,7 @@ import path from "node:path";
 import type { Worker } from "node:worker_threads";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
 import type { WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import type { MachinePresence } from "./device-presence.js";
 import {
   HOST_NODE_CAPABILITY,
@@ -73,6 +74,13 @@ export interface HostKernel {
    * caller that journals an action records as unknown rather than failed.
    * The kind is what the address is, an address unless a caller says
    * otherwise; the node decides from it what its own windows owe the open.
+   *
+   * A promise and not an effect: the three composers that hand this on hand it
+   * to seams outside this package — the account session manager's consent, the
+   * calendar sign-in's page, the roster subscriber's created-workspace open —
+   * each of which is a synchronous or promise-shaped callback owned by
+   * `@sidecar/credentials` and `@sidecar/calendar`, and what would end that is
+   * a decision about those seams rather than anything this kernel holds.
    */
   openExternalThroughNode: (url: string, kind?: HostNodeOpenKind) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
@@ -152,7 +160,9 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
       service.set(next);
     },
     openExternalThroughNode: async (url, kind = HOST_NODE_OPEN_KIND.ADDRESS) => {
-      const result = await nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url, kind });
+      const result = await Effect.runPromise(
+        nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url, kind }),
+      );
       if (result.status === NODE_CAPABILITY_STATUS.OK) return;
       if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
         throw new NodeAnswerLostError(result.reason);

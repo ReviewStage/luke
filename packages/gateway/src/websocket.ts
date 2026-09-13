@@ -389,28 +389,29 @@ const makeGatewaySocket = (
       connections += 1;
       return {
         connectionId: `socket-${connections}`,
-        invoke: (invocation: NodeInvocation): Promise<NodeCapabilityResult> => {
-          // The socket's own state decides this and not the queue behind it: an
-          // ask a closing socket would still take into the queue never leaves
-          // the host, and answering it unknown would record an effect that may
-          // have happened where nothing was dispatched at all.
-          if (accepted.readyState !== WebSocket.OPEN) {
-            return Promise.resolve(
-              unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+        invoke: (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
+          Effect.suspend(() => {
+            // The socket's own state decides this and not the queue behind it: an
+            // ask a closing socket would still take into the queue never leaves
+            // the host, and answering it unknown would record an effect that may
+            // have happened where nothing was dispatched at all.
+            if (accepted.readyState !== WebSocket.OPEN) {
+              return Effect.succeed(
+                unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+              );
+            }
+            const answered = client.pending.open(invocation);
+            const carried = client.outbound.unsafeOffer(
+              frameOf(GATEWAY_FRAME.INVOCATION, JSON.stringify(nodeInvocationToWire(invocation))),
             );
-          }
-          const answered = client.pending.open(invocation);
-          const carried = client.outbound.unsafeOffer(
-            frameOf(GATEWAY_FRAME.INVOCATION, JSON.stringify(nodeInvocationToWire(invocation))),
-          );
-          if (!carried) {
-            client.pending.answer({
-              invocationId: invocation.invocationId,
-              result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
-            });
-          }
-          return answered;
-        },
+            if (!carried) {
+              client.pending.answer({
+                invocationId: invocation.invocationId,
+                result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+              });
+            }
+            return answered;
+          }),
         onClosed: (listener) => {
           client.closedListeners.add(listener);
           return () => {

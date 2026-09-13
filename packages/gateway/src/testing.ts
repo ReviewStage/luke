@@ -108,24 +108,33 @@ export class TextLoopbackTransport extends ServerBoundTransport {
     if (carried) this.deliver(carried);
   }
 
-  protected async carryInvocation(
+  protected carryInvocation(
     invocation: NodeInvocation,
     take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
-  ): Promise<NodeCapabilityResult> {
-    const carried = nodeInvocationFromWire(throughText(nodeInvocationToWire(invocation)));
-    if (!carried) {
-      return unavailableInvocation(invocation, "the invocation did not survive the wire");
-    }
-    // Delivered as many times as a test asked, so a node's dedupe is exercised
-    // on a frame the wire repeated while the first was still performing.
-    const takes = Array.from({ length: 1 + this.#repeatNextInvocation }, () => take(carried));
-    this.#repeatNextInvocation = 0;
-    const answered = (await Promise.all(takes))[0];
-    if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
-    const parsed = nodeCapabilityResultFromWire(
-      throughText(nodeCapabilityResultToWire(answered.result)),
-    );
-    return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
+  ): Effect.Effect<NodeCapabilityResult> {
+    return Effect.suspend(() => {
+      const carried = nodeInvocationFromWire(throughText(nodeInvocationToWire(invocation)));
+      if (!carried) {
+        return Effect.succeed(
+          unavailableInvocation(invocation, "the invocation did not survive the wire"),
+        );
+      }
+      // Delivered as many times as a test asked, so a node's dedupe is exercised
+      // on a frame the wire repeated while the first was still performing.
+      const takes = Array.from({ length: 1 + this.#repeatNextInvocation }, () => take(carried));
+      this.#repeatNextInvocation = 0;
+      return Effect.map(
+        Effect.promise(() => Promise.all(takes)),
+        (answers) => {
+          const answered = answers[0];
+          if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
+          const parsed = nodeCapabilityResultFromWire(
+            throughText(nodeCapabilityResultToWire(answered.result)),
+          );
+          return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
+        },
+      );
+    });
   }
 
   /** Delivers the next invocation `count` extra times, as a wire that repeated a frame would. */

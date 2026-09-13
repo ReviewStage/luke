@@ -274,9 +274,8 @@ async function composed(
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },
-      performAppAction: async (): Promise<WireRecord> => ({
-        status: ACTION_RESULT_STATUS.REJECTED,
-      }),
+      performAppAction: (): Effect.Effect<WireRecord> =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED }),
       recordConversationEntry: () => undefined,
     },
     roster: () => ({ text: "", identities: [], sessions: [] }),

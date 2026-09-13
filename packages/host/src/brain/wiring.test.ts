@@ -62,7 +62,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
       appGuide: () => ({ facts: [], settings: [] }),
       rememberedFacts: () => [],
       notebook: { remember: async () => true, forget: async () => true },
-      performAppAction: async () => ({ status: "accepted" }),
+      performAppAction: () => Effect.succeed({ status: "accepted" }),
       recordConversationEntry: () => undefined,
     },
     roster: () => ({ text: "", identities: [] }),

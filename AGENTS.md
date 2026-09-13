@@ -232,6 +232,16 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   its observation-driven fibers (the held-notice release, the Apple access
   poll, the meeting-boundary wake) from synchronous callbacks — a finalizer,
   the composer's own lifetime — onto the runtime its own layer was built on.
+- **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
+  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the three
+  composers that hand it on hand it to seams outside this repository's host
+  package — the account session manager's consent
+  (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
+  `void | Promise<void>` and whose `reopen()` is synchronous), the calendar
+  sign-in's page (`packages/calendar/src/oauth.ts`), and the roster
+  subscriber's created-workspace open, a synchronous listener — so what would
+  end this row is a decision about those seams rather than an implementation
+  detail of this door.
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Runtime.runSync` on the launch's own runtime, never a second one, because

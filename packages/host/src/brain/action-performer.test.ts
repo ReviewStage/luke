@@ -165,10 +165,11 @@ function performer(
         return true;
       },
     },
-    performAppAction: async (action) => {
-      appActions.push(action);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED };
-    },
+    performAppAction: (action) =>
+      Effect.sync(() => {
+        appActions.push(action);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED };
+      }),
     recordConversationEntry: (entry) => {
       recorded.push(entry);
     },
@@ -317,7 +318,7 @@ test("a panel's answer is read in its own dialect: an acceptance keeps its note 
   ];
   const { actions } = performer({
     appGuide: () => CAPTIONS_GUIDE,
-    performAppAction: async () => answers.shift() ?? {},
+    performAppAction: () => Effect.sync(() => answers.shift() ?? {}),
   });
   const outcomes = [];
   while (answers.length > 0)

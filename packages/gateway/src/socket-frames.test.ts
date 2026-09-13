@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
 import { WebSocket } from "ws";
 import type { GatewayMethodTable } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
@@ -212,7 +212,7 @@ it.live("the frames one socket exchange carries, in order", () =>
     yield* send("request-node-register", GATEWAY_METHOD.NODE_REGISTER, { nodeId: NODE_ID });
     yield* answered(4, "the registration answered");
 
-    const invoked = nodes.invoke(CAPABILITY, { url: "https://example.test" });
+    const invoked = yield* Effect.fork(nodes.invoke(CAPABILITY, { url: "https://example.test" }));
     yield* Effect.promise(() =>
       until(() => frames(GATEWAY_FRAME.INVOCATION).length === 1, "the invocation reached the node"),
     );
@@ -231,7 +231,7 @@ it.live("the frames one socket exchange carries, in order", () =>
         }),
       ),
     );
-    assert.deepEqual(yield* Effect.promise(() => invoked), {
+    assert.deepEqual(yield* Fiber.join(invoked), {
       status: NODE_CAPABILITY_STATUS.OK,
       value: "opened",
     });

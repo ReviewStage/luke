@@ -1,3 +1,4 @@
+import { Deferred, Effect, Exit, FiberId } from "effect";
 import {
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
@@ -48,7 +49,7 @@ export function unknownInvocation(
 export class PendingInvocations {
   readonly #pending = new Map<
     string,
-    { capability: string; resolve: (result: NodeCapabilityResult) => void }
+    { capability: string; deferred: Deferred.Deferred<NodeCapabilityResult> }
   >();
   #closed = false;
 
@@ -56,16 +57,21 @@ export class PendingInvocations {
     return this.#pending.size;
   }
 
-  /** Holds one ask until it is answered; a ledger already closed answers unavailable at once. */
-  open(invocation: NodeInvocation): Promise<NodeCapabilityResult> {
+  /**
+   * Puts one ask on the ledger as it is called and answers with the effect
+   * that waits for it, so the caller holds the ask before it puts the frame
+   * on the wire and an answer arriving between the two settles the deferred
+   * this already keeps. A ledger already closed answers unavailable at once.
+   */
+  open(invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> {
     if (this.#closed) {
-      return Promise.resolve(
+      return Effect.succeed(
         unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
       );
     }
-    return new Promise((resolve) => {
-      this.#pending.set(invocation.invocationId, { capability: invocation.capability, resolve });
-    });
+    const deferred = Deferred.unsafeMake<NodeCapabilityResult>(FiberId.none);
+    this.#pending.set(invocation.invocationId, { capability: invocation.capability, deferred });
+    return Deferred.await(deferred);
   }
 
   /** Settles the ask of that id; an id this ledger never opened, or already settled, is ignored. */
@@ -73,7 +79,7 @@ export class PendingInvocations {
     const held = this.#pending.get(answer.invocationId);
     if (!held) return false;
     this.#pending.delete(answer.invocationId);
-    held.resolve(answer.result);
+    Deferred.unsafeDone(held.deferred, Exit.succeed(answer.result));
     return true;
   }
 
@@ -86,7 +92,10 @@ export class PendingInvocations {
     this.#closed = true;
     for (const [id, held] of [...this.#pending]) {
       this.#pending.delete(id);
-      held.resolve(unknownInvocation({ capability: held.capability }));
+      Deferred.unsafeDone(
+        held.deferred,
+        Exit.succeed(unknownInvocation({ capability: held.capability })),
+      );
     }
   }
 }
