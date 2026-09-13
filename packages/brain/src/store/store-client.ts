@@ -3,7 +3,7 @@ import type { WorkerError } from "@effect/platform/WorkerError";
 import { NodeWorker } from "@effect/platform-node";
 import { type Rpc, RpcClient } from "@effect/rpc";
 import type { RpcClientError } from "@effect/rpc/RpcClientError";
-import type { NotebookMemoryStore } from "@sidecar/memory";
+import { MemorySeamRefused, type NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore } from "@sidecar/runtime";
 import type { ExecutionRuntime, SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
 import {
@@ -52,6 +52,16 @@ import {
  * the caller's decision, as it always was.
  */
 export interface StoreClient {
+  /**
+   * One operation as the effect of asking it: the request goes out when the
+   * effect is run and nothing here runs it, so a caller that already speaks
+   * in effects reaches the worker without a promise in between.
+   */
+  request<Name extends StoreOperationName>(
+    name: Name,
+    params: OperationParams<Name>,
+  ): Effect.Effect<OperationResult<Name>, StoreAskFailure>;
+  /** That same request as the promise a caller still holding one reads. */
   ask<Name extends StoreOperationName>(
     name: Name,
     params: OperationParams<Name>,
@@ -75,7 +85,11 @@ export interface StoreClient {
    * its next save is refused the same way until it loads again.
    */
   brainStateRepository(sessionKey: SessionKey): BrainStateRepository;
-  /** The notebook's index and Conversation's search under the names the memory package's host asks for. */
+  /**
+   * The notebook's index and Conversation's search under the names the memory
+   * package's host asks for, each answering an effect over `request`: the
+   * index is a scoped effect and runs them itself.
+   */
   notebookMemoryStore(): NotebookMemoryStore;
   /** The child service's records and completions as a store, each written whole through the worker. */
   childStore(): ChildStore;
@@ -199,11 +213,12 @@ const settledOn = (
  * where the work lives.
  *
  * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
- * section: `StoreClient` answers the promises `BrainStateRepository`,
- * `NotebookMemoryStore`, and `ChildStore` declare. The first and the last
- * stand on OpenClaw ports that may not import `effect`; `NotebookMemoryStore`
- * has no port behind it and is read by the notebook's index, which is a
- * scoped effect reaching it through `Effect.tryPromise`.
+ * section: what stands on this face is `BrainStateRepository` and `ChildStore`,
+ * and both stand on OpenClaw ports (`packages/brain/src/state-store.ts`,
+ * `packages/runtime/src/children.ts`) that may not import `effect`, so neither
+ * interface can be stated as effects while its port stands.
+ * `NotebookMemoryStore` is off this face: it had no port behind it, and it
+ * answers effects over `request`, which runs nothing.
  */
 export function storeClient(transport: StoreTransport, execution: ExecutionRuntime): StoreClient {
   const settled = settledOn(execution);
@@ -277,15 +292,26 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
     );
   }
 
+  const request = <Name extends StoreOperationName>(
+    name: Name,
+    params: OperationParams<Name>,
+  ): Effect.Effect<OperationResult<Name>, StoreAskFailure> =>
+    sends.withPermits(1)(Effect.flatMap(connected, (connection) => call(connection, name, params)));
+
   const ask = <Name extends StoreOperationName>(
     name: Name,
     params: OperationParams<Name>,
-  ): Promise<OperationResult<Name>> =>
-    settled(
-      sends.withPermits(1)(
-        Effect.flatMap(connected, (connection) => call(connection, name, params)),
-      ),
-    );
+  ): Promise<OperationResult<Name>> => settled(request(name, params));
+
+  /**
+   * A store's refusal as the memory package's own: the index knows no store,
+   * so what it is owed is the words the store wrote and not the shape it
+   * wrote them in.
+   */
+  const refused = <A>(
+    effect: Effect.Effect<A, StoreAskFailure>,
+  ): Effect.Effect<A, MemorySeamRefused> =>
+    Effect.mapError(effect, (failure) => new MemorySeamRefused({ reason: failure.message }));
 
   const open = (options: StoreOpenOptions): Promise<boolean> =>
     settled(
@@ -330,23 +356,26 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
   };
 
   return {
+    request,
     ask,
     open,
     close,
     brainStateRepository,
     notebookMemoryStore: () => ({
       planMemorySync: (identity, now) =>
-        ask("memory.plan-sync", { ...(identity ? { identity } : undefined), now }),
-      applyMemorySync: (apply) => ask("memory.apply-sync", apply),
-      searchMemory: (query) => ask("memory.search", query),
+        refused(request("memory.plan-sync", { ...(identity ? { identity } : undefined), now })),
+      applyMemorySync: (apply) => refused(request("memory.apply-sync", apply)),
+      searchMemory: (query) => refused(request("memory.search", query)),
       readMemory: (path, from, lines) =>
-        ask("memory.get", {
-          path,
-          ...(from !== undefined ? { from } : undefined),
-          ...(lines !== undefined ? { lines } : undefined),
-        }),
+        refused(
+          request("memory.get", {
+            path,
+            ...(from !== undefined ? { from } : undefined),
+            ...(lines !== undefined ? { lines } : undefined),
+          }),
+        ),
       searchConversation: (sessionKeys, query, limit, now) =>
-        ask("conversation.search", { sessionKeys, query, limit, now }),
+        refused(request("conversation.search", { sessionKeys, query, limit, now })),
     }),
     childStore: () => ({
       listChildren: () => ask("children.list", {}),

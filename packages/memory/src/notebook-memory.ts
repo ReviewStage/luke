@@ -49,21 +49,32 @@ import { selectHybridSearchResults, tokenize } from "./ranking.js";
  * indexed nowhere.
  */
 
-/** The store as the host reads and writes it: the index's plan and apply, its search and read, and Conversation's search. */
+/**
+ * The store as the host reads and writes it: the index's plan and apply, its
+ * search and read, and Conversation's search. Every one of them answers an
+ * effect refused with `MemorySeamRefused`, so a store that could not carry
+ * the call out is the same failure here as an adapter that could not answer,
+ * and the index runs none of them: the pass, the search, and the read are
+ * effects of whoever asked for them.
+ */
 export interface NotebookMemoryStore {
   planMemorySync(
     identity: EmbeddingModelIdentity | undefined,
     now: number,
-  ): Promise<MemoryScanPlan>;
-  applyMemorySync(apply: MemorySyncApply): Promise<MemoryApplyReport>;
-  searchMemory(query: MemorySearchQuery): Promise<MemorySearchOutcome>;
-  readMemory(path: string, from?: number, lines?: number): Promise<MemoryReadResult | undefined>;
+  ): Effect.Effect<MemoryScanPlan, MemorySeamRefused>;
+  applyMemorySync(apply: MemorySyncApply): Effect.Effect<MemoryApplyReport, MemorySeamRefused>;
+  searchMemory(query: MemorySearchQuery): Effect.Effect<MemorySearchOutcome, MemorySeamRefused>;
+  readMemory(
+    path: string,
+    from?: number,
+    lines?: number,
+  ): Effect.Effect<MemoryReadResult | undefined, MemorySeamRefused>;
   searchConversation(
     sessionKeys: readonly SessionKey[],
     query: string,
     limit: number,
     now: number,
-  ): Promise<readonly ConversationLineHit[]>;
+  ): Effect.Effect<readonly ConversationLineHit[], MemorySeamRefused>;
 }
 
 /** The two memory tools as one conversation is offered them, each answering the record the model reads. */
@@ -131,8 +142,8 @@ interface QueryEmbedding extends RetrievalStanding {
   readonly identity?: EmbeddingModelIdentity;
 }
 
-/** A store or adapter call that rejected; the pass it was made in reports it and answers nothing. */
-class MemorySeamRefused extends Data.TaggedError("MemorySeamRefused")<{
+/** A store or adapter call that refused; the pass it was made in reports it and answers nothing. */
+export class MemorySeamRefused extends Data.TaggedError("MemorySeamRefused")<{
   readonly reason: string;
 }> {}
 
@@ -140,7 +151,7 @@ function reasonOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-/** A seam's promise as an effect, its rejection carried as the reason a pass reports. */
+/** The embedding adapter's promise as an effect, its rejection carried as the reason a pass reports. */
 function attempted<A>(promise: () => Promise<A>): Effect.Effect<A, MemorySeamRefused> {
   return Effect.tryPromise({
     try: promise,
@@ -290,15 +301,17 @@ export function makeNotebookMemory(
       embedding: QueryEmbedding,
       maxResults: number,
     ): Effect.Effect<MemorySearchOutcome> =>
-      Effect.promise(() =>
-        options.store().searchMemory({
-          query,
-          ...(embedding.queryVector && embedding.identity
-            ? { queryVector: embedding.queryVector, identity: embedding.identity }
-            : undefined),
-          maxResults,
-          now: options.now(),
-        }),
+      Effect.orDie(
+        Effect.suspend(() =>
+          options.store().searchMemory({
+            query,
+            ...(embedding.queryVector && embedding.identity
+              ? { queryVector: embedding.queryVector, identity: embedding.identity }
+              : undefined),
+            maxResults,
+            now: options.now(),
+          }),
+        ),
       );
 
     /** The conversations a search from `current` may read lines of: eligible, same agent, never itself. */
@@ -326,9 +339,7 @@ export function makeNotebookMemory(
         const keys = eligibleKeys(current);
         if (keys.length === 0 || limit <= 0) return Effect.succeed([]);
         return Effect.map(
-          Effect.promise(() =>
-            options.store().searchConversation(keys, query, limit, options.now()),
-          ),
+          Effect.orDie(options.store().searchConversation(keys, query, limit, options.now())),
           (hits) => hits.map((hit, ordinal) => conversationResult(query, hit, ordinal)),
         );
       });
@@ -382,7 +393,9 @@ export function makeNotebookMemory(
         })),
       get: (ask) =>
         Effect.map(
-          Effect.promise(() => options.store().readMemory(ask.path, ask.from, ask.lines)),
+          Effect.orDie(
+            Effect.suspend(() => options.store().readMemory(ask.path, ask.from, ask.lines)),
+          ),
           (read): WireRecord =>
             read
               ? {
@@ -434,7 +447,7 @@ export function makeNotebookMemory(
       // whatever a credential swap installs meanwhile.
       const adapter = options.embeddingAdapter();
       const identity = adapter ? yield* identityOf(adapter) : undefined;
-      const plan = yield* attempted(() => store.planMemorySync(identity, now));
+      const plan = yield* store.planMemorySync(identity, now);
       let settled: RetrievalStanding = adapter ? HYBRID : keywordOnly(NO_CREDENTIAL);
       let embeddings: readonly EmbeddingWrite[] = [];
       if (adapter && plan.missingEmbeddings.length > 0) {
@@ -446,15 +459,13 @@ export function makeNotebookMemory(
         embeddings = embedded.written;
         if (embedded.failed) settled = keywordOnly(embedded.failed);
       }
-      const report = yield* attempted(() =>
-        store.applyMemorySync({
-          changed: plan.changed,
-          removed: plan.removed,
-          embeddings,
-          ...(identity ? { identity } : undefined),
-          now: options.now(),
-        }),
-      );
+      const report = yield* store.applyMemorySync({
+        changed: plan.changed,
+        removed: plan.removed,
+        embeddings,
+        ...(identity ? { identity } : undefined),
+        now: options.now(),
+      });
       yield* Ref.set(standing, settled);
       return { ...report, mode: settled.mode, ...withNote(settled) };
     });

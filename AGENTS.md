@@ -205,19 +205,17 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   nothing from `effect`, so no adapter above this transport can answer an
   effect while that port stands.
 - **`packages/brain/src/store/store-client.ts`** — `StoreClient`'s promise
-  face over the store's Rpc client: `BrainStateRepository` and `ChildStore`
-  are read by OpenClaw ports (`state-store.ts`, `children.ts`) that may not
-  import `effect`, so neither interface can be stated as effects while its
-  port stands. What would end this row is a decision about the ports
-  themselves, not an implementation detail of this migration.
-  `NotebookMemoryStore` is the third interface this face answers and the one
-  with no port behind it: the notebook's index is a scoped effect and reads
-  the store through `Effect.tryPromise`, so that interface is stated as
-  effects the moment this client's own `ask` answers one.
-  `NotebookMemoryStore` is the third interface this face answers and the one
-  with no port behind it: the notebook's index is a scoped effect and reads
-  the store through `Effect.tryPromise`, so that interface is stated as
-  effects the moment this client's own `ask` answers one.
+  face over the store's Rpc client. The client's own door is `request`, an
+  effect over that Rpc client that runs nothing, and what still stands on the
+  promise face beside it is exactly two interfaces: `BrainStateRepository` and
+  `ChildStore`, read by OpenClaw ports (`packages/brain/src/state-store.ts`,
+  `packages/runtime/src/children.ts`) that may not import `effect`, so neither
+  can be stated as effects while its port stands. What would end this row is a
+  decision about the ports themselves, not an implementation detail of this
+  migration. `NotebookMemoryStore` (`packages/memory/src/notebook-memory.ts`)
+  was the third interface this face answered and the one with no port behind
+  it; it answers effects over `request` now, and the notebook's index, a
+  scoped effect, yields them rather than wrapping promises.
 - **`packages/brain/src/store/database.ts`** — `StoreDatabase#run`, the
   synchronous accessor two OpenClaw ports reach the store through:
   `archives.ts` and `maintenance-run.ts` import nothing from `effect` and hold

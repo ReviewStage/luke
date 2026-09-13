@@ -17,7 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { Effect, Fiber, type Scope } from "effect";
+import { Deferred, Effect, Fiber, type Scope } from "effect";
 import { chunkMarkdown, hashText } from "./chunking.js";
 import {
   type ConversationLineHit,
@@ -121,7 +121,11 @@ class FakeStore implements NotebookMemoryStore {
     return files;
   }
 
-  async planMemorySync(identity: EmbeddingModelIdentity | undefined): Promise<MemoryScanPlan> {
+  planMemorySync(identity: EmbeddingModelIdentity | undefined): Effect.Effect<MemoryScanPlan> {
+    return Effect.sync(() => this.#plan(identity));
+  }
+
+  #plan(identity: EmbeddingModelIdentity | undefined): MemoryScanPlan {
     const changed: IndexedFileWrite[] = [];
     const seen = new Set<string>();
     let unchanged = 0;
@@ -161,7 +165,11 @@ class FakeStore implements NotebookMemoryStore {
     };
   }
 
-  async applyMemorySync(apply: MemorySyncApply) {
+  applyMemorySync(apply: MemorySyncApply) {
+    return Effect.sync(() => this.#apply(apply));
+  }
+
+  #apply(apply: MemorySyncApply) {
     for (const embedding of apply.embeddings) this.#cache.set(embedding.hash, embedding.vector);
     for (const removed of apply.removed) this.#files.delete(removed);
     let indexedChunks = 0;
@@ -192,7 +200,11 @@ class FakeStore implements NotebookMemoryStore {
     };
   }
 
-  async searchMemory(query: MemorySearchQuery) {
+  searchMemory(query: MemorySearchQuery) {
+    return Effect.sync(() => this.#search(query));
+  }
+
+  #search(query: MemorySearchQuery) {
     const chunks = [...this.#files.values()].flatMap((file) => file.chunks);
     const asked = [...tokenize(query.query)];
     const keyword = chunks.flatMap((chunk) => {
@@ -224,7 +236,11 @@ class FakeStore implements NotebookMemoryStore {
     };
   }
 
-  async readMemory(relative: string, from = 1, lines = 120) {
+  readMemory(relative: string, from = 1, lines = 120) {
+    return Effect.sync(() => this.#read(relative, from, lines));
+  }
+
+  #read(relative: string, from: number, lines: number) {
     if (relative.includes("..")) return undefined;
     const absolute = path.join(this.#root, relative);
     if (!fs.existsSync(absolute)) return undefined;
@@ -240,11 +256,19 @@ class FakeStore implements NotebookMemoryStore {
     };
   }
 
-  async searchConversation(
+  searchConversation(
     sessionKeys: readonly SessionKey[],
     query: string,
     limit: number,
-  ): Promise<readonly ConversationLineHit[]> {
+  ): Effect.Effect<readonly ConversationLineHit[]> {
+    return Effect.sync(() => this.#searchConversation(sessionKeys, query, limit));
+  }
+
+  #searchConversation(
+    sessionKeys: readonly SessionKey[],
+    query: string,
+    limit: number,
+  ): readonly ConversationLineHit[] {
     this.conversationSearches += 1;
     const asked = [...tokenize(query)];
     const hits: ConversationLineHit[] = [];
@@ -566,16 +590,15 @@ it.scoped(
           }),
         });
         const plan = h.store.planMemorySync.bind(h.store);
-        let release: (() => void) | undefined;
-        const gate = new Promise<void>((resolve) => {
-          release = resolve;
-        });
+        const gate = yield* Deferred.make<void>();
         let plans = 0;
-        h.store.planMemorySync = async (identity: EmbeddingModelIdentity | undefined) => {
-          plans += 1;
-          if (plans === 1) await gate;
-          return plan(identity);
-        };
+        h.store.planMemorySync = (identity: EmbeddingModelIdentity | undefined) =>
+          Effect.suspend(() => {
+            plans += 1;
+            return plans === 1
+              ? Effect.zipRight(Deferred.await(gate), plan(identity))
+              : plan(identity);
+          });
         let asked = 0;
         const askSync = Effect.zipRight(
           Effect.sync(() => {
@@ -589,7 +612,7 @@ it.scoped(
         const requested = yield* Effect.fork(askSync);
         const again = yield* Effect.fork(askSync);
         yield* until(() => asked === 2);
-        release?.();
+        yield* Deferred.succeed(gate, undefined);
         const first = yield* Fiber.join(launch);
         assert.equal(
           first?.mode,
