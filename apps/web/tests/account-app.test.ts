@@ -81,6 +81,12 @@ function resolveUserId(request: Request): Promise<string | undefined> {
   );
 }
 
+function resolveUserIdEffect(request: Request): Effect.Effect<string | undefined> {
+  return Effect.succeed(
+    request.headers.get("authorization") === VALID_AUTHORIZATION ? USER_ID : undefined,
+  );
+}
+
 function deleteUser(state: Backing) {
   return async (userId: string) => {
     state.deleted.push(userId);
@@ -118,7 +124,7 @@ function writePreferences(state: Backing) {
 
 function groupSeams(state: Backing): AccountAppSeams {
   return {
-    resolveUserId,
+    resolveUserId: resolveUserIdEffect,
     deleteUser: deleteUser(state),
     readPreferences: readPreferences(state),
     writePreferences: writePreferences(state),

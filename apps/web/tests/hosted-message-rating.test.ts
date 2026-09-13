@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { conversationMessageRatingPath } from "@sidecar/hosted";
 import { MESSAGE_RATING, type WireBoundaryInput } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleMessageRating, type MessageRatingOptions } from "../server/hosted/message-rating";
 import { RATING_REFUSAL, type RatingWriteResult } from "../server/hosted/store";
+import { runWithoutDatabase } from "./support/no-database";
 
 const MESSAGE_ID = "2b000000-0000-4000-8000-000000000012";
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
@@ -35,10 +37,14 @@ function ratingRequest(
 function options(overrides: Partial<MessageRatingOptions> = {}): MessageRatingOptions {
   return {
     request: ratingRequest(),
-    resolveUserId: async () => "user-1",
-    rate: async () => ({ ok: true, id: "event-1", seq: 7 }),
+    resolveUserId: () => Effect.succeed("user-1"),
+    rate: () => Effect.succeed({ ok: true, id: "event-1", seq: 7 }),
     ...overrides,
   };
+}
+
+function runRating(options: MessageRatingOptions): Promise<Response> {
+  return runWithoutDatabase(handleMessageRating(options));
 }
 
 async function errorOf(response: Response): Promise<[number, string]> {
@@ -58,30 +64,30 @@ test("the path names the hosted rating route with the message's id encoded insid
 test("each gate refuses on its own: method, the path's id, the token, then the body", async () => {
   assert.deepEqual(
     await errorOf(
-      await handleMessageRating(options({ request: ratingRequest(undefined, { method: "POST" }) })),
+      await runRating(options({ request: ratingRequest(undefined, { method: "POST" }) })),
     ),
     [405, HOSTED_API_ERROR.METHOD_NOT_ALLOWED],
   );
   assert.deepEqual(
     await errorOf(
-      await handleMessageRating(
+      await runRating(
         options({
           request: ratingRequest(undefined, { messageId: "" }),
-          resolveUserId: async () => undefined,
+          resolveUserId: () => Effect.succeed(undefined),
         }),
       ),
     ),
     [400, HOSTED_API_ERROR.INVALID_REQUEST],
   );
   assert.deepEqual(
-    await errorOf(await handleMessageRating(options({ resolveUserId: async () => undefined }))),
+    await errorOf(await runRating(options({ resolveUserId: () => Effect.succeed(undefined) }))),
     [401, HOSTED_API_ERROR.INVALID_TOKEN],
   );
   const doubled = new URL(ratingRequest().url);
   doubled.searchParams.append("id", "2b000000-0000-4000-8000-000000000013");
   assert.deepEqual(
     await errorOf(
-      await handleMessageRating(
+      await runRating(
         options({
           request: new Request(doubled, {
             method: "PUT",
@@ -93,13 +99,13 @@ test("each gate refuses on its own: method, the path's id, the token, then the b
     ),
     [400, HOSTED_API_ERROR.INVALID_REQUEST],
   );
-  assert.deepEqual(
-    await errorOf(await handleMessageRating(options({ request: rawRequest("not json") }))),
-    [400, HOSTED_API_ERROR.INVALID_REQUEST],
-  );
+  assert.deepEqual(await errorOf(await runRating(options({ request: rawRequest("not json") }))), [
+    400,
+    HOSTED_API_ERROR.INVALID_REQUEST,
+  ]);
   assert.deepEqual(
     await errorOf(
-      await handleMessageRating(
+      await runRating(
         options({
           request: ratingRequest({ rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID, extra: 1 }),
         }),
@@ -109,7 +115,7 @@ test("each gate refuses on its own: method, the path's id, the token, then the b
   );
   assert.deepEqual(
     await errorOf(
-      await handleMessageRating(
+      await runRating(
         options({
           request: rawRequest(
             `{"rating":"up","deviceId":"${DEVICE_ID}","note":"${"n".repeat(9_000)}"}`,
@@ -123,13 +129,14 @@ test("each gate refuses on its own: method, the path's id, the token, then the b
 
 test("an id that is not a UUID names no row: not found, and the store is never asked", async () => {
   let asked = 0;
-  const response = await handleMessageRating(
+  const response = await runRating(
     options({
       request: ratingRequest(undefined, { messageId: "not-a-uuid" }),
-      rate: async () => {
-        asked += 1;
-        return { ok: true, id: "event-1", seq: 1 };
-      },
+      rate: () =>
+        Effect.sync(() => {
+          asked += 1;
+          return { ok: true, id: "event-1", seq: 1 };
+        }),
     }),
   );
   assert.deepEqual(await errorOf(response), [404, HOSTED_API_ERROR.NOT_FOUND]);
@@ -138,13 +145,14 @@ test("an id that is not a UUID names no row: not found, and the store is never a
 
 test("the path's id reaches the store case folded", async () => {
   const seen: string[] = [];
-  await handleMessageRating(
+  await runRating(
     options({
       request: ratingRequest(undefined, { messageId: MESSAGE_ID.toUpperCase() }),
-      rate: async (_userId, messageId) => {
-        seen.push(messageId);
-        return { ok: true, id: "event-1", seq: 1 };
-      },
+      rate: (_userId, messageId) =>
+        Effect.sync(() => {
+          seen.push(messageId);
+          return { ok: true, id: "event-1", seq: 1 };
+        }),
     }),
   );
   assert.deepEqual(seen, [MESSAGE_ID]);
@@ -152,17 +160,18 @@ test("the path's id reaches the store case folded", async () => {
 
 test("an admitted rating reaches the store with the caller, the path's message, and the body as read, and answers the event", async () => {
   const seen: unknown[] = [];
-  const response = await handleMessageRating(
+  const response = await runRating(
     options({
       request: ratingRequest({
         rating: MESSAGE_RATING.DOWN,
         note: "  wrong session  ",
         deviceId: DEVICE_ID.toUpperCase(),
       }),
-      rate: async (userId, messageId, rating) => {
-        seen.push([userId, messageId, rating]);
-        return { ok: true, id: "event-9", seq: 3 };
-      },
+      rate: (userId, messageId, rating) =>
+        Effect.sync(() => {
+          seen.push([userId, messageId, rating]);
+          return { ok: true, id: "event-9", seq: 3 };
+        }),
     }),
   );
   assert.equal(response.status, 200);
@@ -178,7 +187,7 @@ test("an admitted rating reaches the store with the caller, the path's message, 
 
 test("the store's two refusals are two statuses: not found for a message the account does not hold, forbidden for one Luke did not write", async () => {
   const refused = async (refusal: Extract<RatingWriteResult, { ok: false }>["refusal"]) =>
-    errorOf(await handleMessageRating(options({ rate: async () => ({ ok: false, refusal }) })));
+    errorOf(await runRating(options({ rate: () => Effect.succeed({ ok: false, refusal }) })));
   assert.deepEqual(await refused(RATING_REFUSAL.NOT_FOUND), [404, HOSTED_API_ERROR.NOT_FOUND]);
   assert.deepEqual(await refused(RATING_REFUSAL.NOT_LUKES), [403, HOSTED_API_ERROR.NOT_RATEABLE]);
 });

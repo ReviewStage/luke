@@ -41,7 +41,7 @@ const HTTP_METHOD = {
 } as const;
 
 export interface AccountAppSeams {
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   /** Deletes the user row; every dependent row cascades with it. */
   deleteUser: (userId: string) => Promise<void>;
   readPreferences: (userId: string) => Promise<AccountPreferencesRow | undefined>;
@@ -55,7 +55,7 @@ function resolvedUserId(
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const userId = yield* Effect.promise(() => seams.resolveUserId(request));
+    const userId = yield* seams.resolveUserId(request);
     if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return userId;
   });

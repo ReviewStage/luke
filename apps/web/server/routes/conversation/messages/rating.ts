@@ -1,20 +1,4 @@
-import { Effect } from "effect";
-import { handleMessageRating } from "../../../hosted/message-rating.js";
-import { rateMessage, storeWriter } from "../../../hosted/store/index.js";
-import { hostedVaultRoute, resolveHostedUserId } from "../../../hosted/vault-route.js";
-import { runWeb } from "../../../runtime.js";
+import { ratingApp } from "../../../rating-app.js";
+import { routeFromHttpApp } from "../../../route-effect.js";
 
-export default hostedVaultRoute(({ request }) =>
-  handleMessageRating({
-    request,
-    resolveUserId: resolveHostedUserId,
-    rate: (userId, messageId, rating) =>
-      runWeb(
-        Effect.gen(function* () {
-          // The route records events alone, which name no tool, so the writer stands over no registry.
-          const writer = yield* storeWriter({ tools: {} });
-          return yield* rateMessage({ writer }, userId, messageId, rating);
-        }),
-      ),
-  }),
-);
+export default routeFromHttpApp(ratingApp());

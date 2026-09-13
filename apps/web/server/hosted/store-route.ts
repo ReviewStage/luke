@@ -2,10 +2,11 @@ import type { SqlClient } from "@effect/sql";
 import type { Effect } from "effect";
 import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
+import { hostedUserId } from "./bearer.js";
 import { payloadKeyRing } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
-import { hostedEncryptionSecret, resolveHostedUserId } from "./vault-route.js";
+import { hostedEncryptionSecret, hostedVaultUserInfo } from "./vault-route.js";
 
 /**
  * A hosted route over the conversation store: the same bearer resolution
@@ -45,7 +46,13 @@ export function hostedStoreRoute(
       if (!store) {
         return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
       }
-      return runWeb(handler({ request, resolveUserId: resolveHostedUserId, store }));
+      return runWeb(
+        handler({
+          request,
+          resolveUserId: (userRequest) => hostedUserId(userRequest, hostedVaultUserInfo),
+          store,
+        }),
+      );
     },
   };
 }

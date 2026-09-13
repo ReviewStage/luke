@@ -1,5 +1,7 @@
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either, type ParseResult } from "effect";
 import {
   type HostedMessageRatingRequest,
   hostedMessageRatingRequestSchema,
@@ -36,51 +38,57 @@ const MESSAGE_ID_QUERY = "id";
 
 export interface MessageRatingOptions {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   /** Records the rating on the message where the account holds it and Luke wrote it. */
   rate: (
     userId: string,
     messageId: string,
     rating: HostedMessageRatingRequest,
-  ) => Promise<RatingWriteResult>;
+  ) => Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
 }
 
-export async function handleMessageRating(options: MessageRatingOptions): Promise<Response> {
+export function handleMessageRating(
+  options: MessageRatingOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
   const { request, resolveUserId, rate } = options;
-  if (request.method !== "PUT") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
-  const ids = new URL(request.url).searchParams.getAll(MESSAGE_ID_QUERY);
-  const [id] = ids;
-  if (id === undefined || ids.length !== 1) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  const messageId = readEither(wireUuidSchema)(unparsedWire(id));
-  if (Either.isLeft(messageId)) {
-    return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-  }
-
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const parsed = await readJsonBody(request, MAXIMUM_RATING_BODY_BYTES);
-  if (parsed instanceof Response) return parsed;
-  const rating = readEither(hostedMessageRatingRequestSchema)(parsed);
-  if (Either.isLeft(rating)) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const written = await rate(userId, messageId.right, rating.right);
-  if (written.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, { id: written.id, seq: written.seq });
-  switch (written.refusal) {
-    case RATING_REFUSAL.NOT_FOUND:
+  return Effect.gen(function* () {
+    if (request.method !== "PUT") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    const ids = new URL(request.url).searchParams.getAll(MESSAGE_ID_QUERY);
+    const [id] = ids;
+    if (id === undefined || ids.length !== 1) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+    const messageId = readEither(wireUuidSchema)(unparsedWire(id));
+    if (Either.isLeft(messageId)) {
       return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
-    case RATING_REFUSAL.NOT_LUKES:
-      return errorResponse(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_RATEABLE);
-  }
+    }
+
+    const userId = yield* resolveUserId(request);
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+
+    const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_RATING_BODY_BYTES));
+    if (parsed instanceof Response) return parsed;
+    const rating = readEither(hostedMessageRatingRequestSchema)(parsed);
+    if (Either.isLeft(rating)) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+
+    const written = yield* rate(userId, messageId.right, rating.right);
+    if (written.ok) {
+      return jsonResponse(HOSTED_HTTP_STATUS.OK, { id: written.id, seq: written.seq });
+    }
+    switch (written.refusal) {
+      case RATING_REFUSAL.NOT_FOUND:
+        return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+      case RATING_REFUSAL.NOT_LUKES:
+        return errorResponse(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.NOT_RATEABLE);
+    }
+  });
 }
