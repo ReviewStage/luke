@@ -610,6 +610,25 @@ it.effect("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up"
   }),
 );
 
+it.effect("closing while an attach attempt waits for its answer closes the socket it opened", () =>
+  Effect.gen(function* () {
+    const runtime = yield* Effect.runtime<never>();
+    const script = scriptedOpenSocket([answering(createdFrame()), () => undefined]);
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
+    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    assert.ok(opened);
+    const sideband = yield* Effect.promise(() => opened.attach());
+
+    script.sockets[0]?.closeFromServer({ code: 1006 });
+    yield* Effect.promise(() => openedSockets(script, 2));
+    sideband.close();
+    yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+
+    assert.equal(script.sockets.length, 2);
+    assert.equal(script.sockets[1]?.closedByClient, true);
+  }),
+);
+
 it.effect("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
   Effect.gen(function* () {
     const runtime = yield* Effect.runtime<never>();
