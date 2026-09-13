@@ -6,7 +6,6 @@ import {
   BRAIN_SUBMISSION_OUTCOME,
   BrainAgent,
   BrainStateStore,
-  carryOn,
   detachOn,
   hostedBrainToolCatalog,
   LOOK_SUBJECT,
@@ -30,7 +29,8 @@ import { BrainHost } from "./brain/host.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 
 /** The transitions and their settling run on the runtime the host detaches its drains onto. */
-const onDefault = carryOn(Runtime.defaultRuntime);
+const onDefault = <Value>(effect: Effect.Effect<Value>): Promise<Value> =>
+  Effect.runPromise(effect);
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -161,34 +161,32 @@ function composition() {
   const builds: string[] = [];
   let runs = 0;
   const rebuild = () =>
-    onDefault(
-      host.replace(() =>
-        Effect.suspend(() => {
-          const model = assembler.brainModel;
-          if (!model) return Effect.succeed(undefined);
-          builds.push(model.model ?? "hosted");
-          return BrainAgent.make({
-            conversationId: MAIN_SESSION_KEY,
-            runtime: toolLoopRuntimeOver(model),
-            observes: { kind: LOOK_SUBJECT.NONE },
-            prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-            actions: fakeActionPerformer().actions,
-            roster: () => ({ text: "none", identities: [] }),
-            standingContext: () => "",
-            readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
-            readTranscript: async () => ({ status: "unsupported", reason: "no" }),
-            deliver: () => undefined,
-            store,
-            createRunId: () => `run-${runs++}`,
-            report: () => undefined,
-          });
-        }),
-      ),
+    host.replace(() =>
+      Effect.suspend(() => {
+        const model = assembler.brainModel;
+        if (!model) return Effect.succeed(undefined);
+        builds.push(model.model ?? "hosted");
+        return BrainAgent.make({
+          conversationId: MAIN_SESSION_KEY,
+          runtime: toolLoopRuntimeOver(model),
+          observes: { kind: LOOK_SUBJECT.NONE },
+          prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+          actions: fakeActionPerformer().actions,
+          roster: () => ({ text: "none", identities: [] }),
+          standingContext: () => "",
+          readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
+          readTranscript: async () => ({ status: "unsupported", reason: "no" }),
+          deliver: () => undefined,
+          store,
+          createRunId: () => `run-${runs++}`,
+          report: () => undefined,
+        });
+      }),
     );
   const transition = () =>
     Effect.runPromise(
       transitionVoiceSource({
-        retire: () => host.retire(),
+        retire: () => Effect.sync(() => host.retire()),
         apply: () => assembler.apply(),
         rebuild,
       }),

@@ -47,8 +47,8 @@ interface AccountLinks {
   onFirstSignIn: () => void;
   /** The arrival beat's own moment, recorded after the account event. */
   onFirstSignInArrival: () => void;
-  retireBrain: () => void;
-  rebuildBrain: () => Promise<void>;
+  retireBrain: () => Effect.Effect<void>;
+  rebuildBrain: () => Effect.Effect<void>;
   syncMemory: () => void;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
   releaseDevice: (account: StoredAccount) => Effect.Effect<void>;
@@ -279,10 +279,11 @@ export const composeAccount = (
         transitionVoiceSource({
           retire: () => links().retireBrain(),
           apply: () => voiceCapabilities.apply(),
-          rebuild: async () => {
-            await links().rebuildBrain();
-            links().syncMemory();
-          },
+          rebuild: () =>
+            Effect.gen(function* () {
+              yield* links().rebuildBrain();
+              links().syncMemory();
+            }),
         }),
       ),
     );

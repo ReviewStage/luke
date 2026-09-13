@@ -345,10 +345,10 @@ export const composeBrain = (
             await wiring.store().load();
             await store.restore();
           }),
-          Effect.promise(async () => {
-            wiring.retire();
+          Effect.gen(function* () {
+            yield* wiring.retire();
             memory.stop();
-            await store.close();
+            yield* Effect.promise(() => store.close());
           }),
         ),
         Effect.suspend(() =>

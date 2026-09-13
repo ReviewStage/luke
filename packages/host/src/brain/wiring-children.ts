@@ -66,9 +66,12 @@ interface ChildWiringHost {
    * standing: its directory row, its store, and its brain, with a child's
    * inherited fork as its opening history; nothing while no model stands.
    */
-  open: (sessionKey: SessionKey, fork?: readonly WireRecord[]) => Promise<BrainAgent | undefined>;
+  open: (
+    sessionKey: SessionKey,
+    fork?: readonly WireRecord[],
+  ) => Effect.Effect<BrainAgent | undefined>;
   /** Retires a conversation's brain and lets its store go. */
-  closeConversation: (sessionKey: SessionKey) => Promise<void>;
+  closeConversation: (sessionKey: SessionKey) => Effect.Effect<void>;
 }
 
 interface ChildWiring {
@@ -97,7 +100,7 @@ export function wireChildren(
   host: ChildWiringHost,
 ): ChildWiring {
   const openChild = (record: ChildRunRecord, fork?: readonly WireRecord[]) =>
-    Effect.promise(() => host.open(record.childSessionKey, fork));
+    host.open(record.childSessionKey, fork);
 
   const executor: EffectChildExecutor = {
     start: (record, fork) =>
@@ -136,7 +139,7 @@ export function wireChildren(
       }),
     archive: (record) =>
       Effect.gen(function* () {
-        yield* Effect.promise(() => host.closeConversation(record.childSessionKey));
+        yield* host.closeConversation(record.childSessionKey);
         return yield* Effect.promise(() =>
           dependencies.archiveConversation(record.childSessionKey),
         );
@@ -158,7 +161,7 @@ export function wireChildren(
         // a child requester already archived, a thread with no brain yet.
         // The completion is owed to that conversation and no other, so main
         // is never handed a sibling's result.
-        const agent = yield* Effect.promise(() => host.open(completion.destination));
+        const agent = yield* host.open(completion.destination);
         if (!agent) return { delivered: false, reason: "no brain stands for the requester" };
         return yield* agent.deliverChildCompletion(completion, record);
       }),

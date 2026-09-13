@@ -1,17 +1,18 @@
 /**
- * The brain's two doors onto the host's `ExecutionRuntime`, and they are not
- * the same door. A turn, the maintenance behind it, the tool loop, and the
- * housekeeping run are each a fiber end to end, and since P12-16g so is
- * everything `BrainAgent` answers: an ask, a wait, a cancel, a mark, a
- * child's task, a context snapshot, a stop, and a run-event subscription are
- * all effects a caller runs. What is left here is the two shapes no effect of
- * the brain's can state for itself:
+ * The brain's door onto the host's `ExecutionRuntime`. A turn, the
+ * maintenance behind it, the tool loop, and the housekeeping run are each a
+ * fiber end to end, and since P12-16g so is everything `BrainAgent` answers:
+ * an ask, a wait, a cancel, a mark, a child's task, a context snapshot, a
+ * stop, and a run-event subscription are all effects a caller runs. What is
+ * left here is the one shape no effect of the brain's can state for itself:
  *
  * - `detachOn`, the detach door, which is permanent. Every turn nobody waits
  *   for is begun through it — `AgentSeam#detach` for the ask queue's drain,
  *   the wake window's flush and its roster look, the housekeeping a settled
- *   turn leaves behind, and a hold's release; and `BrainHost`'s retirement
- *   drain, whose fiber the next transition awaits. What only a run gives is
+ *   turn leaves behind, and a hold's release; `BrainHost`'s retirement drain,
+ *   whose fiber the next transition awaits; and, since P12-16n, the brain
+ *   wiring's close and open of a conversation, each shared under its key as
+ *   the settling of the fiber it was begun on. What only a run gives is
  *   the start: `Runtime.runFork` evaluates the effect on the calling stack up
  *   to its first suspension, so `BrainAgent#enqueue`'s own acquisition — the
  *   step that puts the turn in the conversation's queue and counts it busy —
@@ -25,13 +26,13 @@
  *   instead: the registration is the queue's own `acquireUseRelease`, and
  *   prising it apart would give the conversation two places that count a turn
  *   rather than one.
- * - `carryOn`, which is the shim, and the only thing still asking for it is
- *   the host's side, where the promises are the seams above the agent:
- *   `wireBrain`'s own promise face — `rebuild` and `closeConversation` —
- *   which runs `BrainHost`'s transition as a promise because what asks for
- *   one is above this wiring, not inside the brain.
  *
- * Everything else has left it. The child service's executor seams went in
+ * Nothing asks the brain for a promise. The host's own face over it —
+ * `wireBrain`'s `rebuild`, `retire`, `openConversation`, and
+ * `closeConversation` — is effects its composers run too, each conversation's
+ * close and open begun through the door above.
+ *
+ * The child service's executor seams went in
  * P12-16k: `wiring-children.ts` writes each of them as an effect and
  * `childSeamsOnRuntime` carries them to the OpenClaw port that awaits them.
  * `BrainHost`'s transition chain and the publication chain's marks went in
@@ -51,20 +52,13 @@
  * its capture already was. `AgentSeam#detach` went in P12-16m, onto the
  * detach door above.
  *
- * A defect is squashed back to the error that caused it, so a store, a
- * listener, or an engine that threw reaches the caller as the error it threw
- * rather than as the fiber failure that carried it.
- *
- * @deprecated `carryOn` alone is the strangler shim on the `Effect.runPromise`
- * allowlist in `docs/adr/0001-effect.md`; P12-16n deletes it with
- * `wireBrain`'s promise face, the last thing that awaits it. `detachOn` and
- * the `runtimeExit` dispatch beneath both doors stay.
+ * What keeps this file on the `Effect.runPromise` allowlist in
+ * `docs/adr/0001-effect.md` is `runtimeExit`, whose two callers are permanent
+ * rows there because the `ModelAdapter` each answers is a promise, not a
+ * fiber; the detach door is named permanent on the same list.
  */
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
-import { Cause, type Effect, Exit, type Fiber, ManagedRuntime, Runtime } from "effect";
-
-/** Carries an effect to the promise a caller of the brain still holds, on the runtime the host handed in. */
-export type Carry = <Value>(effect: Effect.Effect<Value>) => Promise<Value>;
+import { type Effect, type Exit, type Fiber, ManagedRuntime, Runtime } from "effect";
 
 /**
  * Begins an effect on a fiber of its own, on the runtime the host handed in,
@@ -81,7 +75,7 @@ export type Detach = <Value, Failure>(
 /**
  * Runs an effect to its `Exit` on the given runtime, dispatching between a
  * `ManagedRuntime` and a plain `Runtime` once rather than at each caller. The
- * one thing `Carry` itself cannot state — a caller's own `AbortSignal`,
+ * one thing an effect itself cannot state — a caller's own `AbortSignal`,
  * joined to the run so an aborted call ends as this fiber's own interruption
  * — is this function's second, optional argument; `BrainTransport#send` and
  * `tracedModelAdapter` are the two callers that still read a signal this way,
@@ -101,12 +95,3 @@ export const detachOn = (execution: ExecutionRuntime): Detach =>
   ManagedRuntime.TypeId in execution
     ? (effect) => execution.runFork(effect)
     : Runtime.runFork(execution);
-
-export const carryOn = (execution: ExecutionRuntime): Carry => {
-  const exits = runtimeExit(execution);
-  return (effect) =>
-    exits(effect).then((exit) => {
-      if (Exit.isSuccess(exit)) return exit.value;
-      throw Cause.squash(exit.cause);
-    });
-};
