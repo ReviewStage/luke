@@ -3527,3 +3527,8 @@ The LUKE-143 hold lifted at the same instant: #1294 rebases once, then #1298 fol
 ## 2026-09-13 23:41Z — LUKE-201 (2c) pressed as #1385: the stop is a service frame
 
 Dean's 2c ruling of 2026-09-13 lands: `VOICE_SERVICE_FRAME.SESSION_STOP` joins `session.activity` as a frame the relay reads and never forwards, handed to the exchange's own `stopSpeaking()`; `session.instructions.append` leaves the sessions route's allowlist, so the one Live event a signed-in desktop may still send is `session.close`, and no instruction text of the desktop's choosing can reach a session through the route. `STOP_SPEAKING_INSTRUCTION` stands on the service alone. Contract: one new frame type with its JSON-schema golden (`live-contract-sessionStopFrameSchema.json`) and a `sessionReportFrame` union golden. Trust rule as it now reads: the route's allowlist, not the attachment, is what stops a desktop from appending; the exchange's gauntlet (`acceptAsk`, eve's tool policy, `admit()`) is what stops model output becoming an action.
+
+
+## 2026-09-13 23:47Z — LUKE-202 §3 pressed as #1386: the pause and the introduction hold reach the service on the heartbeat's quiet instant
+
+Decided from the plan, no new wire field: the `announceSessions` pause and the owed spoken introduction are carried on the device heartbeat's existing `quietUntil` as an instant one to two hours ahead, restated on every poll and sent at once when the switch flips or the introduction finishes, so the hold lifts by itself if the Mac stops polling; the meeting hold's end still wins where it is later. The service's push and expiry rules are unchanged (a quiet instant on any device holds the offer). Root `AGENTS.md` and `PRIVACY.md` say so in as many words.
