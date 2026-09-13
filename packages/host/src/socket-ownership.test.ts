@@ -113,7 +113,7 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
         lines: () => lines,
         directory: () => [],
       } as unknown as ConversationOperations,
-      memory: { status: () => ({}) },
+      memory: { status: () => Effect.succeed({}) },
       observedSessionCount: () => 0,
       now: () => NOW,
       createId: () => `id-${++ids}`,

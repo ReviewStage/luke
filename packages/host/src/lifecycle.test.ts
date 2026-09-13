@@ -5,8 +5,7 @@ import {
   type GatewayShutdownSteps,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
-import { Deferred, Effect, Fiber, TestClock } from "effect";
-import { test } from "vitest";
+import { Deferred, Effect, Exit, Fiber, Scope, TestClock } from "effect";
 import {
   seedWorkspaceThenStartMemory,
   shutdownStepsClosingLiveSession,
@@ -24,40 +23,61 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   });
 }
 
-test("a workspace seed that fails is reported and the memory index still starts, after the seed and not before", async () => {
-  const order: string[] = [];
-  const reports: string[] = [];
-  await seedWorkspaceThenStartMemory({
-    seedWorkspace: async () => {
-      order.push("seed");
-      throw new Error("read-only volume");
-    },
-    startMemory: async () => {
-      order.push("memory");
-    },
-    report: (message) => reports.push(message),
-  });
-  assert.deepEqual(order, ["seed", "memory"]);
-  assert.deepEqual(reports, ["Brain workspace could not be seeded: read-only volume"]);
-});
+it.effect(
+  "a workspace seed that fails is reported and the memory index still starts, after the seed and not before",
+  () =>
+    Effect.gen(function* () {
+      const order: string[] = [];
+      const reports: string[] = [];
+      const scope = yield* Scope.make();
+      yield* Scope.extend(
+        seedWorkspaceThenStartMemory({
+          seedWorkspace: Effect.sync(() => {
+            order.push("seed");
+            throw new Error("read-only volume");
+          }),
+          startMemory: Effect.sync(() => {
+            order.push("memory");
+          }),
+          report: (message) => reports.push(message),
+        }),
+        scope,
+      );
+      yield* waitFor(() => order.length === 2);
+      assert.deepEqual(order, ["seed", "memory"]);
+      assert.deepEqual(reports, ["Brain workspace could not be seeded: read-only volume"]);
+      yield* Scope.close(scope, Exit.void);
+    }),
+);
 
-test("a seed that succeeds reports nothing, and the start does not wait on the index settling", async () => {
-  const reports: string[] = [];
-  let settleMemory: (() => void) | undefined;
-  let started = false;
-  await seedWorkspaceThenStartMemory({
-    seedWorkspace: async () => undefined,
-    startMemory: () =>
-      new Promise<void>((resolve) => {
-        started = true;
-        settleMemory = resolve;
-      }),
-    report: (message) => reports.push(message),
-  });
-  assert.equal(started, true);
-  assert.deepEqual(reports, []);
-  settleMemory?.();
-});
+it.effect(
+  "a seed that succeeds reports nothing, and the start does not wait on the index settling",
+  () =>
+    Effect.gen(function* () {
+      const reports: string[] = [];
+      const settleMemory = yield* Deferred.make<void>();
+      let started = false;
+      const scope = yield* Scope.make();
+      yield* Scope.extend(
+        seedWorkspaceThenStartMemory({
+          seedWorkspace: Effect.void,
+          startMemory: Effect.zipRight(
+            Effect.sync(() => {
+              started = true;
+            }),
+            Deferred.await(settleMemory),
+          ),
+          report: (message) => reports.push(message),
+        }),
+        scope,
+      );
+      assert.equal(started, false, "the start answered before the index had its first turn");
+      yield* waitFor(() => started);
+      assert.deepEqual(reports, []);
+      yield* Deferred.succeed(settleMemory, undefined);
+      yield* Scope.close(scope, Exit.void);
+    }),
+);
 
 function baseSteps(order: string[]): GatewayShutdownSteps {
   return {

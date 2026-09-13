@@ -191,13 +191,11 @@ function search(
     isWireNumber(args.max_results) && args.max_results > 0
       ? Math.min(Math.floor(args.max_results), maximumMemorySearchResults)
       : undefined;
-  return Effect.promise(() =>
-    access.search({
-      query,
-      ...(maxResults !== undefined ? { maxResults } : undefined),
-      signal: context.signal,
-    }),
-  );
+  return access.search({
+    query,
+    ...(maxResults !== undefined ? { maxResults } : undefined),
+    signal: context.signal,
+  });
 }
 
 function get(
@@ -209,13 +207,11 @@ function get(
   if (!filePath) return Effect.succeed(rejection(NOTEBOOK_MEMORY_REFUSAL.NOT_MEMORY_PATH));
   const from = isWireNumber(args.from) && args.from >= 1 ? Math.floor(args.from) : undefined;
   const lines = isWireNumber(args.lines) && args.lines >= 1 ? Math.floor(args.lines) : undefined;
-  return Effect.promise(() =>
-    access.get({
-      path: filePath,
-      ...(from !== undefined ? { from } : undefined),
-      ...(lines !== undefined ? { lines } : undefined),
-    }),
-  );
+  return access.get({
+    path: filePath,
+    ...(from !== undefined ? { from } : undefined),
+    ...(lines !== undefined ? { lines } : undefined),
+  });
 }
 
 /** The notebook bound to one scope, for one conversation. */

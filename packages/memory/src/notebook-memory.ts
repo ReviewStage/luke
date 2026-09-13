@@ -1,4 +1,4 @@
-import { type FSWatcher, watch } from "node:fs";
+import { FileSystem } from "@effect/platform";
 import {
   type ConversationRecord,
   DEFAULT_AGENT_ID,
@@ -8,6 +8,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
+import { Data, Deferred, Duration, Effect, Ref, type Scope, Stream } from "effect";
 import {
   type ConversationLineHit,
   type EmbeddingModelIdentity,
@@ -28,13 +29,18 @@ import { isRecallEligibleConversation } from "./eligibility.js";
 import { selectHybridSearchResults, tokenize } from "./ranking.js";
 
 /**
- * The notebook's index as one host over injected seams. The files under the
- * agent's workspace are the source of truth; the store's worker keeps the
- * derived index and does the ranking; this class drives the sync (a plan
- * from the store, the missing vectors from the embedding adapter, the apply
- * back to the store), watches the files for a hand edit, and answers the
- * brain's memory tools. It knows no database, no runtime, and no window: the
- * store and the adapter are handed in.
+ * The notebook's index as one scoped effect over injected seams. The files
+ * under the agent's workspace are the source of truth; the store's worker
+ * keeps the derived index and does the ranking; this module drives the sync
+ * (a plan from the store, the missing vectors from the embedding adapter, the
+ * apply back to the store), watches the files for a hand edit, and answers
+ * the brain's memory tools. It knows no database, no runtime, and no window:
+ * the store and the adapter are handed in, and the one thing it reaches for
+ * itself is the platform's `FileSystem`, for the watch alone.
+ *
+ * The scope it is built in is its life: the watch runs on a fiber of that
+ * scope and a pass under way is a fiber of it too, so closing the scope ends
+ * both and there is no stop for a caller to remember.
  *
  * An adapter that cannot answer degrades the search to keyword-only and the
  * answer says so. No embedding is ever made of a conversation: the
@@ -66,12 +72,12 @@ export interface NotebookMemoryAccess {
     readonly query: string;
     readonly maxResults?: number;
     readonly signal: AbortSignal;
-  }): Promise<WireRecord>;
+  }): Effect.Effect<WireRecord>;
   get(ask: {
     readonly path: string;
     readonly from?: number;
     readonly lines?: number;
-  }): Promise<WireRecord>;
+  }): Effect.Effect<WireRecord>;
 }
 
 export interface NotebookMemoryOptions {
@@ -87,8 +93,25 @@ export interface NotebookMemoryOptions {
   readonly isTemporary: (sessionKey: SessionKey) => boolean;
   readonly now: () => number;
   readonly report: (message: string) => void;
-  /** Hears every completed sync, so the notebook's cached entries can be read again after a hand edit. */
-  readonly onSynced?: () => void;
+  /** Run at the end of every completed sync, so the notebook's cached entries can be read again after a hand edit. */
+  readonly onSynced?: Effect.Effect<void>;
+}
+
+/** The index as its owner holds it; the scope it was built in is its stop. */
+export interface NotebookMemory {
+  /** The retrieval mode the last sync settled on; a search reports its own mode on its answer. */
+  readonly mode: Effect.Effect<RetrievalMode>;
+  /** Syncs once and starts watching; a second start only syncs again. */
+  readonly start: Effect.Effect<void>;
+  /**
+   * One reconcile of the index against the files, answered when the pass
+   * this call earned has ended.
+   */
+  readonly sync: Effect.Effect<MemorySyncReport | undefined>;
+  /** Asks for that same reconcile without waiting on it: the pass runs on the index's own scope. */
+  readonly requestSync: Effect.Effect<void>;
+  /** The brain's memory tools for one conversation. */
+  accessFor(sessionKey: SessionKey): NotebookMemoryAccess;
 }
 
 export interface MemorySyncReport extends MemoryApplyReport {
@@ -97,7 +120,7 @@ export interface MemorySyncReport extends MemoryApplyReport {
 }
 
 /** The mode one call ran in and, when it is not hybrid, why. */
-export interface RetrievalStanding {
+interface RetrievalStanding {
   readonly mode: RetrievalMode;
   readonly note?: string;
 }
@@ -106,6 +129,23 @@ export interface RetrievalStanding {
 interface QueryEmbedding extends RetrievalStanding {
   readonly queryVector?: readonly number[];
   readonly identity?: EmbeddingModelIdentity;
+}
+
+/** A store or adapter call that rejected; the pass it was made in reports it and answers nothing. */
+class MemorySeamRefused extends Data.TaggedError("MemorySeamRefused")<{
+  readonly reason: string;
+}> {}
+
+function reasonOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/** A seam's promise as an effect, its rejection carried as the reason a pass reports. */
+function attempted<A>(promise: () => Promise<A>): Effect.Effect<A, MemorySeamRefused> {
+  return Effect.tryPromise({
+    try: promise,
+    catch: (cause) => new MemorySeamRefused({ reason: reasonOf(cause) }),
+  });
 }
 
 const HYBRID: RetrievalStanding = { mode: RETRIEVAL_MODE.HYBRID };
@@ -192,319 +232,346 @@ function withNote(standing: RetrievalStanding): { note?: string } {
   return standing.note ? { note: standing.note } : {};
 }
 
-export class NotebookMemory {
-  readonly #options: NotebookMemoryOptions;
-  readonly #agentId: string;
-  #standing: RetrievalStanding = { mode: RETRIEVAL_MODE.KEYWORD_ONLY };
-  #watcher: MemoryWatcher | undefined;
-  #syncing: Promise<MemorySyncReport | undefined> | undefined;
-  #followOn: Promise<MemorySyncReport | undefined> | undefined;
+/** The identity the index stores beside a vector: the adapter's provider and model, never its width. */
+function identityOf(
+  adapter: EmbeddingAdapter,
+): Effect.Effect<EmbeddingModelIdentity, MemorySeamRefused> {
+  return Effect.map(
+    attempted(() => adapter.identity()),
+    (identity) => ({ provider: identity.provider, model: identity.model }),
+  );
+}
 
-  constructor(options: NotebookMemoryOptions) {
-    this.#options = options;
-    this.#agentId = options.agentId ?? DEFAULT_AGENT_ID;
-  }
+/** The passes one index has under way: the one running, and the one every caller during it shares. */
+interface Passes {
+  readonly running: Deferred.Deferred<MemorySyncReport | undefined> | undefined;
+  readonly follow: Deferred.Deferred<MemorySyncReport | undefined> | undefined;
+}
 
-  /** The retrieval mode the last sync settled on; a search reports its own mode on its answer. */
-  mode(): RetrievalMode {
-    return this.#standing.mode;
-  }
+export function makeNotebookMemory(
+  options: NotebookMemoryOptions,
+): Effect.Effect<NotebookMemory, never, FileSystem.FileSystem | Scope.Scope> {
+  return Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const scope = yield* Effect.scope;
+    const agentId = options.agentId ?? DEFAULT_AGENT_ID;
+    const standing = yield* Ref.make<RetrievalStanding>({ mode: RETRIEVAL_MODE.KEYWORD_ONLY });
+    const passes = yield* Ref.make<Passes>({ running: undefined, follow: undefined });
+    // One caller at a time decides what its call earns, so two arriving
+    // together cannot both find no pass running.
+    const decision = yield* Effect.makeSemaphore(1);
 
-  /** Syncs once and starts watching; a second start only syncs again. */
-  async start(): Promise<void> {
-    await this.sync();
-    this.#watcher ??= watchMemoryFiles({
-      directory: this.#options.workspaceDirectory(),
-      onChange: () => {
-        void this.sync();
-      },
-      report: this.#options.report,
-    });
-  }
-
-  stop(): void {
-    this.#watcher?.close();
-    this.#watcher = undefined;
-  }
-
-  /**
-   * One reconcile of the index against the files. A call while no pass runs
-   * starts one and answers its report. A call during a pass answers the one
-   * follow-on pass that starts when the running one ends, because the running
-   * pass read the adapter once when it began and a credential published
-   * meanwhile is what the caller is asking to be seen; every call during the
-   * same pass shares that follow-on, and a call during the follow-on
-   * schedules one more, so requests coalesce and a pass runs only when one
-   * was asked for. A pass that fails reports and answers nothing without
-   * cancelling the follow-on it owes; stop() closes the watcher and leaves a
-   * pass already promised to finish.
-   */
-  sync(): Promise<MemorySyncReport | undefined> {
-    if (!this.#syncing) {
-      this.#syncing = this.#runPass();
-      return this.#syncing;
-    }
-    this.#followOn ??= this.#syncing.then(() => {
-      this.#followOn = undefined;
-      this.#syncing ??= this.#runPass();
-      return this.#syncing;
-    });
-    return this.#followOn;
-  }
-
-  #runPass(): Promise<MemorySyncReport | undefined> {
-    return this.#syncOnce()
-      .then((report) => {
-        this.#options.onSynced?.();
-        return report;
-      })
-      .catch((error) => {
-        this.#options.report(
-          `Notebook index sync failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined;
-      })
-      .finally(() => {
-        this.#syncing = undefined;
+    const reported = (message: string): Effect.Effect<void> =>
+      Effect.sync(() => {
+        options.report(message);
       });
-  }
 
-  /** The brain's memory tools for one conversation. */
-  accessFor(sessionKey: SessionKey): NotebookMemoryAccess {
-    return {
-      search: async (ask) => {
-        const answer = await this.search(sessionKey, ask);
+    /** The query's vector under the adapter that stands now, or the standing its absence or failure earns. */
+    const embedQuery = (query: string, signal: AbortSignal): Effect.Effect<QueryEmbedding> =>
+      Effect.gen(function* () {
+        const adapter = options.embeddingAdapter();
+        if (!adapter) return keywordOnly(NO_CREDENTIAL);
+        const answer = yield* Effect.promise(() => adapter.embed([query], { signal }));
+        if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
+          return keywordOnly(RATE_LIMITED);
+        }
+        if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
+          return keywordOnly(`${answer.failure}: ${answer.reason}`);
+        }
+        const queryVector = answer.vectors[0];
+        if (!queryVector) {
+          return keywordOnly("the embedding provider answered no vector");
+        }
+        return { ...HYBRID, queryVector, identity: yield* Effect.orDie(identityOf(adapter)) };
+      });
+
+    const searchNotebook = (
+      query: string,
+      embedding: QueryEmbedding,
+      maxResults: number,
+    ): Effect.Effect<MemorySearchOutcome> =>
+      Effect.promise(() =>
+        options.store().searchMemory({
+          query,
+          ...(embedding.queryVector && embedding.identity
+            ? { queryVector: embedding.queryVector, identity: embedding.identity }
+            : undefined),
+          maxResults,
+          now: options.now(),
+        }),
+      );
+
+    /** The conversations a search from `current` may read lines of: eligible, same agent, never itself. */
+    const eligibleKeys = (current: SessionKey): SessionKey[] =>
+      options
+        .conversationDirectory()
+        .filter((record) =>
+          isRecallEligibleConversation(
+            {
+              sessionKey: record.sessionKey,
+              agentId,
+              temporary: options.isTemporary(record.sessionKey),
+            },
+            { sessionKey: current, agentId },
+          ),
+        )
+        .map((record) => record.sessionKey);
+
+    const conversationResults = (
+      current: SessionKey,
+      query: string,
+      limit: number,
+    ): Effect.Effect<MemorySearchResult[]> =>
+      Effect.suspend(() => {
+        const keys = eligibleKeys(current);
+        if (keys.length === 0 || limit <= 0) return Effect.succeed([]);
+        return Effect.map(
+          Effect.promise(() =>
+            options.store().searchConversation(keys, query, limit, options.now()),
+          ),
+          (hits) => hits.map((hit, ordinal) => conversationResult(query, hit, ordinal)),
+        );
+      });
+
+    /**
+     * One search from `current`: the notebook's chunks and the eligible
+     * conversations' lines ranked inside the same window, under the same
+     * weights and the same threshold. The mode is this call's own; it moves
+     * the standing mode of nothing.
+     */
+    const search = (
+      current: SessionKey,
+      ask: { readonly query: string; readonly maxResults?: number; readonly signal: AbortSignal },
+    ): Effect.Effect<MemorySearchAnswer> =>
+      Effect.gen(function* () {
+        const maxResults = ask.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;
+        const embedding = yield* embedQuery(ask.query, ask.signal);
+        const [notebook, conversations] = yield* Effect.all(
+          [
+            searchNotebook(ask.query, embedding, maxResults),
+            conversationResults(
+              current,
+              ask.query,
+              maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER,
+            ),
+          ],
+          { concurrency: "unbounded" },
+        );
+        const merged = [...notebook.results, ...conversations].sort(
+          (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
+        );
         return {
+          mode: embedding.mode,
+          results: selectHybridSearchResults({
+            merged,
+            keyword: merged.filter((result) => result.textScore > 0),
+            maxResults,
+            minScore: MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE,
+          }),
+          ...withNote(embedding),
+        };
+      });
+
+    const accessFor = (sessionKey: SessionKey): NotebookMemoryAccess => ({
+      search: (ask) =>
+        Effect.map(search(sessionKey, ask), (answer) => ({
           status: ACTION_RESULT_STATUS.ACCEPTED,
           mode: answer.mode,
           ...(answer.note ? { note: answer.note } : undefined),
           results: answer.results.map(resultRecord),
-        };
-      },
-      get: async (ask): Promise<WireRecord> => {
-        const read = await this.#options.store().readMemory(ask.path, ask.from, ask.lines);
-        if (!read) {
-          const refused: WireRecord = {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: "not read: that path is not a notebook file",
-          };
-          return refused;
-        }
-        const answered: WireRecord = {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          path: read.path,
-          from: read.from,
-          to: read.to,
-          total_lines: read.totalLines,
-          truncated: read.truncated,
-          text: read.text,
-        };
-        return answered;
-      },
-    };
-  }
-
-  /**
-   * One search from `current`: the notebook's chunks and the eligible
-   * conversations' lines ranked inside the same window, under the same
-   * weights and the same threshold. The mode is this call's own; it moves
-   * the standing mode of nothing.
-   */
-  async search(
-    current: SessionKey,
-    ask: { readonly query: string; readonly maxResults?: number; readonly signal: AbortSignal },
-  ): Promise<MemorySearchAnswer> {
-    const maxResults = ask.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;
-    const embedding = await this.#embedQuery(ask.query, ask.signal);
-    const [notebook, conversations] = await Promise.all([
-      this.#searchNotebook(ask.query, embedding, maxResults),
-      this.#conversationResults(
-        current,
-        ask.query,
-        maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER,
-      ),
-    ]);
-    const merged = [...notebook.results, ...conversations].sort(
-      (a, b) => b.score - a.score || a.path.localeCompare(b.path) || a.startLine - b.startLine,
-    );
-    return {
-      mode: embedding.mode,
-      results: selectHybridSearchResults({
-        merged,
-        keyword: merged.filter((result) => result.textScore > 0),
-        maxResults,
-        minScore: MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE,
-      }),
-      ...withNote(embedding),
-    };
-  }
-
-  #searchNotebook(
-    query: string,
-    embedding: QueryEmbedding,
-    maxResults: number,
-  ): Promise<MemorySearchOutcome> {
-    return this.#options.store().searchMemory({
-      query,
-      ...(embedding.queryVector && embedding.identity
-        ? { queryVector: embedding.queryVector, identity: embedding.identity }
-        : undefined),
-      maxResults,
-      now: this.#options.now(),
-    });
-  }
-
-  /** The query's vector under the adapter that stands now, or the standing its absence or failure earns. */
-  async #embedQuery(query: string, signal: AbortSignal): Promise<QueryEmbedding> {
-    const adapter = this.#options.embeddingAdapter();
-    if (!adapter) return keywordOnly(NO_CREDENTIAL);
-    const answer = await adapter.embed([query], { signal });
-    if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
-      return keywordOnly(RATE_LIMITED);
-    }
-    if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
-      return keywordOnly(`${answer.failure}: ${answer.reason}`);
-    }
-    const queryVector = answer.vectors[0];
-    if (!queryVector) {
-      return keywordOnly("the embedding provider answered no vector");
-    }
-    return { ...HYBRID, queryVector, identity: await identityOf(adapter) };
-  }
-
-  async #syncOnce(): Promise<MemorySyncReport> {
-    const store = this.#options.store();
-    const now = this.#options.now();
-    // One read of the adapter for the whole pass: the identity the plan is
-    // asked under and the adapter the vectors come from are the same one,
-    // whatever a credential swap installs meanwhile.
-    const adapter = this.#options.embeddingAdapter();
-    const identity = adapter ? await identityOf(adapter) : undefined;
-    const plan = await store.planMemorySync(identity, now);
-    let standing: RetrievalStanding = adapter ? HYBRID : keywordOnly(NO_CREDENTIAL);
-    let embeddings: readonly EmbeddingWrite[] = [];
-    if (adapter && plan.missingEmbeddings.length > 0) {
-      const embedded = await this.#embedAll(adapter, plan.missingEmbeddings);
-      // Every batch that answered lands whatever a later batch did, and the
-      // keyword rows land regardless, under the same identity so every vector
-      // already cached is kept on its chunk; only the chunks still without
-      // one are asked for again next sync.
-      embeddings = embedded.written;
-      if (embedded.failed) standing = keywordOnly(embedded.failed);
-    }
-    const report = await store.applyMemorySync({
-      changed: plan.changed,
-      removed: plan.removed,
-      embeddings,
-      ...(identity ? { identity } : undefined),
-      now: this.#options.now(),
-    });
-    this.#standing = standing;
-    return { ...report, mode: standing.mode, ...withNote(standing) };
-  }
-
-  /** Embeds in batches until one fails; the vectors already answered are kept beside the reason the rest were not. */
-  async #embedAll(
-    adapter: EmbeddingAdapter,
-    texts: readonly { hash: string; text: string }[],
-  ): Promise<{ written: readonly EmbeddingWrite[]; failed?: string }> {
-    const written: EmbeddingWrite[] = [];
-    const size = this.#options.embeddingBatchSize;
-    for (let start = 0; start < texts.length; start += size) {
-      const batch = texts.slice(start, start + size);
-      const answer = await adapter.embed(batch.map((entry) => entry.text));
-      if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
-        return { written, failed: RATE_LIMITED };
-      }
-      if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
-        return { written, failed: `${answer.failure}: ${answer.reason}` };
-      }
-      batch.forEach((entry, index) => {
-        const vector = answer.vectors[index];
-        if (vector) written.push({ hash: entry.hash, vector });
-      });
-    }
-    return { written };
-  }
-
-  /** The conversations a search from `current` may read lines of: eligible, same agent, never itself. */
-  #eligibleKeys(current: SessionKey): SessionKey[] {
-    return this.#options
-      .conversationDirectory()
-      .filter((record) =>
-        isRecallEligibleConversation(
-          {
-            sessionKey: record.sessionKey,
-            agentId: this.#agentId,
-            temporary: this.#options.isTemporary(record.sessionKey),
-          },
-          { sessionKey: current, agentId: this.#agentId },
+        })),
+      get: (ask) =>
+        Effect.map(
+          Effect.promise(() => options.store().readMemory(ask.path, ask.from, ask.lines)),
+          (read): WireRecord =>
+            read
+              ? {
+                  status: ACTION_RESULT_STATUS.ACCEPTED,
+                  path: read.path,
+                  from: read.from,
+                  to: read.to,
+                  total_lines: read.totalLines,
+                  truncated: read.truncated,
+                  text: read.text,
+                }
+              : {
+                  status: ACTION_RESULT_STATUS.REJECTED,
+                  reason: "not read: that path is not a notebook file",
+                },
         ),
-      )
-      .map((record) => record.sessionKey);
-  }
-
-  async #conversationResults(
-    current: SessionKey,
-    query: string,
-    limit: number,
-  ): Promise<MemorySearchResult[]> {
-    const keys = this.#eligibleKeys(current);
-    if (keys.length === 0 || limit <= 0) return [];
-    const hits = await this.#options
-      .store()
-      .searchConversation(keys, query, limit, this.#options.now());
-    return hits.map((hit, ordinal) => conversationResult(query, hit, ordinal));
-  }
-}
-
-/** The identity the index stores beside a vector: the adapter's provider and model, never its width. */
-async function identityOf(adapter: EmbeddingAdapter): Promise<EmbeddingModelIdentity> {
-  const identity = await adapter.identity();
-  return { provider: identity.provider, model: identity.model };
-}
-
-interface MemoryWatcher {
-  close(): void;
-}
-
-interface MemoryWatchOptions {
-  readonly directory: string;
-  readonly onChange: () => void;
-  readonly debounceMs?: number;
-  readonly report?: (message: string) => void;
-}
-
-/**
- * Watches the notebook's directory and asks for one reconcile per burst of
- * changes, debounced at the pinned 1,500 ms. The watcher decides nothing
- * about what changed: the reconcile it triggers reads every file again and
- * compares hashes, so a missed event costs a later pass and never a wrong
- * index, and an index can always be rebuilt from the files alone.
- */
-function watchMemoryFiles(options: MemoryWatchOptions): MemoryWatcher | undefined {
-  const debounceMs = options.debounceMs ?? MEMORY_SEARCH_DEFAULTS.WATCH_DEBOUNCE_MS;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let watcher: FSWatcher;
-  try {
-    watcher = watch(options.directory, { recursive: true, persistent: false }, () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        timer = undefined;
-        options.onChange();
-      }, debounceMs);
     });
-  } catch (error) {
-    options.report?.(
-      `Memory files are not being watched: ${error instanceof Error ? error.message : String(error)}`,
+
+    /** Embeds in batches until one fails; the vectors already answered are kept beside the reason the rest were not. */
+    const embedAll = (
+      adapter: EmbeddingAdapter,
+      texts: readonly { hash: string; text: string }[],
+    ): Effect.Effect<{ written: readonly EmbeddingWrite[]; failed?: string }, MemorySeamRefused> =>
+      Effect.gen(function* () {
+        const written: EmbeddingWrite[] = [];
+        const size = options.embeddingBatchSize;
+        for (let start = 0; start < texts.length; start += size) {
+          const batch = texts.slice(start, start + size);
+          const answer = yield* attempted(() => adapter.embed(batch.map((entry) => entry.text)));
+          if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
+            return { written, failed: RATE_LIMITED };
+          }
+          if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
+            return { written, failed: `${answer.failure}: ${answer.reason}` };
+          }
+          batch.forEach((entry, index) => {
+            const vector = answer.vectors[index];
+            if (vector) written.push({ hash: entry.hash, vector });
+          });
+        }
+        return { written };
+      });
+
+    const syncOnce: Effect.Effect<MemorySyncReport, MemorySeamRefused> = Effect.gen(function* () {
+      const store = options.store();
+      const now = options.now();
+      // One read of the adapter for the whole pass: the identity the plan is
+      // asked under and the adapter the vectors come from are the same one,
+      // whatever a credential swap installs meanwhile.
+      const adapter = options.embeddingAdapter();
+      const identity = adapter ? yield* identityOf(adapter) : undefined;
+      const plan = yield* attempted(() => store.planMemorySync(identity, now));
+      let settled: RetrievalStanding = adapter ? HYBRID : keywordOnly(NO_CREDENTIAL);
+      let embeddings: readonly EmbeddingWrite[] = [];
+      if (adapter && plan.missingEmbeddings.length > 0) {
+        const embedded = yield* embedAll(adapter, plan.missingEmbeddings);
+        // Every batch that answered lands whatever a later batch did, and the
+        // keyword rows land regardless, under the same identity so every vector
+        // already cached is kept on its chunk; only the chunks still without
+        // one are asked for again next sync.
+        embeddings = embedded.written;
+        if (embedded.failed) settled = keywordOnly(embedded.failed);
+      }
+      const report = yield* attempted(() =>
+        store.applyMemorySync({
+          changed: plan.changed,
+          removed: plan.removed,
+          embeddings,
+          ...(identity ? { identity } : undefined),
+          now: options.now(),
+        }),
+      );
+      yield* Ref.set(standing, settled);
+      return { ...report, mode: settled.mode, ...withNote(settled) };
+    });
+
+    /** A pass that fails reports and answers nothing, without cancelling the follow-on it owes. */
+    const passOnce: Effect.Effect<MemorySyncReport | undefined> = syncOnce.pipe(
+      Effect.tap(() => options.onSynced ?? Effect.void),
+      Effect.catchAll((refusal) =>
+        Effect.as(reported(`Notebook index sync failed: ${refusal.reason}`), undefined),
+      ),
+      Effect.catchAllDefect((defect) =>
+        Effect.as(reported(`Notebook index sync failed: ${reasonOf(defect)}`), undefined),
+      ),
     );
-    return undefined;
-  }
-  watcher.on("error", (error) => options.report?.(`Memory watcher stopped: ${error.message}`));
-  return {
-    close: () => {
-      if (timer) clearTimeout(timer);
-      watcher.close();
-    },
-  };
+
+    /**
+     * The pass itself, on a fiber of the index's own scope so no caller's
+     * giving up ends it: when it settles it hands the follow-on it owes the
+     * place it held and only then answers everyone waiting on it.
+     */
+    function runPass(
+      deferred: Deferred.Deferred<MemorySyncReport | undefined>,
+    ): Effect.Effect<void> {
+      return Effect.asVoid(
+        Effect.onExit(passOnce, (exit) =>
+          Effect.zipRight(
+            decision.withPermits(1)(
+              Effect.gen(function* () {
+                const { follow } = yield* Ref.get(passes);
+                yield* Ref.set(passes, { running: follow, follow: undefined });
+                if (follow) yield* forkPass(follow);
+              }),
+            ),
+            Deferred.done(deferred, exit),
+          ),
+        ),
+      );
+    }
+
+    /**
+     * Every fiber this index owns is forked `Effect.interruptible`, because a
+     * fork inherits the interrupt status of whoever made it and both doors
+     * here are reached from uninterruptible regions — the follow-on from a
+     * finished pass's own finalizer, the start from the composer's start —
+     * and a fiber forked uninterruptible is one no scope close could end.
+     */
+    function forkPass(
+      deferred: Deferred.Deferred<MemorySyncReport | undefined>,
+    ): Effect.Effect<void> {
+      return Effect.asVoid(Effect.forkIn(Effect.interruptible(runPass(deferred)), scope));
+    }
+
+    /**
+     * One reconcile of the index against the files. A call while no pass runs
+     * starts one and answers its report. A call during a pass answers the one
+     * follow-on pass that starts when the running one ends, because the running
+     * pass read the adapter once when it began and a credential published
+     * meanwhile is what the caller is asking to be seen; every call during the
+     * same pass shares that follow-on, and a call during the follow-on
+     * schedules one more, so requests coalesce and a pass runs only when one
+     * was asked for.
+     */
+    const sync: Effect.Effect<MemorySyncReport | undefined> = Effect.flatten(
+      decision.withPermits(1)(
+        Effect.gen(function* () {
+          const held = yield* Ref.get(passes);
+          if (!held.running) {
+            const started = yield* Deferred.make<MemorySyncReport | undefined>();
+            yield* Ref.set(passes, { running: started, follow: undefined });
+            yield* forkPass(started);
+            return Deferred.await(started);
+          }
+          if (held.follow) return Deferred.await(held.follow);
+          const asked = yield* Deferred.make<MemorySyncReport | undefined>();
+          yield* Ref.set(passes, { ...held, follow: asked });
+          return Deferred.await(asked);
+        }),
+      ),
+    );
+
+    /**
+     * Watches the notebook's directory and asks for one reconcile per burst of
+     * changes, debounced at the pinned 1,500 ms. The watch decides nothing
+     * about what changed: the reconcile it asks for reads every file again and
+     * compares hashes, so a missed event costs a later pass and never a wrong
+     * index, and an index can always be rebuilt from the files alone. A watch
+     * that cannot be armed, or that ends in a failure, is reported and leaves
+     * the files unwatched; every later sync is one somebody asked for. Each
+     * burst asks rather than waits, so the next debounce window opens at once
+     * and an edit landing during a long pass is a request the coalescer folds
+     * into that pass's follow-on rather than one held behind it.
+     */
+    const requestSync = Effect.asVoid(Effect.forkIn(Effect.interruptible(sync), scope));
+
+    const watchFiles: Effect.Effect<void> = Effect.suspend(() =>
+      Effect.catchAll(
+        Stream.runForEach(
+          Stream.debounce(
+            fileSystem.watch(options.workspaceDirectory(), { recursive: true }),
+            Duration.millis(MEMORY_SEARCH_DEFAULTS.WATCH_DEBOUNCE_MS),
+          ),
+          () => requestSync,
+        ),
+        (failure) => reported(`Memory files are not being watched: ${failure.message}`),
+      ),
+    );
+
+    const watching = yield* Effect.once(
+      Effect.asVoid(Effect.forkIn(Effect.interruptible(watchFiles), scope)),
+    );
+
+    return {
+      mode: Effect.map(Ref.get(standing), (held) => held.mode),
+      start: Effect.zipRight(Effect.asVoid(sync), watching),
+      sync,
+      requestSync,
+      accessFor,
+    };
+  });
 }

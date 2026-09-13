@@ -210,6 +210,14 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   import `effect`, so neither interface can be stated as effects while its
   port stands. What would end this row is a decision about the ports
   themselves, not an implementation detail of this migration.
+  `NotebookMemoryStore` is the third interface this face answers and the one
+  with no port behind it: the notebook's index is a scoped effect and reads
+  the store through `Effect.tryPromise`, so that interface is stated as
+  effects the moment this client's own `ask` answers one.
+  `NotebookMemoryStore` is the third interface this face answers and the one
+  with no port behind it: the notebook's index is a scoped effect and reads
+  the store through `Effect.tryPromise`, so that interface is stated as
+  effects the moment this client's own `ask` answers one.
 - **`packages/brain/src/store/database.ts`** — `StoreDatabase#run`, the
   synchronous accessor two OpenClaw ports reach the store through:
   `archives.ts` and `maintenance-run.ts` import nothing from `effect` and hold

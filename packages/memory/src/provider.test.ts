@@ -44,17 +44,19 @@ interface Seen {
 function harness(overrides: Partial<NotebookMemoryProviderSeams> = {}) {
   const seen: Seen = { searches: [], gets: [], captures: [] };
   const access: NotebookMemoryAccess = {
-    search: async (ask) => {
-      seen.searches.push({
-        query: ask.query,
-        ...(ask.maxResults !== undefined ? { maxResults: ask.maxResults } : undefined),
-      });
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, results: [] };
-    },
-    get: async (ask) => {
-      seen.gets.push(ask);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, path: ask.path };
-    },
+    search: (ask) =>
+      Effect.sync(() => {
+        seen.searches.push({
+          query: ask.query,
+          ...(ask.maxResults !== undefined ? { maxResults: ask.maxResults } : undefined),
+        });
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, results: [] };
+      }),
+    get: (ask) =>
+      Effect.sync(() => {
+        seen.gets.push(ask);
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, path: ask.path };
+      }),
   };
   const provider = notebookMemoryProvider({
     scope: SCOPE,

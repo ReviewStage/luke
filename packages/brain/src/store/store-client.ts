@@ -199,9 +199,11 @@ const settledOn = (
  * where the work lives.
  *
  * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
- * section: `StoreClient` answers the promises
- * `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore` declare, so
- * the face lives as long as those three interfaces do.
+ * section: `StoreClient` answers the promises `BrainStateRepository`,
+ * `NotebookMemoryStore`, and `ChildStore` declare. The first and the last
+ * stand on OpenClaw ports that may not import `effect`; `NotebookMemoryStore`
+ * has no port behind it and is read by the notebook's index, which is a
+ * scoped effect reaching it through `Effect.tryPromise`.
  */
 export function storeClient(transport: StoreTransport, execution: ExecutionRuntime): StoreClient {
   const settled = settledOn(execution);
