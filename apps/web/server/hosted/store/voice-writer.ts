@@ -323,6 +323,28 @@ const findUtteranceSegments = SqlSchema.findAll({
     ),
 });
 
+/** Whether one speaker said anything on the session from an instant on: the first such segment, where one stands. */
+const findSegmentFrom = SqlSchema.findOne({
+  Request: Schema.Struct({
+    voiceSessionId: Schema.String,
+    role: VoiceSegmentRoleSchema,
+    fromMs: Schema.Int,
+  }),
+  Result: Schema.Struct({ seq: Schema.Number }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select seq
+        from voice_transcript_segments
+        where voice_session_id = ${request.voiceSessionId}
+          and role = ${request.role}
+          and start_ms >= ${request.fromMs}
+        order by seq asc
+        limit 1
+      `,
+    ),
+});
+
 /** The developer's own segments of one session inside a span, in the order the deltas came. */
 const findSpokenSegments = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -496,19 +518,20 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       if (latest.line?.clientId === created.delegation.id) return REPEATED;
       const candidate =
         latest.line !== undefined && !latest.line.delegated ? latest.line : undefined;
-      // A line Luke has already answered is not the one a later delegation is about: the
-      // delegation's words are whatever the developer said since, which the cut takes from that
-      // line's end. A line nobody answered is adopted whole.
+      // A line Luke has already answered is not the one a later delegation is about, whatever
+      // offset the delegation carries: the delegation's words are whatever the developer said
+      // since, which the cut takes from that line's end. Luke's words are read from the line's
+      // end on with no bound, so a delegation delivered late, its offset inside the line, cannot
+      // re-key a line his answer already stands beside. A line nobody answered is adopted whole.
       const answered =
-        candidate === undefined || candidate.toMs >= created.offset_ms
-          ? []
-          : yield* findUtteranceSegments({
+        candidate === undefined
+          ? Option.none()
+          : yield* findSegmentFrom({
               voiceSessionId,
               role: VOICE_SEGMENT_ROLE.ASSISTANT,
-              startMs: candidate.toMs,
-              endMs: created.offset_ms - 1,
+              fromMs: candidate.toMs,
             });
-      const adopting = answered.length === 0 ? candidate : undefined;
+      const adopting = Option.isNone(answered) ? candidate : undefined;
       const cutEndMs = Math.max(created.offset_ms, adopting?.toMs ?? created.offset_ms);
       // The cut starts where the developer's last written words end — the previous ask's, or the
       // last undelegated line's other than the one being adopted, whose own words the cut

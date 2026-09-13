@@ -830,3 +830,46 @@ test("a delegation whose offset falls before the settled line's last fragment en
     ],
   );
 });
+
+test("a delegation delivered late, its offset inside a line Luke has already answered, adopts nothing: the exchange stands as it was and the delegation cuts only words said since", async () => {
+  const live = await target();
+  const voice = writer();
+  await database.run(voice.consume(live, heard("Which agent is waiting?", 1000, 2600)));
+  await database.run(voice.consume(live, said("The fixture agent.", 3000, 4000)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2600 })),
+    WRITTEN,
+  );
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(live, { startMs: 3000, endMs: 4000 })),
+    WRITTEN,
+  );
+  const before = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    before.map((row) => [row.role, row.turnId]),
+    [
+      [MESSAGE_ROLE.USER, null],
+      [MESSAGE_ROLE.ASSISTANT, null],
+    ],
+  );
+  // The delegation arrives after the answer, its offset inside the developer's utterance.
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_stale", 2400))), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.IGNORED,
+  });
+  const after = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    after.map((row) => [row.id, row.clientId, row.turnId, row.seq]),
+    before.map((row) => [row.id, row.clientId, row.turnId, row.seq]),
+  );
+  assert.equal(
+    after.some((row) => row.clientId === "dl_stale"),
+    false,
+  );
+});
