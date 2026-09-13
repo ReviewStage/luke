@@ -34,18 +34,17 @@ export interface JsonStateFile<T> {
 }
 
 /**
- * One small JSON record on disk, read and written synchronously. Synchronous
- * because the introduction's completion is read before `whenReady` resolves,
- * and no writer here waits on anything a promise could carry.
+ * One small JSON record on disk, read and written synchronously, and no
+ * writer here waits on anything a promise could carry.
  *
  * The synchronous `node:fs` face beside `jsonStateFileEffect` in
- * `@sidecar/host/effect`, for the callers that still read and write
- * synchronously: `compose-calendars.ts`'s `writeOnboardingState`, called from
- * synchronous gateway handlers themselves forked from `Effect.sync`, and from
- * `compose-live.ts`'s synchronous callbacks; `compose-devices.ts`'s
- * `DeviceCadence#deviceId()`, read synchronously by `compose-conversation.ts`
- * and `compose-host.ts`; and the desktop's own last-run-version file
- * (`apps/desktop/src/main/services/update-service-host.ts`).
+ * `@sidecar/host/effect`, for the two callers that still read and write
+ * synchronously: `compose-devices.ts`'s `DeviceCadence#deviceId()`, read from
+ * a synchronous statement by `compose-conversation.ts` and `compose-host.ts`,
+ * and the desktop's own last-run-version file, read before `whenReady`
+ * resolves (`apps/desktop/src/main/services/update-service-host.ts`). The
+ * onboarding record was the third and reads and writes through
+ * `jsonStateFileEffect` now.
  */
 export function jsonStateFile<T>(options: JsonStateFileOptions<T>): JsonStateFile<T> {
   const filePath = () => path.join(options.directory(), options.fileName);

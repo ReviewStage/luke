@@ -1,106 +1,98 @@
-import { text, type WireRecord } from "@sidecar/wire";
-import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
+import type * as FileSystem from "@effect/platform/FileSystem";
+import { type Context, Effect, Schema } from "effect";
+import { jsonStateFileEffect } from "./effect/json-state-file.js";
+import { Reporter, StateRoot } from "./effect/seams.js";
 
 /** The onboarding record, in the app's own state directory. */
 export const ONBOARDING_STATE_FILE = "onboarding.json";
+
+/** One moment, as every field of the record holds it: an instant in words, or nothing. */
+const moment = Schema.optionalWith(Schema.String, { exact: true });
 
 /**
  * The one-time onboarding moments Luke remembers per install: the spoken
  * introduction, the arrival beat, and the calendar step. One record, because
  * every field is written by the same launch and read by the same reconcile.
  */
-export interface OnboardingState {
+const OnboardingStateSchema = Schema.Struct({
   /**
    * When the install's first observed sign-in owed the spoken introduction.
    * Recorded at that edge alone, so an install already signed in when this
    * build arrived is never greeted as a stranger on an upgrade.
    */
-  introductionRequiredAt?: string;
+  introductionRequiredAt: moment,
   /** When the spoken introduction finished, to the end. */
-  introductionCompletedAt?: string;
+  introductionCompletedAt: moment,
   /** When the account's first sign-in landed, as this install observed it. */
-  arrivalSignedInAt?: string;
+  arrivalSignedInAt: moment,
   /** When the arrival beat stopped being owed: its reply actually began. */
-  arrivalSpokenAt?: string;
+  arrivalSpokenAt: moment,
   /** When the first announcement after that sign-in was spoken. */
-  arrivalFirstAnnouncementAt?: string;
+  arrivalFirstAnnouncementAt: moment,
   /** When the install's first observed sign-in put the Conductor key gate up, ahead of the calendar's. */
-  conductorKeyOnboardingRequiredAt?: string;
+  conductorKeyOnboardingRequiredAt: moment,
   /** When the key gate stopped standing: the vault came to hold a Conductor key. */
-  conductorKeyOnboardingSettledAt?: string;
+  conductorKeyOnboardingSettledAt: moment,
   /** When the developer declined the key step instead; the gate stands down the same way. */
-  conductorKeyOnboardingSkippedAt?: string;
+  conductorKeyOnboardingSkippedAt: moment,
   /** When the install's first observed sign-in put the calendar gate up. */
-  calendarOnboardingRequiredAt?: string;
+  calendarOnboardingRequiredAt: moment,
   /**
    * When the calendar gate stopped standing: Done confirmed the connected
    * calendars, or a calendar already standing was recognized.
    */
-  calendarOnboardingSettledAt?: string;
+  calendarOnboardingSettledAt: moment,
   /**
    * When the user declined the calendar step instead. Its own field rather
    * than a settle, so the record keeps what actually happened, but it stands
    * the gate down the same way.
    */
-  calendarOnboardingSkippedAt?: string;
+  calendarOnboardingSkippedAt: moment,
+});
+
+export type OnboardingState = typeof OnboardingStateSchema.Type;
+
+const onboardingStateFile = jsonStateFileEffect({
+  fileName: ONBOARDING_STATE_FILE,
+  schema: OnboardingStateSchema,
+});
+
+/** The record as one reader and one writer, with every seam the file needs already provided. */
+export interface OnboardingStateRecord {
+  /**
+   * The stored record, or nothing for one with no moment in it at all, for one
+   * that is absent, and for one this build cannot read. "No record" and "an
+   * empty record" are one answer, because every predicate over this state
+   * treats an absent moment as never observed — the safe direction, since it
+   * can only withhold a beat or a gate, never replay one already given.
+   */
+  readonly read: Effect.Effect<OnboardingState | undefined>;
+  /**
+   * Persists `mutate`'s answer over whatever is on disk at this moment, rather
+   * than over a record read earlier, and answers what was persisted. Two
+   * processes write Luke's onboarding record, each owning its own moments, and
+   * one saving over its own older read would drop the other's.
+   */
+  readonly update: (
+    mutate: (current: OnboardingState | undefined) => OnboardingState,
+  ) => Effect.Effect<OnboardingState>;
 }
 
-/**
- * Reads a stored record, or nothing for one with no moment in it at all. "No
- * record" and "an empty record" are one answer, because every predicate over
- * this state treats an absent moment as never observed — the safe direction,
- * since it can only withhold a beat or a gate, never replay one already given.
- */
-function onboardingStateFrom(record: WireRecord): OnboardingState | undefined {
-  const introductionRequiredAt = text(record.introductionRequiredAt);
-  const introductionCompletedAt = text(record.introductionCompletedAt);
-  const arrivalSignedInAt = text(record.arrivalSignedInAt);
-  const arrivalSpokenAt = text(record.arrivalSpokenAt);
-  const arrivalFirstAnnouncementAt = text(record.arrivalFirstAnnouncementAt);
-  const conductorKeyOnboardingRequiredAt = text(record.conductorKeyOnboardingRequiredAt);
-  const conductorKeyOnboardingSettledAt = text(record.conductorKeyOnboardingSettledAt);
-  const conductorKeyOnboardingSkippedAt = text(record.conductorKeyOnboardingSkippedAt);
-  const calendarOnboardingRequiredAt = text(record.calendarOnboardingRequiredAt);
-  const calendarOnboardingSettledAt = text(record.calendarOnboardingSettledAt);
-  const calendarOnboardingSkippedAt = text(record.calendarOnboardingSkippedAt);
-  const state: OnboardingState = {
-    ...(introductionRequiredAt !== undefined ? { introductionRequiredAt } : undefined),
-    ...(introductionCompletedAt !== undefined ? { introductionCompletedAt } : undefined),
-    ...(arrivalSignedInAt !== undefined ? { arrivalSignedInAt } : undefined),
-    ...(arrivalSpokenAt !== undefined ? { arrivalSpokenAt } : undefined),
-    ...(arrivalFirstAnnouncementAt !== undefined ? { arrivalFirstAnnouncementAt } : undefined),
-    ...(conductorKeyOnboardingRequiredAt !== undefined
-      ? { conductorKeyOnboardingRequiredAt }
-      : undefined),
-    ...(conductorKeyOnboardingSettledAt !== undefined
-      ? { conductorKeyOnboardingSettledAt }
-      : undefined),
-    ...(conductorKeyOnboardingSkippedAt !== undefined
-      ? { conductorKeyOnboardingSkippedAt }
-      : undefined),
-    ...(calendarOnboardingRequiredAt !== undefined ? { calendarOnboardingRequiredAt } : undefined),
-    ...(calendarOnboardingSettledAt !== undefined ? { calendarOnboardingSettledAt } : undefined),
-    ...(calendarOnboardingSkippedAt !== undefined ? { calendarOnboardingSkippedAt } : undefined),
+export function onboardingStateRecord(
+  stateRoot: string,
+  report: (message: string) => void,
+  fileSystem: Context.Context<FileSystem.FileSystem>,
+): OnboardingStateRecord {
+  const provided = <A>(
+    effect: Effect.Effect<A, never, FileSystem.FileSystem | StateRoot | Reporter>,
+  ): Effect.Effect<A> =>
+    effect.pipe(
+      Effect.provideService(StateRoot, stateRoot),
+      Effect.provideService(Reporter, { report }),
+      Effect.provide(fileSystem),
+    );
+  return {
+    read: provided(onboardingStateFile.read),
+    update: (mutate) => provided(onboardingStateFile.update(mutate)),
   };
-  return Object.keys(state).length === 0 ? undefined : state;
-}
-
-/** The record as it persists: the moments that are actually on it, and no key holding nothing. */
-function onboardingRecord(state: OnboardingState): WireRecord {
-  const record: Record<string, string> = {};
-  for (const [moment, at] of Object.entries(state)) if (at !== undefined) record[moment] = at;
-  return record;
-}
-
-export function onboardingStateFile(
-  directory: () => string,
-  report?: (message: string) => void,
-): JsonStateFile<OnboardingState> {
-  return jsonStateFile<OnboardingState>({
-    directory,
-    fileName: ONBOARDING_STATE_FILE,
-    read: onboardingStateFrom,
-    write: onboardingRecord,
-    ...(report !== undefined ? { report } : undefined),
-  });
 }

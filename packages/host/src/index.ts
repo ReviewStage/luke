@@ -28,7 +28,6 @@ export {
   type HostNodeOpenKind,
   isHostNodeOpenKind,
 } from "./node-capabilities.js";
-export { onboardingStateFile } from "./onboarding-state.js";
 export { createGatewayOperator, type GatewayOperator } from "./operator.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { createGatewayService } from "./service.js";
