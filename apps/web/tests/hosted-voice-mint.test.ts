@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
+import { LIVE_VOICE } from "@sidecar/live";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
@@ -92,6 +93,20 @@ test("a mint hands back an ephemeral credential aimed at OpenAI's own calls endp
   assert.equal(sent.session.audio.output.voice, REALTIME_VOICE.MARIN);
   assert.equal(sent.session.audio.output.speed, REALTIME_VOICE_SPEED.QUICK);
   assert.equal(sent.session.audio.input.turn_detection, null);
+});
+
+test("a Live voice the Realtime API does not speak is minted at the default", async () => {
+  const call: UpstreamCall = {};
+  const response = await mintAnswer(
+    options({
+      request: mintRequest({ voice: LIVE_VOICE.BEACON }),
+      httpClient: upstream(call, mintedPayload),
+    }),
+  );
+
+  assert.equal(response.status, 200);
+  const sent = JSON.parse(String(call.init?.body));
+  assert.equal(sent.session.audio.output.voice, REALTIME_DEFAULTS.VOICE);
 });
 
 test("the wsUrl is pinned to the build's websocket base and carries the session's model", async () => {

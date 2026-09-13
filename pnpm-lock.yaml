@@ -274,6 +274,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -398,6 +401,9 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -1012,9 +1018,6 @@ importers:
 
   packages/settings:
     dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
@@ -1163,6 +1166,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session

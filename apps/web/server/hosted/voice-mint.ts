@@ -1,8 +1,8 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
+import { isLiveVoice } from "@sidecar/live";
 import { Effect } from "effect";
 import {
   HOSTED_WS_BASE_URL,
-  isRealtimeVoice,
   isRealtimeVoiceSpeed,
   isRecord,
   REALTIME_CALLS_PATH,
@@ -14,6 +14,7 @@ import {
   type RealtimeVoiceSpeed,
   realtimeCredentialFromResponse,
   realtimeCredentialIsUsable,
+  realtimeVoiceFor,
   type UnparsedWireValue,
 } from "../core.js";
 import { HOSTED_OPENAI_DEFAULTS, type OpenAiPostBody, postOpenAiEffect } from "./openai.js";
@@ -37,7 +38,9 @@ export interface VoiceMintPreferences {
  * an empty one — the defaults are a complete request. A value outside the
  * build's own sets refuses the request rather than being repaired: the
  * desktop only sends values it validated, so anything else is a bug or an
- * impostor, and both should hear no. A strict-fields allowlist additionally
+ * impostor, and both should hear no. A Live voice the Realtime API does not
+ * speak is the one repair: a preference the desktop synced is a real voice
+ * the phone cannot mint yet, so it is minted at the default. A strict-fields allowlist additionally
  * refuses any field beyond it, for an endpoint whose callers earn no
  * tolerance for extras.
  */
@@ -60,11 +63,11 @@ export function voiceMintPreferences(
     return undefined;
   }
 
-  if (wire.voice !== undefined && !isRealtimeVoice(wire.voice)) return undefined;
+  if (wire.voice !== undefined && !isLiveVoice(wire.voice)) return undefined;
   if (wire.speed !== undefined && !isRealtimeVoiceSpeed(wire.speed)) return undefined;
 
   const preferences: VoiceMintPreferences = {};
-  if (wire.voice !== undefined) preferences.voice = wire.voice;
+  if (wire.voice !== undefined) preferences.voice = realtimeVoiceFor(wire.voice);
   if (wire.speed !== undefined) preferences.speed = wire.speed;
   return preferences;
 }

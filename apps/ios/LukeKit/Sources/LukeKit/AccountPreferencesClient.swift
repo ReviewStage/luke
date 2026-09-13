@@ -178,7 +178,7 @@ extension DeviceSettingsSnapshot {
 
         var voice = RealtimeVoice.default
         if let rawVoice = wire[AccountPreferenceWireField.voice] {
-            guard let name = rawVoice as? String, let parsed = RealtimeVoice(rawValue: name)
+            guard let name = rawVoice as? String, let parsed = RealtimeVoice(syncedName: name)
             else { return nil }
             voice = parsed
         }
