@@ -34,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Runtime } from "effect";
+import { Effect, Fiber, Runtime } from "effect";
 import type { TestContext } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
@@ -436,7 +436,9 @@ it.scoped(
       );
       yield* waitFor(() => client.inputs.length > beforeSecondAsk);
       const pressedAt = c.tick();
-      const clearing = c.clear();
+      // Run rather than forked: `Effect.fork` hands the body to the scheduler,
+      // where the fences below would not yet stand on the next statement.
+      const clearing = Effect.runFork(c.clear());
       // The fences are synchronous: the store already stands on the successor,
       // and the thread is already empty and relayed, before anything is awaited.
       assert.notEqual(c.store.generationId(), undefined);
@@ -454,7 +456,7 @@ it.scoped(
       // The late answer lands on the fenced generation: recorded nowhere.
       client.release(reply(LATE_REPLY));
       yield* waitFor(() => agent.request(late) === undefined);
-      assert.equal(yield* Effect.promise(() => clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(yield* Fiber.join(clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
       // The late run went with its generation: revoked, and standing in no record.
       assert.equal(agent.request(late), undefined);
       // The rows: the successor lifetime stands with nothing in it, the old words are gone, the later line stays.
@@ -503,7 +505,7 @@ it.scoped(
       const { agent, client } = yield* seeded(c);
       c.refuseErase(true);
       const pressedAt = c.tick();
-      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      assert.equal(yield* c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
       // The thread is fenced in memory and by the durable cutoff the marker raised.
       assert.deepEqual(c.thread.entries(), []);
       assert.equal(
@@ -551,7 +553,7 @@ it.scoped(
       const { agent, client } = yield* seeded(c);
       c.repo.refuse = true;
       const pressedAt = c.tick();
-      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      assert.equal(yield* c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
       assert.deepEqual(archivesOf(c.root), []);
       // In memory the old generation stands nowhere: the store holds the marker
       // successor, the thread is fenced, and the agent's next ask sees no old word.
@@ -580,7 +582,7 @@ it.scoped(
       yield* Effect.promise(() => c.stop(agent));
       const release = c.holdErase();
       c.tick();
-      const clearing = c.clear();
+      const clearing = Effect.runFork(c.clear());
       // The rebuild: a new agent over the same store, while the rows are still on disk.
       const rebuiltClient = heldClient();
       const rebuilt = c.build(rebuiltClient);
@@ -591,10 +593,10 @@ it.scoped(
       yield* waitFor(() => rebuilt.request(during)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
       // A second press while the first still waits: another fence, no harm.
       c.tick();
-      const second = c.clear();
+      const second = Effect.runFork(c.clear());
       release();
-      assert.equal(yield* Effect.promise(() => clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-      assert.equal(yield* Effect.promise(() => second), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(yield* Fiber.join(clearing), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(yield* Fiber.join(second), CONVERSATION_DELETE_OUTCOME.COMPLETE);
       assert.equal(c.standing()?.session_id, c.store.generationId());
       assert.equal(client.inputs.length, 1);
       yield* Effect.promise(() => c.stop(rebuilt));
@@ -612,7 +614,7 @@ it.scoped(
       // The first press: fenced in memory, marker refused, the lines still on disk.
       c.repo.refuse = true;
       c.tick();
-      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.REFUSED);
+      assert.equal(yield* c.clear(), CONVERSATION_DELETE_OUTCOME.REFUSED);
       assert.equal(
         yield* Effect.promise(() =>
           c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
@@ -623,7 +625,7 @@ it.scoped(
       // The second press lands. Its archive must record the cutoff the disk
       // held before it — none — and not the first press's in-memory fence.
       const secondAt = c.tick();
-      assert.equal(yield* Effect.promise(() => c.clear()), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.equal(yield* c.clear(), CONVERSATION_DELETE_OUTCOME.COMPLETE);
       assert.equal(
         yield* Effect.promise(() =>
           c.client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),

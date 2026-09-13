@@ -108,7 +108,7 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       },
       // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
       conversations: {
-        deleteConversation: async () => CONVERSATION_DELETE_OUTCOME.COMPLETE,
+        deleteConversation: () => Effect.succeed(CONVERSATION_DELETE_OUTCOME.COMPLETE),
         holds: () => true,
         lines: () => lines,
         directory: () => [],

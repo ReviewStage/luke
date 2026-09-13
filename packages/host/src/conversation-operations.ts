@@ -18,7 +18,7 @@ export interface ConversationOperations {
   directory: () => readonly ConversationRecord[];
   holds: (sessionKey: SessionKey) => boolean;
   lines: (sessionKey: SessionKey) => readonly ConversationEntry[];
-  deleteConversation: (sessionKey: SessionKey) => Promise<ConversationDeleteOutcome>;
+  deleteConversation: (sessionKey: SessionKey) => Effect.Effect<ConversationDeleteOutcome>;
 }
 
 export interface ConversationOperationsDependencies {
