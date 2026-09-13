@@ -8,6 +8,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import { IntroductionLiveSessionSource } from "@sidecar/voice";
 import type { UnparsedWireValue } from "@sidecar/wire";
+import type { Effect } from "effect";
 import {
   app,
   type IpcMainEvent,
@@ -42,6 +43,8 @@ export interface WindowServiceDependencies {
   native: NativeNode;
   telemetry: TelemetryService;
   operator: OperatorClient;
+  /** Every operator effect this service reads, run on the launch's own runtime. */
+  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /**
    * Whether the launch this start belongs to still stands. False from the
    * moment a Quit is asked for, which is what every wait below re-checks: a
@@ -113,7 +116,7 @@ export interface WindowService extends DesktopService {
  * It is the one concern that opens a window, and it opens none until `start`.
  */
 export function createWindowService(dependencies: WindowServiceDependencies): WindowService {
-  const { config, state, native, telemetry, operator, launchStanding } = dependencies;
+  const { config, state, native, telemetry, operator, run, launchStanding } = dependencies;
   const { runMode } = config;
   const recordProductEvent = telemetry.recordProductEvent;
 
@@ -289,7 +292,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (!introductionPlaying() || !launchStanding()) return;
     introductionSession.end();
     if (given) {
-      operator.completeIntroduction();
+      void run(operator.completeIntroduction());
       recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
     }
     state.update({ introduction: { playing: false } });
@@ -496,7 +499,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       if (!launchStanding()) return;
       dock.applyIcon();
       dock.watchTheme();
-      const settings = await operator.ensureSettings();
+      const settings = await run(operator.ensureSettings());
       if (!launchStanding()) return;
       if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);

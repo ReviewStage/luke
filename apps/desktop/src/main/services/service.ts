@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+
 /**
  * One concern of the desktop client: what it begins at launch, and what it
  * gives back at quit. Nothing here starts while its module loads — the
@@ -16,4 +18,16 @@ export interface DesktopService {
    * interrupted a launch stops a set only half of which began.
    */
   stop: () => Promise<void>;
+}
+
+/**
+ * The same shape as `DesktopService`, for a concern that composes effects
+ * rather than holding the launch's `run`: its own start and stop are effects
+ * the composer runs in the launch's scope, never promises this service built
+ * for itself.
+ */
+export interface EffectDesktopService {
+  readonly name: string;
+  start: () => Effect.Effect<void>;
+  stop: () => Effect.Effect<void>;
 }

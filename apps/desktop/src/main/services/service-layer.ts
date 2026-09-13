@@ -1,5 +1,5 @@
 import { Effect, Layer } from "effect";
-import type { DesktopService } from "./service";
+import type { DesktopService, EffectDesktopService } from "./service";
 
 /**
  * A desktop service as a `Layer`: its `start` runs when the layer is built and
@@ -34,5 +34,29 @@ export const serviceLayer = (
         ),
       ),
       Effect.promise(() => service.start()),
+    ),
+  );
+
+/**
+ * `serviceLayer`'s counterpart for a service whose own start and stop are
+ * already effects: the same order — the stop registered as this scope's
+ * finalizer before the start runs — with no promise door for either.
+ */
+export const effectServiceLayer = (
+  service: EffectDesktopService,
+  report: (message: string) => void,
+): Layer.Layer<never> =>
+  Layer.scopedDiscard(
+    Effect.zipRight(
+      Effect.addFinalizer(() =>
+        Effect.catchAllDefect(service.stop(), (cause) =>
+          Effect.sync(() => {
+            report(
+              `the ${service.name} service did not stop cleanly: ${cause instanceof Error ? cause.message : String(cause)}`,
+            );
+          }),
+        ),
+      ),
+      service.start(),
     ),
   );

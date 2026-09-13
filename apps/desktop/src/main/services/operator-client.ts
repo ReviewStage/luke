@@ -12,7 +12,6 @@ import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
 import { type GatewayWiring, wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNodeCapabilities } from "./native-node";
-import type { DesktopService } from "./service";
 
 /** What the host's events reach in the windows that draw them. */
 interface OperatorClientLinks {
@@ -31,7 +30,9 @@ interface OperatorClientLinks {
   introductionOwedChanged: () => void;
 }
 
-export interface OperatorClient extends DesktopService {
+export interface OperatorClient {
+  /** Names this concern in a failure report and in the order the set starts and stops in. */
+  readonly name: string;
   link: (links: OperatorClientLinks) => void;
   /** The host's own method vocabulary, as this client calls it. */
   readonly host: HostOperator;
@@ -39,35 +40,34 @@ export interface OperatorClient extends DesktopService {
   readonly operator: GatewayWiring["operator"];
   settings: () => AppSettings | undefined;
   /** The settings this launch decides its windows from, read from the host once and written down. */
-  ensureSettings: () => Promise<AppSettings | undefined>;
+  ensureSettings: () => Effect.Effect<AppSettings | undefined>;
   signedIn: () => boolean;
   voiceAvailable: () => boolean;
   /** Whether the host's onboarding record owes the spoken introduction, as last told. */
   introductionOwed: () => boolean;
   /** One host bootstrap, adopted into the document every window is answered from. */
-  readBootstrap: () => Promise<HostBootstrap | undefined>;
+  readBootstrap: () => Effect.Effect<HostBootstrap | undefined>;
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
-  reportGuide: (snapshot: AppGuideSnapshot) => void;
+  reportGuide: (snapshot: AppGuideSnapshot) => Effect.Effect<void>;
   /**
    * The introduction given to its end: the host writes the completion and
    * drops the hold it stood behind. Begun here rather than waited on, because
    * the ending the windows run is not the host's to hold up.
    */
-  completeIntroduction: () => void;
+  completeIntroduction: () => Effect.Effect<void>;
+  /**
+   * Begins this launch's one attachment. An effect the composer runs in the
+   * launch's own scope, never a promise this file built for itself.
+   */
+  start: () => Effect.Effect<void>;
+  /** Gives back what `start` began: every subscription this client holds. */
+  stop: () => Effect.Effect<void>;
 }
 
 export interface OperatorClientDependencies {
   config: DesktopConfig;
-  /**
-   * Runs one of the host's effects on the launch's own runtime, handed down
-   * from the runtime edge that built it. The act rows yield the host's effects
-   * themselves; what is left here is this service's own promise surface — the
-   * start, the bootstrap read, and the settings a window is decided from —
-   * which the composition still calls as promises.
-   */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The host this client operates, reached over the in-process transport. */
   gateway: GatewayInProcessHost;
   node: NativeNodeCapabilities;
@@ -86,7 +86,7 @@ export function createOperatorClient(
   dependencies: OperatorClientDependencies,
 ): Effect.Effect<OperatorClient, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const { config, state, run } = dependencies;
+    const { config, state } = dependencies;
     let heldLinks: OperatorClientLinks | undefined;
     const links = (): OperatorClientLinks => {
       if (heldLinks === undefined) {
@@ -201,30 +201,30 @@ export function createOperatorClient(
       host: gateway.host,
       operator: gateway.operator,
       settings: () => state.snapshot().settings,
-      ensureSettings: async () => {
-        const held = state.snapshot().settings;
-        if (held) return held;
-        const settings = await run(gateway.host.settingsSnapshot());
-        if (settings) state.update({ settings });
-        return settings;
-      },
+      ensureSettings: () =>
+        Effect.gen(function* () {
+          const held = state.snapshot().settings;
+          if (held) return held;
+          const settings = yield* gateway.host.settingsSnapshot();
+          if (settings) state.update({ settings });
+          return settings;
+        }),
       signedIn: () => state.snapshot().account.status === ACCOUNT_STATUS.SIGNED_IN,
       voiceAvailable: () => voiceAvailable,
       introductionOwed: () => introductionOwed,
-      readBootstrap: async () => {
-        const boot = await run(gateway.host.bootstrap());
-        if (boot) adoptBootstrap(boot);
-        return boot;
-      },
+      readBootstrap: () =>
+        Effect.gen(function* () {
+          const boot = yield* gateway.host.bootstrap();
+          if (boot) adoptBootstrap(boot);
+          return boot;
+        }),
       haltSessionReplay: () => setSessionReplayHalted(true),
       resumeSessionReplay: () => setSessionReplayHalted(false),
       reportGuide: (guide) => {
         state.update({ guide });
-        void run(gateway.host.reportGuide(guide));
+        return gateway.host.reportGuide(guide);
       },
-      completeIntroduction: () => {
-        void run(gateway.host.completeIntroduction());
-      },
+      completeIntroduction: () => gateway.host.completeIntroduction(),
       /**
        * What every attachment owes the host: its stream adopted and this
        * process's node registered on the connection that now stands, the guide
@@ -233,22 +233,24 @@ export function createOperatorClient(
        * drop, a later attachment writes what the host now holds into the
        * document, which is what tells the windows whatever of it moved.
        */
-      start: async () => {
-        attachments += 1;
-        await run(gateway.attached());
-        const guide = state.snapshot().guide;
-        if (guide !== EMPTY_APP_GUIDE) void run(gateway.host.reportGuide(guide));
-        const boot = await run(gateway.host.bootstrap());
-        if (!boot) throw new Error("the host answered no bootstrap");
-        adoptBootstrap(boot);
-        if (attachments === 1) return;
-        const relay = links();
-        relay.reapplyTalkHotkey();
-        relay.recycleVoiceWindow();
-      },
-      stop: async () => {
-        while (unsubscribers.length > 0) unsubscribers.pop()?.();
-      },
+      start: () =>
+        Effect.gen(function* () {
+          attachments += 1;
+          yield* gateway.attached();
+          const guide = state.snapshot().guide;
+          if (guide !== EMPTY_APP_GUIDE) yield* gateway.host.reportGuide(guide);
+          const boot = yield* gateway.host.bootstrap();
+          if (!boot) return yield* Effect.die(new Error("the host answered no bootstrap"));
+          adoptBootstrap(boot);
+          if (attachments === 1) return;
+          const relay = links();
+          relay.reapplyTalkHotkey();
+          relay.recycleVoiceWindow();
+        }),
+      stop: () =>
+        Effect.sync(() => {
+          while (unsubscribers.length > 0) unsubscribers.pop()?.();
+        }),
     };
   });
 }
