@@ -103,217 +103,222 @@ function repository(client: StoreClient) {
   return repo;
 }
 
-async function composed(t: TestContext) {
-  const root = await temporaryDirectory(t, "luke-clear-");
-  const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
-  let clock = NOW;
-  let ids = 0;
-  let generations = 0;
-  const reports: string[] = [];
-  const repo = repository(client);
-  const store = new BrainStateStore({
-    repository: repo,
-    createGenerationId: () => `gen-${++generations}`,
-    now: () => clock,
-    report: (message) => reports.push(message),
-  });
-  const relayed: (readonly ConversationEntry[])[] = [];
-  const thread = new ConversationThread({
-    store: {
-      appendConversation: (entries, now) =>
-        client.ask("conversation.append", { sessionKey: MAIN_SESSION_KEY, entries, now }),
-    },
-    now: () => clock,
-    onChanged: (entries) => relayed.push(entries),
-  });
-  const record = (entry: ConversationEntry, at: number) =>
-    thread.append([{ ...entry, recordedAt: at, eventId: `line-${++ids}` }]);
-  // Every agent built here is followed as the main process follows it — the
-  // one Conversation write for a run — and stopped, with its follower drained, by
-  // the harness's close whatever the test asserted.
-  const followers = new Map<BrainAgent, Effect.Effect<void>>();
-  const build = (client: BareResponsesModel) => {
-    const agent = Effect.runSync(
-      BrainAgent.make({
-        conversationId: MAIN_SESSION_KEY,
-        runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
-        observes: { kind: LOOK_SUBJECT.NONE },
-        prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-        actions: fakeActionPerformer().actions,
-        roster: () => ({ text: "- abc", identities: [] }),
-        // The standing context as the main process renders it: the recent
-        // thread, so a line the Clear left anywhere would reach the model.
-        standingContext: () =>
-          conversationLinesText(recentConversationEntries(thread.entries()), []) ?? "",
-        readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-        readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-        deliver: () => undefined,
-        store,
-        createRunId: () => `run-${++ids}`,
-        report: () => undefined,
-        now: () => clock,
-      }),
-    );
-    followers.set(
-      agent,
-      Effect.runSync(
-        followBrainRequests(agent, {
-          broadcastRequests: () => undefined,
-        }),
-      ),
-    );
-    return agent;
-  };
-  const stop = async (agent: BrainAgent) => {
-    await Effect.runPromise(agent.stop());
-    await Effect.runPromise(followers.get(agent) ?? Effect.void);
-    followers.delete(agent);
-  };
-  let refuseErase = false;
-  let eraseGate: Promise<void> | undefined;
-  const clear = () =>
-    deleteConversationFlow({
+function composed(t: TestContext) {
+  return Effect.gen(function* () {
+    const root = yield* Effect.promise(() => temporaryDirectory(t, "luke-clear-"));
+    const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
+    let clock = NOW;
+    let ids = 0;
+    let generations = 0;
+    const reports: string[] = [];
+    const repo = repository(client);
+    const store = new BrainStateStore({
+      repository: repo,
+      createGenerationId: () => `gen-${++generations}`,
       now: () => clock,
-      fence: (at) => thread.fence(at),
-      readCutoffBefore: async () => ({
-        value: await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-      }),
-      fenceBrain: (at) => store.clear(at),
-      erase: async (at, cutoffBefore) => {
-        await eraseGate;
-        if (refuseErase) return undefined;
-        const generationId = store.generationId();
-        const archiveId = `archive-${++ids}`;
-        const outcome = await client.ask(
-          "conversations.delete",
-          generationId === undefined
-            ? {
-                sessionKey: MAIN_SESSION_KEY,
-                now: at,
-                archiveId,
-                cutoffBefore: { value: cutoffBefore },
-              }
-            : {
-                sessionKey: MAIN_SESSION_KEY,
-                now: at,
-                archiveId,
-                keepSessionId: generationId,
-                cutoffBefore: { value: cutoffBefore },
-              },
-        );
-        return outcome ? { published: outcome.published } : undefined;
-      },
       report: (message) => reports.push(message),
     });
-  // The operator stands over whichever agent the ask names, as the host's
-  // current brain would, so a rebuilt agent is submitted to like the first.
-  let asking: BrainAgent | undefined;
-  const operator = await operatorOverBrain({ current: () => asking });
-  const submit = async (agent: BrainAgent, question: string) => {
-    asking = agent;
-    const result = await operator.submit({
-      submissionId: `sub-${++ids}`,
-      question,
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    const relayed: (readonly ConversationEntry[])[] = [];
+    const thread = new ConversationThread({
+      store: {
+        appendConversation: (entries, now) =>
+          client.ask("conversation.append", { sessionKey: MAIN_SESSION_KEY, entries, now }),
+      },
+      now: () => clock,
+      onChanged: (entries) => relayed.push(entries),
     });
-    assert.equal(result.outcome, "accepted");
-    return result.outcome === "accepted" ? result.runId : "";
-  };
-  /** Every row the database holds for main, read on a second handle and flattened for a marker search. */
-  const rows = () => {
-    const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
-    try {
-      return JSON.stringify({
-        sessions: raw
-          .prepare("SELECT session_id, reset_cleared_at FROM conversation_sessions")
-          .all(),
-        checkpoints: raw.prepare("SELECT item FROM runtime_checkpoints").all(),
-        history: raw
-          .prepare("SELECT words, recorded_at FROM conversation_events WHERE session_key = ?")
-          .all(MAIN_SESSION_KEY),
-        transcript: raw
-          .prepare("SELECT payload FROM transcript_events WHERE session_key = ?")
-          .all(MAIN_SESSION_KEY),
+    const record = (entry: ConversationEntry, at: number) =>
+      thread.append([{ ...entry, recordedAt: at, eventId: `line-${++ids}` }]);
+    // Every agent built here is followed as the main process follows it — the
+    // one Conversation write for a run — and stopped, with its follower drained, by
+    // the harness's close whatever the test asserted.
+    const followers = new Map<BrainAgent, Effect.Effect<void>>();
+    const build = (client: BareResponsesModel) => {
+      const agent = Effect.runSync(
+        BrainAgent.make({
+          conversationId: MAIN_SESSION_KEY,
+          runtime: toolLoopRuntimeOver(bareModelAdapter(client)),
+          observes: { kind: LOOK_SUBJECT.NONE },
+          prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+          actions: fakeActionPerformer().actions,
+          roster: () => ({ text: "- abc", identities: [] }),
+          // The standing context as the main process renders it: the recent
+          // thread, so a line the Clear left anywhere would reach the model.
+          standingContext: () =>
+            conversationLinesText(recentConversationEntries(thread.entries()), []) ?? "",
+          readTranscriptSince: async () => ({
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: "no",
+          }),
+          readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+          deliver: () => undefined,
+          store,
+          createRunId: () => `run-${++ids}`,
+          report: () => undefined,
+          now: () => clock,
+        }),
+      );
+      followers.set(
+        agent,
+        Effect.runSync(
+          followBrainRequests(agent, {
+            broadcastRequests: () => undefined,
+          }),
+        ),
+      );
+      return agent;
+    };
+    const stop = async (agent: BrainAgent) => {
+      await Effect.runPromise(agent.stop());
+      await Effect.runPromise(followers.get(agent) ?? Effect.void);
+      followers.delete(agent);
+    };
+    let refuseErase = false;
+    let eraseGate: Promise<void> | undefined;
+    const clear = () =>
+      deleteConversationFlow({
+        now: () => clock,
+        fence: (at) => thread.fence(at),
+        readCutoffBefore: async () => ({
+          value: await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+        }),
+        fenceBrain: (at) => store.clear(at),
+        erase: async (at, cutoffBefore) => {
+          await eraseGate;
+          if (refuseErase) return undefined;
+          const generationId = store.generationId();
+          const archiveId = `archive-${++ids}`;
+          const outcome = await client.ask(
+            "conversations.delete",
+            generationId === undefined
+              ? {
+                  sessionKey: MAIN_SESSION_KEY,
+                  now: at,
+                  archiveId,
+                  cutoffBefore: { value: cutoffBefore },
+                }
+              : {
+                  sessionKey: MAIN_SESSION_KEY,
+                  now: at,
+                  archiveId,
+                  keepSessionId: generationId,
+                  cutoffBefore: { value: cutoffBefore },
+                },
+          );
+          return outcome ? { published: outcome.published } : undefined;
+        },
+        report: (message) => reports.push(message),
       });
-    } finally {
-      raw.close();
-    }
-  };
-  /** The model's checkpoint items on disk, every lifetime's, flattened for a marker search. */
-  const checkpoints = () => {
-    const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
-    try {
-      return JSON.stringify(raw.prepare("SELECT item FROM runtime_checkpoints").all());
-    } finally {
-      raw.close();
-    }
-  };
-  /** The standing lifetime's id and marker on disk. */
-  const standing = () => {
-    const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
-    try {
-      // SAFETY: the two columns selected are the ones the row type names.
-      return raw
-        .prepare(
-          "SELECT session_id, reset_cleared_at FROM conversation_sessions WHERE session_key = ?",
-        )
-        .get(MAIN_SESSION_KEY) as
-        | { session_id: string; reset_cleared_at: number | null }
-        | undefined;
-    } finally {
-      raw.close();
-    }
-  };
-  const open = async () => {
-    await client.open({
-      agentRoot: root,
-      agentId: DEFAULT_AGENT_ID,
-      sessionKey: MAIN_SESSION_KEY,
-      conversationName: MAIN_CONVERSATION_NAME,
-      now: clock,
-    });
-    thread.restore(
-      await client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: clock }),
-      await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
-    );
-  };
-  return {
-    root,
-    client,
-    open,
-    standing,
-    repo,
-    store,
-    thread,
-    relayed,
-    reports,
-    build,
-    stop,
-    clear,
-    submit,
-    record,
-    rows,
-    checkpoints,
-    tick: () => {
-      clock += 1;
-      return clock;
-    },
-    now: () => clock,
-    refuseErase: (refuse: boolean) => {
-      refuseErase = refuse;
-    },
-    holdErase: () => {
-      let release: (() => void) | undefined;
-      eraseGate = new Promise<void>((resolve) => {
-        release = resolve;
+    // The operator stands over whichever agent the ask names, as the host's
+    // current brain would, so a rebuilt agent is submitted to like the first.
+    let asking: BrainAgent | undefined;
+    const operator = yield* operatorOverBrain({ current: () => asking });
+    const submit = async (agent: BrainAgent, question: string) => {
+      asking = agent;
+      const result = await operator.submit({
+        submissionId: `sub-${++ids}`,
+        question,
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
       });
-      return () => release?.();
-    },
-    close: async () => {
-      for (const agent of [...followers.keys()]) await stop(agent);
-      await client.close();
-    },
-  };
+      assert.equal(result.outcome, "accepted");
+      return result.outcome === "accepted" ? result.runId : "";
+    };
+    /** Every row the database holds for main, read on a second handle and flattened for a marker search. */
+    const rows = () => {
+      const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+      try {
+        return JSON.stringify({
+          sessions: raw
+            .prepare("SELECT session_id, reset_cleared_at FROM conversation_sessions")
+            .all(),
+          checkpoints: raw.prepare("SELECT item FROM runtime_checkpoints").all(),
+          history: raw
+            .prepare("SELECT words, recorded_at FROM conversation_events WHERE session_key = ?")
+            .all(MAIN_SESSION_KEY),
+          transcript: raw
+            .prepare("SELECT payload FROM transcript_events WHERE session_key = ?")
+            .all(MAIN_SESSION_KEY),
+        });
+      } finally {
+        raw.close();
+      }
+    };
+    /** The model's checkpoint items on disk, every lifetime's, flattened for a marker search. */
+    const checkpoints = () => {
+      const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+      try {
+        return JSON.stringify(raw.prepare("SELECT item FROM runtime_checkpoints").all());
+      } finally {
+        raw.close();
+      }
+    };
+    /** The standing lifetime's id and marker on disk. */
+    const standing = () => {
+      const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
+      try {
+        // SAFETY: the two columns selected are the ones the row type names.
+        return raw
+          .prepare(
+            "SELECT session_id, reset_cleared_at FROM conversation_sessions WHERE session_key = ?",
+          )
+          .get(MAIN_SESSION_KEY) as
+          | { session_id: string; reset_cleared_at: number | null }
+          | undefined;
+      } finally {
+        raw.close();
+      }
+    };
+    const open = async () => {
+      await client.open({
+        agentRoot: root,
+        agentId: DEFAULT_AGENT_ID,
+        sessionKey: MAIN_SESSION_KEY,
+        conversationName: MAIN_CONVERSATION_NAME,
+        now: clock,
+      });
+      thread.restore(
+        await client.ask("conversation.list", { sessionKey: MAIN_SESSION_KEY, now: clock }),
+        await client.ask("conversation.cutoff", { sessionKey: MAIN_SESSION_KEY }),
+      );
+    };
+    return {
+      root,
+      client,
+      open,
+      standing,
+      repo,
+      store,
+      thread,
+      relayed,
+      reports,
+      build,
+      stop,
+      clear,
+      submit,
+      record,
+      rows,
+      checkpoints,
+      tick: () => {
+        clock += 1;
+        return clock;
+      },
+      now: () => clock,
+      refuseErase: (refuse: boolean) => {
+        refuseErase = refuse;
+      },
+      holdErase: () => {
+        let release: (() => void) | undefined;
+        eraseGate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        return () => release?.();
+      },
+      close: async () => {
+        for (const agent of [...followers.keys()]) await stop(agent);
+        await client.close();
+      },
+    };
+  });
 }
 
 /** Polls a condition on Effect's own fiber scheduler rather than a fixed wall-clock wait. */
@@ -334,7 +339,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
  * the run — since the brain's publication writes no line of its own.
  */
 function seeded(
-  c: Awaited<ReturnType<typeof composed>>,
+  c: Effect.Effect.Success<ReturnType<typeof composed>>,
 ): Effect.Effect<{ agent: BrainAgent; client: ReturnType<typeof heldClient> }> {
   return Effect.gen(function* () {
     yield* Effect.promise(() => c.open());
@@ -406,11 +411,11 @@ function previousCutoffOf(root: string, archiveId: string): number | null | unde
   }
 }
 
-it.effect(
+it.scoped(
   "a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words",
   (t) =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => composed(t));
+      const c = yield* composed(t);
       t.onTestFinished(() => c.close());
       const { agent, client } = yield* seeded(c);
       // A second ask whose answer is still out when the press lands, its own
@@ -487,11 +492,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain",
   (t) =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => composed(t));
+      const c = yield* composed(t);
       t.onTestFinished(() => c.close());
       const { agent, client } = yield* seeded(c);
       c.refuseErase(true);
@@ -535,11 +540,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept",
   (t) =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => composed(t));
+      const c = yield* composed(t);
       t.onTestFinished(() => c.close());
       const { agent, client } = yield* seeded(c);
       c.repo.refuse = true;
@@ -563,11 +568,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless",
   (t) =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => composed(t));
+      const c = yield* composed(t);
       t.onTestFinished(() => c.close());
       const { agent, client } = yield* seeded(c);
       yield* Effect.promise(() => c.stop(agent));
@@ -594,11 +599,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence",
   (t) =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => composed(t));
+      const c = yield* composed(t);
       t.onTestFinished(() => c.close());
       const { agent } = yield* seeded(c);
       yield* Effect.promise(() => c.stop(agent));

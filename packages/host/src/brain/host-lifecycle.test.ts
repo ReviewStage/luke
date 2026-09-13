@@ -30,11 +30,11 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   });
 }
 
-it.effect(
+it.scoped(
   "removing the capability under five outstanding runs leaves every run interrupted and marked, with no line written",
   () =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => brainHarness());
+      const c = yield* brainHarness();
       const client = heldModel();
       yield* runHost(c.host.replace(() => c.build(client)));
       const agent = c.host.current();
@@ -85,11 +85,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a successor replacing the agent under outstanding runs inherits every end marked, and owns the store alone",
   () =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => brainHarness());
+      const c = yield* brainHarness();
       const first = heldModel();
       yield* runHost(c.host.replace(() => c.build(first)));
       const agent = c.host.current();
@@ -171,11 +171,11 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a reset under outstanding runs discards them without publishing, and the successor starts clean",
   () =>
     Effect.gen(function* () {
-      const c = yield* Effect.promise(() => brainHarness());
+      const c = yield* brainHarness();
       const client = heldModel();
       yield* runHost(c.host.replace(() => c.build(client)));
       const agent = c.host.current();

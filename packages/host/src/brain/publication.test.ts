@@ -76,30 +76,38 @@ function markingBrain(
   };
 }
 
-test("an ask with no brain is refused in fixed words", async () => {
-  const operator = await operatorOverBrain({ current: () => undefined });
-  const result = await operator.submit({
-    submissionId: "sub-1",
-    question: "what needs me?",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
-  assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
-});
+it.scoped("an ask with no brain is refused in fixed words", () =>
+  Effect.gen(function* () {
+    const operator = yield* operatorOverBrain({ current: () => undefined });
+    const result = yield* Effect.promise(() =>
+      operator.submit({
+        submissionId: "sub-1",
+        question: "what needs me?",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      }),
+    );
+    assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
+  }),
+);
 
-test("an ask is bounded and handed to the brain whole under its own submission id", async () => {
-  const asked: BrainSubmission[] = [];
-  const long = `  ${"a".repeat(maximumAskLength + 50)}`;
-  const operator = await operatorOverBrain({ current: () => acceptingBrain(asked) });
-  const result = await operator.submit({
-    submissionId: "sub-1",
-    question: long,
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-  });
-  assert.deepEqual(result, { outcome: "accepted", runId: "run-1", acceptedAt: NOW });
-  assert.equal(asked[0]?.question.length, maximumAskLength);
-  assert.equal(asked[0]?.submissionId, "sub-1");
-  assert.equal(asked[0]?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
-});
+it.scoped("an ask is bounded and handed to the brain whole under its own submission id", () =>
+  Effect.gen(function* () {
+    const asked: BrainSubmission[] = [];
+    const long = `  ${"a".repeat(maximumAskLength + 50)}`;
+    const operator = yield* operatorOverBrain({ current: () => acceptingBrain(asked) });
+    const result = yield* Effect.promise(() =>
+      operator.submit({
+        submissionId: "sub-1",
+        question: long,
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      }),
+    );
+    assert.deepEqual(result, { outcome: "accepted", runId: "run-1", acceptedAt: NOW });
+    assert.equal(asked[0]?.question.length, maximumAskLength);
+    assert.equal(asked[0]?.submissionId, "sub-1");
+    assert.equal(asked[0]?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
+  }),
+);
 
 test("a run's end is marked taken once, at the moment it settled, decided against the live record", async () => {
   const marked: { runId: string; at: number }[] = [];

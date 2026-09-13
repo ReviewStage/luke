@@ -1,6 +1,7 @@
 import type { BrainAgent } from "@sidecar/brain";
 import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar/gateway";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
+import { Effect, type Scope } from "effect";
 import type { ConversationOperations } from "../conversation-operations.js";
 import { createGatewayOperator, type GatewayOperator } from "../operator.js";
 import { scopedGatewayService } from "./gateway-service.js";
@@ -12,36 +13,39 @@ import { scopedGatewayService } from "./gateway-service.js";
  * composing the rest of the host. Every other capability is an inert stand-in
  * a test of it would not use.
  */
-export async function operatorOverBrain(options: {
+export function operatorOverBrain(options: {
   current: () => BrainAgent | undefined;
-}): Promise<GatewayOperator> {
+}): Effect.Effect<GatewayOperator, never, Scope.Scope> {
   let ids = 0;
-  const { service } = await scopedGatewayService({
-    brain: {
-      current: options.current,
-      agentForRun: options.current,
-      allRequests: () => options.current()?.requests() ?? [],
-      generationId: () => undefined,
-      // SAFETY: the submit path reaches no child; the stand-in is never read.
-      children: {} as ChildRunService,
-      // SAFETY: only the revision is ever read off this stand-in.
-      configuration: () => ({ revision: 1 }) as ResolvedConfiguration,
-      updateConfiguration: () => [],
-    },
-    // SAFETY: the submit path reaches no conversation operation; the stand-in is never read.
-    conversations: {} as ConversationOperations,
-    memory: { status: () => ({}) },
-    observedSessionCount: () => 0,
-    now: Date.now,
-    createId: () => `id-${++ids}`,
-  });
-  return createGatewayOperator({
-    client: new GatewayClient({
-      transport: new InProcessTransport(service.gateway, {
-        clientId: "test-operator",
-        role: GATEWAY_CLIENT_ROLE.OPERATOR,
-      }),
-      createId: () => `request-${++ids}`,
+  return Effect.map(
+    scopedGatewayService({
+      brain: {
+        current: options.current,
+        agentForRun: options.current,
+        allRequests: () => options.current()?.requests() ?? [],
+        generationId: () => undefined,
+        // SAFETY: the submit path reaches no child; the stand-in is never read.
+        children: {} as ChildRunService,
+        // SAFETY: only the revision is ever read off this stand-in.
+        configuration: () => ({ revision: 1 }) as ResolvedConfiguration,
+        updateConfiguration: () => [],
+      },
+      // SAFETY: the submit path reaches no conversation operation; the stand-in is never read.
+      conversations: {} as ConversationOperations,
+      memory: { status: () => ({}) },
+      observedSessionCount: () => 0,
+      now: Date.now,
+      createId: () => `id-${++ids}`,
     }),
-  });
+    (service) =>
+      createGatewayOperator({
+        client: new GatewayClient({
+          transport: new InProcessTransport(service.gateway, {
+            clientId: "test-operator",
+            role: GATEWAY_CLIENT_ROLE.OPERATOR,
+          }),
+          createId: () => `request-${++ids}`,
+        }),
+      }),
+  );
 }

@@ -445,9 +445,9 @@ the gateway's coordinator pipes, and `shutdownStepsFlushingEvents` and
 the step that begins it and joining it at the step that waits, so the
 `AbortSignal` the settling step used to be handed is the deadline's own
 interruption instead and `packages/gateway/src/shutdown.ts` is off the
-raw-primitive allowlist with it. Beside it is
+raw-primitive allowlist with it. Beside it was
 `scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
-the test's own edge while the host's own suites are plain `test` bodies
+the test's own edge while the host's own suites were plain `test` bodies
 rather than `it.effect`. `gatewayTestHost` stood beside it and P12-20e
 deleted it: the three gateway suites that held one build
 `gatewayInProcessHost` in the scope `it.scopedLive` gives each test,
@@ -455,7 +455,15 @@ append an event with the synchronous `publish` the log answers beside
 `emit`, and close the admissions door by yielding `admissions.close`, so
 nothing in `packages/gateway/src/testing.ts` runs an effect any more and
 the file is off the run allowlist; what is left in it is the text
-transport alone. The socket binding
+transport alone. P12-20e2 settled `scopedGatewayService` itself: it is
+`createGatewayService` under a test-facing name now, a plain
+`Effect.Effect<GatewayService, never, Scope.Scope>` the caller's own
+scope builds, with no run of its own left to allowlist.
+`operatorOverBrain` and `brainHarness` beneath it, which used to run it
+and hand a promise-shaped operator and harness to `service.test.ts`,
+`brain/publication.test.ts`, `brain/conversation-deletion.test.ts`, and
+`brain/host-lifecycle.test.ts`, are scoped effects in the same shape now,
+and those four suites yield them under `it.scoped`. The socket binding
 (`packages/gateway/src/websocket.ts`) never needed any of it: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
@@ -1584,7 +1592,6 @@ design decision stated as such:
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
-| `scopedGatewayService`, the host suites' own scoped build (`gatewayTestHost` was on this row and P12-20e deleted it, the gateway's three suites building the host in the scope `it.scopedLive` gives them) | P6-13 | P12-20e2 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P12-20e — deleted with the effect beneath it and its suite, since no caller ever composed either |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
