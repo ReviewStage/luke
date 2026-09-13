@@ -38,7 +38,7 @@ import {
   type LiveServerEventType,
 } from "../server/live";
 import { hostedLiveExchange } from "../server/voice/live-exchange";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { delegated, heard, sessionStarted } from "./support/live-events";
@@ -114,10 +114,7 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = promisedVoiceSessionRecord(
-  database.run,
-  voiceSessionRecord(() => NOW),
-);
+const sessionRecord = voiceSessionRecord(() => NOW);
 
 /** An eve session id of this test's own: the relay names a turn by session and eve turn, so a counted id would collide across the files that share one database on CI. */
 function mintEveSession(): string {
@@ -178,7 +175,7 @@ async function until(predicate: () => boolean, what: () => string): Promise<void
 /** The exchange composed over one scripted session, the way the voice service would compose it once it attaches. */
 async function stand(target: ConversationTarget, deviceId: string | undefined) {
   const liveSessionId = `sess_${randomUUID()}`;
-  await sessionRecord.register({ userId: target.userId, sessionId: liveSessionId });
+  await database.run(sessionRecord.register({ userId: target.userId, sessionId: liveSessionId }));
   if (deviceId !== undefined) {
     await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
   }

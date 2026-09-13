@@ -1,4 +1,3 @@
-import type { RawData } from "ws";
 import { isWireString, type UnparsedWireValue, VOICE_SERVICE_PATH } from "../core.js";
 import {
   decodeLivePayload,
@@ -50,14 +49,6 @@ const INTRODUCTION_SERVER_EVENTS: readonly string[] = RENDERER_SERVER_EVENTS.map
 );
 
 const INTRODUCTION_CLIENT_EVENTS: readonly string[] = RENDERER_CLIENT_EVENTS;
-
-/** The text of one socket frame; a binary frame is not a Live event and reads as nothing. */
-export function frameText(data: RawData, isBinary: boolean): string | undefined {
-  if (isBinary) return undefined;
-  if (Buffer.isBuffer(data)) return data.toString("utf8");
-  if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
-  return Buffer.from(data).toString("utf8");
-}
 
 /** The `type` of one frame, or nothing when the frame is not a JSON record naming one. */
 export function frameType(text: UnparsedWireValue): string | undefined {

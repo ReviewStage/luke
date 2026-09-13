@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
-import type { PromisedVoiceSessionRecord } from "../../server/voice/session-record";
+import type { VoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this
@@ -213,7 +214,7 @@ interface RecordedClose {
   reason: VoiceCloseReason;
 }
 
-export interface FakeSessionRecord extends PromisedVoiceSessionRecord {
+export interface FakeSessionRecord extends VoiceSessionRecord {
   registered: Array<{ userId: string; sessionId: string; deviceId?: string | undefined }>;
   /** The device rows the fake holds, by the account that holds each. */
   devices: Array<{ userId: string; deviceId: string }>;
@@ -222,7 +223,12 @@ export interface FakeSessionRecord extends PromisedVoiceSessionRecord {
   closes: RecordedClose[];
 }
 
-/** A session record that keeps one owner per live session, as the unique column does. */
+/**
+ * A session record that keeps one owner per live session, as the unique column
+ * does, and answers the same effects the real one does, so a test's service
+ * composes it exactly as the function's does and nothing here reaches a
+ * database.
+ */
 export function fakeSessionRecord(): FakeSessionRecord {
   const owners = new Map<string, string>();
   const fake: FakeSessionRecord = {
@@ -230,24 +236,26 @@ export function fakeSessionRecord(): FakeSessionRecord {
     devices: [],
     usage: [],
     closes: [],
-    async register(input) {
-      fake.registered.push(input);
-      if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
-    },
-    async deviceOwned(input) {
-      return fake.devices.some(
-        (device) => device.userId === input.userId && device.deviceId === input.deviceId,
-      );
-    },
-    async owned(input) {
-      return owners.get(input.sessionId) === input.userId;
-    },
-    async noteUsage(input) {
-      fake.usage.push(input);
-    },
-    async close(input) {
-      fake.closes.push(input);
-    },
+    register: (input) =>
+      Effect.sync(() => {
+        fake.registered.push(input);
+        if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
+      }),
+    deviceOwned: (input) =>
+      Effect.sync(() =>
+        fake.devices.some(
+          (device) => device.userId === input.userId && device.deviceId === input.deviceId,
+        ),
+      ),
+    owned: (input) => Effect.sync(() => owners.get(input.sessionId) === input.userId),
+    noteUsage: (input) =>
+      Effect.sync(() => {
+        fake.usage.push(input);
+      }),
+    close: (input) =>
+      Effect.sync(() => {
+        fake.closes.push(input);
+      }),
   };
   return fake;
 }

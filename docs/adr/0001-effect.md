@@ -466,20 +466,24 @@ runtime at all. `flush` and `drop` are effects the composer and the quit's
 drain yield, and the hold's one read is memoized where an effect is already
 running rather than by an `Effect.runSync` of `Effect.cached`.
 
-`createLiveUpstream` in `apps/web/server/voice/openai.ts` is on the
-same allowlist: the hosted voice function's OpenAI upstream is plain callback code over `ws`'s
-`WebSocket`, never an `Effect` composition, and P12-14 made `CallCredential`'s
-`authorization` an Effect so `accountCall` never bridges a caller's own
-`Promise` internally. `attach`'s one credential is `fixedBearer`'s, which
-answers `Effect.succeed` and nothing else, so `Effect.runSync` here runs no
-asynchronous work and defers nothing past the call that reads it;
-`Effect.runSync` stands in for the `await` this file held before the
-credential became an Effect. Beside it, since P12-20b deleted
-`createAccountCall`, `create` runs the one session request itself with
-`Effect.runPromise` over the client the upstream was built on — the door it
-awaited before ran exactly that, one file further down. Both go if this
-file's WebSocket plumbing is ever rebuilt over `@effect/platform`'s `Socket`,
-which no PR in this plan schedules.
+`createLiveUpstream` in `apps/web/server/voice/openai.ts` was on the same
+allowlist for two runs, and P12-20k deleted both by rebuilding this file's
+WebSocket plumbing over `@effect/platform`'s `Socket`, which is what the entry
+said would take them. `create` answers `Effect<LiveCreateResult>` over the
+client the upstream was built on rather than running that one session request
+where its promise began, and `attach` answers
+`Effect<WebSocket, SidebandNotAttached, Scope>`: the credential is yielded
+where `Effect.runSync` stood, the handshake is an `Effect.async` under
+`Effect.timeoutFail` where a `setTimeout` and a `new Promise` stood, and the
+socket is acquired with `Effect.acquireRelease`, so the session's own scope is
+what resumes and closes a sideband no pipe ever stood on. `relay.ts` left the
+primitive allowlist in the same PR: the pipe is an effect over two
+`VoiceSocket`s (`apps/web/server/voice/socket.ts`), each side's frames a
+`Stream` read by a fiber of the session's scope, its finalization a `Deferred`,
+and its two waits `Effect.sleep` forked into that scope.
+`apps/web/server/voice/service.ts` stays on the primitive allowlist for its own
+lifecycle alone — `listen`, `close`, and the promise per session `close` waits
+on — which is a `ws` server's own shape and not a session's; P12-20k2 takes it.
 
 `Runtime.runFork` in `packages/gateway/src/client.ts` is on the handed-runtime
 list, and it is all that is left of the door P6-13 named
@@ -1154,9 +1158,9 @@ stood, and the poll interval is the seam's effect rather than
 `node:timers/promises`; the frame bytes and the response's status and headers
 are untouched. The voice service's five socket-driven compositions —
 `hostedLiveExchange`, `hostedLiveBrain`, `hostedBriefings`,
-`hostedLiveRecord`, `voiceSessionRecord` — never read a fiber at all: they are
-handed `runWeb` by `voice/function.ts`, which composes them, and a test hands
-them the runner over its own test database. They now name that runner
+`hostedLiveRecord`, `voiceSessionRecord` — never read a fiber at all: the
+runner reaches them through `voice/function.ts`, which composes them, and a
+test hands that runner over its own test database. They now name that runner
 `WebStoreRun` in `server/runtime.ts`, the edge's own runner as a composition
 below it is handed one, rather than the fiber-reading type they are not.
 
@@ -1177,12 +1181,12 @@ delta's place in the record's own sequence is its arrival, and deferring the
 of deltas that reached the socket before it. `voiceSessionRecord` holds no
 runner at all now; its five methods answer
 `Effect<A, SqlError | ParseError, SqlClient>` like every other row module
-under `server/`, and `PromisedVoiceSessionRecord` beside them is the
-promise face `voice/function.ts` builds over `runWeb` for `VoiceService`,
-declared in the same file rather than mapped from the effects, since P12-18c
-moved `Promised<Methods>` out of `server/` and the service is a class of `ws`
-callbacks rather than a composition of fibers, which no PR in this plan
-rewrites.
+under `server/`. `PromisedVoiceSessionRecord` beside them was the promise face
+`voice/function.ts` built over `runWeb` for `VoiceService`, and P12-20k deleted
+it: the service is a composition of fibers now, so its one session effect
+yields those five where it awaited their promises, and the suites that read the
+row read it through `it.effect` over `testSqlClient` rather than through the
+door.
 
 P12-18d2 took the other two of the five, and the device read with them, so no
 composition below `exchangeAttachment` is handed a runner. `hostedBriefings`
@@ -1209,8 +1213,9 @@ submission were promises `@sidecar/voice` declared, so each read `SqlClient`
 once where it was built and ran those two over `runOverClient`, rather than a
 runner threaded down from the edge. P12-18g left them its only callers and
 P12-18h took both, below. `WebStoreRun` stays for `exchangeAttachment`, which opens the
-socket's scope on it rather than running in one, and for
-`promisedVoiceSessionRecord`.
+socket's scope on it rather than running in one, and for `VoiceService`, which
+is handed it as `VoiceServiceOptions.run` and runs one session's whole effect
+on it per upgrade.
 
 What took the fiber's promise face was the brain host, for two reasons that
 were neither of them eve's authorship. `runTool`'s seams took it because the
@@ -1800,7 +1805,6 @@ design decision stated as such:
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
-| `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P12-20j — deleted; `conversation-read.ts` and `events.ts` now answer `Effect.Effect<Response>` run at their edge's `runWeb`, and `devices-vault-app.ts`'s `devicesEffect` yields `RateBrake.check` directly, the last three promise-shaped hosted routes it stood for |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | never — P12-16c settled it: the fence must stay synchronous, so the row is bookkeeping rather than a deletion owed |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |

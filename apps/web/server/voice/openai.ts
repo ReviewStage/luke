@@ -1,7 +1,7 @@
 import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type Layer } from "effect";
+import { Data, Effect, Either, type Layer, type Scope } from "effect";
 import { WebSocket } from "ws";
 import {
   accountCall,
@@ -19,6 +19,7 @@ import {
   liveCreateAnswerSchema,
   liveCreateRequest,
 } from "../live.js";
+import { SOCKET_CLOSE_CODE } from "./relay.js";
 
 /**
  * How the service reaches OpenAI on Luke's project key: the one POST that
@@ -26,6 +27,12 @@ import {
  * attaches this service's sideband to it. The key travels as the bearer on
  * both and nowhere else; a failure is answered as an outcome name and a
  * status, never as an error whose words could carry the key.
+ *
+ * Both answer effects the session's own scope runs. The sideband is acquired
+ * in that scope, so a session refused after the attach, or a fiber interrupted
+ * while the handshake was still open, leaves no socket standing: the scope's
+ * close resumes it — a paused socket cannot complete its close handshake — and
+ * closes it.
  */
 
 const OPENAI_DEFAULTS = {
@@ -40,6 +47,9 @@ type LiveCreateResult =
   | { outcome: typeof LIVE_SESSION_OUTCOME.NETWORK_ERROR; errorName: string | undefined }
   | { outcome: typeof LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
 
+/** The sideband did not stand: the handshake was refused, failed, or ran past its wait. */
+class SidebandNotAttached extends Data.TaggedError("SidebandNotAttached") {}
+
 export interface LiveUpstreamOptions {
   apiKey: string;
   /** The API's `/v1` base; a test points it at a fake. The attach socket derives from the same base. */
@@ -50,9 +60,13 @@ export interface LiveUpstreamOptions {
 }
 
 export interface LiveUpstream {
-  create(config: LiveSessionConfig, sdpOffer: string): Promise<LiveCreateResult>;
-  /** Resolves once the sideband is open and paused, so nothing it speaks is emitted before a consumer listens, or rejects when it could not attach within the timeout. */
-  attach(sessionId: string): Promise<WebSocket>;
+  create(config: LiveSessionConfig, sdpOffer: string): Effect.Effect<LiveCreateResult>;
+  /**
+   * The sideband open and paused in the caller's scope, so nothing it speaks
+   * is emitted before every consumer listens; the caller resumes it once they
+   * do, and reads then what arrived meanwhile.
+   */
+  attach(sessionId: string): Effect.Effect<WebSocket, SidebandNotAttached, Scope.Scope>;
 }
 
 const WS_PROTOCOL = { SECURE: "wss:", PLAIN: "ws:", PLAIN_HTTP: "http:" } as const;
@@ -76,68 +90,66 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
   const attachTimeoutMs = options.attachTimeoutMs ?? OPENAI_DEFAULTS.ATTACH_TIMEOUT_MS;
 
   return {
-    async create(config, sdpOffer) {
-      // The upstream this file builds is plain `ws` callback code rather than
-      // an Effect composition, so the one request it makes is run here, where
-      // the promise it answers begins.
-      const answer = await Effect.runPromise(
-        Effect.provide(
-          call.send({
-            method: HTTP_METHOD.POST,
-            path: LIVE_SESSIONS_PATH,
-            body: JSON.stringify(liveCreateRequest(config, sdpOffer)),
-          }),
-          client,
-        ),
-      );
-      if (!callAnswered(answer)) {
-        return { outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR, errorName: answer.errorName };
-      }
-      if (!answer.response.ok) {
-        return { outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR, status: answer.response.status };
-      }
-      const payload = await answer.response.json().catch(() => undefined);
-      const created = Either.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
-      return created
-        ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
-        : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
-    },
+    create: (config, sdpOffer) =>
+      Effect.gen(function* () {
+        const answer = yield* call.send({
+          method: HTTP_METHOD.POST,
+          path: LIVE_SESSIONS_PATH,
+          body: JSON.stringify(liveCreateRequest(config, sdpOffer)),
+        });
+        if (!callAnswered(answer)) {
+          return { outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR, errorName: answer.errorName };
+        }
+        if (!answer.response.ok) {
+          return { outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR, status: answer.response.status };
+        }
+        const payload = yield* Effect.orElseSucceed(
+          Effect.tryPromise(() => answer.response.json()),
+          () => undefined,
+        );
+        const created = Either.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
+        return created
+          ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
+          : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
+      }).pipe(Effect.provide(client)),
 
-    async attach(sessionId) {
-      // The one credential this upstream ever holds is `fixedBearer`'s, which
-      // answers `Effect.succeed` and nothing else, so running it here defers
-      // no asynchronous work.
-      const authorization = credential.authorization && Effect.runSync(credential.authorization());
-      const socket = new WebSocket(attachAddress(baseUrl, sessionId), {
-        headers: authorization === undefined ? {} : { authorization },
-        followRedirects: false,
-      });
-      return new Promise<WebSocket>((resolve, reject) => {
-        const timer = setTimeout(() => {
-          socket.terminate();
-          reject(new Error("The sideband did not attach within its timeout"));
-        }, attachTimeoutMs);
-        socket.once("open", () => {
-          clearTimeout(timer);
-          // Paused here, inside the open handler, and not by the caller: the
-          // bytes that followed the handshake response are re-queued on the
-          // stream and flushed on the next tick, which runs before any promise
-          // continuation, so a frame in that same chunk would otherwise be
-          // emitted to nobody. The service resumes the socket once every
-          // consumer listens, and reads then what arrived meanwhile.
-          socket.pause();
-          resolve(socket);
-        });
-        socket.once("error", (error) => {
-          clearTimeout(timer);
-          reject(error);
-        });
-        socket.once("unexpected-response", (_request, response) => {
-          clearTimeout(timer);
-          socket.terminate();
-          reject(new Error(`The attach handshake was refused with status ${response.statusCode}`));
-        });
-      });
-    },
+    attach: (sessionId) =>
+      Effect.gen(function* () {
+        const authorization = credential.authorization && (yield* credential.authorization());
+        const socket = yield* Effect.acquireRelease(
+          Effect.sync(
+            () =>
+              new WebSocket(attachAddress(baseUrl, sessionId), {
+                headers: authorization === undefined ? {} : { authorization },
+                followRedirects: false,
+              }),
+          ),
+          (open) =>
+            Effect.sync(() => {
+              // Resumed first: a paused socket cannot complete its close handshake.
+              open.resume();
+              open.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+            }),
+        );
+        yield* Effect.async<void, SidebandNotAttached>((resume) => {
+          socket.once("open", () => {
+            // Paused here, inside the open handler, and not by the caller: the
+            // bytes that followed the handshake response are re-queued on the
+            // stream and flushed on the next tick, which runs before any fiber
+            // continuation, so a frame in that same chunk would otherwise be
+            // emitted to nobody.
+            socket.pause();
+            resume(Effect.void);
+          });
+          socket.once("error", () => resume(Effect.fail(new SidebandNotAttached())));
+          socket.once("unexpected-response", () => resume(Effect.fail(new SidebandNotAttached())));
+        }).pipe(
+          Effect.timeoutFail({
+            duration: attachTimeoutMs,
+            onTimeout: () => new SidebandNotAttached(),
+          }),
+        );
+        return socket;
+      }),
   };
 }

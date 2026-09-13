@@ -10,12 +10,12 @@ import {
 import {
   desktopFrameDecision,
   FRAME_DECISION,
-  frameText,
   frameType,
   routeForPath,
   upstreamFrameDecision,
   VOICE_ROUTE,
 } from "../server/voice/frames";
+import { frameBytes, frameText } from "../server/voice/socket";
 
 test("the two upgrade paths map to the two routes and nothing else does", () => {
   assert.equal(routeForPath(VOICE_SERVICE_PATH.SESSIONS), VOICE_ROUTE.SESSIONS);
@@ -32,11 +32,11 @@ test("a frame's type is read from its JSON record alone", () => {
   assert.equal(frameType(undefined), undefined);
 });
 
-test("a binary frame reads as nothing and a text frame as its text", () => {
-  assert.equal(frameText(Buffer.from("{}"), true), undefined);
-  assert.equal(frameText(Buffer.from("{}"), false), "{}");
-  assert.equal(frameText([Buffer.from("{"), Buffer.from("}")], false), "{}");
-  assert.equal(frameText(new Uint8Array([123, 125]).buffer, false), "{}");
+test("a binary frame reads as nothing, a text frame as its text, and each counts the bytes it carried", () => {
+  assert.equal(frameText({ bytes: Buffer.from("{}") }), undefined);
+  assert.equal(frameText({ text: "{}" }), "{}");
+  assert.equal(frameBytes({ bytes: new Uint8Array([123, 125]) }), 2);
+  assert.equal(frameBytes({ text: "é" }), 2);
 });
 
 test("reflected audio is dropped by type toward the desktop on both routes", () => {

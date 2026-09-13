@@ -46,7 +46,7 @@ import {
 } from "../server/live";
 import { hostedLiveRecord } from "../server/voice/live-record";
 import { observedSideband } from "../server/voice/live-sideband";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { delegated, heard, said, sessionStarted, thinkingAppended } from "./support/live-events";
 import {
@@ -81,10 +81,7 @@ const TOOLS: ToolSet = {
 };
 
 const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
-const sessionRecord = promisedVoiceSessionRecord(
-  database.run,
-  voiceSessionRecord(() => NOW),
-);
+const sessionRecord = voiceSessionRecord(() => NOW);
 const writer = voiceWriter({ store });
 
 /**
@@ -97,7 +94,7 @@ async function target(registered = true): Promise<VoiceTarget> {
   const userId = await database.createUser();
   const conversationId = await insertConversation(database.run, { userId });
   const liveSessionId = `sess_${randomUUID()}`;
-  if (registered) await sessionRecord.register({ userId, sessionId: liveSessionId });
+  if (registered) await database.run(sessionRecord.register({ userId, sessionId: liveSessionId }));
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 

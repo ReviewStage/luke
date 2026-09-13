@@ -259,11 +259,10 @@ provider-key vault's `server/hosted/vault-key-store.ts` are on the same client;
 `server/hosted/speech-push.ts` reads the account's devices through it too,
 beside the speech module's own reads, and `server/voice/session-record.ts` is
 on it whole, each of its five methods answering an effect over the live
-session row rather than running one: `PromisedVoiceSessionRecord` and the
-`promisedVoiceSessionRecord` that builds one, in the same file, are the
-promise face `voice/function.ts` holds over `runWeb`, since
-`VoiceService` is a class of `ws` callbacks and a registration, a usage
-snapshot, and a close each fire from one of them.
+session row rather than running one. `VoiceService` yields those five
+directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
+`voice/function.ts` hands it, so the registration, the usage snapshot, and the
+close are steps of that effect rather than promises a callback awaited.
 `hostedStore()` takes the payload key ring and nothing else, and answers an
 `Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
 composes a store read into whatever it already runs. What still holds a
@@ -689,6 +688,21 @@ desktop untouched except `session.input_audio.append` and
 Luke's never transit the service. It keeps no conversation, reads no frame
 past its `type`, and logs status codes, outcome names, and counts.
 
+One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
+function hands the service. Both sockets are the platform's:
+`server/voice/socket.ts` reads a `ws` socket through
+`@effect/platform`'s `Socket`, a fiber of that scope filling a mailbox with
+every frame in arrival order, so the opening frame is taken from the same
+reader the relay then streams the rest from and nothing between the two lands
+nowhere. `server/voice/relay.ts` pipes the two streams, settles on a
+`Deferred`, and arms its graceful-close and opening waits as `Effect.sleep`
+forked into that scope; `server/voice/openai.ts` answers effects for both the
+session create and the sideband attach, the sideband acquired with
+`Effect.acquireRelease` so a session that ends, however it ends, leaves no
+socket standing. A socket handed over by `ws` is paused until its reader
+stands, because `ws` emits a frame to whoever listens at that instant and the
+reader is a fiber away.
+
 `/api/voice/introduction` takes a fresh install with no account, under the
 same durable shared daily ceiling the introduction mint spends
 (`spendIntroductionMeter`, the `introduction_usage` row), taken only once a
@@ -879,11 +893,11 @@ socket admits many listeners, so the relay keeps piping raw frames to the
 desktop unchanged while the exchange reads parsed events through its
 record-observing sideband. The upstream hands the sideband over paused,
 inside its own open handler, because the bytes after the handshake response
-are re-queued and flushed on the next tick, before any promise continuation;
+are re-queued and flushed on the next tick, before any fiber continuation;
 the service resumes it once both consumers listen, so what the session spoke
 while the exchange stood is read then, by both, in order, and a desktop that
 went meanwhile is answered nothing, its exchange stopped and its sideband
-released rather than left standing for the invocation. The exchange adopts rather than
+left to the session's scope rather than standing for the invocation. The exchange adopts rather than
 creates (`LiveSessionService.adoptSession`): the desktop's create frame
 seeded the session, and a second seed would put the recent lines into the
 conversation twice. A fresh connection re-attached to a running session

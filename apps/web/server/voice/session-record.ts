@@ -7,7 +7,6 @@ import {
   type VoiceCloseReason,
 } from "../db/voice-vocabulary.js";
 import { findHeldDevice } from "../hosted/device-store.js";
-import type { WebStoreRun } from "../runtime.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.
@@ -77,20 +76,6 @@ export interface VoiceSessionRecord {
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<boolean>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
-}
-
-/**
- * The record as `VoiceService` takes it: the same five, each run to a promise
- * on the edge's own runner, since the service is a class of `ws` callbacks
- * rather than a composition of fibers and a registration, a usage snapshot,
- * and a close each fire from one of those callbacks.
- */
-export interface PromisedVoiceSessionRecord {
-  register(input: VoiceSessionRegistration): Promise<void>;
-  deviceOwned(input: VoiceSessionDeviceClaim): Promise<boolean>;
-  owned(input: VoiceSessionOwnership): Promise<boolean>;
-  noteUsage(input: VoiceSessionUsage): Promise<void>;
-  close(input: VoiceSessionClose): Promise<void>;
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -206,23 +191,5 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         closeReason: input.reason,
         usage: usage(input.seconds, true),
       }),
-  };
-}
-
-/**
- * The promise face above, built over an edge's runner: the effects are what a
- * test composes and what this runs, and the runner is always one built at an
- * edge, never one this module makes.
- */
-export function promisedVoiceSessionRecord(
-  run: WebStoreRun,
-  record: VoiceSessionRecord,
-): PromisedVoiceSessionRecord {
-  return {
-    register: (input) => run(record.register(input)),
-    deviceOwned: (input) => run(record.deviceOwned(input)),
-    owned: (input) => run(record.owned(input)),
-    noteUsage: (input) => run(record.noteUsage(input)),
-    close: (input) => run(record.close(input)),
   };
 }

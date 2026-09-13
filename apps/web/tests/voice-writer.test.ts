@@ -29,7 +29,7 @@ import {
 } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
 import {
@@ -65,10 +65,7 @@ const TOOLS: ToolSet = {
 };
 
 const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
-const record = promisedVoiceSessionRecord(
-  database.run,
-  voiceSessionRecord(() => NOW),
-);
+const record = voiceSessionRecord(() => NOW);
 const speech = { writer: store };
 /** The installation the fixture sessions belong to, which is the device a briefing must be claimed by before its speech is marked. */
 const DEVICE_ID = "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50";
@@ -86,7 +83,7 @@ async function target(): Promise<VoiceTarget> {
   const conversationId = await insertConversation(database.run, { userId });
   liveSessions += 1;
   const liveSessionId = `sess_fixture_${liveSessions}`;
-  await record.register({ userId, sessionId: liveSessionId });
+  await database.run(record.register({ userId, sessionId: liveSessionId }));
   await setVoiceSessionDeviceId(database.run, liveSessionId, DEVICE_ID);
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
@@ -195,10 +192,10 @@ test("segments after a gap land on the same open row, from a fresh writer, with 
   const live = await target();
   const first = writer();
   await database.run(first.consume(live, heard("before the gap", 1000, 2000)));
-  await record.noteUsage({ sessionId: live.liveSessionId, seconds: 12 });
+  await database.run(record.noteUsage({ sessionId: live.liveSessionId, seconds: 12 }));
 
   const attached = writer();
-  await record.register({ userId: live.userId, sessionId: live.liveSessionId });
+  await database.run(record.register({ userId: live.userId, sessionId: live.liveSessionId }));
   assert.deepEqual(
     await database.run(attached.consume(live, heard("after the gap", 900_000, 901_000))),
     WRITTEN,
