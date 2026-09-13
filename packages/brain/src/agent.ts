@@ -19,7 +19,7 @@ import { Effect, Either, Exit, PubSub, Runtime, Scope, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
-import { type Carry, carryOn } from "./effect/carry.js";
+import { type Detach, detachOn } from "./effect/carry.js";
 import { joinedOnce } from "./effect/once.js";
 import {
   type BrainPersistedState,
@@ -244,7 +244,7 @@ export class BrainAgent {
   readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
   readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
-  readonly #carry: Carry;
+  readonly #detached: Detach;
   readonly #execution: ExecutionRuntime;
   readonly #generations = new GenerationHolder();
   readonly #lease: BrainStoreLease;
@@ -344,7 +344,7 @@ export class BrainAgent {
       });
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
     this.#execution = options.execution ?? Runtime.defaultRuntime;
-    this.#carry = carryOn(this.#execution);
+    this.#detached = detachOn(this.#execution);
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
       store: options.store,
@@ -850,14 +850,19 @@ export class BrainAgent {
    * it before this returns. Every turn nobody waits for goes through here —
    * the ask ledger's drain, the wake window's flush and its roster look, the
    * housekeeping a settled turn leaves behind, and a hold's release — because
-   * the runtime starts the work on the calling stack: the turn takes its
-   * place in the conversation's queue, and is counted busy, in the same step
-   * that asked for it. `Effect.forkDaemon` would only schedule the fiber, and
-   * a stop arriving before it ran would drain a queue the turn had not yet
-   * joined.
+   * `detachOn` starts the work on the calling stack: `#enqueue`'s own
+   * acquisition is the fiber's first step, so the turn takes its place in the
+   * conversation's queue, and is counted busy, in the same step that asked for
+   * it. `Effect.forkDaemon` would only schedule the fiber, and a stop or a
+   * host reading `busy()` between the fork and the scheduler task would find a
+   * queue the turn had not yet joined. The fiber is dropped rather than held:
+   * what the conversation is drained by is the queue, which this turn is
+   * already counted in, and a defect nobody is left to observe is logged as
+   * the fiber's own unhandled error rather than thrown into a promise nobody
+   * holds.
    */
   #detach(work: Effect.Effect<unknown>): void {
-    void this.#carry(work);
+    this.#detached(work);
   }
 
   #generationFrom(state: BrainPersistedState): Generation {

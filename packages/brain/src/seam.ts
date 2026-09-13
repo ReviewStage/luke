@@ -19,7 +19,9 @@ export interface AgentSeam {
    * edge that holds nothing open while it runs: the queue's own drain, and
    * the wake window's flush, each a callback a timer calls with nowhere to
    * answer. The fiber is the agent's, so what it detaches is still a turn of
-   * the runtime every turn of this conversation is one of.
+   * the runtime every turn of this conversation is one of, and it is begun on
+   * the calling stack, so the turn is standing in the conversation's queue,
+   * counted busy, by the time this returns.
    */
   readonly detach: (work: Effect.Effect<unknown>) => void;
   readonly schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
