@@ -15,7 +15,6 @@ import {
   LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
-  type LiveServerEvent,
   type LiveServerEventType,
   PREFETCH_DEBOUNCE_MS,
   PROACTIVE_SPEECH_KIND,
@@ -30,15 +29,26 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { type Clock, Duration, Effect, Fiber, Layer, Option, type Scope, TestClock } from "effect";
+import {
+  type Clock,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  type Scope,
+  type Stream,
+  TestClock,
+} from "effect";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
+import { holdSocket, type SocketHold } from "../held-socket.js";
 import {
   type LiveSessionOpened,
   type LiveSessionSource,
   SidebandAttachFailed,
 } from "../live-session-source.js";
-import type { LiveSideband, SocketClose } from "../live-socket.js";
+import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
@@ -73,21 +83,17 @@ class FakeSideband implements LiveSideband {
   closed = false;
   /** Whether a thinking append is acknowledged the instant it is sent, as the session does for an append that speaks nothing; a test that watches one wait turns this off. */
   acknowledgeThinkingAtOnce = true;
-  readonly #events = new Set<(event: LiveServerEvent) => void>();
-  readonly #closes = new Set<(close: SocketClose) => void>();
+  /** The hold a real socket has beneath its sideband, so what a test says before the session reads is held exactly as it would be. */
+  readonly #hold: SocketHold = holdSocket({
+    send: () => undefined,
+    close: () => {
+      this.closed = true;
+    },
+  });
+  readonly #sideband: LiveSideband = sidebandOverSocket(this.#hold.socket);
 
-  onEvent(listener: (event: LiveServerEvent) => void): () => void {
-    this.#events.add(listener);
-    return () => {
-      this.#events.delete(listener);
-    };
-  }
-
-  onClose(listener: (close: SocketClose) => void): () => void {
-    this.#closes.add(listener);
-    return () => {
-      this.#closes.delete(listener);
-    };
+  get arrivals(): Stream.Stream<SidebandArrival> {
+    return this.#sideband.arrivals;
   }
 
   send(event: LiveClientEvent): Effect.Effect<void> {
@@ -99,19 +105,19 @@ class FakeSideband implements LiveSideband {
     });
   }
 
-  readonly close = Effect.sync(() => {
-    this.closed = true;
-  });
+  get close(): Effect.Effect<void> {
+    return this.#sideband.close;
+  }
 
   /** Delivers one server event as the socket would, through the same parser the real sideband uses. */
   receive(payload: WireRecord): void {
-    const event = parseLiveServerEvent(JSON.stringify(payload));
-    assert.ok(event, `a test event must parse: ${JSON.stringify(payload)}`);
-    for (const listener of [...this.#events]) listener(event);
+    const frame = JSON.stringify(payload);
+    assert.ok(parseLiveServerEvent(frame), `a test event must parse: ${frame}`);
+    this.#hold.hear({ frame });
   }
 
   dropConnection(): void {
-    for (const listener of [...this.#closes]) listener({ code: 1006 });
+    this.#hold.hear({ close: { code: 1006 } });
   }
 
   /** Acknowledges the append sent at the given index, on the session timeline given. */
@@ -460,6 +466,7 @@ it.scoped(
       assert.equal(f.service.sessionStands(), true);
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED]);
       f.sidebands[0]?.started("sess-1");
+      yield* settle();
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
       assert.deepEqual(
         f.traces.map((trace) => trace.decision),
@@ -862,14 +869,17 @@ it.scoped(
       sideband.acknowledge(0, 5000, 5200);
       yield* settle();
       sideband.output("Nuku", 5100, 5150);
+      yield* settle();
       assert.deepEqual(f.spoken, []);
       sideband.output("alofa is done.", 5150, 5400);
+      yield* settle();
       assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING]);
       sideband.receive({
         type: LIVE_SERVER_EVENT.ERROR,
         event_id: "err",
         error: { code: "moderation" },
       });
+      yield* settle();
       assert.deepEqual(
         f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.UNSETTLED).length,
         1,
@@ -986,6 +996,7 @@ it.scoped(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
       sideband.acknowledge(1, 300, 400);
       sideband.output("Connect your calendar.", 500, 900);
+      yield* settle();
       assert.deepEqual(f.spoken, [
         PROACTIVE_SPEECH_KIND.BRIEFING,
         PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
@@ -1030,6 +1041,7 @@ it.scoped(
         event_id: "u2",
         usage: { seconds: 305 },
       });
+      yield* settle();
       assert.equal(f.service.status().usageSeconds, 305);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 310);
       yield* settle();
@@ -2039,6 +2051,7 @@ it.scoped(
       sideband.input("What is", 1000, 1300);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       sideband.input(" abc doing", 1300, 1800);
+      yield* settle();
       brain.facts({ rowId: 1, text: "stale" });
       brain.facts({ rowId: 9, text: "unknown row" });
       yield* settle();

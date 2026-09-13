@@ -366,24 +366,34 @@ fiber of the same scope rather than a promise chain, each acknowledgment a
 `Effect` whose timeout is the ambient `Clock`'s, which is why both are off
 `rawAsyncPrimitives`. A test drives all of it from a `TestClock` it already
 stands on, and `packages/host/src/compose-live.ts` builds no timer bridge.
-What is left for P12-18h4 is the standing session's socket and its listeners,
-which are still stood up and torn down by hand rather than released by a child
-scope's `acquireRelease`, and P12-20i2 found what that waits on. `#tearDown`
-is a synchronous method whose side effects run where it is called and whose
-returned effect is what the caller runs afterwards, and the three callers that
-matter — a `session.closed` frame, a close on the sideband, and a failed peer
-transport — are socket callbacks, which can only offer that effect to the
+What is left for P12-18h4 is the standing session's socket, still stood up and
+torn down by hand rather than released by a child scope's `acquireRelease`,
+and P12-20i2 found what that waits on. `#tearDown` is a synchronous method
+whose side effects run where it is called and whose returned effect is what
+the caller runs afterwards, and the three callers that matter — a
+`session.closed` frame, a close on the sideband, and a failed peer
+transport — were socket callbacks, which can only offer that effect to the
 service's task queue. Releasing the sideband from a scope would put its close
 in the deferred half while `ended` and `#standing` are cleared in the eager
 one, so a `stop` arriving between the two would find no session standing and
 leave the socket open. P12-20i2b took the socket's own frames onto a `Stream`
-beneath the sideband, and those three callers are still callbacks all the
-same, because what the service reads is `LiveSideband`'s `onEvent` and
-`onClose`: the pump that reads the socket dispatches to them from a fiber, and
-a fiber's dispatch into a callback is still a callback at the far end.
-P12-20i2c is the sideband's own events and closes as a stream the service
-consumes, and P12-18h4 follows it; until then the hand-written unwind is what
-keeps the session over at the instant it is declared over.
+beneath the sideband; P12-20i2c took the sideband's own events and closes onto
+one too, and with that the first two of those three callers are fibers. A
+standing session is read by one fiber of `#sessions` (`#read`), and what it
+reads it acts on where it reads it: a `session.closed` and a close that ends
+the arrivals are settled for whoever is closing gracefully and then torn down
+by that same fiber, which waits for the close `#tearDown` hands back instead
+of offering it. `reportTransport` is the one caller left that offers, because
+the peer's transport is reported to the service from outside the session
+altogether.
+
+What P12-18h4 has still to settle is which fiber closes the session's scope.
+A reader forked into that scope cannot close it — the close's own finalizer
+interrupts the fiber running it — so the tear-down a reader begins has to end
+the reader's body rather than interrupt it, and a tear-down begun outside has
+to interrupt the reader and wait for that body's finalizer. Until that is
+written, the hand-written unwind is what keeps the session over at the instant
+it is declared over.
 
 What P12-20i2b did settle is which scope a session stands in. A sideband now
 leaves a fiber reading its socket behind it, and the graceful close speaks to
@@ -1169,10 +1179,10 @@ the two seams where it awaited them.
 P12-20i2b took the frames themselves off callbacks. A `LiveSocket` hands up
 one `Stream` of arrivals — every frame the far side sent and then the close
 that ended it — which one consumer runs in its own scope, and
-`sidebandOverSocket` answers `Effect<LiveSideband, never, Scope>`: it forks
-the fiber that reads that stream into the scope `attach` was yielded in, so
-closing the scope ends the reading. The hold is what makes a stream safe
-there. `holdSocket` no longer wraps a socket; it is what a transport makes one
+`sidebandOverSocket` answered `Effect<LiveSideband, never, Scope>`, forking
+the fiber that read that stream into the scope `attach` was yielded in, which
+P12-20i2c below took away with the listeners it was pumping. The hold is what
+makes a stream safe there. `holdSocket` no longer wraps a socket; it is what a transport makes one
 from, taking the two verbs it answers for and handing back the socket and the
 one hand — `hear` — the transport calls from inside its own handler, where no
 fiber runs. That keeps the guarantee `ws` forces: the bytes that followed the
@@ -1187,8 +1197,23 @@ session's scope reads each connection to its end, and because a connection's
 close is the arrival that ends its stream, standing the next one up is the
 next step of that same fiber rather than something a callback forks. A hang-up
 is a `Deferred` the recovery races, so the attempt in flight is interrupted
-and closes what it opened. What is still a callback is what the sideband
-itself hands out, which P12-20i2c is for.
+and closes what it opened.
+
+P12-20i2c took the last of it. A `LiveSideband` hands up one `Stream` of
+arrivals of its own — the events it reads and the close that ended them — and
+`sidebandOverSocket` is a plain function over the socket's stream rather than
+a scoped effect with a pump fiber: the hold it used to keep for a listener
+that had not come yet was a second hold over the socket's, so deleting the
+pump deleted the hold with it, and what a session says before its reader comes
+is held once, by the socket, bounded where `holdSocket` bounds it. A sideband
+has one consumer, which is what makes `Stream.tap` enough for
+`observedSideband`'s observation on the hosted tier: the record sees each
+event once, on its way past that reader, in the order the session emitted it.
+The graceful close was the second listener that shape had no room for, and it
+does not need to be one: `closeGracefully` takes the session's last word as an
+effect the reader settles (`settled`), so the final event cannot be missed
+between the send and a subscription that came after it, and what the close
+itself owns is the send, the timeout, and the release of the transport.
 
 `fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` was on this
 allowlist from P10-16, the PR that deleted `HostedStoreRun` and

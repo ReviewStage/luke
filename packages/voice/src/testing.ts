@@ -1,7 +1,14 @@
+import type { LiveServerEvent } from "@sidecar/live";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, type Stream } from "effect";
+import { Effect, type Scope, Stream } from "effect";
 import { type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";
-import type { OpenSocket, SocketArrival, SocketClose, SocketOpening } from "./live-socket.js";
+import type {
+  LiveSideband,
+  OpenSocket,
+  SocketArrival,
+  SocketClose,
+  SocketOpening,
+} from "./live-socket.js";
 
 /**
  * A scripted socket for the sources' tests: what the source sent is kept,
@@ -96,4 +103,32 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
       return answer(socket) ?? { socket };
     });
   return { openSocket, opens, sockets };
+}
+
+/** What one reader of a sideband heard, in arrival order: the events it read, then the close that ended them. */
+export interface SidebandReading {
+  readonly events: LiveServerEvent[];
+  readonly closes: SocketClose[];
+}
+
+/**
+ * Reads a sideband the way the session's own reader does — one consumer, on a
+ * fiber of the scope this is yielded in — and answers what it has heard so
+ * far, which a test reads after giving that fiber its turns.
+ */
+export function readSideband(
+  sideband: LiveSideband,
+): Effect.Effect<SidebandReading, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const reading: SidebandReading = { events: [], closes: [] };
+    yield* Effect.forkScoped(
+      Stream.runForEach(sideband.arrivals, (arrival) =>
+        Effect.sync(() => {
+          if ("close" in arrival) reading.closes.push(arrival.close);
+          else reading.events.push(arrival.event);
+        }),
+      ),
+    );
+    return reading;
+  });
 }

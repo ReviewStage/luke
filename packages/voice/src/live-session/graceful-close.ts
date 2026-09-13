@@ -1,10 +1,5 @@
-import {
-  closeEvent,
-  LIVE_SERVER_EVENT,
-  type LiveServerEvent,
-  type LiveSessionClosed,
-} from "@sidecar/live";
-import { Deferred, Duration, Effect, Exit } from "effect";
+import { closeEvent, type LiveSessionClosed } from "@sidecar/live";
+import { Duration, Effect } from "effect";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
 
 /**
@@ -33,54 +28,40 @@ export type SidebandCloseResult =
 
 export interface GracefulCloseOptions {
   eventId: string;
+  /**
+   * The session's last word as its own reader hands it up: the
+   * `session.closed` it read, or the close that ended the arrivals before
+   * one came. A sideband has one consumer, so the close asks the reader
+   * that already stands rather than listening beside it, which is what
+   * makes the final event impossible to miss between the send and a
+   * listener registered after it.
+   */
+  settled: Effect.Effect<SidebandCloseResult>;
   timeoutMs?: number;
 }
 
 /**
- * Closes a session the way the guide says to: the `session.closed` listener
- * is registered first, then `session.close` is sent, and the sideband is held
- * open until the final event, the socket's own end, or the timeout. The
- * listeners and the transport are a scope of this close's own, released in
- * that order and only after one of those three; a socket closed first would
- * leave the final usage unconfirmed by the caller's own hand. The wait is the
- * ambient `Clock`'s, so whoever runs this close runs its timeout too: a test
- * on a `TestClock` gives up when it says so, and the fiber that gave up
- * closes the scope on its way out exactly as the timeout does.
+ * Closes a session the way the guide says to: `session.close` is sent and the
+ * sideband is held open until the reader's last word, or the timeout. The
+ * transport is released only after one of the two; a socket closed first
+ * would leave the final usage unconfirmed by the caller's own hand, so the
+ * release is this close's own finalizer and runs on an interruption as well.
+ * The wait is the ambient `Clock`'s, so whoever runs this close runs its
+ * timeout too: a test on a `TestClock` gives up when it says so.
  */
 export function closeGracefully(
   sideband: LiveSideband,
   options: GracefulCloseOptions,
 ): Effect.Effect<SidebandCloseResult> {
-  return Effect.scoped(
-    Effect.gen(function* () {
-      const settled = yield* Deferred.make<SidebandCloseResult>();
-      const finish = (result: SidebandCloseResult) => {
-        Deferred.unsafeDone(settled, Exit.succeed(result));
-      };
-      yield* Effect.addFinalizer(() => sideband.close);
-      yield* Effect.acquireRelease(
-        Effect.sync(() => ({
-          stopEvents: sideband.onEvent((event: LiveServerEvent) => {
-            if (event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
-              finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: event });
-            }
-          }),
-          stopClose: sideband.onClose((close) =>
-            finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST, close }),
-          ),
-        })),
-        ({ stopEvents, stopClose }) =>
-          Effect.sync(() => {
-            stopEvents();
-            stopClose();
-          }),
-      );
-      yield* sideband.send(closeEvent(options.eventId));
-      return yield* Effect.timeoutTo(Deferred.await(settled), {
+  return Effect.ensuring(
+    Effect.zipRight(
+      sideband.send(closeEvent(options.eventId)),
+      Effect.timeoutTo(options.settled, {
         duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
         onSuccess: (result: SidebandCloseResult) => result,
         onTimeout: (): SidebandCloseResult => ({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
-      });
-    }),
+      }),
+    ),
+    sideband.close,
   );
 }

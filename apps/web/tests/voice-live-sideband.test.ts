@@ -4,16 +4,11 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
 import { sidebandOverSocket } from "@sidecar/voice/live-session";
-import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { Effect } from "effect";
+import { FakeLiveSocket, readSideband } from "@sidecar/voice/testing";
+import { Effect, Stream } from "effect";
 import { onTestFinished } from "vitest";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import {
-  closeEvent,
-  LIVE_CLIENT_EVENT,
-  LIVE_SERVER_EVENT,
-  type LiveServerEvent,
-} from "../server/live";
+import { closeEvent, LIVE_CLIENT_EVENT, LIVE_SERVER_EVENT } from "../server/live";
 import { observedSideband, upstreamSideband } from "../server/voice/live-sideband";
 
 /** OpenAI's end of one attach, stood up on this machine: what it sends the sideband hears, what the sideband sends it keeps. */
@@ -57,10 +52,7 @@ it.scopedLive(
       const remote = yield* Effect.promise(() => upstream());
       onTestFinished(() => remote.close());
       const sideband = yield* upstreamSideband(remote.client);
-      const heard: LiveServerEvent[] = [];
-      const closes: number[] = [];
-      sideband.onEvent((event) => heard.push(event));
-      sideband.onClose((close) => closes.push(close.code ?? -1));
+      const read = yield* readSideband(sideband);
 
       remote.far.send(Buffer.from([1, 2, 3]), { binary: true });
       remote.far.send(
@@ -75,11 +67,11 @@ it.scopedLive(
         }),
       );
       yield* sideband.send(closeEvent("close-1"));
-      while (remote.received.length === 0 || heard.length === 0) {
+      while (remote.received.length === 0 || read.events.length === 0) {
         yield* pause;
       }
       assert.deepEqual(
-        heard.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],
       );
       assert.deepEqual(
@@ -88,10 +80,13 @@ it.scopedLive(
       );
 
       remote.far.close(1000);
-      while (closes.length === 0) {
+      while (read.closes.length === 0) {
         yield* pause;
       }
-      assert.deepEqual(closes, [1000]);
+      assert.deepEqual(
+        read.closes.map((close) => close.code ?? -1),
+        [1000],
+      );
     }),
 );
 
@@ -100,42 +95,39 @@ function started(id: string) {
 }
 
 it.scopedLive(
-  "an observed sideband hands each event to the observer once, ahead of every listener, replay included, and the sends and close pass through",
+  "an observed sideband hands each event to the observer once, ahead of the reader that runs its arrivals, replay included, and the sends and close pass through",
   () =>
     Effect.gen(function* () {
       const socket = new FakeLiveSocket();
       const observed: string[] = [];
       const order: string[] = [];
-      const sideband = observedSideband(yield* sidebandOverSocket(socket), (event) => {
+      const closes: (number | undefined)[] = [];
+      const sideband = observedSideband(sidebandOverSocket(socket), (event) => {
         observed.push("event_id" in event ? event.event_id : "");
         order.push("observer");
       });
 
-      // Said before anyone listened: held by the socket, read by the sideband, replayed at the
-      // first listener. The pause between each is the reading fiber's own turn.
+      // Said before anyone read: held by the socket, observed and read when the
+      // session's one reader comes. The pause between each is that reader's turn.
       socket.receive(started("early"));
       yield* pause;
-      const stopFirst = sideband.onEvent(() => order.push("first"));
-      sideband.onEvent(() => order.push("second"));
+      yield* Effect.forkScoped(
+        Stream.runForEach(sideband.arrivals, (arrival) =>
+          Effect.sync(() => {
+            if ("close" in arrival) closes.push(arrival.close.code);
+            else order.push("reader");
+          }),
+        ),
+      );
+      yield* pause;
       socket.receive(started("late"));
       yield* pause;
-      stopFirst();
       socket.receive(started("later"));
       yield* pause;
 
       assert.deepEqual(observed, ["started-early", "started-late", "started-later"]);
-      assert.deepEqual(order, [
-        "observer",
-        "first",
-        "observer",
-        "first",
-        "second",
-        "observer",
-        "second",
-      ]);
+      assert.deepEqual(order, ["observer", "reader", "observer", "reader", "observer", "reader"]);
 
-      const closes: (number | undefined)[] = [];
-      sideband.onClose((close) => closes.push(close.code));
       yield* sideband.send(closeEvent("c"));
       socket.closeFromServer({ code: 1006 });
       yield* pause;

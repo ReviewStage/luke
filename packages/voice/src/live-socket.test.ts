@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { closeEvent, LIVE_SERVER_EVENT, type LiveServerEvent, thinkingAppend } from "@sidecar/live";
+import { closeEvent, LIVE_SERVER_EVENT, thinkingAppend } from "@sidecar/live";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { SOCKET_OPEN_FAULT, sidebandOverSocket, socketOpened } from "./live-socket.js";
-import { FakeLiveSocket } from "./testing.js";
+import { FakeLiveSocket, readSideband } from "./testing.js";
 
-/** Lets the fiber pumping the socket's arrivals read what the far side has said. */
+/** Lets the fiber reading the sideband's arrivals read what the far side has said. */
 function settle() {
   return Effect.gen(function* () {
     for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
@@ -17,9 +17,7 @@ it.effect("a sideband parses the socket's frames and drops reflected audio by ty
   Effect.scoped(
     Effect.gen(function* () {
       const socket = new FakeLiveSocket();
-      const sideband = yield* sidebandOverSocket(socket);
-      const seen: LiveServerEvent[] = [];
-      sideband.onEvent((event) => seen.push(event));
+      const read = yield* readSideband(sidebandOverSocket(socket));
 
       socket.receive({
         type: LIVE_SERVER_EVENT.SESSION_STARTED,
@@ -40,7 +38,7 @@ it.effect("a sideband parses the socket's frames and drops reflected audio by ty
       yield* settle();
 
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA],
       );
     }),
@@ -51,7 +49,7 @@ it.effect("a sideband sends client events as JSON frames and closes the socket i
   Effect.scoped(
     Effect.gen(function* () {
       const socket = new FakeLiveSocket();
-      const sideband = yield* sidebandOverSocket(socket);
+      const sideband = sidebandOverSocket(socket);
       const append = thinkingAppend({ eventId: "ev_a", delegationId: null, content: "roster" });
 
       yield* sideband.send(append);
@@ -67,21 +65,18 @@ it.effect("a sideband sends client events as JSON frames and closes the socket i
   ),
 );
 
-it.effect("a sideband's close listener follows the socket's and unsubscribes", () =>
+it.effect("a sideband's arrivals end with the socket's close, and nothing follows it", () =>
   Effect.scoped(
     Effect.gen(function* () {
       const socket = new FakeLiveSocket();
-      const sideband = yield* sidebandOverSocket(socket);
-      const closes: Array<{ code?: number }> = [];
-      const stop = sideband.onClose((close) => closes.push(close));
+      const read = yield* readSideband(sidebandOverSocket(socket));
 
       socket.closeFromServer({ code: 1006 });
       yield* settle();
-      stop();
       socket.closeFromServer({ code: 1000 });
       yield* settle();
 
-      assert.deepEqual(closes, [{ code: 1006 }]);
+      assert.deepEqual(read.closes, [{ code: 1006 }]);
     }),
   ),
 );
@@ -93,12 +88,12 @@ test("an opening is a socket or one of the two faults", () => {
 });
 
 it.effect(
-  "a sideband holds what arrived before anyone listened and replays it to the first listener",
+  "a sideband holds what arrived before anyone read it and replays it to the first consumer",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const socket = new FakeLiveSocket();
-        const sideband = yield* sidebandOverSocket(socket);
+        const sideband = sidebandOverSocket(socket);
         socket.receive({
           type: LIVE_SERVER_EVENT.SESSION_STARTED,
           event_id: "ev_1",
@@ -108,19 +103,16 @@ it.effect(
         socket.closeFromServer({ code: 1006 });
         yield* settle();
 
-        const seen: LiveServerEvent[] = [];
-        const closes: Array<{ code?: number }> = [];
-        sideband.onEvent((event) => seen.push(event));
-        sideband.onClose((close) => closes.push(close));
-        const late: LiveServerEvent[] = [];
-        sideband.onEvent((event) => late.push(event));
+        const read = yield* readSideband(sideband);
+        const late = yield* readSideband(sideband);
+        yield* settle();
 
         assert.deepEqual(
-          seen.map((event) => event.type),
+          read.events.map((event) => event.type),
           [LIVE_SERVER_EVENT.SESSION_STARTED],
         );
-        assert.deepEqual(late, []);
-        assert.deepEqual(closes, [{ code: 1006 }]);
+        assert.deepEqual(late.events, []);
+        assert.deepEqual(read.closes, [{ code: 1006 }]);
       }),
     ),
 );

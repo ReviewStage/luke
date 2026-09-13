@@ -14,7 +14,6 @@ import {
   LIVE_SESSION_OUTCOME,
   LIVE_SESSIONS_PATH,
   LIVE_VOICE,
-  type LiveServerEvent,
   liveAttachPath,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
@@ -32,7 +31,12 @@ import {
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
-import { type ScriptedOpening, type ScriptedSocketSeam, scriptedOpenSocket } from "./testing.js";
+import {
+  readSideband,
+  type ScriptedOpening,
+  type ScriptedSocketSeam,
+  scriptedOpenSocket,
+} from "./testing.js";
 
 const NOW = 1_800_000_000_000;
 const SDP_OFFER =
@@ -145,9 +149,7 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
 
-      const sideband = yield* opened.attach();
-      const seen: LiveServerEvent[] = [];
-      sideband.onEvent((event) => seen.push(event));
+      const read = yield* readSideband(yield* opened.attach());
 
       const [open] = opens;
       assert.equal(open?.url, `wss://api.openai.com/v1${liveAttachPath(SESSION_ID)}`);
@@ -163,7 +165,7 @@ it.scopedLive(
       socket?.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
       yield* pause;
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],
       );
 
@@ -346,8 +348,7 @@ it.scopedLive(
       assert.equal(yield* opened.attach(), sideband);
       assert.equal(script.opens.length, 1);
 
-      const seen: LiveServerEvent[] = [];
-      sideband.onEvent((event) => seen.push(event));
+      const read = yield* readSideband(sideband);
       socket.receive(createdFrame());
       socket.receive({
         type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
@@ -356,7 +357,7 @@ it.scopedLive(
       });
       yield* pause;
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
 
@@ -578,10 +579,7 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
       const sideband = yield* opened.attach();
-      const seen: LiveServerEvent[] = [];
-      const closes: unknown[] = [];
-      sideband.onEvent((event) => seen.push(event));
-      sideband.onClose((close) => closes.push(close));
+      const read = yield* readSideband(sideband);
       const [first] = script.sockets;
       assert.ok(first);
 
@@ -599,7 +597,7 @@ it.scopedLive(
         type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
         sessionId: SESSION_ID,
       });
-      assert.deepEqual(closes, []);
+      assert.deepEqual(read.closes, []);
       assert.equal(source.diagnostics().sidebandAttached, true);
 
       second.receive({
@@ -609,7 +607,7 @@ it.scopedLive(
       });
       yield* pause;
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
       yield* sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
@@ -653,14 +651,12 @@ it.scopedLive("re-attaching tries as many times as it has delays and then report
     const source = reattaching(script);
     const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* opened.attach();
-    const closes: Array<{ code?: number }> = [];
-    sideband.onClose((close) => closes.push(close));
+    const read = yield* readSideband(yield* opened.attach());
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
     yield* openedSockets(script, 4);
-    yield* closesReported(closes);
-    assert.deepEqual(closes, [{ code: 1006 }]);
+    yield* closesReported(read.closes);
+    assert.deepEqual(read.closes, [{ code: 1006 }]);
     assert.equal(script.sockets.length, 4);
     assert.equal(source.diagnostics().sidebandAttached, false);
     for (const socket of script.sockets.slice(1)) assert.equal(socket.closedByClient, true);
@@ -673,21 +669,20 @@ it.scoped("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up"
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
     const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* opened.attach();
-    const closes: Array<{ code?: number }> = [];
-    sideband.onClose((close) => closes.push(close));
+    const read = yield* readSideband(yield* opened.attach());
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
     yield* openedSockets(script, 2);
-    assert.deepEqual(closes, []);
+    assert.deepEqual(read.closes, []);
 
     yield* TestClock.adjust("3 seconds");
     yield* openedSockets(script, 3);
-    assert.deepEqual(closes, []);
+    assert.deepEqual(read.closes, []);
 
     yield* TestClock.adjust("7 seconds");
     yield* openedSockets(script, 4);
-    assert.deepEqual(closes, [{ code: 1006 }]);
+    yield* closesReported(read.closes);
+    assert.deepEqual(read.closes, [{ code: 1006 }]);
     assert.equal(script.sockets.length, 4);
   }),
 );
@@ -736,13 +731,11 @@ it.scopedLive("a service that refuses the attachment ends the tries at once", ()
     const source = reattaching(script);
     const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* opened.attach();
-    const closes: Array<{ code?: number }> = [];
-    sideband.onClose((close) => closes.push(close));
+    const read = yield* readSideband(yield* opened.attach());
 
     script.sockets[0]?.closeFromServer({ code: 1001 });
-    yield* closesReported(closes);
-    assert.deepEqual(closes, [{ code: 1001 }]);
+    yield* closesReported(read.closes);
+    assert.deepEqual(read.closes, [{ code: 1001 }]);
     assert.equal(script.sockets.length, 2);
     assert.equal(script.sockets[1]?.closedByClient, true);
   }),
@@ -756,11 +749,10 @@ it.scopedLive(
       const ended = reattaching(normal);
       const first = yield* ended.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(first);
-      const firstCloses: unknown[] = [];
-      (yield* first.attach()).onClose((close) => firstCloses.push(close));
+      const firstRead = yield* readSideband(yield* first.attach());
       normal.sockets[0]?.closeFromServer({ code: 1000 });
       yield* pause;
-      assert.deepEqual(firstCloses, [{ code: 1000 }]);
+      assert.deepEqual(firstRead.closes, [{ code: 1000 }]);
       assert.equal(normal.sockets.length, 1);
 
       const own = scriptedOpenSocket([answering(createdFrame())]);
@@ -768,13 +760,12 @@ it.scopedLive(
       const second = yield* hungUp.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(second);
       const sideband = yield* second.attach();
-      const secondCloses: unknown[] = [];
-      sideband.onClose((close) => secondCloses.push(close));
+      const secondRead = yield* readSideband(sideband);
       yield* sideband.close;
       assert.equal(own.sockets[0]?.closedByClient, true);
       own.sockets[0]?.closeFromServer({ code: 1005 });
       yield* pause;
-      assert.deepEqual(secondCloses, [{ code: 1005 }]);
+      assert.deepEqual(secondRead.closes, [{ code: 1005 }]);
       assert.equal(own.sockets.length, 1);
     }),
 );
@@ -915,12 +906,12 @@ it.scopedLive(
       assert.ok(opened);
       const sideband = yield* opened.attach();
       // What the service spoke behind the answer is held by the socket until the sideband's own
-      // reader takes it; this pause is that reader's first turn, and no listener stands in it.
+      // reader takes it, and nothing reads it in this pause.
       yield* pause;
-      const seen: LiveServerEvent[] = [];
-      sideband.onEvent((event) => seen.push(event));
+      const read = yield* readSideband(sideband);
+      yield* pause;
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
     }),
@@ -939,16 +930,14 @@ it.scopedLive(
       const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
-      const sideband = yield* opened.attach();
-      const seen: LiveServerEvent[] = [];
-      sideband.onEvent((event) => seen.push(event));
+      const read = yield* readSideband(yield* opened.attach());
       const [first] = script.sockets;
       assert.ok(first);
       first.closeFromServer({ code: 1006 });
       yield* openedSockets(script, 2);
       yield* pause;
       assert.deepEqual(
-        seen.map((event) => event.type),
+        read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
     }),
@@ -976,11 +965,14 @@ it.scopedLive(
       const sideband = yield* opened.attach();
       // The close was queued behind the handshake, and the attach is an effect
       // that answers without waiting for it; this pause is the gap it lands in,
-      // before any sideband listener stands.
+      // before the sideband's reader stands.
       yield* pause;
-      const closes: (number | undefined)[] = [];
-      sideband.onClose((close) => closes.push(close.code));
-      assert.deepEqual(closes, [1006]);
+      const read = yield* readSideband(sideband);
+      yield* pause;
+      assert.deepEqual(
+        read.closes.map((close) => close.code),
+        [1006],
+      );
       assert.equal(source.diagnostics().sidebandAttached, false);
     }),
 );
@@ -1004,12 +996,15 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
       const sideband = yield* opened.attach();
-      // The close was queued behind the answer; this pause is the reader's turn on it, before any
-      // sideband listener stands.
+      // The close was queued behind the answer; this pause is the recovering socket's turn on it,
+      // before the sideband's reader stands.
       yield* pause;
-      const closes: (number | undefined)[] = [];
-      sideband.onClose((close) => closes.push(close.code));
-      assert.deepEqual(closes, [1000]);
+      const read = yield* readSideband(sideband);
+      yield* pause;
+      assert.deepEqual(
+        read.closes.map((close) => close.code),
+        [1000],
+      );
       assert.equal(script.sockets.length, 1);
     }),
 );

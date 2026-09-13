@@ -773,7 +773,8 @@ the record precedes the speech — over Postgres. `server/voice/live-sideband.ts
 reads the upstream socket as the `LiveSideband` the service consumes — the
 `ws` listeners it registers are the acquire of the session's own scope and are
 taken off at its close — and `observedSideband` hands each event to the record
-once, ahead of every listener, replay included.
+once, on its way past the one reader that runs the sideband's arrivals, replay
+included.
 
 ### The brain answered in process
 
