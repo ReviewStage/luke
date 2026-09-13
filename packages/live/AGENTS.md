@@ -28,11 +28,12 @@ the host, and a web function alike.
   `LIVE_CLIENT_EVENT`, which is the in-session set a renderer's channel and the
   service's frame decisions are stated over.
 - `instructions.ts` is the Live prompting guide's starter template with its
-  brackets filled in and one block beside them, "How you speak". **Every other
-  optional control from the guide's appendix is absent until listening shows a
-  behavior it would change.** That block stands because the model paraphrases
-  every commentary it is handed, so the spoken words are chosen here and
-  nowhere else; it is a few short sentences of rules with no sample line.
+  brackets filled in and one block beside them, the speaking policies. **Every
+  other optional control from the guide's appendix is absent until listening
+  shows a behavior it would change.** That block stands because the model
+  paraphrases every commentary it is handed, so the spoken words are chosen
+  here and nowhere else; each line is one labelled policy stating one behavior,
+  the template's own shape, with no sample line.
   `INTRODUCTION` names no delegation capability and says never, because the
   accountless endpoint wires no carrier.
 

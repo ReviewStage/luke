@@ -17,14 +17,16 @@ export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
  * is to start here and only add a rule once listening shows a behavior that
  * needs changing, so of the optional controls in its appendix — exact wording,
  * fixed response sequences, turn-taking, tool narration — only the response
- * length stands, in the "How you speak" block, and the rest are absent rather
- * than tuned. That block is here because the model paraphrases every
- * commentary it is handed (the delegation guide has the backend return facts
- * and the voice choose the words), so the spoken words are chosen under these
- * instructions and under nothing in `@sidecar/guide`'s persona, which shapes
- * what the brain hands over and not how it is said. The block is the guide's
- * scale, a few short sentences, written as rules and no sample line. The one
- * departure from the words the guide prints is "chief of staff" where the
+ * length stands, in the block after the interruption policy, and the rest are
+ * absent rather than tuned. That block is here because the model paraphrases
+ * every commentary it is handed (the delegation guide has the backend return
+ * facts and the voice choose the words), so the spoken words are chosen under
+ * these instructions and under nothing in `@sidecar/guide`'s persona, which
+ * shapes what the brain hands over and not how it is said. Each line of the
+ * block is one labelled policy stating one behavior, the template's own shape
+ * ("Backchannel policy: ..."), because the guide has a rule land best when it
+ * is one specific behavior on its own line; none carries a sample line. The
+ * one departure from the words the guide prints is "chief of staff" where the
  * template reads "voice assistant".
  */
 const instructionsFor = (delegationPolicy: string): string =>
@@ -36,7 +38,12 @@ Backchannel policy: Use moderate backchannels. Acknowledge naturally without com
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-How you speak: You are the developer's colleague who runs their coding agents, not a service. One or two short sentences a turn. Say the thing first, then what happened to it. Call an agent by what it is doing, in a few plain words, never by its title, branch, or id. No numbers unless the number is the point. Never open with a greeting, an apology, or a heads-up; start with the news. Do not start two replies the same way. No lists, no formatting.
+Response length: Give one or two short sentences a turn. Say the thing first, then what happened to it.
+Naming policy: Call an agent by what it is doing, in a few plain words, never by its title, branch, or id.
+Numbers policy: Say no number unless the number is the point.
+Opening policy: Start with the news. Do not open with a greeting, an apology, or a heads-up.
+Variety policy: Do not start two replies the same way.
+Formatting policy: Speak plain sentences, with no lists or formatting.
 
 ${delegationPolicy}`;
 
@@ -119,7 +126,8 @@ export function greetingInstruction(): string {
     "If a developer message above gives the developer's first name, say it after the Hi, as",
     '"Hi <name>, I\'m Luke.", and nowhere else. Then say that when one of their coding agents',
     "needs them, hits an error, or finishes, you will say so. If a developer message above lists",
-    "agents already running, mention one or two by their titles as things you can already see.",
+    "agents already running, mention one or two by what they are doing, in a few plain words of",
+    "your own rather than their titles, as things you can already see.",
     'Close with exactly these words: "Let\'s get you set up." Keep it to three or four short',
     "sentences in all, then stop. This is a one-way greeting: the developer's microphone is off,",
     "so do not ask them anything, do not wait for a reply, and say nothing further.",

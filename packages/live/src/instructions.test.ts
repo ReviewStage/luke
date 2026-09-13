@@ -28,7 +28,7 @@ for (const scene of Object.values(LIVE_SCENE)) {
   });
 }
 
-/** Identity, backchannel, interruption, and how you speak: every block the two scenes share, ahead of the delegation policy. */
+/** Identity, backchannel, interruption, and the speaking policies: every block the two scenes share, ahead of the delegation policy. */
 const SHARED_BLOCKS = 4;
 
 test("the two scenes differ in their delegation policy alone", () => {
