@@ -110,8 +110,12 @@ function isBareReference(node: ESTree.Identifier): boolean {
  * The raw primitives Effect replaces: a delay is `Effect.sleep`, a cadence a
  * `Schedule`, a value another fiber completes a `Deferred`, a cancellation a
  * fiber's interruption, and a watched directory a `Stream`. The allowlist this
- * reads is root AGENTS.md's twin: some entries are the permanent adaptors
- * named there, and the rest are files a later PR still converts.
+ * reads is root AGENTS.md's twin, and no row on it is pending: each is an
+ * OpenClaw port that imports nothing from `effect`, a foreign boundary this
+ * repository does not own (an Electron main/renderer API, a browser API in a
+ * React component, `ws`, `node:http2`), or a permanent adaptor named there —
+ * never a file some later PR still converts. A shim on its way out is deleted
+ * in the PR that finishes its callers, not left as a row here.
  */
 export const noRawAsyncPrimitivesRule = defineRule({
   meta: {
