@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { it } from "@effect/vitest";
+import { Duration, Effect, Fiber, TestClock } from "effect";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
@@ -14,6 +16,7 @@ import {
 } from "../server/hosted/observation-tick";
 import { SPEECH_PUSH, type SpeechPushOutcome } from "../server/hosted/speech-push";
 import type { SpeechSweepOutcome } from "../server/hosted/store";
+import { noDatabase, runWithoutDatabase } from "./support/no-database";
 
 const CRON_SECRET = "cron-secret-1";
 const ENCRYPTION_SECRET = "a".repeat(64);
@@ -57,11 +60,10 @@ interface Recorded {
 function tickOptions(
   overrides: Partial<ObservationTickOptions> = {},
   accounts: string[] = ["user-a", "user-b"],
-  outcome: (userId: string) => Promise<AccountPassOutcome> = async () => ({
-    complete: true,
-    changed: false,
-  }),
-  opening: (userId: string) => Promise<TurnOpeningOutcome> = async () => NOTHING_OPENED,
+  outcome: (userId: string) => Effect.Effect<AccountPassOutcome> = () =>
+    Effect.succeed({ complete: true, changed: false }),
+  opening: (userId: string) => Effect.Effect<TurnOpeningOutcome> = () =>
+    Effect.succeed(NOTHING_OPENED),
 ) {
   const recorded: Recorded = {
     forgot: [],
@@ -76,65 +78,78 @@ function tickOptions(
     request: tickRequest(),
     cronSecret: CRON_SECRET,
     encryptionSecret: ENCRYPTION_SECRET,
-    listAccounts: async (limit, seenAfter) => {
-      recorded.listed.push({ limit, seenAfter });
-      return accounts.map((userId) => ({ userId }));
-    },
-    forgetIneligible: async (seenAfter) => {
-      recorded.forgot.push(seenAfter);
-    },
-    purgeCleared: async (now) => {
-      recorded.purged.push(now);
-      return 2;
-    },
-    sweepSpeech: async (now) => {
-      recorded.swept.push(now);
-      return SWEPT;
-    },
-    pushSpeech: async (now) => {
-      recorded.pushed.push(now);
-      return PUSHED;
-    },
-    observe: async (userId) => {
-      recorded.observed.push(userId);
-      recorded.ran.push(`observe:${userId}`);
-      return outcome(userId);
-    },
-    openTurns: async (userId) => {
-      recorded.ran.push(`open:${userId}`);
-      return opening(userId);
-    },
+    listAccounts: (limit, seenAfter) =>
+      Effect.sync(() => {
+        recorded.listed.push({ limit, seenAfter });
+        return accounts.map((userId) => ({ userId }));
+      }),
+    forgetIneligible: (seenAfter) =>
+      Effect.sync(() => {
+        recorded.forgot.push(seenAfter);
+      }),
+    purgeCleared: (now) =>
+      Effect.sync(() => {
+        recorded.purged.push(now);
+        return 2;
+      }),
+    sweepSpeech: (now) =>
+      Effect.sync(() => {
+        recorded.swept.push(now);
+        return SWEPT;
+      }),
+    pushSpeech: (now) =>
+      Effect.sync(() => {
+        recorded.pushed.push(now);
+        return PUSHED;
+      }),
+    observe: (userId) =>
+      Effect.gen(function* () {
+        recorded.observed.push(userId);
+        recorded.ran.push(`observe:${userId}`);
+        // A concurrent batch's passes interleave before any opens it, exactly
+        // as a real pass's own await would; the yield stands in for that.
+        yield* Effect.yieldNow();
+        return yield* outcome(userId);
+      }),
+    openTurns: (userId) =>
+      Effect.gen(function* () {
+        recorded.ran.push(`open:${userId}`);
+        return yield* opening(userId);
+      }),
     now: () => TICK_TIME,
     ...overrides,
   };
   return { options, recorded };
 }
 
+/** The tick, run over a client that refuses every statement — nothing here ever reaches one. */
+function runTick(options: ObservationTickOptions): Promise<Response> {
+  return runWithoutDatabase(handleObservationTick(options));
+}
+
 test("the tick is off without CRON_SECRET or the encryption secret, and refuses a wrong bearer", async () => {
-  const wrongMethod = await handleObservationTick(
+  const wrongMethod = await runTick(
     tickOptions({
       request: new Request(`https://luke.test${OBSERVATION_TICK_PATH}`, { method: "POST" }),
     }).options,
   );
   assert.equal(wrongMethod.status, 405);
 
-  const noCron = await handleObservationTick(tickOptions({ cronSecret: undefined }).options);
+  const noCron = await runTick(tickOptions({ cronSecret: undefined }).options);
   assert.equal(noCron.status, 503);
   assert.equal((await noCron.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const blankCron = await handleObservationTick(tickOptions({ cronSecret: "  " }).options);
+  const blankCron = await runTick(tickOptions({ cronSecret: "  " }).options);
   assert.equal(blankCron.status, 503);
 
-  const noEncryption = await handleObservationTick(
-    tickOptions({ encryptionSecret: undefined }).options,
-  );
+  const noEncryption = await runTick(tickOptions({ encryptionSecret: undefined }).options);
   assert.equal(noEncryption.status, 503);
 
   const { options, recorded } = tickOptions({ request: tickRequest("Bearer other") });
-  const wrongBearer = await handleObservationTick(options);
+  const wrongBearer = await runTick(options);
   assert.equal(wrongBearer.status, 401);
   assert.equal((await wrongBearer.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
-  const missing = await handleObservationTick(tickOptions({ request: tickRequest(null) }).options);
+  const missing = await runTick(tickOptions({ request: tickRequest(null) }).options);
   assert.equal(missing.status, 401);
   assert.deepEqual(recorded.forgot, []);
   assert.deepEqual(recorded.observed, []);
@@ -146,13 +161,15 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     ["user-b", { complete: false, changed: false }],
     ["user-c", { complete: true, changed: false }],
   ]);
-  const { options, recorded } = tickOptions({}, [...outcomes.keys()], async (userId) => {
-    const outcome = outcomes.get(userId);
-    assert.ok(outcome);
-    return outcome;
-  });
+  const { options, recorded } = tickOptions({}, [...outcomes.keys()], (userId) =>
+    Effect.sync(() => {
+      const outcome = outcomes.get(userId);
+      assert.ok(outcome);
+      return outcome;
+    }),
+  );
 
-  const response = await handleObservationTick(options);
+  const response = await runTick(options);
 
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
@@ -176,12 +193,14 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
 });
 
 test("a pass that throws is counted as failed and does not end the tick", async () => {
-  const { options } = tickOptions({}, ["user-a", "user-b"], async (userId) => {
-    if (userId === "user-a") throw new Error("the adapter had a bug");
-    return { complete: true, changed: false };
-  });
+  const { options } = tickOptions({}, ["user-a", "user-b"], (userId) =>
+    Effect.sync(() => {
+      if (userId === "user-a") throw new Error("the adapter had a bug");
+      return { complete: true, changed: false };
+    }),
+  );
 
-  const response = await handleObservationTick(options);
+  const response = await runTick(options);
 
   assert.deepEqual(await response.json(), {
     accounts: 2,
@@ -202,13 +221,14 @@ test("a tick starts a batch only while a whole pass deadline still fits its budg
   const { options, recorded } = tickOptions(
     { now: () => now, budgetMs: 10_000, passDeadlineMs: 1_000 },
     accounts,
-    async () => {
-      now += 3_000;
-      return { complete: true, changed: false };
-    },
+    () =>
+      Effect.sync(() => {
+        now += 3_000;
+        return { complete: true, changed: false };
+      }),
   );
 
-  const response = await handleObservationTick(options);
+  const response = await runTick(options);
 
   const body = await response.json();
   assert.equal(body.exhausted, true);
@@ -217,27 +237,33 @@ test("a tick starts a batch only while a whole pass deadline still fits its budg
   assert.equal(recorded.observed.length, OBSERVATION_TICK.CONCURRENCY);
 });
 
-test("a pass that outruns its deadline is counted failed and the tick moves on", async () => {
-  const { options } = tickOptions({ passDeadlineMs: 20 }, ["user-slow", "user-quick"], (userId) =>
-    userId === "user-slow"
-      ? new Promise(() => undefined)
-      : Promise.resolve({ complete: true, changed: true }),
-  );
+it.effect("a pass that outruns its deadline is counted failed and the tick moves on", () =>
+  Effect.gen(function* () {
+    const { options } = tickOptions(
+      { passDeadlineMs: 20 },
+      ["user-slow", "user-quick"],
+      (userId) =>
+        userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true, changed: true }),
+    );
 
-  const response = await handleObservationTick(options);
+    const fiber = yield* Effect.fork(Effect.provide(handleObservationTick(options), noDatabase));
+    yield* TestClock.adjust(Duration.millis(20));
+    const response = yield* Fiber.join(fiber);
+    const body = yield* Effect.promise(() => response.json());
 
-  assert.deepEqual(await response.json(), {
-    accounts: 2,
-    observed: 1,
-    failed: 1,
-    changed: 1,
-    exhausted: false,
-    purged: 2,
-    speech: SWEPT,
-    push: PUSHED,
-    turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
-  });
-});
+    assert.deepEqual(body, {
+      accounts: 2,
+      observed: 1,
+      failed: 1,
+      changed: 1,
+      exhausted: false,
+      purged: 2,
+      speech: SWEPT,
+      push: PUSHED,
+      turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+    });
+  }),
+);
 
 test("each account's opening runs after its own pass, inside the same share of the tick, and its counts are summed; a pass that throws is still followed by its opening", async () => {
   const openings = new Map<string, TurnOpeningOutcome>([
@@ -247,18 +273,20 @@ test("each account's opening runs after its own pass, inside the same share of t
   const { options, recorded } = tickOptions(
     {},
     ["user-a", "user-b"],
-    async (userId) => {
-      if (userId === "user-a") throw new Error("the adapter had a bug");
-      return { complete: true, changed: true };
-    },
-    async (userId) => {
-      const opened = openings.get(userId);
-      assert.ok(opened);
-      return opened;
-    },
+    (userId) =>
+      Effect.sync(() => {
+        if (userId === "user-a") throw new Error("the adapter had a bug");
+        return { complete: true, changed: true };
+      }),
+    (userId) =>
+      Effect.sync(() => {
+        const opened = openings.get(userId);
+        assert.ok(opened);
+        return opened;
+      }),
   );
 
-  const response = await handleObservationTick(options);
+  const response = await runTick(options);
 
   assert.deepEqual(await response.json(), {
     accounts: 2,
@@ -283,14 +311,15 @@ test("an opening that throws is one failed opening and nothing else of the tick 
   const { options } = tickOptions(
     {},
     ["user-a", "user-b"],
-    async () => ({ complete: true, changed: false }),
-    async (userId) => {
-      if (userId === "user-a") throw new Error("eve went away");
-      return { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 };
-    },
+    () => Effect.succeed({ complete: true, changed: false }),
+    (userId) =>
+      Effect.sync(() => {
+        if (userId === "user-a") throw new Error("eve went away");
+        return { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 };
+      }),
   );
 
-  const response = await handleObservationTick(options);
+  const response = await runTick(options);
 
   assert.deepEqual(await response.json(), {
     accounts: 2,
