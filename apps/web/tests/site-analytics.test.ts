@@ -40,3 +40,8 @@ test("values that are not addresses pass through untouched", () => {
   const properties = { $referrer: "$direct", $screen_height: 900, missing: null };
   assert.deepEqual(sanitizeAnalyticsUrls(properties), properties);
 });
+
+test("an array value is left whole, so a recording's snapshot is never walked", () => {
+  const snapshot = { $snapshot_data: [{ href: SIGN_IN_URL }] };
+  assert.deepEqual(sanitizeAnalyticsUrls(snapshot), snapshot);
+});
