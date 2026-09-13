@@ -51,10 +51,9 @@ export interface DesktopServices {
 }
 
 /** The desktop client as it stands once every step of the launch has run. */
-export class DesktopTag extends Context.Tag("@luke/desktop/Desktop")<
-  DesktopTag,
-  DesktopServices
->() {}
+export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
+  "@luke/desktop/Desktop",
+) {}
 
 /**
  * The steps of the launch, in the order it has to keep, each one built into

@@ -3,7 +3,7 @@
  * `registry.ts` states both directly — it is not an OpenClaw port and
  * already imports `effect` for `resolveConfigurationEither` — so this
  * sibling carries only what a host composition needs beyond that: the
- * table as a `Context.Tag` a host can hand down through a `Layer`, and the
+ * table as a `Context.Service` a host can hand down through a `Layer`, and the
  * resolution door restated as an `Effect` over it, for P7's host composer
  * to build the agent's runtime on.
  */
@@ -16,10 +16,9 @@ import {
 } from "../registry.js";
 
 /** The built-ins this build compiled in, read as a service rather than the module-level constant. */
-export class Builtins extends Context.Tag("@sidecar/runtime/Builtins")<
-  Builtins,
-  typeof BUILTINS
->() {}
+export class Builtins extends Context.Service<Builtins, typeof BUILTINS>()(
+  "@sidecar/runtime/Builtins",
+) {}
 
 /** The one table this build compiles in, handed down as a `Layer`. */
 export const BuiltinsLive: Layer.Layer<Builtins> = Layer.succeed(Builtins, BUILTINS);

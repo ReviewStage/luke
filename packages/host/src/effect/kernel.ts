@@ -105,16 +105,14 @@ const kernelEmit = (service: LateService<GatewayService>): Effect.Effect<HostKer
   });
 
 /** The service the merge composes, awaited by every concern that reads it. */
-export class HostService extends Context.Tag("@sidecar/host/HostService")<
-  HostService,
-  LateService<GatewayService>
->() {}
+export class HostService extends Context.Service<HostService, LateService<GatewayService>>()(
+  "@sidecar/host/HostService",
+) {}
 
 /** The seams as one value, for as long as the composers are handed one. */
-export class HostKernelTag extends Context.Tag("@sidecar/host/HostKernel")<
-  HostKernelTag,
-  HostKernel
->() {}
+export class HostKernelTag extends Context.Service<HostKernelTag, HostKernel>()(
+  "@sidecar/host/HostKernel",
+) {}
 
 /**
  * The account service override, read by the variable's own name out of the

@@ -189,7 +189,7 @@ export function bearerAuthentication(expected: string): GatewayAuthenticate {
 }
 
 /** The socket the host is listening on, and the two things a host asks of it beside its frames. */
-export class GatewaySocketBinding extends Context.Tag("@sidecar/gateway/GatewaySocketBinding")<
+export class GatewaySocketBinding extends Context.Service<
   GatewaySocketBinding,
   {
     /** The port it bound; the one a binding that named none was given by the system. */
@@ -201,7 +201,7 @@ export class GatewaySocketBinding extends Context.Tag("@sidecar/gateway/GatewayS
      */
     readonly closeAdmissions: Effect.Effect<void>;
   }
->() {}
+>()("@sidecar/gateway/GatewaySocketBinding") {}
 
 interface GatewaySocketOptions {
   /** Who is asking, decided where the credential is understood; this file learns none. */
@@ -240,8 +240,8 @@ const makeGatewaySocket = (
   options: GatewaySocketOptions,
 ): Effect.Effect<
   {
-    readonly protocol: RpcServer.Protocol["Type"];
-    readonly binding: GatewaySocketBinding["Type"];
+    readonly protocol: RpcServer.Protocol["Service"];
+    readonly binding: GatewaySocketBinding["Service"];
   },
   SocketServer.SocketServerError,
   | RpcSerialization.RpcSerialization

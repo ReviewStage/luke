@@ -15,7 +15,9 @@ import { serviceLayer } from "./service-layer";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 
 /** The test's own handle on the updater Layer builds, to read the value a scoped Layer otherwise discards. */
-class UpdatesTag extends Context.Tag("test/services/updates")<UpdatesTag, UpdateServiceHost>() {}
+class UpdatesTag extends Context.Service<UpdatesTag, UpdateServiceHost>()(
+  "test/services/updates",
+) {}
 
 /**
  * The services that reach Electron cannot be constructed here at all:

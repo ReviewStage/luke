@@ -35,8 +35,8 @@ const OPERATOR: GatewayClientIdentity = {
 };
 
 interface Hosted {
-  readonly binding: GatewaySocketBinding["Type"];
-  readonly log: GatewayEventLog["Type"];
+  readonly binding: GatewaySocketBinding["Service"];
+  readonly log: GatewayEventLog["Service"];
   readonly effects: string[];
   readonly shutdowns: () => number;
   /** Takes the host away while the test still stands, as a quit would. */

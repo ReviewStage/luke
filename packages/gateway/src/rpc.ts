@@ -37,10 +37,9 @@ import {
  */
 
 /** Whether an Rpc changes something, carried on the Rpc itself so a server keys its idempotency ledger on the same entry the name came from. */
-export class GatewayMutates extends Context.Tag("@sidecar/gateway/GatewayMutates")<
-  GatewayMutates,
-  boolean
->() {}
+export class GatewayMutates extends Context.Service<GatewayMutates, boolean>()(
+  "@sidecar/gateway/GatewayMutates",
+) {}
 
 /** One method of the group: its wire name, a record of parameters, a wire value or nothing, and a refusal of the family. */
 export type GatewayRpc = Rpc.Rpc<
@@ -289,7 +288,7 @@ export interface GatewayEnvelopeSerializationOptions {
  */
 export function gatewayEnvelopeSerialization(
   options: GatewayEnvelopeSerializationOptions,
-): RpcSerialization.RpcSerialization["Type"] {
+): RpcSerialization.RpcSerialization["Service"] {
   const encodeMessage = (message: RpcRequestMessage | RpcExitMessage | RpcChunkMessage) => {
     switch (message._tag) {
       case RPC_MESSAGE_TAG.REQUEST:

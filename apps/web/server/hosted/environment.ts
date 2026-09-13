@@ -41,10 +41,10 @@ export interface HostedEnvironmentValues {
   readonly apnsCredentials: ApnsCredentials | undefined;
 }
 
-export class HostedEnvironment extends Context.Tag("HostedEnvironment")<
+export class HostedEnvironment extends Context.Service<
   HostedEnvironment,
   HostedEnvironmentValues
->() {}
+>()("HostedEnvironment") {}
 
 function present(value: Option.Option<string>): string | undefined {
   return text(Option.getOrUndefined(value));

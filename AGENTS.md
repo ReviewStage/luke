@@ -153,7 +153,7 @@ an injected clock seam, and a fake clock beside it. `effect` is pinned at
 `3.22.2`, the newest 3.x release, through the pnpm catalog in
 `pnpm-workspace.yaml` and nowhere else — every workspace that reaches it
 declares `"effect": "catalog:"`, so one copy resolves across the repository,
-which is what keeps a `Context.Tag` minted in one package the same service in
+which is what keeps a `Context.Service` minted in one package the same service in
 another. `@effect/platform` joins at `0.97.2`, `@effect/sql`/`@effect/sql-pg`
 at `0.52.1`, and `@effect/experimental` at `0.61.1`, each the newest release
 whose peer range accepts that `effect`. Effect 4 is not adopted: its release

@@ -38,15 +38,14 @@ test("Schema.Struct refuses a literal outside the declared set", () => {
   assert.equal(Result.isFailure(refused), true);
 });
 
-class Clock extends Context.Tag("@sidecar/wire/effect-spike/Clock")<
-  Clock,
-  { readonly now: () => number }
->() {}
+class Clock extends Context.Service<Clock, { readonly now: () => number }>()(
+  "@sidecar/wire/effect-spike/Clock",
+) {}
 
-class Roster extends Context.Tag("@sidecar/wire/effect-spike/Roster")<
+class Roster extends Context.Service<
   Roster,
   { readonly stamp: (id: string) => Effect.Effect<{ readonly id: string; readonly at: number }> }
->() {}
+>()("@sidecar/wire/effect-spike/Roster") {}
 
 const FIXED_INSTANT = 1_700_000_000_000;
 
@@ -69,7 +68,7 @@ const stampBoth = Effect.gen(function* () {
   return [first, second];
 });
 
-test("Layer resolves a Context.Tag through the layer it depends on", () => {
+test("Layer resolves a Context.Service through the layer it depends on", () => {
   const stamped = Effect.runSync(Effect.provide(stampBoth, Layer.provide(rosterLayer, clockLayer)));
 
   assert.deepEqual(stamped, [

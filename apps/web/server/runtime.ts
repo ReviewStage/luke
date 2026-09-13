@@ -40,7 +40,7 @@ type WebServicesError = Layer.Layer.Error<typeof webServices>;
  * registry between invocations, so the first invocation of a cold start builds
  * the layer and every later one on that instance reuses the same services.
  * Nothing builds a second runtime — a second one would be a second copy of
- * every service a `Context.Tag` was supposed to identify.
+ * every service a `Context.Service` was supposed to identify.
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 
