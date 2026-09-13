@@ -22,12 +22,21 @@ test("a referrer that is a sign-in address is cut to its path", () => {
   assert.equal(clean.$referrer, "https://tryluke.dev/sign-in.html");
 });
 
-test("the first-seen address PostHog keeps once on the person is cut as well", () => {
-  const clean = sanitizeAnalyticsUrls({
+test("the top-level $set_once first-seen pair the person keeps is cut, and a Date is left whole", () => {
+  const timestamp = new Date(0);
+  const capture = {
+    uuid: "abc",
+    event: "$pageview",
+    properties: { $current_url: SIGN_IN_URL, $referrer: CONSENT_URL },
     $set_once: { $initial_current_url: SIGN_IN_URL, $initial_referrer: CONSENT_URL },
-  });
+    timestamp,
+  };
+  const clean = sanitizeAnalyticsUrls(capture);
+  assert.equal(clean.properties.$current_url, "https://tryluke.dev/sign-in.html");
   assert.equal(clean.$set_once.$initial_current_url, "https://tryluke.dev/sign-in.html");
   assert.equal(clean.$set_once.$initial_referrer, "https://tryluke.dev/consent.html");
+  assert.equal(clean.timestamp, timestamp);
+  assert.ok(clean.timestamp instanceof Date);
 });
 
 test("a marketing address keeps the campaign query that brought someone", () => {
