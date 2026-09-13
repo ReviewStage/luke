@@ -39,7 +39,6 @@
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
     "apps/desktop/src/main/update-service.ts",
-    "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
@@ -80,7 +79,6 @@
     "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",
     "apps/web/tests/support/voice-fakes.ts",
-    "packages/brain/src/agent.ts",
     "packages/brain/src/asks.ts",
     "packages/brain/src/generation-clock.ts",
     "packages/brain/src/generation.ts",

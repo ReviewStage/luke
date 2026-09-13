@@ -19,8 +19,7 @@ const held = (capacity: number) =>
     coalesceMs: 1_000,
     capacity,
     now: () => NOW,
-    schedule: () => 0,
-    cancel: () => undefined,
+    arm: () => () => undefined,
     quietUntil: () => undefined,
     flush: () => undefined,
   });

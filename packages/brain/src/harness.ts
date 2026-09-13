@@ -312,6 +312,13 @@ export type HarnessOverrides = Partial<Omit<BrainAgentOptions, "runtime">> & {
   client?: BrainClient;
   /** The runtime every run of this harness is a fiber on; the test's own where a test has one. */
   execution?: ExecutionRuntime;
+  /**
+   * What the `BrainStateStore` beside the agent stamps with. The agent keeps
+   * its own time on the `Clock` it was built under, so `effectHarness` hands
+   * the same `TestClock`'s instants here rather than letting the envelope
+   * stand still while a test advances.
+   */
+  now?: () => number;
 };
 
 export function harness(
@@ -320,12 +327,12 @@ export function harness(
 ): Effect.Effect<Harness> {
   return Effect.gen(function* () {
     const client = new FakeClient();
-    const { client: clientOverride, execution, ...agentOverrides } = overrides;
+    const { client: clientOverride, execution, now: storeNow, ...agentOverrides } = overrides;
     const model = adapterOf(clientOverride ?? client);
     const runtime = toolLoopOver(model);
     // The store reads the same clock the agent does, so a test advancing time
     // moves both rather than leaving the envelope stamped at the fixed start.
-    const now = agentOverrides.now ?? (() => NOW);
+    const now = storeNow ?? (() => NOW);
     const deliveries: BrainDelivery[] = [];
     const persisted: BrainPersistedState[] = [];
     const store = new BrainStateStore({

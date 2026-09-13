@@ -173,7 +173,6 @@ function agentWith(
       report: (line) => {
         reports.push(line);
       },
-      now: () => NOW,
       memory: {
         scope: SCOPE,
         provider: {

@@ -192,14 +192,22 @@ code that uses it rather than sharing a module three packages once did.
 settle, and finalize timers until P12-18h3, which took the seam itself away:
 the service keeps time on the `Clock` of the scope it is built in, so there is
 nothing left there for a bridge to answer.
-`packages/brain/src/effect/harness.ts`'s own copy stays for now, answering
-the brain's test harness alone, so its `BrainAgent` reads the ambient
-`TestClock` an `it.effect` test already stands on rather than a `FakeClock` of
-its own; it is still `runOnHandedRuntime` on the same terms the others were:
-it starts the work on the runtime it was handed rather than building a
-second one, so this is that runtime's own edge for as long as the seam it
-answers still takes closures instead of an effect. It goes once `BrainAgent`
-answers `Clock` and `Scope` directly instead.
+The brain's own copy, in its test harness, is gone with P12-20f, which is the
+condition it was kept for: `BrainAgent.make` yields the `Clock` and the scope
+of the fiber that builds it, so an agent built inside an `it.effect` stamps
+every instant and sleeps every wait on that test's own `TestClock` without a
+`now`/`schedule`/`cancel` triple to bridge, and the harness runs nothing. The
+agent's waits — the wake window's coalescing and the ask ledger's timeout —
+are `Effect.sleep` on that clock, forked through `detachOn` into the agent's
+scope with `Runtime.RunForkOptions`' `scope`, so `stop()` closing the scope
+ends a wait no collaborator disarmed. `packages/brain/src/agent.ts` left
+`rawAsyncPrimitives` in the same PR: the `globalThis.setTimeout` fallback it
+held for a caller that passed no seam went with the options. The closures
+outlive the seam in two places this PR does not reach: `PendingInputQueue` is
+an OpenClaw port that may not import `effect`, so `AskLedger` hands it two
+closures over one of the agent's own armed waits; and `BrainGenerationClock`
+still takes `now`/`schedule`/`cancel`, with the last bridge for it built
+inside `agent.test.ts`, where a test body is its own edge by extension.
 `forkOn` in `packages/brain/src/effect/fork.ts` was on the same list for one
 release and P12-16g deleted the file: `anticipateAsk` answers an
 `Effect<void>` now, so the slot's fiber is an `Effect.forkDaemon` inside the
@@ -1653,7 +1661,6 @@ design decision stated as such:
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
 | `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | pending — once `googleCalendarSignIn`'s `exchange` callback answers an effect its one caller yields instead of awaits |
-| `timerSeamFromRuntime` (`packages/brain/src/effect/harness.ts`) | P12-03 | once `BrainAgent` answers `Clock`/`Scope` directly |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |

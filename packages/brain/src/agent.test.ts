@@ -22,8 +22,8 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Fiber, TestClock } from "effect";
-import { advanceHarness, ambientTimers, effectHarness, effectReviewing } from "./effect/harness.js";
+import { type Clock, Duration, Effect, Fiber, FiberId, Runtime, TestClock } from "effect";
+import { advanceHarness, effectHarness, effectReviewing } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
 import {
@@ -76,9 +76,47 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import { responsesModelAnswer } from "./responses-api.js";
+import type { ScheduledTimer } from "./scheduled-timer.js";
 import { fakeBrainStateRepository } from "./testing.js";
 import { BRAIN_TOOL } from "./tools.js";
 import { BRAIN_TURN_TRIGGER } from "./turn.js";
+
+/**
+ * The `now`/`schedule`/`cancel` seam `BrainGenerationClock` still takes,
+ * answered from this test's own runtime and `TestClock` so the expiry it arms
+ * is due when the harness's agent says it is. `BrainAgent` reads a `Clock`
+ * and a scope directly since P12-20f; the generation clock is the last
+ * collaborator in this package holding the closures, and this bridge goes
+ * with it. Running the fiber here is the suite's own edge, which is why the
+ * seam lives here rather than in the harness beside it.
+ */
+const generationClockTimers = Effect.gen(function* () {
+  const runtime = yield* Effect.runtime<never>();
+  const clock: Clock.Clock = yield* Effect.clock;
+  const fork = Runtime.runFork(runtime);
+  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  return {
+    now: () => clock.unsafeCurrentTimeMillis(),
+    schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
+      const handle: ScheduledTimer = {};
+      armed.set(
+        handle,
+        fork(
+          Effect.andThen(clock.sleep(Duration.millis(delayMs)), Effect.sync(callback)).pipe(
+            Effect.ensuring(Effect.sync(() => armed.delete(handle))),
+          ),
+        ),
+      );
+      return handle;
+    },
+    cancel: (handle: ScheduledTimer): void => {
+      const fiber = armed.get(handle);
+      if (fiber === undefined) return;
+      armed.delete(handle);
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    },
+  };
+});
 
 it.effect("an announce is delivered trimmed, and every output item is remembered", () =>
   Effect.gen(function* () {
@@ -1131,7 +1169,7 @@ it.effect(
       const h = yield* effectHarness({ client: inner });
       const generationClock = new BrainGenerationClock({
         store: h.store,
-        ...(yield* ambientTimers),
+        ...(yield* generationClockTimers),
       });
       yield* Effect.promise(() => generationClock.start());
       inner.answers.push(answered([message(`noted ${OLD_SECRET}`)]));
@@ -1225,7 +1263,7 @@ it.effect("a fortnight of writes never extends a generation's life", () =>
     const h = yield* effectHarness();
     const generationClock = new BrainGenerationClock({
       store: h.store,
-      ...(yield* ambientTimers),
+      ...(yield* generationClockTimers),
     });
     yield* Effect.promise(() => generationClock.start());
     h.client.answers.push(answered([message("one")]));
@@ -1266,7 +1304,7 @@ it.effect(
         const h = yield* effectHarness({ actions });
         const generationClock = new BrainGenerationClock({
           store: h.store,
-          ...(yield* ambientTimers),
+          ...(yield* generationClockTimers),
         });
         yield* Effect.promise(() => generationClock.start());
         h.client.answers.push(answered([message("first")]));

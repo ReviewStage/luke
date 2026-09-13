@@ -7,7 +7,7 @@ import {
   freshBrainState,
 } from "./envelope.js";
 import { BrainGenerationClock } from "./generation-clock.js";
-import type { ScheduledTimer } from "./seam.js";
+import type { ScheduledTimer } from "./scheduled-timer.js";
 import { BrainStateStore } from "./state-store.js";
 import { type FakeBrainStateRepository, fakeBrainStateRepository } from "./testing.js";
 
