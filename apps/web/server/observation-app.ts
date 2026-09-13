@@ -174,12 +174,14 @@ function promisePassthrough(handle: (request: Request) => Promise<Response>): Ht
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
 async function sessionsMessagesHandler(request: Request): Promise<Response> {
-  return handleConversationRead({
-    ...hostedVaultSeams,
-    encryptionSecret: await hostedEncryptionSecret(),
-    request,
-    execute: (ask) => runWeb(executeConversationRead(ask)),
-  });
+  return runWeb(
+    handleConversationRead({
+      ...hostedVaultSeams,
+      encryptionSecret: await hostedEncryptionSecret(),
+      request,
+      execute: (ask) => runWeb(executeConversationRead(ask)),
+    }),
+  );
 }
 
 /** Lists where the signed-in user's keys can create a workspace. */
@@ -214,7 +216,7 @@ async function eventsHandler(request: Request): Promise<Response> {
     readPerson: (userId) => runWeb(readPerson(userId)),
   };
   if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
-  return handleEvents(options);
+  return runWeb(handleEvents(options));
 }
 
 /**

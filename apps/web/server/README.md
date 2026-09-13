@@ -439,8 +439,8 @@ down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
 `change-signal.ts`'s poll still reaches for), and `server/hosted/vault.ts` is
 gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
 is the deployment's real wiring — the same account store the `hostedVaultRoute`
-seams other, still-promise-shaped hosted routes read — so each of the three
-route files is one line handing it to `routeFromHttpApp(devicesVaultApp(...))`.
+seams other hosted routes read — so each of the three route files is one line
+handing it to `routeFromHttpApp(devicesVaultApp(...))`.
 `HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
 (429), for the device brake's own refusal. Reading a body through
 `readJsonBodyEffect` needed a byte bound neither route held before; both take

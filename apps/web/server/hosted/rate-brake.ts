@@ -60,23 +60,3 @@ export function makeRateBrake(config: RateBrakeConfig): RateBrake {
       }),
   };
 }
-
-/**
- * The promise door the routes that still hold a promise call through,
- * keeping the older brake's own polarity — `true` means the request is over
- * the window and must be refused — since each of them reads it as
- * `if (rateLimited(userId)) return 429`. The check needs no service: its
- * whole state is the map `makeRateBrake` closes over, so nothing here needs
- * a runtime edge to answer it.
- *
- * @deprecated A strangler shim. P10-16 moved every route it converted onto
- * `RateBrake.check` directly; it goes with the last promise-shaped hosted
- * route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`).
- */
-export function createRateBrake(
-  config: RateBrakeConfig,
-): (userId: string, weight?: number) => Promise<boolean> {
-  const brake = makeRateBrake(config);
-  return (userId, weight) =>
-    Effect.runPromise(Effect.map(brake.check(userId, weight), (admitted) => !admitted));
-}

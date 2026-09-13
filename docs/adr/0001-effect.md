@@ -355,10 +355,11 @@ in `packages/voice/src/live-session-source.ts`. None of the three is an Effect
 composition yet, so each runs the one request it makes where the promise it
 answers begins, over the client it was built on or the ambient fetch one,
 rather than behind a door shared by all of them; the last two were already on
-this allowlist for their own runs, and `posthog.ts` is a new entry whose
-`postPosthogBatch` is deleted with the promise-shaped `events.ts` route above
-it, whose handler would yield the batch effect beneath that door instead — the
-same deletion `createRateBrake` waits on. `HostedChangesClient`'s, `HostedRosterClient`'s, and
+this allowlist for their own runs, and `posthog.ts` was a third, until
+P12-20j deleted `postPosthogBatch` together with the promise-shaped
+`events.ts` route it belonged to — the same PR `createRateBrake` waited
+on — whose handler now yields the batch effect beneath that door directly.
+`HostedChangesClient`'s, `HostedRosterClient`'s, and
 `HostedConversationClient`'s own `#run` in `changes-client.ts`,
 `roster-client.ts`, and `conversation-client.ts` were the seventh; P12-04b
 deleted it, so `observe`, `projects`, `poll`, `messages`, `events`, `turns`,
@@ -1112,19 +1113,6 @@ adapter and the schema cannot part again unnoticed. Letting the two packages
 go is a schema change first — those columns to JSON text, existing rows
 rewritten, the seeder writing JSON — and only then the adapter swap.
 
-`createRateBrake` in `apps/web/server/hosted/rate-brake.ts` is on the allowlist
-for the reason `fiberStoreRunner` was: `RateBrake.check` is an
-`Effect.Effect<boolean>` a per-user window reads through the ambient `Clock`,
-but a route that still holds a plain boolean it awaits cannot compose one, so
-`createRateBrake` runs that check to a promise here rather than on a fiber of
-its own. Effect's own `RateLimiter` was tried first and dropped: its only
-way to ask whether a permit is free without waiting for one is racing its
-blocking `take` against a zero-duration timeout, and that race lost to a busy
-event loop in this repository's own test suite, refusing a request nothing had
-actually rate-limited. P10-16 moved every route it converted onto
-`RateBrake.check` directly; the door goes with the last hosted route that still
-answers a promise (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`).
-
 `packages/brain/src/effect/carry.ts` holds the brain's door onto the host's
 `ExecutionRuntime`. P12-16m settled that there were two of them rather than
 one, on opposite schedules: `detachOn`, permanent and named as the detach door
@@ -1565,7 +1553,7 @@ design decision stated as such:
 | `cloudFetchFromHttpClient` | P1-07 | P12-04e |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
-| `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | with the promise-shaped `events.ts` route |
+| `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | P12-20j — deleted with the promise-shaped `events.ts` route it belonged to; `handleEvents` now yields the batch effect beneath that door directly |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
@@ -1595,7 +1583,7 @@ design decision stated as such:
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
 | `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
-| `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
+| `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | P12-20j — deleted; `conversation-read.ts` and `events.ts` now answer `Effect.Effect<Response>` run at their edge's `runWeb`, and `devices-vault-app.ts`'s `devicesEffect` yields `RateBrake.check` directly, the last three promise-shaped hosted routes it stood for |
 | `retireGeneration`'s `Scope.close` over `Effect.runSync` | P5-04 | never — P12-16c settled it: the fence must stay synchronous, so the row is bookkeeping rather than a deletion owed |
 | `compose-account.ts`'s runs of the account gate's links on the host's own runtime | P7-13b | P12-14b (see also below, put back in P12-14f and P12-14h, both deleted in P12-16d) |
 | `awaitedSettingsStore`, the settings store's own methods as the promises their unmigrated callers hold | P12-14c | deleted by P12-14i |
