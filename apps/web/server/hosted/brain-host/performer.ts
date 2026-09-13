@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { Effect } from "effect";
+import { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -23,7 +25,6 @@ import {
   type WireRecord,
   workspaceAgentModels,
 } from "../../core.js";
-import type { WebStoreRun } from "../../runtime.js";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
@@ -52,9 +53,9 @@ import type { HostedRoster } from "./roster.js";
 
 /** The facts as an action reaches them: remember answers whether the words now stand, forget whether the entry is gone. */
 export interface HostedFactsWriter {
-  list(): Promise<readonly RememberedFact[]>;
-  remember(ask: { id: string; words: string; replaces?: string }): Promise<boolean>;
-  forget(id: string): Promise<boolean>;
+  list(): Effect.Effect<readonly RememberedFact[]>;
+  remember(ask: { id: string; words: string; replaces?: string }): Effect.Effect<boolean>;
+  forget(id: string): Effect.Effect<boolean>;
 }
 
 /** One session action carried to its provider through the service's own execution, admitted there again. */
@@ -69,11 +70,11 @@ export type CloudActionExecutor = (input: {
 
 export interface HostedCarrierDependencies {
   /** The roster as the snapshot holds it now, read again for every action. */
-  readonly roster: () => Promise<HostedRoster>;
-  readonly defaults: () => Promise<HostedWorkspaceDefaults>;
+  readonly roster: () => Effect.Effect<HostedRoster>;
+  readonly defaults: () => Effect.Effect<HostedWorkspaceDefaults>;
   readonly facts: HostedFactsWriter;
   /** The account's stored key for a provider, decrypted; nothing where none is stored. */
-  readonly apiKey: (providerId: CloudAgentProviderId) => Promise<string | undefined>;
+  readonly apiKey: (providerId: CloudAgentProviderId) => Effect.Effect<string | undefined>;
   readonly execute: CloudActionExecutor;
 }
 
@@ -127,17 +128,17 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
     standing: ToolContext,
   ): Effect.Effect<ActionOutputEnvelope> =>
     Effect.gen(function* () {
-      const roster = yield* Effect.promise(() => dependencies.roster());
+      const roster = yield* dependencies.roster();
       const target = actionTargetSnapshot(action, roster.sessions);
       const kind = hostedSessionKind(action.kind);
       if (kind === undefined) return refusedActionOutput(REFUSAL.NOT_HERE, target);
       const providerId = "identity" in action ? action.identity.providerId : action.providerId;
       if (!isCloudAgentProviderId(providerId))
         return refusedActionOutput(REFUSAL.NOT_CLOUD, target);
-      const apiKey = yield* Effect.promise(() => dependencies.apiKey(providerId));
+      const apiKey = yield* dependencies.apiKey(providerId);
       if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER, target);
       if (!apiKey) return refusedActionOutput(REFUSAL.NO_KEY, target);
-      const stored = yield* Effect.promise(() => dependencies.roster());
+      const stored = yield* dependencies.roster();
       const executed = yield* dependencies.execute({
         kind,
         providerId,
@@ -149,12 +150,10 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
     });
 
   const wrote = (
-    write: () => Promise<boolean>,
+    write: Effect.Effect<boolean>,
     refusal: string,
   ): Effect.Effect<ActionOutputEnvelope> =>
-    Effect.map(Effect.promise(write), (done) =>
-      done ? acceptedActionOutput() : refusedActionOutput(refusal),
-    );
+    Effect.map(write, (done) => (done ? acceptedActionOutput() : refusedActionOutput(refusal)));
 
   const notHere = (): Effect.Effect<ActionOutputEnvelope> =>
     Effect.sync(() => refusedActionOutput(REFUSAL.NOT_HERE));
@@ -162,16 +161,15 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
   return {
     admission: () =>
       Effect.gen(function* () {
-        let read: Promise<HostedRoster> | undefined;
-        const roster = () => Effect.promise(() => (read ??= dependencies.roster()));
+        const roster = yield* Effect.cached(dependencies.roster());
         return {
-          roster: { read: () => Effect.map(roster(), (held) => held.sessions) },
+          roster: { read: () => Effect.map(roster, (held) => held.sessions) },
           projects: {
-            read: () => Effect.map(roster(), (held) => held.projects),
-            defaults: () => Effect.promise(() => dependencies.defaults()),
+            read: () => Effect.map(roster, (held) => held.projects),
+            defaults: () => dependencies.defaults(),
             agentModels: workspaceAgentModels,
           },
-          rememberedFacts: yield* Effect.promise(() => dependencies.facts.list()),
+          rememberedFacts: yield* dependencies.facts.list(),
         };
       }),
     carry(action, fields, standing) {
@@ -181,7 +179,7 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
         return dispatchByKind(action, {
           [ACTION_KIND.REMEMBER]: (remember) =>
             wrote(
-              () =>
+              Effect.suspend(() =>
                 dependencies.facts.remember({
                   id: randomUUID(),
                   words: remember.words,
@@ -189,10 +187,11 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
                     ? { replaces: remember.replaces }
                     : undefined),
                 }),
+              ),
               REFUSAL.MEMORY_NOT_SAVED,
             ),
           [ACTION_KIND.FORGET]: (forget) =>
-            wrote(() => dependencies.facts.forget(forget.id), REFUSAL.MEMORY_NOT_REMOVED),
+            wrote(dependencies.facts.forget(forget.id), REFUSAL.MEMORY_NOT_REMOVED),
           [ACTION_KIND.MESSAGE]: (carried) => carrySessionAction(carried, fields, standing),
           [ACTION_KIND.CONTROL]: (carried) => carrySessionAction(carried, fields, standing),
           [ACTION_KIND.CREATE_WORKSPACE]: (carried) =>
@@ -216,60 +215,70 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
  * One account's fact writes, one at a time: every mutation reads the list
  * again before it writes, and the next waits for the last, so two calls
  * remembering at once cannot each replace the list from a stale reading and
- * drop the other's entry. The chain is per account and per process, which is
- * where concurrent calls of one turn run.
+ * drop the other's entry. The permit is per account and per process, which is
+ * where concurrent calls of one turn run, and a write that fails or is
+ * interrupted releases it like any other.
  */
-const FACT_WRITES = new Map<string, Promise<unknown>>();
+const FACT_WRITE_PERMITS = new Map<string, Effect.Semaphore>();
 
-function serially<Value>(userId: string, write: () => Promise<Value>): Promise<Value> {
-  const last = FACT_WRITES.get(userId) ?? Promise.resolve();
-  const next = last.then(write, write);
-  FACT_WRITES.set(
-    userId,
-    next.then(
-      () => undefined,
-      () => undefined,
-    ),
-  );
-  return next;
+function serially<A, E, R>(userId: string, write: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  const held = FACT_WRITE_PERMITS.get(userId) ?? Effect.unsafeMakeSemaphore(1);
+  FACT_WRITE_PERMITS.set(userId, held);
+  return held.withPermits(1)(write);
 }
 
-/** The facts table as the carrier writes it: the same bounds the desktop's notebook keeps, one account's rows. */
+/**
+ * The facts table as the carrier writes it: the same bounds the desktop's
+ * notebook keeps, one account's rows. `HostedFactsWriter` answers
+ * `Effect<A, never, never>`, so the request's own client is provided into
+ * each row read and `Effect.orDie` stands for the error the contract has
+ * nowhere to say, exactly as `hostedWorkspaceAccess` does.
+ */
 export function hostedFactsWriter(
-  run: WebStoreRun,
+  client: SqlClient.SqlClient,
   store: Pick<HostedStore, "facts">,
   userId: string,
   now: () => number,
 ): HostedFactsWriter {
+  const run = <A>(
+    effect: Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>,
+  ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
+  const list = () => run(store.facts.list(userId));
   return {
-    list: () => run(store.facts.list(userId)),
+    list,
     remember: (ask) =>
-      serially(userId, async () => {
-        const words = rememberedFactText(ask.words);
-        if (!words) return false;
-        const standing = await run(store.facts.list(userId));
-        const kept = standing.filter((fact) => fact.id !== ask.replaces);
-        const next = kept.some((fact) => fact.words === words)
-          ? kept
-          : [...kept, { id: ask.id, words }];
-        if (next.length > maximumRememberedFacts) return false;
-        if (next.length !== standing.length || next !== kept) {
-          await run(store.facts.replace(userId, next, now()));
-        }
-        return true;
-      }),
+      serially(
+        userId,
+        Effect.gen(function* () {
+          const words = rememberedFactText(ask.words);
+          if (!words) return false;
+          const standing = yield* list();
+          const kept = standing.filter((fact) => fact.id !== ask.replaces);
+          const next = kept.some((fact) => fact.words === words)
+            ? kept
+            : [...kept, { id: ask.id, words }];
+          if (next.length > maximumRememberedFacts) return false;
+          if (next.length !== standing.length || next !== kept) {
+            yield* run(store.facts.replace(userId, next, now()));
+          }
+          return true;
+        }),
+      ),
     forget: (id) =>
-      serially(userId, async () => {
-        const standing = await run(store.facts.list(userId));
-        if (!standing.some((fact) => fact.id === id)) return false;
-        await run(
-          store.facts.replace(
-            userId,
-            standing.filter((fact) => fact.id !== id),
-            now(),
-          ),
-        );
-        return true;
-      }),
+      serially(
+        userId,
+        Effect.gen(function* () {
+          const standing = yield* list();
+          if (!standing.some((fact) => fact.id === id)) return false;
+          yield* run(
+            store.facts.replace(
+              userId,
+              standing.filter((fact) => fact.id !== id),
+              now(),
+            ),
+          );
+          return true;
+        }),
+      ),
   };
 }

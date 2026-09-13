@@ -1,6 +1,6 @@
 import { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Cause, Effect, Either, Option, type ParseResult } from "effect";
+import { Cause, Effect, Option, type ParseResult } from "effect";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
 import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
 import { OBSERVATION_TICK } from "../observation-bounds.js";
@@ -362,16 +362,21 @@ function withTranscript(
   opening: Opening,
 ): Effect.Effect<{ events: readonly BrainWakeEvent[]; cursor?: string; from?: string }> {
   return Effect.gen(function* () {
-    const read = yield* Effect.either(
-      Effect.tryPromise(() => seams.transcripts.since(opening.identity)),
+    // A defect as well as a failure: a read that dies — a provider plugin
+    // that throws where its effect declares no error — was a read not made
+    // when it was a rejected promise, and stays one now. Neither catch
+    // reaches an interruption, so a cancelled tick still ends the tick.
+    const read = yield* Effect.asSome(seams.transcripts.since(opening.identity)).pipe(
+      Effect.catchAllDefect(Effect.fail),
+      Effect.catchAll((failure) => {
+        seams.report(
+          `The transcript of ${opening.identity.providerSessionId} could not be read: ${String(failure)}.`,
+        );
+        return Effect.succeedNone;
+      }),
     );
-    if (Either.isLeft(read)) {
-      seams.report(
-        `The transcript of ${opening.identity.providerSessionId} could not be read: ${String(read.left.error)}.`,
-      );
-      return { events: opening.events };
-    }
-    const reading = read.right;
+    if (Option.isNone(read)) return { events: opening.events };
+    const reading = read.value;
     if (reading === undefined) return { events: opening.events };
     const [first, ...rest] = opening.events;
     if (first === undefined) return { events: opening.events };

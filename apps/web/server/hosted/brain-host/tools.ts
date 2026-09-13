@@ -87,7 +87,7 @@ export function hostedTurnPolicy(trigger: BrainTurnTrigger): EffectiveToolPolicy
 export interface HostedToolSeams {
   readonly conversation: ConversationTarget;
   /** The roster as the snapshot holds it now, read again for every call that needs it. */
-  readonly roster: () => Promise<HostedRoster>;
+  readonly roster: () => Effect.Effect<HostedRoster>;
   readonly carrier: HostedActionCarrier;
   readonly transcripts: Pick<HostedTranscriptReads, "whole">;
   readonly workspace: BrainWorkspaceAccess;
@@ -201,11 +201,11 @@ function runOf(
     case "read":
       return (fields, standing) =>
         Effect.gen(function* () {
-          const roster = brainRosterOf(yield* Effect.promise(() => seams.roster()), seams.now());
+          const roster = brainRosterOf(yield* seams.roster(), seams.now());
           return yield* named.module.execute(fields, {
             ...standing,
             roster: { text: roster.text, identities: roster.identities },
-            readTranscript: (identity) => Effect.promise(() => seams.transcripts.whole(identity)),
+            readTranscript: (identity) => seams.transcripts.whole(identity),
           });
         });
     case "announce":

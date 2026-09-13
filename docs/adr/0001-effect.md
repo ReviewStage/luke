@@ -970,10 +970,10 @@ arrival for the same reason, and only its reporting rides the exchange's
 scoped fiber. What those two modules do still hold is a promise face for the
 doors above them: `LiveRecord`'s two utterance writes and `LiveBrain`'s
 submission are promises `@sidecar/voice` declares, so each reads `SqlClient`
-once where it is built and runs those two over `runOverClient`, the same
-shim and the same shape `runTool`'s three seams take, rather than a runner
-threaded down from the edge. `WebStoreRun` stays for `exchangeAttachment`,
-which opens the socket's scope on it rather than running in one, and for
+once where it is built and runs those two over `runOverClient`, rather than a
+runner threaded down from the edge. Since P12-18g they are the only callers
+of it left. `WebStoreRun` stays for `exchangeAttachment`, which opens the
+socket's scope on it rather than running in one, and for
 `promisedVoiceSessionRecord`.
 
 What took the fiber's promise face was the brain host, for two reasons that
@@ -1002,12 +1002,34 @@ effect rather than running anything beside it. That left no module under
 `apps/web/server` holding a promise-shaped seam, so the `Promised` mapped type
 is gone from `fiber-runner.ts`; what is left of it is a copy in
 `apps/web/tests/support/promised-store.ts`, test support for the suites that
-predate `it.effect`, and it goes with the last of them. What still calls
-`runOverClient` is `runTool`'s own three — `hostedFactsWriter`,
-`hostedTranscriptReads`, and the roster reader — whose contracts are the
-brain's and answer promises; that is P12-18g. P12-18d2 gave it two more of
-the same shape, `hostedLiveRecord` and `hostedLiveBrain`, whose contracts are
-`@sidecar/voice`'s and answer promises for the same reason.
+predate `it.effect`, and it goes with the last of them.
+
+P12-18g took `runTool`'s own three the same way, once the contracts behind
+them answered effects rather than promises: `HostedFactsWriter`'s three
+methods, `HostedTranscriptReads`'s `whole` and `since`, and the roster reader
+`runTool` builds. Those contracts are `apps/web`'s own — the plan named them
+the brain's, and on contact the brain declares none of them: `read-tools.ts`
+takes its roster as rendered text and its `readTranscript` already answered an
+effect — so the move is the same `Effect.provideService` over the request's
+`SqlClient` that `hostedWorkspaceAccess` takes, with `Effect.orDie` where a
+contract admits no error. `since` is the one that keeps a typed error, because
+the opener reports a transcript it could not read and carries the turn without
+a delta rather than failing the visit; it catches the read's defects as well
+as its failures, so a provider plugin that dies where its effect declares no
+error is still a read not made, as it was when the rejection came back through
+a promise. Neither catch reaches an interruption, which is deliberate: a
+cancelled tick is the tick ending rather than a transcript that could not be
+read, the same distinction `offered` in that file draws. `hostedFactsWriter`'s per-account write chain — every mutation
+reads the list again before it writes, so two calls remembering at once cannot
+each replace the list from a stale reading — is now an `Effect.Semaphore` of
+one permit per account rather than a promise chained onto the last; a write
+that fails or is interrupted releases it, where the promise chain continued
+onto the next either way. What still calls `runOverClient` is the pair P12-18d2
+gave it, `hostedLiveRecord` and `hostedLiveBrain`, whose contracts are
+`@sidecar/voice`'s and answer promises because the live session service that
+calls them is a promise-shaped class; taking those two needs that service onto
+effects, which no PR in this plan schedules, so `fiber-runner.ts` and its
+`runShims` row stand.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -1451,7 +1473,7 @@ design decision stated as such:
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
-| `runOverClient` in `fiber-runner.ts`, the replacement promise face `hostedFactsWriter`, `hostedTranscriptReads`, and the roster reader take, over a `SqlClient` `runTool` reads once rather than a runtime it reads off the fiber, and the one `hostedLiveRecord` and `hostedLiveBrain` take over the `SqlClient` the socket's scope is built on | P12-18e; the voice compositions' P12-18d2 | P12-18g, with the last of the brain's callers, as its own tool contracts move onto effects; the voice compositions' when `@sidecar/voice`'s `LiveRecord` and `LiveBrain` answer effects, which no PR in this plan schedules; P12-18c took `relay`'s `StreamRelay` and stop carrier off it |
+| `runOverClient` in `fiber-runner.ts`, the promise face `hostedLiveRecord` and `hostedLiveBrain` take over the `SqlClient` the socket's scope is built on | P12-18d2 | when `@sidecar/voice`'s `LiveRecord` and `LiveBrain` answer effects, which no PR in this plan schedules; P12-18e took `runTool`'s workspace access off it, P12-18g its last three seams, and P12-18c `relay`'s `StreamRelay` and stop carrier |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
 | `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |
