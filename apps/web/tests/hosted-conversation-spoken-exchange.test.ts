@@ -46,7 +46,7 @@ import {
 import { STORE_WRITE_EFFECT, storeWriter, voiceWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { heard, said } from "./support/live-events";
 
@@ -468,10 +468,7 @@ it.effect(
       // and nothing leaves it.
       tick();
       const liveSessionId = `sess_${randomUUID()}`;
-      await promisedVoiceSessionRecord(database.run, voiceSessionRecord(now)).register({
-        userId,
-        sessionId: liveSessionId,
-      });
+      await database.run(voiceSessionRecord(now).register({ userId, sessionId: liveSessionId }));
       const voice = voiceWriter({ store: writer });
       const live = { userId, liveSessionId, conversation: target };
       for (const event of [

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RawData, WebSocket } from "ws";
+import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
 import {
   closeEvent,
   LIVE_SERVER_EVENT,
@@ -11,18 +11,19 @@ import {
 import {
   desktopFrameDecision,
   FRAME_DECISION,
-  frameText,
   frameType,
   upstreamFrameDecision,
   type VoiceRoute,
 } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
+import { frameBytes, frameText, type VoiceFrame, type VoiceSocket } from "./socket.js";
 
 /**
  * The pipe between one desktop socket and one OpenAI sideband, once both
- * stand. Frames cross as the bytes they arrived as; the service reads each
- * frame's `type` and nothing else of it, drops reflected audio by that type
- * on every route, and on the introduction route admits only what a
+ * stand. Each side's frames are a `Stream` read by a fiber of the session's
+ * own scope, and they cross as the bytes they arrived as; the service reads
+ * each frame's `type` and nothing else of it, drops reflected audio by that
+ * type on every route, and on the introduction route admits only what a
  * renderer's own data channel would carry. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by the id it was
@@ -34,6 +35,10 @@ import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
  * its behalf and the sideband held open for the final event under a
  * timeout; a sideband that goes first leaves the usage unconfirmed and takes
  * the desktop socket with it.
+ *
+ * A side going is its stream ending, so the two endings are read where every
+ * other frame is; the two waits are `Effect.sleep` forked into the same scope,
+ * which is what ends them when the session does.
  */
 
 export const RELAY_DEFAULTS = {
@@ -81,14 +86,14 @@ export const SOCKET_CLOSE_CODE = {
 /** The reason a desktop socket is closed with when OpenAI's side ended before `session.closed`. */
 export const UPSTREAM_CLOSED_REASON = "upstream-closed";
 
-export interface RelayOptions {
+export interface RelayOptions<R = never> {
   route: VoiceRoute;
-  desktop: WebSocket;
-  upstream: WebSocket;
+  desktop: VoiceSocket;
+  upstream: VoiceSocket;
   /** Runs once, on the first `session.closed`; the relay waits for it before settling. */
-  onSessionClosed?: ((closed: LiveSessionClosed) => Promise<void>) | undefined;
-  /** Runs on every `session.usage.updated`, with the seconds it named. */
-  onUsageUpdated?: ((seconds: number) => void) | undefined;
+  onSessionClosed?: ((closed: LiveSessionClosed) => Effect.Effect<void, never, R>) | undefined;
+  /** Runs on every `session.usage.updated`, with the seconds it named, on a fiber of its own. */
+  onUsageUpdated?: ((seconds: number) => Effect.Effect<void, never, R>) | undefined;
   /** Asked once, on the first `session.started`, for an event to send upstream from the service's own side. */
   onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
   /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
@@ -103,65 +108,40 @@ export interface RelaySummary extends RelayCounts {
   seconds: number | undefined;
 }
 
-function frameBytes(data: RawData): number {
-  if (Buffer.isBuffer(data)) return data.byteLength;
-  if (Array.isArray(data)) return data.reduce((total, part) => total + part.byteLength, 0);
-  return data.byteLength;
-}
-
-function isOpen(socket: WebSocket): boolean {
-  return socket.readyState === socket.OPEN;
-}
-
 /** Runs the pipe until the session is finalized or both transports are gone, and answers what it carried. */
-export function relaySession(options: RelayOptions): Promise<RelaySummary> {
+export function relaySession<R = never>(
+  options: RelayOptions<R>,
+): Effect.Effect<RelaySummary, never, R | Scope.Scope> {
   const { route, desktop, upstream } = options;
   const closeTimeoutMs = options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS;
   const openingTimeoutMs = options.openingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS;
-  const counts: RelayCounts = {
-    framesToUpstream: 0,
-    bytesToUpstream: 0,
-    framesToDesktop: 0,
-    bytesToDesktop: 0,
-    droppedAudio: 0,
-    droppedUnpermitted: 0,
-  };
-  let closedSeen = false;
-  let startedSeen = false;
-  /** Whether the caller has gone: an opening command is for someone still listening. */
-  let hungUp = false;
-  let closed: LiveSessionClosed | undefined;
-  let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
-  let openingEventId: string | undefined;
-  let openingTimer: ReturnType<typeof setTimeout> | undefined;
 
-  return new Promise<RelaySummary>((resolve) => {
-    let settled = false;
-    const settle = (finalization: Finalization): void => {
-      if (settled) return;
-      settled = true;
-      if (closeTimer !== undefined) clearTimeout(closeTimer);
-      openingEventId = undefined;
-      if (openingTimer !== undefined) clearTimeout(openingTimer);
-      if (isOpen(desktop)) {
-        desktop.close(
-          finalization === FINALIZATION.CONFIRMED
-            ? SOCKET_CLOSE_CODE.NORMAL
-            : SOCKET_CLOSE_CODE.GOING_AWAY,
-          finalization === FINALIZATION.CONFIRMED ? undefined : UPSTREAM_CLOSED_REASON,
-        );
-      }
-      if (isOpen(upstream)) upstream.close(SOCKET_CLOSE_CODE.NORMAL);
-      resolve({ ...counts, finalization, seconds: closed?.usage.seconds });
+  return Effect.gen(function* () {
+    const counts: RelayCounts = {
+      framesToUpstream: 0,
+      bytesToUpstream: 0,
+      framesToDesktop: 0,
+      bytesToDesktop: 0,
+      droppedAudio: 0,
+      droppedUnpermitted: 0,
     };
+    let closedSeen = false;
+    let startedSeen = false;
+    /** Whether the caller has gone: an opening command is for someone still listening. */
+    let hungUp = false;
+    let closed: LiveSessionClosed | undefined;
+    /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
+    let openingEventId: string | undefined;
+    let openingWait: Fiber.RuntimeFiber<void> | undefined;
 
-    const finalize = async (): Promise<void> => {
-      if (closed !== undefined && options.onSessionClosed) {
-        await options.onSessionClosed(closed).catch(() => undefined);
-      }
-      settle(FINALIZATION.CONFIRMED);
-    };
+    const settled = yield* Deferred.make<Finalization>();
+    const settle = (finalization: Finalization): Effect.Effect<void> =>
+      Effect.asVoid(Deferred.succeed(settled, finalization));
+
+    const sendUpstream = (event: LiveClientEvent): Effect.Effect<void> =>
+      Effect.flatMap(upstream.isOpen, (open) =>
+        open ? upstream.send({ text: JSON.stringify(event) }) : Effect.void,
+      );
 
     /**
      * The opening command's answer, handled once: the acknowledgment, the
@@ -169,13 +149,18 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
      * in turn, which is how the docs' cue follows the greeting rather than
      * racing it.
      */
-    const settleOpening = (opening: OpeningSettled): void => {
-      if (openingEventId === undefined) return;
-      openingEventId = undefined;
-      if (openingTimer !== undefined) clearTimeout(openingTimer);
-      const next = options.onOpeningSettled?.(opening);
-      if (next !== undefined && isOpen(upstream)) upstream.send(JSON.stringify(next));
-    };
+    const settleOpening = (opening: OpeningSettled): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        if (openingEventId === undefined) return Effect.void;
+        openingEventId = undefined;
+        const waiting = openingWait;
+        openingWait = undefined;
+        const next = options.onOpeningSettled?.(opening);
+        const sending = next === undefined ? Effect.void : sendUpstream(next);
+        return waiting === undefined
+          ? sending
+          : Effect.zipRight(Fiber.interruptFork(waiting), sending);
+      });
 
     /** How a server event answers the opening command, or nothing when it is about something else. */
     const openingAnswer = (event: LiveServerEvent): OpeningSettled | undefined => {
@@ -195,98 +180,154 @@ export function relaySession(options: RelayOptions): Promise<RelaySummary> {
         : undefined;
     };
 
-    const onUpstreamMessage = (data: RawData, isBinary: boolean): void => {
-      const text = frameText(data, isBinary);
-      const type = frameType(text);
-      const decision = upstreamFrameDecision(type, route);
-      if (decision === FRAME_DECISION.DROP_AUDIO) {
-        counts.droppedAudio += 1;
-      } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
-        counts.droppedUnpermitted += 1;
-      } else if (isOpen(desktop)) {
-        desktop.send(data, { binary: isBinary });
-        counts.framesToDesktop += 1;
-        counts.bytesToDesktop += frameBytes(data);
-      }
-      if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
-        startedSeen = true;
-        const opening = hungUp ? undefined : options.onSessionStarted?.();
-        if (opening !== undefined && isOpen(upstream)) {
-          upstream.send(JSON.stringify(opening));
-          openingEventId = opening.event_id;
-          openingTimer = setTimeout(() => {
-            settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
-          }, openingTimeoutMs);
-        }
-      }
-      if (
-        openingEventId !== undefined &&
-        (type === LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED || type === LIVE_SERVER_EVENT.ERROR)
-      ) {
-        const event = parseLiveServerEvent(text);
-        const answer = event === undefined ? undefined : openingAnswer(event);
-        if (answer !== undefined) settleOpening(answer);
-      }
-      if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
-        const updated = parseLiveServerEvent(text);
-        if (updated?.type === LIVE_SERVER_EVENT.USAGE_UPDATED) {
-          options.onUsageUpdated(updated.usage.seconds);
-        }
-      }
-      if (type === LIVE_SERVER_EVENT.SESSION_CLOSED && !closedSeen) {
-        closedSeen = true;
-        const event = parseLiveServerEvent(text);
-        if (event?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) closed = event;
-        void finalize();
-      }
-    };
+    const armOpening = (opening: LiveClientEvent): Effect.Effect<void, never, Scope.Scope> =>
+      Effect.gen(function* () {
+        openingEventId = opening.event_id;
+        openingWait = yield* Effect.forkScoped(
+          Effect.sleep(openingTimeoutMs).pipe(
+            // Cleared before the settle it runs, so the settle interrupts no
+            // fiber: the one it would interrupt is this one.
+            Effect.zipRight(
+              Effect.sync(() => {
+                openingWait = undefined;
+              }),
+            ),
+            Effect.zipRight(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
+          ),
+        );
+      });
 
-    const onUpstreamGone = (): void => {
-      if (!closedSeen) settle(FINALIZATION.UNCONFIRMED);
-    };
+    /**
+     * The finalization, which settles whatever the caller's own close write
+     * came to: run to its `Exit` rather than awaited, because a write that
+     * failed or died is still a session that ended, and a defect carried into
+     * the settle would leave the pipe waiting on a `Deferred` nothing
+     * completes.
+     */
+    const finalize: Effect.Effect<void, never, R> = Effect.suspend(() =>
+      closed !== undefined && options.onSessionClosed
+        ? Effect.zipRight(
+            Effect.exit(options.onSessionClosed(closed)),
+            settle(FINALIZATION.CONFIRMED),
+          )
+        : settle(FINALIZATION.CONFIRMED),
+    );
 
-    const onDesktopMessage = (data: RawData, isBinary: boolean): void => {
-      const decision = desktopFrameDecision(frameType(frameText(data, isBinary)), route);
-      if (decision !== FRAME_DECISION.FORWARD) {
-        counts.droppedUnpermitted += 1;
-        return;
-      }
-      if (!isOpen(upstream)) return;
-      upstream.send(data, { binary: isBinary });
-      counts.framesToUpstream += 1;
-      counts.bytesToUpstream += frameBytes(data);
-    };
+    const onUpstreamFrame = (frame: VoiceFrame) =>
+      Effect.gen(function* () {
+        const text = frameText(frame);
+        const type = frameType(text);
+        const decision = upstreamFrameDecision(type, route);
+        if (decision === FRAME_DECISION.DROP_AUDIO) {
+          counts.droppedAudio += 1;
+        } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
+          counts.droppedUnpermitted += 1;
+        } else if (yield* desktop.isOpen) {
+          yield* desktop.send(frame);
+          counts.framesToDesktop += 1;
+          counts.bytesToDesktop += frameBytes(frame);
+        }
+        if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
+          startedSeen = true;
+          const opening = hungUp ? undefined : options.onSessionStarted?.();
+          if (opening !== undefined && (yield* upstream.isOpen)) {
+            yield* upstream.send({ text: JSON.stringify(opening) });
+            yield* armOpening(opening);
+            // The caller may have gone while the command was going up, on the
+            // fiber reading their own socket: an opening armed behind a hangup
+            // is settled here rather than left to cue a session on its way out,
+            // which is what the hangup itself would have done had it run first.
+            if (hungUp) yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
+          }
+        }
+        if (
+          openingEventId !== undefined &&
+          (type === LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED || type === LIVE_SERVER_EVENT.ERROR)
+        ) {
+          const event = parseLiveServerEvent(text);
+          const answer = event === undefined ? undefined : openingAnswer(event);
+          if (answer !== undefined) yield* settleOpening(answer);
+        }
+        if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
+          const updated = parseLiveServerEvent(text);
+          if (updated?.type === LIVE_SERVER_EVENT.USAGE_UPDATED) {
+            // On its own fiber, since a snapshot is not what the pipe waits
+            // on, and uninterruptible, since the scope closing on a session
+            // that ended unconfirmed would otherwise cut the last snapshot
+            // the row will ever hold.
+            yield* Effect.forkScoped(
+              Effect.uninterruptible(options.onUsageUpdated(updated.usage.seconds)),
+            );
+          }
+        }
+        if (type === LIVE_SERVER_EVENT.SESSION_CLOSED && !closedSeen) {
+          closedSeen = true;
+          const event = parseLiveServerEvent(text);
+          if (event?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) closed = event;
+          yield* Effect.forkScoped(finalize);
+        }
+      });
+
+    const onUpstreamGone = Effect.suspend(() =>
+      closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED),
+    );
+
+    const onDesktopFrame = (frame: VoiceFrame) =>
+      Effect.gen(function* () {
+        const decision = desktopFrameDecision(frameType(frameText(frame)), route);
+        if (decision !== FRAME_DECISION.FORWARD) {
+          counts.droppedUnpermitted += 1;
+          return;
+        }
+        if (!(yield* upstream.isOpen)) return;
+        yield* upstream.send(frame);
+        counts.framesToUpstream += 1;
+        counts.bytesToUpstream += frameBytes(frame);
+      });
 
     /**
      * The desktop went first. The docs' graceful close on its behalf: the
-     * `session.closed` listener already stands, `session.close` goes up, and
-     * the sideband is held for the final event so the seconds are recorded,
-     * under the timeout after which finalization is reported incomplete.
+     * sideband's own stream is already read, `session.close` goes up, and the
+     * sideband is held for the final event so the seconds are recorded, under
+     * the timeout after which finalization is reported incomplete.
      */
-    const onDesktopGone = (): void => {
+    const onDesktopGone = Effect.gen(function* () {
       hungUp = true;
-      if (closedSeen || settled) return;
+      if (closedSeen || (yield* Deferred.isDone(settled))) return;
       // The caller has hung up, so the opening command will never be answered
       // to any purpose: it is settled as unanswered here rather than left
       // armed, where an acknowledgment arriving during the graceful close
       // would cue a session already on its way out.
-      settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
-      if (!isOpen(upstream)) {
-        settle(FINALIZATION.UNCONFIRMED);
+      yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
+      if (!(yield* upstream.isOpen)) {
+        yield* settle(FINALIZATION.UNCONFIRMED);
         return;
       }
-      upstream.send(JSON.stringify(closeEvent(randomUUID())));
-      closeTimer = setTimeout(() => {
-        if (!closedSeen) settle(FINALIZATION.UNCONFIRMED);
-      }, closeTimeoutMs);
-    };
+      yield* upstream.send({ text: JSON.stringify(closeEvent(randomUUID())) });
+      yield* Effect.forkScoped(
+        Effect.sleep(closeTimeoutMs).pipe(
+          Effect.zipRight(
+            Effect.suspend(() => (closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED))),
+          ),
+        ),
+      );
+    });
 
-    upstream.on("message", onUpstreamMessage);
-    upstream.on("close", onUpstreamGone);
-    upstream.on("error", onUpstreamGone);
-    desktop.on("message", onDesktopMessage);
-    desktop.on("close", onDesktopGone);
-    desktop.on("error", onDesktopGone);
-    if (!isOpen(desktop)) onDesktopGone();
+    yield* Effect.forkScoped(
+      Effect.zipRight(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
+    );
+    yield* Effect.forkScoped(
+      Effect.zipRight(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
+    );
+
+    const finalization = yield* Deferred.await(settled);
+    openingEventId = undefined;
+    if (yield* desktop.isOpen) {
+      yield* finalization === FINALIZATION.CONFIRMED
+        ? desktop.close(SOCKET_CLOSE_CODE.NORMAL)
+        : desktop.close(SOCKET_CLOSE_CODE.GOING_AWAY, UPSTREAM_CLOSED_REASON);
+    }
+    if (yield* upstream.isOpen) yield* upstream.close(SOCKET_CLOSE_CODE.NORMAL);
+    return { ...counts, finalization, seconds: closed?.usage.seconds };
   });
 }

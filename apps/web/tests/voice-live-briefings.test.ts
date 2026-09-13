@@ -28,7 +28,7 @@ import {
   type HostedBriefings,
   hostedBriefings,
 } from "../server/voice/live-briefings";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -66,10 +66,7 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = promisedVoiceSessionRecord(
-  database.run,
-  voiceSessionRecord(() => NOW),
-);
+const sessionRecord = voiceSessionRecord(() => NOW);
 const speech = { writer };
 
 async function account(): Promise<ConversationTarget> {
@@ -93,7 +90,7 @@ async function device(userId: string): Promise<string> {
 /** A registered live session for the account, its row naming the device given, or none. */
 async function voiceSession(userId: string, deviceId: string | undefined): Promise<string> {
   const liveSessionId = `sess_${randomUUID()}`;
-  await sessionRecord.register({ userId, sessionId: liveSessionId });
+  await database.run(sessionRecord.register({ userId, sessionId: liveSessionId }));
   if (deviceId !== undefined) {
     await setVoiceSessionDeviceId(database.run, liveSessionId, deviceId);
   }

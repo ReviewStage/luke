@@ -33,7 +33,7 @@ import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE } from "../server/voice/relay";
 import { VoiceService, type VoiceServiceOptions } from "../server/voice/service";
-import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import {
@@ -118,10 +118,7 @@ const relay = new StreamRelay({
   now: () => NOW,
   report: () => undefined,
 });
-const sessionRecord = promisedVoiceSessionRecord(
-  database.run,
-  voiceSessionRecord(() => NOW),
-);
+const sessionRecord = voiceSessionRecord(() => NOW);
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
@@ -249,6 +246,7 @@ async function stand(offer: Offer): Promise<Stand> {
     apiKey: API_KEY,
     accounts,
     record: sessionRecord,
+    run: database.run,
     openAiBaseUrl: openAi.baseUrl,
     log: (entry) => {
       log.push(entry);
@@ -466,12 +464,15 @@ it.effect(
         input: SEED,
       });
       const attach = await context.openAi.nextAttach();
+      // The upstream reader stands the instant the attach lands: the session's
+      // scope releases the sideband as it ends, which is before the refusal
+      // the desktop is answered with has crossed back to this test.
+      const upstream = readSocket(attach.socket);
       const refusal = record(await desktop.next());
       assert.equal(refusal.error, "unavailable");
       const closed = await desktop.closed;
       assert.equal(closed.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
-      const upstreamClosed = await readSocket(attach.socket).closed;
-      assert.equal(upstreamClosed.code, SOCKET_CLOSE_CODE.GOING_AWAY);
+      assert.equal((await upstream.closed).code, SOCKET_CLOSE_CODE.GOING_AWAY);
       assert.deepEqual(
         context.log.map((entry) => entry.event),
         [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],

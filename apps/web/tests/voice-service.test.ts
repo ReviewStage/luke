@@ -33,7 +33,7 @@ import {
   sessionInstructions,
 } from "../server/live";
 import { VOICE_ROUTE } from "../server/voice/frames";
-import { LOG_EVENT, type LogEntry } from "../server/voice/log";
+import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
   INTRODUCTION_INPUT_BOUNDS,
@@ -42,6 +42,7 @@ import {
   VoiceService,
   type VoiceServiceOptions,
 } from "../server/voice/service";
+import { runWithoutDatabase } from "./support/no-database";
 import {
   connect,
   FAKE_BEARER,
@@ -123,6 +124,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
     apiKey: API_KEY,
     accounts,
     record,
+    run: runWithoutDatabase,
     openAiBaseUrl: openAi.baseUrl,
     log: (entry) => {
       log.push(entry);
@@ -389,6 +391,34 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
   const recorded = context.log.find((entry) => entry.event === LOG_EVENT.USAGE_RECORDED);
   assert.ok(recorded && recorded.event === LOG_EVENT.USAGE_RECORDED);
   assert.equal(recorded.outcome, VOICE_SECONDS_OUTCOME.RECORDED);
+  assert.equal(context.service.sessions(), 0);
+});
+
+test("a seconds report that throws still finalizes the session: both ends are closed and the session is reported ended", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.accounts.recordSeconds = () => Promise.reject(new Error("the ledger is not reachable"));
+  const { desktop, upstream, created } = await openSession(context);
+
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "e9",
+      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      usage: { seconds: 12 },
+    }),
+  );
+
+  assert.equal((await desktop.closed).code, SOCKET_CLOSE_CODE.NORMAL);
+  await upstream.closed;
+  assert.deepEqual(context.record.closes, [
+    { sessionId: created.sessionId, seconds: 12, reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED },
+  ]);
+  const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+  assert.equal(ended.finalization, FINALIZATION.CONFIRMED);
+  assert.equal(ended.seconds, 12);
   assert.equal(context.service.sessions(), 0);
 });
 
@@ -934,7 +964,7 @@ test("an attach to a session another account created, or one never created, is r
   const context = await stand();
   onTestFinished(() => context.stop());
   const { created } = await openSession(context);
-  await context.record.register({ userId: "user-2", sessionId: "live_theirs" });
+  await runWithoutDatabase(context.record.register({ userId: "user-2", sessionId: "live_theirs" }));
 
   for (const sessionId of ["live_theirs", "live_never"]) {
     const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {

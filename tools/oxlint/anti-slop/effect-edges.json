@@ -16,7 +16,6 @@
   ],
   "runShims": [
     "apps/web/eve/evals/brain-host.eval.ts",
-    "apps/web/server/voice/openai.ts",
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
@@ -67,8 +66,6 @@
     "apps/web/server/hosted/brain-ask.ts",
     "apps/web/server/hosted/brain-host/eve-sessions.ts",
     "apps/web/server/hosted/observation-tick.ts",
-    "apps/web/server/voice/openai.ts",
-    "apps/web/server/voice/relay.ts",
     "apps/web/server/voice/service.ts",
     "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",

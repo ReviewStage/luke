@@ -3,8 +3,10 @@ import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { Layer } from "effect";
-import { type RawData, type WebSocket, WebSocketServer } from "ws";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type Layer, Option, type ParseResult, type Scope } from "effect";
+import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -34,8 +36,9 @@ import {
   RENDERER_SERVER_EVENTS,
   SEED_ROLE,
 } from "../live.js";
+import type { WebStoreRun } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { frameText, routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
+import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import type { AttachedExchange, AttachedSession, ExchangeAttachment } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
@@ -46,7 +49,8 @@ import {
   relaySession,
   SOCKET_CLOSE_CODE,
 } from "./relay.js";
-import type { PromisedVoiceSessionRecord } from "./session-record.js";
+import type { VoiceSessionRecord } from "./session-record.js";
+import { frameText, type VoiceSocket, voiceSocket } from "./socket.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the
@@ -134,7 +138,9 @@ export interface VoiceServiceOptions {
   model?: string | undefined;
   accounts: VoiceAccounts;
   /** The `voice_sessions` row of each signed-in session; the introduction, with no account, writes none. */
-  record: PromisedVoiceSessionRecord;
+  record: VoiceSessionRecord;
+  /** The edge's own runner, which every session's one effect is run on; a test hands the runner over its own test database. */
+  run: WebStoreRun;
   /**
    * The hosted exchange to stand on each signed-in session, adopted over the
    * same sideband the relay pipes; absent, the service only pipes, and the
@@ -218,15 +224,21 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
   );
 }
 
-function isOpen(socket: WebSocket): boolean {
-  return socket.readyState === socket.OPEN;
-}
+/**
+ * What one session's own effect may fail with: the `voice_sessions` writes
+ * the service makes on the session's behalf, and nothing else — every other
+ * refusal is a frame the desktop is answered with.
+ */
+type SessionFailure = SqlError | ParseResult.ParseError;
+
+type SessionEffect<A> = Effect.Effect<A, SessionFailure, SqlClient.SqlClient | Scope.Scope>;
 
 export class VoiceService {
   readonly #options: VoiceServiceOptions;
   readonly #log: Log;
   readonly #accounts: VoiceAccounts;
-  readonly #record: PromisedVoiceSessionRecord;
+  readonly #record: VoiceSessionRecord;
+  readonly #run: WebStoreRun;
   readonly #upstream: LiveUpstream | undefined;
   readonly #sockets: WebSocketServer;
   readonly #http = http.createServer((request, response) => {
@@ -242,6 +254,7 @@ export class VoiceService {
     this.#log = options.log ?? standardOutputLog;
     this.#accounts = options.accounts;
     this.#record = options.record;
+    this.#run = options.run;
     const apiKey = options.apiKey?.trim();
     this.#upstream = apiKey
       ? createLiveUpstream({
@@ -310,7 +323,11 @@ export class VoiceService {
       return;
     }
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
-      const session = this.#serve(webSocket, decision).finally(() => {
+      // Paused before the fiber that reads it stands: `ws` emits a frame to
+      // whoever listens at that instant, and the session's own reader is a
+      // fiber away. `#serve` resumes it once that reader is registered.
+      webSocket.pause();
+      const session = this.#run(Effect.scoped(this.#serve(webSocket, decision))).finally(() => {
         this.#active.delete(session);
       });
       this.#active.add(session);
@@ -336,117 +353,128 @@ export class VoiceService {
     return { route };
   }
 
-  /** One socket, one session: the opening frame, the creation or attachment, the pipe. */
-  async #serve(desktop: WebSocket, admission: Admission): Promise<void> {
-    const upstream = this.#upstream;
-    if (upstream === undefined) return;
-    const { route } = admission;
-    const refuse = (reason: HostedApiError): void => {
-      this.#log({ event: LOG_EVENT.SESSION_REFUSED, route, reason });
-      if (!isOpen(desktop)) return;
-      desktop.send(JSON.stringify({ error: reason }));
-      desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, reason);
-    };
+  /**
+   * One socket, one session, one scope: the opening frame, the creation or
+   * attachment, the pipe. Everything the session acquires — both sockets, the
+   * fibers that read them, and the waits the relay arms — belongs to the scope
+   * this effect runs in, so a session that ends, however it ends, leaves
+   * nothing of itself behind.
+   */
+  #serve(socket: WebSocket, admission: Admission): SessionEffect<void> {
+    return Effect.gen(this, function* () {
+      const upstream = this.#upstream;
+      if (upstream === undefined) return;
+      const { route } = admission;
+      const desktop = yield* voiceSocket(socket);
+      yield* Effect.sync(() => socket.resume());
+      const refuse = (reason: HostedApiError): Effect.Effect<void> =>
+        Effect.gen(this, function* () {
+          this.#log({ event: LOG_EVENT.SESSION_REFUSED, route, reason });
+          if (!(yield* desktop.isOpen)) return;
+          yield* desktop.send({ text: JSON.stringify({ error: reason }) });
+          yield* desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, reason);
+        });
 
-    const frame = await this.#firstFrame(desktop);
-    if (!isOpen(desktop)) return;
-    if (frame === undefined) {
-      refuse(HOSTED_API_ERROR.INVALID_REQUEST);
-      return;
-    }
-    const opened =
-      frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH
-        ? await this.#openAttached(upstream, admission, frame)
-        : await this.#openCreated(upstream, admission, frame);
-    if (!isOpen(desktop)) {
-      if ("sideband" in opened) this.#release(opened.sideband);
-      return;
-    }
-    if ("refusal" in opened) {
-      refuse(opened.refusal);
-      return;
-    }
-    const { sessionId, accountId, sideband } = opened;
-    // The exchange stands before the desktop is answered, on the same socket
-    // the relay is about to pipe. The socket is paused since the attach, so a
-    // frame the session spoke while the exchange stood is read once both
-    // consumers listen, by both, in order.
-    const standing =
-      accountId === undefined
-        ? { exchange: undefined }
-        : await this.#attachExchange(route, {
-            accountId,
-            sessionId,
-            deviceId: opened.deviceId,
-            started: opened.started,
-            sideband,
-          });
-    if ("refused" in standing) {
-      this.#release(sideband);
-      refuse(HOSTED_API_ERROR.UNAVAILABLE);
-      return;
-    }
-    const { exchange } = standing;
-    // The desktop may have gone while the exchange stood: nothing is answered
-    // to a socket that is not there, and the exchange and the sideband are
-    // released here rather than left standing for the invocation.
-    if (!isOpen(desktop)) {
-      sideband.resume();
-      if (exchange !== undefined) await this.#stopExchange(exchange);
-      this.#release(sideband);
-      return;
-    }
-    desktop.send(JSON.stringify(opened.answer));
-    this.#log({ event: opened.logEvent, route });
+      const frame = yield* this.#firstFrame(desktop);
+      if (!(yield* desktop.isOpen)) return;
+      if (frame === undefined) {
+        yield* refuse(HOSTED_API_ERROR.INVALID_REQUEST);
+        return;
+      }
+      const opened =
+        frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH
+          ? yield* this.#openAttached(upstream, admission, frame)
+          : yield* this.#openCreated(upstream, admission, frame);
+      // A sideband opened for a desktop that has gone is the scope's to
+      // release, which it does on the way out of this effect.
+      if (!(yield* desktop.isOpen)) return;
+      if ("refusal" in opened) {
+        yield* refuse(opened.refusal);
+        return;
+      }
+      const { sessionId, accountId, sideband } = opened;
+      // The exchange stands before the desktop is answered, on the same socket
+      // the relay is about to pipe. The socket is paused since the attach, so a
+      // frame the session spoke while the exchange stood is read once both
+      // consumers listen, by both, in order.
+      const standing =
+        accountId === undefined
+          ? { exchange: undefined }
+          : yield* this.#attachExchange(route, {
+              accountId,
+              sessionId,
+              deviceId: opened.deviceId,
+              started: opened.started,
+              sideband,
+            });
+      if ("refused" in standing) {
+        yield* refuse(HOSTED_API_ERROR.UNAVAILABLE);
+        return;
+      }
+      const { exchange } = standing;
+      // The desktop may have gone while the exchange stood: nothing is answered
+      // to a socket that is not there, and the exchange ends here rather than
+      // being left standing for the invocation. The sideband is resumed first,
+      // since the exchange's own graceful close waits for a `session.closed` a
+      // paused socket would never deliver.
+      if (!(yield* desktop.isOpen)) {
+        yield* Effect.sync(() => sideband.resume());
+        if (exchange !== undefined) yield* this.#stopExchange(exchange);
+        return;
+      }
+      yield* desktop.send({ text: JSON.stringify(opened.answer) });
+      this.#log({ event: opened.logEvent, route });
 
-    const relaying = relaySession({
-      route,
-      desktop,
-      upstream: sideband,
-      closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
-      openingTimeoutMs: this.#options.greetingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS,
-      onSessionStarted:
-        route === VOICE_ROUTE.INTRODUCTION
-          ? () => {
-              this.#log({ event: LOG_EVENT.GREETING_SENT, route });
-              return instructionsAppend({
-                eventId: randomUUID(),
-                delegationId: null,
-                content: greetingInstruction(),
-              });
-            }
-          : undefined,
-      onOpeningSettled:
-        route === VOICE_ROUTE.INTRODUCTION
-          ? (settled) => this.#greetingSettled(route, settled)
-          : undefined,
-      onUsageUpdated:
-        accountId === undefined
-          ? undefined
-          : (seconds) => {
-              void this.#record.noteUsage({ sessionId, seconds }).catch(() => undefined);
-            },
-      onSessionClosed:
-        accountId === undefined
-          ? undefined
-          : async (closed) => {
-              await this.#record.close({
-                sessionId,
-                seconds: closed.usage.seconds,
-                reason: closed.reason,
-              });
-              await this.#recordUsage(accountId, sessionId, closed.usage.seconds);
-            },
+      const pipe = yield* voiceSocket(sideband);
+      // Both consumers listen now: what the session spoke since the attach is read here, by both.
+      yield* Effect.sync(() => sideband.resume());
+      const summary = yield* relaySession<SqlClient.SqlClient>({
+        route,
+        desktop,
+        upstream: pipe,
+        closeTimeoutMs: this.#options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS,
+        openingTimeoutMs: this.#options.greetingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS,
+        onSessionStarted:
+          route === VOICE_ROUTE.INTRODUCTION
+            ? () => {
+                this.#log({ event: LOG_EVENT.GREETING_SENT, route });
+                return instructionsAppend({
+                  eventId: randomUUID(),
+                  delegationId: null,
+                  content: greetingInstruction(),
+                });
+              }
+            : undefined,
+        onOpeningSettled:
+          route === VOICE_ROUTE.INTRODUCTION
+            ? (settled) => this.#greetingSettled(route, settled)
+            : undefined,
+        onUsageUpdated:
+          accountId === undefined
+            ? undefined
+            : (seconds) => Effect.ignore(this.#record.noteUsage({ sessionId, seconds })),
+        onSessionClosed:
+          accountId === undefined
+            ? undefined
+            : (closed) =>
+                Effect.ignore(
+                  Effect.gen(this, function* () {
+                    yield* this.#record.close({
+                      sessionId,
+                      seconds: closed.usage.seconds,
+                      reason: closed.reason,
+                    });
+                    yield* this.#recordUsage(accountId, sessionId, closed.usage.seconds);
+                  }),
+                ),
+      });
+      // The relay has settled and closed both transports; the exchange ends its
+      // follows and its look, closes the session it holds (already gone, which
+      // its sideband reports as the close it held), and waits for every record
+      // write already started, so no line begun before the settle is cut.
+      if (exchange !== undefined) yield* this.#stopExchange(exchange);
+      this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
     });
-    // Both consumers listen now: what the session spoke since the attach is read here, by both.
-    sideband.resume();
-    const summary = await relaying;
-    // The relay has settled and closed both transports; the exchange ends its
-    // follows and its look, closes the session it holds (already gone, which
-    // its sideband reports as the close it held), and waits for every record
-    // write already started, so no line begun before the settle is cut.
-    if (exchange !== undefined) await this.#stopExchange(exchange);
-    this.#log({ event: LOG_EVENT.SESSION_ENDED, route, ...summary });
   }
 
   /**
@@ -457,36 +485,36 @@ export class VoiceService {
    * The attachment builds the sideband and adopts; this service hands it the
    * socket and reaches nothing of the exchange itself.
    */
-  async #attachExchange(
+  #attachExchange(
     route: VoiceRoute,
     session: AttachedSession,
-  ): Promise<{ exchange: AttachedExchange | undefined } | { refused: true }> {
+  ): Effect.Effect<{ exchange: AttachedExchange | undefined } | { refused: true }> {
     const attachment = this.#options.exchange;
-    if (attachment === undefined) return { exchange: undefined };
-    try {
-      const exchange = await attachment(session);
-      if (exchange === undefined) return { exchange: undefined };
-      this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route });
-      return { exchange };
-    } catch {
-      this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
-      return { refused: true };
-    }
-  }
-
-  /** A sideband let go before any pipe stood: resumed first, since a paused socket cannot complete its close handshake. */
-  #release(sideband: WebSocket): void {
-    sideband.resume();
-    sideband.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+    if (attachment === undefined) return Effect.succeed({ exchange: undefined });
+    return Effect.tryPromise(() => attachment(session)).pipe(
+      Effect.map((exchange) => {
+        if (exchange === undefined) return { exchange: undefined };
+        this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route });
+        return { exchange };
+      }),
+      Effect.catchAll(() =>
+        Effect.sync(() => {
+          this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
+          return { refused: true } as const;
+        }),
+      ),
+    );
   }
 
   /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
-  async #stopExchange(exchange: AttachedExchange): Promise<void> {
-    try {
-      await exchange.stop();
-    } catch {
-      this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route: VOICE_ROUTE.SESSIONS });
-    }
+  #stopExchange(exchange: AttachedExchange): Effect.Effect<void> {
+    return Effect.catchAll(
+      Effect.tryPromise(() => exchange.stop()),
+      () =>
+        Effect.sync(() => {
+          this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route: VOICE_ROUTE.SESSIONS });
+        }),
+    );
   }
 
   /**
@@ -528,68 +556,69 @@ export class VoiceService {
    * only after reading a valid body, so an empty or malformed handshake costs
    * the ceiling nothing.
    */
-  async #openCreated(
+  #openCreated(
     upstream: LiveUpstream,
     admission: Admission,
     frame: SessionCreateFrame,
-  ): Promise<Opened> {
-    const { route } = admission;
-    if (route === VOICE_ROUTE.INTRODUCTION) {
-      if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
-      if (!(await this.#accounts.spendIntroduction()).allowed) {
-        return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+  ): SessionEffect<Opened> {
+    return Effect.gen(this, function* () {
+      const { route } = admission;
+      if (route === VOICE_ROUTE.INTRODUCTION) {
+        if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+        const introduction = yield* Effect.promise(() => this.#accounts.spendIntroduction());
+        if (!introduction.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+      } else if (!sessionsInputAdmitted(frame)) {
+        return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
       }
-    } else if (!sessionsInputAdmitted(frame)) {
-      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
-    }
-    const account =
-      admission.route === VOICE_ROUTE.SESSIONS ? await this.#admitAccount(admission) : undefined;
-    if (account && "refusal" in account) return account;
-    const answer: SessionCreatedFrame = {
-      type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-      sessionId: "",
-      sdpAnswer: "",
-      ...(account?.quota === undefined ? undefined : { quota: account.quota }),
-    };
-
-    const config = liveSessionConfig({
-      scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
-      model: this.#options.model,
-      voice: frame.voice,
-      input: frame.input,
-      clientEvents: RENDERER_CLIENT_EVENTS,
-      serverEvents: RENDERER_SERVER_EVENTS,
-    });
-    const created = await upstream.create(config, frame.sdp);
-    if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
-      return {
-        refusal:
-          created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
-          created.status === HTTP_STATUS.TOO_MANY_REQUESTS
-            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
-            : HOSTED_API_ERROR.UPSTREAM_ERROR,
+      const account =
+        admission.route === VOICE_ROUTE.SESSIONS ? yield* this.#admitAccount(admission) : undefined;
+      if (account && "refusal" in account) return account;
+      const answer: SessionCreatedFrame = {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATED,
+        sessionId: "",
+        sdpAnswer: "",
+        ...(account?.quota === undefined ? undefined : { quota: account.quota }),
       };
-    }
-    answer.sessionId = created.answer.session.id;
-    answer.sdpAnswer = created.answer.transport.sdp;
-    if (account) {
-      await this.#record.register({
-        userId: account.accountId,
-        sessionId: answer.sessionId,
-        deviceId: account.deviceId,
+
+      const config = liveSessionConfig({
+        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
+        model: this.#options.model,
+        voice: frame.voice,
+        input: frame.input,
+        clientEvents: RENDERER_CLIENT_EVENTS,
+        serverEvents: RENDERER_SERVER_EVENTS,
       });
-    }
-    const sideband = await this.#attach(upstream, answer.sessionId);
-    if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
-    return {
-      sessionId: answer.sessionId,
-      accountId: account?.accountId,
-      deviceId: account?.deviceId,
-      started: false,
-      sideband,
-      answer,
-      logEvent: LOG_EVENT.SESSION_CREATED,
-    };
+      const created = yield* upstream.create(config, frame.sdp);
+      if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
+        return {
+          refusal:
+            created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
+            created.status === HTTP_STATUS.TOO_MANY_REQUESTS
+              ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
+              : HOSTED_API_ERROR.UPSTREAM_ERROR,
+        };
+      }
+      answer.sessionId = created.answer.session.id;
+      answer.sdpAnswer = created.answer.transport.sdp;
+      if (account) {
+        yield* this.#record.register({
+          userId: account.accountId,
+          sessionId: answer.sessionId,
+          deviceId: account.deviceId,
+        });
+      }
+      const sideband = yield* this.#attach(upstream, answer.sessionId);
+      if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
+      return {
+        sessionId: answer.sessionId,
+        accountId: account?.accountId,
+        deviceId: account?.deviceId,
+        started: false,
+        sideband,
+        answer,
+        logEvent: LOG_EVENT.SESSION_CREATED,
+      };
+    });
   }
 
   /**
@@ -601,18 +630,22 @@ export class VoiceService {
    * the record's own write checks the same fact again, so a row gone between
    * here and there names no device.
    */
-  async #admitAccount(admission: SessionsAdmission): Promise<AdmittedAccount> {
-    const accountId = await this.#accounts.resolveUserId(admission.bearer);
-    if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
-    if (
-      admission.deviceId !== undefined &&
-      !(await this.#record.deviceOwned({ userId: accountId, deviceId: admission.deviceId }))
-    ) {
-      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
-    }
-    const spend = await this.#accounts.spend(accountId);
-    if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
-    return { accountId, deviceId: admission.deviceId, quota: spend.quota };
+  #admitAccount(
+    admission: SessionsAdmission,
+  ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> {
+    return Effect.gen(this, function* () {
+      const accountId = yield* Effect.promise(() => this.#accounts.resolveUserId(admission.bearer));
+      if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
+      if (
+        admission.deviceId !== undefined &&
+        !(yield* this.#record.deviceOwned({ userId: accountId, deviceId: admission.deviceId }))
+      ) {
+        return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+      }
+      const spend = yield* Effect.promise(() => this.#accounts.spend(accountId));
+      if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
+      return { accountId, deviceId: admission.deviceId, quota: spend.quota };
+    });
   }
 
   /**
@@ -622,36 +655,38 @@ export class VoiceService {
    * bearer's own failure rather than as a hint that the id exists. The
    * introduction never re-attaches.
    */
-  async #openAttached(
+  #openAttached(
     upstream: LiveUpstream,
     admission: Admission,
     frame: SessionAttachFrame,
-  ): Promise<Opened> {
-    if (admission.route !== VOICE_ROUTE.SESSIONS) {
-      return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
-    }
-    const accountId = await this.#accounts.resolveUserId(admission.bearer);
-    if (
-      accountId === undefined ||
-      !(await this.#record.owned({ userId: accountId, sessionId: frame.sessionId }))
-    ) {
-      return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
-    }
-    const sideband = await this.#attach(upstream, frame.sessionId);
-    if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
-    const answer: SessionAttachedFrame = {
-      type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
-      sessionId: frame.sessionId,
-    };
-    return {
-      sessionId: frame.sessionId,
-      accountId,
-      deviceId: undefined,
-      started: true,
-      sideband,
-      answer,
-      logEvent: LOG_EVENT.SESSION_ATTACHED,
-    };
+  ): SessionEffect<Opened> {
+    return Effect.gen(this, function* () {
+      if (admission.route !== VOICE_ROUTE.SESSIONS) {
+        return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
+      }
+      const accountId = yield* Effect.promise(() => this.#accounts.resolveUserId(admission.bearer));
+      if (
+        accountId === undefined ||
+        !(yield* this.#record.owned({ userId: accountId, sessionId: frame.sessionId }))
+      ) {
+        return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
+      }
+      const sideband = yield* this.#attach(upstream, frame.sessionId);
+      if (sideband === undefined) return { refusal: HOSTED_API_ERROR.UPSTREAM_ERROR };
+      const answer: SessionAttachedFrame = {
+        type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
+        sessionId: frame.sessionId,
+      };
+      return {
+        sessionId: frame.sessionId,
+        accountId,
+        deviceId: undefined,
+        started: true,
+        sideband,
+        answer,
+        logEvent: LOG_EVENT.SESSION_ATTACHED,
+      };
+    });
   }
 
   /**
@@ -661,37 +696,42 @@ export class VoiceService {
    * resumes it once every listener stands, and what arrived meanwhile is read
    * then, in order.
    */
-  async #attach(upstream: LiveUpstream, sessionId: string): Promise<WebSocket | undefined> {
-    try {
-      return await upstream.attach(sessionId);
-    } catch {
-      return undefined;
-    }
+  #attach(
+    upstream: LiveUpstream,
+    sessionId: string,
+  ): Effect.Effect<WebSocket | undefined, never, Scope.Scope> {
+    return Effect.catchAll(upstream.attach(sessionId), () => Effect.succeed(undefined));
   }
 
-  async #recordUsage(userId: string, sessionId: string, seconds: number): Promise<void> {
-    const outcome = await this.#accounts.recordSeconds({ userId, sessionId, seconds });
-    this.#log({ event: LOG_EVENT.USAGE_RECORDED, route: VOICE_ROUTE.SESSIONS, seconds, outcome });
+  #recordUsage(userId: string, sessionId: string, seconds: number): Effect.Effect<void> {
+    return Effect.map(
+      Effect.promise(() => this.#accounts.recordSeconds({ userId, sessionId, seconds })),
+      (outcome) => {
+        this.#log({
+          event: LOG_EVENT.USAGE_RECORDED,
+          route: VOICE_ROUTE.SESSIONS,
+          seconds,
+          outcome,
+        });
+      },
+    );
   }
 
   /** The socket's first frame as a `session.create` or `session.attach`, or nothing when it was late, closed, or neither. */
-  #firstFrame(desktop: WebSocket): Promise<SessionOpeningFrame | undefined> {
+  #firstFrame(desktop: VoiceSocket): Effect.Effect<SessionOpeningFrame | undefined> {
     const timeoutMs = this.#options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS;
-    return new Promise((resolve) => {
-      const done = (frame: SessionOpeningFrame | undefined): void => {
-        clearTimeout(timer);
-        desktop.off("message", onMessage);
-        desktop.off("close", onClose);
-        resolve(frame);
-      };
-      const timer = setTimeout(() => done(undefined), timeoutMs);
-      const onMessage = (data: RawData, isBinary: boolean): void => {
-        const payload = decodeLivePayload(frameText(data, isBinary));
-        done(payload === undefined ? undefined : sessionOpeningFrameFromWire(payload));
-      };
-      const onClose = (): void => done(undefined);
-      desktop.once("message", onMessage);
-      desktop.once("close", onClose);
-    });
+    return desktop.next.pipe(
+      Effect.map((frame) => {
+        const text = Option.flatMapNullable(frame, frameText);
+        if (Option.isNone(text)) return undefined;
+        const payload = decodeLivePayload(text.value);
+        return payload === undefined ? undefined : sessionOpeningFrameFromWire(payload);
+      }),
+      Effect.timeoutTo({
+        duration: timeoutMs,
+        onTimeout: () => undefined,
+        onSuccess: (opening) => opening,
+      }),
+    );
   }
 }
