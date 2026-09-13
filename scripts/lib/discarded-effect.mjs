@@ -3,10 +3,9 @@ import ts from "typescript";
 
 /**
  * An Effect describes work: writing one as a statement and then walking past
- * it runs nothing at all. That is not a style complaint but a silent bug —
- * #1332 turned `deleteConversation` into an Effect and left a `void ...(...)`
- * caller behind it, so Conversation Clear stopped deleting the local thread
- * and said nothing about it until #1342 found the dropped effect by hand.
+ * it runs nothing at all. That is not a style complaint but a silent bug: a
+ * `void ...(...)` left behind when a call turns into an Effect quietly drops
+ * whatever it was meant to do, and nothing before this check said so.
  *
  * Deciding it needs types: the expression is an ordinary call, and only its
  * type says whether what came back was a description or a result. The oxlint

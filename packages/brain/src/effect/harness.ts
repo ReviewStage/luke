@@ -57,14 +57,12 @@ export const effectHarness = (
 /**
  * Advances the ambient `TestClock` to `untilMs`, one due timer at a time
  * rather than jumping straight there, settling the harness's own microtask
- * chains between each — the same shape `FakeClock#advance` took. Jumping
- * straight to `untilMs` in one `TestClock.setTime` call would already read
- * `now` as `untilMs` by the time a callback's own promise chain settles far
- * enough to reschedule, so a short requeue computed from that already-jumped
- * `now` would read as due only after the target and never fire within this
- * advance; holding `now` at each due instant in turn, as the old
- * `FakeClock#advance` did, is what keeps a requeue's own delay landing
- * inside the same budget it would have under the old clock.
+ * chains between each. Jumping straight to `untilMs` in one `TestClock.setTime`
+ * call would already read `now` as `untilMs` by the time a callback's own
+ * promise chain settles far enough to reschedule, so a short requeue computed
+ * from that already-jumped `now` would read as due only after the target and
+ * never fire within this advance; holding `now` at each due instant in turn is
+ * what keeps a requeue's own delay landing inside the same budget.
  */
 export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
   Effect.gen(function* () {
