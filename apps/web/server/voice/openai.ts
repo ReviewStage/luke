@@ -19,7 +19,7 @@ import {
   liveCreateAnswerSchema,
   liveCreateRequest,
 } from "../live.js";
-import { SOCKET_CLOSE_CODE } from "./relay.js";
+import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**
  * How the service reaches OpenAI on Luke's project key: the one POST that

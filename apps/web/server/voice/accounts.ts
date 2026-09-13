@@ -1,3 +1,4 @@
+import type { Effect } from "effect";
 import type { HostedSpend, IntroductionSpend, VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
@@ -9,8 +10,8 @@ import type { HostedSpend, IntroductionSpend, VoiceSecondsOutcome } from "../hos
  * request, and is held no longer than the handshake it arrived on.
  */
 export interface VoiceAccounts {
-  /** The account behind an `Authorization` value, or nothing. */
-  resolveUserId(authorization: string): Promise<string | undefined>;
+  /** The account behind an `Authorization` value, or nothing, yielded on the session's own fiber. */
+  resolveUserId(authorization: string): Effect.Effect<string | undefined>;
   /** Spends one session of the account's daily allowance. */
   spend(userId: string): Promise<HostedSpend>;
   /** Spends one introduction of the deployment's shared daily ceiling, the one the introduction mint spends. */

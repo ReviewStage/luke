@@ -1,5 +1,5 @@
 import * as Socket from "@effect/platform/Socket";
-import { Deferred, Effect, Mailbox, type Option, type Scope, type Stream } from "effect";
+import { Deferred, Effect, Exit, Mailbox, type Option, type Scope, type Stream } from "effect";
 import type { WebSocket } from "ws";
 
 /**
@@ -28,6 +28,18 @@ import type { WebSocket } from "ws";
  * scope closes the socket.
  */
 
+/** The WebSocket close codes this service sends, by what each one says. */
+export const SOCKET_CLOSE_CODE = {
+  NORMAL: 1000,
+  /** The service itself is leaving, or the upstream left first. */
+  GOING_AWAY: 1001,
+  /** The peer sent something this route does not admit, or was refused. */
+  POLICY_VIOLATION: 1008,
+} as const;
+
+/** The reason a socket is closed with when the peer has sent more than its budget of bytes. */
+export const BUDGET_SPENT_REASON = "frame-budget-spent";
+
 export type VoiceFrame = { readonly text: string } | { readonly bytes: Uint8Array };
 
 export interface VoiceSocket {
@@ -52,7 +64,22 @@ export function frameText(frame: VoiceFrame): string | undefined {
   return "text" in frame ? frame.text : undefined;
 }
 
-export function voiceSocket(socket: WebSocket): Effect.Effect<VoiceSocket, never, Scope.Scope> {
+export interface VoiceSocketOptions {
+  /**
+   * How many bytes the peer may send before this closes the socket, counted
+   * from the reader's first frame rather than from whenever a consumer stood,
+   * so the frames a session holds while it is being stood up are spent as much
+   * as the ones the pipe carries. A frame past the budget is not read at all
+   * and the socket is closed with `BUDGET_SPENT_REASON`, so what a consumer
+   * sees is the peer going, which is a hangup it already knows how to end.
+   */
+  readonly byteBudget?: number | undefined;
+}
+
+export function voiceSocket(
+  socket: WebSocket,
+  options: VoiceSocketOptions = {},
+): Effect.Effect<VoiceSocket, never, Scope.Scope> {
   return Effect.gen(function* () {
     const platform = yield* Socket.fromWebSocket(
       Effect.acquireRelease(
@@ -69,13 +96,23 @@ export function voiceSocket(socket: WebSocket): Effect.Effect<VoiceSocket, never
     const inbound = yield* Mailbox.make<VoiceFrame>();
     const writeRaw = yield* platform.writer;
     const standing = yield* Deferred.make<void>();
+    const overspent = yield* Deferred.make<void>();
     let reading = false;
+    let spent = 0;
     yield* Effect.forkScoped(
       Effect.ensuring(
         Effect.ignore(
           platform.runRaw(
             (data) => {
-              inbound.unsafeOffer(data instanceof Uint8Array ? { bytes: data } : { text: data });
+              const frame = data instanceof Uint8Array ? { bytes: data } : { text: data };
+              if (options.byteBudget !== undefined) {
+                spent += frameBytes(frame);
+                if (spent > options.byteBudget) {
+                  Deferred.unsafeDone(overspent, Exit.void);
+                  return;
+                }
+              }
+              inbound.unsafeOffer(frame);
             },
             {
               onOpen: Effect.sync(() => {
@@ -97,6 +134,12 @@ export function voiceSocket(socket: WebSocket): Effect.Effect<VoiceSocket, never
     yield* Deferred.await(standing);
     const write = (chunk: string | Uint8Array | Socket.CloseEvent): Effect.Effect<void> =>
       Effect.suspend(() => (reading ? Effect.ignore(writeRaw(chunk)) : Effect.void));
+    yield* Effect.forkScoped(
+      Effect.zipRight(
+        Deferred.await(overspent),
+        write(new Socket.CloseEvent(SOCKET_CLOSE_CODE.POLICY_VIOLATION, BUDGET_SPENT_REASON)),
+      ),
+    );
     return {
       next: Effect.optionFromOptional(inbound.take),
       frames: Mailbox.toStream(inbound),

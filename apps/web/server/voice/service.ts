@@ -5,7 +5,7 @@ import type { Duplex } from "node:stream";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type Layer, Option, type ParseResult, type Scope } from "effect";
+import { Effect, FiberSet, type Layer, Option, type ParseResult, type Scope } from "effect";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,
@@ -42,15 +42,9 @@ import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import type { AttachedExchange, AttachedSession, ExchangeAttachment } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
-import {
-  OPENING_OUTCOME,
-  type OpeningSettled,
-  RELAY_DEFAULTS,
-  relaySession,
-  SOCKET_CLOSE_CODE,
-} from "./relay.js";
+import { OPENING_OUTCOME, type OpeningSettled, RELAY_DEFAULTS, relaySession } from "./relay.js";
 import type { VoiceSessionRecord } from "./session-record.js";
-import { frameText, type VoiceSocket, voiceSocket } from "./socket.js";
+import { frameText, SOCKET_CLOSE_CODE, type VoiceSocket, voiceSocket } from "./socket.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the
@@ -106,6 +100,105 @@ export const UPGRADE_STATUS = {
 const UPGRADE_REQUIRED = 426;
 
 /**
+ * How many bytes one desktop socket may send before the service closes it,
+ * counted by its own reader from the first frame it takes, so what a caller
+ * sends while its session is being stood up is spent as much as what the pipe
+ * later carries. The frames a caller sends here are a data channel's — mutes,
+ * appended text, the opening frame — since the voice itself travels over
+ * WebRTC and never over this socket, so a caller past this bound is sending
+ * something other than a conversation. The introduction's bound is the tighter
+ * one, because that route answers a fresh install with no account behind it
+ * and nothing else caps what it may hold: every frame the reader takes is held
+ * in the socket's own mailbox until a consumer takes it, so an unbounded
+ * sender would be unbounded memory on Luke's key. A signed-in desktop is
+ * bounded far wider, since its account is spent per session and answers for
+ * what it sends.
+ */
+export const SOCKET_BYTE_BUDGET = {
+  INTRODUCTION: 1024 * 1024,
+  SESSIONS: 8 * 1024 * 1024,
+} as const;
+
+/** What a server hands a service that stands on it, which is what `ws` upgrades on. */
+type VoiceUpgrade = (request: IncomingMessage, socket: Duplex, head: Buffer) => void;
+
+export interface VoiceServer {
+  /** The server a function module exports for Vercel to upgrade into. */
+  readonly server: http.Server;
+  /** The one service answering this server's upgrades: none until one stands, and none again once its scope closes. */
+  readonly serve: (handle: VoiceUpgrade | undefined) => void;
+}
+
+/** Refuses one upgrade before any socket stands, with the status the decision named. */
+function refuseUpgrade(socket: Duplex, status: number): void {
+  socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\n\r\n`);
+}
+
+/**
+ * The HTTP face of the voice service, built where a function module is
+ * evaluated because that module's export is synchronous and the service
+ * behind it is an effect the edge's own runtime runs. It answers plain
+ * requests itself, and until a service claims it — the gap between the
+ * module's evaluation and the service standing on the runtime the same module
+ * builds, which closes before Vercel's bridge has a socket to hand it — every
+ * upgrade is refused with the same 503 a deployment missing the project key
+ * answers with. A deployment whose runtime cannot be built stands no service
+ * and keeps answering it.
+ */
+export function voiceServer(): VoiceServer {
+  let handle: VoiceUpgrade | undefined;
+  const server = http.createServer((request, response) => {
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
+    response.writeHead(routeForPath(path) ? UPGRADE_REQUIRED : UPGRADE_STATUS.NOT_FOUND).end();
+  });
+  server.on("upgrade", (request, socket, head) => {
+    socket.on("error", () => socket.destroy());
+    if (handle === undefined) {
+      refuseUpgrade(socket, UPGRADE_STATUS.SERVICE_UNAVAILABLE);
+      return;
+    }
+    handle(request, socket, head);
+  });
+  return {
+    server,
+    serve: (next) => {
+      handle = next;
+    },
+  };
+}
+
+/**
+ * Listens for the scope's life and answers the port the operating system
+ * gave. The deployment never calls it — Vercel's bridge listens on the server
+ * the function exported — so this is what a test stands one on, and the
+ * scope's close is the listener's. A test acquires it before the service, so
+ * the reverse order that closes the scope drains the sessions first and the
+ * listener waits on no connection the drain has yet to end.
+ */
+export function listening(
+  voice: VoiceServer,
+  port: number,
+  host: string,
+): Effect.Effect<number, never, Scope.Scope> {
+  return Effect.acquireRelease(
+    Effect.async<number>((resume) => {
+      const failed = (error: Error) => resume(Effect.die(error));
+      voice.server.once("error", failed);
+      voice.server.listen(port, host, () => {
+        voice.server.off("error", failed);
+        // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
+        const address = voice.server.address() as AddressInfo;
+        resume(Effect.succeed(address.port));
+      });
+    }),
+    () =>
+      Effect.async<void>((resume) => {
+        voice.server.close(() => resume(Effect.void));
+      }),
+  );
+}
+
+/**
  * What an accountless introduction may put into a session running on Luke's
  * key: one developer message naming the detected sessions, bounded well
  * under what the takeover composes (at most eight titles of eighty
@@ -133,6 +226,8 @@ export const SESSIONS_INPUT_BOUNDS = {
 const BEARER_SCHEME = "Bearer ";
 
 export interface VoiceServiceOptions {
+  /** The server the service stands on, built where the function module is evaluated. */
+  server: VoiceServer;
   /** The GPT Live project key; absent, every upgrade is refused with 503. */
   apiKey: string | undefined;
   model?: string | undefined;
@@ -241,85 +336,118 @@ export class VoiceService {
   readonly #run: WebStoreRun;
   readonly #upstream: LiveUpstream | undefined;
   readonly #sockets: WebSocketServer;
-  readonly #http = http.createServer((request, response) => {
-    const path = new URL(request.url ?? "/", "http://localhost").pathname;
-    response.writeHead(routeForPath(path) ? UPGRADE_REQUIRED : UPGRADE_STATUS.NOT_FOUND).end();
-  });
-  /** Every session under way, so a close can wait for each to finalize. */
-  readonly #active = new Set<Promise<void>>();
-  #admitting = true;
+  /** Every session under way, one fiber each, so a close can wait for each to finalize. */
+  readonly #fibers: FiberSet.FiberSet<void>;
+  readonly #begin: (session: Effect.Effect<void>) => void;
 
-  constructor(options: VoiceServiceOptions) {
+  private constructor(
+    options: VoiceServiceOptions,
+    upstream: LiveUpstream | undefined,
+    sockets: WebSocketServer,
+    fibers: FiberSet.FiberSet<void>,
+    begin: (session: Effect.Effect<void>) => void,
+  ) {
     this.#options = options;
     this.#log = options.log ?? standardOutputLog;
     this.#accounts = options.accounts;
     this.#record = options.record;
     this.#run = options.run;
-    const apiKey = options.apiKey?.trim();
-    this.#upstream = apiKey
-      ? createLiveUpstream({
-          apiKey,
-          baseUrl: options.openAiBaseUrl,
-          httpClient: options.httpClient,
-          createTimeoutMs: options.createTimeoutMs,
-          attachTimeoutMs: options.attachTimeoutMs,
-        })
-      : undefined;
-    this.#sockets = new WebSocketServer({
-      noServer: true,
-      maxPayload: SERVICE_DEFAULTS.MAXIMUM_FRAME_BYTES,
-    });
-    this.#http.on("upgrade", (request, socket, head) => {
-      this.#upgrade(request, socket, head);
-    });
-  }
-
-  /** The server a function exports: Vercel upgrades each WebSocket into it. */
-  get server(): http.Server {
-    return this.#http;
-  }
-
-  listen(port: number, host: string): Promise<number> {
-    return new Promise((resolve, reject) => {
-      this.#http.once("error", reject);
-      this.#http.listen(port, host, () => {
-        this.#http.off("error", reject);
-        // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
-        const address = this.#http.address() as AddressInfo;
-        resolve(address.port);
-      });
-    });
-  }
-
-  sessions(): number {
-    return this.#active.size;
+    this.#upstream = upstream;
+    this.#sockets = sockets;
+    this.#fibers = fibers;
+    this.#begin = begin;
   }
 
   /**
-   * Refuses new upgrades, closes every desktop socket so each relay runs
-   * its graceful close upstream, waits for those to finalize under their
-   * own timeouts, and then releases the listener.
+   * The service for one function instance, standing for the scope it is built
+   * in. That scope owns everything the service's own life is made of: the `ws`
+   * server the upgrades are handled on, the set each session's fiber joins,
+   * and the claim on the server the function exported. There is no `close`
+   * beside it, because the close is the scope's own finalizer rather than a
+   * verb a caller chooses: a deployment holds this scope for the instance's
+   * life and is given no shutdown hook to end it with, so the one caller that
+   * ever ends a service is a test ending the scope it stood one in.
+   *
+   * The finalizers run in the order the session's own ending needs. Giving up
+   * the claim and closing every desktop socket comes first, so each relay runs
+   * its graceful close upstream and the seconds it owes are recorded; the
+   * drain waits for those fibers under their own timeouts; and only then does
+   * the `ws` server close and the set interrupt whatever the drain left, which
+   * is nothing a session that ended left behind.
    */
-  async close(): Promise<void> {
-    this.#admitting = false;
-    for (const socket of this.#sockets.clients) {
-      socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
-    }
-    await Promise.all(this.#active);
-    await new Promise<void>((resolve) => {
-      this.#sockets.close(() => {
-        this.#http.close(() => resolve());
-      });
+  static make(options: VoiceServiceOptions): Effect.Effect<VoiceService, never, Scope.Scope> {
+    return Effect.gen(function* () {
+      const fibers = yield* FiberSet.make<void>();
+      const fork = yield* FiberSet.runtime(fibers)<never>();
+      const sockets = yield* Effect.acquireRelease(
+        Effect.sync(
+          () =>
+            new WebSocketServer({
+              noServer: true,
+              maxPayload: SERVICE_DEFAULTS.MAXIMUM_FRAME_BYTES,
+            }),
+        ),
+        (server) =>
+          Effect.async<void>((resume) => {
+            server.close(() => resume(Effect.void));
+          }),
+      );
+      const apiKey = options.apiKey?.trim();
+      const service = new VoiceService(
+        options,
+        apiKey
+          ? createLiveUpstream({
+              apiKey,
+              baseUrl: options.openAiBaseUrl,
+              httpClient: options.httpClient,
+              createTimeoutMs: options.createTimeoutMs,
+              attachTimeoutMs: options.attachTimeoutMs,
+            })
+          : undefined,
+        sockets,
+        fibers,
+        (session) => {
+          fork(session);
+        },
+      );
+      yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          options.server.serve((request, socket, head) => {
+            service.#upgrade(request, socket, head);
+          }),
+        ),
+        () => service.#drain,
+      );
+      return service;
+    });
+  }
+
+  /** How many sessions are under way, each a fiber of the service's own set. */
+  get sessions(): Effect.Effect<number> {
+    return FiberSet.size(this.#fibers);
+  }
+
+  /**
+   * Refuses new upgrades by giving up the server's claim, closes every desktop
+   * socket so each relay runs its graceful close upstream, and waits for those
+   * fibers to finalize under their own timeouts.
+   */
+  get #drain(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      this.#options.server.serve(undefined);
+      for (const socket of this.#sockets.clients) {
+        socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
+      }
+      yield* FiberSet.awaitEmpty(this.#fibers);
     });
   }
 
   #upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
-    socket.on("error", () => socket.destroy());
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     const decision = this.#admit(request, routeForPath(path));
     if ("status" in decision) {
       this.#log({ event: LOG_EVENT.UPGRADE_REFUSED, route: path, status: decision.status });
-      socket.end(`HTTP/1.1 ${decision.status} Refused\r\nConnection: close\r\n\r\n`);
+      refuseUpgrade(socket, decision.status);
       return;
     }
     this.#sockets.handleUpgrade(request, socket, head, (webSocket) => {
@@ -327,16 +455,30 @@ export class VoiceService {
       // whoever listens at that instant, and the session's own reader is a
       // fiber away. `#serve` resumes it once that reader is registered.
       webSocket.pause();
-      const session = this.#run(Effect.scoped(this.#serve(webSocket, decision))).finally(() => {
-        this.#active.delete(session);
-      });
-      this.#active.add(session);
+      this.#begin(this.#session(webSocket, decision));
     });
+  }
+
+  /**
+   * One session as a fiber of the service's set: the effect `#serve`
+   * describes, run on the edge's own runner, and the `voice_sessions` write
+   * that could fail it written down by its route alone. A failure there was an
+   * unhandled rejection before this was a fiber, and it says nothing of the
+   * session but that one of its own rows did not land.
+   */
+  #session(socket: WebSocket, admission: Admission): Effect.Effect<void> {
+    return Effect.catchAll(
+      Effect.tryPromise(() => this.#run(Effect.scoped(this.#serve(socket, admission)))),
+      () =>
+        Effect.sync(() => {
+          this.#log({ event: LOG_EVENT.SESSION_FAILED, route: admission.route });
+        }),
+    );
   }
 
   /** Who an upgrade admits before any socket stands, or the status it is refused with. */
   #admit(request: IncomingMessage, route: VoiceRoute | undefined): UpgradeDecision {
-    if (!this.#admitting || this.#upstream === undefined) {
+    if (this.#upstream === undefined) {
       return { status: UPGRADE_STATUS.SERVICE_UNAVAILABLE };
     }
     if (route === undefined) return { status: UPGRADE_STATUS.NOT_FOUND };
@@ -365,7 +507,12 @@ export class VoiceService {
       const upstream = this.#upstream;
       if (upstream === undefined) return;
       const { route } = admission;
-      const desktop = yield* voiceSocket(socket);
+      const desktop = yield* voiceSocket(socket, {
+        byteBudget:
+          route === VOICE_ROUTE.INTRODUCTION
+            ? SOCKET_BYTE_BUDGET.INTRODUCTION
+            : SOCKET_BYTE_BUDGET.SESSIONS,
+      });
       yield* Effect.sync(() => socket.resume());
       const refuse = (reason: HostedApiError): Effect.Effect<void> =>
         Effect.gen(this, function* () {
@@ -634,7 +781,7 @@ export class VoiceService {
     admission: SessionsAdmission,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> {
     return Effect.gen(this, function* () {
-      const accountId = yield* Effect.promise(() => this.#accounts.resolveUserId(admission.bearer));
+      const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
       if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
       if (
         admission.deviceId !== undefined &&
@@ -664,7 +811,7 @@ export class VoiceService {
       if (admission.route !== VOICE_ROUTE.SESSIONS) {
         return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
       }
-      const accountId = yield* Effect.promise(() => this.#accounts.resolveUserId(admission.bearer));
+      const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
       if (
         accountId === undefined ||
         !(yield* this.#record.owned({ userId: accountId, sessionId: frame.sessionId }))

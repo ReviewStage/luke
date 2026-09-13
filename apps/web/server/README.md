@@ -309,9 +309,8 @@ Every caller yields it. `HostedStoreRoute.resolveUserId`
 and voice-mint groups are Effect-shaped fields, so `brain-ask.ts`,
 `turn-event-stream.ts`, `conversation-clear.ts`, `change-signal.ts`,
 `resource-reads.ts`, and the three groups' gates read the bearer on their own
-fiber instead of wrapping a promise in `Effect.promise`. Two callers are
-promises of somebody else's: `server/voice/function.ts`, whose `VoiceService`
-is a class of `ws` callbacks, and eve's `AuthFn`, which
+fiber instead of wrapping a promise in `Effect.promise`. One caller is a
+promise of somebody else's: eve's `AuthFn`, which
 `apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
 that authored file — eve's own edge — rather than keeping a promise-shaped
 door beside the effect under `server/hosted/`. `lukeAccount` takes the
@@ -667,9 +666,9 @@ backstop and should be configured with it.
 service: two Vercel Functions serving WebSockets on Fluid compute, the part of
 this deployment that holds the GPT Live project key and owns each hosted voice
 session (`live-contract.ts` in `@sidecar/hosted` is the desktop's contract
-with them). Each file exports the `http.Server` that `server/voice/service.ts`
-builds, with `ws` handling the upgrade on it, exactly as Vercel's WebSocket
-guide has it; the desktop opens `wss://` on this deployment's own origin,
+with them). Each file exports the `http.Server` that `server/voice/service.ts`'s
+`voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
+Vercel's WebSocket guide has it; the desktop opens `wss://` on this deployment's own origin,
 `HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
 A plain request to either path answers 426, since the path is a socket's.
 
@@ -687,6 +686,19 @@ desktop untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so the developer's voice and
 Luke's never transit the service. It keeps no conversation, reads no frame
 past its `type`, and logs status codes, outcome names, and counts.
+
+The service itself is a scope. `VoiceService.make(options)` answers
+`Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
+`FiberSet` each session's fiber joins, and the claim on the server the function
+exported; closing it gives up the claim, closes every desktop socket so each
+relay runs its graceful close upstream, drains those fibers under their own
+timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
+it, because a Vercel function is frozen between invocations and discarded with
+no shutdown hook: `voice/function.ts` stands the service on `runWeb` in a scope
+held open by `Effect.never` and a test is the only caller that ever ends one.
+Until a service stands, and again once its scope closes, the server refuses
+every upgrade with the same 503 a deployment missing the project key answers
+with.
 
 One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
 function hands the service. Both sockets are the platform's:
@@ -712,7 +724,15 @@ nothing. There the sideband is
 the function's alone: the caller may send only what a renderer's data channel
 may, is shown only what one is shown, and `greetingInstruction()` goes up once
 on `session.started`. The seed is bounded to one developer message of at most
-1,024 characters.
+1,024 characters, and the socket itself to `SOCKET_BYTE_BUDGET.INTRODUCTION`,
+a mebibyte the caller may send before the service closes the socket. The
+socket's own reader counts it, from its first frame rather than from whenever
+the pipe stood, so what a caller sends while its session is being stood up is
+spent as much as what the pipe later carries, and a frame past the budget is
+not read at all — what the relay sees is the peer going, which is a hangup it
+already knows how to end. The voice never travels here: it is WebRTC's. A
+signed-in desktop's socket is bounded the same way at eight mebibytes, since
+its account is spent per session and answers for what it sends.
 
 ### The live session service, composed and not yet attached
 

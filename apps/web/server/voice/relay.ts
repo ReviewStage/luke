@@ -16,7 +16,13 @@ import {
   type VoiceRoute,
 } from "./frames.js";
 import { FINALIZATION, type Finalization, type RelayCounts } from "./log.js";
-import { frameBytes, frameText, type VoiceFrame, type VoiceSocket } from "./socket.js";
+import {
+  frameBytes,
+  frameText,
+  SOCKET_CLOSE_CODE,
+  type VoiceFrame,
+  type VoiceSocket,
+} from "./socket.js";
 
 /**
  * The pipe between one desktop socket and one OpenAI sideband, once both
@@ -73,15 +79,6 @@ export type OpeningSettled =
       errorCode: string | undefined;
     }
   | { outcome: typeof OPENING_OUTCOME.UNACKNOWLEDGED };
-
-/** The WebSocket close codes this service sends, by what each one says. */
-export const SOCKET_CLOSE_CODE = {
-  NORMAL: 1000,
-  /** The service itself is leaving, or the upstream left first. */
-  GOING_AWAY: 1001,
-  /** The peer sent something this route does not admit, or was refused. */
-  POLICY_VIOLATION: 1008,
-} as const;
 
 /** The reason a desktop socket is closed with when OpenAI's side ended before `session.closed`. */
 export const UPSTREAM_CLOSED_REASON = "upstream-closed";

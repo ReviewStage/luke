@@ -480,10 +480,29 @@ what resumes and closes a sideband no pipe ever stood on. `relay.ts` left the
 primitive allowlist in the same PR: the pipe is an effect over two
 `VoiceSocket`s (`apps/web/server/voice/socket.ts`), each side's frames a
 `Stream` read by a fiber of the session's scope, its finalization a `Deferred`,
-and its two waits `Effect.sleep` forked into that scope.
-`apps/web/server/voice/service.ts` stays on the primitive allowlist for its own
-lifecycle alone — `listen`, `close`, and the promise per session `close` waits
-on — which is a `ws` server's own shape and not a session's; P12-20k2 takes it.
+and its two waits `Effect.sleep` forked into that scope. P12-20k2 gave that
+reader the byte budget the route's retention had been missing: `voiceSocket`
+counts what the peer sends from its first frame and closes the socket past the
+budget, so the frames a session holds while it is being stood up are spent as
+much as the ones the pipe carries.
+`apps/web/server/voice/service.ts` left the primitive allowlist in P12-20k2,
+which took the lifecycle P12-20k had left behind — `listen`, `close`, and the
+promise per session that `close` waited on. `VoiceService.make(options)`
+answers `Effect<VoiceService, never, Scope>`, and that scope owns the `ws`
+server, the `FiberSet` each session's fiber joins, and the claim on the server
+the function exported. There is no `close` beside it: a deployment is given no
+shutdown hook, so the close is the scope's own finalizer rather than a verb a
+caller chooses, and the finalizers run in the order a session's ending needs —
+the claim given up and every desktop socket closed, then the drain
+(`FiberSet.awaitEmpty`) that lets each relay finish its graceful close
+upstream, then the `ws` server's own close. `listen` is an `Effect.async`
+under `Effect.acquireRelease` that only a test acquires, since Vercel's bridge
+listens on the server the function module exported. That module's export is
+synchronous and the service behind it is an effect, so `voiceServer()` builds
+the `http.Server` where the module is evaluated and `voice/function.ts` stands
+the service on `runWeb` in a scope held open by `Effect.never`; until one
+stands, and again once its scope closes, the server refuses every upgrade with
+the 503 a deployment missing the project key answers with.
 
 `Runtime.runFork` in `packages/gateway/src/client.ts` is on the handed-runtime
 list, and it is all that is left of the door P6-13 named

@@ -10,7 +10,7 @@ import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "../hosted/quota.js";
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { VoiceService } from "./service.js";
+import { type VoiceServer, VoiceService, voiceServer } from "./service.js";
 import { voiceSessionRecord } from "./session-record.js";
 
 /**
@@ -36,22 +36,47 @@ const voiceUserInfo: UserInfoEndpoint = (input) =>
   });
 
 const deploymentAccounts: VoiceAccounts = {
-  resolveUserId: (authorization) => runWeb(userIdForAuthorization(authorization, voiceUserInfo)),
+  resolveUserId: (authorization) => userIdForAuthorization(authorization, voiceUserInfo),
   spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
   spendIntroduction: () => runWeb(spendIntroductionMeter({ now: Date.now() })),
   recordSeconds: (input) => runWeb(recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
-let service: VoiceService | undefined;
+let standing: VoiceServer | undefined;
 
-/** The one service of this function instance, built on first use. */
+/**
+ * The service standing for this instance's life. Its scope is held open by
+ * `Effect.never`, so the `ws` server, every session's fiber, and the claim on
+ * the server this module exported belong to one scope nothing but a disposed
+ * runtime closes — which is what a Vercel function gets, since it is frozen
+ * between invocations and discarded with no shutdown hook to end a service
+ * with. An instance whose runtime cannot be built stands none, and its server
+ * keeps answering every upgrade with the 503 a deployment missing the project
+ * key answers with.
+ */
+function standService(voice: VoiceServer): void {
+  void runWeb(
+    Effect.scoped(
+      Effect.zipRight(
+        VoiceService.make({
+          server: voice,
+          apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
+          model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
+          accounts: deploymentAccounts,
+          record: voiceSessionRecord(),
+          run: runWeb,
+        }),
+        Effect.never,
+      ),
+    ),
+  ).catch(() => undefined);
+}
+
+/** The one server of this function instance, with its service stood on first use. */
 export function voiceFunctionServer() {
-  service ??= new VoiceService({
-    apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],
-    model: process.env[VOICE_FUNCTION_ENVIRONMENT.LIVE_MODEL],
-    accounts: deploymentAccounts,
-    record: voiceSessionRecord(),
-    run: runWeb,
-  });
-  return service.server;
+  if (standing === undefined) {
+    standing = voiceServer();
+    standService(standing);
+  }
+  return standing.server;
 }

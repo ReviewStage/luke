@@ -186,9 +186,11 @@ export function fakeAccounts(): FakeAccounts {
     introductionAnswer: { allowed: true },
     introductions: 0,
     knownBearer: FAKE_BEARER,
-    async resolveUserId(authorization) {
-      fake.resolved.push(authorization);
-      return authorization === fake.knownBearer ? FAKE_USER_ID : undefined;
+    resolveUserId(authorization) {
+      return Effect.sync(() => {
+        fake.resolved.push(authorization);
+        return authorization === fake.knownBearer ? FAKE_USER_ID : undefined;
+      });
     },
     async spend(userId) {
       fake.spent.push(userId);

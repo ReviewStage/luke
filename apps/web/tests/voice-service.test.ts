@@ -10,7 +10,7 @@ import {
 } from "@sidecar/hosted";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Effect, Either, Exit, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
@@ -34,14 +34,18 @@ import {
 } from "../server/live";
 import { VOICE_ROUTE } from "../server/voice/frames";
 import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
-import { SOCKET_CLOSE_CODE, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
+import { UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
   INTRODUCTION_INPUT_BOUNDS,
+  listening,
   SESSIONS_INPUT_BOUNDS,
+  SOCKET_BYTE_BUDGET,
   UPGRADE_STATUS,
   VoiceService,
   type VoiceServiceOptions,
+  voiceServer,
 } from "../server/voice/service";
+import { BUDGET_SPENT_REASON, SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { runWithoutDatabase } from "./support/no-database";
 import {
   connect,
@@ -112,38 +116,61 @@ interface Stand {
   service: VoiceService;
   log: LogEntry[];
   url(path: string): string;
+  /** How many sessions the service holds, read where the test is not inside a fiber. */
+  sessions(): Promise<number>;
+  /** Closes the scope the service stands in, which is its whole close. */
+  close(): Promise<void>;
   stop(): Promise<void>;
 }
 
+/**
+ * One service in a scope of the test's own, standing on a server built as a
+ * function module builds one. The listener is acquired ahead of the service,
+ * so closing the scope drains the sessions before it stops listening.
+ */
 async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stand> {
   const openAi = await startFakeOpenAi();
   const accounts = fakeAccounts();
   const record = fakeSessionRecord();
   const log: LogEntry[] = [];
-  const service = new VoiceService({
-    apiKey: API_KEY,
-    accounts,
-    record,
-    run: runWithoutDatabase,
-    openAiBaseUrl: openAi.baseUrl,
-    log: (entry) => {
-      log.push(entry);
-    },
-    closeTimeoutMs: CLOSE_TIMEOUT_MS,
-    firstFrameTimeoutMs: 1_000,
-    attachTimeoutMs: 2_000,
-    ...overrides,
-  });
-  const port = await service.listen(0, "127.0.0.1");
+  const voice = voiceServer();
+  const scope = await runWithoutDatabase(Scope.make());
+  const standing = await runWithoutDatabase(
+    Scope.extend(
+      Effect.gen(function* () {
+        const port = yield* listening(voice, 0, "127.0.0.1");
+        const service = yield* VoiceService.make({
+          server: voice,
+          apiKey: API_KEY,
+          accounts,
+          record,
+          run: runWithoutDatabase,
+          openAiBaseUrl: openAi.baseUrl,
+          log: (entry) => {
+            log.push(entry);
+          },
+          closeTimeoutMs: CLOSE_TIMEOUT_MS,
+          firstFrameTimeoutMs: 1_000,
+          attachTimeoutMs: 2_000,
+          ...overrides,
+        });
+        return { port, service };
+      }),
+      scope,
+    ),
+  );
+  const close = () => runWithoutDatabase(Scope.close(scope, Exit.void));
   return {
     openAi,
     accounts,
     record,
-    service,
+    service: standing.service,
     log,
-    url: (path) => `ws://127.0.0.1:${port}${path}`,
+    url: (path) => `ws://127.0.0.1:${standing.port}${path}`,
+    sessions: () => runWithoutDatabase(standing.service.sessions),
+    close,
     stop: async () => {
-      await service.close();
+      await close();
       await openAi.close();
     },
   };
@@ -295,7 +322,7 @@ test("a session is authorized, created, registered to its account, attached, and
   assert.equal(attach.authorization, `Bearer ${API_KEY}`);
   assert.equal(created.sdpAnswer, FAKE_SDP_ANSWER);
   assert.deepEqual(created.quota, FAKE_QUOTA);
-  assert.equal(context.service.sessions(), 1);
+  assert.equal(await context.sessions(), 1);
 });
 
 test("frames pass through untouched in both directions, except reflected audio, which is dropped by type", async () => {
@@ -391,7 +418,7 @@ test("session.closed is forwarded, its seconds reported exactly once, and both e
   const recorded = context.log.find((entry) => entry.event === LOG_EVENT.USAGE_RECORDED);
   assert.ok(recorded && recorded.event === LOG_EVENT.USAGE_RECORDED);
   assert.equal(recorded.outcome, VOICE_SECONDS_OUTCOME.RECORDED);
-  assert.equal(context.service.sessions(), 0);
+  assert.equal(await context.sessions(), 0);
 });
 
 test("a seconds report that throws still finalizes the session: both ends are closed and the session is reported ended", async () => {
@@ -419,7 +446,7 @@ test("a seconds report that throws still finalizes the session: both ends are cl
   assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
   assert.equal(ended.finalization, FINALIZATION.CONFIRMED);
   assert.equal(ended.seconds, 12);
-  assert.equal(context.service.sessions(), 0);
+  assert.equal(await context.sessions(), 0);
 });
 
 test("a desktop that hangs up first has session.close sent for it and its seconds still recorded", async () => {
@@ -473,6 +500,57 @@ test("a sideband that closes first takes the desktop socket with it and reports 
   assert.equal(end.reason, UPSTREAM_CLOSED_REASON);
   assert.equal(context.accounts.reports.length, 0);
   assert.deepEqual(context.record.closes, []);
+});
+
+test("an introduction past its byte budget is closed, counted over what the route drops as well as what it carries", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in opened);
+  const desktop = opened.reader;
+  await send(desktop.socket, createFrame([developerMessage("Running: api on main.")]));
+  const attach = await context.openAi.nextAttach();
+  const upstream = readSocket(attach.socket);
+  assert.ok(sessionCreatedFrameFromWire(record(await desktop.next())));
+
+  const spend = JSON.stringify({
+    type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+    event_id: "b1",
+    content: "x".repeat(SOCKET_BYTE_BUDGET.INTRODUCTION),
+  });
+  await sendText(desktop.socket, spend);
+
+  const end = await desktop.closed;
+  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(end.reason, BUDGET_SPENT_REASON);
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+});
+
+test("a socket past its byte budget before it ever opened a session is closed and creates nothing", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.INTRODUCTION));
+  assert.ok("reader" in opened);
+  await sendText(opened.reader.socket, "x".repeat(SOCKET_BYTE_BUDGET.INTRODUCTION + 1));
+
+  const end = await opened.reader.closed;
+  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(end.reason, BUDGET_SPENT_REASON);
+  assert.equal(context.openAi.creates.length, 0);
+  assert.equal(context.accounts.introductions, 0);
+});
+
+test("a server with no service standing on it refuses every upgrade with 503", async () => {
+  const voice = voiceServer();
+  const scope = await runWithoutDatabase(Scope.make());
+  const port = await runWithoutDatabase(Scope.extend(listening(voice, 0, "127.0.0.1"), scope));
+  onTestFinished(() => runWithoutDatabase(Scope.close(scope, Exit.void)));
+
+  assert.deepEqual(await connect(`ws://127.0.0.1:${port}${VOICE_SERVICE_PATH.INTRODUCTION}`), {
+    status: UPGRADE_STATUS.SERVICE_UNAVAILABLE,
+  });
 });
 
 test("a creation OpenAI refuses is answered as an upstream error and nothing is attached", async () => {
@@ -895,7 +973,7 @@ test("closing the service closes every desktop socket and refuses new upgrades w
   const { desktop, upstream } = await openSession(context);
   onTestFinished(() => context.openAi.close());
 
-  const closing = context.service.close();
+  const closing = context.close();
   assert.equal(await desktop.closed.then((end) => end.code), SOCKET_CLOSE_CODE.GOING_AWAY);
   assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
   await closing;
