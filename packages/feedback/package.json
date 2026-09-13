@@ -18,7 +18,6 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   }

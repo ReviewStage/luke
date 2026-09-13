@@ -140,6 +140,11 @@ in for the missing job before the first release.
 
 ## Effect idioms
 
+Before writing any Effect code, first read `node_modules/effect/AGENTS.md`
+**completely**, and follow the links in the file when required. If you need to
+learn more about particular Effect apis and concepts that the guide doesn't
+cover, search through the source code in `node_modules/effect/src`.
+
 Effect is the repository's infrastructure library, replacing what used to be
 hand-rolled: a Schema that both parses and emits JSON Schema, disposables,
 an event emitter, independent backoff loops, `setInterval` loops, a

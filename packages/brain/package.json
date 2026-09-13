@@ -19,11 +19,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/experimental": "catalog:",
-    "@effect/platform": "catalog:",
     "@effect/platform-node": "catalog:",
-    "@effect/rpc": "catalog:",
-    "@effect/sql": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",

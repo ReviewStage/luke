@@ -12,7 +12,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
