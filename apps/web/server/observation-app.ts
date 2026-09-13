@@ -38,12 +38,7 @@ import {
 } from "./hosted/store/index.js";
 import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
-import {
-  hostedEncryptionSecret,
-  hostedEncryptionSecretEffect,
-  hostedVaultSeams,
-} from "./hosted/vault-route.js";
-import { runWeb } from "./runtime.js";
+import { hostedEncryptionSecretEffect, hostedVaultSeams } from "./hosted/vault-route.js";
 
 /**
  * The observation group: the routes that read and are read from the roster
@@ -52,7 +47,7 @@ import { runWeb } from "./runtime.js";
  * organization rather than dispatch — Vercel already sent each function only
  * the requests for its own path. What differs across them is each handler's
  * own logic, kept exactly as it stood; the group is the `HttpRouter` that
- * carries a promise-shaped answer to an `HttpApp`, and the hosted vocabulary's
+ * carries each handler's answer to an `HttpApp`, and the hosted vocabulary's
  * own `not-found` on any path none of them declares.
  */
 
@@ -159,28 +154,13 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
 }
 
 /**
- * A promise-shaped handler's answer, carried to the `HttpApp` the group
- * composes: the handler already answers the hosted vocabulary's own bytes, so
- * nothing here reads or rewrites the response beside forwarding it, except a
- * HEAD, whose status and headers the web handler reads off the
- * `HttpServerResponse` rather than the raw answer it wraps.
- */
-function promisePassthrough(handle: (request: Request) => Promise<Response>): HttpApp.Default {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.promise(() => handle(request));
-    return incoming.method === HTTP_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
-
-/**
- * An effect-shaped handler's answer, carried the same way a promise-shaped
- * one is. The handler runs on the group's own fiber rather than through
- * `runWeb`, so a failed statement it reads is a defect here, exactly as a
- * rejected promise was for `promisePassthrough`.
+ * A handler's answer, carried to the `HttpApp` the group composes: the
+ * handler already answers the hosted vocabulary's own bytes, so nothing here
+ * reads or rewrites the response beside forwarding it, except a HEAD, whose
+ * status and headers the web handler reads off the `HttpServerResponse`
+ * rather than the raw answer it wraps. The handler runs on the group's own
+ * fiber rather than through a runner of its own, so a failed statement it
+ * reads is a defect here.
  */
 function effectPassthrough<R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
@@ -215,15 +195,29 @@ function sessionsMessagesEffect(
 }
 
 /** Lists where the signed-in user's keys can create a workspace. */
-async function projectsHandler(request: Request): Promise<Response> {
-  const encryptionSecret = await hostedEncryptionSecret();
-  return runWeb(handleProjects({ ...hostedVaultSeams, encryptionSecret, request }));
+function projectsEffect(
+  request: Request,
+): Effect.Effect<
+  Response,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient | HostedEnvironment
+> {
+  return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
+    handleProjects({ ...hostedVaultSeams, encryptionSecret, request }),
+  );
 }
 
 /** Observes the signed-in user's cloud sessions on demand. */
-async function observeHandler(request: Request): Promise<Response> {
-  const encryptionSecret = await hostedEncryptionSecret();
-  return runWeb(handleObserve({ ...hostedVaultSeams, encryptionSecret, request }));
+function observeEffect(
+  request: Request,
+): Effect.Effect<
+  Response,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient | HostedEnvironment
+> {
+  return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
+    handleObserve({ ...hostedVaultSeams, encryptionSecret, request }),
+  );
 }
 
 /**
@@ -380,7 +374,7 @@ function observationTickEffect(
 }
 
 /**
- * The group: each path's promise-shaped handler carried to an `HttpApp`, and
+ * The group: each path's handler carried to an `HttpApp`, and
  * the hosted vocabulary's own refusal for a path none of them declares —
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
@@ -392,9 +386,9 @@ export function observationApp(): HttpApp.Default<never, SqlClient.SqlClient | H
     // wrong method still answers 405 rather than falling through to the
     // group's own 404.
     HttpRouter.all(PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
-    HttpRouter.all(PATH.PROJECTS, promisePassthrough(projectsHandler)),
+    HttpRouter.all(PATH.PROJECTS, effectPassthrough(projectsEffect)),
     HttpRouter.all(PATH.EVENTS, effectPassthrough(eventsEffect)),
-    HttpRouter.all(PATH.OBSERVE, promisePassthrough(observeHandler)),
+    HttpRouter.all(PATH.OBSERVE, effectPassthrough(observeEffect)),
     HttpRouter.all(PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
     Effect.catchTag("RouteNotFound", () =>
       Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),

@@ -5,7 +5,7 @@ import { productionBrainHostSeams } from "../../server/hosted/brain-host/product
 import { runWeb } from "../../server/runtime.js";
 
 /** The one door into the hosted brain: eve's own HTTP API under the host's auth and queue policy. */
-const seams = productionBrainHostSeams();
+const seams = productionBrainHostSeams(runWeb);
 
 /**
  * The bearer's account, resolved as an effect and run once here: eve's door

@@ -16,7 +16,7 @@ import { scriptedModel } from "./scripted-model.js";
  * inference, so the account's daily meter is spent once for each.
  */
 
-const seams = productionBrainHostSeams();
+const seams = productionBrainHostSeams(runWeb);
 
 export default defineAgent({
   defaultTools: false,

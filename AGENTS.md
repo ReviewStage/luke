@@ -175,15 +175,34 @@ at each of the two roots that import it), the renderer's own fiber sites —
 panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
 strip forks its own clock the same way the voice window's does), and the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
-`apps/desktop/src/renderer/voice/use-voice-session.ts` — each `apps/web/api/**`
-function module through the module-scope memoized runtime `apps/web/server/runtime.ts`
-holds, `apps/web/server/db/migrate.ts` (the migration command, through
+`apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
+module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
+that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
+function module under `apps/web/server/routes/**` exports its `HttpApp`
+through, which reads that runtime once per instance and lets the handler it
+builds do its own running), `apps/web/server/hosted/store-route.ts` (the same
+door for a hosted store route, whose handler is composed over the ambient
+`SqlClient` rather than an `HttpApp`), `apps/web/server/voice/function.ts`
+(the voice service, stood for a function instance's life rather than for a
+request, so there is no request fiber to compose it into) and
+`apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
+its own process), the eve project's authored files —
+`apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
+`apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
+`apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
+an edge because eve drives them through promise-shaped hooks of its own and
+an authored file is where this deployment runs what it hands eve, which is
+what keeps every seam under `apps/web/server/hosted/` an effect,
+`apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
 probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
 `Effect.runPromise`, `Effect.runSync`, and `Effect.runFork` belong nowhere
 else — everything between the edges returns an Effect and lets its caller
 decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
-that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists;
+that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
+reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime` as the
+runs they are, so a module that holds the edge's runner rather than
+`Effect.runPromise` itself is no less visible to it;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
 `rawAsyncPrimitives` list. A file on those two run lists that is not a runtime
