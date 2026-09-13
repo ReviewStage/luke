@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { PRODUCT_CALENDAR_SOURCE, PRODUCT_EVENT, PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
 import {
   activeMeetingEnd,
@@ -26,7 +27,7 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Either, Fiber, Option, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, Either, Fiber, Queue, Runtime, Schedule, Scope } from "effect";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
   type AppleCalendarHelperRun,
@@ -40,7 +41,7 @@ import { quietUntilFrom } from "./device-presence.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { introductionOwed } from "./introduction-flow.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
-import { type OnboardingState, onboardingStateFile } from "./onboarding-state.js";
+import { type OnboardingState, onboardingStateRecord } from "./onboarding-state.js";
 import { reporterOf } from "./wire-helpers.js";
 
 /** A diary changes at the pace of hands too; five minutes is current. */
@@ -93,9 +94,16 @@ export interface CalendarsComposer extends Composer {
   /** Whether the Conductor key step of onboarding stands, as the record has it. */
   keyGateOwed: () => boolean;
   /** The vault holds a Conductor key: the key step is answered, if it stood. */
-  settleKeyGate: () => void;
+  readonly settleKeyGate: Effect.Effect<void>;
   /** The onboarding record as it stands, for the beats that read their own moments out of it. */
   onboarding: () => OnboardingState | undefined;
+  /**
+   * One moment recorded over the record. The callers are synchronous
+   * statements — the live service's own callbacks — so the moment stands in
+   * the record this run reads on the statement that asked for it, and the
+   * disk and the events it earns are offered to this composer's writer fiber,
+   * as with the first sign-in below.
+   */
   writeOnboarding: (moment: OnboardingState) => void;
   /** The calendar step goes up at the first sign-in ever observed, before the account event. */
   recordFirstSignIn: () => void;
@@ -112,16 +120,16 @@ export interface CalendarsDependencies {
 
 /**
  * The calendars concern, over the kernel it takes as a tag and the runtime
- * the layer it is built under is running on: the two effects its own
- * promise-shaped edges start are forked onto that runtime rather than the
- * ambient default one, and the three
- * observation-driven timers fork their fibers into the `Scope` the account
- * gate's own arming runs in, exactly as the device registration does one
- * level down.
+ * the layer it is built under is running on: the announcement hold its
+ * observation finalizer owes is forked onto that runtime rather than the
+ * ambient default one, and the three observation-driven timers fork their
+ * fibers into the `Scope` the account gate's own arming runs in, exactly as
+ * the device registration does one level down. The onboarding record is read
+ * and written through `FileSystem`, which this composition provides.
  */
 export const composeCalendars = (
   dependencies: CalendarsDependencies,
-): Effect.Effect<CalendarsComposer, never, HostKernelTag | Scope.Scope> =>
+): Effect.Effect<CalendarsComposer, never, HostKernelTag | FileSystem.FileSystem | Scope.Scope> =>
   Effect.gen(function* () {
     const { settings, observationGate } = dependencies;
     const kernel = yield* HostKernelTag;
@@ -129,13 +137,7 @@ export const composeCalendars = (
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
     const late = yield* lateService<CalendarsLinks>();
-    const links = (): CalendarsLinks => {
-      const standing = late.unsafePeek();
-      if (Option.isNone(standing)) {
-        throw new Error("the calendars composer's links are read before link() has run");
-      }
-      return standing.value;
-    };
+    const fileSystemContext = yield* Effect.context<FileSystem.FileSystem>();
 
     const googleCalendar = new GoogleCalendarReader({
       readAccounts: () => Effect.orDie(settingsStore.readCalendarAccounts()),
@@ -189,7 +191,47 @@ export const composeCalendars = (
     /** The one pending meeting-boundary wake, interrupted and replaced on every re-arm. */
     let boundaryFiber: Fiber.RuntimeFiber<void, never> | undefined;
 
-    const onboarding = onboardingStateFile(() => kernel.stateRoot, report);
+    const onboarding = onboardingStateRecord(kernel.stateRoot, report, fileSystemContext);
+    /**
+     * What a synchronous edge asked the record to record and nothing waits
+     * on — a beat that was spoken, the first sign-in ever observed — taken in
+     * turn by a fiber of this composer's scope, in the order it was offered.
+     * A write that dies is written down rather than left to end the fiber
+     * every later write needs.
+     */
+    const onboardingWrites = yield* Queue.unbounded<Effect.Effect<void>>();
+    /**
+     * A write is uninterruptible, because a moment that reached this queue is
+     * one the record has to end up holding: a quit landing between the read
+     * and the write would leave the disk saying the edge never happened.
+     */
+    const takeOnboardingWrite = (write: Effect.Effect<void>): Effect.Effect<void> =>
+      Effect.catchAllDefect(Effect.uninterruptible(write), (defect) =>
+        Effect.logError("an onboarding write failed", defect),
+      );
+    /**
+     * Registered before the fiber below is forked, so the scope closing runs
+     * it after that fiber has been interrupted: what was offered and not yet
+     * taken is written here rather than lost with the queue.
+     */
+    yield* Effect.addFinalizer(() =>
+      Effect.flatMap(Queue.takeAll(onboardingWrites), (pending) =>
+        Effect.forEach(pending, takeOnboardingWrite, { discard: true }),
+      ),
+    );
+    yield* Effect.forkScoped(
+      Effect.forever(Effect.flatMap(Queue.take(onboardingWrites), takeOnboardingWrite)),
+    );
+    const offerOnboardingWrite = (write: Effect.Effect<void>): void => {
+      Queue.unsafeOffer(onboardingWrites, write);
+    };
+    /**
+     * One writer at a time over the record, which the synchronous face this
+     * replaced had for free: every write merges its own moment over what disk
+     * holds at that instant, so two that overlapped would each save over a
+     * record read before the other's moment landed.
+     */
+    const writeGate = yield* Effect.makeSemaphore(1);
     let onboardingState: OnboardingState | undefined;
     let announcedCalendarGateOwed: boolean | undefined;
     let announcedIntroductionOwed: boolean | undefined;
@@ -214,42 +256,74 @@ export const composeCalendars = (
      * fenced on a changed answer, so writing an arrival moment cannot tell the
      * client about a gate or an introduction that did not move.
      */
-    function writeOnboardingState(moment: OnboardingState): void {
-      onboardingState = onboarding.update((current) => ({ ...current, ...moment }));
-      if (moment.arrivalSpokenAt !== undefined) links().withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
-      const owed = calendarOnboardingGateOwed();
-      if (!owed) links().withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
-      const introduction = spokenIntroductionOwed();
-      if (introduction !== announcedIntroductionOwed) {
-        announcedIntroductionOwed = introduction;
-        kernel.emit(GATEWAY_EVENT.INTRODUCTION_CHANGED, { owed: introduction });
-        // The introduction is an announcement hold of its own, and the live
-        // service learns a hold only by re-reading it: raised here so nothing
-        // speaks over the greeting, dropped here so what waited is re-decided.
-        links().reconcileSpeech();
-      }
-      const keyGate = conductorKeyGateOwed();
-      if (keyGate !== announcedKeyGateOwed) {
-        announcedKeyGateOwed = keyGate;
-        kernel.emit(GATEWAY_EVENT.CONDUCTOR_KEY_ONBOARDING_CHANGED, { owed: keyGate });
-      }
-      if (owed === announcedCalendarGateOwed) return;
-      announcedCalendarGateOwed = owed;
-      kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
-    }
+    const writeOnboardingState = (moment: OnboardingState): Effect.Effect<void> =>
+      writeGate.withPermits(1)(
+        Effect.gen(function* () {
+          const links = yield* late.value;
+          const persisted = yield* onboarding.update((current) => ({ ...current, ...moment }));
+          // What another process recorded, under what this run has: a moment
+          // offered while this write was out stands in memory already and is
+          // not on the disk the merge above read from.
+          onboardingState = { ...persisted, ...onboardingState, ...moment };
+          if (moment.arrivalSpokenAt !== undefined) {
+            links.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
+          }
+          const owed = calendarOnboardingGateOwed();
+          if (!owed) links.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
+          const introduction = spokenIntroductionOwed();
+          if (introduction !== announcedIntroductionOwed) {
+            announcedIntroductionOwed = introduction;
+            kernel.emit(GATEWAY_EVENT.INTRODUCTION_CHANGED, { owed: introduction });
+            // The introduction is an announcement hold of its own, and the live
+            // service learns a hold only by re-reading it: raised here so nothing
+            // speaks over the greeting, dropped here so what waited is re-decided.
+            links.reconcileSpeech();
+          }
+          const keyGate = conductorKeyGateOwed();
+          if (keyGate !== announcedKeyGateOwed) {
+            announcedKeyGateOwed = keyGate;
+            kernel.emit(GATEWAY_EVENT.CONDUCTOR_KEY_ONBOARDING_CHANGED, { owed: keyGate });
+          }
+          if (owed === announcedCalendarGateOwed) return;
+          announcedCalendarGateOwed = owed;
+          kernel.emit(GATEWAY_EVENT.CALENDAR_ONBOARDING_CHANGED, { owed });
+        }),
+      );
 
-    function settleKeyGate(): void {
+    /**
+     * The record as this run holds it, merged on the caller's own statement so
+     * that every synchronous reader beside it — the arrival beat's guard, the
+     * first announcement's count, the gate the account event is raised before —
+     * decides on the moment just recorded. What the writer fiber adds after is
+     * the disk and the events the change earns.
+     */
+    const recordMoment = (moment: OnboardingState): void => {
+      onboardingState = { ...onboardingState, ...moment };
+      offerOnboardingWrite(writeOnboardingState(moment));
+    };
+
+    /**
+     * The settled key gate, and the beat that was waiting behind it: the
+     * settings composer's link yields this where it stores a key, so a key
+     * stored twice reads the gate twice and settles it once.
+     */
+    const settleKeyGate: Effect.Effect<void> = Effect.gen(function* () {
       if (!conductorKeyOnboardingOwed(onboardingState)) return;
-      writeOnboardingState({ conductorKeyOnboardingSettledAt: new Date(now()).toISOString() });
-      links().requestOnboardingBeat();
-    }
+      yield* writeOnboardingState({
+        conductorKeyOnboardingSettledAt: new Date(now()).toISOString(),
+      });
+      const links = yield* late.value;
+      links.requestOnboardingBeat();
+    });
 
     const settleCalendarOnboardingIfConnected = (): Effect.Effect<void> =>
       Effect.gen(function* () {
         if (!calendarOnboardingOwed(onboardingState)) return;
         const connected = yield* Effect.orDie(settingsStore.calendarConnectionStored());
         if (!connected || !calendarOnboardingOwed(onboardingState)) return;
-        writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
+        yield* writeOnboardingState({
+          calendarOnboardingSettledAt: new Date(now()).toISOString(),
+        });
       });
 
     const calendarGateOfferable = (): Effect.Effect<boolean> =>
@@ -319,10 +393,11 @@ export const composeCalendars = (
           Effect.interruptible(
             Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
               Effect.zipRight(
-                Effect.suspend(() => {
+                Effect.gen(function* () {
                   boundaryFiber = undefined;
-                  links().reconcileSpeech();
-                  return armQuietBoundaryTimer;
+                  const links = yield* late.value;
+                  links.reconcileSpeech();
+                  yield* armQuietBoundaryTimer;
                 }),
               ),
             ),
@@ -356,7 +431,7 @@ export const composeCalendars = (
           if (held.failure) report(`Calendar observation failed: ${held.failure}`);
         }
         if (!loop.isCurrent(generation)) return;
-        links().reconcileSpeech();
+        (yield* late.value).reconcileSpeech();
         yield* armQuietBoundaryTimer;
       });
     }
@@ -418,7 +493,7 @@ export const composeCalendars = (
       const scope = yield* Effect.scope;
       observationScope = scope;
       yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           observationScope = undefined;
           boundaryFiber = undefined;
           appleAccessProbeFailing = false;
@@ -426,7 +501,7 @@ export const composeCalendars = (
           observedCalendars = [];
           googleCalendar.forget();
           appleCalendar.forget();
-          links().dropBriefings();
+          (yield* late.value).dropBriefings();
           kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
           Runtime.runFork(runtime)(refreshAnnouncementHold());
         }),
@@ -434,7 +509,7 @@ export const composeCalendars = (
       yield* Effect.forkScoped(
         Effect.interruptible(
           Effect.schedule(
-            Effect.sync(() => links().reconcileSpeech()),
+            Effect.flatMap(late.value, (links) => Effect.sync(() => links.reconcileSpeech())),
             Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
           ),
         ),
@@ -637,12 +712,12 @@ export const composeCalendars = (
           conductorKeyOnboardingOwed: conductorKeyGateOwed(),
         })),
       [GATEWAY_METHOD.ONBOARDING_SKIP_CONDUCTOR_KEY]: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (conductorKeyOnboardingOwed(onboardingState)) {
-            writeOnboardingState({
+            yield* writeOnboardingState({
               conductorKeyOnboardingSkippedAt: new Date(now()).toISOString(),
             });
-            links().requestOnboardingBeat();
+            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
@@ -650,26 +725,32 @@ export const composeCalendars = (
       // the hold above comes down on the same event the client learns from;
       // the beats that waited behind the greeting are asked for again here.
       [GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION]: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (introductionOwed(onboardingState)) {
-            writeOnboardingState({ introductionCompletedAt: new Date(now()).toISOString() });
-            links().requestOnboardingBeat();
+            yield* writeOnboardingState({
+              introductionCompletedAt: new Date(now()).toISOString(),
+            });
+            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
       [GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR]: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (calendarOnboardingOwed(onboardingState)) {
-            writeOnboardingState({ calendarOnboardingSkippedAt: new Date(now()).toISOString() });
-            links().requestOnboardingBeat();
+            yield* writeOnboardingState({
+              calendarOnboardingSkippedAt: new Date(now()).toISOString(),
+            });
+            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
       [GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR]: () =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (calendarOnboardingOwed(onboardingState)) {
-            writeOnboardingState({ calendarOnboardingSettledAt: new Date(now()).toISOString() });
-            links().requestOnboardingBeat();
+            yield* writeOnboardingState({
+              calendarOnboardingSettledAt: new Date(now()).toISOString(),
+            });
+            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
@@ -687,21 +768,23 @@ export const composeCalendars = (
       keyGateOwed: conductorKeyGateOwed,
       settleKeyGate,
       onboarding: () => onboardingState,
-      writeOnboarding: writeOnboardingState,
+      writeOnboarding: recordMoment,
       recordFirstSignIn: () => {
         // The first sign-in ever observed is where the spoken introduction,
         // the Conductor key step, and the calendar step of onboarding go up,
         // in that order: recorded on disk rather than derived, so quitting at
         // any and relaunching finds it standing, and an install signed in
-        // before this edge was recorded has none to record.
+        // before this edge was recorded has none to record. The three stand
+        // on this statement, before the account event the caller publishes
+        // next; the disk and the settle follow on the writer's own fiber.
         if (onboardingState?.calendarOnboardingRequiredAt !== undefined) return;
         const at = new Date(now()).toISOString();
-        writeOnboardingState({
+        recordMoment({
           introductionRequiredAt: at,
           conductorKeyOnboardingRequiredAt: at,
           calendarOnboardingRequiredAt: at,
         });
-        Runtime.runFork(runtime)(settleCalendarOnboardingIfConnected());
+        offerOnboardingWrite(settleCalendarOnboardingIfConnected());
       },
       armObservation: observation.arm,
       disarmObservation: observation.disarm,
@@ -709,9 +792,13 @@ export const composeCalendars = (
       // The gate's own disarm is what ends the observation; the scope this
       // composer was built in ends whatever a disarm missed, so this lifetime
       // is its start alone.
-      lifetime: Effect.sync(() => {
-        onboardingState = onboarding.read();
-        Runtime.runFork(runtime)(settleCalendarOnboardingIfConnected());
+      lifetime: Effect.gen(function* () {
+        const stored = yield* onboarding.read;
+        // Under what this run has already recorded, never over it: the account
+        // composer starts ahead of this one and its first sign-in ever observed
+        // can raise the three gates while this read is still out.
+        if (stored !== undefined) onboardingState = { ...stored, ...onboardingState };
+        offerOnboardingWrite(settleCalendarOnboardingIfConnected());
       }),
     };
   });

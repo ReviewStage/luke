@@ -250,10 +250,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   (`Effect.runFork`) rather than a fiber of whoever asked first, because a
   caller that gives up on its own await must not take the flight the other
   callers are still joined to.
-- **`packages/host/src/compose-calendars.ts`** — the calendars composer forks
-  its observation-driven fibers (the held-notice release, the Apple access
-  poll, the meeting-boundary wake) from synchronous callbacks — a finalizer,
-  the composer's own lifetime — onto the runtime its own layer was built on.
+- **`packages/host/src/compose-calendars.ts`** — the announcement hold the
+  observation's own finalizer owes: a finalizer is a synchronous callback with
+  no fiber of its own to yield on, and the hold must not be what the disarm
+  waits for, so it is forked onto the runtime the composer's layer was built
+  on. The onboarding writes a synchronous edge asks for are offered to this
+  composer's own queue and taken by a fiber of its scope instead.
 - **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
   promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the three
   composers that hand it on hand it to seams outside this repository's host
