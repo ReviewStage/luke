@@ -225,16 +225,18 @@ export const hostAssemblyLayer: Layer.Layer<
     // Every edge a composer could not take as a constructor argument, in one
     // list: each is a cycle the concerns genuinely have. The write is the
     // composer's own set-once, so a reader that awaits its links suspends
-    // until this has run rather than reading nothing; the three composers
-    // that still read theirs from a synchronous statement throw by name.
+    // until this has run rather than reading nothing; the one composer that
+    // still reads its own from a synchronous statement throws by name.
     yield* settings.link({
       refreshAccount: account.session.refreshOnce,
-      cloudKeyHeld: () => calendars.settleKeyGate(),
+      cloudKeyHeld: Effect.sync(() => calendars.settleKeyGate()),
       applyVoiceCredential: account.applyVoiceCredential,
-      setVoice: (voice) => account.voiceCapabilities.liveSessions?.setVoice(voice),
-      reconcileSpeech: () => live.service.reconcile(),
+      setVoice: (voice) =>
+        Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
+      reconcileSpeech: Effect.sync(() => live.service.reconcile()),
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
-      workspaceProjectOffered: observation.workspaceProjectOffered,
+      workspaceProjectOffered: (providerId, providerProjectId) =>
+        Effect.sync(() => observation.workspaceProjectOffered(providerId, providerProjectId)),
     });
     yield* account.link({
       startCapabilities: openCapabilities,

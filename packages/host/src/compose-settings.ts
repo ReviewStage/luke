@@ -42,7 +42,7 @@ import {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Cause, Deferred, Effect, Option, Queue, type Scope } from "effect";
+import { Cause, Deferred, Effect, Queue, type Scope } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
@@ -67,12 +67,15 @@ type StoredSettings = SettingsUpdateResult["settings"]["stored"];
 interface SettingsLinks {
   refreshAccount: () => Effect.Effect<void, unknown>;
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
-  cloudKeyHeld: () => void;
+  readonly cloudKeyHeld: Effect.Effect<void>;
   applyVoiceCredential: Effect.Effect<void>;
-  setVoice: (voice: StoredSettings["voice"]) => void;
-  reconcileSpeech: () => void;
+  setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
+  readonly reconcileSpeech: Effect.Effect<void>;
   broadcastWorkspaceProjects: Effect.Effect<void>;
-  workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
+  workspaceProjectOffered: (
+    providerId: string,
+    providerProjectId: string,
+  ) => Effect.Effect<boolean>;
 }
 
 export interface SettingsComposer extends Composer {
@@ -137,13 +140,14 @@ export const composeSettings = (): Effect.Effect<
     const fileSystem = yield* FileSystem.FileSystem;
     const { runMode, report } = kernel;
     const late = yield* lateService<SettingsLinks>();
-    const links = (): SettingsLinks => {
-      const standing = late.unsafePeek();
-      if (Option.isNone(standing)) {
-        throw new Error("the settings composer's links are read before link() has run");
-      }
-      return standing.value;
-    };
+    /**
+     * One link, awaited: every reader of these is an effect of its own, so a
+     * read before the merge has linked suspends until it stands rather than
+     * throwing by name.
+     */
+    const linked = <A, E>(
+      read: (links: SettingsLinks) => Effect.Effect<A, E>,
+    ): Effect.Effect<A, E> => Effect.flatMap(late.value, read);
 
     /**
      * Which cloud agent providers the vault holds a key for, as it last listed
@@ -188,7 +192,7 @@ export const composeSettings = (): Effect.Effect<
       appVersion: identity.appVersion,
       sends: runMode.sendsNetwork,
       readAccessToken: () => Effect.map(readStoredAccount(), (account) => account?.accessToken),
-      refreshAccount: () => links().refreshAccount(),
+      refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
       held: heldProductEvents(kernel.stateRoot, report, fileSystemContext),
     });
@@ -198,7 +202,7 @@ export const composeSettings = (): Effect.Effect<
         runMode.sendsNetwork
           ? Effect.map(readStoredAccount(), (account) => vaultStepBearer(account, vaultStepAccount))
           : Effect.succeed(undefined),
-      refreshAccount: () => links().refreshAccount(),
+      refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
     });
     const accountPreferencesClient = new AccountPreferencesClient({
@@ -207,7 +211,7 @@ export const composeSettings = (): Effect.Effect<
         runMode.sendsNetwork
           ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
           : Effect.succeed(undefined),
-      refreshAccount: () => links().refreshAccount(),
+      refreshAccount: () => linked((links) => links.refreshAccount()),
       readAccountKey: () =>
         readAccountPreferenceAccountKey().pipe(Effect.orElseSucceed(() => undefined)),
     });
@@ -432,7 +436,9 @@ export const composeSettings = (): Effect.Effect<
             yield* emitSettings();
             // A developer who already had a Conductor key in the vault has
             // answered onboarding's key step before it was ever drawn.
-            if (vaultKeys.has(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR)) links().cloudKeyHeld();
+            if (vaultKeys.has(CLOUD_AGENT_PROVIDER_ID.CONDUCTOR)) {
+              yield* linked((links) => links.cloudKeyHeld);
+            }
           }),
         );
       });
@@ -504,7 +510,7 @@ export const composeSettings = (): Effect.Effect<
             return yield* refusedSettings("The account signed out while the key was being stored.");
           }
           vaultKeys.add(providerId);
-          links().cloudKeyHeld();
+          yield* linked((links) => links.cloudKeyHeld);
           yield* Effect.orDie(store.setApiKey(providerId, undefined));
         } else {
           const deleted = yield* hostedVault.deleteKey(providerId);
@@ -669,9 +675,9 @@ export const composeSettings = (): Effect.Effect<
     }
 
     const sideEffects = hostSettingSideEffects({
-      setVoice: (voice) => links().setVoice(voice),
-      applyVoiceCredential: Effect.suspend(() => links().applyVoiceCredential),
-      reconcileSpeech: () => links().reconcileSpeech(),
+      setVoice: (voice) => linked((links) => links.setVoice(voice)),
+      applyVoiceCredential: linked((links) => links.applyVoiceCredential),
+      reconcileSpeech: linked((links) => links.reconcileSpeech),
       emitSettings,
     });
 
@@ -694,7 +700,7 @@ export const composeSettings = (): Effect.Effect<
           changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
           changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
         ) {
-          yield* links().broadcastWorkspaceProjects;
+          yield* linked((links) => links.broadcastWorkspaceProjects);
         }
         emitSettingsSnapshot(result.settings);
       });
@@ -772,10 +778,12 @@ export const composeSettings = (): Effect.Effect<
           const projectWire = parsed.value as UnparsedWireValue;
           if (
             field === APP_SETTING_SCHEMA.workspaceProjectDefaults.field &&
-            isWireString(projectWire) &&
-            !links().workspaceProjectOffered(key, projectWire)
+            isWireString(projectWire)
           ) {
-            return yield* invalid("that project is not one a provider offers");
+            const offered = yield* linked((links) =>
+              links.workspaceProjectOffered(key, projectWire),
+            );
+            if (!offered) return yield* invalid("that project is not one a provider offers");
           }
           const result = yield* settingsWrite(
             // SAFETY: settingEntryGuard validated the entry before it reaches the store.
@@ -839,7 +847,7 @@ export const composeSettings = (): Effect.Effect<
                 ? Effect.void
                 : Effect.gen(function* () {
                     if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                      yield* links().applyVoiceCredential;
+                      yield* linked((links) => links.applyVoiceCredential);
                       yield* emitSettings();
                     }
                     recordProductEvent(
