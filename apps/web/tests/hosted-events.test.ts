@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
+import { SqlError } from "@effect/sql/SqlError";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   PRODUCT_EVENT,
@@ -12,6 +14,7 @@ import {
 import { type EventsOptions, handleEvents } from "../server/hosted/events";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import type { PosthogBatch, PosthogBatchItem } from "../server/hosted/posthog";
+import { runWithoutDatabase } from "./support/no-database";
 
 const NOW = Date.parse("2026-08-19T12:00:00.000Z");
 const PROJECT_KEY = "phc_project";
@@ -73,7 +76,7 @@ function eventsRequest(body: WireValue): Request {
 }
 
 function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
-  const resolveUserId: EventsOptions["resolveUserId"] = async () => "user-1";
+  const resolveUserId: EventsOptions["resolveUserId"] = () => Effect.succeed("user-1");
   return {
     request: eventsRequest({ events: [LAUNCH] }),
     projectApiKey: PROJECT_KEY,
@@ -85,15 +88,15 @@ function options(overrides: Partial<EventsOptions> = {}): EventsOptions {
 
 /** Each test gets its own account, because the rate-limit map outlives one. */
 let accounts = 0;
-function freshUser(): () => Promise<string | undefined> {
+function freshUser(): () => Effect.Effect<string | undefined> {
   accounts += 1;
   const userId = `user-${accounts}`;
-  return async () => userId;
+  return () => Effect.succeed(userId);
 }
 
 test("only POST is answered, and nothing is forwarded without a key or a token", async () => {
   const wrongMethod = upstream();
-  const rejectedMethod = await runTest(
+  const rejectedMethod = await runWithoutDatabase(
     handleEvents(
       options({
         request: new Request("https://luke.test/api/events"),
@@ -107,15 +110,16 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
   const keyless = upstream();
   let resolved = 0;
-  const unconfigured = await runTest(
+  const unconfigured = await runWithoutDatabase(
     handleEvents(
       options({
         projectApiKey: "   ",
         httpClient: keyless.layer,
-        resolveUserId: async () => {
-          resolved += 1;
-          return "user-1";
-        },
+        resolveUserId: () =>
+          Effect.sync(() => {
+            resolved += 1;
+            return "user-1";
+          }),
       }),
     ),
   );
@@ -127,8 +131,10 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
   assert.equal(resolved, 0);
 
   const anonymous = upstream();
-  const refused = await runTest(
-    handleEvents(options({ resolveUserId: async () => undefined, httpClient: anonymous.layer })),
+  const refused = await runWithoutDatabase(
+    handleEvents(
+      options({ resolveUserId: () => Effect.succeed(undefined), httpClient: anonymous.layer }),
+    ),
   );
   assert.equal(refused.status, 401);
   assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -137,7 +143,7 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
 test("a malformed or oversized body is refused, the oversized one before parsing", async () => {
   const malformed = upstream();
-  const unreadable = await runTest(
+  const unreadable = await runWithoutDatabase(
     handleEvents(
       options({
         request: rawEventsRequest("{not json"),
@@ -149,7 +155,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
   assert.equal(unreadable.status, 400);
   assert.equal((await unreadable.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
 
-  const strange = await runTest(
+  const strange = await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({ events: [{ name: "app:sneak", at: NOW, properties: {} }] }),
@@ -160,7 +166,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
   );
   assert.equal(strange.status, 400);
 
-  const overLimit = await runTest(
+  const overLimit = await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({
@@ -174,7 +180,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
   assert.equal(overLimit.status, 400);
 
   // Valid JSON, but past the byte ceiling: refused without being parsed at all.
-  const huge = await runTest(
+  const huge = await runWithoutDatabase(
     handleEvents(
       options({
         request: rawEventsRequest(`{"events":[],"pad":"${"x".repeat(20_000)}"}`),
@@ -189,7 +195,7 @@ test("a malformed or oversized body is refused, the oversized one before parsing
 
 test("the resolved account is the distinct id, whatever the body tried to say", async () => {
   const posthog = upstream();
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({
@@ -239,7 +245,9 @@ test("the resolved account is the distinct id, whatever the body tried to say", 
  */
 test("the forwarded document matches the processor's documented batch shape", async () => {
   const posthog = upstream();
-  await runTest(handleEvents(options({ httpClient: posthog.layer, resolveUserId: freshUser() })));
+  await runWithoutDatabase(
+    handleEvents(options({ httpClient: posthog.layer, resolveUserId: freshUser() })),
+  );
 
   const { request: forwarded, items } = onlyBatch(posthog.forwarded);
   assert.equal(forwarded.body.api_key, PROJECT_KEY);
@@ -257,7 +265,7 @@ test("the forwarded document matches the processor's documented batch shape", as
 test("the client header selects the $lib tag, and anything else is the desktop", async () => {
   for (const client of [PRODUCT_EVENT_CLIENT.IOS, PRODUCT_EVENT_CLIENT.WATCHOS]) {
     const posted = upstream();
-    await runTest(
+    await runWithoutDatabase(
       handleEvents(
         options({
           request: new Request("https://luke.test/api/events", {
@@ -281,7 +289,7 @@ test("the client header selects the $lib tag, and anything else is the desktop",
 
   // A header outside the set cannot put its own words in the tag.
   const forged = upstream();
-  await runTest(
+  await runWithoutDatabase(
     handleEvents(
       options({
         request: new Request("https://luke.test/api/events", {
@@ -305,11 +313,11 @@ test("the client header selects the $lib tag, and anything else is the desktop",
 
 test("the account's name and address ride as person properties, once per batch", async () => {
   const posthog = upstream();
-  await runTest(
+  await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({ events: [LAUNCH, LAUNCH] }),
-        readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+        readPerson: () => Effect.succeed({ name: "Ada", email: "ada@example.test" }),
         httpClient: posthog.layer,
         resolveUserId: freshUser(),
       }),
@@ -331,19 +339,17 @@ test("the account's name and address ride as person properties, once per batch",
 
 test("a deployment that reads no person, or fails to, still records the counts", async () => {
   const withoutSeam = upstream();
-  const anonymous = await runTest(
+  const anonymous = await runWithoutDatabase(
     handleEvents(options({ httpClient: withoutSeam.layer, resolveUserId: freshUser() })),
   );
   assert.equal(anonymous.status, 202);
   assert.equal(itemAt(onlyBatch(withoutSeam.forwarded).items, 0).properties.$set, undefined);
 
   const failing = upstream();
-  const survived = await runTest(
+  const survived = await runWithoutDatabase(
     handleEvents(
       options({
-        readPerson: async () => {
-          throw new Error("database unreachable");
-        },
+        readPerson: () => Effect.fail(new SqlError({ cause: new Error("database unreachable") })),
         httpClient: failing.layer,
         resolveUserId: freshUser(),
       }),
@@ -355,7 +361,7 @@ test("a deployment that reads no person, or fails to, still records the counts",
 
 test("nothing the request body says can name the person", async () => {
   const posthog = upstream();
-  await runTest(
+  await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({
@@ -363,7 +369,7 @@ test("nothing the request body says can name the person", async () => {
             { ...LAUNCH, properties: { app_version: "0.2.0", $set: { email: "them@evil" } } },
           ],
         }),
-        readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+        readPerson: () => Effect.succeed({ name: "Ada", email: "ada@example.test" }),
         httpClient: posthog.layer,
         resolveUserId: freshUser(),
       }),
@@ -376,7 +382,7 @@ test("nothing the request body says can name the person", async () => {
 
 test("a wrong desktop clock is clamped to the reader's own window", async () => {
   const posthog = upstream();
-  await runTest(
+  await runWithoutDatabase(
     handleEvents(
       options({
         request: eventsRequest({
@@ -400,7 +406,7 @@ test("past the per-account brake the batch is refused rather than forwarded", as
   const posthog = upstream();
   const resolveUserId = freshUser();
   const send = () =>
-    runTest(
+    runWithoutDatabase(
       handleEvents(
         options({
           request: eventsRequest({ events: Array.from({ length: 50 }, () => LAUNCH) }),
@@ -423,7 +429,7 @@ test("past the per-account brake the batch is refused rather than forwarded", as
 
 test("an upstream refusal answers 502 carrying its status and nothing else", async () => {
   const refusing = upstream(400);
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleEvents(options({ httpClient: refusing.layer, resolveUserId: freshUser() })),
   );
   assert.equal(response.status, 502);
@@ -432,7 +438,7 @@ test("an upstream refusal answers 502 carrying its status and nothing else", asy
     upstreamStatus: 400,
   });
 
-  const unreachable = await runTest(
+  const unreachable = await runWithoutDatabase(
     handleEvents(
       options({
         httpClient: fakeHttpClientLayer(async () => {

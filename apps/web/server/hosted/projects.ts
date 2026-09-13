@@ -70,7 +70,7 @@ export function handleProjects(
       );
     }
 
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }

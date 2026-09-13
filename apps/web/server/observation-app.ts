@@ -38,7 +38,11 @@ import {
 } from "./hosted/store/index.js";
 import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
-import { hostedEncryptionSecret, hostedVaultSeams } from "./hosted/vault-route.js";
+import {
+  hostedEncryptionSecret,
+  hostedEncryptionSecretEffect,
+  hostedVaultSeams,
+} from "./hosted/vault-route.js";
 import { runWeb } from "./runtime.js";
 
 /**
@@ -172,16 +176,42 @@ function promisePassthrough(handle: (request: Request) => Promise<Response>): Ht
   });
 }
 
+/**
+ * An effect-shaped handler's answer, carried the same way a promise-shaped
+ * one is. The handler runs on the group's own fiber rather than through
+ * `runWeb`, so a failed statement it reads is a defect here, exactly as a
+ * rejected promise was for `promisePassthrough`.
+ */
+function effectPassthrough<R>(
+  handle: (request: Request) => Effect.Effect<Response, unknown, R>,
+): HttpApp.Default<never, R> {
+  return Effect.gen(function* () {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const answer = yield* Effect.orDie(handle(request));
+    return incoming.method === HTTP_METHOD.HEAD
+      ? bodylessAnswer(answer)
+      : HttpServerResponse.raw(answer);
+  });
+}
+
 /** Reads one observed session's conversation for the caller who opened its screen. */
-async function sessionsMessagesHandler(request: Request): Promise<Response> {
-  return runWeb(
-    handleConversationRead({
+function sessionsMessagesEffect(
+  request: Request,
+): Effect.Effect<
+  Response,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient | HostedEnvironment
+> {
+  return Effect.gen(function* () {
+    const encryptionSecret = yield* hostedEncryptionSecretEffect;
+    return yield* handleConversationRead({
       ...hostedVaultSeams,
-      encryptionSecret: await hostedEncryptionSecret(),
+      encryptionSecret,
       request,
-      execute: (ask) => runWeb(executeConversationRead(ask)),
-    }),
-  );
+      execute: executeConversationRead,
+    });
+  });
 }
 
 /** Lists where the signed-in user's keys can create a workspace. */
@@ -200,23 +230,30 @@ async function observeHandler(request: Request): Promise<Response> {
  * Records what the signed-in desktop counted about its own use. The logic
  * lives in `server/hosted/events.ts`; this hands it the deployment's real
  * seams — the project token the desktop never holds, and the same
- * in-process token resolution every other hosted endpoint trusts.
+ * in-process token resolution every other hosted endpoint trusts. The
+ * userinfo call is better-auth's own foreign promise, so it is wrapped here,
+ * at the seam's implementation, rather than inside the handler.
  */
-async function eventsHandler(request: Request): Promise<Response> {
-  const environment = await runWeb(HostedEnvironment);
-  const options: EventsOptions = {
-    request,
-    projectApiKey:
-      environment.posthogProjectApiKey === undefined
-        ? undefined
-        : Redacted.value(environment.posthogProjectApiKey),
-    resolveUserId: (incoming) => hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input)),
-    // Read from the service's own user row rather than from the request, so
-    // the desktop still sends nothing that names anybody.
-    readPerson: (userId) => runWeb(readPerson(userId)),
-  };
-  if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
-  return runWeb(handleEvents(options));
+function eventsEffect(
+  request: Request,
+): Effect.Effect<Response, never, SqlClient.SqlClient | HostedEnvironment> {
+  return Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    const options: EventsOptions = {
+      request,
+      projectApiKey:
+        environment.posthogProjectApiKey === undefined
+          ? undefined
+          : Redacted.value(environment.posthogProjectApiKey),
+      resolveUserId: (incoming) =>
+        Effect.promise(() => hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input))),
+      // Read from the service's own user row rather than from the request, so
+      // the desktop still sends nothing that names anybody.
+      readPerson,
+    };
+    if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
+    return yield* handleEvents(options);
+  });
 }
 
 /**
@@ -348,15 +385,15 @@ async function observationTickHandler(request: Request): Promise<Response> {
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
  */
-export function observationApp(): HttpApp.Default {
+export function observationApp(): HttpApp.Default<never, SqlClient.SqlClient | HostedEnvironment> {
   return HttpRouter.empty.pipe(
     // `all`, not `get`/`post`: each handler decides its own method refusal,
     // as it did before conversion, so a request to the right path on the
     // wrong method still answers 405 rather than falling through to the
     // group's own 404.
-    HttpRouter.all(PATH.SESSIONS_MESSAGES, promisePassthrough(sessionsMessagesHandler)),
+    HttpRouter.all(PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
     HttpRouter.all(PATH.PROJECTS, promisePassthrough(projectsHandler)),
-    HttpRouter.all(PATH.EVENTS, promisePassthrough(eventsHandler)),
+    HttpRouter.all(PATH.EVENTS, effectPassthrough(eventsEffect)),
     HttpRouter.all(PATH.OBSERVE, promisePassthrough(observeHandler)),
     HttpRouter.all(PATH.OBSERVATION_TICK, promisePassthrough(observationTickHandler)),
     Effect.catchTag("RouteNotFound", () =>

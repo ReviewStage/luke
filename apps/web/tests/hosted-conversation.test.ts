@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import { test } from "vitest";
 import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../server/hosted/conversation-read";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
+import { runWithoutDatabase } from "./support/no-database";
 
 const SECRET = "a".repeat(64);
 const SESSION_UUID = "11111111-1111-4111-8111-111111111111";
@@ -38,9 +39,9 @@ function conversationOptions(
       providerSessionId: SESSION_UUID,
     }),
     encryptionSecret: SECRET,
-    resolveUserId: async () => "user-1",
-    readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
-    execute: async () => ({ messages: [], hasMore: false }),
+    resolveUserId: () => Effect.succeed("user-1"),
+    readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
+    execute: () => Effect.succeed({ messages: [], hasMore: false }),
     ...overrides,
   };
 }
@@ -48,7 +49,7 @@ function conversationOptions(
 // --- Gate checks ---
 
 test("the conversation gate order is method, secret, token", async () => {
-  const wrongMethod = await runTest(
+  const wrongMethod = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: new Request("https://luke.test/api/sessions/messages", { method: "POST" }),
@@ -57,13 +58,13 @@ test("the conversation gate order is method, secret, token", async () => {
   );
   assert.equal(wrongMethod.status, 405);
 
-  const noSecret = await runTest(
+  const noSecret = await runWithoutDatabase(
     handleConversationRead(conversationOptions({ encryptionSecret: undefined })),
   );
   assert.equal(noSecret.status, 503);
 
-  const anonymous = await runTest(
-    handleConversationRead(conversationOptions({ resolveUserId: async () => undefined })),
+  const anonymous = await runWithoutDatabase(
+    handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(undefined) })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -73,13 +74,12 @@ test("the conversation gate order is method, secret, token", async () => {
 
 test("a provider without the documented read is an invalid request", async () => {
   for (const providerId of ["devin", "copilot", "not-a-provider"]) {
-    const response = await runTest(
+    const response = await runWithoutDatabase(
       handleConversationRead(
         conversationOptions({
           request: conversationRequest({ providerId, providerSessionId: SESSION_UUID }),
-          execute: async () => {
-            throw new Error("execute must not run for a provider without the read");
-          },
+          execute: () =>
+            Effect.die(new Error("execute must not run for a provider without the read")),
         }),
       ),
     );
@@ -89,7 +89,7 @@ test("a provider without the documented read is an invalid request", async () =>
 });
 
 test("a session id or cursor outside its bound is an invalid request", async () => {
-  const missingSession = await runTest(
+  const missingSession = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({ providerId: "conductor" }),
@@ -98,7 +98,7 @@ test("a session id or cursor outside its bound is an invalid request", async () 
   );
   assert.equal(missingSession.status, 400);
 
-  const slashedSession = await runTest(
+  const slashedSession = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({
@@ -110,7 +110,7 @@ test("a session id or cursor outside its bound is an invalid request", async () 
   );
   assert.equal(slashedSession.status, 400);
 
-  const slashedCursor = await runTest(
+  const slashedCursor = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({
@@ -124,7 +124,7 @@ test("a session id or cursor outside its bound is an invalid request", async () 
   assert.equal(slashedCursor.status, 400);
 
   for (const beforeOffset of ["-1", "1.5", "not-a-number", "9999999999"]) {
-    const badOffset = await runTest(
+    const badOffset = await runWithoutDatabase(
       handleConversationRead(
         conversationOptions({
           request: conversationRequest({
@@ -139,7 +139,7 @@ test("a session id or cursor outside its bound is an invalid request", async () 
   }
 
   // A poll and a history read are different asks, never combined.
-  const bothPositions = await runTest(
+  const bothPositions = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({
@@ -156,7 +156,7 @@ test("a session id or cursor outside its bound is an invalid request", async () 
 
 test("a history position rides the query to the executor", async () => {
   let executed: Parameters<ConversationReadOptions["execute"]>[0] | undefined;
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({
@@ -164,10 +164,11 @@ test("a history position rides the query to the executor", async () => {
           providerSessionId: SESSION_UUID,
           beforeOffset: "240",
         }),
-        execute: async (options) => {
-          executed = options;
-          return { messages: [], hasMore: false, firstOffset: 140, hasOlder: true };
-        },
+        execute: (options) =>
+          Effect.sync(() => {
+            executed = options;
+            return { messages: [], hasMore: false, firstOffset: 140, hasOlder: true };
+          }),
       }),
     ),
   );
@@ -184,13 +185,11 @@ test("a history position rides the query to the executor", async () => {
 });
 
 test("a request with no key stored is invalid rather than attempted", async () => {
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
-        readKey: async () => undefined,
-        execute: async () => {
-          throw new Error("execute must not run without a key");
-        },
+        readKey: () => Effect.succeed(undefined),
+        execute: () => Effect.die(new Error("execute must not run without a key")),
       }),
     ),
   );
@@ -200,10 +199,10 @@ test("a request with no key stored is invalid rather than attempted", async () =
 // --- The executor's outcome decides the response ---
 
 test("a refused read answers upstream-error and never echoes the provider", async () => {
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
-        execute: async () => ({ refused: "Conductor rejected the stored API key." }),
+        execute: () => Effect.succeed({ refused: "Conductor rejected the stored API key." }),
       }),
     ),
   );
@@ -215,7 +214,7 @@ test("a refused read answers upstream-error and never echoes the provider", asyn
 
 test("an answered read carries the page to the wire with the parsed fields", async () => {
   let executed: Parameters<ConversationReadOptions["execute"]>[0] | undefined;
-  const response = await runTest(
+  const response = await runWithoutDatabase(
     handleConversationRead(
       conversationOptions({
         request: conversationRequest({
@@ -223,14 +222,17 @@ test("an answered read carries the page to the wire with the parsed fields", asy
           providerSessionId: SESSION_UUID,
           after: MESSAGE_UUIDS[0],
         }),
-        execute: async (options) => {
-          executed = options;
-          return {
-            messages: [{ id: MESSAGE_UUIDS[1], author: "agent", text: "Done.", receivedAt: 1_000 }],
-            lastMessageId: MESSAGE_UUIDS[2],
-            hasMore: true,
-          };
-        },
+        execute: (options) =>
+          Effect.sync(() => {
+            executed = options;
+            return {
+              messages: [
+                { id: MESSAGE_UUIDS[1], author: "agent", text: "Done.", receivedAt: 1_000 },
+              ],
+              lastMessageId: MESSAGE_UUIDS[2],
+              hasMore: true,
+            };
+          }),
       }),
     ),
   );
@@ -251,14 +253,14 @@ test("the conversation endpoint returns 429 after too many requests in the same 
   const userId = `ratelimit-${Date.now()}-${process.pid}`;
 
   for (let i = 0; i < 30; i++) {
-    const response = await runTest(
-      handleConversationRead(conversationOptions({ resolveUserId: async () => userId })),
+    const response = await runWithoutDatabase(
+      handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(userId) })),
     );
     assert.equal(response.status, 200, `request ${i + 1} should succeed`);
   }
 
-  const limited = await runTest(
-    handleConversationRead(conversationOptions({ resolveUserId: async () => userId })),
+  const limited = await runWithoutDatabase(
+    handleConversationRead(conversationOptions({ resolveUserId: () => Effect.succeed(userId) })),
   );
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

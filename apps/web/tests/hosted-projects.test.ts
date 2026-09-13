@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { hostedProjectsAnswerFromWire } from "@sidecar/hosted";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -25,7 +26,7 @@ function projectsOptions(
   return {
     request: projectsRequest(),
     encryptionSecret: SECRET,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     readVaultKeys: async (): Promise<VaultKeyRow[]> => [],
     store: () => memoryObservationStore(),
     ...overrides,
@@ -111,7 +112,7 @@ test("the projects gate order is method, token, secret", async () => {
   assert.equal(wrongMethod.status, 405);
 
   const anonymous = await runWithoutDatabase(
-    handleProjects(projectsOptions({ resolveUserId: async () => undefined })),
+    handleProjects(projectsOptions({ resolveUserId: () => Effect.succeed(undefined) })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);

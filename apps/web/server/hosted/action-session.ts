@@ -1,6 +1,6 @@
 import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, Either, type ParseResult } from "effect";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -169,39 +169,38 @@ interface ActionAdmission {
   body: WireRecord;
 }
 
-async function admitActionRequest(
+function admitActionRequest(
   options: Pick<HostedVaultRoute, "request" | "resolveUserId" | "encryptionSecret">,
-): Promise<ActionAdmission | Response> {
+): Effect.Effect<ActionAdmission | Response> {
   const { request, resolveUserId, encryptionSecret } = options;
 
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-    );
-  }
+  return Effect.gen(function* () {
+    if (request.method !== "POST") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
 
-  const secretResult = secretOrUnavailable(encryptionSecret);
-  if (secretResult instanceof Response) return secretResult;
+    const secretResult = secretOrUnavailable(encryptionSecret);
+    if (secretResult instanceof Response) return secretResult;
 
-  const userId = await resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
+    const userId = yield* resolveUserId(request);
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
 
-  let body: UnparsedWireValue;
-  try {
+    const parsed = yield* Effect.either(Effect.tryPromise(() => request.json()));
+    if (Either.isLeft(parsed)) return invalidRequest();
     // SAFETY: request.json() returns unknown; isRecord below validates the shape.
-    body = (await request.json()) as UnparsedWireValue;
-  } catch {
-    return invalidRequest();
-  }
-  if (!isRecord(body)) return invalidRequest();
+    const body = parsed.right as UnparsedWireValue;
+    if (!isRecord(body)) return invalidRequest();
 
-  const providerId = text(body.providerId);
-  if (!isCloudAgentProviderId(providerId)) return invalidRequest();
+    const providerId = text(body.providerId);
+    if (!isCloudAgentProviderId(providerId)) return invalidRequest();
 
-  return { userId, secret: secretResult.secret, providerId, body };
+    return { userId, secret: secretResult.secret, providerId, body };
+  });
 }
 
 function invalidRequest(): Response {
@@ -228,30 +227,36 @@ function actionAnswer(executed: ActionExecutionAnswer): Response {
  * caller gets instead: a rejection naming the missing key, or a 503 for a
  * ciphertext this deployment's secret cannot open.
  */
-async function apiKeyOrAnswer(
+function apiKeyOrAnswer(
   readKey: HostedVaultRoute["readKey"],
   userId: string,
   providerId: CloudAgentProviderId,
   secret: string,
-): Promise<{ apiKey: string } | Response> {
-  const keyRow = await readKey(userId, providerId);
-  if (!keyRow) {
-    return refusedAnswer(
-      ACTION_RESULT_STATUS.REJECTED,
-      "No provider key stored. Add a key for this provider in settings.",
-    );
-  }
-  try {
-    return { apiKey: decryptProviderKey(keyRow.ciphertext, secret) };
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
+): Effect.Effect<
+  { apiKey: string } | Response,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+> {
+  return Effect.gen(function* () {
+    const keyRow = yield* readKey(userId, providerId);
+    if (!keyRow) {
+      return refusedAnswer(
+        ACTION_RESULT_STATUS.REJECTED,
+        "No provider key stored. Add a key for this provider in settings.",
+      );
+    }
+    try {
+      return { apiKey: decryptProviderKey(keyRow.ciphertext, secret) };
+    } catch {
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    }
+  });
 }
 
 /** Admits and delivers one action aimed at a cloud session or project on the user's behalf. */
 export function handleSessionAction(options: SessionActionOptions): HostedActionEffect<Response> {
   return Effect.gen(function* () {
-    const admission = yield* Effect.promise(() => admitActionRequest(options));
+    const admission = yield* admitActionRequest(options);
     if (admission instanceof Response) return admission;
     const { userId, secret, providerId, body } = admission;
     const { kind } = options;
@@ -265,9 +270,7 @@ export function handleSessionAction(options: SessionActionOptions): HostedAction
     );
     if (unsupported) return refusedAnswer(ACTION_RESULT_STATUS.UNSUPPORTED, unsupported);
 
-    const key = yield* Effect.promise(() =>
-      apiKeyOrAnswer(options.readKey, userId, providerId, secret),
-    );
+    const key = yield* apiKeyOrAnswer(options.readKey, userId, providerId, secret);
     if (key instanceof Response) return key;
 
     const roster = yield* options.roster(userId, providerId, secret);

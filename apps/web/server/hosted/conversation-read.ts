@@ -1,4 +1,6 @@
-import { Effect } from "effect";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult } from "effect";
 import {
   type CloudAgentProviderId,
   type HostedConversationAnswer,
@@ -43,7 +45,7 @@ export interface ConversationReadOptions
     afterMessageId?: string;
     beforeOffset?: number;
     apiKey: string;
-  }) => Promise<HostedConversationAnswer | ConversationReadRefusal>;
+  }) => Effect.Effect<HostedConversationAnswer | ConversationReadRefusal>;
 }
 
 /**
@@ -69,7 +71,9 @@ function parseBeforeOffset(value: string): number | undefined {
  * serving the response. Only the client asks; no observation pass ever
  * issues this read.
  */
-export function handleConversationRead(options: ConversationReadOptions): Effect.Effect<Response> {
+export function handleConversationRead(
+  options: ConversationReadOptions,
+): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
   const { request, resolveUserId, encryptionSecret, readKey } = options;
 
   return Effect.gen(function* () {
@@ -85,7 +89,7 @@ export function handleConversationRead(options: ConversationReadOptions): Effect
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
@@ -123,7 +127,7 @@ export function handleConversationRead(options: ConversationReadOptions): Effect
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
 
-    const keyRow = yield* Effect.promise(() => readKey(userId, providerId));
+    const keyRow = yield* readKey(userId, providerId);
     if (!keyRow) {
       // A roster that advertised this read had a key behind it; a request with
       // none stored is not one that screen could have made.
@@ -137,15 +141,13 @@ export function handleConversationRead(options: ConversationReadOptions): Effect
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const outcome = yield* Effect.promise(() =>
-      options.execute({
-        providerId,
-        providerSessionId,
-        ...(afterMessageId ? { afterMessageId } : undefined),
-        ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
-        apiKey,
-      }),
-    );
+    const outcome = yield* options.execute({
+      providerId,
+      providerSessionId,
+      ...(afterMessageId ? { afterMessageId } : undefined),
+      ...(beforeOffset !== undefined ? { beforeOffset } : undefined),
+      apiKey,
+    });
     if ("refused" in outcome) {
       // The screen behind this request draws its empty state either way; the
       // status says only that the provider side, not the request, refused.

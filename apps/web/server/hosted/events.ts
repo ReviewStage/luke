@@ -1,6 +1,8 @@
 import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import { Effect, type Layer } from "effect";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type Layer, type ParseResult } from "effect";
 import {
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
@@ -58,12 +60,18 @@ export interface EventsOptions {
   projectApiKey: string | undefined;
   /** A deployment-configured ingestion host; the shared default otherwise. */
   host?: string;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   /**
    * The account's own name and address, for the person record. Omitted by a
    * deployment that would rather PostHog held neither; the counts still land.
    */
-  readPerson?: (userId: string) => Promise<PosthogPerson | undefined>;
+  readPerson?: (
+    userId: string,
+  ) => Effect.Effect<
+    PosthogPerson | undefined,
+    SqlError | ParseResult.ParseError,
+    SqlClient.SqlClient
+  >;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   timeoutMs?: number;
@@ -116,7 +124,9 @@ function batchDocument(
   };
 }
 
-export function handleEvents(options: EventsOptions): Effect.Effect<Response> {
+export function handleEvents(
+  options: EventsOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
   return Effect.gen(function* () {
     if (request.method !== "POST") {
@@ -133,12 +143,14 @@ export function handleEvents(options: EventsOptions): Effect.Effect<Response> {
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const userId = yield* Effect.promise(() => options.resolveUserId(request));
+    const userId = yield* options.resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const raw = yield* Effect.promise(() => request.text().catch(() => undefined));
+    const raw = yield* Effect.tryPromise(() => request.text()).pipe(
+      Effect.orElseSucceed((): string | undefined => undefined),
+    );
     // Measured before parsing: an oversized body is refused rather than read.
     if (raw === undefined || new TextEncoder().encode(raw).byteLength > MAXIMUM_BODY_BYTES) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
@@ -170,7 +182,9 @@ export function handleEvents(options: EventsOptions): Effect.Effect<Response> {
     // A failed read costs the person's name, never the counts.
     const readPerson = options.readPerson;
     const person = readPerson
-      ? yield* Effect.promise(() => readPerson(userId).catch(() => undefined))
+      ? yield* readPerson(userId).pipe(
+          Effect.orElseSucceed((): PosthogPerson | undefined => undefined),
+        )
       : undefined;
     // The header only selects between the fixed tags; anything else, including
     // no header at all, is a desktop build.

@@ -1,13 +1,13 @@
 import { Effect } from "effect";
 import { handleMessageRating } from "../../../hosted/message-rating.js";
 import { rateMessage, storeWriter } from "../../../hosted/store/index.js";
-import { hostedVaultRoute } from "../../../hosted/vault-route.js";
+import { hostedVaultRoute, resolveHostedUserId } from "../../../hosted/vault-route.js";
 import { runWeb } from "../../../runtime.js";
 
-export default hostedVaultRoute(({ request, resolveUserId }) =>
+export default hostedVaultRoute(({ request }) =>
   handleMessageRating({
     request,
-    resolveUserId,
+    resolveUserId: resolveHostedUserId,
     rate: (userId, messageId, rating) =>
       runWeb(
         Effect.gen(function* () {

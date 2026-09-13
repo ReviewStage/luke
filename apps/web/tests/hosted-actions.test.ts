@@ -47,8 +47,8 @@ function messageOptions(overrides: Partial<SessionActionOptions> = {}): SessionA
     }),
     kind: ACTION_KIND.MESSAGE,
     encryptionSecret: SECRET,
-    resolveUserId: async () => "user-1",
-    readKey: async () => ({ ciphertext: encryptProviderKey("key-1", SECRET) }),
+    resolveUserId: () => Effect.succeed("user-1"),
+    readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
     roster: () => Effect.succeed(EMPTY_ROSTER),
     unsupportedReason: () => undefined,
     execute: () => Effect.succeed({ result: "accepted" }),
@@ -75,7 +75,7 @@ test("an unsupported provider gets 'unsupported' even with no key stored", async
     handleSessionAction(
       messageOptions({
         unsupportedReason: () => "Not available.",
-        readKey: async () => undefined,
+        readKey: () => Effect.succeed(undefined),
         execute: () => Effect.die(new Error("execute must not run for an unsupported provider")),
       }),
     ),
@@ -92,7 +92,7 @@ test("an unsupported workspace provider gets 'unsupported' even with no key stor
     handleSessionAction(
       workspaceOptions({
         unsupportedReason: () => "Not available.",
-        readKey: async () => undefined,
+        readKey: () => Effect.succeed(undefined),
         execute: () => Effect.die(new Error("execute must not run for an unsupported provider")),
       }),
     ),
@@ -108,7 +108,7 @@ test("an unsupported workspace provider gets 'unsupported' even with no key stor
 
 test("a supported provider with no key stored gets 'rejected'", async () => {
   const response = await runWithoutDatabase(
-    handleSessionAction(messageOptions({ readKey: async () => undefined })),
+    handleSessionAction(messageOptions({ readKey: () => Effect.succeed(undefined) })),
   );
 
   assert.equal(response.status, 200);
