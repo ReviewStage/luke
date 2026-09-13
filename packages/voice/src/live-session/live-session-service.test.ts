@@ -33,7 +33,11 @@ import type { WireRecord } from "@sidecar/wire";
 import { type Clock, Duration, Effect, Fiber, Layer, Option, type Scope, TestClock } from "effect";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
-import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
+import {
+  type LiveSessionOpened,
+  type LiveSessionSource,
+  SidebandAttachFailed,
+} from "../live-session-source.js";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
@@ -349,18 +353,19 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     let ids = 0;
     const state = { quiet: false, sourceAvailable: true };
     const source: LiveSessionSource = {
-      create: async (input) => {
-        seeds.push([...input.input]);
-        const sideband = new FakeSideband();
-        sidebands.push(sideband);
-        const opened: LiveSessionOpened = {
-          sessionId: `sess-${sidebands.length}`,
-          sdpAnswer: `answer-for-${input.sdpOffer}`,
-          attach: async () => sideband,
-        };
-        creates.push(opened);
-        return opened;
-      },
+      create: (input) =>
+        Effect.sync(() => {
+          seeds.push([...input.input]);
+          const sideband = new FakeSideband();
+          sidebands.push(sideband);
+          const opened: LiveSessionOpened = {
+            sessionId: `sess-${sidebands.length}`,
+            sdpAnswer: `answer-for-${input.sdpOffer}`,
+            attach: () => Effect.succeed(sideband),
+          };
+          creates.push(opened);
+          return opened;
+        }),
       setVoice: () => undefined,
       diagnostics: () => {
         throw new Error("not read here");
@@ -470,7 +475,7 @@ it.scoped(
       const sideband = new FakeSideband();
       const adopted = yield* f.service.adoptSession({
         sessionId: "sess-adopted",
-        attach: async () => sideband,
+        attach: () => Effect.succeed(sideband),
         started: false,
       });
       assert.equal(adopted, true);
@@ -497,7 +502,7 @@ it.scoped(
       assert.equal(
         yield* running.service.adoptSession({
           sessionId: "sess-running",
-          attach: async () => runningSideband,
+          attach: () => Effect.succeed(runningSideband),
           started: true,
         }),
         true,
@@ -518,7 +523,7 @@ it.scoped(
       assert.equal(
         yield* fresh.service.adoptSession({
           sessionId: "sess-fresh",
-          attach: async () => freshSideband,
+          attach: () => Effect.succeed(freshSideband),
           started: false,
         }),
         true,
@@ -542,9 +547,7 @@ it.scoped(
       const f = yield* fixture();
       const adopted = yield* f.service.adoptSession({
         sessionId: "sess-unreachable",
-        attach: async () => {
-          throw new Error("the sideband never opened");
-        },
+        attach: () => new SidebandAttachFailed({ detail: "the sideband never opened" }),
         started: false,
       });
       assert.equal(adopted, false);

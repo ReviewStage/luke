@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { PRODUCT_EVENT } from "@sidecar/analytics";
 import { INTRODUCTION_SEED_BOUNDS, LIVE_SESSION_OUTCOME, SEED_ROLE } from "@sidecar/live";
 import type { IntroductionSessionSource, LiveSessionCreateInput } from "@sidecar/voice";
-import { test } from "vitest";
+import { Effect } from "effect";
 import { IntroductionSession } from "./introduction-session";
 
 const SDP = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\n";
@@ -12,13 +13,14 @@ function fakeSource(answers: boolean[]) {
   const closes: string[] = [];
   let count = 0;
   const source: IntroductionSessionSource = {
-    async create(input) {
-      creates.push(input);
-      count += 1;
-      if (answers[count - 1] === false) return undefined;
-      const sessionId = `sess_${count}`;
-      return { sessionId, sdpAnswer: "v=0\r\nanswer\r\n", close: () => closes.push(sessionId) };
-    },
+    create: (input) =>
+      Effect.sync(() => {
+        creates.push(input);
+        count += 1;
+        if (answers[count - 1] === false) return undefined;
+        const sessionId = `sess_${count}`;
+        return { sessionId, sdpAnswer: "v=0\r\nanswer\r\n", close: () => closes.push(sessionId) };
+      }),
     diagnostics: () => ({
       apiKeyConfigured: false,
       fixtureMode: false,
@@ -31,64 +33,72 @@ function fakeSource(answers: boolean[]) {
   return { source, creates, closes };
 }
 
-test("an offer seeds the session with the bounded titles and holds the connection", async () => {
-  const { source, creates, closes } = fakeSource([true]);
-  const counted: string[] = [];
-  const session = new IntroductionSession({
-    source,
-    recordProductEvent: (name) => counted.push(name),
-  });
+it.effect("an offer seeds the session with the bounded titles and holds the connection", () =>
+  Effect.gen(function* () {
+    const { source, creates, closes } = fakeSource([true]);
+    const counted: string[] = [];
+    const session = new IntroductionSession({
+      source,
+      recordProductEvent: (name) => counted.push(name),
+    });
 
-  const titles = Array.from({ length: INTRODUCTION_SEED_BOUNDS.TITLES + 2 }, (_, i) => `T${i}`);
-  const answer = await session.open({ sdp: SDP, titles });
+    const titles = Array.from({ length: INTRODUCTION_SEED_BOUNDS.TITLES + 2 }, (_, i) => `T${i}`);
+    const answer = yield* session.open({ sdp: SDP, titles });
 
-  assert.deepEqual(answer, { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" });
-  assert.equal(creates[0]?.sdpOffer, SDP);
-  assert.equal(creates[0]?.input.length, 1);
-  assert.equal(creates[0]?.input[0]?.role, SEED_ROLE.DEVELOPER);
-  assert.equal(
-    creates[0]?.input[0]?.content[0].text.split("\n").length - 1,
-    INTRODUCTION_SEED_BOUNDS.TITLES,
-  );
-  assert.deepEqual(counted, [PRODUCT_EVENT.VOICE_CALL_START]);
-  assert.equal(session.standing, true);
-  assert.deepEqual(closes, []);
+    assert.deepEqual(answer, { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" });
+    assert.equal(creates[0]?.sdpOffer, SDP);
+    assert.equal(creates[0]?.input.length, 1);
+    assert.equal(creates[0]?.input[0]?.role, SEED_ROLE.DEVELOPER);
+    assert.equal(
+      creates[0]?.input[0]?.content[0].text.split("\n").length - 1,
+      INTRODUCTION_SEED_BOUNDS.TITLES,
+    );
+    assert.deepEqual(counted, [PRODUCT_EVENT.VOICE_CALL_START]);
+    assert.equal(session.standing, true);
+    assert.deepEqual(closes, []);
 
-  session.end();
-  assert.deepEqual(closes, ["sess_1"]);
-  assert.equal(session.standing, false);
-  session.end();
-  assert.deepEqual(closes, ["sess_1"]);
-});
+    session.end();
+    assert.deepEqual(closes, ["sess_1"]);
+    assert.equal(session.standing, false);
+    session.end();
+    assert.deepEqual(closes, ["sess_1"]);
+  }),
+);
 
-test("the account's name rides the seed as its first word, and a blank one is not seeded", async () => {
-  const { source, creates } = fakeSource([true, true]);
-  const session = new IntroductionSession({ source, recordProductEvent: () => undefined });
+it.effect(
+  "the account's name rides the seed as its first word, and a blank one is not seeded",
+  () =>
+    Effect.gen(function* () {
+      const { source, creates } = fakeSource([true, true]);
+      const session = new IntroductionSession({ source, recordProductEvent: () => undefined });
 
-  await session.open({ sdp: SDP, titles: [], name: "Ada Lovelace" });
-  assert.equal(creates[0]?.input.length, 1);
-  assert.equal(creates[0]?.input[0]?.role, SEED_ROLE.DEVELOPER);
-  assert.deepEqual(creates[0]?.input[0]?.content[0].text.split("\n").slice(-1), ["Ada"]);
+      yield* session.open({ sdp: SDP, titles: [], name: "Ada Lovelace" });
+      assert.equal(creates[0]?.input.length, 1);
+      assert.equal(creates[0]?.input[0]?.role, SEED_ROLE.DEVELOPER);
+      assert.deepEqual(creates[0]?.input[0]?.content[0].text.split("\n").slice(-1), ["Ada"]);
 
-  await session.open({ sdp: SDP, titles: [], name: "   " });
-  assert.deepEqual(creates[1]?.input, []);
-});
+      yield* session.open({ sdp: SDP, titles: [], name: "   " });
+      assert.deepEqual(creates[1]?.input, []);
+    }),
+);
 
-test("a second offer hangs up the first session, and a refusal holds and counts nothing", async () => {
-  const { source, closes } = fakeSource([true, true, false]);
-  const counted: string[] = [];
-  const session = new IntroductionSession({
-    source,
-    recordProductEvent: (name) => counted.push(name),
-  });
+it.effect("a second offer hangs up the first session, and a refusal holds and counts nothing", () =>
+  Effect.gen(function* () {
+    const { source, closes } = fakeSource([true, true, false]);
+    const counted: string[] = [];
+    const session = new IntroductionSession({
+      source,
+      recordProductEvent: (name) => counted.push(name),
+    });
 
-  await session.open({ sdp: SDP, titles: [] });
-  await session.open({ sdp: SDP, titles: [] });
-  assert.deepEqual(closes, ["sess_1"]);
-  assert.equal(session.standing, true);
+    yield* session.open({ sdp: SDP, titles: [] });
+    yield* session.open({ sdp: SDP, titles: [] });
+    assert.deepEqual(closes, ["sess_1"]);
+    assert.equal(session.standing, true);
 
-  assert.equal(await session.open({ sdp: SDP, titles: [] }), undefined);
-  assert.deepEqual(closes, ["sess_1", "sess_2"]);
-  assert.equal(session.standing, false);
-  assert.equal(counted.length, 2);
-});
+    assert.equal(yield* session.open({ sdp: SDP, titles: [] }), undefined);
+    assert.deepEqual(closes, ["sess_1", "sess_2"]);
+    assert.equal(session.standing, false);
+    assert.equal(counted.length, 2);
+  }),
+);

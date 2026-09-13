@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
 import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
@@ -315,26 +316,32 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   assert.equal(withoutSeam.liveSessions, undefined);
 });
 
-test("the assembler's own HTTP client reaches the keyed live session it builds, not the real network", async () => {
-  const { openSocket } = scriptedOpenSocket([]);
-  const { requests, fetchLike } = recordingOpenAi();
+it.scoped(
+  "the assembler's own HTTP client reaches the keyed live session it builds, not the real network",
+  () =>
+    Effect.gen(function* () {
+      const { openSocket } = scriptedOpenSocket([]);
+      const { requests, fetchLike } = recordingOpenAi();
 
-  const keyed = new VoiceCapabilityAssembler({
-    credentialsUsable: () => true,
-    fixtureRun: () => false,
-    accountSignedIn: () => true,
-    hostedServiceBaseUrl: "https://example.test",
-    refreshAccount: () => Effect.void,
-    report: () => undefined,
-    httpClient: fakeHttpClientLayer(fetchLike),
-    openSocket,
-    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
-  });
-  await Effect.runPromise(keyed.apply());
+      const keyed = new VoiceCapabilityAssembler({
+        credentialsUsable: () => true,
+        fixtureRun: () => false,
+        accountSignedIn: () => true,
+        hostedServiceBaseUrl: "https://example.test",
+        refreshAccount: () => Effect.void,
+        report: () => undefined,
+        httpClient: fakeHttpClientLayer(fetchLike),
+        openSocket,
+        settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+      });
+      yield* keyed.apply();
 
-  const opened = await keyed.liveSessions?.create({ sdpOffer: SDP_OFFER, input: [] });
+      const sessions = keyed.liveSessions;
+      assert.ok(sessions);
+      const opened = yield* sessions.create({ sdpOffer: SDP_OFFER, input: [] });
 
-  assert.ok(opened);
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.url, "https://api.openai.com/v1/live/sessions");
-});
+      assert.ok(opened);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0]?.url, "https://api.openai.com/v1/live/sessions");
+    }),
+);

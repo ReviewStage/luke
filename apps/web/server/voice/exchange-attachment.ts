@@ -84,7 +84,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
       });
       const adopted = yield* exchange.adopt({
         sessionId: session.sessionId,
-        attach: async () => upstreamSideband(session.sideband),
+        attach: () => Effect.succeed(upstreamSideband(session.sideband)),
         started: session.started,
       });
       if (!adopted) return yield* Effect.fail(new ExchangeCannotStand());

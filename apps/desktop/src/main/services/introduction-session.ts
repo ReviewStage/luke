@@ -6,6 +6,7 @@ import {
 import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway";
 import { introductionSeedItems } from "@sidecar/live";
 import type { IntroductionLiveSessionOpened, IntroductionSessionSource } from "@sidecar/voice";
+import { Effect } from "effect";
 
 export interface IntroductionSessionDependencies {
   source: IntroductionSessionSource;
@@ -37,23 +38,25 @@ export class IntroductionSession {
     return this.#standing !== undefined;
   }
 
-  async open(input: {
+  open(input: {
     sdp: string;
     titles: readonly string[];
     /** The account's display name; the seed keeps its first word under its own bound. */
     name?: string | undefined;
-  }): Promise<VoiceCreateLiveSessionResult | undefined> {
-    this.end();
-    const opened = await this.#dependencies.source.create({
-      sdpOffer: input.sdp,
-      input: introductionSeedItems({ titles: input.titles, name: input.name }),
+  }): Effect.Effect<VoiceCreateLiveSessionResult | undefined> {
+    return Effect.gen(this, function* () {
+      this.end();
+      const opened = yield* this.#dependencies.source.create({
+        sdpOffer: input.sdp,
+        input: introductionSeedItems({ titles: input.titles, name: input.name }),
+      });
+      if (!opened) return undefined;
+      this.#standing = opened;
+      this.#dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+        session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION,
+      });
+      return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
     });
-    if (!opened) return undefined;
-    this.#standing = opened;
-    this.#dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-      session_source: PRODUCT_VOICE_SESSION_SOURCE.INTRODUCTION,
-    });
-    return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
   }
 
   end(): void {

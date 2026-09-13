@@ -51,7 +51,7 @@ import {
   FiberSet,
   Option,
   Queue,
-  type Scope,
+  Scope,
 } from "effect";
 import { LiveBrainTag } from "../effect/live-brain.js";
 import { LiveRecordTag } from "../effect/live-record.js";
@@ -362,6 +362,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** The clock the session keeps: the one the scope it was built in stands on, read where a callback cannot wait for an effect. */
   readonly #clock: Clock.Clock;
 
+  /** The scope the service was built in, which a session it creates or attaches stands for. */
+  readonly #scope: Scope.Scope;
+
   /** The brain this session delegates to and the record it writes through, read from the context it was built in. */
   readonly #brain: LiveBrain;
   readonly #record: LiveRecord;
@@ -371,12 +374,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     collaborators: { readonly brain: LiveBrain; readonly record: LiveRecord },
     tasks: Queue.Queue<Effect.Effect<void>>,
     clock: Clock.Clock,
+    scope: Scope.Scope,
   ) {
     this.#options = options;
     this.#brain = collaborators.brain;
     this.#record = collaborators.record;
     this.#tasks = tasks;
     this.#clock = clock;
+    this.#scope = scope;
     this.#queue = new ProactiveQueue({ now: () => this.#now(), trace: this.#trace });
     this.#stopRunEvents = this.#brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
@@ -407,7 +412,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
       const fibers = yield* FiberSet.make();
       const collaborators = { brain: yield* LiveBrainTag, record: yield* LiveRecordTag };
-      const service = new LiveSessionService(options, collaborators, tasks, yield* Effect.clock);
+      const service = new LiveSessionService(
+        options,
+        collaborators,
+        tasks,
+        yield* Effect.clock,
+        yield* Effect.scope,
+      );
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
       );
@@ -481,8 +492,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (!source) return undefined;
       const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#now());
       this.#dropPendingRoster();
-      const opened = yield* Effect.promise(() =>
+      const opened = yield* Scope.extend(
         source.create({ sdpOffer, input: this.#seedInput(seeded) }),
+        this.#scope,
       );
       if (!opened) return undefined;
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
@@ -785,16 +797,18 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return false;
   }
 
+  /**
+   * The attach runs in the service's own scope rather than the caller's: what
+   * the sideband leaves standing — the hosted source's re-attaching tries —
+   * belongs to the session, and the session belongs to this service.
+   */
   #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
   ): Effect.Effect<LiveSideband | undefined> {
-    return Effect.tryPromise(() => opened.attach()).pipe(
+    return Scope.extend(opened.attach(), this.#scope).pipe(
       Effect.catchAll((failure) =>
         Effect.sync(() => {
-          const error = failure.error;
-          this.#options.report(
-            `Live sideband could not attach: ${error instanceof Error ? error.message : String(error)}`,
-          );
+          this.#options.report(`Live sideband could not attach: ${failure.message}`);
           this.#setPhase({
             sessionId: opened.sessionId,
             phase: LIVE_SESSION_PHASE.CLOSED,

@@ -184,11 +184,12 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
   }
   const socket = new FakeLiveSocket();
   const source: LiveSessionSource = {
-    create: async (input) => ({
-      sessionId: liveSessionId,
-      sdpAnswer: `answer-for-${input.sdpOffer}`,
-      attach: async () => sidebandOverSocket(socket),
-    }),
+    create: (input) =>
+      Effect.succeed({
+        sessionId: liveSessionId,
+        sdpAnswer: `answer-for-${input.sdpOffer}`,
+        attach: () => Effect.succeed(sidebandOverSocket(socket)),
+      }),
     setVoice: () => undefined,
     diagnostics: () => {
       throw new Error("not read here");

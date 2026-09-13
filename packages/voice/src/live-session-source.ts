@@ -53,11 +53,13 @@ import {
   Duration,
   Effect,
   Either,
-  Fiber,
+  type Fiber,
+  FiberId,
+  FiberSet,
   type Layer,
   Option,
-  Runtime,
   Schedule,
+  type Scope,
 } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 import {
@@ -101,14 +103,25 @@ export interface LiveSessionCreateInput {
   input: readonly InitialItem[];
 }
 
+/** A sideband that could not be opened, named by the fault the attempt ended at and by nothing the attempt carried. */
+export class SidebandAttachFailed extends Data.TaggedError("SidebandAttachFailed")<{
+  readonly detail: string;
+}> {
+  override get message(): string {
+    return `sideband attach failed (${this.detail})`;
+  }
+}
+
 /** A session that stands: the renderer's half, and the trusted half the host attaches. */
 export interface LiveSessionOpened extends LiveSessionCreated {
   /**
    * Opens the trusted sideband on this session. Called once per session; a
-   * failure records `SIDEBAND_FAILED` on the source and rejects, and the
-   * session it leaves standing is the caller's to close.
+   * failure records `SIDEBAND_FAILED` on the source and fails with
+   * `SidebandAttachFailed`, and the session it leaves standing is the
+   * caller's to close. The scope it is yielded in is the one the sideband's
+   * own connections stand for.
    */
-  attach(): Promise<LiveSideband>;
+  attach(): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope>;
 }
 
 /**
@@ -123,15 +136,27 @@ export interface IntroductionLiveSessionOpened extends LiveSessionCreated {
 }
 
 export interface LiveSessionSource {
-  create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined>;
+  /**
+   * The one session for this offer, or nothing where it could not be created.
+   * The scope it is yielded in owns whatever the session left standing on
+   * this side — the hosted source's re-attaching tries above all — so closing
+   * that scope ends them.
+   */
+  create(
+    input: LiveSessionCreateInput,
+  ): Effect.Effect<LiveSessionOpened | undefined, never, Scope.Scope>;
   /** Applies to the next session: a voice is immutable once a session has started. */
   setVoice(voice: string | undefined): void;
   diagnostics(): LiveDiagnostics;
 }
 
-/** The introduction's source: the same create, no voice to set, and no sideband on this side. */
+/**
+ * The introduction's source: the same create, no voice to set, and no
+ * sideband on this side. Nothing of its session stands on a fiber here, so
+ * its create asks for no scope.
+ */
 export interface IntroductionSessionSource {
-  create(input: LiveSessionCreateInput): Promise<IntroductionLiveSessionOpened | undefined>;
+  create(input: LiveSessionCreateInput): Effect.Effect<IntroductionLiveSessionOpened | undefined>;
   diagnostics(): LiveDiagnostics;
 }
 
@@ -273,60 +298,63 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
     this.#voice = chosenVoice(voice, this.#configuredVoice);
   }
 
-  async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
-    this.#outcome.attempt();
-    this.#sidebandAttached = false;
-    const call = accountCall({
-      baseUrl: this.#baseUrl,
-      credential: fixedBearer(this.#apiKey),
-      requestTimeoutMs: this.#requestTimeoutMs,
-    });
-    const session = liveSessionConfig({
-      scene: LIVE_SCENE.DESKTOP,
-      model: this.#model,
-      voice: this.#voice,
-      input: input.input,
-    });
-    // This source answers its caller a promise and holds no runtime edge of
-    // its own, so the one request it makes begins here, over the client the
-    // source was built on or the ambient fetch one.
-    const answer = await Effect.runPromise(
-      Effect.provide(
+  create(input: LiveSessionCreateInput): Effect.Effect<LiveSessionOpened | undefined> {
+    return Effect.gen(this, function* () {
+      this.#outcome.attempt();
+      this.#sidebandAttached = false;
+      const call = accountCall({
+        baseUrl: this.#baseUrl,
+        credential: fixedBearer(this.#apiKey),
+        requestTimeoutMs: this.#requestTimeoutMs,
+      });
+      const session = liveSessionConfig({
+        scene: LIVE_SCENE.DESKTOP,
+        model: this.#model,
+        voice: this.#voice,
+        input: input.input,
+      });
+      const answer = yield* Effect.provide(
         call.send({
           method: HTTP_METHOD.POST,
           path: LIVE_SESSIONS_PATH,
           body: JSON.stringify(liveCreateRequest(session, input.sdpOffer)),
         }),
         this.#httpClient ?? FetchHttpClient.layer,
-      ),
-    );
-    if (!callAnswered(answer)) {
-      this.#refuseCall(answer);
-      return undefined;
-    }
-    const { response } = answer;
-    if (!response.ok) {
-      // Status alone diagnoses credentials or rate limits without writing the
-      // request or the key to the log.
-      this.#outcome.record(LIVE_SESSION_OUTCOME.HTTP_ERROR, `status ${response.status}`);
-      return undefined;
-    }
-    const payload = await response.json().catch(() => undefined);
-    const created =
-      payload === undefined
-        ? undefined
-        : Either.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
-    if (!created) {
-      this.#outcome.record(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE, "no session id and SDP answer");
-      return undefined;
-    }
-    this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
-    const sessionId = created.session.id;
-    return {
-      sessionId,
-      sdpAnswer: created.transport.sdp,
-      attach: () => this.#attach(sessionId),
-    };
+      );
+      if (!callAnswered(answer)) {
+        this.#refuseCall(answer);
+        return undefined;
+      }
+      const { response } = answer;
+      if (!response.ok) {
+        // Status alone diagnoses credentials or rate limits without writing the
+        // request or the key to the log.
+        this.#outcome.record(LIVE_SESSION_OUTCOME.HTTP_ERROR, `status ${response.status}`);
+        return undefined;
+      }
+      const payload = yield* Effect.orElseSucceed(
+        Effect.tryPromise(() => response.json()),
+        () => undefined,
+      );
+      const created =
+        payload === undefined
+          ? undefined
+          : Either.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
+      if (!created) {
+        this.#outcome.record(
+          LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
+          "no session id and SDP answer",
+        );
+        return undefined;
+      }
+      this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
+      const sessionId = created.session.id;
+      return {
+        sessionId,
+        sdpAnswer: created.transport.sdp,
+        attach: () => this.#attach(sessionId),
+      };
+    });
   }
 
   diagnostics(): LiveDiagnostics {
@@ -345,24 +373,24 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
    * with the id kept unchanged, and the handshake carries the same project
    * key that created the session, as the server-controls guide requires.
    */
-  async #attach(sessionId: string): Promise<LiveSideband> {
-    const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
-    address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
-    // The attach answers its caller a promise, like the creation above it, so the open is run to
-    // one here over the runtime this source holds none of its own in place of.
-    const opening = await Effect.runPromise(
-      this.#openSocket(address.toString(), { authorization: `Bearer ${this.#apiKey}` }),
-    );
-    if (!socketOpened(opening)) {
-      const { detail } = socketFaultOutcome(opening);
-      this.#outcome.record(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED, detail);
-      throw new Error(`sideband attach failed (${detail})`);
-    }
-    this.#sidebandAttached = true;
-    opening.socket.onClose(() => {
-      this.#sidebandAttached = false;
+  #attach(sessionId: string): Effect.Effect<LiveSideband, SidebandAttachFailed> {
+    return Effect.gen(this, function* () {
+      const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
+      address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
+      const opening = yield* this.#openSocket(address.toString(), {
+        authorization: `Bearer ${this.#apiKey}`,
+      });
+      if (!socketOpened(opening)) {
+        const { detail } = socketFaultOutcome(opening);
+        this.#outcome.record(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED, detail);
+        return yield* new SidebandAttachFailed({ detail });
+      }
+      this.#sidebandAttached = true;
+      opening.socket.onClose(() => {
+        this.#sidebandAttached = false;
+      });
+      return sidebandOverSocket(opening.socket);
     });
-    return sidebandOverSocket(opening.socket);
   }
 
   #refuseCall(failure: CallFailure): void {
@@ -393,8 +421,6 @@ interface ServiceSessionOptions {
    * refresh-and-retry exists.
    */
   authorization?: AccountToken;
-  /** The runtime a creation is run on, for a source handed one; the ambient default otherwise. */
-  runtime?: Runtime.Runtime<never>;
   /**
    * This installation's `devices` row id, read at each creation so a row
    * registered after the source was built is still named; nothing while the
@@ -417,7 +443,6 @@ class ServiceLiveSessionSource {
   readonly #address: string;
   readonly #openSocket: OpenSocket;
   readonly #authorization: AccountToken | undefined;
-  readonly #runtime: Runtime.Runtime<never>;
   readonly #deviceId: (() => string | undefined) | undefined;
   readonly #configuredVoice: LiveVoice;
   #voice: LiveVoice;
@@ -435,7 +460,6 @@ class ServiceLiveSessionSource {
     this.#address = address;
     this.#openSocket = options.openSocket;
     this.#authorization = options.authorization;
-    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#deviceId = options.deviceId;
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
@@ -469,17 +493,10 @@ class ServiceLiveSessionSource {
    * the first frame back; the socket that answered is the sideband, held for
    * the caller's `attach`. Anything else — a refusal, a frame that is not the
    * answer, a close, or silence past the deadline — closes the socket and
-   * resolves to nothing. The creation is one effect, of which this is the
-   * promise door the two sources' own `create` answers their caller through;
-   * it goes when `LiveSessionSource#create` answers an effect instead.
+   * answers nothing. The creation is one effect, which the two sources' own
+   * `create` yields on the fiber their caller runs them on.
    */
   protected createSession(
-    input: LiveSessionCreateInput,
-  ): Promise<{ created: LiveSessionCreated; socket: LiveSocket } | undefined> {
-    return Runtime.runPromise(this.#runtime)(this.#createSession(input));
-  }
-
-  #createSession(
     input: LiveSessionCreateInput,
   ): Effect.Effect<{ created: LiveSessionCreated; socket: LiveSocket } | undefined> {
     return Effect.gen(this, function* () {
@@ -758,18 +775,21 @@ function reattachRetrySchedule(
  * every try fails, or the service refuses the attachment, does the close
  * reach the listeners, as the connection loss the host already handles.
  *
- * The tries themselves are one fiber, on the runtime the source was handed:
+ * The tries themselves are one fiber of the scope the session was created in:
  * closing the socket while it stands is that fiber's interruption, which
  * abandons whichever wait or attempt was in flight rather than polling a flag
  * for it, and an attempt that still lands the instant after is the one race
- * interruption cannot reach, so it is still closed by hand.
+ * interruption cannot reach, so it is still closed by hand. Closing that scope
+ * interrupts the fiber the same way, so a source whose composition has gone
+ * leaves nothing trying.
  */
 class ReattachingSocket implements LiveSocket {
   #inner: LiveSocket;
   readonly #attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
   readonly #sessionId: string;
   readonly #delaysMs: readonly number[];
-  readonly #runtime: Runtime.Runtime<never>;
+  /** Begins the recovery on a fiber of the session's scope, which is where a socket callback can start one at all. */
+  readonly #fork: (effect: Effect.Effect<void>) => Fiber.RuntimeFiber<void>;
   readonly #messageListeners = new Set<(data: string) => void>();
   readonly #closeListeners = new Set<(close: SocketClose) => void>();
   /** Frames heard before the first listener stands, replayed to it in order; the sideband over this socket subscribes only after construction. */
@@ -786,13 +806,13 @@ class ReattachingSocket implements LiveSocket {
     sessionId: string;
     attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
     delaysMs: readonly number[];
-    runtime: Runtime.Runtime<never>;
+    fork: (effect: Effect.Effect<void>) => Fiber.RuntimeFiber<void>;
   }) {
     this.#inner = options.socket;
     this.#sessionId = options.sessionId;
     this.#attach = options.attach;
     this.#delaysMs = options.delaysMs;
-    this.#runtime = options.runtime;
+    this.#fork = options.fork;
     this.#adopt(options.socket);
   }
 
@@ -806,8 +826,7 @@ class ReattachingSocket implements LiveSocket {
 
   close(): void {
     this.#closedByClient = true;
-    const recovery = this.#recovery;
-    if (recovery) Runtime.runFork(this.#runtime)(Fiber.interrupt(recovery));
+    this.#recovery?.unsafeInterruptAsFork(FiberId.none);
     this.#inner.close();
   }
 
@@ -846,7 +865,7 @@ class ReattachingSocket implements LiveSocket {
         this.#end(close);
         return;
       }
-      this.#recovery = Runtime.runFork(this.#runtime)(
+      this.#recovery = this.#fork(
         this.#recoverEffect(close).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -927,8 +946,6 @@ export type HostedLiveSessionOptions = ServiceSourceOptions &
   AccountToken & {
     /** The waits between tries at re-attaching a lost connection; `HOSTED_REATTACH_DELAYS_MS` by default. */
     reattachDelaysMs?: readonly number[];
-    /** The runtime a creation runs on and the reattach tries are forked on, for a caller (a test today) that holds its own. */
-    runtime?: Runtime.Runtime<never>;
   };
 
 /**
@@ -940,37 +957,45 @@ export type HostedLiveSessionOptions = ServiceSourceOptions &
  */
 export class HostedLiveSessionSource extends ServiceLiveSessionSource implements LiveSessionSource {
   readonly #reattachDelaysMs: readonly number[];
-  readonly #runtime: Runtime.Runtime<never>;
 
   constructor(options: HostedLiveSessionOptions) {
-    const { readAccessToken, refreshAccount, readAccountKey, reattachDelaysMs, runtime, ...rest } =
-      options;
+    const { readAccessToken, refreshAccount, readAccountKey, reattachDelaysMs, ...rest } = options;
     super({
       ...rest,
       servicePath: VOICE_SERVICE_PATH.SESSIONS,
       logLabel: "Hosted live session",
       authorization: { readAccessToken, refreshAccount, readAccountKey },
-      ...(runtime ? { runtime } : undefined),
     });
     this.#reattachDelaysMs = reattachDelaysMs ?? HOSTED_REATTACH_DELAYS_MS;
-    this.#runtime = runtime ?? Runtime.defaultRuntime;
   }
 
-  async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
-    const opened = await this.createSession(input);
-    if (!opened) return undefined;
-    // The socket that answered is already the session's: the sideband is held
-    // now, so nothing the session says before the host attaches is lost.
-    const sideband = this.holdSideband(
-      new ReattachingSocket({
-        socket: opened.socket,
-        sessionId: opened.created.sessionId,
-        attach: (sessionId) => this.attachOnce(sessionId),
-        delaysMs: this.#reattachDelaysMs,
-        runtime: this.#runtime,
-      }),
-    );
-    return { ...opened.created, attach: async () => sideband };
+  /**
+   * The re-attaching socket's tries are fibers of the scope this creation was
+   * yielded in — its caller's, which the session it hands back stands for —
+   * so the recovery a socket's close begins is begun by that scope's own
+   * runtime rather than one this source holds, and closing the scope ends
+   * every try still in flight.
+   */
+  create(
+    input: LiveSessionCreateInput,
+  ): Effect.Effect<LiveSessionOpened | undefined, never, Scope.Scope> {
+    return Effect.gen(this, function* () {
+      const opened = yield* this.createSession(input);
+      if (!opened) return undefined;
+      const fork = yield* FiberSet.makeRuntime<never, void, never>();
+      // The socket that answered is already the session's: the sideband is held
+      // now, so nothing the session says before the host attaches is lost.
+      const sideband = this.holdSideband(
+        new ReattachingSocket({
+          socket: opened.socket,
+          sessionId: opened.created.sessionId,
+          attach: (sessionId) => this.attachOnce(sessionId),
+          delaysMs: this.#reattachDelaysMs,
+          fork,
+        }),
+      );
+      return { ...opened.created, attach: () => Effect.succeed(sideband) };
+    });
   }
 }
 
@@ -997,13 +1022,15 @@ export class IntroductionLiveSessionSource
     });
   }
 
-  async create(input: LiveSessionCreateInput): Promise<IntroductionLiveSessionOpened | undefined> {
-    const opened = await this.createSession(input);
-    if (!opened) return undefined;
-    // Kept open and never read: the frames the service might send are heard and dropped, so the
-    // hold on this socket releases at once rather than filling toward its bound.
-    opened.socket.onMessage(() => undefined);
-    return { ...opened.created, close: () => opened.socket.close() };
+  create(input: LiveSessionCreateInput): Effect.Effect<IntroductionLiveSessionOpened | undefined> {
+    return Effect.gen(this, function* () {
+      const opened = yield* this.createSession(input);
+      if (!opened) return undefined;
+      // Kept open and never read: the frames the service might send are heard and dropped, so the
+      // hold on this socket releases at once rather than filling toward its bound.
+      opened.socket.onMessage(() => undefined);
+      return { ...opened.created, close: () => opened.socket.close() };
+    });
   }
 }
 
