@@ -5,7 +5,7 @@ export {
   fakeCloudApi,
   recordedRoutes,
 } from "./cloud-fake.js";
-export { runTest, TestReporter, temporaryScope, testReporter } from "./effect.js";
+export { runTest, TestReporter, testReporter } from "./effect.js";
 export {
   type FakeResponder,
   fakeHttpClient,

@@ -634,7 +634,7 @@ node --input-type=module -e '
     adr.indexOf("## Where an Effect may run"),
     adr.indexOf("## Strangler shims and their deletions"),
   );
-  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(/;
+  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(/;
   const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
   const groups = [
     { name: "runtimeEdges", named: true, pattern: null },
@@ -655,12 +655,18 @@ node --input-type=module -e '
         offenders.push(`${group.name}: ${entry} no longer exists`);
         continue;
       }
-      // The name as the section writes it — bare beside a `#private`, or under
-      // its directory — but never as the tail of a longer one: `effect.ts` must
-      // not be satisfied by `state-store.effect.ts`, a different file entirely.
-      const named = new RegExp(`(?<![\\w.-])${path.basename(entry).replaceAll(".", "\\.")}(?![\\w-])`, "u");
+      // The whole path, never a tail of it. A basename was enough until P12-10,
+      // and two files named `testing.ts` were one file to it: the paragraph
+      // about `packages/gateway/src/testing.ts` — which is not even on the
+      // allowlist any more — answered for `packages/brain/src/store/testing.ts`,
+      // which had no paragraph at all. The path is also never the tail of a
+      // longer one, so `queue.effect.ts` is not satisfied by a mention of
+      // `packages/runtime/src/queue.effect.ts.bak`.
+      const named = new RegExp(`(?<![\\w.\\-/])${entry.replaceAll(".", "\\.")}(?![\\w\\-/])`, "u");
       if (group.named && !named.test(section)) {
-        offenders.push(`${group.name}: ${entry} is on the allowlist and the ADR never names it`);
+        offenders.push(
+          `${group.name}: ${entry} is on the allowlist and the ADR never names it by its whole path`,
+        );
       }
       if (group.pattern !== null && !group.pattern.test(text)) {
         offenders.push(`${group.name}: ${entry} no longer holds what it was allowed for`);
@@ -670,6 +676,34 @@ node --input-type=module -e '
   if (offenders.length > 0) {
     process.stderr.write(
       `error: ${allowlistPath} and docs/adr/0001-effect.md have drifted apart:\n${offenders.join("\n")}\n`,
+    );
+    process.exit(1);
+  }
+' "$SIDECAR_REPO_ROOT"
+
+# The root `vitest.config.ts` names every workspace whose tests run under
+# `pnpm test`. A workspace that gains a `vitest.config.ts` and is left off that
+# list has tests nothing runs, and CI stays green over them; one that loses its
+# config and stays on the list fails the run outright. Both are the same drift.
+node --input-type=module -e '
+  import { glob, readFile } from "node:fs/promises";
+  import path from "node:path";
+  const root = process.argv[1];
+  const configured = [];
+  for await (const found of glob(["apps/*/vitest.config.ts", "packages/*/vitest.config.ts", "tools/*/vitest.config.ts"], { cwd: root })) {
+    configured.push(path.dirname(found).split(path.sep).join("/"));
+  }
+  const rootConfig = await readFile(path.join(root, "vitest.config.ts"), "utf8");
+  const projects = rootConfig.slice(rootConfig.indexOf("projects: ["), rootConfig.indexOf("],", rootConfig.indexOf("projects: [")));
+  const listed = [...projects.matchAll(/"([^"]+)"/gu)].map((match) => match[1]);
+  const missing = configured.filter((one) => !listed.includes(one)).sort();
+  const stale = listed.filter((one) => !configured.includes(one)).sort();
+  if (missing.length > 0 || stale.length > 0) {
+    process.stderr.write(
+      `error: the root vitest.config.ts projects list and the workspaces holding a vitest.config.ts have drifted apart:\n${[
+        ...missing.map((one) => `  ${one} has a vitest.config.ts and the list never names it, so nothing runs its tests`),
+        ...stale.map((one) => `  ${one} is on the list and holds no vitest.config.ts`),
+      ].join("\n")}\n`,
     );
     process.exit(1);
   }

@@ -10,6 +10,7 @@
   "scripts": {
     "build": "pnpm --recursive --if-present run build",
     "check": "node scripts/check.mjs",
+    "discarded-effect": "node scripts/discarded-effect.mjs",
     "evidence:record": "node scripts/record-evidence.mjs",
     "format": "biome format --write .",
     "knip": "knip --no-config-hints",
@@ -38,6 +39,7 @@
     "lint-staged": "17.3.0",
     "oxlint": "1.79.0",
     "tsx": "catalog:",
+    "typescript": "catalog:web",
     "vitest": "catalog:"
   }
 }

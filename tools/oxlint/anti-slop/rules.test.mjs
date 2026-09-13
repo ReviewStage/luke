@@ -7,7 +7,9 @@ import { fileURLToPath } from "node:url";
 
 /**
  * Every anti-slop rule is exercised against a pair of fixtures: one file the
- * rule must report and one it must leave alone. A rule with no pair, or a pair
+ * rule must report — as many times as that file shows the pattern, which is
+ * what lets one fixture carry every shape a rule matches — and one it must
+ * leave alone. A rule with no pair, or a pair
  * with no rule, fails here — the rules are the executable style policy, so a
  * rewrite that silently stops reporting is a change nothing else would catch.
  *
@@ -52,7 +54,7 @@ function reportedRules() {
     const rule = /^anti-slop\((?<rule>[^)]+)\)$/u.exec(diagnostic.code)?.groups?.rule;
     if (rule === undefined) continue;
     const fixture = path.basename(diagnostic.filename);
-    byFixture.set(fixture, [...(byFixture.get(fixture) ?? []), rule].sort());
+    byFixture.set(fixture, [...new Set([...(byFixture.get(fixture) ?? []), rule])].sort());
   }
   return byFixture;
 }

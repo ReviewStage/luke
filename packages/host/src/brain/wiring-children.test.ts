@@ -33,7 +33,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
-import { temporaryDirectory, temporaryScope } from "@sidecar/wire/testing";
+import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
 import { Chunk, Duration, Effect, FiberId, Runtime, Scope, TestClock } from "effect";
 import type { TestContext } from "vitest";
@@ -169,6 +169,7 @@ function childTimersOn(runtime: Runtime.Runtime<never>) {
 
 async function composed(
   t: TestContext,
+  scope: Scope.Scope,
   script: Script,
   overrides: Partial<Parameters<typeof wireBrain>[0]> = {},
 ): Promise<Composed> {
@@ -303,12 +304,11 @@ async function composed(
     ...overrides,
   });
   // The wiring's generation clocks read the clock and arm their waits in the
-  // scope it is built in, which ends with this test. No store here enables
-  // automatic reset, so what those clocks arm is nothing and the default
-  // runtime this is built on is the only clock they would have asked.
-  const wiring = await Effect.runPromise(
-    Effect.provideService(building, Scope.Scope, await temporaryScope(t)),
-  );
+  // scope it is built in, which is the one `it.scoped` gives this test and
+  // closes when it ends. No store here enables automatic reset, so what those
+  // clocks arm is nothing and the default runtime this is built on is the only
+  // clock they would have asked.
+  const wiring = await Effect.runPromise(Effect.provideService(building, Scope.Scope, scope));
   return {
     wiring,
     seen,
@@ -351,13 +351,14 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
 
-it.effect(
+it.scoped(
   "a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn",
   (t) =>
     Effect.gen(function* () {
       const runtime = yield* Effect.runtime<never>();
+      const scope = yield* Effect.scope;
       const c = yield* Effect.promise(() =>
-        composed(t, delegatingScript(), { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, delegatingScript(), { childTimers: childTimersOn(runtime) }),
       );
       yield* c.wiring.rebuild();
       const runId = yield* Effect.promise(() => ask(c, "look into the last commit"));
@@ -419,11 +420,12 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone",
   (t) =>
     Effect.gen(function* () {
       const runtime = yield* Effect.runtime<never>();
+      const scope = yield* Effect.scope;
       // Every child spawns another until refused; the last child answers text.
       const script: Script = (seen) => {
         if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
@@ -438,7 +440,7 @@ it.effect(
         return textAnswer("ok");
       };
       const c = yield* Effect.promise(() =>
-        composed(t, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
       );
       yield* c.wiring.rebuild();
       yield* Effect.promise(() => ask(c, "go deep"));
@@ -467,11 +469,12 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "a fork carries the requester's context into the child and an isolated child sees none of it",
   (t) =>
     Effect.gen(function* () {
       const runtime = yield* Effect.runtime<never>();
+      const scope = yield* Effect.scope;
       const script: Script = (seen) => {
         if (seen.answeringTool) return textAnswer("ok");
         if (seen.lastInput.includes(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) {
@@ -490,7 +493,7 @@ it.effect(
         return textAnswer(MAIN_SECRET);
       };
       const c = yield* Effect.promise(() =>
-        composed(t, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
       );
       yield* c.wiring.rebuild();
       // Main first says something memorable, so its context holds a secret to fork.
@@ -525,11 +528,12 @@ it.effect(
     }),
 );
 
-it.effect(
+it.scoped(
   "Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it",
   (t) =>
     Effect.gen(function* () {
       const runtime = yield* Effect.runtime<never>();
+      const scope = yield* Effect.scope;
       let releaseChild: (() => void) | undefined;
       const script: Script = (seen) => {
         if (seen.texts.includes(BRAIN_INPUT_MARKER.DEVELOPER_ASK) && seen.outputs.length === 0) {
@@ -540,6 +544,7 @@ it.effect(
       const c = yield* Effect.promise(() =>
         composed(
           t,
+          scope,
           (seen, calls) => {
             if (seen.texts.includes(BRAIN_INPUT_MARKER.SUBAGENT_TASK)) {
               // The child's model call never answers until released: the child stays running.
@@ -574,38 +579,45 @@ it.effect(
     }),
 );
 
-it("a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way", async (t) => {
-  for (const [outcome] of [
-    [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
-    [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],
-  ] as const) {
-    const reports: string[] = [];
-    let captures = 0;
-    const c = await composed(t, () => textAnswer("ok"), {
-      report: (message) => {
-        reports.push(message);
-      },
-      memory: () => ({
-        scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
-        provider: {
-          recall: () => Effect.succeed({ messages: [] }),
-          capture: (turn) =>
-            Effect.sync(() => {
-              captures += 1;
-              assert.equal(turn.phase, MEMORY_CAPTURE_PHASE.RESET_REQUESTED);
-              return { outcome, writes: 0, reason: "not an eligible private conversation" };
+it.scopedLive(
+  "a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way",
+  (t) =>
+    Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      for (const [outcome] of [
+        [MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED, false],
+        [MEMORY_HOUSEKEEPING_OUTCOME.FAILED, true],
+      ] as const) {
+        const reports: string[] = [];
+        let captures = 0;
+        const c = yield* Effect.promise(() =>
+          composed(t, scope, () => textAnswer("ok"), {
+            report: (message) => {
+              reports.push(message);
+            },
+            memory: () => ({
+              scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" },
+              provider: {
+                recall: () => Effect.succeed({ messages: [] }),
+                capture: (turn) =>
+                  Effect.sync(() => {
+                    captures += 1;
+                    assert.equal(turn.phase, MEMORY_CAPTURE_PHASE.RESET_REQUESTED);
+                    return { outcome, writes: 0, reason: "not an eligible private conversation" };
+                  }),
+                tools: [],
+              },
             }),
-          tools: [],
-        },
-      }),
-    });
-    await Effect.runPromise(c.wiring.rebuild());
-    const main = c.wiring.current();
-    assert.ok(main);
-    const runId = await ask(c, "remember this");
-    await Effect.runPromise(main.waitAsk(runId, 60_000));
-    assert.equal(await Effect.runPromise(c.wiring.resetConversation(MAIN_SESSION_KEY)), true);
-    assert.equal(captures, 1, "the capture ran over the context the reset let go of");
-    Effect.runSync(c.wiring.retire());
-  }
-});
+          }),
+        );
+        yield* c.wiring.rebuild();
+        const main = c.wiring.current();
+        assert.ok(main);
+        const runId = yield* Effect.promise(() => ask(c, "remember this"));
+        yield* main.waitAsk(runId, 60_000);
+        assert.equal(yield* c.wiring.resetConversation(MAIN_SESSION_KEY), true);
+        assert.equal(captures, 1, "the capture ran over the context the reset let go of");
+        yield* c.wiring.retire();
+      }
+    }),
+);

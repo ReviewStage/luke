@@ -33,6 +33,7 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] No `effect` import in an OpenClaw-ported file. (CI grep, added in P2-05)
 - [ ] No `Effect.runPromise`/`runSync`/`runFork` outside the runtime edges and the shims `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-run-promise-outside-edges`)
 - [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
+- [ ] No Effect, Stream, or Layer written as a statement and dropped; a description a caller walks past runs nothing. (CI via `pnpm discarded-effect`)
 - [ ] Test count equals the pre-PR count or the delta is listed. (manual: `vitest run --reporter=json`)
 - [ ] Each hand-rolled file the PR replaces is deleted or marked `@deprecated` with its deletion PR named.
 - [ ] Every `CLAUDE.md`/`AGENTS.md` sentence naming a changed part is edited; root pair stays byte-identical. (CI for pair existence; manual for wording)

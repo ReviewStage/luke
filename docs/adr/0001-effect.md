@@ -112,7 +112,8 @@ An Effect describes work; something has to run it, and the only places that may
 are the process's own edges, one runtime each:
 
 - `apps/desktop/src/main/main.ts`, one `ManagedRuntime` the quit disposes. The
-  layer it is made from is the whole launch (`services/compose-desktop.ts`):
+  layer it is made from is the whole launch
+  (`apps/desktop/src/main/services/compose-desktop.ts`):
   the host's assembly and standing layers and every desktop service's own
   start, in one order, in one scope. Building it is the standup, and the
   entry's `before-quit` is `runtime.disposeEffect` — forked as a daemon and
@@ -150,9 +151,11 @@ are the process's own edges, one runtime each:
   own rather than an atom's, run through `Runtime.runFork` or
   `Runtime.runPromise` on the value it answers. Every place that does the
   latter today is named rather than left for a grep to rediscover:
-  `voice/use-voice-session.ts`'s remote-audio retry, `voice/live-call.ts`'s
-  own session-life fiber and its armed bounds, and
-  `introduction/introduction-takeover.tsx`'s one `runCallEffect` helper,
+  `apps/desktop/src/renderer/voice/use-voice-session.ts`'s remote-audio
+  retry, `apps/desktop/src/renderer/voice/live-call.ts`'s own session-life
+  fiber and its armed bounds, and
+  `apps/desktop/src/renderer/introduction/introduction-takeover.tsx`'s one
+  `runCallEffect` helper,
   through which every verb it asks of its own `LiveCall` runs. A fiber built
   on a runtime constructed anywhere else in the bundle is the thing this rule
   forbids, not the pattern above.
@@ -160,6 +163,14 @@ are the process's own edges, one runtime each:
   thread, through `NodeRuntime.runMain(NodeWorkerRunner.launch(...))`. It is
   bundled apart from `main.ts` because a worker starts from its own file, so
   it is a runtime edge of its own rather than a second use of the app's.
+- `packages/brain/src/store/worker-entry.ts`, the same launch for the store
+  client's own suite, which spawns that file directly so the client is
+  exercised against a real worker thread rather than the in-process transport.
+  It carries no production export and nothing but that suite reaches it, and
+  it is a runtime edge on the same terms as the file above: a worker starts
+  from its own file. It stood outside the lint's reach until P12-10, because
+  `no-run-promise-outside-edges` matched member calls on `Effect`, `Runtime`,
+  and `ManagedRuntime` alone and never `NodeRuntime.runMain`.
 
 `Effect.runPromise`, `Effect.runSync`, and `Effect.runFork` belong nowhere
 else: a runtime built where the work lives is a second runtime, and two
@@ -168,6 +179,16 @@ identify. Everything between the edges returns an Effect and lets its caller
 decide. The migration enforces this by review until the lint rule
 `no-run-promise-outside-edges` lands, after which the edges above are its
 allowlist.
+
+What that rule reads is a call: a member call on `Effect`, `Runtime`,
+`ManagedRuntime`, or `NodeRuntime`, or a call of whatever an imported
+`runtimeExit` answered. P12-10 added the last two. A run reached through a
+wrapper is still a run, and the three files that reached one — the store
+worker's entry above, and `runCall` and `tracedModelAdapter` below, both of
+which run through the brain's own `runtimeExit` dispatch rather than through
+`Runtime.runPromiseExit` by name — were the whole of what the rule could not
+see, so the allowlist was three entries short of the truth rather than three
+files too permissive.
 
 The strangler shims in the table below are on that allowlist for as long as they live.
 `packages/wire/src/effect/http.ts` is on it no longer: P12-04e deleted
@@ -183,8 +204,8 @@ found no caller left that could take a shared one instead of a seam of its
 own. P12-03b deleted the two non-brain copies
 (`packages/runtime/src/effect/timer-seam.ts`,
 `packages/host/src/effect/timer-seam.ts`) outright rather than keeping them
-as named, shared functions: `children.effect.ts` and `queue.effect.ts` each
-now build the bridge inline, over the runtime their `Effect.acquireRelease`
+as named, shared functions: `packages/runtime/src/children.effect.ts` and
+`packages/runtime/src/queue.effect.ts` each now build the bridge inline, over the runtime their `Effect.acquireRelease`
 was handed, never one either builds; neither names or imports the other's
 copy, since a caller that still needs the bridge keeps its own beside the
 code that uses it rather than sharing a module three packages once did.
@@ -947,6 +968,16 @@ handle's synchronous release, for the worker's `acquireRelease` and the
 suites that open a database by hand. Both go when those two ports are handed
 a synchronous accessor of their own instead of the handle; the plan schedules
 no such PR, and this row is where that is recorded.
+
+`openDatabase` in `packages/brain/src/store/testing.ts` is the same handle
+opened for a suite that holds it itself, and it is the store's fixtures'
+own edge rather than the product's: `Effect.runSyncExit(StoreDatabase.open(location))`,
+with the refusal the open failed with squashed and thrown so a test asserts
+the one it names. It goes with the synchronous handle above, when the suites
+that hold one hold a client instead. Until P12-10 this file had no paragraph
+of its own and passed the allowlist cross-check on
+`packages/gateway/src/testing.ts`'s, because that check matched an entry by
+its basename alone and two files named `testing.ts` were one file to it.
 
 `storeClient`'s Promise face in `packages/brain/src/store/store-client.ts`
 is on the allowlist too: the host's store wiring still holds a `StoreClient`
@@ -1774,15 +1805,19 @@ same shape `read-prefetch.ts` and `apps/web`'s `since` already hold.
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
 `it.effect` holds a `Promise`, so the effect is run to one here, over the layer
-the caller supplied or none. `temporaryScope` beside it is the second run in
-that file and the same door one step further: a promise-shaped suite that must
-build something scoped and then read it across several `await`s cannot use
+the caller supplied or none. `temporaryScope` stood beside it as the second run in
+that file, the same door one step further: a promise-shaped suite that had to
+build something scoped and then read it across several `await`s could not use
 `Effect.scoped`, which would close the scope the moment the build answered, so
-this runs `Scope.make` to a promise and registers the close on the test's own
-teardown. `wiring-routing.test.ts` and `wiring-children.test.ts` are its
-callers, each building a `wireBrain` whose generation clocks arm their waits in
-that scope. Both go when the last such suite is an `it.effect` or an
-`it.scoped`; no PR in this plan is that one yet.
+it ran `Scope.make` to a promise and registered the close on the test's own
+teardown. P12-10 deleted it with its two callers' promise shape:
+`packages/host/src/brain/wiring-routing.test.ts` and
+`packages/host/src/brain/wiring-children.test.ts` are `it.scoped` and
+`it.scopedLive` bodies now, each building its `wireBrain` in the scope the test
+itself was given, so the generation clocks arm their waits there and the runner
+closes it. `runTest` stays, and with it the file's row: roughly two hundred and
+fifty call sites across `packages/providers`, `packages/session`, and
+`apps/web` still hold a promise where an effect was described.
 
 Some entries are a suite's edge or a command's rather than the product's.
 `openMigratedPglite` in `apps/web/tests/support/sql-client.ts` builds a

@@ -1,8 +1,11 @@
 import { defineConfig } from "vitest/config";
 
-// Runner-swap PRs (P0-04 onward) add one project entry per package or app
-// that gains its own vitest.config.ts. Root `pnpm test` still runs the
-// per-package `node --test` scripts until each is swapped.
+// One entry per workspace that holds a vitest.config.ts of its own, which
+// since P0-14 is every workspace that has tests at all: `no-node-test` refuses
+// a `node:test` import in TypeScript, and `pnpm test:harness` is the one
+// `node --test` pass left, over the `.mjs` build and lint harnesses.
+// `scripts/repository-checks.sh` fails a workspace that gains or loses a
+// config without this list moving with it.
 export default defineConfig({
   test: {
     projects: [

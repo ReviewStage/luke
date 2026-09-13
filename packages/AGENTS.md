@@ -3,9 +3,11 @@
 Application logic lives here; `apps/` holds only what is specific to a
 deployable. **A module belongs in an app when it imports `electron`, `react`, or
 a DOM API** — everything else is logic and tests under vitest with no harness,
-registered in the root project list by the package's own `vitest.config.ts`. A
-developer command-line tool lives under `tools/` instead, where what it reaches
-cannot become a package's.
+registered in the root project list by the package's own `vitest.config.ts`.
+`repository-checks.sh` fails a package that holds one config without the other,
+so a suite nothing runs is caught rather than staying quietly green. A developer
+command-line tool lives under `tools/` instead, where what it reaches cannot
+become a package's.
 
 ## A wire value is declared once
 

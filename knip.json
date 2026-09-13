@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignoreDependencies": ["oxlint", "husky", "lint-staged"],
+  "ignoreDependencies": ["oxlint"],
   "ignoreBinaries": [
     "iconutil",
     "ditto",
@@ -22,7 +22,7 @@
         "tools/**/*.ts",
         "tools/**/*.mjs",
         "apps/ios/*.test.mjs",
-        "scripts/*.ts"
+        "scripts/**/*.ts"
       ],
       "project": ["scripts/**", "design/**", "tools/**"]
     },
@@ -73,8 +73,7 @@
         "src/ui-messages/index.ts",
         "src/store/index.ts"
       ],
-      "project": ["src/**"],
-      "ignoreDependencies": ["tsx"]
+      "project": ["src/**"]
     },
     "tools/*": {
       "entry": ["src/*.ts", "*.ts", "*.mjs", "**/*.test.*"],

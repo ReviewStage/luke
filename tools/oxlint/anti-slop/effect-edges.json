@@ -12,6 +12,7 @@
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
     "apps/web/server/runtime.ts",
+    "packages/brain/src/store/worker-entry.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
@@ -19,12 +20,14 @@
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
+    "packages/brain/src/client.ts",
     "packages/brain/src/effect/carry.ts",
     "packages/brain/src/generation.ts",
     "packages/brain/src/store/database.ts",
     "packages/brain/src/store/store-client.ts",
     "packages/brain/src/store/testing.ts",
     "packages/credentials/src/single-flight.ts",
+    "packages/devtrace/src/brain-trace.ts",
     "packages/host/src/compose-calendars.ts",
     "packages/wire/src/testing/effect.ts"
   ],
