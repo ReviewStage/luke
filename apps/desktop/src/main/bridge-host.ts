@@ -84,18 +84,8 @@ export function registerBridgeHost(dependencies: BridgeHostDependencies): void {
     const definition = BRIDGE[method];
     // SAFETY: definition.args validates the erased IPC arguments before this typed handler runs.
     const handler = reports[method] as ErasedHandler;
-    if (definition.kind === "invoke") {
-      ipcMain.handle(definition.channel, async (event, ...rawArgs) => {
-        if (!trustedSender(event) || !definition.args(rawArgs)) {
-          throw new Error("Invalid bridge request");
-        }
-        // SAFETY: the guard above admitted these arguments for this method.
-        const value = await handler({ sender: event.sender }, ...(rawArgs as never[]));
-        if (definition.result?.(value) === false) throw new Error("Invalid bridge response");
-        return value;
-      });
-      continue;
-    }
+    // Every report is a send: a window says what only it knows and awaits no
+    // answer, so the two invokes above are the whole of what this process answers.
     ipcMain.on(definition.channel, (event, ...rawArgs) => {
       if (!trustedSender(event) || !definition.args(rawArgs)) return;
       // SAFETY: the guard above admitted these arguments for this method.

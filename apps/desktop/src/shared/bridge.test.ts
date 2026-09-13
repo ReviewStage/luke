@@ -12,7 +12,7 @@ test("the bridge is one act channel, one state read, and the reports beside them
   // reports. Anything else added here is a second way in.
   assert.deepEqual(
     entries.filter(([, entry]) => entry.kind === "invoke").map(([method]) => method),
-    ["act", "requestAppState", "appendConversationLines"],
+    ["act", "requestAppState"],
   );
   // Every entry parses what arrives, and a channel names exactly one entry.
   for (const [method, entry] of entries) {
@@ -41,36 +41,6 @@ test("the act channel takes one act of any kind and nothing else", () => {
   assert.equal(answer({ status: "unknown-act" }), true);
   assert.equal(answer({ status: "thrown", reason: "Not now." }), false);
   assert.equal(answer(undefined), false);
-});
-
-test("a conversation report carries only well-formed conversation lines", () => {
-  const guard = BRIDGE.appendConversationLines.args;
-  const ask = { kind: "spoken-ask", words: "how is it going?", recordedAt: 1 };
-  const announcement = {
-    kind: "announcement",
-    words: "A chat finished.",
-    identity: { providerId: "claude-code", providerSessionId: "session-a" },
-    recordedAt: 2,
-  };
-  assert.equal(guard([[]]), true);
-  assert.equal(guard([[ask, announcement]]), true);
-  // A field an older build stored beside the words is left unread, not refused.
-  assert.equal(guard([[{ ...announcement, mentions: [{ title: "checkout" }] }]]), true);
-  // One argument, and it is the thread itself.
-  assert.equal(guard([]), false);
-  assert.equal(guard([[ask], [announcement]]), false);
-  assert.equal(guard([ask]), false);
-  // A line is only a line: a made-up kind, wordless words, a malformed
-  // identity, or a smuggled extra shape all refuse the whole report.
-  assert.equal(guard([[{ kind: "transcript", words: "x" }]]), false);
-  assert.equal(guard([[{ kind: "reply" }]]), false);
-  assert.equal(guard([[{ kind: "reply", words: 3 }]]), false);
-  assert.equal(guard([[{ ...ask, identity: { providerId: "claude-code" } }]]), false);
-  assert.equal(
-    guard([[{ ...ask, identity: { providerId: "nope", providerSessionId: "s" } }]]),
-    false,
-  );
-  assert.equal(guard([[{ ...ask, recordedAt: Number.POSITIVE_INFINITY }]]), false);
 });
 
 const WINDOW = { role: "panel", mode: "compact" };
