@@ -4,23 +4,43 @@
  * `effect` — so everything Effect needs of it lives here beside it: the
  * service itself as a scoped resource whose start and stop are its acquire
  * and release, the refusals the port already decides as tagged errors
- * carrying its own codes, and the delivery backoff as a `Schedule` composed
- * from the same initial delay and cap the port's formula reads.
+ * carrying its own codes, the executor and deliverer seams as effects the
+ * host writes on its own fiber, and the delivery backoff as a `Schedule`
+ * composed from the same initial delay and cap the port's formula reads.
  */
+import type { WireRecord } from "@sidecar/wire";
 import type { Fiber } from "effect";
-import { Clock, Data, Duration, Effect, FiberId, Runtime, Schedule, type Scope } from "effect";
-import type { ChildSpawnReceipt } from "./child-records.js";
+import {
+  Cause,
+  Clock,
+  Data,
+  Duration,
+  Effect,
+  Exit,
+  FiberId,
+  ManagedRuntime,
+  Runtime,
+  Schedule,
+  type Scope,
+} from "effect";
+import type { ChildCompletionRecord, ChildRunRecord, ChildSpawnReceipt } from "./child-records.js";
 import {
   CHILD_DEFAULTS,
   CHILD_SPAWN_REFUSAL,
   type ChildCancellation,
+  type ChildEnd,
+  type ChildExecutor,
   ChildRunService,
   type ChildRunServiceOptions,
   type ChildSpawnOutcome,
   type ChildSpawnRefusal,
   type ChildSpawnRequest,
+  type ChildStart,
+  type CompletionDeliverer,
+  type CompletionDeliveryOutcome,
   type ScheduledTimer,
 } from "./children.js";
+import type { ExecutionRuntime } from "./execution.js";
 import type { SessionKey } from "./identifiers.js";
 
 export class ChildSpawnRefused extends Data.TaggedError("ChildSpawnRefused")<{
@@ -141,6 +161,75 @@ export const makeChildRunService = (
     }),
     (service) => Effect.sync(() => service.stop()),
   );
+
+/** A child's run accepted by its backend, with the effect of its end; or refused, with why. */
+export type EffectChildStart =
+  | { readonly started: true; readonly done: Effect.Effect<ChildEnd> }
+  | { readonly started: false; readonly reason: string };
+
+/** What runs a child, as a host that owns the conversations now writes it: every seam an effect. */
+export interface EffectChildExecutor {
+  start(
+    record: ChildRunRecord,
+    fork: readonly WireRecord[] | undefined,
+  ): Effect.Effect<EffectChildStart>;
+  resume(record: ChildRunRecord): Effect.Effect<EffectChildStart>;
+  cancel(record: ChildRunRecord): Effect.Effect<boolean>;
+  archive(record: ChildRunRecord): Effect.Effect<boolean>;
+  lines(record: ChildRunRecord, limit: number): Effect.Effect<readonly string[]>;
+}
+
+/** Hands a completion to the conversation it is for, as an effect of that conversation's own. */
+export interface EffectCompletionDeliverer {
+  deliver(
+    completion: ChildCompletionRecord,
+    record: ChildRunRecord,
+  ): Effect.Effect<CompletionDeliveryOutcome>;
+}
+
+export interface EffectChildSeams {
+  readonly executor: EffectChildExecutor;
+  readonly deliverer: EffectCompletionDeliverer;
+}
+
+/**
+ * The executor and deliverer pair the port's constructor takes, over seams
+ * their owner writes as effects. The port awaits promises — it imports
+ * nothing from `effect` — so each seam is run here, on the runtime the host
+ * handed in, which is the same runtime its conversations are fibers of; this
+ * is the one place that carrying happens rather than each seam's own. A
+ * defect is squashed back to the error that caused it, so a store or an
+ * agent that threw reaches the port's own error handling as the error it
+ * threw rather than as the fiber failure that carried it. A `start` answers
+ * its end as an effect, and running it is what the port's `done` promise is:
+ * the run begins where the port would have begun awaiting it.
+ */
+export const childSeamsOnRuntime = (
+  execution: ExecutionRuntime,
+  seams: EffectChildSeams,
+): Pick<ChildRunServiceOptions, "executor" | "deliverer"> => {
+  const carry = <Value>(effect: Effect.Effect<Value>): Promise<Value> =>
+    (ManagedRuntime.TypeId in execution
+      ? execution.runPromiseExit(effect)
+      : Runtime.runPromiseExit(execution)(effect)
+    ).then((exit) => {
+      if (Exit.isSuccess(exit)) return exit.value;
+      throw Cause.squash(exit.cause);
+    });
+  const startOf = (start: EffectChildStart): ChildStart =>
+    start.started ? { started: true, done: carry(start.done) } : start;
+  const executor: ChildExecutor = {
+    start: (record, fork) => carry(seams.executor.start(record, fork)).then(startOf),
+    resume: (record) => carry(seams.executor.resume(record)).then(startOf),
+    cancel: (record) => carry(seams.executor.cancel(record)),
+    archive: (record) => carry(seams.executor.archive(record)),
+    lines: (record, limit) => carry(seams.executor.lines(record, limit)),
+  };
+  const deliverer: CompletionDeliverer = {
+    deliver: (completion, record) => carry(seams.deliverer.deliver(completion, record)),
+  };
+  return { executor, deliverer };
+};
 
 /** Accepts a spawn, or fails with the port's own refusal code and detail. */
 export const spawnChild = (
