@@ -265,6 +265,29 @@ describe("claimedUnlessAborted", () => {
       }),
   );
 
+  it.effect("answers under an uninterruptible region, which is what it is written for", () =>
+    Effect.gen(function* () {
+      const counted = countedSignal();
+      const discarded: string[] = [];
+      const fiber = yield* Effect.fork(
+        Effect.uninterruptible(
+          claimedUnlessAborted(
+            answeredAfter(Duration.minutes(1), "held"),
+            counted.signal,
+            (value) => discarded.push(value),
+          ),
+        ),
+      );
+
+      yield* TestClock.adjust(Duration.minutes(1));
+      const settled = yield* Fiber.join(fiber);
+
+      assert.deepEqual(settled, Option.some("held"));
+      assert.deepEqual(discarded, []);
+      assert.equal(counted.listening(), 0);
+    }),
+  );
+
   it.effect("hands the value to the discard when the waiting fiber is interrupted", () =>
     Effect.gen(function* () {
       const counted = countedSignal();

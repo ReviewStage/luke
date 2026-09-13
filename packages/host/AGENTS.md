@@ -34,7 +34,11 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
   what began, in reverse, at once.
 - **A cadence forks its scope from the one its composer was built in**
   (`cadenceGate`), so its fibers run on the host's own runtime and the host's
-  close ends them whatever became of the stop.
+  close ends them whatever became of the stop. **Every body an arming forks is
+  marked `Effect.interruptible`**, because a fork inherits the interrupt status
+  of the fiber that made it: an arming reached from inside an uninterruptible
+  region — a composer's start, an acquire, a finalizer — would otherwise leave
+  the disarm waiting forever on fibers it cannot end.
 
 A method two composers claim fails the build with `DuplicateGatewayMethod`, so
 that one does not need stating here. `client.bootstrap` is the one method no

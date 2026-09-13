@@ -84,19 +84,32 @@ export const claimedUnlessAborted = <A, E, R>(
     Effect.gen(function* () {
       const decision = yield* Deferred.make<Option.Option<A>, E>();
       if (signal.aborted) yield* Deferred.succeed(decision, Option.none());
+      // Interruptible for the reason the listener below is: the work owns a
+      // race or a scope of its own — a context open does — and under an
+      // uninterruptible region it could interrupt neither, so what is meant to
+      // be a daemon nothing cuts would be a daemon nothing can finish either.
       yield* Effect.forkDaemon(
-        Effect.matchCauseEffect(work, {
-          onFailure: (cause) => Deferred.failCause(decision, cause),
-          onSuccess: (value) =>
-            Effect.uninterruptible(
-              Effect.flatMap(Deferred.succeed(decision, Option.some(value)), (claimed) =>
-                claimed ? Effect.void : Effect.sync(() => discard(value)),
+        Effect.interruptible(
+          Effect.matchCauseEffect(work, {
+            onFailure: (cause) => Deferred.failCause(decision, cause),
+            onSuccess: (value) =>
+              Effect.uninterruptible(
+                Effect.flatMap(Deferred.succeed(decision, Option.some(value)), (claimed) =>
+                  claimed ? Effect.void : Effect.sync(() => discard(value)),
+                ),
               ),
-            ),
-        }),
+          }),
+        ),
       );
+      // Interruptible whatever the asking fiber's own status, because a fork
+      // inherits the runtime flags of the fiber that made it: under the
+      // uninterruptible region this function is written for, the listener
+      // would be a fiber the scope's close could not interrupt, and the close
+      // would wait on it forever for a signal that never fires.
       yield* Effect.forkScoped(
-        Effect.zipRight(whenAborted(signal), Deferred.succeed(decision, Option.none())),
+        Effect.interruptible(
+          Effect.zipRight(whenAborted(signal), Deferred.succeed(decision, Option.none())),
+        ),
       );
       // The waiting fiber can be interrupted by something other than this
       // signal — the turn it runs in ending — and the value would then be

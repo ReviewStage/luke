@@ -310,13 +310,15 @@ export const composeCalendars = (
       if (boundary === undefined) return;
       boundaryFiber = yield* Effect.provideService(
         Effect.forkScoped(
-          Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
-            Effect.zipRight(
-              Effect.suspend(() => {
-                boundaryFiber = undefined;
-                links().reconcileSpeech();
-                return armQuietBoundaryTimer;
-              }),
+          Effect.interruptible(
+            Effect.sleep(Duration.millis(boundary - at + 1)).pipe(
+              Effect.zipRight(
+                Effect.suspend(() => {
+                  boundaryFiber = undefined;
+                  links().reconcileSpeech();
+                  return armQuietBoundaryTimer;
+                }),
+              ),
             ),
           ),
         ),
@@ -399,6 +401,12 @@ export const composeCalendars = (
      * because a `setInterval` never fires at once either, and a repeat would.
      * What the gate's release gives back is registered first, so it runs after
      * the fibers it belongs beside have been interrupted.
+     *
+     * Every body forked here — these two and the meeting-boundary wake — is
+     * marked interruptible, because a fork inherits the runtime flags of the
+     * fiber that made it and an arming reached from inside an uninterruptible
+     * region would leave the gate's close waiting forever on fibers it could
+     * not end.
      */
     const observationArmed = Effect.gen(function* () {
       const scope = yield* Effect.scope;
@@ -418,16 +426,20 @@ export const composeCalendars = (
         }),
       );
       yield* Effect.forkScoped(
-        Effect.schedule(
-          Effect.sync(() => links().reconcileSpeech()),
-          Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
+        Effect.interruptible(
+          Effect.schedule(
+            Effect.sync(() => links().reconcileSpeech()),
+            Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
+          ),
         ),
       );
       if (process.platform === "darwin" && runMode.observesProviders) {
         yield* Effect.forkScoped(
-          Effect.schedule(
-            pollAppleCalendarAccess(),
-            Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
+          Effect.interruptible(
+            Effect.schedule(
+              pollAppleCalendarAccess(),
+              Schedule.spaced(Duration.millis(APPLE_ACCESS_POLL_INTERVAL_MS)),
+            ),
           ),
         );
       }
