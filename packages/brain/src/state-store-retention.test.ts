@@ -54,7 +54,7 @@ const launch = (
     return { store, generationClock, reports };
   });
 
-it.scoped(
+it.effect(
   "a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock",
   () =>
     Effect.gen(function* () {

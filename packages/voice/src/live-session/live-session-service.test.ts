@@ -439,7 +439,7 @@ function phases(changes: readonly VoiceLiveSessionChanged[]) {
   return changes.map((change) => change.phase);
 }
 
-it.scoped(
+it.effect(
   "a created session is seeded from the record alone, attached before the answer, and its phases are announced",
   () =>
     Effect.gen(function* () {
@@ -466,7 +466,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an adopted session is stood without asking the source and without a seed: nothing is created, nothing is sent before the session speaks, and a delegation reaches the brain as on a created session",
   () =>
     Effect.gen(function* () {
@@ -493,7 +493,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a session adopted as already started is speakable at once: it hears no session.started again, so a briefing delivered to it is appended without waiting, where one adopted as not yet started waits for the start",
   () =>
     Effect.gen(function* () {
@@ -540,7 +540,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an adopted session whose sideband cannot attach is not stood: the adopt answers false and the session is announced closed as sideband-failed",
   () =>
     Effect.gen(function* () {
@@ -556,7 +556,7 @@ it.scoped(
     }),
 );
 
-it.scoped("no source means no session and nothing announced", () =>
+it.effect("no source means no session and nothing announced", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.sourceAvailable = false;
@@ -565,7 +565,7 @@ it.scoped("no source means no session and nothing announced", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a delegation is claimed once, composed from the transcript since the previous one, and written as the developer's line",
   () =>
     Effect.gen(function* () {
@@ -607,7 +607,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a delegation before any developer utterance is retained and composed on the next fragment, once",
   () =>
     Effect.gen(function* () {
@@ -628,7 +628,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a retained delegation dies with its session", () =>
+it.effect("a retained delegation dies with its session", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -644,7 +644,7 @@ it.scoped("a retained delegation dies with its session", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a slow step earns the exchange's one thinking append, and the reply streams only after the actions settled, each chunk awaiting its ack",
   () =>
     Effect.gen(function* () {
@@ -708,7 +708,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an accepted ask is told nothing of its own acceptance: the reply's commentary is the first thing on the channel, and a refused ask is answered with its refusal",
   () =>
     Effect.gen(function* () {
@@ -744,7 +744,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a delegation while the run is in flight steers it: one exchange, both runs, the reply under the newest id",
   () =>
     Effect.gen(function* () {
@@ -787,7 +787,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a run that ends without a reply is spoken as the standing note for how it ended, and a completed one says nothing more",
   () =>
     Effect.gen(function* () {
@@ -823,7 +823,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a refused submission is spoken as its refusal under the delegation", () =>
+it.effect("a refused submission is spoken as its refusal under the delegation", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.brain.refuse = "No brain stands.";
@@ -842,7 +842,7 @@ it.scoped("a refused submission is spoken as its refusal under the delegation", 
   }),
 );
 
-it.scoped(
+it.effect(
   "a briefing is spoken into the standing session with no delegation, settled spoken by the first output past its end, and un-settled by a moderation cut",
   () =>
     Effect.gen(function* () {
@@ -878,7 +878,7 @@ it.scoped(
     }),
 );
 
-it.scoped("an error naming an append refuses that append and never counts as success", () =>
+it.effect("an error naming an append refuses that append and never counts as success", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -904,7 +904,7 @@ it.scoped("an error naming an append refuses that append and never counts as suc
   }),
 );
 
-it.scoped(
+it.effect(
   "a proactive turn with no session asks for one, muted, and speaks once it starts; a stale one is dropped instead",
   () =>
     Effect.gen(function* () {
@@ -929,7 +929,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "quiet holds briefings and beats; its end hands briefings back for re-decision and speaks the beats afresh",
   () =>
     Effect.gen(function* () {
@@ -954,7 +954,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a beat is spoken at most once to the end per run, and dropping briefings leaves beats standing",
   () =>
     Effect.gen(function* () {
@@ -1001,7 +1001,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "idle reported by the peer closes the session only once the host too has appended nothing in the window, and records the usage",
   () =>
     Effect.gen(function* () {
@@ -1046,7 +1046,7 @@ it.scoped(
     }),
 );
 
-it.scoped("an idle report while an exchange is in flight does not close the session", () =>
+it.effect("an idle report while an exchange is in flight does not close the session", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -1061,7 +1061,7 @@ it.scoped("an idle report while an exchange is in flight does not close the sess
   }),
 );
 
-it.scoped(
+it.effect(
   "a graceful close that hears nothing gives up at the timeout with the usage unconfirmed",
   () =>
     Effect.gen(function* () {
@@ -1089,7 +1089,7 @@ it.scoped(
     }),
 );
 
-it.scoped("an expired session reopens at once", () =>
+it.effect("an expired session reopens at once", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -1104,7 +1104,7 @@ it.scoped("an expired session reopens at once", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a lost connection leaves the usage unconfirmed, drops the delivery aimed at the dead session, and reopens only if the microphone was live",
   () =>
     Effect.gen(function* () {
@@ -1141,7 +1141,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a failed peer transport is a lost connection; a peer closed without a hang-up asked here closes gracefully",
   () =>
     Effect.gen(function* () {
@@ -1161,7 +1161,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a reply that finishes after its session closed opens a new one and is spoken there with no delegation",
   () =>
     Effect.gen(function* () {
@@ -1193,7 +1193,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a line is recorded at the instant its utterance began, so a Clear's cutoff refuses what was begun before it",
   () =>
     Effect.gen(function* () {
@@ -1210,7 +1210,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a muted microphone never carries the stop instruction, whether Luke is silent or mid-sentence",
   () =>
     Effect.gen(function* () {
@@ -1235,7 +1235,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the stop key sends exactly one instruction with no delegation into the standing session, and nothing when none stands",
   () =>
     Effect.gen(function* () {
@@ -1261,7 +1261,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "both speakers' utterances reach the record after the gap and the settle margin, grouped, once",
   () =>
     Effect.gen(function* () {
@@ -1292,7 +1292,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an utterance that settled before its delegation is written again under the delegation, with its run, and the record decides what the second write means",
   () =>
     Effect.gen(function* () {
@@ -1334,7 +1334,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a briefing's last append is told to the record before it is sent, once, under the event id the append carries; a beat tells nothing",
   () =>
     Effect.gen(function* () {
@@ -1367,7 +1367,7 @@ it.scoped(
     }),
 );
 
-it.scoped("creating a session while one stands closes the standing one first", () =>
+it.effect("creating a session while one stands closes the standing one first", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const first = yield* f.open();
@@ -1382,7 +1382,7 @@ it.scoped("creating a session while one stands closes the standing one first", (
   }),
 );
 
-it.scoped("stop closes the session gracefully and takes nothing else with it", () =>
+it.effect("stop closes the session gracefully and takes nothing else with it", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
@@ -1396,7 +1396,7 @@ it.scoped("stop closes the session gracefully and takes nothing else with it", (
   }),
 );
 
-it.scoped(
+it.effect(
   "a close the session's own reader reads releases the scope that session stood in, finalizing what its attach left standing there",
   () =>
     Effect.gen(function* () {
@@ -1426,7 +1426,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a stop that lands between a tear-down's decision and its release waits for that release rather than answering with the session's last words still out",
   () =>
     Effect.gen(function* () {
@@ -1452,7 +1452,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an end asked for while the reader's own tear-down is still releasing waits on that one release and begins no second close",
   () =>
     Effect.gen(function* () {
@@ -1479,7 +1479,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a run's reply is appended once per sentence, in order, and nothing of the run is appended after its end",
   () =>
     Effect.gen(function* () {
@@ -1522,7 +1522,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a briefing taken from the queue is appended once: a hold beginning and ending around it re-sends nothing, and a held one is handed back once and appended never",
   () =>
     Effect.gen(function* () {
@@ -1557,7 +1557,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an append pending when the session dies is dropped with it and never re-sent into the session opened after",
   () =>
     Effect.gen(function* () {
@@ -1598,7 +1598,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "run events landing while the ask's record write is out are deferred, then spoken in order once the record holds the ask",
   () =>
     Effect.gen(function* () {
@@ -1642,7 +1642,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a run that ends during the ask's record write is finalized once the write lands, its end spoken as the standing note",
   () =>
     Effect.gen(function* () {
@@ -1672,7 +1672,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "an ask whose record write fails is answered with the unrecorded note once, and its run's later events reach nothing",
   () =>
     Effect.gen(function* () {
@@ -1718,7 +1718,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a steered ask whose sibling's record write fails is settled once every write is in: one unrecorded note, nothing spoken",
   () =>
     Effect.gen(function* () {
@@ -1779,7 +1779,7 @@ function rosterSession(id: string, overrides: Partial<RosterSeedSession> = {}): 
   };
 }
 
-it.scoped(
+it.effect(
   "a created session opens knowing the desk: the roster leads the input as one developer message, ahead of the conversation",
   () =>
     Effect.gen(function* () {
@@ -1798,7 +1798,7 @@ it.scoped(
     }),
 );
 
-it.scoped("an empty desk puts no roster message into the input at all", () =>
+it.effect("an empty desk puts no roster message into the input at all", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.entries.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
@@ -1810,7 +1810,7 @@ it.scoped("an empty desk puts no roster message into the input at all", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "the roster message is counted against the input's own bounds, and the conversation is what fills what is left",
   () =>
     Effect.gen(function* () {
@@ -1831,7 +1831,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a moved desk reaches the standing session as one thinking append with no delegation, once the change has settled",
   () =>
     Effect.gen(function* () {
@@ -1851,7 +1851,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a roster that comes back reading the same appends nothing", () =>
+it.effect("a roster that comes back reading the same appends nothing", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.roster.push(rosterSession("a"));
@@ -1864,7 +1864,7 @@ it.scoped("a roster that comes back reading the same appends nothing", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a desk that moves between a session's creation and its start is told at the start, not dropped",
   () =>
     Effect.gen(function* () {
@@ -1884,7 +1884,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a change the seed's own read has already superseded is discarded, never told back as news",
   () =>
     Effect.gen(function* () {
@@ -1899,7 +1899,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a desk that empties withdraws what the session was told rather than leaving it standing",
   () =>
     Effect.gen(function* () {
@@ -1921,7 +1921,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a refresh the session refused is not recorded as told, so the withdrawal it carried is sent again",
   () =>
     Effect.gen(function* () {
@@ -1951,7 +1951,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a change that lands while a refresh is still in flight is decided against what the session will know by then",
   () =>
     Effect.gen(function* () {
@@ -1986,7 +1986,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a desk that moves while no session stands opens none and sends nothing", () =>
+it.effect("a desk that moves while no session stands opens none and sends nothing", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.service.updateRoster([rosterSession("a")]);
@@ -1997,7 +1997,7 @@ it.scoped("a desk that moves while no session stands opens none and sends nothin
   }),
 );
 
-it.scoped(
+it.effect(
   "a roster append does not keep a quiet session open: the idle clock reads the appends the session is worth staying open for",
   () =>
     Effect.gen(function* () {
@@ -2015,7 +2015,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the developer's fragments arm one debounce; when it fires the words so far reach the brain once, and more words arm it again",
   () =>
     Effect.gen(function* () {
@@ -2046,7 +2046,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a delegation cancels the pending debounce, Luke's own fragments arm none, and a brain that reads nothing ahead is handed nothing",
   () =>
     Effect.gen(function* () {
@@ -2076,7 +2076,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "facts read ahead are appended once, as thinking under no delegation and behind the data prefix, and leave the idle clock where it was",
   () =>
     Effect.gen(function* () {
@@ -2114,7 +2114,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "facts for words since superseded, for a row never anticipated, or with no started session are dropped, never appended",
   () =>
     Effect.gen(function* () {
@@ -2141,7 +2141,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "once a row is the spoken ask, a late fragment on it anticipates nothing more and a summary read ahead for it is dropped rather than appended into the exchange",
   () =>
     Effect.gen(function* () {
@@ -2174,7 +2174,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a session's end and the drain each drop what the brain read ahead", () =>
+it.effect("a session's end and the drain each drop what the brain read ahead", () =>
   Effect.gen(function* () {
     const brain = new AnticipatingBrain();
     const f = yield* fixture(brain);

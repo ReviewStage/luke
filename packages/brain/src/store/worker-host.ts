@@ -1,4 +1,4 @@
-import { Effect, Exit, Layer, Option, Ref, Scope } from "effect";
+import { Cause, Effect, Exit, Layer, Option, Ref, Runtime, Scope } from "effect";
 import { type Rpc, RpcServer, RpcTest } from "effect/unstable/rpc";
 import type { SqlClient } from "effect/unstable/sql/SqlClient";
 import type { WorkerError } from "effect/unstable/workers/WorkerError";
@@ -208,6 +208,22 @@ export const storeWorkerLayer: Layer.Layer<never, WorkerError, WorkerRunner.Work
     disableTracing: true,
     disableFatalDefects: true,
   }).pipe(Layer.provide(storeHandlers), Layer.provide(RpcServer.layerProtocolWorkerRunner));
+
+/**
+ * How a launched store worker ends. A worker told to close ends by
+ * interrupting its own main fiber: the Rpc server's worker-runner protocol
+ * schedules that interrupt on the fiber that built it the moment the runner
+ * stops hearing the parent, and a launched layer holds the thread open until
+ * it lands, so an interruption here is the close the main thread asked for and
+ * not a signal anyone sent. The default teardown reads an interrupted exit as
+ * a `SIGINT` and would end the thread with 130, which a parent watching the
+ * thread's `exit` reads as a crash; only a real failure earns a code of its
+ * own.
+ */
+export const storeWorkerTeardown: Runtime.Teardown = (exit, onExit) =>
+  Exit.isSuccess(exit) || Cause.hasInterruptsOnly(exit.cause)
+    ? onExit(0)
+    : Runtime.defaultTeardown(exit, onExit);
 
 /**
  * The same handlers served in the calling thread, with no worker between:

@@ -139,7 +139,7 @@ const platform = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Scop
 
 const signal = () => new AbortController().signal;
 
-it.scoped("a sync and a search run over the real store worker, not a fake", () =>
+it.effect("a sync and a search run over the real store worker, not a fake", () =>
   platform(
     Effect.gen(function* () {
       const h = yield* harness();
@@ -156,7 +156,7 @@ it.scoped("a sync and a search run over the real store worker, not a fake", () =
   ),
 );
 
-it.scoped(
+it.effect(
   "an embedding outage degrades an automatic provider to keyword-only, and the search says so",
   () =>
     platform(
@@ -179,7 +179,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "past-conversation results come from eligible conversations' Conversation alone, never the asking one or a temporary thread",
   () =>
     platform(
@@ -258,7 +258,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors without an edit",
   () =>
     platform(
@@ -293,7 +293,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "a transient embedding failure leaves keyword rows searchable and the next sync retries the vectors",
   () =>
     platform(

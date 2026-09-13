@@ -280,6 +280,20 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
     return Effect.raceFirst(
       Effect.flatMap(connection.client, (client) => client(name, params)),
       connection.gone,
+    ).pipe(
+      /**
+       * A worker that dies takes the request it was holding with it from the
+       * inside: the Rpc client resumes every request still outstanding with an
+       * interruption of its own the moment the connection's scope closes, and
+       * the watcher closes that scope on the very completion the race's other
+       * side is waiting on, so which of the two reaches the caller first is
+       * scheduling rather than meaning. An interruption nobody asked for is
+       * that death seen from the inside, and the death itself is what the
+       * caller is owed, so the watcher's own record of it answers here.
+       */
+      Effect.catchCause((cause) =>
+        gone && Cause.hasInterruptsOnly(cause) ? Effect.fail(gone) : Effect.failCause(cause),
+      ),
     );
   }
 

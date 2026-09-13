@@ -968,7 +968,7 @@ it.effect(
       const stopRun = acceptedRunId(yield* submit(stopping, "send"));
       yield* Effect.promise(() => settle());
       assert.equal(refusedStart.held(), true);
-      const stopped = yield* Effect.forkChild(stopping.agent.stop());
+      const stopped = yield* Effect.forkChild(stopping.agent.stop(), { startImmediately: true });
       refusedStart.release(false);
       yield* Fiber.join(stopped);
       assert.equal(stopping.agent.request(stopRun)?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);

@@ -93,7 +93,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
   return { wiring, loads };
 }
 
-it.scoped("with no model to run on, a rebuild opens no conversation and loads no store", () =>
+it.effect("with no model to run on, a rebuild opens no conversation and loads no store", () =>
   Effect.gen(function* () {
     const { wiring, loads } = dependencies();
     const brains = yield* wireBrain(wiring);

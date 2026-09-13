@@ -211,10 +211,13 @@ export const composeCalendars = (
     /**
      * Registered before the fiber below is forked, so the scope closing runs
      * it after that fiber has been interrupted: what was offered and not yet
-     * taken is written here rather than lost with the queue.
+     * taken is written here rather than lost with the queue. `Queue.clear` is
+     * what reads a queue that may be empty — `Queue.takeAll` waits for the
+     * first message rather than answering with nothing, and a finalizer is
+     * uninterruptible, so a close behind an empty queue would never end.
      */
     yield* Effect.addFinalizer(() =>
-      Effect.flatMap(Queue.takeAll(onboardingWrites), (pending) =>
+      Effect.flatMap(Queue.clear(onboardingWrites), (pending) =>
         Effect.forEach(pending, takeOnboardingWrite, { discard: true }),
       ),
     );

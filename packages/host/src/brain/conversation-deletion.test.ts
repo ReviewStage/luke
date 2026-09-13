@@ -413,7 +413,7 @@ function previousCutoffOf(root: string, archiveId: string): number | null | unde
   }
 }
 
-it.scoped(
+it.effect(
   "a Clear under a held model answer fences the brain and the thread before any wait, keeps the line accepted after the press, archives what stood, and the next ask sees none of the old words",
   (t) =>
     Effect.gen(function* () {
@@ -496,7 +496,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a Clear whose rows the store will not remove answers refused, yet the old words reach no context, no window, and no later launch of the brain",
   (t) =>
     Effect.gen(function* () {
@@ -544,7 +544,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a Clear whose marker the disk refuses answers refused without touching the rows, and still fences every context; the next landed write replaces what the disk kept",
   (t) =>
     Effect.gen(function* () {
@@ -572,7 +572,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a credential rebuild landing while the deletion waits on the disk builds over the successor, never the old checkpoint, and a second Clear during the first is harmless",
   (t) =>
     Effect.gen(function* () {
@@ -603,7 +603,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a Clear whose marker the disk refused, followed by a Clear that lands, archives the lines still on disk under the cutoff the disk held before the press, never the refused press's own fence",
   (t) =>
     Effect.gen(function* () {

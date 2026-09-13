@@ -641,7 +641,7 @@ test("a load's own cleanup write and a replacement both yield to a Clear or expi
   });
 });
 
-it.scoped(
+it.effect(
   "default policy keeps an existing checkpoint beyond its legacy deadline and arms no reset timer",
   () =>
     Effect.gen(function* () {

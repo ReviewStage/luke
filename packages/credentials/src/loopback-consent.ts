@@ -298,13 +298,6 @@ export function loopbackConsent<Grant extends object>(
 
   function trip(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope> {
     return Effect.gen(function* () {
-      // A press on Cancel while the port is still binding must not be lost: the
-      // trip is not yet listening, so there is nothing to withdraw except the
-      // intention, which the arming below reads back.
-      let withdrawn = false;
-      abandon = () => {
-        withdrawn = true;
-      };
       const codeVerifier = createCodeVerifier();
       const challenge = codeChallenge(codeVerifier);
       const state = loopbackState(options.statePrefix);
@@ -314,6 +307,18 @@ export function loopbackConsent<Grant extends object>(
       let redirectUri = "";
       let claimed = false;
       let arrived = false;
+      // Cancel is one door for the whole trip, armed before anything is bound
+      // and read back at every step that would carry the trip further. A press
+      // given before the loopback is listening has nothing to withdraw but the
+      // intention, which the steps below read; a press after it ends the wait
+      // where it stands. A callback already claimed is a code in hand rather
+      // than an open door, so a cancel that arrives after it withdraws nothing.
+      let withdrawn = false;
+      abandon = () => {
+        if (claimed) return;
+        withdrawn = true;
+        Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
+      };
 
       const callback = (parameters: Readonly<Record<string, string | Array<string>>>) =>
         Effect.gen(function* () {
@@ -366,21 +371,27 @@ export function loopbackConsent<Grant extends object>(
       if (port === undefined) return { reason: SHARED_REASON.UNAVAILABLE };
       redirectUri = `http://${LOOPBACK_HOST}:${port}${options.callbackPath}`;
 
+      // A press on Cancel given while the port was binding is read back here,
+      // and the scheduler is handed a turn before it is: a bound port resumes
+      // this fiber on the listening callback's own stack, so a cancel that
+      // has been waiting its turn since before the bind would otherwise still
+      // be queued when the trip walked past this line and opened the browser.
+      yield* Effect.yieldNow;
+      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
+
       const authorizationUrl = options.authorizationUrl({
         state,
         redirectUri,
         codeChallenge: challenge,
       });
-      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
-      // A callback already claimed is a code in hand rather than an open door,
-      // so a cancel that arrives after it withdraws nothing.
-      abandon = () => {
-        if (claimed) return;
-        Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
-      };
       reopenPage = () => {
         void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
       };
+      // Composing the page runs the flow's own callback, which is foreign code
+      // this module hands the trip's step to: a press it let through — a fiber
+      // it woke, a window it drew — is a cancel given before there was ever a
+      // tab, so the browser is not opened on it.
+      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
       const opened = yield* Effect.result(
         Effect.tryPromise(() => Promise.resolve(options.openExternal(authorizationUrl))),
       );

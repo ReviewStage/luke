@@ -162,7 +162,12 @@ export class ChildRuns {
     // deferred and waits on the first's answer rather than opening a second
     // turn for the same completion. The decision itself runs on a fiber of its
     // own, forked by the effect this answers, and hands its exit to everyone
-    // waiting.
+    // waiting. That fiber is started immediately rather than scheduled: which
+    // run a completion is steered into is decided by what stands when the
+    // delivery was asked for, and a fork the scheduler resumes later would
+    // decide against whatever the run had become by then — a run that answered,
+    // failed, or ended in between would be missed and a turn of its own opened
+    // for words the run under way would have taken.
     return Effect.suspend(() => {
       const pending = this.#pending.get(completion.completionId);
       if (pending) return pending;
@@ -179,6 +184,7 @@ export class ChildRuns {
               Deferred.done(settled, exit),
             ),
           ),
+          { startImmediately: true },
         ),
         waiting,
       );

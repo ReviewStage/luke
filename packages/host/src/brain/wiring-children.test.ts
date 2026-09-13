@@ -304,7 +304,7 @@ async function composed(
     ...overrides,
   });
   // The wiring's generation clocks read the clock and arm their waits in the
-  // scope it is built in, which is the one `it.scoped` gives this test and
+  // scope it is built in, which is the one `it.effect` gives this test and
   // closes when it ends. No store here enables automatic reset, so what those
   // clocks arm is nothing and the default clock this is built under is the
   // only one they would have asked.
@@ -351,7 +351,7 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
 
-it.scoped(
+it.effect(
   "a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn",
   (t) =>
     Effect.gen(function* () {
@@ -420,7 +420,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone",
   (t) =>
     Effect.gen(function* () {
@@ -469,7 +469,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a fork carries the requester's context into the child and an isolated child sees none of it",
   (t) =>
     Effect.gen(function* () {
@@ -528,7 +528,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it",
   (t) =>
     Effect.gen(function* () {
@@ -579,7 +579,7 @@ it.scoped(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way",
   (t) =>
     Effect.gen(function* () {

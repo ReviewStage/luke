@@ -68,6 +68,24 @@ function trip(consent: ReturnType<typeof harness>["consent"]) {
 }
 
 /**
+ * The authorization the trip composed, read once the trip has armed itself on
+ * it: the tab opened and the page held for reopening. Composing the page is
+ * what settles `armed`, and a fiber that completes a Deferred resumes its
+ * waiters on its own stack, so a read of `armed` alone lands inside the trip's
+ * own compose, a statement ahead of the browser. The scheduler turn is what
+ * stands between the two.
+ */
+function armedTrip(
+  armed: Deferred.Deferred<LoopbackAuthorization>,
+): Effect.Effect<LoopbackAuthorization> {
+  return Effect.gen(function* () {
+    const authorization = yield* Deferred.await(armed);
+    yield* Effect.yieldNow;
+    return authorization;
+  });
+}
+
+/**
  * Follows the redirect the browser would make. On its own connection every
  * time: a trip may bind a registered port rather than an ephemeral one, so a
  * pooled socket left over from an earlier trip would be reused against a
@@ -142,7 +160,7 @@ it.effect("one trip runs press to grant, with the PKCE pair the exchange answers
     const { consent, opened, exchanges } = harness(armed);
 
     const waiting = yield* trip(consent);
-    const authorization = yield* Deferred.await(armed);
+    const authorization = yield* armedTrip(armed);
     assert.deepEqual(opened, [
       `https://example.test/consent?state=${encodeURIComponent(authorization.state)}`,
     ]);
@@ -490,7 +508,7 @@ it.effect("a lost tab reopens the very page the trip is listening for", () =>
     assert.deepEqual(opened, []);
 
     const waiting = yield* trip(consent);
-    yield* Deferred.await(armed);
+    yield* armedTrip(armed);
     consent.reopen();
     assert.equal(opened.length, 2);
     // The same URL exactly: same state, same challenge, same loopback port.

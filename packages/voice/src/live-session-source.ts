@@ -723,7 +723,13 @@ class ServiceLiveSessionSource {
       this.#quota = created.quota ?? this.#quota;
       return { sessionId: created.sessionId, sdpAnswer: created.sdpAnswer };
     }
-    const error = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
+    // The refusal frame names its reason beside whatever else the service said about it — the
+    // quota it exhausted, and whatever a newer service adds — and v4 settles excess keys at the
+    // read rather than on the declaration, so this read drops them instead of refusing the frame
+    // and calling a refusal it can plainly name malformed.
+    const error = Result.getOrUndefined(
+      readEither(hostedErrorSchema, { excess: EXCESS_KEYS.DROP })(payload),
+    );
     if (error) {
       if (error === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
         this.#quota =

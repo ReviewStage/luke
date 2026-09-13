@@ -21,7 +21,7 @@ const GOLDEN_PATH = path.join(FIXTURES_ROOT, "sample-trace.json");
  * byte for byte: the entry with an unrecognized `kind` is decoded against
  * `TraceEntryKindSchema` and costs only itself.
  */
-it.scoped("a fixture trace exports to the recorded document, byte for byte", () =>
+it.effect("a fixture trace exports to the recorded document, byte for byte", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const destination = yield* fs.makeTempFileScoped();

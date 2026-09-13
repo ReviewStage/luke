@@ -146,7 +146,9 @@ it.effect(
         childId: "child-1",
         resultText: "the child's report",
       });
-      const pending = yield* Effect.forkChild(h.agent.deliverChildCompletion(...completion));
+      const pending = yield* Effect.forkChild(h.agent.deliverChildCompletion(...completion), {
+        startImmediately: true,
+      });
       open();
       const steered = yield* Fiber.join(pending);
       assert.equal(steered.delivered, false);

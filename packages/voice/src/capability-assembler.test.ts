@@ -316,7 +316,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   assert.equal(withoutSeam.liveSessions, undefined);
 });
 
-it.scoped(
+it.effect(
   "the assembler's own HTTP client reaches the keyed live session it builds, not the real network",
   () =>
     Effect.gen(function* () {
