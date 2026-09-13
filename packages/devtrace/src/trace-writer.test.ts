@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
 import {
   BRAIN_PREFETCH_OUTCOME,
   BRAIN_PREFETCH_TAKE,
@@ -12,7 +14,7 @@ import { LIVE_SERVER_EVENT } from "@sidecar/live";
 import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
 import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
-import { test } from "vitest";
+import { Effect } from "effect";
 import { AgentTraceWriter } from "./trace-writer.js";
 import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
@@ -24,97 +26,112 @@ function fixedClock(): () => Date {
   };
 }
 
-test("lines land in the named file, stamped, in the order they were recorded", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "devtrace-"));
-  const writer = new AgentTraceWriter({ directory, now: fixedClock() });
-  writer.recordWire({
-    direction: TRACE_DIRECTION.CLIENT,
-    event: { type: "session.input_audio.mute" },
-  });
-  writer.recordBrainRequest({
-    inputItems: 3,
-    inputChars: 2_048,
-    outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
-    elapsedMs: 900,
-    outputItemKinds: ["reasoning", "message"],
-    inputTokens: 1_500,
-    outputTokens: 60,
-  });
-  writer.recordBrainTurn({
-    trigger: BRAIN_TURN_TRIGGER.WAKE,
-    origin: RUN_ORIGIN.OBSERVATION,
-    runtime: TOOL_LOOP_RUNTIME.ID,
-    tools: [...hostedBrainToolCatalog().keys()],
-    promptChars: 12_000,
-    inputTokens: 1_500,
-    transcriptBytes: 4_096,
-    toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
-    deliveries: [{ briefingChars: 96 }],
-    elapsedMs: 1_250,
-    iterations: 1,
-  });
-  writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
-  writer.recordBrainPrefetch({
-    outcome: BRAIN_PREFETCH_OUTCOME.PLANNED,
-    chars: 24,
-    reads: 1,
-    elapsedMs: 300,
-  });
-  writer.recordBrainPrefetch({ take: BRAIN_PREFETCH_TAKE.HIT_WAITED, reads: 1, waitedMs: 120 });
-  await writer.settled();
-  const lines = (await readFile(writer.file, "utf8")).split("\n").filter((line) => line.length > 0);
-  const entries = lines.map(recordFromJsonLine);
-  assert.equal(entries.length, 6);
-  assert.equal(entries[4]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
-  assert.equal(entries[4]?.outcome, BRAIN_PREFETCH_OUTCOME.PLANNED);
-  assert.equal(entries[4]?.reads, 1);
-  assert.equal(entries[5]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
-  assert.equal(entries[5]?.take, BRAIN_PREFETCH_TAKE.HIT_WAITED);
-  assert.equal(entries[5]?.waitedMs, 120);
-  assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
-  assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
-  assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
-  assert.equal(entries[1]?.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
-  assert.equal(entries[1]?.inputChars, 2_048);
-  assert.ok(entries[1] && !("model" in entries[1]));
-  assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
-  assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
-  assert.equal(entries[2]?.elapsedMs, 1_250);
-  const toolCalls = entries[2]?.toolCalls;
-  assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
-  assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);
-  assert.deepEqual(entries[3]?.speech, { kind: "briefing", decision: "offered", pendingCount: 2 });
-  for (const entry of entries) {
-    assert.ok(isWireString(entry?.at));
-  }
-});
+/** A directory of this run's own, and the `FileSystem` the host's layer hands the writer. */
+const traceDirectory = Effect.promise(() => mkdtemp(path.join(tmpdir(), "devtrace-")));
 
-test("raw audio handed straight to the writer still never reaches the file", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "devtrace-"));
-  const writer = new AgentTraceWriter({ directory });
-  writer.recordWire({
-    direction: TRACE_DIRECTION.CLIENT,
-    event: { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audio: "AAAAAAA=" },
-  });
-  await writer.settled();
-  const [line] = (await readFile(writer.file, "utf8")).split("\n");
-  const entry = recordFromJsonLine(line ?? "");
-  assert.ok(isRecord(entry?.event));
-  assert.deepEqual(entry?.event, { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audioBytes: 5 });
-});
+it.scopedLive("lines land in the named file, stamped, in the order they were recorded", () =>
+  Effect.gen(function* () {
+    const directory = yield* traceDirectory;
+    const writer = yield* AgentTraceWriter.make({ directory, now: fixedClock() });
+    writer.recordWire({
+      direction: TRACE_DIRECTION.CLIENT,
+      event: { type: "session.input_audio.mute" },
+    });
+    writer.recordBrainRequest({
+      inputItems: 3,
+      inputChars: 2_048,
+      outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
+      elapsedMs: 900,
+      outputItemKinds: ["reasoning", "message"],
+      inputTokens: 1_500,
+      outputTokens: 60,
+    });
+    writer.recordBrainTurn({
+      trigger: BRAIN_TURN_TRIGGER.WAKE,
+      origin: RUN_ORIGIN.OBSERVATION,
+      runtime: TOOL_LOOP_RUNTIME.ID,
+      tools: [...hostedBrainToolCatalog().keys()],
+      promptChars: 12_000,
+      inputTokens: 1_500,
+      transcriptBytes: 4_096,
+      toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
+      deliveries: [{ briefingChars: 96 }],
+      elapsedMs: 1_250,
+      iterations: 1,
+    });
+    writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
+    writer.recordBrainPrefetch({
+      outcome: BRAIN_PREFETCH_OUTCOME.PLANNED,
+      chars: 24,
+      reads: 1,
+      elapsedMs: 300,
+    });
+    writer.recordBrainPrefetch({ take: BRAIN_PREFETCH_TAKE.HIT_WAITED, reads: 1, waitedMs: 120 });
+    yield* writer.settled;
+    const written = yield* Effect.promise(() => readFile(writer.file, "utf8"));
+    const lines = written.split("\n").filter((line) => line.length > 0);
+    const entries = lines.map(recordFromJsonLine);
+    assert.equal(entries.length, 6);
+    assert.equal(entries[4]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
+    assert.equal(entries[4]?.outcome, BRAIN_PREFETCH_OUTCOME.PLANNED);
+    assert.equal(entries[4]?.reads, 1);
+    assert.equal(entries[5]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
+    assert.equal(entries[5]?.take, BRAIN_PREFETCH_TAKE.HIT_WAITED);
+    assert.equal(entries[5]?.waitedMs, 120);
+    assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
+    assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
+    assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
+    assert.equal(entries[1]?.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
+    assert.equal(entries[1]?.inputChars, 2_048);
+    assert.ok(entries[1] && !("model" in entries[1]));
+    assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
+    assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
+    assert.equal(entries[2]?.elapsedMs, 1_250);
+    const toolCalls = entries[2]?.toolCalls;
+    assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
+    assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);
+    assert.deepEqual(entries[3]?.speech, {
+      kind: "briefing",
+      decision: "offered",
+      pendingCount: 2,
+    });
+    for (const entry of entries) {
+      assert.ok(isWireString(entry?.at));
+    }
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
 
-test("a writer that cannot write reports once and stays quiet after", async () => {
-  const directory = await mkdtemp(path.join(tmpdir(), "devtrace-"));
-  // A file where the trace directory should be makes every mkdir fail.
-  const blocked = path.join(directory, "blocked");
-  await writeFile(blocked, "");
-  const reports: string[] = [];
-  const writer = new AgentTraceWriter({
-    directory: blocked,
-    report: (message) => reports.push(message),
-  });
-  writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "one" } });
-  writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "two" } });
-  await writer.settled();
-  assert.equal(reports.length, 1);
-});
+it.scopedLive("raw audio handed straight to the writer still never reaches the file", () =>
+  Effect.gen(function* () {
+    const directory = yield* traceDirectory;
+    const writer = yield* AgentTraceWriter.make({ directory });
+    writer.recordWire({
+      direction: TRACE_DIRECTION.CLIENT,
+      event: { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audio: "AAAAAAA=" },
+    });
+    yield* writer.settled;
+    const written = yield* Effect.promise(() => readFile(writer.file, "utf8"));
+    const [line] = written.split("\n");
+    const entry = recordFromJsonLine(line ?? "");
+    assert.ok(isRecord(entry?.event));
+    assert.deepEqual(entry?.event, { type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audioBytes: 5 });
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);
+
+it.scopedLive("a writer that cannot write reports once and stays quiet after", () =>
+  Effect.gen(function* () {
+    const directory = yield* traceDirectory;
+    // A file where the trace directory should be makes every mkdir fail.
+    const blocked = path.join(directory, "blocked");
+    yield* Effect.promise(() => writeFile(blocked, ""));
+    const reports: string[] = [];
+    const writer = yield* AgentTraceWriter.make({
+      directory: blocked,
+      report: (message) => reports.push(message),
+    });
+    writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "one" } });
+    writer.recordWire({ direction: TRACE_DIRECTION.CLIENT, event: { type: "two" } });
+    yield* writer.settled;
+    assert.equal(reports.length, 1);
+  }).pipe(Effect.provide(NodeFileSystem.layer)),
+);

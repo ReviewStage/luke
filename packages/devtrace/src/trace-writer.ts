@@ -1,10 +1,10 @@
 import path from "node:path";
 import type { PlatformError } from "@effect/platform/Error";
 import * as FileSystem from "@effect/platform/FileSystem";
-import { NodeFileSystem } from "@effect/platform-node";
 import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "@sidecar/brain";
 import {
   Cause,
+  Deferred,
   Effect,
   FiberId,
   FiberRefs,
@@ -12,7 +12,8 @@ import {
   List,
   Logger,
   LogLevel,
-  ManagedRuntime,
+  Queue,
+  type Scope,
 } from "effect";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
@@ -65,6 +66,21 @@ type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH } & BrainPrefetchTraceRecord)
   | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
+/**
+ * What waits on the writer's queue: a line to append, or a caller's own marker
+ * that it wants every line offered before it to have landed. The queue is
+ * first in, first out, so the marker's turn is exactly that moment and no
+ * counting of what is outstanding is needed to find it.
+ */
+const TRACE_WORK = {
+  LINE: "line",
+  SETTLED: "settled",
+} as const;
+
+type TraceWork =
+  | { readonly kind: typeof TRACE_WORK.LINE; readonly line: string }
+  | { readonly kind: typeof TRACE_WORK.SETTLED; readonly done: Deferred.Deferred<void> };
+
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
@@ -107,32 +123,53 @@ function writeTraceLine(
  * an instrument reading the app, and a full disk must never become a voice
  * bug.
  *
- * @deprecated `AgentTraceWriter` is a promise-facing strangler shim on the
- * `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`: its callers
- * (the host's composers) still hold a plain object with `record*` methods,
- * not a fiber, so each line's effect — the logger's formatting and the
- * `FileSystem` write together — is run here rather than on a caller's own
- * runtime. It is deleted once a host composer is a `Layer` that can hold the
- * writer's `ManagedRuntime` itself, in P7's devtrace composer PR (or P12-03
- * if none is needed before then).
+ * It runs nothing of its own. A `record*` call offers its line onto an
+ * unbounded queue, and one fiber — forked by {@link AgentTraceWriter.make}
+ * into the scope its caller is already composing in, over the `FileSystem`
+ * that caller's own layer provides — takes them one at a time and writes
+ * them, so the order the queue keeps is the order the file gets and the fiber
+ * ends with that scope.
  */
 export class AgentTraceWriter {
   readonly file: string;
   readonly #directory: string;
   readonly #report: (message: string) => void;
   readonly #logger: Logger.Logger<PendingTraceEntry, string>;
-  readonly #runtime: ManagedRuntime.ManagedRuntime<FileSystem.FileSystem, never>;
-  #queue: Promise<void> = Promise.resolve();
+  readonly #work: Queue.Queue<TraceWork>;
   #failed = false;
 
-  constructor(options: AgentTraceWriterOptions) {
+  /**
+   * The queue drained, for a test to await what `record*` fired and forgot: a
+   * marker of its own onto the same queue, awaited until the fiber reaches it.
+   */
+  readonly settled: Effect.Effect<void> = Effect.suspend(() =>
+    Effect.flatMap(Deferred.make<void>(), (done) =>
+      Effect.zipRight(
+        Queue.offer(this.#work, { kind: TRACE_WORK.SETTLED, done }),
+        Deferred.await(done),
+      ),
+    ),
+  );
+
+  private constructor(options: AgentTraceWriterOptions, work: Queue.Queue<TraceWork>) {
     this.#directory = options.directory;
     const now = options.now ?? (() => new Date());
     this.#report = options.report ?? ((text: string) => process.stderr.write(text));
     const stamp = now().toISOString().replace(/[:.]/gu, "-");
     this.file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
     this.#logger = traceLineLogger(now);
-    this.#runtime = ManagedRuntime.make(NodeFileSystem.layer);
+    this.#work = work;
+  }
+
+  /** One writer, with the fiber that carries its lines to disk forked into the caller's scope. */
+  static make(
+    options: AgentTraceWriterOptions,
+  ): Effect.Effect<AgentTraceWriter, never, Scope.Scope | FileSystem.FileSystem> {
+    return Effect.gen(function* () {
+      const writer = new AgentTraceWriter(options, yield* Queue.unbounded<TraceWork>());
+      yield* Effect.forkScoped(writer.#drain());
+      return writer;
+    });
   }
 
   recordWire(trace: AgentWireTrace): void {
@@ -169,11 +206,6 @@ export class AgentTraceWriter {
     this.#append({ kind: TRACE_ENTRY_KIND.SPEECH, speech: record });
   }
 
-  /** The queue drained, for a test to await what `record*` fired and forgot. */
-  settled(): Promise<void> {
-    return this.#queue;
-  }
-
   #append(entry: PendingTraceEntry): void {
     const line = this.#logger.log({
       fiberId: FiberId.none,
@@ -185,13 +217,27 @@ export class AgentTraceWriter {
       annotations: HashMap.empty(),
       date: new Date(),
     });
-    this.#queue = this.#queue
-      .then(() => this.#runtime.runPromise(writeTraceLine(this.#directory, this.file, line)))
-      .catch((error) => {
-        if (this.#failed) return;
-        this.#failed = true;
-        const message = error instanceof Error ? error.message : String(error);
-        this.#report(`Agent trace could not be written: ${message}\n`);
-      });
+    Queue.unsafeOffer(this.#work, { kind: TRACE_WORK.LINE, line });
+  }
+
+  /**
+   * One line at a time, for as long as the fiber stands. Only a write's own
+   * failure is caught, so the interruption that ends the scope ends the fiber
+   * rather than being swallowed by a loop that would never stop.
+   */
+  #drain(): Effect.Effect<never, never, FileSystem.FileSystem> {
+    return Effect.forever(
+      Effect.flatMap(Queue.take(this.#work), (work) =>
+        work.kind === TRACE_WORK.SETTLED
+          ? Effect.asVoid(Deferred.succeed(work.done, undefined))
+          : Effect.catchAll(writeTraceLine(this.#directory, this.file, work.line), (error) =>
+              Effect.sync(() => {
+                if (this.#failed) return;
+                this.#failed = true;
+                this.#report(`Agent trace could not be written: ${error.message}\n`);
+              }),
+            ),
+      ),
+    );
   }
 }

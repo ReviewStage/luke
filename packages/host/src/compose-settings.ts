@@ -42,7 +42,7 @@ import {
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Cause, Deferred, Effect, Option, Queue } from "effect";
+import { Cause, Deferred, Effect, Option, Queue, type Scope } from "effect";
 import { AccountPreferencesClient } from "./account-preferences-client.js";
 import type { Composer } from "./composer.js";
 import { startedAndStopped } from "./effect/composer.js";
@@ -114,7 +114,7 @@ export interface SettingsComposer extends Composer {
   /** The account behind the hydrated preferences changed; the next push hydrates again. */
   forgetAccountPreferenceHydration: () => void;
   /** The count the account actions flush before they end the account they are authenticated with. */
-  flushProductEvents: () => Promise<void>;
+  flushProductEvents: Effect.Effect<void>;
   link: (links: SettingsLinks) => void;
 }
 
@@ -126,7 +126,7 @@ export interface SettingsComposer extends Composer {
 export const composeSettings = (): Effect.Effect<
   SettingsComposer,
   never,
-  HostKernelTag | Environment | SecretCipher | AppIdentity | FileSystem.FileSystem
+  HostKernelTag | Environment | SecretCipher | AppIdentity | FileSystem.FileSystem | Scope.Scope
 > =>
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
@@ -183,7 +183,7 @@ export const composeSettings = (): Effect.Effect<
 
     // The quit's drain flushes ahead of this composer's stop, so a batch no
     // account could carry at that flush is on disk before the queue is dropped.
-    const productEvents = new ProductEventSender({
+    const productEvents = yield* ProductEventSender.make({
       serviceBaseUrl: kernel.hostedServiceBaseUrl,
       appVersion: identity.appVersion,
       sends: runMode.sendsNetwork,
@@ -887,7 +887,7 @@ export const composeSettings = (): Effect.Effect<
       forgetAccountPreferenceHydration: () => {
         accountPreferencesHydratedAccount = undefined;
       },
-      flushProductEvents: () => productEvents.flush(),
+      flushProductEvents: productEvents.flush,
       link: (next) => {
         late.unsafeSet(next);
       },
@@ -897,11 +897,8 @@ export const composeSettings = (): Effect.Effect<
             productEvents.arm();
             productEvents.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: identity.appVersion });
             productEvents.markDayActive();
-            if (runMode.sendsNetwork) productEvents.start();
           }),
-          Effect.sync(() => {
-            productEvents.stop();
-          }),
+          productEvents.drop,
         );
         // The settings read once so the file is warm for the composers built
         // after this one, waited on by none of them.
