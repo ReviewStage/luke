@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
+import { Chunk, Effect, TestClock } from "effect";
 import { test } from "vitest";
+import { detachOn } from "./effect/carry.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,
@@ -637,34 +640,36 @@ test("a load's own cleanup write and a replacement both yield to a Clear or expi
   });
 });
 
-test("default policy keeps an existing checkpoint beyond its legacy deadline and arms no reset timer", async () => {
-  const previous = complete();
-  const repository = fakeBrainStateRepository(previous);
-  let now = previous.expiresAt + BRAIN_GENERATION_LIFETIME_MS;
-  const store = new BrainStateStore({
-    repository,
-    createGenerationId: () => "explicit-reset",
-    now: () => now,
-  });
-  assert.deepEqual(await store.load(), previous);
-  assert.equal(store.automaticReset, false);
-  assert.equal(store.expireIfDue(now), false);
-  let scheduled = false;
-  const clock = new BrainGenerationClock({
-    store,
-    now: () => now,
-    schedule: () => {
-      scheduled = true;
-      throw new Error("default policy must not schedule expiry");
-    },
-  });
-  await clock.start();
-  now += BRAIN_GENERATION_LIFETIME_MS;
-  assert.equal((await store.load()).generationId, previous.generationId);
-  assert.deepEqual(store.current()?.items, previous.items);
-  assert.equal(scheduled, false);
-  assert.equal(await store.reset(now), true);
-  assert.equal(store.current()?.generationId, "explicit-reset");
-  assert.deepEqual(store.current()?.items, []);
-  clock.stop();
-});
+it.scoped(
+  "default policy keeps an existing checkpoint beyond its legacy deadline and arms no reset timer",
+  () =>
+    Effect.gen(function* () {
+      const previous = complete();
+      const repository = fakeBrainStateRepository(previous);
+      let now = previous.expiresAt + BRAIN_GENERATION_LIFETIME_MS;
+      const store = new BrainStateStore({
+        repository,
+        createGenerationId: () => "explicit-reset",
+        now: () => now,
+      });
+      assert.deepEqual(yield* Effect.promise(() => store.load()), previous);
+      assert.equal(store.automaticReset, false);
+      assert.equal(store.expireIfDue(now), false);
+      const clock = new BrainGenerationClock({
+        store,
+        clock: yield* Effect.clock,
+        detach: detachOn(yield* Effect.runtime<never>()),
+        scope: yield* Effect.scope,
+      });
+      yield* clock.start();
+      now += BRAIN_GENERATION_LIFETIME_MS;
+      assert.equal((yield* Effect.promise(() => store.load())).generationId, previous.generationId);
+      assert.deepEqual(store.current()?.items, previous.items);
+      // The default policy arms nothing, so no wait stands on this test's clock.
+      assert.deepEqual(Chunk.toReadonlyArray(yield* TestClock.sleeps()), []);
+      assert.equal(yield* Effect.promise(() => store.reset(now)), true);
+      assert.equal(store.current()?.generationId, "explicit-reset");
+      assert.deepEqual(store.current()?.items, []);
+      clock.stop();
+    }),
+);

@@ -62,7 +62,7 @@ import { agentRootPath } from "./store-path.js";
 import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
 
-type BrainWiring = ReturnType<typeof wireBrain>;
+type BrainWiring = Effect.Effect.Success<ReturnType<typeof wireBrain>>;
 
 export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
@@ -217,7 +217,7 @@ export const composeBrain = (
       };
     }
 
-    const wiring = wireBrain({
+    const wiring = yield* wireBrain({
       execution,
       repositoryFor: (sessionKey) => store.brainStateRepository(sessionKey),
       ensureObservedConversation: async (sessionKey, name) => {
