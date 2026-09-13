@@ -317,6 +317,60 @@ it.effect(
 );
 
 it.effect(
+  "a released hold stands in the conversation's queue, counted busy, in the step that released it",
+  () =>
+    Effect.gen(function* () {
+      const h = yield* effectHarness();
+      h.client.answers.push(
+        answered([call("call_1", BRAIN_TOOL.ANNOUNCE, { briefing: "the first" })]),
+        answered([message("")]),
+        answered([call("call_2", BRAIN_TOOL.ANNOUNCE, { briefing: "the second" })]),
+        answered([message("")]),
+      );
+      yield* h.agent.ready();
+      assert.equal(h.agent.busy(), false);
+      yield* h.agent.releaseHeld([{ briefing: "one", decidedAt: NOW }]);
+      // The whole reason the detach door is a run rather than a fork: a fork
+      // would leave the queue empty, and the conversation idle to a host
+      // reading it, until a scheduler task ran.
+      assert.equal(h.agent.busy(), true);
+      yield* h.agent.releaseHeld([{ briefing: "two", decidedAt: NOW }]);
+      assert.equal(h.agent.busy(), true);
+      yield* Effect.promise(() => settle());
+      assert.equal(h.agent.busy(), false);
+      assert.deepEqual(
+        h.traces.map((trace) => trace.trigger),
+        [BRAIN_TURN_TRIGGER.HOLD_RELEASED, BRAIN_TURN_TRIGGER.HOLD_RELEASED],
+      );
+      // The order the releases came in is the order their turns ran in.
+      assert.deepEqual(
+        h.deliveries.map((delivery) => delivery.briefing),
+        ["the first", "the second"],
+      );
+    }),
+);
+
+it.effect("a stop behind a released hold drains that turn rather than racing it", () =>
+  Effect.gen(function* () {
+    const h = yield* effectHarness();
+    h.client.answers.push(answered([message("answered")]));
+    yield* h.agent.ready();
+    yield* h.agent.releaseHeld([{ briefing: "one", decidedAt: NOW }]);
+    assert.equal(h.agent.busy(), true);
+    yield* h.agent.stop();
+    // The stop took the conversation's one permit behind the turn already
+    // standing in the queue, so nothing of that turn is left to land.
+    assert.equal(h.agent.busy(), false);
+    const asked = h.client.inputs.length;
+    const traced = h.traces.length;
+    yield* Effect.promise(() => settle());
+    assert.equal(h.client.inputs.length, asked);
+    assert.equal(h.traces.length, traced);
+    assert.equal(h.agent.busy(), false);
+  }),
+);
+
+it.effect(
   "a wake turn runs the actions the policy allows, journaled and attributed as Luke's own",
   () =>
     Effect.gen(function* () {
