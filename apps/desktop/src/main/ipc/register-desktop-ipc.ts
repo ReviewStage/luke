@@ -166,7 +166,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // other panel's Conversation by the host's change event.
     appendConversationLines: (context, entries) =>
       run(operator.host.appendConversation(entries, windows.reporterOf(context.sender))),
-    reportAppGuide: (_context, snapshot) => operator.reportGuide(snapshot),
+    reportAppGuide: (_context, snapshot) => run(operator.reportGuide(snapshot)),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),
     // The development trace is the host's: a tapped wire event crosses to its
@@ -215,7 +215,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
      * document arrives on `app:state`.
      */
     snapshotFor: async (sender): Promise<AppStateSnapshot> => {
-      await operator.readBootstrap();
+      await run(operator.readBootstrap());
       native.refreshMicrophoneStatus();
       return { ...state.snapshot(), window: windows.windowFactsFor(sender) };
     },

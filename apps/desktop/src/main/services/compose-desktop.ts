@@ -17,7 +17,7 @@ import { createMachinePresence } from "./machine-presence";
 import { createNativeNode, type NativeNode } from "./native-node";
 import { createOperatorClient, type OperatorClient } from "./operator-client";
 import type { DesktopQuit } from "./quit";
-import { serviceLayer } from "./service-layer";
+import { effectServiceLayer, serviceLayer } from "./service-layer";
 import { createTelemetryService, type TelemetryService } from "./telemetry-service";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 import { createWindowService, type WindowService } from "./window-service";
@@ -108,7 +108,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
     ),
   );
   const throughWindows = layersInOrder([
-    serviceLayer(operator, report),
+    effectServiceLayer(operator, report),
     Layer.effectDiscard(Effect.sync(() => updates.start())),
     serviceLayer(windows, report),
   ]).pipe(Layer.provideMerge(hostStandingLayer), Layer.provideMerge(machine));
@@ -158,7 +158,6 @@ export function composeDesktop(
       const native = createNativeNode({ config, state });
       const operator = yield* createOperatorClient({
         config,
-        run,
         gateway: host.gateway,
         node: native.capabilities,
         state,
@@ -170,7 +169,6 @@ export function composeDesktop(
         recordEvent: (name, properties) => {
           void run(operator.host.recordEvent(name, properties));
         },
-        run,
       });
       const windows = createWindowService({
         config,
@@ -178,6 +176,7 @@ export function composeDesktop(
         native,
         telemetry,
         operator,
+        run,
         launchStanding: quit.launchStanding,
       });
       const updates = yield* createUpdateServiceHost({
