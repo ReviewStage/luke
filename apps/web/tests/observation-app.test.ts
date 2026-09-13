@@ -121,24 +121,29 @@ const EXCHANGES: readonly Exchange[] = [
     request: () => new Request(`${ORIGIN}/api/observation/tick`),
     handle: async () => {
       const { handleObservationTick } = await import("../server/hosted/observation-tick.js");
-      return handleObservationTick({
-        request: new Request(`${ORIGIN}/api/observation/tick`),
-        cronSecret: undefined,
-        encryptionSecret: ENCRYPTION_SECRET,
-        listAccounts: async () => [],
-        forgetIneligible: async () => undefined,
-        purgeCleared: async () => 0,
-        sweepSpeech: async () => ({ held: 0, released: 0, expired: 0, turns: 0 }),
-        pushSpeech: async () => ({
-          pushed: 0,
-          undelivered: 0,
-          unaddressed: 0,
-          unreadable: 0,
-          waiting: 0,
+      const { Effect } = await import("effect");
+      return runWithoutDatabase(
+        handleObservationTick({
+          request: new Request(`${ORIGIN}/api/observation/tick`),
+          cronSecret: undefined,
+          encryptionSecret: ENCRYPTION_SECRET,
+          listAccounts: () => Effect.succeed([]),
+          forgetIneligible: () => Effect.void,
+          purgeCleared: () => Effect.succeed(0),
+          sweepSpeech: () => Effect.succeed({ held: 0, released: 0, expired: 0, turns: 0 }),
+          pushSpeech: () =>
+            Effect.succeed({
+              pushed: 0,
+              undelivered: 0,
+              unaddressed: 0,
+              unreadable: 0,
+              waiting: 0,
+            }),
+          observe: () => Effect.succeed({ complete: false, changed: false }),
+          openTurns: () =>
+            Effect.succeed({ observation: 0, holdRelease: 0, failed: 0, reseeded: 0 }),
         }),
-        observe: async () => ({ complete: false, changed: false }),
-        openTurns: async () => ({ observation: 0, holdRelease: 0, failed: 0, reseeded: 0 }),
-      });
+      );
     },
   },
 ];

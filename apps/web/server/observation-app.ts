@@ -260,55 +260,58 @@ function eventsEffect(
  * The scheduled observation's one entry, called by Vercel's cron on the
  * cadence `vercel.json` fixes. The logic lives in
  * `server/hosted/observation-tick.ts`; this hands it the deployment's real
- * seams and the database queries behind them. An account was seen when one
- * of its devices last registered or sent a heartbeat: the `devices` row's
- * `last_seen_at`, which every platform moves along while the app is open. A
- * deployment without the Apple push credential pushes nothing and reads
- * nothing for it; one with it opens a sender for the tick and closes it with
- * the tick, so the notifications share one connection to Apple. The opener
- * reaches eve as the deployment acting for the one account the tick is
- * passing over, under the tick's own secret, so the account named to eve is
- * only ever one this tick enumerated.
+ * seams and the database queries behind them, each read answering an Effect
+ * over the group's own `SqlClient.SqlClient` rather than a promise, so the
+ * tick runs on the same fiber the group's other routes do instead of a
+ * runtime built anew per read. An account was seen when one of its devices
+ * last registered or sent a heartbeat: the `devices` row's `last_seen_at`,
+ * which every platform moves along while the app is open. A deployment
+ * without the Apple push credential pushes nothing and reads nothing for it;
+ * one with it opens a sender for the tick and closes it with the tick, so the
+ * notifications share one connection to Apple. The opener reaches eve as the
+ * deployment acting for the one account the tick is passing over, under the
+ * tick's own secret, so the account named to eve is only ever one this tick
+ * enumerated.
  */
-async function observationTickHandler(request: Request): Promise<Response> {
-  const environment = await runWeb(HostedEnvironment);
-  const encryptionSecret = environment.providerKeyEncryptionSecret
-    ? Redacted.value(environment.providerKeyEncryptionSecret)
-    : undefined;
-  const store = encryptionSecret
-    ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
-    : undefined;
-  const sender = environment.apnsCredentials
-    ? new ApnsSender({ credentials: environment.apnsCredentials })
-    : undefined;
-  const cronSecret =
-    environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
-  const eveOrigin = eveOriginFor(new URL(request.url).origin);
-  const vaultRows = (userId: string) => runWeb(readStoredVaultKeys(userId));
+function observationTickEffect(
+  request: Request,
+): Effect.Effect<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+  return Effect.gen(function* () {
+    const environment = yield* HostedEnvironment;
+    const encryptionSecret = environment.providerKeyEncryptionSecret
+      ? Redacted.value(environment.providerKeyEncryptionSecret)
+      : undefined;
+    const store = encryptionSecret
+      ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
+      : undefined;
+    const sender = environment.apnsCredentials
+      ? new ApnsSender({ credentials: environment.apnsCredentials })
+      : undefined;
+    const cronSecret =
+      environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
+    const eveOrigin = eveOriginFor(new URL(request.url).origin);
 
-  const options: ObservationTickOptions = {
-    request,
-    cronSecret,
-    encryptionSecret,
-    listAccounts: (limit, seenAfter) => runWeb(listEligibleAccounts(limit, seenAfter)),
-    forgetIneligible: async (seenAfter) => {
-      if (store)
-        await runWeb(store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter }));
-    },
-    purgeCleared: async (now) => (store ? runWeb(store.retention.purgeCleared(new Date(now))) : 0),
-    sweepSpeech: (now) =>
-      store === undefined
-        ? Promise.resolve(NOTHING_SWEPT)
-        : runWeb(
-            Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+    const options: ObservationTickOptions = {
+      request,
+      cronSecret,
+      encryptionSecret,
+      listAccounts: (limit, seenAfter) => listEligibleAccounts(limit, seenAfter),
+      forgetIneligible: (seenAfter) =>
+        store
+          ? store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter })
+          : Effect.void,
+      purgeCleared: (now) =>
+        store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
+      sweepSpeech: (now) =>
+        store === undefined
+          ? Effect.succeed(NOTHING_SWEPT)
+          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
               sweepSpeech({ writer }, { now }),
             ),
-          ),
-    pushSpeech: (now) =>
-      store === undefined || sender === undefined
-        ? Promise.resolve(NOTHING_PUSHED)
-        : runWeb(
-            Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+      pushSpeech: (now) =>
+        store === undefined || sender === undefined
+          ? Effect.succeed(NOTHING_PUSHED)
+          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
               pushSpeech(
                 {
                   store: { writer },
@@ -319,28 +322,26 @@ async function observationTickHandler(request: Request): Promise<Response> {
                 { now },
               ),
             ),
-          ),
-    observe: async (userId) => {
-      if (!store || !encryptionSecret) return { complete: false, changed: false };
-      const rows = await vaultRows(userId);
-      const outcome = await runWeb(
-        observeAndSnapshot({
-          userId,
-          rows,
-          secret: encryptionSecret,
-          store,
-          seams: {},
-          now: Date.now(),
-        }),
-      );
-      return { complete: outcome.complete, changed: outcome.changed };
-    },
-    openTurns: async (userId) => {
-      if (!store || !encryptionSecret || !cronSecret) return NOTHING_OPENED;
-      const rows = await vaultRows(userId);
-      const readApiKey = readApiKeyFor(rows, encryptionSecret);
-      return runWeb(
-        Effect.gen(function* () {
+      observe: (userId) => {
+        if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
+        return Effect.gen(function* () {
+          const rows = yield* readStoredVaultKeys(userId);
+          const outcome = yield* observeAndSnapshot({
+            userId,
+            rows,
+            secret: encryptionSecret,
+            store,
+            seams: {},
+            now: Date.now(),
+          });
+          return { complete: outcome.complete, changed: outcome.changed };
+        });
+      },
+      openTurns: (userId) => {
+        if (!store || !encryptionSecret || !cronSecret) return Effect.succeed(NOTHING_OPENED);
+        return Effect.gen(function* () {
+          const rows = yield* readStoredVaultKeys(userId);
+          const readApiKey = readApiKeyFor(rows, encryptionSecret);
           const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
           return yield* openAccountTurns(
             {
@@ -367,16 +368,15 @@ async function observationTickHandler(request: Request): Promise<Response> {
             },
             userId,
           );
-        }),
-      );
-    },
-  };
+        });
+      },
+    };
 
-  try {
-    return await handleObservationTick(options);
-  } finally {
-    await sender?.close();
-  }
+    return yield* Effect.ensuring(
+      handleObservationTick(options),
+      sender ? Effect.promise(() => sender.close()) : Effect.void,
+    );
+  });
 }
 
 /**
@@ -395,7 +395,7 @@ export function observationApp(): HttpApp.Default<never, SqlClient.SqlClient | H
     HttpRouter.all(PATH.PROJECTS, promisePassthrough(projectsHandler)),
     HttpRouter.all(PATH.EVENTS, effectPassthrough(eventsEffect)),
     HttpRouter.all(PATH.OBSERVE, promisePassthrough(observeHandler)),
-    HttpRouter.all(PATH.OBSERVATION_TICK, promisePassthrough(observationTickHandler)),
+    HttpRouter.all(PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
     Effect.catchTag("RouteNotFound", () =>
       Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
     ),
