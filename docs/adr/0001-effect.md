@@ -312,13 +312,23 @@ all. `Effect.runtime<never>()` is gone from this composer's build, and
 `packages/host/src/compose-observation.ts` is off `runOnHandedRuntime` with
 it.
 
-`compose-live.ts`'s entry covers the one run left there now that the timer
-bridge named above is gone: `requestOnboardingBeat` decides whether to speak
-from the roster a fresh pass just drew, so it waits on
-`observation.loop.refresh` — and the link that asks for a beat is a
-synchronous callback the calendars composer holds, so the pass is run to a
-promise on this composition's own runtime. It goes when that link answers an
-effect.
+`compose-live.ts` is off this list since P12-20h, which took the last run
+there. `requestOnboardingBeat` decides whether to speak from the roster a
+fresh pass just drew, so it waits on `observation.loop.refresh`, and it waited
+on `calendars.gateOfferable()` and `arrivalBeat` beside it; all three were run
+to promises because the composer answered the beat as a plain async function.
+The beat is an `Effect.Effect<void>` now, and what
+the composer answers is the ask rather than the effect: `requestOnboardingBeat`
+offers that effect to an unbounded `Queue` this composer opened in its own
+scope and answers at once, and a fiber forked into that scope takes one beat
+at a time. Every caller wanted exactly that — the account gate and the launch
+discarded the promise, and the four calendars links are synchronous
+`() => void` seams — so nothing waits on a pass it never waited on before, and
+a beat that dies is logged rather than left to end the fiber every later beat
+needs. A quit ends one in flight. What a `Runtime.runFork` would have given
+here, the first step standing in the step that asked, the beat does not need:
+every guard it makes is re-read when it runs, which is why the queue is the
+right door and `detachOn`'s is not.
 
 `LiveSessionService` in `packages/voice/src/live-session/live-session-service.ts`
 was on the same list as of P12-18h, as the one run left on the live path: it
@@ -371,6 +381,22 @@ when those callbacks can yield instead of offer, which is the same change that
 makes the socket's frames a `Stream` (P12-20i2b, over P12-20i3's `attach`
 door); until then the hand-written unwind is what keeps the session over at
 the instant it is declared over.
+
+P12-20h took the service's two collaborators out of its options and into its
+context. `LiveSessionService.make` yields `LiveBrainTag` and `LiveRecordTag`,
+so what the session speaks through is stated by the composition that provides
+them rather than handed down a constructor field: `compose-host.ts` builds the
+plain `LiveBrain` and `LiveRecord` where the brain composer stands and
+provides both to `compose-live.ts`, which now only names them in its own
+requirement, and `apps/web`'s hosted exchange provides the pair it builds
+beside the service on the spot. `liveBrainLayer` and `liveRecordLayer` stop
+being strangler shims with that — they are how a caller that built a
+collaborator imperatively hands it over — and the two source tags beside them,
+`LiveSessionSourceTag` and `IntroductionSessionSourceTag`, are deleted
+outright: they were scaffolding from P6-08 that no caller ever adopted, and
+every source a composition holds is still a getter whose answer changes over the run, which a `Layer.succeed` cannot stand
+in for. A tag nothing reads is a second door onto a value with no one behind
+it.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
@@ -647,24 +673,14 @@ announcement hold refreshed from the arming's finalizer, and the onboarding
 settle decided from a Gateway handler's synchronous body, each forked onto
 the runtime the layer was built on rather than an ambient default one.
 
-`compose-live.ts` and `compose-devices.ts` each gained one such run in
-P12-14e, on the runtime each already holds: the calendars composer's
-`announcementsQuietNow`, `gateOfferable`, and `meetingQuietUntil` are effects
-since that PR, and the two readers of them that are not — `LiveSessionService`'s
-`quietNow` option and the device row's own presence report — run one there
-until each answers effects itself. Both files were already on this list for
-their own reasons, so neither is a new row.
-
-`compose-live.ts`'s `arrivalBeat` is an effect too, since P12-14f moved its one
-read (the stored voice hotkey) onto `settings.store` directly; its own caller,
-`requestOnboardingBeat`, is still a plain async function rather than a fiber,
-so it runs `arrivalBeat` to a promise on the same captured runtime beside its
-existing `gateOfferable` run, one line above where that already stood. Neither
-changes what file this is: `compose-live.ts` was already on the list. P12-16c
-added one more of the same shape and for the same reason: the brain's
-`releaseHeld` is an effect, and `LiveSessionService`'s `releaseHeldBriefings`
-option is a synchronous callback, so the effect is forked onto that runtime
-until the service answers effects itself.
+`compose-devices.ts` gained one such run in P12-14e, on the runtime it already
+holds: the calendars composer's `announcementsQuietNow`, `gateOfferable`, and
+`meetingQuietUntil` are effects since that PR, and the device row's own
+presence report reads one until it answers effects itself. `compose-live.ts`
+read them too, and none of those readings is a run any more: `quietNow` and
+`releaseHeldBriefings` are `LiveSessionService` options that answer effects
+the service yields on its own fiber, and `gateOfferable` and `arrivalBeat` are
+yielded by the onboarding beat's own effect.
 
 `composeObservation`'s entry above was widened in P12-14f and narrowed again
 in P12-15e: every one of its nine `awaitedSettingsStore` reads moved onto
@@ -1454,17 +1470,25 @@ subscriber, is on the allowlist for the reason below rather than exempt from
 one.
 
 `packages/brain/src/agent.ts` is off this allowlist since P12-16g, and the
-three runs it was on it for went together. `BrainAgent#onRunEvent` is an
-`Effect<() => void>` its caller runs: it takes the subscription on the
-caller's own fiber — `Stream.fromPubSub(pubsub, { scoped: true })` extended
-into a scope of the subscription's own — and only then forks the fiber that
-pumps it, because a bare `Effect.forkDaemon` would take the subscription a
-scheduler task later and the events of that gap would reach nobody. The
-unsubscribe interrupts that fiber, whose `ensuring` closes the scope. Every
-rule a listener could observe under the old `Emitter` still holds —
-subscription order, a listener subscribed mid-round hearing only what follows,
-a thrower stopping none of the rest — because the pump is the same
-`Stream.runForEach` it always was. `#fireRunEvent` publishes with the pubsub's
+three runs it was on it for went together. Its run events are the `Stream`
+itself since P12-20h: `BrainAgent#runEvents` is
+`Stream.fromPubSub(pubsub, { scoped: true })`, an
+`Effect<Stream<BrainRunEvent>, never, Scope>` a subscriber extends into a
+scope of its own, which takes the subscription on that subscriber's own fiber
+— everything published after it is heard, in order — and then reads however it
+likes. `packages/host/src/voice/live-brain-adapter.ts` is the subscriber the
+condition named: it extends the stream into the adapter's own scope and forks
+`Stream.runForEach` into the same scope, so closing that scope is the whole of
+the unsubscribe and the per-subscription fiber the agent used to build for
+every listener is gone with the `onRunEvent` face that built it. What a
+listener that throws costs is the reader's own decision now — the adapter
+catches the defect, logs it, and carries on, which is what `Emitter#fire`
+guaranteed and what the agent used to guarantee on the reader's behalf — since
+a fan-out the agent cannot see is not a failure the agent can rule on. Every
+other rule a listener could observe under the old `Emitter` still holds,
+subscription order and a listener subscribed mid-round hearing only what
+follows, because the pump is the same `Stream.runForEach` it always was.
+`#fireRunEvent` publishes with the pubsub's
 own `unsafeOffer` rather than `Effect.runSync(PubSub.publish(...))`, which is
 the same statement without a fiber around it: a publish into a shut-down
 pubsub answers false there as it did here. And the pubsub itself is made
@@ -1492,9 +1516,9 @@ behind rather than anything the queue runs.
 what runs them is the composer that always asked for them:
 `compose-observation.ts` yields the look from the observation loop's own pass,
 through an `afterRun` hook that is an effect rather than a `void` callback, and
-`compose-live.ts` forks the release onto the runtime it already holds because
-`LiveSessionService` hands its held briefings back through a synchronous
-callback. Each stays fire-and-forget where it always was: the host's wiring
+`compose-live.ts` hands the release straight to
+`LiveSessionService`'s `releaseHeldBriefings` option, which has answered an
+effect the service yields on its own fiber since P12-18h2. Each stays fire-and-forget where it always was: the host's wiring
 forks one fiber per conversation with `Effect.forkDaemon`, exactly as it
 detached one promise per conversation before, so a provider slow to answer one
 session's transcript holds neither the next pass nor the other sessions'
@@ -1706,10 +1730,7 @@ design decision stated as such:
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
 | `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | pending — once `googleCalendarSignIn`'s `exchange` callback answers an effect its one caller yields instead of awaits |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
-| `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
-| `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
 | `detachOn`, the brain's synchronous-start door onto the same runtime | P12-16j | never — P12-16m named it permanent as the detach door: only a run begins the effect on the calling stack, and `AgentSeam#detach`'s queue registration, `BrainHost`'s retirement revocation, and the brain wiring's close and open (P12-16n) must each stand in the step that asked for them |
-| `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub`, an `Effect<() => void>` since P12-16g rather than a run | P5-06 | once a subscriber reads the stream directly |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |

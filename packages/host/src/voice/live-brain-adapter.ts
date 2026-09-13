@@ -17,7 +17,7 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "@sidecar/voice/live-session";
-import { Effect } from "effect";
+import { Effect, Scope, Stream } from "effect";
 
 /** What the adapter says when no brain stands to take the ask at all. */
 const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];
@@ -27,7 +27,7 @@ const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];
  * the whole class: the ask and its run seams always, and the read prefetch's
  * three where the agent has one.
  */
-export type LiveBrainAgent = Pick<BrainAgent, "onRunEvent" | "submitAsk"> &
+export type LiveBrainAgent = Pick<BrainAgent, "runEvents" | "submitAsk"> &
   Partial<Pick<BrainAgent, "anticipateAsk" | "dropAnticipation" | "onAnticipationFacts">>;
 
 export interface BrainAgentLiveBrainOptions {
@@ -81,16 +81,24 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  * following the agent at submission is following every run it will report.
  * Following the same agent twice is one subscription.
  *
- * Built as an effect, and answering effects: `LiveBrain`'s own faces are
- * effects since P12-18h, so everything the agent is asked for — its
- * `submitAsk`, its `onRunEvent` subscription, its `anticipateAsk` — is
- * yielded inside the effect the service runs, and the adapter runs nothing
- * itself. An ask follows the agent before it submits to it rather than racing
- * a subscription started beside it, and the whole of an ask is one fiber of
- * the runtime the composition handed the service.
+ * Built as a scoped effect, and answering effects: `LiveBrain`'s own faces
+ * are effects since P12-18h, so everything the agent is asked for — its
+ * `submitAsk`, its `anticipateAsk` — is yielded inside the effect the service
+ * runs, and the adapter runs nothing itself. Since P12-20h the run events are
+ * read as the `Stream` the agent publishes rather than through a subscription
+ * face of its own: following an agent takes its subscription on the fiber
+ * that asked — which is why an ask follows before it submits, rather than
+ * racing a subscription started beside it — and then pumps it into this
+ * adapter's listeners on a fiber of the adapter's own scope. Closing that
+ * scope ends every pump, and a listener that throws is logged rather than
+ * left to end the pump it threw in, which is the guarantee the agent used to
+ * hold.
  */
-export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): Effect.Effect<LiveBrain> {
-  return Effect.sync(() => {
+export function brainAgentLiveBrain(
+  options: BrainAgentLiveBrainOptions,
+): Effect.Effect<LiveBrain, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const scope = yield* Effect.scope;
     const listeners = new Set<(event: LiveBrainRunEvent) => void>();
     const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
     const subscribed = new WeakSet<LiveBrainAgent>();
@@ -99,11 +107,21 @@ export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): Effect
       Effect.gen(function* () {
         if (subscribed.has(agent)) return;
         subscribed.add(agent);
-        yield* agent.onRunEvent((event) => {
-          const translated = liveRunEventOf(event);
-          if (!translated) return;
-          for (const listener of [...listeners]) listener(translated);
-        });
+        const events = yield* Scope.extend(agent.runEvents, scope);
+        yield* Effect.forkIn(
+          Stream.runForEach(events, (event) =>
+            Effect.catchAllDefect(
+              Effect.sync(() => {
+                const translated = liveRunEventOf(event);
+                if (!translated) return;
+                for (const listener of [...listeners]) listener(translated);
+              }),
+              (defect) =>
+                Effect.logError("a listener failed while a run event was delivered", defect),
+            ),
+          ),
+          scope,
+        );
         // The brain keys an anticipation by the string the service handed it,
         // which is the service's own row number; it goes back as the number it
         // came from, and a key that is not one names no row and is dropped.
