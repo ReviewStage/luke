@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "@effect/vitest";
+import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
 import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option, TestClock } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE, SERVICE_READ_BEFORE_MERGE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
@@ -75,8 +76,10 @@ const kernelLayerOver = (input: TestSeams) =>
     ),
   );
 
-// SAFETY: these tests hold the late service and hand it back; none of them calls a method on it.
-const stubService = (): GatewayService => ({}) as GatewayService;
+// SAFETY: the event door is the only method the kernel reads of the service,
+// and these tests hand it back or call that one door and nothing else.
+const stubService = (emit: GatewayService["emit"] = () => undefined): GatewayService =>
+  ({ emit }) as GatewayService;
 
 describe("the seam tags", () => {
   it.effect("each resolve from the kernel's own layer", () =>
@@ -224,20 +227,26 @@ describe("the late service", () => {
     }),
   );
 
-  it.effect("is the one the kernel's sync faces read and write", () =>
+  it.effect("is the one the kernel's event door reads", () =>
     Effect.gen(function* () {
       const held = yield* Effect.provide(
         Effect.all({ kernel: HostKernelTag, late: HostService }),
         kernelLayerOver(seams()),
       );
-      const service = stubService();
+      const emitted: GatewayEventKind[] = [];
+      const service = stubService((kind) => {
+        emitted.push(kind);
+      });
 
-      assert.throws(() => held.kernel.service(), { message: SERVICE_READ_BEFORE_MERGE });
-      held.kernel.setService(service);
-      assert.equal(held.kernel.service(), service);
+      assert.throws(() => held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {}), {
+        message: SERVICE_READ_BEFORE_MERGE,
+      });
+      assert.equal(yield* held.late.set(service), true);
+      held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
       assert.equal(yield* held.late.value, service);
       assert.equal(yield* held.late.set(stubService()), false);
-      assert.equal(held.kernel.service(), service);
+      held.kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, {});
+      assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
     }),
   );
 });

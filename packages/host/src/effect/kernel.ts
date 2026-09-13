@@ -7,8 +7,9 @@
  * composed it suspends until it stands, which is what a late reference was
  * always for. The write is a set-once — a second write answers `false` and the
  * first service stands — so which service a concern holds cannot depend on the
- * order the merge folded it in. The sync faces beside it are the shim the
- * unconverted composers read through, and they answer from the same `Deferred`.
+ * order the merge folded it in. The one sync read beside it answers the same
+ * `Deferred`'s value, for the event door and for the three composers whose own
+ * links are still read from a synchronous statement.
  */
 import { Config, Context, Deferred, Effect, Layer, Option } from "effect";
 import {
@@ -38,29 +39,26 @@ export interface LateService<A> {
   /** What stands now, for a reader that must not suspend. */
   readonly peek: Effect.Effect<Option.Option<A>>;
   /**
-   * The sync write a caller still built as a plain object holds: a concern
-   * that answers `link()` synchronously sets its late reference through this
-   * face rather than through the effect.
+   * The sync read, for a caller that publishes from a synchronous statement:
+   * the host's event door, and the account, settings, and calendars composers
+   * until each reads its own links by awaiting them.
    */
-  readonly unsafeSet: (value: A) => boolean;
-  /** The sync read beside it, for the same plain-object caller. */
   readonly unsafePeek: () => Option.Option<A>;
 }
 
 export const lateService = <A>(): Effect.Effect<LateService<A>> =>
   Effect.map(Deferred.make<A>(), (deferred) => {
     let held: Option.Option<A> = Option.none();
-    const unsafeSet = (value: A): boolean => {
-      if (Option.isSome(held)) return false;
-      held = Option.some(value);
-      Deferred.unsafeDone(deferred, Effect.succeed(value));
-      return true;
-    };
     return {
       value: Deferred.await(deferred),
-      set: (value) => Effect.sync(() => unsafeSet(value)),
+      set: (value) =>
+        Effect.sync(() => {
+          if (Option.isSome(held)) return false;
+          held = Option.some(value);
+          Deferred.unsafeDone(deferred, Effect.succeed(value));
+          return true;
+        }),
       peek: Effect.sync(() => held),
-      unsafeSet,
       unsafePeek: () => held,
     };
   });
@@ -119,15 +117,10 @@ const kernelLayer = Layer.effect(
       now: () => clock.unsafeCurrentTimeMillis(),
       createId: idSource.create,
       report: reporter.report,
-      service: {
-        read: () => {
-          const standing = service.unsafePeek();
-          if (Option.isNone(standing)) throw new Error(SERVICE_READ_BEFORE_MERGE);
-          return standing.value;
-        },
-        set: (next) => {
-          service.unsafeSet(next);
-        },
+      service: () => {
+        const standing = service.unsafePeek();
+        if (Option.isNone(standing)) throw new Error(SERVICE_READ_BEFORE_MERGE);
+        return standing.value;
       },
     });
   }),

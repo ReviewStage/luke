@@ -223,9 +223,11 @@ export const hostAssemblyLayer: Layer.Layer<
     });
 
     // Every edge a composer could not take as a constructor argument, in one
-    // list: each is a cycle the concerns genuinely have, and reading one before
-    // this has run throws by name rather than answering nothing.
-    settings.link({
+    // list: each is a cycle the concerns genuinely have. The write is the
+    // composer's own set-once, so a reader that awaits its links suspends
+    // until this has run rather than reading nothing; the three composers
+    // that still read theirs from a synchronous statement throw by name.
+    yield* settings.link({
       refreshAccount: account.session.refreshOnce,
       cloudKeyHeld: () => calendars.settleKeyGate(),
       applyVoiceCredential: account.applyVoiceCredential,
@@ -234,7 +236,7 @@ export const hostAssemblyLayer: Layer.Layer<
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
       workspaceProjectOffered: observation.workspaceProjectOffered,
     });
-    account.link({
+    yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
       onFirstSignIn: calendars.recordFirstSignIn,
@@ -245,14 +247,14 @@ export const hostAssemblyLayer: Layer.Layer<
       releaseDevice: (stored) => devices.release(stored),
       deviceId: () => devices.deviceId(),
     });
-    observation.link({ rosterLook: () => brain.wiring.rosterLook() });
-    calendars.link({
+    yield* observation.link({ rosterLook: () => brain.wiring.rosterLook() });
+    yield* calendars.link({
       reconcileSpeech: () => live.service.reconcile(),
       withdrawBeat: (kind) => live.service.withdrawBeat(kind),
       dropBriefings: () => live.service.dropBriefings(),
       requestOnboardingBeat: live.requestOnboardingBeat,
     });
-    live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
+    yield* live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
 
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,

@@ -73,7 +73,7 @@ export interface AccountComposer extends Composer {
   readonly token: AccountToken;
   applyVoiceCredential: Effect.Effect<void>;
   sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }>;
-  link: (links: AccountLinks) => void;
+  link: (links: AccountLinks) => Effect.Effect<void>;
 }
 
 export interface AccountDependencies {
@@ -356,9 +356,7 @@ export const composeAccount = (
       token,
       applyVoiceCredential,
       sessionReplayState,
-      link: (next) => {
-        late.unsafeSet(next);
-      },
+      link: (next) => Effect.asVoid(late.set(next)),
       // The session manager holds no timer this host started beyond its own
       // subscription: what a sign-in began is stopped by the capabilities it
       // started, and the subscription is forked into this same scope, so

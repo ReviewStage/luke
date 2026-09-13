@@ -34,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Either, Option, type Scope } from "effect";
+import { Effect, Either, type Scope } from "effect";
 import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
 import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
@@ -103,7 +103,7 @@ export interface ObservationComposer extends Composer {
   heldWorkspaceDefaults: () => WorkspaceCreationDefaults;
   startObservation: () => void;
   stopObservation: () => void;
-  link: (links: ObservationLinks) => void;
+  link: (links: ObservationLinks) => Effect.Effect<void>;
 }
 
 export interface ObservationDependencies {
@@ -125,13 +125,6 @@ export const composeObservation = (
     const kernel = yield* HostKernelTag;
     const { runMode, report, now } = kernel;
     const late = yield* lateService<ObservationLinks>();
-    const links = (): ObservationLinks => {
-      const standing = late.unsafePeek();
-      if (Option.isNone(standing)) {
-        throw new Error("the observation composer's links are read before link() has run");
-      }
-      return standing.value;
-    };
 
     const sessionRegistry = new SessionRoster();
     const rosterClient = new HostedRosterClient({
@@ -367,7 +360,7 @@ export const composeObservation = (
           }),
           FetchHttpClient.layer,
         ),
-      afterRun: () => links().rosterLook(),
+      afterRun: () => Effect.flatMap(late.value, (links) => links.rosterLook()),
     });
 
     /**
@@ -543,9 +536,7 @@ export const composeObservation = (
       heldWorkspaceDefaults: () => brainWorkspaceDefaults,
       startObservation,
       stopObservation,
-      link: (next) => {
-        late.unsafeSet(next);
-      },
+      link: (next) => Effect.asVoid(late.set(next)),
       lifetime: Effect.addFinalizer(() =>
         Effect.sync(() => {
           unsubscribeSessions?.();
