@@ -39,7 +39,6 @@
     "packages/brain/src/store/testing.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/brain-trace.ts",
-    "packages/host/src/compose-calendars.ts",
     "packages/host/src/host-kernel.ts",
     "packages/wire/src/testing/effect.ts"
   ],

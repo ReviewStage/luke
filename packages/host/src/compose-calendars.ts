@@ -486,10 +486,12 @@ export const composeCalendars = (
      * the fibers it belongs beside have been interrupted.
      *
      * Every body forked here — these two and the meeting-boundary wake — is
-     * marked interruptible, because a fork inherits the runtime flags of the
-     * fiber that made it and an arming reached from inside an uninterruptible
-     * region would leave the gate's close waiting forever on fibers it could
-     * not end.
+     * marked interruptible. v3 needed that: a fork inherited the runtime flags
+     * of the fiber that made it, and an arming reached from inside an
+     * uninterruptible region would have left the gate's close waiting forever
+     * on fibers it could not end. v4 forks interruptible by default and
+     * inherits only on `uninterruptible: "inherit"`, so the marks are
+     * redundant rather than load-bearing.
      */
     const observationArmed = Effect.gen(function* () {
       const scope = yield* Effect.scope;

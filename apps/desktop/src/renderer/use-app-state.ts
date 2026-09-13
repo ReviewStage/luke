@@ -13,8 +13,12 @@ export interface AppStateSource {
   read: () => Promise<AppStateSnapshot>;
 }
 
-/** The bridge refused the one read, so this window has no document to draw. */
-export class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
+/**
+ * The bridge refused the one read, so this window has no document to draw.
+ * Local to this module: what a reader outside it holds is `AppStateUnavailable`,
+ * the union below, and the `_tag` is what tells the two arms apart.
+ */
+class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
   readonly cause: unknown;
 }> {}
 

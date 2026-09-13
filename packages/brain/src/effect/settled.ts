@@ -101,11 +101,14 @@ export const claimedUnlessAborted = <A, E, R>(
           }),
         ),
       );
-      // Interruptible whatever the asking fiber's own status, because a fork
-      // inherits the runtime flags of the fiber that made it: under the
-      // uninterruptible region this function is written for, the listener
-      // would be a fiber the scope's close could not interrupt, and the close
-      // would wait on it forever for a signal that never fires.
+      // Interruptible whatever the asking fiber's own status. v3 required
+      // this: a fork inherited the runtime flags of the fiber that made it, so
+      // under the uninterruptible region this function is written for the
+      // listener would have been a fiber the scope's close could not
+      // interrupt, and the close would have waited on it forever for a signal
+      // that never fires. v4 forks interruptible by default and inherits only
+      // on `uninterruptible: "inherit"`, so the wrapper is now redundant
+      // rather than load-bearing.
       yield* Effect.forkScoped(
         Effect.interruptible(
           Effect.andThen(whenAborted(signal), Deferred.succeed(decision, Option.none())),

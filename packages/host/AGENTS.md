@@ -33,12 +33,17 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
   sides concurrently and closes them in parallel; a start that fails must release
   what began, in reverse, at once.
 - **A cadence forks its scope from the one its composer was built in**
-  (`cadenceGate`), so its fibers run on the host's own runtime and the host's
-  close ends them whatever became of the stop. **Every body an arming forks is
-  marked `Effect.interruptible`**, because a fork inherits the interrupt status
-  of the fiber that made it: an arming reached from inside an uninterruptible
-  region — a composer's start, an acquire, a finalizer — would otherwise leave
-  the disarm waiting forever on fibers it cannot end.
+  (`cadenceGate`), so its fibers run on the host's own services and the host's
+  close ends them whatever became of the stop. Several bodies an arming forks
+  are still marked `Effect.interruptible`, which v3 required because a fork
+  inherited the interrupt status of the fiber that made it: an arming reached
+  from inside an uninterruptible region — a composer's start, an acquire, a
+  finalizer — would otherwise have left the disarm waiting forever on fibers it
+  could not end. **v4 does not inherit.** `forkUnsafe` defaults
+  `uninterruptible` to `false`, and inheritance is the opt-in
+  `uninterruptible: "inherit"`, so those wrappers are now redundant rather than
+  load-bearing. They are harmless; dropping one is a behaviour change to reason
+  about, not a tidy-up.
 
 A method two composers claim fails the build with `DuplicateGatewayMethod`, so
 that one does not need stating here. `client.bootstrap` is the one method no

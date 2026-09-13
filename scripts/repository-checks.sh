@@ -634,7 +634,14 @@ node --input-type=module -e '
     agents.indexOf("## Effect idioms"),
     agents.indexOf("## TypeScript"),
   );
-  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(|\bdetachOn\s*\(|\brunWeb\s*\(/;
+  // The same runners `no-run-promise-outside-edges` bans, spelled as a regex
+  // because this check reads text rather than an AST. Keep the two in step:
+  // v4 removed `Runtime<R>`, so what a caller used to carry as a runtime it
+  // hands to a `run*With` instead, and the `Runtime` namespace is down to
+  // `makeRunMain`. Longest alternative first, so `runPromiseExitWith` is not
+  // read as a `runPromise` that failed to be followed by its parenthesis.
+  const stillRuns =
+    /\b(?:Effect|ManagedRuntime)\.run(?:PromiseExit|Promise|SyncExit|Sync|Fork|Callback)(?:With)?\s*\(|\bManagedRuntime\.make\s*\(|\b(?:Runtime\.makeRunMain|NodeRuntime\.runMain)\s*\(|\b(?:runtimeExit|detachOn|runWeb)\s*\(/;
   const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
   const groups = [
     { name: "runtimeEdges", named: true, pattern: null },
