@@ -32,6 +32,7 @@ import {
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { makeRateBrake } from "./hosted/rate-brake.js";
+import type { VaultKeyEffect } from "./hosted/vault-key-store.js";
 
 /**
  * The device record's three writes and the provider key vault's three, on
@@ -66,9 +67,9 @@ const deviceBrake = makeRateBrake({
 export interface DevicesVaultSeams extends DeviceSeams {
   /** Reads the signed-in account behind the request's bearer, or nothing. */
   resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
-  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
-  listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
-  deleteKey: (userId: string, providerId: string) => Promise<boolean>;
+  storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
+  listKeys: (userId: string) => VaultKeyEffect<{ providerId: string; updatedAt: Date }[]>;
+  deleteKey: (userId: string, providerId: string) => VaultKeyEffect<boolean>;
   now?: () => number;
   mintId?: () => string;
 }
@@ -187,14 +188,14 @@ function vaultKeyEffect(
     }
 
     if (request.method === "DELETE") {
-      const deleted = yield* Effect.promise(() => seams.deleteKey(userId, providerId));
+      const deleted = yield* Effect.orDie(seams.deleteKey(userId, providerId));
       return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted });
     }
 
     const key = parseProviderKey(payload.key);
     if (!key) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
     const ciphertext = encryptProviderKey(key, secret);
-    yield* Effect.promise(() => seams.storeKey(userId, providerId, ciphertext));
+    yield* Effect.orDie(seams.storeKey(userId, providerId, ciphertext));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
   }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
@@ -208,7 +209,7 @@ function vaultKeysEffect(
     if (request.method !== "GET") return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     yield* vaultSecret();
     const userId = yield* bearerUserId(seams);
-    const rows = yield* Effect.promise(() => seams.listKeys(userId));
+    const rows = yield* Effect.orDie(seams.listKeys(userId));
     // The table outlives the provider set: a key stored for a provider this
     // build no longer accepts still has a row, and both clients' readers drop
     // the whole answer on an id they do not know. The list answers only for

@@ -46,7 +46,7 @@ function options(overrides: Partial<BrainCall> & { request: Request }): BrainCal
   return {
     apiKey: "sk-hosted-secret",
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     ...overrides,
   };
 }
@@ -67,10 +67,11 @@ test("an embed request posts the texts under the build-fixed model, spends the a
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a", "b"] }),
       httpClient: layer,
-      spend: async () => {
-        spent += 1;
-        return OPEN_SPEND;
-      },
+      spend: () =>
+        Effect.sync(() => {
+          spent += 1;
+          return OPEN_SPEND;
+        }),
     }),
   );
   assert.equal(response.status, 200);
@@ -106,7 +107,7 @@ test("a malformed embed request, a spent allowance, and a malformed upstream ans
   const exhausted = await brainAnswer(
     options({
       request: request({ contract: HOSTED_BRAIN_CONTRACT_VERSION, texts: ["a"] }),
-      spend: async () => ({ allowed: false, quota: OPEN_SPEND.quota }),
+      spend: () => Effect.succeed({ allowed: false, quota: OPEN_SPEND.quota }),
     }),
   );
   assert.equal(exhausted.status, 429);

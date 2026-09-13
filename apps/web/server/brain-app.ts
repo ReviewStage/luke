@@ -5,6 +5,7 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import { Effect, Redacted } from "effect";
 import {
   BRAIN_DEFAULTS,
@@ -56,7 +57,7 @@ import {
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { postOpenAiEffect } from "./hosted/openai.js";
-import type { HostedSpend } from "./hosted/quota.js";
+import type { HostedSpend, QuotaEffect } from "./hosted/quota.js";
 
 /**
  * The hosted brain contract as the one route group the brain functions serve.
@@ -92,7 +93,7 @@ export const HOSTED_BRAIN_DEFAULTS = {
 /** What the group is handed that the deployment alone can answer for. */
 export interface BrainSeams {
   resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
-  spend: (userId: string) => Promise<HostedSpend>;
+  spend: (userId: string) => QuotaEffect<HostedSpend>;
   timeoutMs?: number | undefined;
 }
 
@@ -232,14 +233,17 @@ function brainOperation<Admitted>(
 ): Effect.Effect<
   Answer,
   Answer,
-  HttpServerRequest.HttpServerRequest | HostedEnvironment | HttpClient.HttpClient
+  | HttpServerRequest.HttpServerRequest
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
     const { userId, apiKey, model, prefetchModel } = yield* account(seams, HTTP_METHOD.POST);
     const payload = yield* refusing(readJsonBodyEffect(maximumHostedBrainRequestBytes));
     const read = operation.read(payload);
     if (!read.ok) return yield* refuse(REFUSAL_ERROR[read.refusal]);
-    const spend = yield* Effect.promise(() => seams.spend(userId));
+    const spend = yield* Effect.orDie(seams.spend(userId));
     if (!spend.allowed) {
       return yield* Effect.fail(
         hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
@@ -409,7 +413,7 @@ function embed(seams: BrainSeams) {
 /** The group, which is the contract's five paths and the refusal anywhere else. */
 export function brainApp(
   seams: BrainSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, Effect.merge(capabilities(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, Effect.merge(respond(seams))),

@@ -1,4 +1,5 @@
 import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Redacted } from "effect";
@@ -7,6 +8,7 @@ import {
   type HostedAccountPreferences,
   phoneVoiceSpeed,
 } from "./hosted/account-preferences.js";
+import type { AccountSeamEffect } from "./hosted/account-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -43,9 +45,12 @@ const HTTP_METHOD = {
 export interface AccountAppSeams {
   resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   /** Deletes the user row; every dependent row cascades with it. */
-  deleteUser: (userId: string) => Promise<void>;
-  readPreferences: (userId: string) => Promise<AccountPreferencesRow | undefined>;
-  writePreferences: (userId: string, preferences: HostedAccountPreferences) => Promise<Date>;
+  deleteUser: (userId: string) => AccountSeamEffect<void>;
+  readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
+  writePreferences: (
+    userId: string,
+    preferences: HostedAccountPreferences,
+  ) => AccountSeamEffect<Date>;
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -98,12 +103,12 @@ function forgetAnalytics(
  */
 function accountDeleteEndpoint(
   seams: AccountAppSeams,
-): HttpApp.Default<HostedRefusal, HostedEnvironment | HttpClient.HttpClient> {
+): HttpApp.Default<HostedRefusal, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
   return Effect.gen(function* () {
     yield* hostedMethod(HTTP_METHOD.POST);
     const userId = yield* resolvedUserId(seams);
     yield* forgetAnalytics(userId);
-    yield* Effect.promise(() => seams.deleteUser(userId));
+    yield* Effect.orDie(seams.deleteUser(userId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
   });
 }
@@ -114,11 +119,11 @@ function preferencesReadEndpoint(
 ): Effect.Effect<
   ReturnType<typeof hostedJsonResponse>,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
     const userId = yield* resolvedUserId(seams);
-    const row = yield* Effect.promise(() => seams.readPreferences(userId));
+    const row = yield* Effect.orDie(seams.readPreferences(userId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       preferences: row?.preferences ?? {},
       ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
@@ -132,7 +137,7 @@ function preferencesWriteEndpoint(
 ): Effect.Effect<
   ReturnType<typeof hostedJsonResponse>,
   HostedRefusal,
-  HttpServerRequest.HttpServerRequest
+  HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
     const userId = yield* resolvedUserId(seams);
@@ -154,7 +159,7 @@ function preferencesWriteEndpoint(
         : undefined),
     };
 
-    const updatedAt = yield* Effect.promise(() => seams.writePreferences(userId, preferences));
+    const updatedAt = yield* Effect.orDie(seams.writePreferences(userId, preferences));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
       preferences,
       updatedAt: updatedAt.getTime(),
@@ -163,7 +168,9 @@ function preferencesWriteEndpoint(
 }
 
 /** GET or PUT on the same path; any other method is the same refusal the two branches would answer separately. */
-function accountPreferencesEndpoint(seams: AccountAppSeams): HttpApp.Default<HostedRefusal> {
+function accountPreferencesEndpoint(
+  seams: AccountAppSeams,
+): HttpApp.Default<HostedRefusal, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* preferencesReadEndpoint(seams);
@@ -179,7 +186,7 @@ function accountPreferencesEndpoint(seams: AccountAppSeams): HttpApp.Default<Hos
  */
 export function accountApp(
   seams: AccountAppSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACCOUNT_PATH.DELETE, accountDeleteEndpoint(seams)),
     HttpRouter.all(ACCOUNT_PATH.PREFERENCES, accountPreferencesEndpoint(seams)),

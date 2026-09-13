@@ -1,4 +1,5 @@
 import { type HttpApp, type HttpClient, HttpRouter } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
 import { HOSTED_SERVICE_PATH } from "./core.js";
 import { HostedEnvironment } from "./hosted/environment.js";
@@ -22,7 +23,7 @@ import {
   mintPreferences,
   refusingMint,
 } from "./hosted/mint-effect.js";
-import type { IntroductionSpend } from "./hosted/quota.js";
+import type { IntroductionSpend, QuotaEffect } from "./hosted/quota.js";
 
 /**
  * The accountless introduction's mint as its own route group. It stands apart
@@ -33,7 +34,7 @@ import type { IntroductionSpend } from "./hosted/quota.js";
  */
 
 export interface IntroductionMintSeams extends MintSeams {
-  spendIntroduction: () => Promise<IntroductionSpend>;
+  spendIntroduction: () => QuotaEffect<IntroductionSpend>;
 }
 
 /**
@@ -49,7 +50,7 @@ function introductionMint(seams: IntroductionMintSeams) {
     const apiKey = yield* hostedKey();
     const environment = yield* HostedEnvironment;
     const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
-    const spend = yield* Effect.promise(() => seams.spendIntroduction());
+    const spend = yield* Effect.orDie(seams.spendIntroduction());
     if (!spend.allowed) {
       return yield* Effect.fail(
         hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
@@ -67,7 +68,7 @@ function introductionMint(seams: IntroductionMintSeams) {
 /** The group, which is the introduction's own mint and the refusal anywhere else. */
 export function introductionMintApp(
   seams: IntroductionMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, Effect.merge(introductionMint(seams))),
     Effect.catchTag("RouteNotFound", () =>

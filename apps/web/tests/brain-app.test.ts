@@ -135,7 +135,7 @@ function answering(call: Partial<BrainCall> & { request: Request }): () => Promi
     brainAnswer({
       apiKey: "sk-hosted-secret",
       resolveUserId: () => Effect.succeed("user-1"),
-      spend: async () => OPEN_SPEND,
+      spend: () => Effect.succeed(OPEN_SPEND),
       ...call,
     });
 }
@@ -211,7 +211,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
     "respond-quota-exhausted",
     answering({
       request: posted(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      spend: async () => ({ allowed: false, quota: OPEN_SPEND.quota }),
+      spend: () => Effect.succeed({ allowed: false, quota: OPEN_SPEND.quota }),
     }),
   ],
   [

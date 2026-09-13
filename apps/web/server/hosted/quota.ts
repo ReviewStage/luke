@@ -33,6 +33,9 @@ export function utcDayEnd(dayKey: string): number {
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
 type QuotaFailure = SqlError | ParseResult.ParseError;
 
+/** What a meter seam answers: an effect over the ambient client, composed into the request that spent it. */
+export type QuotaEffect<A> = Effect.Effect<A, QuotaFailure, SqlClient.SqlClient>;
+
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, build);

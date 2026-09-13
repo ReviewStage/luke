@@ -96,7 +96,7 @@ function options(overrides: Partial<BrainCall> & { request: Request }): BrainCal
   return {
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     ...overrides,
   };
 }
@@ -170,10 +170,11 @@ test("a respond request runs the prepared prompt over the schemas its names sele
         respondBody({ options: { maximumOutputTokens: 900, reasoningEffort: "low" } }),
       ),
       httpClient: layer,
-      spend: async () => {
-        spent += 1;
-        return OPEN_SPEND;
-      },
+      spend: () =>
+        Effect.sync(() => {
+          spent += 1;
+          return OPEN_SPEND;
+        }),
     }),
   );
   assert.equal(response.status, 200);
@@ -229,10 +230,11 @@ test("a prefetch plan runs the one registered planning tool, forced, on the pref
         prefetchBody(HOSTED_BRAIN_PREFETCH_KIND.PLAN),
       ),
       httpClient: layer,
-      spend: async () => {
-        spent += 1;
-        return OPEN_SPEND;
-      },
+      spend: () =>
+        Effect.sync(() => {
+          spent += 1;
+          return OPEN_SPEND;
+        }),
     }),
   );
   assert.equal(planned.status, 200);
@@ -305,10 +307,11 @@ test("each refusal answers its own error before anything is spent: prompt envelo
     const response = await brainAnswer(
       options({
         request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, body),
-        spend: async () => {
-          spent += 1;
-          return OPEN_SPEND;
-        },
+        spend: () =>
+          Effect.sync(() => {
+            spent += 1;
+            return OPEN_SPEND;
+          }),
         httpClient: fakeHttpClientLayer(async () => {
           throw new Error("nothing may reach upstream");
         }),
@@ -367,7 +370,7 @@ test("a spent allowance answers 429 with the quota, and an upstream fault or an 
   const exhausted = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, respondBody()),
-      spend: async () => ({ allowed: false, quota: OPEN_SPEND.quota }),
+      spend: () => Effect.succeed({ allowed: false, quota: OPEN_SPEND.quota }),
     }),
   );
   assert.equal(exhausted.status, 429);

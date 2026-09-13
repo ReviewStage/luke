@@ -56,7 +56,7 @@ function capabilitiesRoute(userId: string | undefined) {
   return routeFromHttpApp(
     brainApp({
       resolveUserId: () => Effect.succeed(userId),
-      spend: () => Promise.reject(new Error("capabilities spend nothing")),
+      spend: () => Effect.die(new Error("capabilities spend nothing")),
     }),
   );
 }
@@ -104,7 +104,7 @@ test("the route reads a bearer the request carries", async () => {
         seen.push(authorization);
         return Effect.succeed(USER_ID);
       },
-      spend: () => Promise.reject(new Error("capabilities spend nothing")),
+      spend: () => Effect.die(new Error("capabilities spend nothing")),
     }),
   );
   const response = await route.fetch(capabilitiesRequest("GET"));

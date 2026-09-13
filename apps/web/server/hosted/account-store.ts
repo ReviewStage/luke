@@ -15,6 +15,9 @@ import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-
 
 type AccountSeamFailure = SqlError | ParseResult.ParseError;
 
+/** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
+export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient>;
+
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
   Effect.flatMap(SqlClient.SqlClient, build);

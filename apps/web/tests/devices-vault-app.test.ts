@@ -95,14 +95,17 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
         recorded.forgets.push({ userId, deviceId });
         return true;
       }),
-    storeKey: async (userId, providerId, ciphertext) => {
-      recorded.stores.push({ userId, providerId, ciphertext });
-    },
-    listKeys: async () => [{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE }],
-    deleteKey: async (userId, providerId) => {
-      recorded.deletes.push({ userId, providerId });
-      return true;
-    },
+    storeKey: (userId, providerId, ciphertext) =>
+      Effect.sync(() => {
+        recorded.stores.push({ userId, providerId, ciphertext });
+      }),
+    listKeys: () =>
+      Effect.succeed([{ providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE }]),
+    deleteKey: (userId, providerId) =>
+      Effect.sync(() => {
+        recorded.deletes.push({ userId, providerId });
+        return true;
+      }),
     ...overrides,
   };
   return { seams, recorded };
@@ -466,7 +469,7 @@ test("the delete gate order is method, secret, token, body", async () => {
 });
 
 test("deleting an existing key answers { deleted: true }", async () => {
-  const { seams } = seamsFor({ deleteKey: async () => true });
+  const { seams } = seamsFor({ deleteKey: () => Effect.succeed(true) });
   const response = await answer(
     seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
@@ -476,7 +479,7 @@ test("deleting an existing key answers { deleted: true }", async () => {
 });
 
 test("deleting a key that was not stored answers { deleted: false }", async () => {
-  const { seams } = seamsFor({ deleteKey: async () => false });
+  const { seams } = seamsFor({ deleteKey: () => Effect.succeed(false) });
   const response = await answer(
     seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
@@ -523,11 +526,12 @@ test("the list answer never contains ciphertext or plaintext keys", async () => 
 
 test("the list omits rows stored for a provider the vault no longer accepts", async () => {
   const { seams } = seamsFor({
-    listKeys: async () => [
-      { providerId: "cursor", updatedAt: NOW_DATE },
-      { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE },
-      { providerId: "devin", updatedAt: NOW_DATE },
-    ],
+    listKeys: () =>
+      Effect.succeed([
+        { providerId: "cursor", updatedAt: NOW_DATE },
+        { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, updatedAt: NOW_DATE },
+        { providerId: "devin", updatedAt: NOW_DATE },
+      ]),
   });
   const response = await answer(seams, vaultKeysRequest());
 
@@ -542,10 +546,11 @@ test("the list calls the seam with the resolved user id", async () => {
   let calledWithUserId: string | undefined;
   const { seams } = seamsFor({
     resolveUserId: () => Effect.succeed("user-xyz"),
-    listKeys: async (userId) => {
-      calledWithUserId = userId;
-      return [];
-    },
+    listKeys: (userId) =>
+      Effect.sync(() => {
+        calledWithUserId = userId;
+        return [];
+      }),
   });
 
   await answer(seams, vaultKeysRequest());
