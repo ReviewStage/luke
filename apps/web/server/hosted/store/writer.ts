@@ -890,8 +890,8 @@ const rekeySpokenLine = SqlSchema.findOne({
   Request: Schema.Struct({
     id: Schema.String,
     delegationId: Schema.String,
-    parts: StoredPartsColumnSchema,
-    metadata: MessageMetadataColumnSchema,
+    parts: Schema.parseJson(StoredPartsColumnSchema),
+    metadata: Schema.parseJson(MessageMetadataColumnSchema),
   }),
   Result: RowIdSchema,
   execute: (row) =>

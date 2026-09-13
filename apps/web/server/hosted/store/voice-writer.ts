@@ -111,7 +111,7 @@ const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN
 const REPEATED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
 const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION };
 
-export const SPOKEN_REPLY = {
+const SPOKEN_REPLY = {
   /**
    * How long after the developer's line Luke's first words may begin and still
    * be his answer to it, on the session's clock. The voice model answers at
