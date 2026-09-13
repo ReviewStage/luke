@@ -78,8 +78,6 @@ export interface HostedLiveExchangeOptions {
   readonly conversationEntries: LiveSessionServiceOptions<BriefingDelivery>["conversationEntries"];
   readonly emit: LiveSessionServiceOptions<BriefingDelivery>["emit"];
   readonly now: () => number;
-  readonly schedule: LiveSessionServiceOptions<BriefingDelivery>["schedule"];
-  readonly cancel: LiveSessionServiceOptions<BriefingDelivery>["cancel"];
   readonly createId: () => string;
   readonly report: (message: string) => void;
   readonly trace?: LiveSessionServiceOptions<BriefingDelivery>["trace"];
@@ -267,9 +265,6 @@ export function hostedLiveExchange(
       quietNow: () => Effect.succeed(false),
       releaseHeldBriefings: () => Effect.void,
       emit: options.emit,
-      now: options.now,
-      schedule: options.schedule,
-      cancel: options.cancel,
       createId: options.createId,
       report,
       ...(options.trace ? { trace: options.trace } : undefined),

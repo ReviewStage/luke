@@ -185,11 +185,13 @@ own. P12-03b deleted the two non-brain copies
 `packages/host/src/effect/timer-seam.ts`) outright rather than keeping them
 as named, shared functions: `children.effect.ts` and `queue.effect.ts` each
 now build the bridge inline, over the runtime their `Effect.acquireRelease`
-was handed, never one either builds, and so does `compose-live.ts` for
-`LiveSessionService`'s idle, settle, and finalize timers, over the runtime
-the live composition runs on; none of the three names or imports the others'
+was handed, never one either builds; neither names or imports the other's
 copy, since a caller that still needs the bridge keeps its own beside the
 code that uses it rather than sharing a module three packages once did.
+`compose-live.ts` built a third such copy for `LiveSessionService`'s idle,
+settle, and finalize timers until P12-18h3, which took the seam itself away:
+the service keeps time on the `Clock` of the scope it is built in, so there is
+nothing left there for a bridge to answer.
 `packages/brain/src/effect/harness.ts`'s own copy stays for now, answering
 the brain's test harness alone, so its `BrainAgent` reads the ambient
 `TestClock` an `it.effect` test already stands on rather than a `FakeClock` of
@@ -223,9 +225,9 @@ sibling that needs the shape rather than redeclaring it — `packages/runtime/sr
 option this is, and `packages/host/src/brain/wiring-children.ts` imports the
 same one from `@sidecar/runtime` to build a `ChildRunService`) and
 `packages/voice/src/scheduled-timer.ts` (restored under the name
-`TimerHandle`, imported by `append-channel.ts` and `notice-strip.ts` and
-re-exported through `@sidecar/voice/live-session` for `compose-live.ts` and
-the hosted voice service's own tests). What P12-03b actually deletes is the
+`TimerHandle`, and since P12-18h3 imported by `notice-strip.ts` alone, which
+is the one voice seam left that traffics in a handle; the live session's own
+door exports the name no longer). What P12-03b actually deletes is the
 three-package *duplication* — `timerSeamFromRuntime` as a shared, exported
 bridge function reused across packages — and the name `ScheduledTimer`
 itself outside `packages/runtime` (voice's is `TimerHandle`); it does not
@@ -288,12 +290,13 @@ all. `Effect.runtime<never>()` is gone from this composer's build, and
 `packages/host/src/compose-observation.ts` is off `runOnHandedRuntime` with
 it.
 
-`compose-live.ts`'s entry covers a second run beside the timer bridge named
-above: `requestOnboardingBeat` decides whether to speak from the roster a
-fresh pass just drew, so it waits on `observation.loop.refresh` — and the
-link that asks for a beat is a synchronous callback the calendars composer
-holds, so the pass is run to a promise on this composition's own runtime. It
-goes when that link answers an effect.
+`compose-live.ts`'s entry covers the one run left there now that the timer
+bridge named above is gone: `requestOnboardingBeat` decides whether to speak
+from the roster a fresh pass just drew, so it waits on
+`observation.loop.refresh` — and the link that asks for a beat is a
+synchronous callback the calendars composer holds, so the pass is run to a
+promise on this composition's own runtime. It goes when that link answers an
+effect.
 
 `LiveSessionService` in `packages/voice/src/live-session/live-session-service.ts`
 was on the same list as of P12-18h, as the one run left on the live path: it
@@ -315,11 +318,25 @@ the same shape `apps/web/server/voice/live-exchange.ts` already reports each
 record write through. The close is not that scope's: how long a quit may wait
 on the peer is the composition's own decision, so `stop` stays a drain step of
 `compose-host.ts` on the desktop and the socket scope's own finalizer in the
-hosted exchange. What the service still takes as seams is the
-`now`/`schedule`/`cancel` timer trio and the promise-shaped append channel
-beneath it, which is why `packages/host/src/compose-live.ts` keeps its own
-entry for the bridge that answers them; P12-18h3 is where those become the
-`Clock`'s and the session's socket an `acquireRelease` of its own.
+hosted exchange.
+
+P12-18h3 took the `now`/`schedule`/`cancel` trio away with the promise-shaped
+append channel beneath it. The service reads the `Clock` of the scope it was
+built in — `unsafeCurrentTimeMillis` where a socket callback cannot wait for an
+effect — and every delay it arms (the idle window, an utterance's settle, the
+prefetch debounce, the roster debounce, an exchange's finalize) is an
+`Effect.sleep` on a fiber of that scope, cancelled by settling a `Deferred`
+the arming handed back, so a hand that gives up before the fiber reached its
+sleep still stops the body from running and frees the fiber at once.
+`AppendChannel` serializes its sends over an unbounded `Queue` drained by one
+fiber of the same scope rather than a promise chain, each acknowledgment a
+`Deferred` under `Effect.timeoutOption`, and `closeGracefully` answers an
+`Effect` whose timeout is the ambient `Clock`'s, which is why both are off
+`rawAsyncPrimitives`. A test drives all of it from a `TestClock` it already
+stands on, and `packages/host/src/compose-live.ts` builds no timer bridge.
+What is left for P12-18h4 is the standing session's socket and its listeners,
+which are still stood up and torn down by hand rather than released by a child
+scope's `acquireRelease`.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
