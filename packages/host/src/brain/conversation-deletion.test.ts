@@ -9,7 +9,6 @@ import {
   type BrainPersistedState,
   type BrainStateRepository,
   BrainStateStore,
-  carryOn,
   LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
@@ -132,7 +131,7 @@ async function composed(t: TestContext) {
   // Every agent built here is followed as the main process follows it — the
   // one Conversation write for a run — and stopped, with its follower drained, by
   // the harness's close whatever the test asserted.
-  const followers = new Map<BrainAgent, () => Promise<void>>();
+  const followers = new Map<BrainAgent, Effect.Effect<void>>();
   const build = (client: BareResponsesModel) => {
     const agent = Effect.runSync(
       BrainAgent.make({
@@ -157,16 +156,17 @@ async function composed(t: TestContext) {
     );
     followers.set(
       agent,
-      followBrainRequests(agent, {
-        carry: carryOn(Runtime.defaultRuntime),
-        broadcastRequests: () => undefined,
-      }),
+      Effect.runSync(
+        followBrainRequests(agent, {
+          broadcastRequests: () => undefined,
+        }),
+      ),
     );
     return agent;
   };
   const stop = async (agent: BrainAgent) => {
     await Effect.runPromise(agent.stop());
-    await followers.get(agent)?.();
+    await Effect.runPromise(followers.get(agent) ?? Effect.void);
     followers.delete(agent);
   };
   let refuseErase = false;

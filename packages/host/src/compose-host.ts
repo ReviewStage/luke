@@ -376,7 +376,7 @@ export const hostAssemblyLayer: Layer.Layer<
           }
           return cancelled;
         }),
-        awaitSettled: Effect.promise(() => brain.wiring.publicationSettled()),
+        awaitSettled: Effect.suspend(() => brain.wiring.publicationSettled()),
         persistUnresolved: Effect.sync(() => {
           // What the next launch will find: the records as the stores last
           // persisted them, read from the envelopes rather than from memory. A

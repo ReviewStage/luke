@@ -1134,8 +1134,10 @@ and since P12-16g that is nothing of `BrainAgent`'s own surface: the ask face
 left it with the queue beneath it, so an ask, a wait, a cancel, a mark, a
 context snapshot, a stop, the four child verbs, and a run-event subscription
 are each an `Effect` its caller runs. What holds a promise is the host above
-the agent — `BrainHost`'s transition chain, the publication chain's marks,
-and nothing else — and the two edges
+the agent — `wireBrain`'s own promise face, `rebuild` and
+`closeConversation` in `packages/host/src/brain/wiring.ts`, which run
+`BrainHost`'s transition as a promise because the seams above this wiring ask
+for one rather than because anything of the brain's is one — and the two edges
 inside the agent that a timer calls with nowhere to answer, which
 `AgentSeam#detach` carries in one place rather than in each. The child
 service's executor seams left this door in P12-16k.
@@ -1200,8 +1202,18 @@ release — because a run begins the work on the calling stack while
 `Effect.forkDaemon` only schedules a fiber, and a turn must stand in the
 conversation's queue, counted busy, in the step that asked for it rather than
 a scheduler task later, or a stop arriving between the two would drain a queue
-the turn had not yet joined; and, in the host,
-`BrainHost`'s build and stop and `followBrainRequests`' marks.
+the turn had not yet joined; and, in the host, `wireBrain`'s own promise
+face, `rebuild` and `closeConversation`. P12-16j took `BrainHost`'s build and
+stop and `followBrainRequests`' marks off this door: a transition is an effect
+its caller runs, serialized by one `Effect.unsafeMakeSemaphore(1)` permit held
+for the whole of it rather than by a promise chain, and a follower is a queue
+the brain's listener writes to and one fiber marks from, so the reports a
+retirement drains are awaited as that fiber's own barrier. What retirement
+still needs of this file is `detachOn`, exported beside `carryOn` and built
+over the same `ExecutionRuntime` dispatch: it begins a stop's drain on a fiber
+of its own before it returns, so the revocation stands in the step that asked
+for it, and answers that fiber, so the next transition awaits how the drain
+ended rather than a promise nobody is holding.
 `brainAgentLiveBrain`'s ask and subscription left it in P12-16l, named above:
 the adapter runs the agent's own effects on the composition's runtime it was
 built on rather than carrying them; `wireChildren`'s four executor seams left

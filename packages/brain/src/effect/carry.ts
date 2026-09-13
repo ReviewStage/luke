@@ -14,11 +14,18 @@
  *   — because the run starts the work on the calling stack, so the turn takes
  *   its place in the conversation's queue in the same step that asked for it;
  * - and the host's side, where the promises are the seams above the agent:
- *   `BrainHost`'s transition chain (a build and a stop), the publication
- *   chain's marks. The child service's executor seams left this list in
- *   P12-16k: `wiring-children.ts` writes each of them as an effect and
- *   `childSeamsOnRuntime` carries them to the OpenClaw port that awaits
- *   them.
+ *   `wireBrain`'s own promise face — `rebuild` and `closeConversation` — which
+ *   runs `BrainHost`'s transition as a promise because what asks for one is
+ *   above this wiring, not inside the brain. The child service's executor
+ *   seams left this list in P12-16k: `wiring-children.ts` writes each of them
+ *   as an effect and `childSeamsOnRuntime` carries them to the OpenClaw port
+ *   that awaits them.
+ *
+ * `BrainHost`'s transition chain and the publication chain's marks left this
+ * door in P12-16j: a transition is an effect its caller runs and a follower is
+ * a queue one fiber marks from. What retirement still asks of this file is
+ * `detachOn`, which begins a stop's drain on a fiber of its own before it
+ * returns and answers that fiber for the next transition to await.
  *
  * The live brain adapter left this door in P12-16l: it is built as an effect
  * on the composition's own runtime, so following an agent and asking it are
@@ -43,10 +50,22 @@
  * once the host holds the brain in effects of its own.
  */
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
-import { Cause, type Effect, Exit, ManagedRuntime, Runtime } from "effect";
+import { Cause, type Effect, Exit, type Fiber, ManagedRuntime, Runtime } from "effect";
 
 /** Carries an effect to the promise a caller of the brain still holds, on the runtime the host handed in. */
 export type Carry = <Value>(effect: Effect.Effect<Value>) => Promise<Value>;
+
+/**
+ * Begins an effect on a fiber of its own, on the runtime the host handed in,
+ * before it returns: the runtime starts the work on the calling stack, so the
+ * effect's first step — a stop's revocation of every run — stands in the step
+ * that asked for it rather than in a scheduler task later, which is all
+ * `Effect.forkDaemon` would give. What it answers is the fiber, so a caller
+ * that must know how the work ended awaits it as one.
+ */
+export type Detach = <Value, Failure>(
+  effect: Effect.Effect<Value, Failure>,
+) => Fiber.RuntimeFiber<Value, Failure>;
 
 /**
  * Runs an effect to its `Exit` on the given runtime, dispatching between a
@@ -66,6 +85,11 @@ export const runtimeExit =
     ManagedRuntime.TypeId in execution
       ? execution.runPromiseExit(effect, options)
       : Runtime.runPromiseExit(execution)(effect, options);
+
+export const detachOn = (execution: ExecutionRuntime): Detach =>
+  ManagedRuntime.TypeId in execution
+    ? (effect) => execution.runFork(effect)
+    : Runtime.runFork(execution);
 
 export const carryOn = (execution: ExecutionRuntime): Carry => {
   const exits = runtimeExit(execution);

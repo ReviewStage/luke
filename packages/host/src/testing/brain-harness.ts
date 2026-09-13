@@ -4,7 +4,7 @@ import {
   BrainAgent,
   type BrainAgentOptions,
   BrainStateStore,
-  carryOn,
+  detachOn,
   LOOK_SUBJECT,
   responsesModelAnswer,
   toolLoopRuntimeOver,
@@ -55,13 +55,11 @@ export async function brainHarness() {
   });
   const broadcasts: (readonly BrainRequestSnapshot[])[] = [];
   // The agents this harness builds take no execution of their own, so the
-  // carry here is over the same default runtime they run their turns on.
-  const carry = carryOn(Runtime.defaultRuntime);
+  // detach here is over the same default runtime they run their turns on.
   const host = new BrainHost({
-    carry,
+    detach: detachOn(Runtime.defaultRuntime),
     follow: (agent) =>
       followBrainRequests(agent, {
-        carry,
         broadcastRequests: (snapshots) => {
           broadcasts.push(snapshots);
         },
