@@ -62,6 +62,7 @@ export {
   removeNotebookEntry,
 } from "./notebook-markdown.js";
 export {
+  MemorySeamRefused,
   type MemorySyncReport,
   makeNotebookMemory,
   type NotebookMemory,
