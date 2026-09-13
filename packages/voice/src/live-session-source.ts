@@ -348,9 +348,11 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
   async #attach(sessionId: string): Promise<LiveSideband> {
     const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
     address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
-    const opening = await this.#openSocket(address.toString(), {
-      authorization: `Bearer ${this.#apiKey}`,
-    });
+    // The attach answers its caller a promise, like the creation above it, so the open is run to
+    // one here over the runtime this source holds none of its own in place of.
+    const opening = await Effect.runPromise(
+      this.#openSocket(address.toString(), { authorization: `Bearer ${this.#apiKey}` }),
+    );
     if (!socketOpened(opening)) {
       const { detail } = socketFaultOutcome(opening);
       this.#outcome.record(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED, detail);
@@ -622,64 +624,56 @@ class ServiceLiveSessionSource {
 
   /** The handshake's headers: the bearer where one stands, and on a creation the device the session is opened for. */
   #open(bearer: string | undefined, deviceId?: string): Effect.Effect<SocketOpening> {
-    return Effect.promise(() =>
-      this.#openSocket(this.#address, {
-        ...(bearer === undefined ? undefined : { authorization: bearer }),
-        ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
-      }),
-    );
+    return this.#openSocket(this.#address, {
+      ...(bearer === undefined ? undefined : { authorization: bearer }),
+      ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
+    });
   }
 
   /**
-   * Waits for the service's one answer, taken from the held socket without
-   * releasing its hold, so a frame the service sends right behind the answer
-   * waits for the consumer that subscribes in the continuation rather than
-   * being emitted to nobody in between. A frame is decoded but not judged
-   * here; a socket closed before it answered, or one silent past the request
-   * deadline, is recorded as the service unavailable.
+   * Sends the request frame and waits for the service's one answer, taken from
+   * the held socket without releasing its hold, so a frame the service sends
+   * right behind the answer waits for the consumer that subscribes afterwards
+   * rather than being emitted to nobody in between. The send goes before the
+   * wait and the hold is what closes that gap: an answer already back by the
+   * time the wait begins is at the head of the hold, and the wait takes it
+   * from there. The deadline is the one above the wait, so exactly one of the
+   * two — an arrival or the deadline — is what this records, and its own
+   * interruption withdraws the wait before anything is written down, leaving a
+   * close or a late frame held for the consumer. A frame is decoded but not
+   * judged here; a socket closed before it answered, or one silent past the
+   * request deadline, is recorded as the service unavailable.
    */
   #firstFrame(socket: HeldSocket, send: () => void): Effect.Effect<WireRecord | undefined> {
-    const answered = Effect.async<WireRecord | undefined>((resume) => {
-      const withdraw = socket.takeFirst((arrival) => {
-        if ("close" in arrival) {
-          this.#outcome.record(
-            LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
-            arrival.close.code === undefined
-              ? "closed before answering"
-              : `closed with code ${arrival.close.code}`,
-          );
-          resume(Effect.succeed(undefined));
-          return;
-        }
-        const payload = decodeLivePayload(arrival.frame);
-        if (payload === undefined) {
-          this.#outcome.record(
-            LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-            "answer was not a document",
-          );
-        }
-        resume(Effect.succeed(payload));
-      });
-      send();
-      return Effect.sync(withdraw);
+    return Effect.gen(this, function* () {
+      yield* Effect.sync(send);
+      const arrival = yield* Effect.timeoutOption(
+        socket.takeFirst,
+        Duration.millis(this.#requestTimeoutMs),
+      );
+      if (Option.isNone(arrival)) {
+        this.#outcome.record(
+          LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
+          "no answer before the deadline",
+        );
+        return undefined;
+      }
+      const first = arrival.value;
+      if ("close" in first) {
+        this.#outcome.record(
+          LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
+          first.close.code === undefined
+            ? "closed before answering"
+            : `closed with code ${first.close.code}`,
+        );
+        return undefined;
+      }
+      const payload = decodeLivePayload(first.frame);
+      if (payload === undefined) {
+        this.#outcome.record(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE, "answer was not a document");
+      }
+      return payload;
     });
-    return Effect.flatMap(
-      Effect.timeoutOption(answered, Duration.millis(this.#requestTimeoutMs)),
-      // The deadline interrupts the wait, and the interruption withdraws it before this
-      // continuation writes the outcome, so the close the caller answers a deadline with, or a
-      // frame arriving late, is held for the consumer and records nothing over the deadline's own.
-      Option.match({
-        onNone: () =>
-          Effect.sync(() => {
-            this.#outcome.record(
-              LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
-              "no answer before the deadline",
-            );
-            return undefined;
-          }),
-        onSome: (payload) => Effect.succeed(payload),
-      }),
-    );
   }
 
   #readCreated(payload: WireRecord): LiveSessionCreated | undefined {

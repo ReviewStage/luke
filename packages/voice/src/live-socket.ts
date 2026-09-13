@@ -4,6 +4,7 @@ import {
   type LiveServerEvent,
   parseLiveServerEvent,
 } from "@sidecar/live";
+import type { Effect } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 
 /**
@@ -49,18 +50,20 @@ export function socketOpened(opening: SocketOpening): opening is { socket: HeldS
 }
 
 /**
- * Opens one WebSocket and settles once the handshake has: with the socket, or
+ * Opens one WebSocket and answers once the handshake has: with the socket, or
  * with why the upgrade was refused. The headers are the handshake's alone, and
  * the one this package ever sets is the bearer the endpoint takes. The socket
- * settled with is held (`holdSocket`) from inside the transport's own open
+ * answered with is held (`holdSocket`) from inside the transport's own open
  * handler, so a frame or a close in the handshake's own chunk waits for the
- * consumer that subscribes in the continuation; every implementation of this
- * seam, the host's over `ws` and the tests' scripted one, keeps that contract.
+ * consumer that subscribes afterwards; every implementation of this seam, the
+ * host's over `ws` and the tests' scripted one, keeps that contract. The open
+ * is an effect, so an attempt interrupted before the handshake settled takes
+ * the socket it started with it rather than leaving one connecting behind.
  */
 export type OpenSocket = (
   url: string,
   headers: Readonly<Record<string, string>>,
-) => Promise<SocketOpening>;
+) => Effect.Effect<SocketOpening>;
 
 /**
  * The trusted side's view of one running session: every event the session

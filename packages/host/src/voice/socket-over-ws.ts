@@ -5,6 +5,7 @@ import {
   SOCKET_OPEN_FAULT,
   type SocketOpening,
 } from "@sidecar/voice";
+import { Effect } from "effect";
 import { type RawData, WebSocket } from "ws";
 
 /**
@@ -41,25 +42,31 @@ function socketOver(socket: WebSocket): LiveSocket {
 }
 
 /**
- * Opens one WebSocket with the handshake headers it is handed, and settles
+ * Opens one WebSocket with the handshake headers it is handed, and answers
  * once the handshake has: with the socket, with the status a refused upgrade
  * answered, or with the name of the error a connection that never upgraded
  * ended in. The error's words never travel, since a URL or header echoed in
  * them could carry the bearer.
+ *
+ * The handshake is what the effect acquires and giving it up is its release:
+ * a fiber interrupted before the handshake answered terminates the socket it
+ * started, so a hang-up during an open leaves nothing connecting behind it.
+ * A handshake that did answer belongs to the caller from then on, and closing
+ * it is the caller's to do.
  */
 export const openSocketOverWs: OpenSocket = (url, headers) =>
-  new Promise<SocketOpening>((resolve) => {
+  Effect.async<SocketOpening>((resume) => {
     const socket = new WebSocket(url, { headers: { ...headers } });
     let settled = false;
     const settle = (opening: SocketOpening) => {
       if (settled) return;
       settled = true;
-      resolve(opening);
+      resume(Effect.succeed(opening));
     };
     // Held here, inside the open handler and not in the caller's continuation: `ws` re-queues the
     // bytes that followed the handshake response and flushes them on the next tick, which runs
-    // before any promise continuation, so a frame in that same chunk would otherwise be emitted to
-    // no listener. The hold's listener stands before this handler returns.
+    // before any continuation of this effect, so a frame in that same chunk would otherwise be
+    // emitted to no listener. The hold's listener stands before this handler returns.
     socket.once("open", () => settle({ socket: holdSocket(socketOver(socket)) }));
     socket.once("unexpected-response", (_request, response) => {
       settle({ fault: SOCKET_OPEN_FAULT.REFUSED, status: response.statusCode ?? 0 });
@@ -70,5 +77,10 @@ export const openSocketOverWs: OpenSocket = (url, headers) =>
     });
     socket.once("close", () => {
       settle({ fault: SOCKET_OPEN_FAULT.NETWORK, errorName: "ClosedBeforeOpen" });
+    });
+    return Effect.sync(() => {
+      if (settled) return;
+      settled = true;
+      socket.terminate();
     });
   });
