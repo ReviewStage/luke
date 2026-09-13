@@ -1,6 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * The encrypted provider-key vault over `effect/unstable/sql`: one ciphertext row
@@ -71,7 +72,7 @@ export function readStoredVaultKeys(
 
 const KeyListingRowSchema = Schema.Struct({
   providerId: Schema.String,
-  updatedAt: Schema.Date,
+  updatedAt: InstantColumnSchema,
 }).pipe(Schema.encodeKeys({ providerId: "provider_id", updatedAt: "updated_at" }));
 
 const findKeyListing = SqlSchema.findAll({

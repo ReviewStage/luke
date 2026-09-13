@@ -11,6 +11,7 @@ import {
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as Statement from "effect/unstable/sql/Statement";
 import {
   type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,
@@ -50,7 +51,7 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema, nullable } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
  * The store writer: the one path by which a `messages`, `turns`, or `events`
@@ -545,9 +546,10 @@ const ConversationTargetSchema = Schema.Struct({
 /**
  * The counter's value after an allocation moved it, which is one past the
  * position handed out. It is a 64-bit column like every instant here, so it
- * is read through the same schema they are: `pg` hands an `int8` back as a
- * string and PGlite as a number, and a sequence position is as far inside the
- * safe integer range as a millisecond is.
+ * is read through the same schema they are: `@effect/sql-pg` hands an `int8`
+ * back as a JS `bigint`, the `pg` driver before it as a string, PGlite as a
+ * number, and a sequence position is as far inside the safe integer range as
+ * a millisecond is.
  */
 const SequenceSchema = Schema.Struct({ next: EpochMillisColumnSchema });
 
@@ -556,7 +558,7 @@ const MessageRowSchema = Schema.Struct({
   id: Schema.String,
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(MessageMetadataColumnSchema),
-  finishedAt: Schema.NullOr(Schema.Date),
+  finishedAt: Schema.NullOr(InstantColumnSchema),
 }).pipe(Schema.encodeKeys({ finishedAt: "finished_at" }));
 
 type MessageRow = Schema.Schema.Type<typeof MessageRowSchema>;
@@ -809,6 +811,20 @@ const startTurn = SqlSchema.void({
     ),
 });
 
+/**
+ * A `text[]` column's value, as the two drivers will take it. A driver infers
+ * a parameter's Postgres type from the value it is handed, and an empty array
+ * offers no element to infer one from, so the empty case is written as the
+ * literal it is rather than bound. A turn that called nothing settles with no
+ * response ids, which is why this is the ordinary case and not an edge.
+ */
+function emptyTextArray(
+  sql: SqlClient.SqlClient,
+  values: readonly string[],
+): Statement.Fragment | readonly string[] {
+  return values.length === 0 ? sql.literal("'{}'::text[]") : values;
+}
+
 const settleTurn = SqlSchema.void({
   Request: Schema.Struct({
     turnId: Schema.String,
@@ -826,7 +842,7 @@ const settleTurn = SqlSchema.void({
             settled_at = ${row.settledAt},
             failure = ${row.failure},
             usage = ${row.usage}::jsonb,
-            response_ids = ${row.responseIds}
+            response_ids = ${emptyTextArray(sql, row.responseIds)}
         where id = ${row.turnId}
       `,
     ),

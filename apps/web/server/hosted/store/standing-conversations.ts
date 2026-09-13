@@ -2,7 +2,7 @@ import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { EpochMillisColumnSchema } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 
 /**
  * The conversations the Conversation view is selected from: the account's
@@ -50,7 +50,7 @@ const StandingConversationRowSchema = Schema.Struct({
   kind: Schema.Literals([CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED]),
   providerId: Schema.NullOr(Schema.String),
   providerSessionId: Schema.NullOr(Schema.String),
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
   nextMessageSeq: EpochMillisColumnSchema,
   nextEventSeq: EpochMillisColumnSchema,
   journalRevision: EpochMillisColumnSchema,

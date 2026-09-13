@@ -12,6 +12,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
@@ -24,6 +25,7 @@ import {
   insertToolSet,
   insertToolSetIgnoringConflict,
   insertTurn,
+  instantColumn,
   POSTGRES_ERROR,
   readConversationById,
   readEventsByMessage,
@@ -290,13 +292,13 @@ test("a new conversation numbers its messages and events from one and stands und
   assert.ok(row);
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({
-      next_message_seq: Schema.Union([Schema.Number, Schema.NumberFromString]),
-      next_event_seq: Schema.Union([Schema.Number, Schema.NumberFromString]),
+      next_message_seq: EpochMillisColumnSchema,
+      next_event_seq: EpochMillisColumnSchema,
       deleted_at: Schema.Null,
       parent_conversation_id: Schema.Null,
       spawned_by_message_id: Schema.Null,
-      created_at: Schema.Date,
-      last_activity_at: Schema.Date,
+      created_at: InstantColumnSchema,
+      last_activity_at: InstantColumnSchema,
     }),
   )(row);
   assert.equal(decoded.next_message_seq, 1);
@@ -449,7 +451,7 @@ test("an event keeps its kind, device, and payload as written", async () => {
   assert.equal(row.device_id, "mac-1");
   assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
   assert.equal(Number(row.seq), 1);
-  assert.ok(row.created_at instanceof Date);
+  assert.ok(instantColumn(row.created_at) instanceof Date);
 });
 
 test("a tool set is one row per hash however often it is written", async () => {

@@ -4,6 +4,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { isRealtimeVoiceSpeed } from "../core.js";
 import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-preferences.js";
+import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, and
@@ -46,7 +47,7 @@ const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
   voiceSpeed: Schema.NullOr(Schema.Number),
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
-  updatedAt: Schema.Date,
+  updatedAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     voiceSpeed: "voice_speed",

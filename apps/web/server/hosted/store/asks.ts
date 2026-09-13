@@ -3,6 +3,7 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ASK_ORIGIN, type AskOrigin } from "../../core.js";
 import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
+import { InstantColumnSchema } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
 
 /**
@@ -109,11 +110,11 @@ const AskRowSchema = Schema.Struct({
   conversationId: Schema.String,
   clientId: Schema.String,
   origin: Schema.Literals(Object.values(ASK_ORIGIN)),
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
   sessionId: Schema.NullOr(Schema.String),
   deliveryId: Schema.NullOr(Schema.String),
   turnId: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.NullOr(Schema.Date),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
 }).pipe(
   Schema.encodeKeys({
     userId: "user_id",

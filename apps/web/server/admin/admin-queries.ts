@@ -2,6 +2,7 @@ import { Duration, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
+import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {
@@ -34,14 +35,19 @@ const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.
   Effect.flatMap(SqlClient.SqlClient, build);
 
 /**
- * An aggregate as the two drivers hand it back: `count` and `sum` answer a
- * bigint, which `pg` reads as a string because a 64-bit value need not fit a
- * JS number, while PGlite parses it to one. Every aggregate here counts rows
- * or sums a day's calls, well inside the safe integer range, so both readings
- * decode to the same number. A `sum` over no rows is null, which is the zero
- * the dashboard shows.
+ * An aggregate as the three drivers hand it back: `count` and `sum` answer a
+ * bigint, which `@effect/sql-pg` reads as a JS `bigint` and the `pg` driver
+ * before it read as a string, each because a 64-bit value need not fit a JS
+ * number, while PGlite parses it to one. Every aggregate here counts rows or
+ * sums a day's calls, well inside the safe integer range, so all three
+ * readings decode to the same number. A `sum` over no rows is null, which is
+ * the zero the dashboard shows.
  */
-const AggregateColumnSchema = Schema.Union([Schema.Number, Schema.NumberFromString]);
+const AggregateColumnSchema = Schema.Union([
+  Schema.Number,
+  Schema.NumberFromString,
+  NumberFromBigIntColumn,
+]);
 const NullableAggregateColumnSchema = Schema.NullOr(AggregateColumnSchema);
 
 const CountRowSchema = Schema.Struct({ value: AggregateColumnSchema });
@@ -540,7 +546,7 @@ const AccountRowSchema = Schema.Struct({
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
 }).pipe(Schema.encodeKeys({ createdAt: "created_at" }));
 
 const findAccount = SqlSchema.findOneOption({
@@ -708,7 +714,7 @@ const findSessionsSeen = SqlSchema.findAll({
   Request: RosterFilterSchema,
   Result: Schema.Struct({
     userId: Schema.String,
-    seenAt: Schema.NullOr(Schema.Date),
+    seenAt: Schema.NullOr(InstantColumnSchema),
   }).pipe(Schema.encodeKeys({ userId: "user_id", seenAt: "seen_at" })),
   execute: (request) =>
     statement(
@@ -746,7 +752,7 @@ const RosterRowSchema = Schema.Struct({
   email: Schema.String,
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
   activeDays: AggregateColumnSchema,
   lastActiveDay: Schema.NullOr(Schema.String),
   calls: NullableAggregateColumnSchema,

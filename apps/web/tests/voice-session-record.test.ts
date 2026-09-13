@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { testSqlClient } from "./support/sql-client";
 
@@ -32,10 +33,22 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
+/** The row as the suite reads it back, the instant column through the schema the two drivers agree on. */
+const VoiceSessionRowSchema = Schema.Struct({
+  user_id: Schema.String,
+  device_id: Schema.NullOr(Schema.String),
+  delegation_mode: Schema.String,
+  closed_at: Schema.NullOr(InstantColumnSchema),
+  close_reason: Schema.NullOr(Schema.String),
+  usage: Schema.NullOr(Schema.Unknown),
+});
+const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
+
 const readVoiceSession = (liveSessionId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
-    return yield* sql`select * from voice_sessions where live_session_id = ${liveSessionId}`;
+    const rows = yield* sql`select * from voice_sessions where live_session_id = ${liveSessionId}`;
+    return rows.map((row) => decodeVoiceSessionRow(row));
   });
 
 it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {

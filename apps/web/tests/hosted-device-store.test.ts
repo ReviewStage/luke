@@ -5,6 +5,7 @@ import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { forgetDevice, registerDevice, touchDevice } from "../server/hosted/device-store";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -35,12 +36,12 @@ const DeviceRowSchema = Schema.Struct({
   userId: Schema.String,
   installationId: Schema.String,
   platform: Schema.String,
-  activeUntil: Schema.NullOr(Schema.Date),
-  quietUntil: Schema.NullOr(Schema.Date),
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  quietUntil: Schema.NullOr(InstantColumnSchema),
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
-  createdAt: Schema.Date,
-  updatedAt: Schema.Date,
+  createdAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     userId: "user_id",

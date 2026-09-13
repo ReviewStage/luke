@@ -27,7 +27,7 @@ import {
   type WireBoundaryInput,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 import {
   ConversationEventKindSchema,
   type ConversationTarget,
@@ -242,7 +242,7 @@ const SpeechEventRowSchema = Schema.Struct({
   kind: ConversationEventKindSchema,
   deviceId: Schema.NullOr(Schema.String),
   payload: WireValueSchema,
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({ messageId: "message_id", deviceId: "device_id", createdAt: "created_at" }),
 );
@@ -739,7 +739,7 @@ export interface SpeechSweepOptions {
 /** The latest quiet instant of one account's devices still ahead of the read. */
 const QuietAccountSchema = Schema.Struct({
   userId: Schema.String,
-  quietUntil: Schema.Date,
+  quietUntil: InstantColumnSchema,
 }).pipe(Schema.encodeKeys({ userId: "user_id", quietUntil: "quiet_until" }));
 
 const QuietRequestSchema = Schema.Struct({
@@ -1079,8 +1079,8 @@ const ReleaseRowSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
   messageId: Schema.String,
   parts: ReadPartsColumnSchema,
-  decidedAt: Schema.Date,
-  releasedAt: Schema.Date,
+  decidedAt: InstantColumnSchema,
+  releasedAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     messageId: "message_id",

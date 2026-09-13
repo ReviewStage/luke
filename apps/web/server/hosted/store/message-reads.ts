@@ -21,7 +21,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
-import { EpochMillisColumnSchema, optionalField } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
 
 /**
  * The per-resource reads a device polls with a cursor of its own — a
@@ -159,8 +159,8 @@ const SelectedMessageRowSchema = Schema.Struct({
   role: Schema.String,
   parts: Schema.Any,
   metadata: Schema.NullOr(Schema.Any),
-  createdAt: Schema.Date,
-  finishedAt: Schema.NullOr(Schema.Date),
+  createdAt: InstantColumnSchema,
+  finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
 }).pipe(
   Schema.encodeKeys({
@@ -445,7 +445,7 @@ const EventRowSchema = Schema.Struct({
   kind: Schema.String,
   deviceId: Schema.NullOr(Schema.String),
   payload: Schema.NullOr(Schema.Any),
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     conversationId: "conversation_id",
@@ -591,11 +591,11 @@ const TurnRowSchema = Schema.Struct({
   toolSetHash: Schema.NullOr(Schema.String),
   responseIds: Schema.NullOr(Schema.Array(Schema.String)),
   usage: Schema.NullOr(Schema.Any),
-  queuedAt: Schema.Date,
-  startedAt: Schema.NullOr(Schema.Date),
-  settledAt: Schema.NullOr(Schema.Date),
+  queuedAt: InstantColumnSchema,
+  startedAt: Schema.NullOr(InstantColumnSchema),
+  settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.NullOr(Schema.Date),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
   changedAt: Schema.String,
 }).pipe(
   Schema.encodeKeys({
@@ -680,7 +680,7 @@ export function listTurns(
 const QueuedTurnRowSchema = Schema.Struct({
   id: Schema.String,
   conversationId: Schema.String,
-  queuedAt: Schema.Date,
+  queuedAt: InstantColumnSchema,
 }).pipe(Schema.encodeKeys({ conversationId: "conversation_id", queuedAt: "queued_at" }));
 
 /** A queued turn as the opener reads it: the row, the conversation it waits on, and when it was queued. */
@@ -851,7 +851,7 @@ const RatingRowSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
   deviceId: Schema.NullOr(Schema.String),
   payload: Schema.Any,
-  createdAt: Schema.Date,
+  createdAt: InstantColumnSchema,
 }).pipe(Schema.encodeKeys({ deviceId: "device_id", createdAt: "created_at" }));
 
 const findLatestRating = SqlSchema.findOneOption({

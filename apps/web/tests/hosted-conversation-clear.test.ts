@@ -18,7 +18,12 @@ import { afterAll, test } from "vitest";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage, readConversationById } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  instantColumn,
+  readConversationById,
+} from "./support/store-rows";
 
 /**
  * Clear over the real store: the route stamps the standing main and answers
@@ -110,7 +115,7 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   assert.equal(answer.openedAt, NOW);
 
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(stamped?.deleted_at, new Date(NOW));
+  assert.deepEqual(instantColumn(stamped?.deleted_at), new Date(NOW));
 
   const after = parse(
     conversationMessagesAnswerSchema,

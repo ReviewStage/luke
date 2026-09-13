@@ -53,6 +53,7 @@ import {
 } from "../server/hosted/resource-reads";
 import { storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   amendMessageInPlace,
@@ -1219,9 +1220,9 @@ it.effect(
       );
       assert.equal(after.messages.length, 4);
       assert.equal(
-        EffectSchema.decodeUnknownSync(
-          EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
-        )(after.conversation[0]?.next_message_seq),
+        EffectSchema.decodeUnknownSync(EpochMillisColumnSchema)(
+          after.conversation[0]?.next_message_seq,
+        ),
         5,
       );
       const whole = await database.run(
@@ -1240,7 +1241,7 @@ it.effect(
       const { main, turns: ids } = await populate(userId);
       const MessageIdRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
+        seq: EpochMillisColumnSchema,
       });
       const sent = (await readMessagesByConversation(database.run, main))
         .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
@@ -1273,7 +1274,7 @@ it.effect(
 
       const EventRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
+        seq: EpochMillisColumnSchema,
         kind: EffectSchema.String,
         payload: EffectSchema.Unknown,
       });

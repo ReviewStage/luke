@@ -4,7 +4,7 @@ import { Effect, Option, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
-import { EpochMillisColumnSchema } from "../../server/hosted/store/database";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**
@@ -18,6 +18,9 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
  */
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
+
+/** A raw row's `timestamptz` column as the instant it holds, whichever of the two readings the dialect gave it. */
+export const instantColumn = Schema.decodeUnknownSync(InstantColumnSchema);
 
 export interface ConversationRow {
   readonly userId: string;
@@ -193,11 +196,11 @@ const TurnRowSchema = Schema.Struct({
   toolSetHash: Schema.NullOr(Schema.String),
   responseIds: Schema.NullOr(Schema.Array(Schema.String)),
   usage: Schema.NullOr(Schema.Unknown),
-  queuedAt: Schema.Date,
-  startedAt: Schema.NullOr(Schema.Date),
-  settledAt: Schema.NullOr(Schema.Date),
+  queuedAt: InstantColumnSchema,
+  startedAt: Schema.NullOr(InstantColumnSchema),
+  settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.NullOr(Schema.Date),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
 }).pipe(
   Schema.encodeKeys({
     userId: "user_id",
@@ -256,8 +259,8 @@ const MessageRowFullSchema = Schema.Struct({
   role: MessageRoleSchema,
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(Schema.Unknown),
-  createdAt: Schema.Date,
-  finishedAt: Schema.NullOr(Schema.Date),
+  createdAt: InstantColumnSchema,
+  finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
 }).pipe(
   Schema.encodeKeys({
@@ -419,9 +422,9 @@ export const DeviceRowSchema = Schema.Struct({
   userId: Schema.String,
   installationId: Schema.String,
   platform: Schema.String,
-  lastSeenAt: Schema.Date,
-  activeUntil: Schema.NullOr(Schema.Date),
-  quietUntil: Schema.NullOr(Schema.Date),
+  lastSeenAt: InstantColumnSchema,
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  quietUntil: Schema.NullOr(InstantColumnSchema),
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
 }).pipe(
@@ -540,8 +543,8 @@ const VoiceSessionRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
   liveSessionId: Schema.String,
   delegationMode: Schema.String,
-  startedAt: Schema.Date,
-  closedAt: Schema.NullOr(Schema.Date),
+  startedAt: InstantColumnSchema,
+  closedAt: Schema.NullOr(InstantColumnSchema),
   closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
 }).pipe(
@@ -787,18 +790,20 @@ export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: strin
  * The driver's own refusal code (Postgres's `SQLSTATE`, e.g. `23505` for a
  * unique violation) off a rejected `database.run(...)` promise: a promise door
  * rejects with the squashed `Cause`, which is the `SqlError` itself, nothing
- * wrapping it, and that error carries the driver's error as its own `cause`,
- * the way Drizzle's wrapped error once did.
+ * wrapping it. v4's `SqlError` states what went wrong as a structured `reason`
+ * of its own and aliases its `cause` to that reason, so the driver's own error
+ * — the one carrying the code — is a level further down than it was when the
+ * error wrapped it directly.
  */
 const DriverErrorSchema = Schema.Struct({
-  cause: Schema.Struct({ code: Schema.String }),
+  cause: Schema.Struct({ cause: Schema.Struct({ code: Schema.String }) }),
 });
 
 // oxlint-disable-next-line anti-slop/no-unknown-parameters -- this is the boundary: the value node:assert's own `rejects` caught, parsed immediately below by Schema.
 function sqlErrorCode(error: unknown): string | undefined {
   return Option.map(
     Schema.decodeUnknownOption(DriverErrorSchema)(error),
-    (decoded) => decoded.cause.code,
+    (decoded) => decoded.cause.cause.code,
   ).pipe(Option.getOrUndefined);
 }
 

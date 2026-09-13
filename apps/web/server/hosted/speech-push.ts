@@ -18,6 +18,7 @@ import {
 } from "./apns.js";
 import { briefingWordsOf } from "./briefing-words.js";
 import type { DeviceSeams } from "./devices.js";
+import { InstantColumnSchema } from "./store/database.js";
 import {
   markSpeechPushed,
   openSpeechOffers,
@@ -218,7 +219,7 @@ const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   platform: Schema.String,
-  activeUntil: Schema.NullOr(Schema.Date),
+  activeUntil: Schema.NullOr(InstantColumnSchema),
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
 }).pipe(
