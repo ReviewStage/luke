@@ -378,21 +378,23 @@ export function harness(
         identities: [ABC, DEF],
       }),
       standingContext: () => "Durable facts: none.",
-      readTranscriptSince: async (identity, cursor): Promise<ProviderTranscriptSinceResult> => {
-        sinceReads.push({ identity, cursor });
-        // The transcript grows once: a read from its cursor finds nothing new.
-        return {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text:
-            cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
-          cursor: `${identity.providerSessionId}-cursor`,
-          truncated: false,
-        };
-      },
-      readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
-        wholeReads.push(identity);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
-      },
+      readTranscriptSince: (identity, cursor): Effect.Effect<ProviderTranscriptSinceResult> =>
+        Effect.sync(() => {
+          sinceReads.push({ identity, cursor });
+          // The transcript grows once: a read from its cursor finds nothing new.
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text:
+              cursor === undefined ? `${TRANSCRIPT_SECRET} for ${identity.providerSessionId}` : "",
+            cursor: `${identity.providerSessionId}-cursor`,
+            truncated: false,
+          };
+        }),
+      readTranscript: (identity): Effect.Effect<ProviderTranscriptResult> =>
+        Effect.sync(() => {
+          wholeReads.push(identity);
+          return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+        }),
       deliver: (delivery) => {
         deliveries.push(delivery);
       },
@@ -694,8 +696,9 @@ export function agentOn(runtime: AgentRuntimeEffect, h: Harness): Effect.Effect<
     actions: fakeActionPerformer().actions,
     roster: () => ({ text: "", identities: [] }),
     standingContext: () => "",
-    readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
-    readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscriptSince: () =>
+      Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+    readTranscript: () => Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
     deliver: () => undefined,
     store: h.store,
     createRunId: () => `run-${nextRunId()}`,

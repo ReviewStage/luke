@@ -45,7 +45,7 @@ export interface WakeCaptureOptions {
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ) => Promise<ProviderTranscriptSinceResult>;
+  ) => Effect.Effect<ProviderTranscriptSinceResult>;
   createRunId: () => string;
   /** The moment the model may be asked again, or nothing when it may be asked now. */
   quietUntil: () => number | undefined;

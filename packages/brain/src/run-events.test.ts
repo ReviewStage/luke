@@ -541,16 +541,20 @@ it.effect(
   () =>
     Effect.gen(function* () {
       let answer: (() => void) | undefined;
-      const read = new Promise<void>((resolve) => {
-        answer = resolve;
-      });
       const reads: SessionIdentity[] = [];
       const h = yield* effectHarness({
-        readTranscript: async (identity): Promise<ProviderTranscriptResult> => {
-          reads.push(identity);
-          await read;
-          return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
-        },
+        readTranscript: (identity): Effect.Effect<ProviderTranscriptResult> =>
+          Effect.async<ProviderTranscriptResult>((resume) => {
+            reads.push(identity);
+            answer = () => {
+              resume(
+                Effect.succeed({
+                  status: ACTION_RESULT_STATUS.ACCEPTED,
+                  transcript: "whole transcript",
+                }),
+              );
+            };
+          }),
       });
       const events = yield* listen(h);
       h.client.answers.push(

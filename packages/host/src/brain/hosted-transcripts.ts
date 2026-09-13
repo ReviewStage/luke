@@ -2,7 +2,6 @@ import type {
   HostedConversationAnswer,
   HostedConversationMessage,
   HostedSessionMessagesClient,
-  SessionMessagesQuery,
 } from "@sidecar/hosted";
 import {
   CONVERSATION_MESSAGE_AUTHOR,
@@ -24,33 +23,17 @@ import { Effect } from "effect";
  * gained since the cursor an observed conversation last kept, for its look.
  */
 export interface SessionTranscriptReads {
-  readTranscript(identity: SessionIdentity): Promise<ProviderTranscriptResult>;
+  readTranscript(identity: SessionIdentity): Effect.Effect<ProviderTranscriptResult>;
   readTranscriptSince(
     identity: SessionIdentity,
     cursor: string | undefined,
-  ): Promise<ProviderTranscriptSinceResult>;
+  ): Effect.Effect<ProviderTranscriptSinceResult>;
 }
 
 export interface HostedTranscriptReadsDependencies {
   client: Pick<HostedSessionMessagesClient, "read">;
   /** The session as the roster holds it, for the name its agent's lines wear. */
   session: (identity: SessionIdentity) => Session | undefined;
-}
-
-/**
- * One page of the messages endpoint, as a promise.
- *
- * @deprecated This is the promise-facing seam on the `Effect.runPromise`
- * allowlist in `docs/adr/0001-effect.md`: the brain's own
- * `readTranscript`/`readTranscriptSince` seams still answer promises, so the
- * client's effect is run here rather than yielded on the turn's own fiber.
- * Deleted once those two seams answer effects.
- */
-function readPage(
-  client: Pick<HostedSessionMessagesClient, "read">,
-  query: SessionMessagesQuery,
-): Promise<HostedConversationAnswer | undefined> {
-  return Effect.runPromise(client.read(query));
 }
 
 const REFUSAL = {
@@ -100,64 +83,67 @@ export function hostedTranscriptReads(
    * wear, or the refusal both reads share: a local identity before any call,
    * an unanswered page after it.
    */
-  const page = async (
+  const page = (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ): Promise<
+  ): Effect.Effect<
     | { speaker: string; answer: HostedConversationAnswer }
     | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string }
     | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
-  > => {
-    const { providerId, providerSessionId } = identity;
-    if (!isCloudAgentProviderId(providerId)) {
-      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
-    }
-    const answer = await readPage(client, {
-      providerId,
-      providerSessionId,
-      ...(cursor === undefined ? undefined : { afterMessageId: cursor }),
+  > =>
+    Effect.gen(function* () {
+      const { providerId, providerSessionId } = identity;
+      if (!isCloudAgentProviderId(providerId)) {
+        return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+      }
+      const answer = yield* client.read({
+        providerId,
+        providerSessionId,
+        ...(cursor === undefined ? undefined : { afterMessageId: cursor }),
+      });
+      if (!answer) return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_READ };
+      const speaker =
+        session(identity)?.agent?.displayName ?? PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+      return { speaker, answer };
     });
-    if (!answer) return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_READ };
-    const speaker =
-      session(identity)?.agent?.displayName ?? PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-    return { speaker, answer };
-  };
 
   return {
-    async readTranscript(identity) {
-      const read = await page(identity, undefined);
-      if ("status" in read) return read;
-      const { speaker, answer } = read;
-      const lines = transcriptLines(speaker, answer.messages);
-      if (lines.length === 0) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_FOUND };
-      }
-      const rendered = lines.join("\n");
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        // A tail that history precedes opens with the marker, so the reader
-        // knows the chat did not begin there.
-        transcript: answer.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
-      };
-    },
+    readTranscript: (identity) =>
+      Effect.gen(function* () {
+        const read = yield* page(identity, undefined);
+        if ("status" in read) return read;
+        const { speaker, answer } = read;
+        const lines = transcriptLines(speaker, answer.messages);
+        if (lines.length === 0) {
+          return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_FOUND };
+        }
+        const rendered = lines.join("\n");
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          // A tail that history precedes opens with the marker, so the reader
+          // knows the chat did not begin there.
+          transcript: answer.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
+        };
+      }),
 
-    async readTranscriptSince(identity, cursor) {
-      const read = await page(identity, cursor);
-      if ("status" in read) return read;
-      const { speaker, answer } = read;
-      // The cursor answered is the newest stored message the page consumed,
-      // attributed or not, so the next look resumes past the lifecycle noise
-      // too; a chat that gained nothing answers no words and the same cursor.
-      const next = answer.lastMessageId ?? cursor;
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: transcriptLines(speaker, answer.messages).join("\n"),
-        ...(next !== undefined ? { cursor: next } : undefined),
-        // A first look reads the newest page and says the front was cut when
-        // history precedes it; a look behind a cursor says whether newer
-        // messages remain past the page.
-        truncated: cursor === undefined ? answer.hasOlder === true : answer.hasMore,
-      };
-    },
+    readTranscriptSince: (identity, cursor) =>
+      Effect.gen(function* () {
+        const read = yield* page(identity, cursor);
+        if ("status" in read) return read;
+        const { speaker, answer } = read;
+        // The cursor answered is the newest stored message the page consumed,
+        // attributed or not, so the next look resumes past the lifecycle noise
+        // too; a chat that gained nothing answers no words and the same cursor.
+        const next = answer.lastMessageId ?? cursor;
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text: transcriptLines(speaker, answer.messages).join("\n"),
+          ...(next !== undefined ? { cursor: next } : undefined),
+          // A first look reads the newest page and says the front was cut when
+          // history precedes it; a look behind a cursor says whether newer
+          // messages remain past the page.
+          truncated: cursor === undefined ? answer.hasOlder === true : answer.hasMore,
+        };
+      }),
   };
 }

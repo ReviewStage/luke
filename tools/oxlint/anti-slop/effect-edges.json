@@ -30,7 +30,6 @@
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/trace-writer.ts",
     "packages/gateway/src/transport.ts",
-    "packages/host/src/brain/hosted-transcripts.ts",
     "packages/host/src/compose-calendars.ts",
     "packages/host/src/compose-devices.ts",
     "packages/voice/src/live-session-source.ts",

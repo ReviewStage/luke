@@ -139,11 +139,12 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness({
         prepareTurn: NO_ACTS_POLICY,
-        readTranscriptSince: async () => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: INSTRUCTION_IN_DATA,
-          truncated: false,
-        }),
+        readTranscriptSince: () =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: INSTRUCTION_IN_DATA,
+            truncated: false,
+          }),
       });
       h.client.answers.push(answered(OBSERVATION_ACTIONS), answered([message("")]));
       yield* h.agent.wake([edge(ABC)]);
@@ -199,12 +200,13 @@ it.effect(
     Effect.gen(function* () {
       assert.equal(DELTA_PER_SESSION_CHARS, 20_000);
       const h = yield* effectHarness({
-        readTranscriptSince: async () => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
-          cursor: "far",
-          truncated: false,
-        }),
+        readTranscriptSince: () =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
+            cursor: "far",
+            truncated: false,
+          }),
       });
       yield* h.agent.wake([edge(ABC)]);
       assert.equal(h.client.inputs.length, 0, "nothing was sent before the capture landed");
@@ -310,10 +312,11 @@ it.effect("a whole-transcript read is cut from the front to 60,000 characters", 
   Effect.gen(function* () {
     assert.equal(FULL_TRANSCRIPT_CHARS, 60_000);
     const h = yield* effectHarness({
-      readTranscript: async () => ({
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
-      }),
+      readTranscript: () =>
+        Effect.succeed({
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
+        }),
     });
     h.client.answers.push(
       answered([

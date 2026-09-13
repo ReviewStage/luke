@@ -343,8 +343,10 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
       actions: fakeActionPerformer().actions,
       roster: () => ({ text: "none", identities: [] }),
       standingContext: () => "",
-      readTranscriptSince: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
-      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+      readTranscriptSince: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
+      readTranscript: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: "n" }),
       deliver: () => undefined,
       store,
       createRunId: () => `run-${++ids}`,

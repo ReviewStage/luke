@@ -245,22 +245,24 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
     // The local transcript grows once; every later read from the cursor
     // finds nothing new.
     transcripts: {
-      readTranscriptSince: async (identity, cursor) => {
-        reads.push(identity);
-        if (identity.providerId === conductor.id) {
+      readTranscriptSince: (identity, cursor) =>
+        Effect.sync(() => {
+          reads.push(identity);
+          if (identity.providerId === conductor.id) {
+            return {
+              status: ACTION_RESULT_STATUS.UNSUPPORTED,
+              reason: "This provider keeps no transcript this build can read.",
+            };
+          }
           return {
-            status: ACTION_RESULT_STATUS.UNSUPPORTED,
-            reason: "This provider keeps no transcript this build can read.",
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: cursor === undefined ? SECRET(identity.providerSessionId) : "",
+            cursor: `${identity.providerSessionId}-1`,
+            truncated: false,
           };
-        }
-        return {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: cursor === undefined ? SECRET(identity.providerSessionId) : "",
-          cursor: `${identity.providerSessionId}-1`,
-          truncated: false,
-        };
-      },
-      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "" }),
+        }),
+      readTranscript: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "" }),
     },
     session: (identity) =>
       roster.find((held) => held.providerSessionId === identity.providerSessionId),

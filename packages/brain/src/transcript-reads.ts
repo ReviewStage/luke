@@ -5,7 +5,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Effect, Either, Option } from "effect";
+import { Effect, Option } from "effect";
 import { settledUnlessAborted } from "./effect/settled.js";
 import { rejection, sameIdentity } from "./tools/records.js";
 import { REFUSAL_REASON } from "./tools/refusals.js";
@@ -34,7 +34,7 @@ export interface TranscriptDeltaRead {
   read: (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ) => Promise<ProviderTranscriptSinceResult>;
+  ) => Effect.Effect<ProviderTranscriptSinceResult>;
   maximumChars: number;
 }
 
@@ -86,31 +86,30 @@ export function readTranscriptDelta(
   options: TranscriptDeltaRead,
 ): Effect.Effect<BrainTranscriptDelta> {
   const { cursors } = options;
-  return Effect.map(
-    Effect.either(
-      Effect.tryPromise(async () => await options.read(identity, cursors.cursor(identity))),
+  return Effect.catchAllDefect(
+    Effect.map(
+      Effect.suspend(() => options.read(identity, cursors.cursor(identity))),
+      (result) => {
+        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+          return { text: "", truncated: false, status: result.status };
+        }
+        if (result.cursor !== undefined) cursors.setCursor(identity, result.cursor);
+        const bounded = cutFront(result.text, options.maximumChars);
+        return {
+          text: bounded.text,
+          truncated: result.truncated || bounded.cut,
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+        };
+      },
     ),
-    (read) => {
-      if (Either.isLeft(read)) {
-        return { text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED };
-      }
-      const result = read.right;
-      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        return { text: "", truncated: false, status: result.status };
-      }
-      if (result.cursor !== undefined) cursors.setCursor(identity, result.cursor);
-      const bounded = cutFront(result.text, options.maximumChars);
-      return {
-        text: bounded.text,
-        truncated: result.truncated || bounded.cut,
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-      };
-    },
+    // The seam declares no error, so a read that died is the only failure
+    // left to answer for: it is the rejected, empty delta a rejected read is.
+    () => Effect.succeed({ text: "", truncated: false, status: ACTION_RESULT_STATUS.REJECTED }),
   );
 }
 
 export interface WholeTranscriptRead {
-  read: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
+  read: (identity: SessionIdentity) => Effect.Effect<ProviderTranscriptResult>;
   signal: AbortSignal;
   maximumChars: number;
 }
@@ -130,28 +129,31 @@ export function readWholeTranscript(
   identity: SessionIdentity,
   options: WholeTranscriptRead,
 ): Effect.Effect<WireRecord> {
-  return Effect.map(
-    Effect.interruptible(
-      settledUnlessAborted(
-        Effect.either(Effect.tryPromise(async () => await options.read(identity))),
-        options.signal,
+  return Effect.catchAllDefect(
+    Effect.map(
+      Effect.interruptible(
+        settledUnlessAborted(
+          Effect.suspend(() => options.read(identity)),
+          options.signal,
+        ),
       ),
+      Option.match({
+        onNone: () => rejection(REFUSAL_REASON.RUN_REVOKED),
+        onSome: (result) => {
+          if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+            return { status: result.status, reason: result.reason };
+          }
+          const bounded = cutFront(result.transcript, options.maximumChars);
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            truncated: bounded.cut,
+            transcript: bounded.text,
+          };
+        },
+      }),
     ),
-    Option.match({
-      onNone: () => rejection(REFUSAL_REASON.RUN_REVOKED),
-      onSome: (read) => {
-        if (Either.isLeft(read)) return rejection(REFUSAL_REASON.READ_FAILED);
-        const result = read.right;
-        if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-          return { status: result.status, reason: result.reason };
-        }
-        const bounded = cutFront(result.transcript, options.maximumChars);
-        return {
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          truncated: bounded.cut,
-          transcript: bounded.text,
-        };
-      },
-    }),
+    // The seam declares no error, so a read that died answers the same
+    // refusal a read that failed always did.
+    () => Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED)),
   );
 }
