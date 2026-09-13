@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { OBSERVE_QUERY, observeAnswerFromWire } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -41,7 +42,7 @@ function observeOptions(
   return {
     request: observeRequest(),
     encryptionSecret: SECRET,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     readVaultKeys: async (_userId: string): Promise<VaultKeyRow[]> => [],
     store: () => store,
     ...overrides,
@@ -90,7 +91,7 @@ test("the observe gate order is method, secret, token", async () => {
   assert.equal(blankSecret.status, 503);
 
   const anonymous = await runWithoutDatabase(
-    handleObserve(observeOptions({ resolveUserId: async () => undefined })),
+    handleObserve(observeOptions({ resolveUserId: () => Effect.succeed(undefined) })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -509,7 +510,7 @@ test("readVaultKeys is called with the resolved user id", async () => {
   await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        resolveUserId: async () => "user-xyz",
+        resolveUserId: () => Effect.succeed("user-xyz"),
         readVaultKeys: async (userId) => {
           calledWithUserId = userId;
           return [];
@@ -533,7 +534,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
   const fresh = () =>
     observeOptions({
       request: observeRequest({}, true),
-      resolveUserId: async () => userId,
+      resolveUserId: () => Effect.succeed(userId),
       readVaultKeys: async () => KEY_ROWS,
       store: () => store,
       httpClient: api.layer,
@@ -553,7 +554,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
   const stored = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        resolveUserId: async () => userId,
+        resolveUserId: () => Effect.succeed(userId),
         readVaultKeys: async () => KEY_ROWS,
         store: () => store,
         now,

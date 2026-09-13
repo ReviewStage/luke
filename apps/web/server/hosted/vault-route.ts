@@ -1,4 +1,6 @@
-import { Redacted } from "effect";
+import type { SqlClient } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
@@ -36,11 +38,18 @@ export interface VaultKeyRow {
 
 export interface HostedVaultRoute {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   /** The value of PROVIDER_KEY_ENCRYPTION_SECRET; undefined means the env var is absent. */
   encryptionSecret: string | undefined;
   /** Reads the encrypted key row for this user and provider, or undefined if none stored. */
-  readKey: (userId: string, providerId: string) => Promise<{ ciphertext: string } | undefined>;
+  readKey: (
+    userId: string,
+    providerId: string,
+  ) => Effect.Effect<
+    { ciphertext: string } | undefined,
+    SqlError | ParseResult.ParseError,
+    SqlClient.SqlClient
+  >;
   /** Reads every vault key row the user has stored, for decryption in the handler. */
   readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
   /** Lists what is stored — provider ids and timestamps, never ciphertext. */
@@ -82,11 +91,23 @@ export function resolveHostedUserId(request: Request): Promise<string | undefine
 
 /** The provider key vault's own secret, read once with the deployment's services rather than at each invocation. */
 export async function hostedEncryptionSecret(): Promise<string | undefined> {
-  const environment = await runWeb(HostedEnvironment);
-  return environment.providerKeyEncryptionSecret === undefined
-    ? undefined
-    : Redacted.value(environment.providerKeyEncryptionSecret);
+  return runWeb(hostedEncryptionSecretEffect);
 }
+
+/**
+ * The same secret, read on a handler's own fiber rather than through
+ * `runWeb`: a handler that is already an effect on the edge's runtime reads
+ * `HostedEnvironment` directly instead of running one to get at it.
+ */
+export const hostedEncryptionSecretEffect: Effect.Effect<
+  string | undefined,
+  never,
+  HostedEnvironment
+> = Effect.map(HostedEnvironment, (environment) =>
+  environment.providerKeyEncryptionSecret === undefined
+    ? undefined
+    : Redacted.value(environment.providerKeyEncryptionSecret),
+);
 
 /**
  * The same seams, exported for a route built as an `HttpApi` group instead of
@@ -98,8 +119,8 @@ export async function hostedEncryptionSecret(): Promise<string | undefined> {
  * effects and so read it on the group's own fiber.
  */
 export const hostedVaultSeams = {
-  resolveUserId: resolveHostedUserId,
-  readKey: (userId: string, providerId: string) => runWeb(readVaultKey(userId, providerId)),
+  resolveUserId: (request: Request) => Effect.promise(() => resolveHostedUserId(request)),
+  readKey: readVaultKey,
   readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
   listKeys: (userId: string) => runWeb(listVaultKeys(userId)),
   storeKey: (userId: string, providerId: string, ciphertext: string) =>

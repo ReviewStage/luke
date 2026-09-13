@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { runTest } from "@sidecar/wire/testing";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { routeFromHttpApp } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
+import { runWithoutDatabase } from "./support/no-database.js";
 import {
   recordedGoldenNames,
   recordedResponse,
@@ -50,12 +50,12 @@ const EXCHANGES: readonly Exchange[] = [
       const { handleConversationRead } = await import("../server/hosted/conversation-read.js");
       const { executeConversationRead } = await import("../server/hosted/action-execute.js");
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return runTest(
+      return runWithoutDatabase(
         handleConversationRead({
           ...hostedVaultSeams,
           encryptionSecret: undefined,
           request: new Request(`${ORIGIN}/api/sessions/messages`),
-          execute: (ask) => runTest(executeConversationRead(ask)),
+          execute: executeConversationRead,
         }),
       );
     },
@@ -102,7 +102,8 @@ const EXCHANGES: readonly Exchange[] = [
       }),
     handle: async () => {
       const { handleEvents } = await import("../server/hosted/events.js");
-      return runTest(
+      const { Effect } = await import("effect");
+      return runWithoutDatabase(
         handleEvents({
           request: new Request(`${ORIGIN}/api/events`, {
             method: "POST",
@@ -110,7 +111,7 @@ const EXCHANGES: readonly Exchange[] = [
             body: "[]",
           }),
           projectApiKey: undefined,
-          resolveUserId: async () => "user-1",
+          resolveUserId: () => Effect.succeed("user-1"),
         }),
       );
     },
