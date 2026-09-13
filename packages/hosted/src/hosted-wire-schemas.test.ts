@@ -74,6 +74,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
     sessionOpeningFrameSchema: liveContract.sessionOpeningFrameSchema,
+    sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     liveSessionCreatedSchema: liveContract.liveSessionCreatedSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,

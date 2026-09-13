@@ -68,8 +68,8 @@ next and erases nothing here. The 20 most recent Conversation lines, each cut to
 memory. The same 20 lines, in their roles, are also placed into each voice
 session when it opens, beside a summary of the coding agent sessions on your
 screen (their titles, status, and branch, as the rows draw them), so the voice
-can follow what was just said and what is on your desk; while a session
-stands, that summary is sent again as quiet context whenever it changes. A thread you open as temporary is held in memory alone and is gone
+can follow what was just said and what is on your desk as it stood when the
+session opened. A thread you open as temporary is held in memory alone and is gone
 when Luke next opens; nothing said in it is remembered automatically. What
 our servers keep of a conversation is the record described under "Your
 account" below; a fixture or evidence run keeps no conversation at all.
@@ -478,9 +478,9 @@ Send.
   waiting on you, finished, or failed, the tool it is holding for your
   permission, and roughly how long since its provider last wrote about it,
   and nothing else about it: no branch, repository, error line, model,
-  address, or conversation. When that changes while the session is open, the
-  lines that changed are sent again, so what the voice knows of your desk
-  stays current without asking. Every turn sends the
+  address, or conversation. That summary is what the session opens with; a
+  change to your desk while the session is open is not sent to the voice, and
+  what Luke says about it he reads for himself when you ask. Every turn sends the
   session fields listed above — on the Mac app, iOS, and Apple Watch alike,
   drawn from the
   same cloud observation your vault keys already
@@ -488,7 +488,9 @@ Send.
   described under Provider API keys above). When you use voice through your
   Luke account, the Mac reaches OpenAI through our own voice service, which
   creates the session on our key, relays the control and transcript events
-  between your Mac and OpenAI without reading them, drops the audio OpenAI
+  between your Mac and OpenAI, reads them on our side to keep the record and
+  to hand each spoken ask to Luke's judgment (your Mac no longer answers a
+  spoken ask itself), drops the audio OpenAI
   reflects back so your voice never transits our service, keeps of the
   exchange only the lines described under "Your account" above, logs only
   status codes and byte counts, and records the
@@ -496,13 +498,7 @@ Send.
   devices opened it (the Mac names its own device row on the handshake, and
   the service accepts that name only for a row your account holds), so a
   briefing that device claims is spoken into that session and no other. With your own OpenAI key the Mac
-  reaches OpenAI directly and our service sees nothing of the session. One
-  such session opens on its own at every signed-in launch, after the first
-  sign-in's arrival beat has played, so Luke can greet you: the greeting is a
-  fixed script into which travels only the first word of the name your
-  account provider reported, never a session's title or anything else about
-  your work, and it waits like an announcement while a meeting or the Announce
-  switch holds it. Luke's judgment is a separate call
+  reaches OpenAI directly and our service sees nothing of the session. Luke's judgment is a separate call
   to OpenAI's Responses API, made when his periodic look
   wakes the conversation following that session and when
   you ask him something: it carries that conversation's working memory —

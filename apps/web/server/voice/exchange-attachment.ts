@@ -20,9 +20,9 @@ import { upstreamSideband } from "./live-sideband.js";
  * at the session's start, the store context and the writer the function
  * already holds, and eve reached as the deployment for that account. This is
  * the whole of what `VoiceServiceOptions.exchange` takes, kept apart from the
- * function's composition so the route can pass it in one line when the
- * desktop's own exchange is unwired, and not before: until then the function
- * passes nothing, the service only pipes, and the desktop answers.
+ * function's composition, which passes it composed over the deployment's
+ * seams (`deployment-exchange.ts`) since E5-3 unwired the desktop's own
+ * exchange in the same commit.
  *
  * One socket, one scope. The attachment opens a `Scope` when the service
  * offers it a session, builds the whole standing — the account's main, the

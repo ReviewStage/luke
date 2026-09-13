@@ -55,23 +55,25 @@ reverse, store closed. The drain runs once whichever door asks for it.
 and there is none to run. A shutdown never fabricates a completion for work it
 cut off.**
 
-## The live session reaches the brain through one door
+## The live session is the service's exchange, held open from here
 
-**It reaches Luke's judgment only through `LiveBrain`** — a transport-neutral
-contract of ids and plain data, because the roster stays with the brain. Nothing
-in the service imports `@sidecar/brain`. The run event kinds are read by name and
-never assumed exhaustive: a brain firing kinds this build does not know must
-leave the adapter standing.
-
-**The live service is the one sink for everything Luke says unprompted** — every
-briefing, every run's streamed reply, and the two onboarding beats. At most one
-spoken reply per run holds by construction, since a run's sentences reach the
-voice only as that run's own events arriving here, each appended once in order
-and none after the run's end.
+**The host reaches no brain and writes no record for a voice session.** The
+exchange stands on the voice service: every spoken ask is admitted through
+`acceptAsk` there, every reply and briefing is appended there over the same
+socket the relay pipes, and the account's record is the service's. What this
+package keeps is `LiveSessionHolder`, which creates the session for the peer's
+offer (seeded from the desk and the recent Conversation as this Mac sees them),
+ends it on the peer's hang-up or the drain, sends the stop key's one
+`session.instructions.append` under no delegation, and carries the peer's idle
+to the service as `session.activity`, since the idle decision is made against
+appends only the service made. It appends nothing else and wants no session of
+its own: the `wanted` phase is never announced from here, and nothing on this
+side speaks unprompted. The sessions route closes a desktop socket that sends
+any other frame, so a re-wired local exchange is refused at the relay rather
+than heard twice.
 
 The stop key's instruction is asked for only while Luke is speaking, since the
 append is standing text a silent model would read as a rule for its next answer.
-A muted microphone is read as nothing but `micLive = false`.
 
 ## Two doors that exist for the graph
 

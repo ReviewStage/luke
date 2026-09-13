@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { test } from "vitest";
 import {
   LIVE_CLIENT_EVENT,
@@ -12,6 +12,8 @@ import {
   FRAME_DECISION,
   frameType,
   routeForPath,
+  SESSIONS_CLIENT_EVENTS,
+  SESSIONS_REPORT_FRAMES,
   upstreamFrameDecision,
   VOICE_ROUTE,
 } from "../server/voice/frames";
@@ -52,17 +54,41 @@ test("reflected audio is dropped by type toward the desktop on both routes", () 
   }
 });
 
-test("a signed-in session forwards every other frame in both directions, unread ones included", () => {
+test("a signed-in session is shown every frame OpenAI sends, unread ones included", () => {
   assert.equal(
     upstreamFrameDecision(LIVE_SERVER_EVENT.DELEGATION_CREATED, VOICE_ROUTE.SESSIONS),
     FRAME_DECISION.FORWARD,
   );
   assert.equal(upstreamFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+});
+
+test("a signed-in desktop may send the stop and the hang-up, is read for its idle report, and is refused on anything else", () => {
+  assert.deepEqual(SESSIONS_CLIENT_EVENTS, [
+    LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+    LIVE_CLIENT_EVENT.CLOSE,
+  ]);
+  assert.deepEqual(SESSIONS_REPORT_FRAMES, [VOICE_SERVICE_FRAME.SESSION_ACTIVITY]);
+  for (const type of SESSIONS_CLIENT_EVENTS) {
+    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+  }
   assert.equal(
-    desktopFrameDecision(LIVE_CLIENT_EVENT.COMMENTARY_APPEND, VOICE_ROUTE.SESSIONS),
-    FRAME_DECISION.FORWARD,
+    desktopFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY, VOICE_ROUTE.SESSIONS),
+    FRAME_DECISION.REPORT,
   );
-  assert.equal(desktopFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+  // The exchange's own appends from an older desktop build, the microphone
+  // switch that never crosses this socket, a handshake frame after the
+  // handshake, and a frame whose type cannot be read: each closes the socket.
+  for (const type of [
+    LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+    LIVE_CLIENT_EVENT.THINKING_APPEND,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+    VOICE_SERVICE_FRAME.SESSION_CREATE,
+    VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    undefined,
+  ]) {
+    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REFUSE);
+  }
 });
 
 test("the introduction is shown exactly the renderer's server events and may send exactly its client events", () => {

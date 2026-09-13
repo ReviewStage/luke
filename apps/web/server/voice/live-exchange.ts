@@ -101,10 +101,10 @@ export interface AttachedSession {
  * where this build stands none; one offered that cannot stand throws, and the
  * route refuses the session. The attachment builds the sideband over the
  * socket and adopts, so the service itself reaches nothing of the exchange
- * or the live-session door, and the function bundle gains that edge only in
- * the commit that passes the attachment: the desktop still runs an exchange
- * of its own, and with both live every spoken ask would be delegated twice
- * and every reply appended twice.
+ * or the live-session door; the function bundle gained that edge in the
+ * commit that passed the attachment and unwired the desktop's own exchange,
+ * since with both live every spoken ask would be delegated twice and every
+ * reply appended twice.
  */
 export type ExchangeAttachment = (
   session: AttachedSession,

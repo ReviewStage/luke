@@ -32,6 +32,7 @@ import {
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
 import {
+  type FakeLiveSocket,
   readSideband,
   type ScriptedOpening,
   type ScriptedSocketSeam,
@@ -642,6 +643,135 @@ it.scopedLive(
           LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
         ],
       );
+    }),
+);
+
+it.scopedLive(
+  "the hosted session's idle report is the service's own frame on the same socket, and rides whichever connection stands",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.reportActivity);
+      yield* opened.attach();
+      opened.reportActivity(true);
+      const [first] = script.sockets;
+      assert.ok(first);
+      assert.deepEqual(
+        first.sent.map((data) => JSON.parse(data)),
+        [
+          {
+            type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+            sdp: SDP_OFFER,
+            voice: LIVE_DEFAULTS.VOICE,
+            input: [],
+          },
+          { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true },
+        ],
+      );
+      first.closeFromServer({ code: 1001 });
+      yield* openedSockets(script, 2);
+      yield* pause;
+      const second = script.sockets[1];
+      assert.ok(second);
+      // The report last made stands for the session, so the fresh connection
+      // is told it first; a report made after rides the new connection as any
+      // send does.
+      opened.reportActivity(false);
+      assert.deepEqual(
+        second.sent.map((data) => JSON.parse(data)),
+        [
+          { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: SESSION_ID },
+          { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true },
+          { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: false },
+        ],
+      );
+    }),
+);
+
+it.scopedLive(
+  "a peer that went idle before a re-attach is idle to the exchange that comes after it: the standing report is told to the fresh connection, and one that never reported is told nothing",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering(createdFrame()),
+        answering(attachedFrame()),
+        answering(attachedFrame()),
+      ]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.reportActivity);
+      yield* opened.attach();
+      // No report yet: a recycled connection is told nothing it was not told.
+      script.sockets[0]?.closeFromServer({ code: 1001 });
+      yield* openedSockets(script, 2);
+      yield* pause;
+      assert.deepEqual(
+        script.sockets[1]?.sent.map((data) => JSON.parse(data).type),
+        [VOICE_SERVICE_FRAME.SESSION_ATTACH],
+      );
+      opened.reportActivity(true);
+      script.sockets[1]?.closeFromServer({ code: 1001 });
+      yield* openedSockets(script, 3);
+      yield* pause;
+      assert.deepEqual(
+        script.sockets[2]?.sent.map((data) => JSON.parse(data)),
+        [
+          { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: SESSION_ID },
+          { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true },
+        ],
+      );
+    }),
+);
+
+it.scopedLive(
+  "idle reports made during a gap are not replayed behind the standing one: a peer heard again before the fresh connection stood is told as heard, never as idle",
+  () =>
+    Effect.gen(function* () {
+      let held: FakeLiveSocket | undefined;
+      const script = scriptedOpenSocket([
+        answering(createdFrame()),
+        (socket) => {
+          // The second connection is not answered until the test says so, so the gap is held open.
+          held = socket;
+          return undefined;
+        },
+      ]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.reportActivity);
+      const sideband = yield* opened.attach();
+      script.sockets[0]?.closeFromServer({ code: 1001 });
+      yield* openedSockets(script, 2);
+      // During the gap the peer goes idle, then is heard again, and hangs up nothing.
+      opened.reportActivity(true);
+      opened.reportActivity(false);
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
+      assert.ok(held);
+      held.receive(attachedFrame());
+      yield* pause;
+      // The standing report says heard, once; the stale idle never reaches the fresh exchange, and the other held send does.
+      assert.deepEqual(
+        held.sent.map((data) => JSON.parse(data)),
+        [
+          { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: SESSION_ID },
+          { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: false },
+          { type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" },
+        ],
+      );
+    }),
+);
+
+it.scopedLive(
+  "a keyed session opens no door for the idle report: nothing stands between it and OpenAI to tell",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = openAi([created()]);
+      const { source } = keyed(fetchLike);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      assert.equal(opened.reportActivity, undefined);
     }),
 );
 

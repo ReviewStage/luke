@@ -20,12 +20,10 @@ import {
   invalid,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
-import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { ObservationLoop } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
-import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
 import { Duration, Effect, Either, Fiber, Queue, Runtime, Schedule, Scope } from "effect";
 import {
@@ -38,7 +36,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { conductorKeyOnboardingOwed } from "./conductor-key-onboarding-flow.js";
 import { quietUntilFrom } from "./device-presence.js";
-import { HostKernelTag, lateService } from "./effect/kernel.js";
+import { HostKernelTag } from "./effect/kernel.js";
 import { introductionOwed } from "./introduction-flow.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateRecord } from "./onboarding-state.js";
@@ -47,13 +45,13 @@ import { reporterOf } from "./wire-helpers.js";
 /** A diary changes at the pace of hands too; five minutes is current. */
 const CALENDAR_REFRESH_INTERVAL_MS = 5 * 60_000;
 /**
- * How often held notices ask whether the meeting holding them has ended. The
- * question is answered from meetings already in memory, so asking often costs
- * nothing. The boundary timer is what answers on time — this tick is the net
- * behind it, for the clocks a timer cannot promise to keep: a laptop asleep
- * through the boundary, or a system clock moved by hand.
+ * How often the announcement hold the panel draws is read again against the
+ * meetings already in memory, so asking often costs nothing. The boundary
+ * timer is what answers on time — this tick is the net behind it, for the
+ * clocks a timer cannot promise to keep: a laptop asleep through the
+ * boundary, or a system clock moved by hand.
  */
-const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
+const HOLD_REFRESH_INTERVAL_MS = 30_000;
 /**
  * How often the System Settings switch is asked about between passes. Each
  * probe is a fresh helper process on purpose: EventKit answers a running
@@ -63,21 +61,13 @@ const HELD_NOTICE_RELEASE_INTERVAL_MS = 30_000;
  */
 const APPLE_ACCESS_POLL_INTERVAL_MS = 10_000;
 
-/** What the calendars reach in the speech the meetings hold. */
-interface CalendarsLinks {
-  reconcileSpeech: () => void;
-  withdrawBeat: (kind: BeatKind) => void;
-  /** The live service's held briefings go with the meetings that were holding them. */
-  dropBriefings: () => void;
-  /** The gate settling is where the beat that was waiting for it may speak. */
-  requestOnboardingBeat: () => void;
-}
-
 export interface CalendarsComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   observedCalendars: () => readonly ObservedAccountCalendars[];
   announcementsQuietNow: (at: number) => Effect.Effect<boolean>;
+  /** Reads the hold again and tells the panel where it moved; the settings composer yields this where the pause is toggled. */
+  readonly refreshAnnouncementHold: Effect.Effect<void>;
   /**
    * When the meeting hold standing at `at` ends; `null` once the calendars
    * have been observed and none stands; `undefined` before the first
@@ -110,7 +100,6 @@ export interface CalendarsComposer extends Composer {
   /** Arms the three observation-driven timers; the account gate's own edges are what run these two. */
   readonly armObservation: Effect.Effect<void>;
   readonly disarmObservation: Effect.Effect<void>;
-  link: (links: CalendarsLinks) => Effect.Effect<void>;
 }
 
 export interface CalendarsDependencies {
@@ -136,7 +125,6 @@ export const composeCalendars = (
     const runtime = yield* Effect.runtime<never>();
     const { runMode, report, now } = kernel;
     const settingsStore = settings.store;
-    const late = yield* lateService<CalendarsLinks>();
     const fileSystemContext = yield* Effect.context<FileSystem.FileSystem>();
 
     const googleCalendar = new GoogleCalendarReader({
@@ -259,25 +247,19 @@ export const composeCalendars = (
     const writeOnboardingState = (moment: OnboardingState): Effect.Effect<void> =>
       writeGate.withPermits(1)(
         Effect.gen(function* () {
-          const links = yield* late.value;
           const persisted = yield* onboarding.update((current) => ({ ...current, ...moment }));
           // What another process recorded, under what this run has: a moment
           // offered while this write was out stands in memory already and is
           // not on the disk the merge above read from.
           onboardingState = { ...persisted, ...onboardingState, ...moment };
-          if (moment.arrivalSpokenAt !== undefined) {
-            links.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
-          }
           const owed = calendarOnboardingGateOwed();
-          if (!owed) links.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
           const introduction = spokenIntroductionOwed();
           if (introduction !== announcedIntroductionOwed) {
             announcedIntroductionOwed = introduction;
             kernel.emit(GATEWAY_EVENT.INTRODUCTION_CHANGED, { owed: introduction });
-            // The introduction is an announcement hold of its own, and the live
-            // service learns a hold only by re-reading it: raised here so nothing
-            // speaks over the greeting, dropped here so what waited is re-decided.
-            links.reconcileSpeech();
+            // The introduction owed is a hold the panel draws: read again
+            // here so the face it holds asleep wakes on the completion.
+            yield* refreshAnnouncementHold;
           }
           const keyGate = conductorKeyGateOwed();
           if (keyGate !== announcedKeyGateOwed) {
@@ -303,17 +285,15 @@ export const composeCalendars = (
     };
 
     /**
-     * The settled key gate, and the beat that was waiting behind it: the
-     * settings composer's link yields this where it stores a key, so a key
-     * stored twice reads the gate twice and settles it once.
+     * The settled key gate: the settings composer's link yields this where it
+     * stores a key, so a key stored twice reads the gate twice and settles it
+     * once.
      */
     const settleKeyGate: Effect.Effect<void> = Effect.gen(function* () {
       if (!conductorKeyOnboardingOwed(onboardingState)) return;
       yield* writeOnboardingState({
         conductorKeyOnboardingSettledAt: new Date(now()).toISOString(),
       });
-      const links = yield* late.value;
-      links.requestOnboardingBeat();
     });
 
     const settleCalendarOnboardingIfConnected = (): Effect.Effect<void> =>
@@ -364,8 +344,16 @@ export const composeCalendars = (
         (quietDuringMeetings) => quietUntilFrom(calendarMeetings, quietDuringMeetings, at),
       );
 
-    const refreshAnnouncementHold = (): Effect.Effect<void> =>
-      Effect.asVoid(announcementsQuietNow(now()));
+    /**
+     * The hold read again for the panel's sake: `announcementsQuietNow` is
+     * what tells the panel where the hold moved, and since E5-3 nothing on
+     * this side queues speech to hold, so this read is the whole of what the
+     * pass, the boundary wake, the tick, the pause, and the introduction's
+     * completion still owe.
+     */
+    const refreshAnnouncementHold: Effect.Effect<void> = Effect.suspend(() =>
+      Effect.asVoid(announcementsQuietNow(now())),
+    );
 
     /**
      * The meeting-boundary wake is a one-shot fiber rather than a fixed
@@ -395,8 +383,7 @@ export const composeCalendars = (
               Effect.zipRight(
                 Effect.gen(function* () {
                   boundaryFiber = undefined;
-                  const links = yield* late.value;
-                  links.reconcileSpeech();
+                  yield* refreshAnnouncementHold;
                   yield* armQuietBoundaryTimer;
                 }),
               ),
@@ -431,7 +418,7 @@ export const composeCalendars = (
           if (held.failure) report(`Calendar observation failed: ${held.failure}`);
         }
         if (!loop.isCurrent(generation)) return;
-        (yield* late.value).reconcileSpeech();
+        yield* refreshAnnouncementHold;
         yield* armQuietBoundaryTimer;
       });
     }
@@ -493,7 +480,7 @@ export const composeCalendars = (
       const scope = yield* Effect.scope;
       observationScope = scope;
       yield* Effect.addFinalizer(() =>
-        Effect.gen(function* () {
+        Effect.sync(() => {
           observationScope = undefined;
           boundaryFiber = undefined;
           appleAccessProbeFailing = false;
@@ -501,16 +488,15 @@ export const composeCalendars = (
           observedCalendars = [];
           googleCalendar.forget();
           appleCalendar.forget();
-          (yield* late.value).dropBriefings();
           kernel.emit(GATEWAY_EVENT.CALENDARS_CHANGED, { calendars: [] });
-          Runtime.runFork(runtime)(refreshAnnouncementHold());
+          Runtime.runFork(runtime)(refreshAnnouncementHold);
         }),
       );
       yield* Effect.forkScoped(
         Effect.interruptible(
           Effect.schedule(
-            Effect.flatMap(late.value, (links) => Effect.sync(() => links.reconcileSpeech())),
-            Schedule.spaced(Duration.millis(HELD_NOTICE_RELEASE_INTERVAL_MS)),
+            refreshAnnouncementHold,
+            Schedule.spaced(Duration.millis(HOLD_REFRESH_INTERVAL_MS)),
           ),
         ),
       );
@@ -717,20 +703,17 @@ export const composeCalendars = (
             yield* writeOnboardingState({
               conductorKeyOnboardingSkippedAt: new Date(now()).toISOString(),
             });
-            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
       // The completion is the host's write, so the record has one writer and
-      // the hold above comes down on the same event the client learns from;
-      // the beats that waited behind the greeting are asked for again here.
+      // the client learns of it from the same event.
       [GATEWAY_METHOD.ONBOARDING_COMPLETE_INTRODUCTION]: () =>
         Effect.gen(function* () {
           if (introductionOwed(onboardingState)) {
             yield* writeOnboardingState({
               introductionCompletedAt: new Date(now()).toISOString(),
             });
-            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
@@ -740,7 +723,6 @@ export const composeCalendars = (
             yield* writeOnboardingState({
               calendarOnboardingSkippedAt: new Date(now()).toISOString(),
             });
-            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
@@ -750,7 +732,6 @@ export const composeCalendars = (
             yield* writeOnboardingState({
               calendarOnboardingSettledAt: new Date(now()).toISOString(),
             });
-            (yield* late.value).requestOnboardingBeat();
           }
           return {};
         }),
@@ -761,6 +742,7 @@ export const composeCalendars = (
       loop,
       observedCalendars: () => observedCalendars,
       announcementsQuietNow,
+      refreshAnnouncementHold,
       meetingQuietUntil,
       gateOwed: calendarOnboardingGateOwed,
       gateOfferable: calendarGateOfferable,
@@ -788,7 +770,6 @@ export const composeCalendars = (
       },
       armObservation: observation.arm,
       disarmObservation: observation.disarm,
-      link: (next) => Effect.asVoid(late.set(next)),
       // The gate's own disarm is what ends the observation; the scope this
       // composer was built in ends whatever a disarm missed, so this lifetime
       // is its start alone.
