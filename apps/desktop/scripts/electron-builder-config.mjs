@@ -75,9 +75,6 @@ export function createElectronBuilderConfig(env = process.env) {
       output: builderReleaseArtifactDirectory(repoRoot),
     },
     asar: true,
-    // The brain store's worker thread starts from a real file path, so its
-    // bundle is unpacked beside the archive; store-path.ts resolves it.
-    asarUnpack: ["dist/store-worker.js"],
     npmRebuild: false,
     files: ["dist/**/*", "package.json", "!dist/**/*.map"],
     extraResources: [

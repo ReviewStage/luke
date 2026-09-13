@@ -8,36 +8,17 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { Duration, Effect, Exit, Scope, TestClock } from "effect";
+import { Effect } from "effect";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
-  CONVERSATION_MAINTENANCE_INTERVAL_MS,
   type ConversationOperationsDependencies,
-  conversationMaintenance,
   conversationOperations,
 } from "./conversation-operations.js";
 
-/**
- * Polls `condition` across up to `rounds` batches of a hundred fiber yields
- * each, letting Effect's own scheduler interleave with pending Promises
- * rather than pumping `setImmediate` a fixed number of times.
- */
-function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    for (let round = 0; round < rounds; round += 1) {
-      if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
-    }
-    assert.ok(condition(), "the condition did not hold in time");
-  });
-}
-
 const NOW = 1_800_000_000_000;
 const THREAD = threadSessionKey("t-1");
-/** The cutoff an earlier Clear left, which the deletion's archive must record as the one before its own. */
-const EARLIER_CUTOFF = NOW - 5;
 
-function harness(erasePublished = true, { marks = true, readsCutoff = true } = {}) {
+function harness({ marks = true } = {}) {
   const calls: string[] = [];
   let generation = "gen-1";
   const record = (sessionKey: SessionKey): ConversationRecord => ({
@@ -49,7 +30,7 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
   });
   const entries: readonly ConversationEntry[] = [];
   const dependencies: ConversationOperationsDependencies = {
-    store: {
+    conversations: {
       directory: () => [record(THREAD)],
       holds: (sessionKey) => sessionKey === THREAD || sessionKey === MAIN_SESSION_KEY,
       // SAFETY: the operations reach the thread for its lines and its fence alone.
@@ -59,14 +40,9 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
           fence: (deletedAt: number) => {
             calls.push(`fence:${sessionKey}:${deletedAt}`);
           },
-        }) as unknown as ReturnType<ConversationOperationsDependencies["store"]["thread"]>,
-      conversationCutoff: async (sessionKey) => {
-        calls.push(`cutoff:${sessionKey}`);
-        return readsCutoff ? { value: EARLIER_CUTOFF } : undefined;
-      },
-      eraseConversation: async (sessionKey, now, keepSessionId, cutoffBefore) => {
-        calls.push(`erase:${sessionKey}:${now}:${keepSessionId}:${cutoffBefore}`);
-        return { published: erasePublished };
+        }) as unknown as ReturnType<ConversationOperationsDependencies["conversations"]["thread"]>,
+      erase: (sessionKey, deletedAt) => {
+        calls.push(`erase:${sessionKey}:${deletedAt}`);
       },
     },
     brain: {
@@ -90,7 +66,7 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
 }
 
 it.effect(
-  "Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened",
+  "Delete conversation fences the thread and the brain's generation, then forgets what stood at or before the press while the successor lifetime stands; nothing is retired or reopened",
   () =>
     Effect.gen(function* () {
       const { operations, calls } = harness();
@@ -100,71 +76,31 @@ it.effect(
       );
       assert.deepEqual(calls, [
         `fence:${THREAD}:${NOW}`,
-        `cutoff:${THREAD}`,
         `clear:${THREAD}:${NOW}`,
-        `erase:${THREAD}:${NOW}:gen-2:${EARLIER_CUTOFF}`,
+        `erase:${THREAD}:${NOW}`,
       ]);
-      const unpublished = harness(false);
-      assert.equal(
-        yield* unpublished.operations.deleteConversation(THREAD),
-        CONVERSATION_DELETE_OUTCOME.INCOMPLETE,
+      assert.deepEqual(
+        operations.directory().map((record) => record.sessionKey),
+        [THREAD],
       );
+      assert.equal(operations.holds(THREAD), true);
+      assert.deepEqual(operations.lines(THREAD), []);
     }),
 );
 
 it.effect(
-  "a marker the store will not write refuses the deletion with the fences standing and nothing erased",
+  "a marker the brain's store will not write refuses the deletion with the fences standing and nothing erased",
   () =>
     Effect.gen(function* () {
-      const { operations } = harness(true, { marks: false });
-      assert.equal(
-        yield* operations.deleteConversation(THREAD),
-        CONVERSATION_DELETE_OUTCOME.REFUSED,
-      );
-    }),
-);
-
-it.effect(
-  "a cutoff the store cannot read refuses the deletion after the marker, with nothing erased: an archive never records a guessed cutoff",
-  () =>
-    Effect.gen(function* () {
-      const { operations } = harness(true, { readsCutoff: false });
+      const { operations, calls } = harness({ marks: false });
       assert.equal(
         yield* operations.deleteConversation(THREAD),
         CONVERSATION_DELETE_OUTCOME.REFUSED,
       );
-    }),
-);
-
-it.effect(
-  "maintenance runs at the launch, preserving the busy conversations, and again on its own hourly clock, stopping with its scope",
-  () =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.make();
-      const runs: (readonly SessionKey[])[] = [];
-      yield* Effect.provideService(
-        conversationMaintenance({
-          store: {
-            runMaintenance: async (preserve: readonly SessionKey[]) => {
-              runs.push(preserve);
-              return undefined;
-            },
-          },
-          brain: { busyConversations: () => [THREAD] },
-        }),
-        Scope.Scope,
-        scope,
-      );
-      yield* waitFor(() => runs.length > 0);
-      assert.deepEqual(runs, [[THREAD]]);
-
-      yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
-      yield* waitFor(() => runs.length > 1);
-      assert.deepEqual(runs, [[THREAD], [THREAD]]);
-
-      yield* Scope.close(scope, Exit.void);
-      yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
-      assert.deepEqual(runs, [[THREAD], [THREAD]]);
+      assert.deepEqual(calls, [
+        `fence:${THREAD}:${NOW}`,
+        `clear:${THREAD}:${NOW}`,
+        "report:Delete conversation incomplete: the brain's memory could not be marked erased",
+      ]);
     }),
 );

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { describe, it } from "@effect/vitest";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
+import { DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
 import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option, TestClock } from "effect";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
@@ -19,7 +20,6 @@ import {
   SecretCipher as SecretCipherTag,
   ShutdownSignal,
   StateRoot,
-  StoreWorker,
 } from "./seams.js";
 
 const CIPHER: SecretCipher = {
@@ -35,7 +35,6 @@ interface TestSeams {
   readonly packaged: boolean;
   readonly environment: Record<string, string>;
   readonly cipher: SecretCipher;
-  readonly createWorker: () => never;
   readonly createId: () => string;
   readonly report: (message: string) => void;
 }
@@ -47,9 +46,6 @@ const seams = (overrides: Partial<TestSeams> = {}): TestSeams => ({
   packaged: false,
   environment: {},
   cipher: CIPHER,
-  createWorker: () => {
-    throw new Error("a fixture run keeps nothing on disk");
-  },
   createId: () => "id",
   report: () => undefined,
   ...overrides,
@@ -68,7 +64,6 @@ const kernelLayerOver = (input: TestSeams) =>
         ConfigProvider.fromMap(new Map(Object.entries(input.environment))),
       ),
       Layer.succeed(SecretCipherTag, input.cipher),
-      Layer.succeed(StoreWorker, { create: input.createWorker }),
       Layer.succeed(IdSource, { create: input.createId }),
       reporterLayer(input.report),
       Layer.succeed(MachinePresenceReader, { read: undefined }),
@@ -85,9 +80,6 @@ describe("the seam tags", () => {
   it.effect("each resolve from the kernel's own layer", () =>
     Effect.gen(function* () {
       const reported: string[] = [];
-      const worker = () => {
-        throw new Error("a fixture run keeps nothing on disk");
-      };
 
       const read = yield* Effect.provide(
         Effect.all({
@@ -95,7 +87,6 @@ describe("the seam tags", () => {
           runMode: RunMode,
           identity: AppIdentity,
           cipher: SecretCipherTag,
-          storeWorker: StoreWorker,
           idSource: IdSource,
           reporter: Reporter,
         }),
@@ -103,7 +94,6 @@ describe("the seam tags", () => {
           seams({
             stateRoot: "/state",
             appVersion: "1.2.3",
-            createWorker: worker,
             createId: () => "minted",
             report: (message) => reported.push(message),
           }),
@@ -117,7 +107,6 @@ describe("the seam tags", () => {
         packaged: false,
       });
       assert.equal(read.cipher, CIPHER);
-      assert.equal(read.storeWorker.create, worker);
       assert.equal(read.idSource.create(), "minted");
       read.reporter.report("a line");
       assert.deepEqual(reported, ["a line"]);
@@ -183,6 +172,10 @@ describe("the seam tags", () => {
 
       assert.equal(kernel.stateRoot, "/state");
       assert.equal(kernel.createId(), "id");
+      assert.equal(
+        kernel.agentWorkspacePath(),
+        path.join("/state", "agents", DEFAULT_AGENT_ID, "workspace"),
+      );
       assert.equal(path.dirname(kernel.agentSkillsPath()), kernel.agentWorkspacePath());
     }),
   );

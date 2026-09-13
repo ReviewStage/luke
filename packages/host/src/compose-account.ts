@@ -48,7 +48,6 @@ interface AccountLinks {
   onFirstSignIn: () => void;
   retireBrain: () => Effect.Effect<void>;
   rebuildBrain: () => Effect.Effect<void>;
-  readonly syncMemory: Effect.Effect<void>;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
   releaseDevice: (account: StoredAccount) => Effect.Effect<void>;
   /** This installation's device row id, once registered, for the live session's handshake. */
@@ -288,7 +287,6 @@ export const composeAccount = (
             Effect.gen(function* () {
               const links = yield* late.value;
               yield* links.rebuildBrain();
-              yield* links.syncMemory;
             }),
         }),
       ),

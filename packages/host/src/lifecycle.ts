@@ -1,43 +1,11 @@
 import type { GatewayShutdownSteps } from "@sidecar/gateway";
-import { Cause, Effect, type Fiber, Ref, type Scope } from "effect";
+import { Effect, type Fiber, Ref } from "effect";
 
 /**
- * Two moments of the runtime host's life where one concern must not decide
- * another's fate: the workspace seed and the memory index at start, and the
- * counted events and the run drain at the explicit quit.
+ * The explicit quit, where one concern must not decide another's fate: the
+ * counted events and the live session's close each ride beside the run drain
+ * rather than inside it.
  */
-
-export interface StartupStoreOptions {
-  /** Seeds the workspace's missing files; a failure is reported and stops nothing else. */
-  readonly seedWorkspace: Effect.Effect<void, unknown>;
-  /** Starts the notebook index; its own settling is nobody's to wait on. */
-  readonly startMemory: Effect.Effect<void>;
-  readonly report: (message: string) => void;
-}
-
-/**
- * The workspace's missing files are seeded at every live launch and never
- * rewritten. A seed that failed leaves the files that already stand, which
- * are still worth indexing, so the index starts whatever became of the seed
- * and the start does not wait on the index: the index's own start is a fiber
- * of the scope this runs in, which is the caller's lifetime, forked
- * interruptible because the start this runs inside is not.
- */
-export function seedWorkspaceThenStartMemory(
-  options: StartupStoreOptions,
-): Effect.Effect<void, never, Scope.Scope> {
-  return Effect.zipRight(
-    Effect.catchAllCause(options.seedWorkspace, (cause) => {
-      const failure = Cause.squash(cause);
-      return Effect.sync(() => {
-        options.report(
-          `Brain workspace could not be seeded: ${failure instanceof Error ? failure.message : String(failure)}`,
-        );
-      });
-    }),
-    Effect.asVoid(Effect.forkScoped(Effect.interruptible(options.startMemory))),
-  );
-}
 
 /**
  * A step that begins beside the drain rather than inside it: the first ask

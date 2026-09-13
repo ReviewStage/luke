@@ -1,9 +1,7 @@
 import type { BrainFlushMarkerStore } from "@sidecar/brain";
 import { runMemoryHousekeeping } from "@sidecar/brain";
-import type { StoreClient } from "@sidecar/brain/store";
 import {
   type HousekeepingPrompt,
-  housekeepingCompleted,
   isMaintenanceEligibleConversation,
   localDayStamp,
   MEMORY_FLUSH_DEFAULTS,
@@ -27,12 +25,11 @@ import { Effect } from "effect";
  * compaction, the reset capture before the conversation starts fresh — and
  * the flush marker the brain keeps its cycle by. Every model call is a
  * workspace-only run over a private context that is dropped at its end, on
- * the developer's own key or through Luke's service.
+ * the developer's own key or through Luke's service, and what it writes is a
+ * dated note in the agent's workspace on disk.
  */
 
 export interface MemoryMaintenanceDependencies {
-  persistent: boolean;
-  client: () => StoreClient;
   /** A runtime for the housekeeping runs, or nothing when no brain may stand. */
   createRuntime: () => AgentRuntimeEffect | undefined;
   workspaceDirectory: () => string;
@@ -40,27 +37,32 @@ export interface MemoryMaintenanceDependencies {
   now: () => number;
   createId: () => string;
   report: (message: string) => void;
-  /** Run at every committed notebook change, so the index syncs. */
-  onNotebookChanged?: Effect.Effect<void>;
 }
 
 type MemoryCapture = (turn: MemoryCaptureTurn) => Effect.Effect<MemoryCaptureResult>;
 
+/** Which compaction of which generation a conversation last flushed at. */
+interface FlushMark {
+  readonly generationId: string;
+  readonly compactionCount: number;
+}
+
 export interface MemoryMaintenance {
   /**
    * The capture for one conversation, or nothing for one whose memory is
-   * never captured: main and the developer's durable private threads
-   * capture, never a temporary thread, an observed session, or a child. A
+   * never captured: main captures, never a conversation opened in this run
+   * for an observed session or a child. A
    * reset's capture is cut at its own timeout; the flush runs under the
    * signal the brain hands it. Neither blocks the compaction or the reset
    * that asked for it.
    */
   captureFor: (sessionKey: SessionKey) => MemoryCapture | undefined;
   /**
-   * Where one conversation's flush marker outlives the process: the store's
-   * flush-state row, read and written under the generation the brain names,
-   * so a relaunch knows which cycle was flushed and a new lifetime reads none.
-   * Nothing for a conversation that never flushes.
+   * Where one conversation's flush marker stands for this run: held in
+   * memory under the generation the brain names, so a second compaction of
+   * one cycle is not flushed twice and a new lifetime reads none. The
+   * generation itself is this run's alone, so a marker outliving it would
+   * name nothing. Nothing for a conversation that never flushes.
    */
   flushMarkerFor: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
 }
@@ -76,7 +78,6 @@ export function wireMemoryMaintenance(
   });
 
   const eligible = (sessionKey: SessionKey): boolean =>
-    dependencies.persistent &&
     isMaintenanceEligibleConversation(sessionKey, dependencies.isTemporary(sessionKey));
 
   const housekeeping = (
@@ -94,7 +95,7 @@ export function wireMemoryMaintenance(
           reason: "no brain stands to run it",
         };
       }
-      const result = yield* runMemoryHousekeeping({
+      return yield* runMemoryHousekeeping({
         runtime,
         items: turn.items,
         prompt,
@@ -103,10 +104,6 @@ export function wireMemoryMaintenance(
         signal,
         runId: dependencies.createId(),
       });
-      if (result.writes > 0 && dependencies.onNotebookChanged) {
-        yield* dependencies.onNotebookChanged;
-      }
-      return result;
     });
 
   const flush: MemoryCapture = (turn) =>
@@ -148,27 +145,16 @@ export function wireMemoryMaintenance(
       turn.phase === MEMORY_CAPTURE_PHASE.RESET_REQUESTED ? resetCapture(turn) : flush(turn);
   };
 
+  const marks = new Map<SessionKey, FlushMark>();
   const flushMarkerFor: MemoryMaintenance["flushMarkerFor"] = (sessionKey) => {
     if (!eligible(sessionKey)) return undefined;
     return {
       read: async (generationId) => {
-        const state = await dependencies.client().ask("memory.flush-state.get", {
-          sessionKey,
-          generationId,
-        });
-        return state && housekeepingCompleted(state.outcome) ? state.compactionCount : undefined;
+        const mark = marks.get(sessionKey);
+        return mark?.generationId === generationId ? mark.compactionCount : undefined;
       },
       write: async (generationId, compactionCount) => {
-        const recorded = await dependencies.client().ask("memory.flush-state.put", {
-          sessionKey,
-          state: {
-            generationId,
-            compactionCount,
-            outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
-            flushedAt: dependencies.now(),
-          },
-        });
-        if (!recorded) throw new Error("the store refused the flush marker");
+        marks.set(sessionKey, { generationId, compactionCount });
       },
     };
   };

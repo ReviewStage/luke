@@ -14,10 +14,7 @@ export {
   BRAIN_EMBEDDINGS_PATH,
   type BrainEmbeddingsRequest,
   brainEmbeddingsRequest,
-  EMBEDDING_BATCH_SIZE,
   embeddingsVectors,
-  HostedEmbeddingAdapter,
-  OpenAiEmbeddingAdapter,
 } from "./embedding-adapters.js";
 export {
   type BrainPersistedState,

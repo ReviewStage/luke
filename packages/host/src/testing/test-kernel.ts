@@ -22,7 +22,6 @@ import {
   SecretCipher,
   ShutdownSignal,
   StateRoot,
-  StoreWorker,
 } from "../effect/seams.js";
 import type { HostSeams } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
@@ -45,9 +44,6 @@ const testKernelSeams = (options: TestKernelOptions): HostSeams => ({
   packaged: false,
   environment: {},
   cipher: NO_CIPHER,
-  createWorker: () => {
-    throw new Error("a fixture host keeps nothing on disk");
-  },
   createId: () => "id",
   report: () => undefined,
   ...options,
@@ -70,7 +66,6 @@ const testSeamLayers = (seams: HostSeams) =>
       ),
     ),
     Layer.succeed(SecretCipher, seams.cipher),
-    Layer.succeed(StoreWorker, { create: seams.createWorker }),
     Layer.succeed(IdSource, { create: seams.createId }),
     reporterLayer(seams.report),
     Layer.succeed(MachinePresenceReader, { read: seams.machinePresence }),

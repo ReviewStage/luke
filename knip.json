@@ -29,7 +29,6 @@
     "apps/desktop": {
       "entry": [
         "src/main/index.ts",
-        "src/main/store-worker.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
         "src/renderer/voice/index.tsx",

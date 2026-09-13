@@ -1,6 +1,6 @@
 import path from "node:path";
-import type { Worker } from "node:worker_threads";
 import { type GatewayEventKind, NODE_CAPABILITY_STATUS, NodeRegistry } from "@sidecar/gateway";
+import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
 import type { WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { MachinePresence } from "./device-presence.js";
@@ -12,7 +12,6 @@ import {
 import type { RunMode } from "./run-mode.js";
 import { NodeAnswerLostError } from "./session-action-performer.js";
 import type { SecretCipher } from "./settings-store.js";
-import { agentRootPath } from "./store-path.js";
 
 export interface HostSeams {
   /** Luke's own application-state root, given explicitly: never derived from the hosting process's profile. */
@@ -23,8 +22,6 @@ export interface HostSeams {
   /** The environment the host reads its development overrides from. */
   environment: NodeJS.ProcessEnv;
   cipher: SecretCipher;
-  /** Spawns the brain store's worker thread; the host's store wiring connects its client to it. */
-  createWorker: () => Worker;
   createId: () => string;
   report: (message: string) => void;
   /**
@@ -42,9 +39,17 @@ export interface HostSeams {
   onShutdownRequested?: () => void;
 }
 
-/** The agent's identity workspace and the skills beside it, under the agent's own directory. */
+/**
+ * The agent's own directory under Luke's application data, one per agent,
+ * holding its identity workspace and the skills beside it.
+ */
+const AGENTS_DIRECTORY = "agents";
 const AGENT_WORKSPACE_DIRECTORY = "workspace";
 const AGENT_SKILLS_DIRECTORY = "skills";
+
+function agentRootPath(stateRoot: string, agentId: AgentId = DEFAULT_AGENT_ID): string {
+  return path.join(stateRoot, AGENTS_DIRECTORY, agentId);
+}
 
 /**
  * What every composer of the host is handed: the seams the host was given,

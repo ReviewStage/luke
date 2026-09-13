@@ -47,8 +47,6 @@ export {
   checkpointFormatFromTag,
   checkpointFormatTag,
   type EmbeddingAdapter,
-  type EmbeddingBatch,
-  type EmbeddingIdentity,
   type ExecutionRuntime,
   isReasoningEffort,
   type MaybePromise,
