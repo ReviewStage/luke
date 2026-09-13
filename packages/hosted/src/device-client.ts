@@ -93,11 +93,11 @@ export class HostedDeviceClient {
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  register(request: DeviceRegisterRequest): Promise<DeviceRegisterAnswer | undefined> {
+  register(request: DeviceRegisterRequest): Effect.Effect<DeviceRegisterAnswer | undefined> {
     const admitted = Either.getOrUndefined(
       readEither(deviceRegisterRequestSchema)(registerRecord(request)),
     );
-    if (admitted === undefined) return Promise.resolve(undefined);
+    if (admitted === undefined) return Effect.succeed(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.REGISTER, body: registerRecord(admitted) },
       deviceRegisterAnswerSchema,
@@ -112,11 +112,11 @@ export class HostedDeviceClient {
   forget(
     request: DeviceForgetRequest,
     departing?: DepartingCredential,
-  ): Promise<DeviceForgetAnswer | undefined> {
+  ): Effect.Effect<DeviceForgetAnswer | undefined> {
     const admitted = Either.getOrUndefined(
       readEither(deviceForgetRequestSchema)(forgetRecord(request)),
     );
-    if (admitted === undefined) return Promise.resolve(undefined);
+    if (admitted === undefined) return Effect.succeed(undefined);
     return this.#ask(
       { method: DEVICE_METHOD.FORGET, body: forgetRecord(admitted) },
       deviceForgetAnswerSchema,
@@ -124,24 +124,26 @@ export class HostedDeviceClient {
     );
   }
 
+  /**
+   * One ask over this client's own `HttpClient`, provided here, so a caller
+   * yields the ask without carrying one of its own.
+   */
   #ask<Answer, Encoded>(
     request: DeviceRequest,
     answer: EffectSchema.Schema<Answer, Encoded>,
     departing?: DepartingCredential,
-  ): Promise<Answer | undefined> {
+  ): Effect.Effect<Answer | undefined> {
     const call = departing ? this.#callOn(fixedBearer(departing.accessToken)) : this.#call;
-    return Effect.runPromise(
-      Effect.provide(
-        call.ask(
-          {
-            method: request.method,
-            path: HOSTED_SERVICE_PATH.DEVICES,
-            body: JSON.stringify(request.body),
-          },
-          answer,
-        ),
-        this.#client,
+    return Effect.provide(
+      call.ask(
+        {
+          method: request.method,
+          path: HOSTED_SERVICE_PATH.DEVICES,
+          body: JSON.stringify(request.body),
+        },
+        answer,
       ),
+      this.#client,
     );
   }
 

@@ -31,6 +31,7 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import {
+  carriedHostedCall,
   HOSTED_ACTION_ANSWER,
   hostedActionResult,
   settleHostedWrite,
@@ -192,14 +193,14 @@ export function createSessionActionPerformer(
   function carry(
     identity: SessionIdentity,
     counted: ProductSessionAction,
-    call: (target: HostedActionTarget) => Promise<HostedActionOutcome>,
+    call: (target: HostedActionTarget) => Effect.Effect<HostedActionOutcome>,
   ): Effect.Effect<CarriedActionResult> {
     return Effect.gen(function* () {
       const target = cloudTarget(identity);
       if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const outcome = yield* Effect.promise(() => call(target));
+          const outcome = yield* carriedHostedCall(call(target));
           return yield* settle(target.providerId, counted, hostedActionResult(outcome));
         }),
       );
@@ -387,7 +388,7 @@ export function createSessionActionPerformer(
       // asked for it.
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const outcome = yield* Effect.promise(() =>
+          const outcome = yield* carriedHostedCall(
             actions.createWorkspace(providerId, {
               providerProjectId,
               agent: action.agent ?? selection?.agent,
@@ -457,7 +458,7 @@ export function createSessionActionPerformer(
       const effort = action.model === undefined ? paired?.effort : action.effort;
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const outcome = yield* Effect.promise(() =>
+          const outcome = yield* carriedHostedCall(
             actions.addAgent(target, {
               agent: action.agent,
               model,

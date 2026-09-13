@@ -2,6 +2,7 @@ import type {
   HostedConversationAnswer,
   HostedConversationMessage,
   HostedSessionMessagesClient,
+  SessionMessagesQuery,
 } from "@sidecar/hosted";
 import {
   CONVERSATION_MESSAGE_AUTHOR,
@@ -15,6 +16,7 @@ import {
   transcriptLine,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, wholeText } from "@sidecar/wire";
+import { Effect } from "effect";
 
 /**
  * The brain's two transcript reads, as the wiring asks for them: one
@@ -33,6 +35,22 @@ export interface HostedTranscriptReadsDependencies {
   client: Pick<HostedSessionMessagesClient, "read">;
   /** The session as the roster holds it, for the name its agent's lines wear. */
   session: (identity: SessionIdentity) => Session | undefined;
+}
+
+/**
+ * One page of the messages endpoint, as a promise.
+ *
+ * @deprecated This is the promise-facing seam on the `Effect.runPromise`
+ * allowlist in `docs/adr/0001-effect.md`: the brain's own
+ * `readTranscript`/`readTranscriptSince` seams still answer promises, so the
+ * client's effect is run here rather than yielded on the turn's own fiber.
+ * Deleted once those two seams answer effects.
+ */
+function readPage(
+  client: Pick<HostedSessionMessagesClient, "read">,
+  query: SessionMessagesQuery,
+): Promise<HostedConversationAnswer | undefined> {
+  return Effect.runPromise(client.read(query));
 }
 
 const REFUSAL = {
@@ -94,7 +112,7 @@ export function hostedTranscriptReads(
     if (!isCloudAgentProviderId(providerId)) {
       return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
     }
-    const answer = await client.read({
+    const answer = await readPage(client, {
       providerId,
       providerSessionId,
       ...(cursor === undefined ? undefined : { afterMessageId: cursor }),

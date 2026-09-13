@@ -55,7 +55,7 @@ export class HostedSessionMessagesClient {
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  read(query: SessionMessagesQuery): Promise<HostedConversationAnswer | undefined> {
+  read(query: SessionMessagesQuery): Effect.Effect<HostedConversationAnswer | undefined> {
     const parameters = new URLSearchParams({
       [SESSION_MESSAGES_QUERY.PROVIDER_ID]: query.providerId,
       [SESSION_MESSAGES_QUERY.PROVIDER_SESSION_ID]: query.providerSessionId,
@@ -63,7 +63,7 @@ export class HostedSessionMessagesClient {
     if (query.afterMessageId !== undefined) {
       parameters.set(SESSION_MESSAGES_QUERY.AFTER, query.afterMessageId);
     }
-    return this.#run(
+    return Effect.provide(
       this.#call.ask(
         {
           method: HTTP_METHOD.GET,
@@ -71,10 +71,7 @@ export class HostedSessionMessagesClient {
         },
         hostedConversationAnswerSchema,
       ),
+      this.#client,
     );
-  }
-
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }

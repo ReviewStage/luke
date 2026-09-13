@@ -168,10 +168,7 @@ export class AccountSessionManager {
       const stored = yield* Effect.uninterruptible(this.#clearAccount());
       if (options.revokeRemote && stored?.refreshToken) {
         yield* reportingFailure(
-          Effect.tryPromise({
-            try: () => this.#options.client.revoke(stored.refreshToken),
-            catch: asError,
-          }),
+          this.#options.client.revoke(stored.refreshToken),
           "Account token revocation failed",
         );
       }
@@ -211,10 +208,7 @@ export class AccountSessionManager {
       if (Either.isLeft(deleted)) {
         if (!accessTokenNeedsRefresh(deleted.left)) return yield* Effect.fail(deleted.left);
         const generation = this.#generation;
-        const tokens = yield* Effect.tryPromise({
-          try: () => this.#options.client.refresh(stored.refreshToken),
-          catch: asError,
-        });
+        const tokens = yield* this.#options.client.refresh(stored.refreshToken);
         yield* this.#storeCurrent(generation, { ...stored, ...tokens });
         yield* this.#deleteHosted(tokens.accessToken);
       }
@@ -228,10 +222,7 @@ export class AccountSessionManager {
       if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
       const identity = yield* Effect.either(
-        Effect.tryPromise({
-          try: () => this.#options.client.userInfo(stored.accessToken, stored.provider),
-          catch: asError,
-        }),
+        this.#options.client.userInfo(stored.accessToken, stored.provider),
       );
       if (Either.isRight(identity)) {
         if (sameIdentity(stored, identity.right)) return;
@@ -241,12 +232,7 @@ export class AccountSessionManager {
         return;
       }
       if (!accessTokenNeedsRefresh(identity.left)) return;
-      const renewed = yield* Effect.either(
-        Effect.tryPromise({
-          try: () => this.#options.client.refresh(stored.refreshToken),
-          catch: asError,
-        }),
-      );
+      const renewed = yield* Effect.either(this.#options.client.refresh(stored.refreshToken));
       if (Either.isLeft(renewed)) {
         if (
           accountFailureAction(renewed.left) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
@@ -263,10 +249,7 @@ export class AccountSessionManager {
       yield* Effect.ignore(
         Effect.gen(this, function* () {
           if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
-          const next = yield* Effect.tryPromise({
-            try: () => this.#options.client.userInfo(tokens.accessToken, stored.provider),
-            catch: asError,
-          });
+          const next = yield* this.#options.client.userInfo(tokens.accessToken, stored.provider);
           const merged = mergedIdentity({ ...stored, ...tokens }, next);
           if (!(yield* this.#storeCurrent(generation, merged))) return;
           yield* this.#publishChange();
@@ -368,21 +351,14 @@ export class AccountSessionManager {
     input: LoopbackExchange,
   ): Effect.Effect<LoopbackConsentOutcome<AccountSnapshot>> {
     return withIssuedAccountTokens({
-      issue: Effect.tryPromise({
-        try: () =>
-          this.#options.client.exchangeCode({
-            code: input.code,
-            codeVerifier: input.codeVerifier,
-            redirectUri: input.redirectUri,
-          }),
-        catch: asError,
+      issue: this.#options.client.exchangeCode({
+        code: input.code,
+        codeVerifier: input.codeVerifier,
+        redirectUri: input.redirectUri,
       }),
       use: (tokens) =>
         Effect.gen(this, function* () {
-          const identity = yield* Effect.tryPromise({
-            try: () => this.#options.client.userInfo(tokens.accessToken, provider),
-            catch: asError,
-          });
+          const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
           if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
             return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
           }
@@ -392,11 +368,7 @@ export class AccountSessionManager {
           }
           return this.#account;
         }),
-      revoke: (refreshToken) =>
-        Effect.tryPromise({
-          try: () => this.#options.client.revoke(refreshToken),
-          catch: asError,
-        }),
+      revoke: (refreshToken) => this.#options.client.revoke(refreshToken),
       onRevokeFailure: (error) => {
         process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
       },
@@ -419,13 +391,9 @@ export class AccountSessionManager {
   }
 
   #deleteHosted(accessToken: string): Effect.Effect<void, Error> {
-    return Effect.tryPromise({
-      try: () =>
-        deleteHostedAccount({
-          serviceBaseUrl: this.#options.hostedServiceBaseUrl,
-          accessToken,
-        }),
-      catch: asError,
+    return deleteHostedAccount({
+      serviceBaseUrl: this.#options.hostedServiceBaseUrl,
+      accessToken,
     });
   }
 }

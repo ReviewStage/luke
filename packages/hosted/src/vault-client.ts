@@ -52,9 +52,9 @@ export class HostedVaultClient {
   storeKey(
     providerId: CloudAgentProviderId,
     key: string,
-  ): Promise<VaultKeyStoreAnswer | undefined> {
-    if (!vaultKeyIsStorable(key)) return Promise.resolve(undefined);
-    return this.#run(
+  ): Effect.Effect<VaultKeyStoreAnswer | undefined> {
+    if (!vaultKeyIsStorable(key)) return Effect.succeed(undefined);
+    return this.#provided(
       this.#call.ask(
         {
           method: HTTP_METHOD.POST,
@@ -67,19 +67,21 @@ export class HostedVaultClient {
   }
 
   /** Lists what is stored — provider ids and timestamps, never keys. */
-  async listKeys(): Promise<readonly VaultKeyListEntry[] | undefined> {
-    const answer = await this.#run(
-      this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.VAULT_KEYS },
-        vaultKeysListAnswerSchema,
+  listKeys(): Effect.Effect<readonly VaultKeyListEntry[] | undefined> {
+    return Effect.map(
+      this.#provided(
+        this.#call.ask(
+          { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.VAULT_KEYS },
+          vaultKeysListAnswerSchema,
+        ),
       ),
+      (answer) => answer?.keys,
     );
-    return answer?.keys;
   }
 
   /** Deletes one provider's key; `deleted: false` means none was stored. */
-  deleteKey(providerId: CloudAgentProviderId): Promise<VaultKeyDeleteAnswer | undefined> {
-    return this.#run(
+  deleteKey(providerId: CloudAgentProviderId): Effect.Effect<VaultKeyDeleteAnswer | undefined> {
+    return this.#provided(
       this.#call.ask(
         {
           method: HTTP_METHOD.DELETE,
@@ -91,7 +93,13 @@ export class HostedVaultClient {
     );
   }
 
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
+  /**
+   * One ask over this client's own `HttpClient`, provided here, so a caller
+   * yields the ask without carrying one of its own.
+   */
+  #provided<Answer>(
+    effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
+  ): Effect.Effect<Answer> {
+    return Effect.provide(effect, this.#client);
   }
 }

@@ -16,8 +16,8 @@ const STORED: StoredAccount = {
 
 function manager(options: {
   stored?: StoredAccount;
-  revoke?: (token: string) => Promise<void>;
-  exchangeCode?: () => Promise<{ accessToken: string; refreshToken: string }>;
+  revoke?: (token: string) => Effect.Effect<void, Error>;
+  exchangeCode?: () => Effect.Effect<{ accessToken: string; refreshToken: string }, Error>;
   onSignOut?: (account: StoredAccount) => Effect.Effect<void, Error>;
   client?: AccountClient;
   /** Held before the credential is cleared, so a sign-out can be cut mid-way. */
@@ -40,16 +40,16 @@ function manager(options: {
     const authorizations: { redirectUri: string; state: string }[] = [];
     // SAFETY: Fixture client implements only the AccountClient methods the manager calls.
     const fixtureClient = {
-      revoke: options.revoke ?? (async () => undefined),
-      userInfo: async () => STORED,
-      refresh: async () => ({ accessToken: "new-access", refreshToken: "new-refresh" }),
+      revoke: options.revoke ?? (() => Effect.void),
+      userInfo: () => Effect.succeed(STORED),
+      refresh: () => Effect.succeed({ accessToken: "new-access", refreshToken: "new-refresh" }),
       authorizeUrl: (input: { redirectUri: string; state: string }) => {
         authorizations.push(input);
         return `https://accounts.example/authorize?state=${encodeURIComponent(input.state)}`;
       },
       exchangeCode:
         options.exchangeCode ??
-        (async () => ({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
+        (() => Effect.succeed({ accessToken: "issued-access", refreshToken: "issued-refresh" })),
     } as unknown as AccountClient;
     const instance = yield* AccountSessionManager.make({
       client: options.client ?? fixtureClient,
@@ -94,9 +94,10 @@ it.scoped("sign out closes capabilities, clears storage, broadcasts, then revoke
     const calls: string[] = [];
     const subject = yield* manager({
       stored: STORED,
-      revoke: async () => {
-        calls.push("revoke");
-      },
+      revoke: () =>
+        Effect.sync(() => {
+          calls.push("revoke");
+        }),
     });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
     yield* subject.instance.signOut({ revokeRemote: true });
@@ -117,9 +118,10 @@ it.scoped(
       const order: string[] = [];
       const subject = yield* manager({
         stored: STORED,
-        revoke: async () => {
-          order.push("revoke");
-        },
+        revoke: () =>
+          Effect.sync(() => {
+            order.push("revoke");
+          }),
         onSignOut: (account) =>
           Effect.gen(function* () {
             order.push(
@@ -255,7 +257,7 @@ it.scoped("a withdrawn sign-in settles signed out rather than reporting a failur
 it.scoped("an exchange the account refuses is a failure the panel can report", () =>
   Effect.gen(function* () {
     const subject = yield* manager({
-      exchangeCode: () => Promise.reject(new Error("Account refused the exchange")),
+      exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),
     });
     const refused = yield* Effect.fork(
       Effect.exit(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB)),

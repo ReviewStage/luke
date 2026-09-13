@@ -330,14 +330,15 @@ export const composeDevices = (
     const changesClient = new HostedChangesClient(credential);
 
     const cadence = yield* deviceCadence({
+      // Every call of this row answers an effect now, each run to a promise
+      // here because this cadence's own beat is still a promise; on the
+      // `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`. `poll`
+      // carries no client of its own, so the ambient one is provided to it.
       client: {
-        register: (request) => devicesClient.register(request),
-        // `poll` answers an effect over the ambient `HttpClient`, run to a
-        // promise here because this cadence's own beat is still a promise;
-        // on the `Effect.runPromise` allowlist in `docs/adr/0001-effect.md`.
+        register: (request) => Effect.runPromise(devicesClient.register(request)),
         poll: (request) =>
           Effect.runPromise(Effect.provide(changesClient.poll(request), FetchHttpClient.layer)),
-        forget: (request, departing) => devicesClient.forget(request, departing),
+        forget: (request, departing) => Effect.runPromise(devicesClient.forget(request, departing)),
       },
       state: deviceStateFile(() => kernel.stateRoot, report),
       mintInstallationId: kernel.createId,

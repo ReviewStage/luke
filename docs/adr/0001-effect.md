@@ -389,9 +389,11 @@ three: `ObservationLoop`'s `run` is a fiber now, so `drawSnapshotRoster` and
 `runClientEffect` is gone with the poll, the pager, and `readPage` that
 awaited it — each provides `FetchHttpClient.layer` once, where the loop's
 pass is built, rather than running the client's effect where the work is
-needed. `compose-devices.ts` stays: `deviceCadence`'s beat is still a plain
-async callback rather than a fiber of its own, and it is deleted when that
-callback is one.
+needed. `compose-devices.ts` stays, and P12-20a widened what it runs rather
+than narrowing it: `HostedDeviceClient`'s `register` and `forget` answer
+effects too now, so all three of the cadence's calls are run to promises
+there. It is deleted when `deviceCadence`'s beat is a fiber rather than a
+plain async callback.
 
 `ProductEventSender`'s `start`, `stop`, and `flush` in
 `packages/analytics/src/sender.ts` are the eighth, on the same terms as
@@ -878,17 +880,26 @@ the ambient default runtime before. It stands beside `BrainTransport#send`'s
 `runCall` for the same reason: it can stop answering a promise only when the
 `ModelAdapter` it wraps does, which is never while `compaction.ts` stands.
 
-`timedRequest` in `packages/credentials/src/account/client.ts` and
-`LinearIssueTracker#post` in `packages/credentials/src/linear/tracker.ts` are
-on the same allowlist: both build a request over the ambient `HttpClient` and
-both still answer their callers — `AccountClient`, `deleteHostedAccount`, and
-`LinearIssueTracker`'s `observe`/`execute` — a Promise rather than a fiber, so
-each runs its request to a promise in place. `AccountClient`'s and
-`deleteHostedAccount`'s own `httpClient` option is a `Layer` a test hands over
-in place of `FetchHttpClient.layer` since P12-04 deleted the `CloudFetch`
-seam it used to build that layer from. `timedRequest` goes in P12-04b, once it
-answers a fiber instead of a promise; `LinearIssueTracker` is gone from the
-tree entirely, with the Linear integration it served.
+`packages/credentials/src/account/client.ts` runs nothing any more and is off
+the allowlist. P12-20a took `timedRequest` onto the failure channel: it
+answers `Effect<Response, Error>` with the client's own layer provided to it,
+so `AccountClient`'s `exchangeCode`, `refresh`, `revoke`, and `userInfo` and
+the free `deleteHostedAccount` each answer an `Effect<A, Error>` that
+`AccountSessionManager` yields where it used to wrap a promise in
+`Effect.tryPromise({ catch: asError })`. What a caller reads is unchanged: a
+failure and a defect each land on that channel exactly as the promise rejected
+with them, so an `AccountClientError` still carries the status and the OAuth
+code `accountFailureAction` and `accessTokenNeedsRefresh` branch on, and a
+deadline is still the `TimeoutError` name `AbortSignal.timeout` gave it. An
+interruption is the one cause that is not worded as a failure, because the
+request now runs on the asking fiber rather than on a runtime of its own: a
+quit or a withdrawn sign-in cuts it, and `reportingFailure`'s
+`Cause.isInterruptedOnly` and the sign-in's own withdrawal must keep reading
+that as the caller ending rather than the service refusing. The
+`httpClient` option stays a `Layer` a test hands over in place of
+`FetchHttpClient.layer`, since P12-04 deleted the `CloudFetch` seam it used to
+build that layer from. `LinearIssueTracker#post` is gone from the tree
+entirely, with the Linear integration it served.
 
 `LoopbackConsent`'s `signIn` in
 `packages/credentials/src/loopback-consent.ts` runs nothing any more, and is
@@ -1536,18 +1547,33 @@ the list machine-readable — `HostedActionClient`'s `#run` in
 `packages/hosted/src/action-client.ts`, `DeviceClient`'s `#ask` in
 `device-client.ts`, `SessionMessagesClient`'s `#run` in
 `session-messages-client.ts`, and `VaultClient`'s `#run` in `vault-client.ts` —
-stand on exactly the terms `changes-client.ts`, `roster-client.ts`, and
-`conversation-client.ts` do: each holds `accountCall` directly, none of its
-public methods takes a caller's own `AbortSignal`, and each runs its request
-effect over its own `httpClient` layer (a test's fake, or
-`FetchHttpClient.layer` for the ambient one — P12-04 deleted the `CloudFetch`
-seam these four used to build that layer from) to the Promise those methods
-answer. They go in P12-04b with the seam. The feedback delivery's own courier one
-package over was the same shape and is gone: P12-20b took
+are all four gone, and none of those files is on the allowlist any longer.
+P12-20a took them where P12-04b took `changes-client.ts`,
+`roster-client.ts`, and `conversation-client.ts`: every public method answers
+the request effect rather than a promise run from inside the class. They part
+from those three on one point, and it is the `httpClient` option each of the
+four takes and none of those three does. A layer a test hands over is the
+client's own, so it is provided at construction and the methods answer
+`Effect<A>` with nothing left in their requirements, where the other three
+leave `HttpClient` there for a caller to provide once. That is what keeps the
+requirement out of `SessionActionPerformer#perform` and every `Effect` the
+Gateway and the brain hold above it; the run that stood here is simply gone
+rather than moved up. The feedback delivery's own courier one package over was
+the same shape and is gone too: P12-20b took
 `feedbackDeliveryFromEnvironment` onto an effect per submission with its
 `HttpClient` already provided, and the desktop's telemetry service runs it on
 the launch's own edge — the `run` `compose-desktop.ts` reads out of the fiber
 building it — rather than on a runtime the package built for itself.
+
+`readPage` in `packages/host/src/brain/hosted-transcripts.ts` is the one run
+P12-20a added, and it is the price of the requirement above being gone rather
+than a second door onto the network: `hostedTranscriptReads` answers the
+brain's `SessionTranscriptReads`, whose `readTranscript` and
+`readTranscriptSince` are promises the agent's own options declare, so the
+messages client's effect is run to one there. It holds nothing else — a page
+is read, and every refusal, every cursor, and the whole rendering of the lines
+is the same code it always was. It goes once those two seams answer effects,
+which is a `packages/brain` change no PR in this plan schedules.
 
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
@@ -1611,7 +1637,7 @@ design decision stated as such:
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | P12-20j — deleted with the promise-shaped `events.ts` route it belonged to; `handleEvents` now yields the batch effect beneath that door directly |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
-| `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
+| `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above and, since P12-20a, over the device client's `register` and `forget` too (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
@@ -1620,7 +1646,9 @@ design decision stated as such:
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P12-20e — deleted with the effect beneath it and its suite, since no caller ever composed either |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
-| `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |
+| `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-20a — deleted; it answers `Effect<Response, Error>` and `AccountClient`'s verbs and `deleteHostedAccount` answer effects with it |
+| `HostedActionClient`/`HostedDeviceClient`/`HostedSessionMessagesClient`/`HostedVaultClient`'s `#run`/`#ask` | P3-06c | P12-20a — deleted; each provides its own `httpClient` layer and answers the effect |
+| `readPage`, the brain transcript reads' promise door over `HostedSessionMessagesClient#read` (`packages/host/src/brain/hosted-transcripts.ts`) | P12-20a | once the brain's `readTranscript`/`readTranscriptSince` seams answer effects |
 | `AccountSessionManager`'s `Effect.runSync(PubSub.unbounded())` field construction | P12-16d | once the class is itself built by an effect its owner runs |
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
