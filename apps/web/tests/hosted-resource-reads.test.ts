@@ -1017,9 +1017,10 @@ it.effect(
         ]),
       );
 
-      // Two rows of the main written in place, then a new row: a bound of one
-      // answers the written rows first, oldest write first, naming the revision
-      // each page reached, then the new row at its sequence.
+      // Two rows of the main written in place, the journal at the head first
+      // and an older row after it: a bound of one answers them oldest write
+      // first, naming the revision each page reached and saying more stands
+      // until a page comes back empty, whatever the rows' sequences.
       const [first] = await readMessagesByConversationTyped(database.run, main);
       assert.ok(first);
       await amendMessageInPlace(database.run, {
@@ -1031,10 +1032,6 @@ it.effect(
         conversationId: main,
         id: first.id,
         parts: [{ type: "text", text: "Edited ask.", state: "done" }],
-      });
-      const late = await insertMessage(userId, main, 6, {
-        turnId: running,
-        createdAt: new Date(NOW + 43_000),
       });
       const pageOne = await device.poll();
       assert.deepEqual(
@@ -1050,6 +1047,16 @@ it.effect(
       );
       assert.equal(pageTwo.hasMore, true);
       assert.deepEqual(positions(pageTwo.next).get(main), [5, 2]);
+      const pageEmpty = await device.poll();
+      assert.deepEqual(pageEmpty.groups, []);
+      assert.equal(pageEmpty.hasMore, false);
+      assert.deepEqual(positions(pageEmpty.next).get(main), [5, 2]);
+
+      // A new row past the position is read at its sequence, and the cursor stands at the head.
+      const late = await insertMessage(userId, main, 6, {
+        turnId: running,
+        createdAt: new Date(NOW + 43_000),
+      });
       const pageThree = await device.poll();
       assert.deepEqual(
         pageThree.groups.flatMap((group) => group.messages.map((message) => message.seq)),

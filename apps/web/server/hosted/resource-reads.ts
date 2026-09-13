@@ -299,16 +299,21 @@ function walkSequences<Row, Failure>(
         continue;
       }
       const lastSeq = reading.seqOf(last);
-      const cut = fetched.length > 0 && remaining === 0 && lastSeq < head.seq;
-      if (cut) hasMore = true;
-      // A page cut among the rows written in place, which stand at or before
-      // the position and come first, keeps the position and names the last
-      // revision it took; one that reached the rows past the position took
-      // every row written in place with it and stands at the head's revision.
-      if (cut && lastSeq <= from) {
+      const full = remaining === 0;
+      // The rows written in place stand at or before the position and come
+      // first, in the order they were written, so a full page ending among
+      // them may have more of them behind it whatever their sequence: it
+      // keeps the position, names the last revision it took, and says more
+      // stands. A page that reached the rows past the position took every
+      // row written in place with it and stands at the head's revision; it
+      // says more stands only while rows stand between it and the head.
+      const endedAmongWritten = lastSeq <= from;
+      if (full && endedAmongWritten) {
+        hasMore = true;
         at(conversation.id, from, reading.revisionOf?.(last) ?? revision);
         continue;
       }
+      if (full && lastSeq < head.seq) hasMore = true;
       at(conversation.id, Math.max(from, lastSeq), head.revision);
     }
     return { taken, next: encodeSequenceReadCursor(next), hasMore };
