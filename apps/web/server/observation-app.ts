@@ -246,7 +246,7 @@ function eventsEffect(
           ? undefined
           : Redacted.value(environment.posthogProjectApiKey),
       resolveUserId: (incoming) =>
-        Effect.promise(() => hostedUserId(incoming, (input) => auth.api.oauth2UserInfo(input))),
+        hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
       // Read from the service's own user row rather than from the request, so
       // the desktop still sends nothing that names anybody.
       readPerson,

@@ -1,3 +1,5 @@
+import type { Cause } from "effect";
+import { Effect } from "effect";
 import { isRecord, text, type UnparsedWireValue } from "../core.js";
 
 /** The subject a signed-in OAuth userinfo answer names. */
@@ -9,9 +11,13 @@ export interface OAuthUserInfo {
  * The auth service's own userinfo endpoint, called in process. It is the same
  * validation the desktop's identity request goes through over HTTP: expiry,
  * revocation, and scope are all the OAuth provider's answer, never a second
- * implementation here.
+ * implementation here. The call itself is the auth service's promise, so an
+ * endpoint is built by wrapping that promise once where it is constructed,
+ * and the failure it can answer with is whatever the auth service threw.
  */
-export type UserInfoEndpoint = (input: { headers: Headers }) => Promise<OAuthUserInfo | undefined>;
+export type UserInfoEndpoint = (input: {
+  headers: Headers;
+}) => Effect.Effect<OAuthUserInfo | undefined, Cause.UnknownException>;
 
 /** Parses the auth service's raw userinfo answer at the hosted API boundary. */
 export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUserInfo | undefined {
@@ -29,7 +35,7 @@ export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUser
 export function hostedUserId(
   request: Request,
   userInfo: UserInfoEndpoint,
-): Promise<string | undefined> {
+): Effect.Effect<string | undefined> {
   return userIdForAuthorization(request.headers.get("authorization"), userInfo);
 }
 
@@ -38,16 +44,14 @@ export function hostedUserId(
  * other than on its own request: the voice service forwards the header the
  * desktop opened its socket with, and it is read as if it had been sent here.
  */
-export async function userIdForAuthorization(
+export function userIdForAuthorization(
   value: string | null | undefined,
   userInfo: UserInfoEndpoint,
-): Promise<string | undefined> {
+): Effect.Effect<string | undefined> {
   const authorization = value?.trim();
-  if (!authorization) return undefined;
-  try {
-    const identity = await userInfo({ headers: new Headers({ authorization }) });
-    return identity?.sub || undefined;
-  } catch {
-    return undefined;
-  }
+  if (!authorization) return Effect.succeed(undefined);
+  return userInfo({ headers: new Headers({ authorization }) }).pipe(
+    Effect.map((identity) => identity?.sub || undefined),
+    Effect.orElseSucceed(() => undefined),
+  );
 }

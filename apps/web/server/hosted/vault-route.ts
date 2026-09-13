@@ -77,26 +77,22 @@ function storeFor(secret: string): HostedStore {
  * Every vault, device, or mint route resolves its bearer through this one,
  * whether it is built from the seams below or composed as an `HttpApp`.
  */
-export const hostedVaultUserInfo: UserInfoEndpoint = async (input) => {
-  // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
-  const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
-  return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
-};
+export const hostedVaultUserInfo: UserInfoEndpoint = (input) =>
+  Effect.tryPromise(async () => {
+    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+    const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+    return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+  });
 
 /**
  * The bearer resolved against the deployment's own account store, the same
- * for every hosted route that reads its seams on its own fiber. `hostedUserId`
- * still answers a promise, since the auth service's userinfo call and the
- * request its `HostedStoreRoute`-shaped callers wrap it in both stay
- * promise-shaped; here, where the one Effect-native seam this deployment
- * carries needs the same bearer, that promise is the effect's own
- * construction, wrapped once with `Effect.tryPromise` rather than rewrapped
- * with `Effect.promise` at every route that reads it.
+ * for every hosted route that reads its seams on its own fiber. The auth
+ * service's userinfo call is the one promise in it, wrapped once where
+ * `hostedVaultUserInfo` is constructed, so the resolution itself is an effect
+ * a route yields rather than a promise each route rewraps.
  */
 export function resolveHostedUserId(request: Request): Effect.Effect<string | undefined> {
-  return Effect.tryPromise(() => hostedUserId(request, hostedVaultUserInfo)).pipe(
-    Effect.orElseSucceed(() => undefined),
-  );
+  return hostedUserId(request, hostedVaultUserInfo);
 }
 
 /** The provider key vault's own secret, read once with the deployment's services rather than at each invocation. */

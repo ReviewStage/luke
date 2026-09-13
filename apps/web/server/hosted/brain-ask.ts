@@ -105,7 +105,7 @@ const HOST_TURN_OF_ASK_ORIGIN = {
 
 export interface BrainAskOptions {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "turns">;
   asks: AskRecord;
   /** eve as the caller reaches it, under the caller's own bearer. */
@@ -126,7 +126,7 @@ function gate(options: BrainAskOptions, method: string): Effect.Effect<Gate> {
         HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
       );
     }
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     const authorization = request.headers.get("authorization")?.trim();
     if (!userId || !authorization) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);

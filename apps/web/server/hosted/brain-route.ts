@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import { auth } from "../auth.js";
 import type { BrainSeams } from "../brain-app.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
@@ -13,11 +14,12 @@ import { spendHostedMeter } from "./quota.js";
  * The auth service's own userinfo endpoint, read at the hosted API boundary.
  * Every brain route resolves its bearer through this one.
  */
-const hostedBrainUserInfo: UserInfoEndpoint = async (input) => {
-  // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
-  const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
-  return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
-};
+const hostedBrainUserInfo: UserInfoEndpoint = (input) =>
+  Effect.tryPromise(async () => {
+    // SAFETY: Better Auth hands back its parsed userinfo answer as structured-clone data; the wire guards below validate the selected field.
+    const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+    return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+  });
 
 /**
  * The deployment's real seams behind the brain group: the bearer's account

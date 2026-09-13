@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { HOSTED_SERVICE_PATH } from "../server/core";
 import type { HostedSpend, IntroductionSpend } from "../server/hosted/quota";
@@ -61,7 +62,7 @@ function voice(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT),
     apiKey: API_KEY,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     now: () => NOW,
     httpClient: upstream(minted),
@@ -73,7 +74,7 @@ function remote(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT),
     apiKey: API_KEY,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     readVaultKeys: async () => [],
     now: () => NOW,
@@ -101,7 +102,10 @@ const CASES: [string, () => Promise<Response>][] = [
       mintAnswer(voice({ request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT, undefined, "GET") })),
   ],
   ["mint-unavailable", () => mintAnswer(voice({ apiKey: " " }))],
-  ["mint-invalid-token", () => mintAnswer(voice({ resolveUserId: async () => undefined }))],
+  [
+    "mint-invalid-token",
+    () => mintAnswer(voice({ resolveUserId: () => Effect.succeed(undefined) })),
+  ],
   [
     "mint-invalid-request",
     () =>
@@ -124,7 +128,10 @@ const CASES: [string, () => Promise<Response>][] = [
       ),
   ],
   ["remote-mint-unavailable", () => mintAnswer(remote({ apiKey: " " }))],
-  ["remote-mint-invalid-token", () => mintAnswer(remote({ resolveUserId: async () => undefined }))],
+  [
+    "remote-mint-invalid-token",
+    () => mintAnswer(remote({ resolveUserId: () => Effect.succeed(undefined) })),
+  ],
   [
     "remote-mint-invalid-request",
     () =>

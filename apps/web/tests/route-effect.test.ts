@@ -55,7 +55,7 @@ const AUTHORIZATION = "Bearer token";
 function capabilitiesRoute(userId: string | undefined) {
   return routeFromHttpApp(
     brainApp({
-      resolveUserId: () => Promise.resolve(userId),
+      resolveUserId: () => Effect.succeed(userId),
       spend: () => Promise.reject(new Error("capabilities spend nothing")),
     }),
   );
@@ -102,7 +102,7 @@ test("the route reads a bearer the request carries", async () => {
     brainApp({
       resolveUserId: (authorization) => {
         seen.push(authorization);
-        return Promise.resolve(USER_ID);
+        return Effect.succeed(USER_ID);
       },
       spend: () => Promise.reject(new Error("capabilities spend nothing")),
     }),

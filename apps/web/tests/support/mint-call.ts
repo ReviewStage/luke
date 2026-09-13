@@ -35,7 +35,7 @@ function present(value: string | undefined): string | undefined {
 export function mintAnswer(call: MintCall): Promise<Response> {
   const apiKey = present(call.apiKey);
   const seams = {
-    resolveUserId: async () => undefined,
+    resolveUserId: () => Effect.succeed(undefined),
     spend: async () => ({ allowed: false, quota: { used: 0, limit: 0, resetsAt: 0 } }),
     spendIntroduction: async () => ({ allowed: false }),
     readVaultKeys: async () => [],

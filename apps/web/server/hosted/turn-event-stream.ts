@@ -172,7 +172,7 @@ export function projectTurnEvents(
 
 export interface TurnEventStreamOptions {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "turns" | "messages">;
   now?: () => number;
   sleep?: (ms: number) => Effect.Effect<void>;
@@ -250,7 +250,7 @@ export function handleTurnEventStream(
     const after = cursorOf(query);
     if (after === undefined) return invalidRequest();
 
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }

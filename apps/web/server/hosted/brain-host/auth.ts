@@ -1,8 +1,6 @@
 import { type AuthFn, ForbiddenError, withAuthChallenges } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { isWireString } from "../../core.js";
-import type { UserInfoEndpoint } from "../bearer.js";
-import { hostedUserId } from "../bearer.js";
 import { bearerMatchesSecret } from "../http.js";
 import {
   ACCOUNT_ID_PATTERN,
@@ -60,10 +58,18 @@ export function requestAttributes(headers: Headers): SessionAuthContext["attribu
   return attributes;
 }
 
+/**
+ * The account behind a request's bearer, as eve's own promise-shaped `AuthFn`
+ * takes it. The resolution itself is an effect (`hostedUserId`), so what
+ * crosses into eve is one run of it at eve's own edge rather than a
+ * promise-shaped door beside the effect in `server/hosted/`.
+ */
+export type BearerAccount = (request: Request) => Promise<string | undefined>;
+
 /** The route authenticator: a Luke account bearer, or nothing so the walk moves on. */
-export function lukeAccount(userInfo: UserInfoEndpoint): AuthFn<Request> {
+export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
   return withAuthChallenges(async (request) => {
-    const userId = await hostedUserId(request, userInfo);
+    const userId = await resolveUserId(request);
     if (!userId) return null;
     return {
       principalId: userId,

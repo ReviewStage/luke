@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { HOSTED_BRAIN_DEFAULTS } from "../server/brain-app";
 import {
@@ -94,7 +95,7 @@ function upstream(answers: readonly (() => Response)[]) {
 function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
   return {
     apiKey: API_KEY,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     ...overrides,
   };
@@ -150,7 +151,7 @@ test("capabilities name the contract, the model, the operations, the registered 
   const anonymous = await brainAnswer(
     options({
       request: request(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, null, { method: "GET" }),
-      resolveUserId: async () => undefined,
+      resolveUserId: () => Effect.succeed(undefined),
     }),
   );
   assert.equal(anonymous.status, 401);

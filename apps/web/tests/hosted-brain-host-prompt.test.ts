@@ -62,7 +62,7 @@ const seams: BrainHostSeams = {
   eveOrigin: () => undefined,
   store: () => database.store,
   writer: () => Effect.succeed(writer),
-  userInfo: async () => undefined,
+  userInfo: () => Effect.succeed(undefined),
   ownership: {
     sessionOwner: (sessionId) => database.run(runtimeSessionOwner(sessionId)),
     ownsConversation: (userId, conversationId) =>

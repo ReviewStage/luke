@@ -91,7 +91,7 @@ export const HOSTED_BRAIN_DEFAULTS = {
 
 /** What the group is handed that the deployment alone can answer for. */
 export interface BrainSeams {
-  resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
   timeoutMs?: number | undefined;
 }
@@ -193,7 +193,7 @@ function account(
     const environment = yield* HostedEnvironment;
     if (environment.openAiKey === undefined) return yield* refuse(HOSTED_REFUSAL.UNAVAILABLE);
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const userId = yield* Effect.promise(() => seams.resolveUserId(request.headers.authorization));
+    const userId = yield* seams.resolveUserId(request.headers.authorization);
     if (!userId) return yield* refuse(HOSTED_REFUSAL.INVALID_TOKEN);
     return {
       userId,

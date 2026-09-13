@@ -144,11 +144,12 @@ export function productionBrainHostSeams(): BrainHostSeams {
       const own = process.env[VERCEL_ENVIRONMENT.URL]?.trim();
       return named || (own ? `https://${own}` : undefined);
     },
-    userInfo: async (input) => {
-      // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.
-      const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
-      return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
-    },
+    userInfo: (input) =>
+      Effect.tryPromise(async () => {
+        // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.
+        const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
+        return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
+      }),
     openAi: () => {
       const apiKey = process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY];
       if (!apiKey) return undefined;

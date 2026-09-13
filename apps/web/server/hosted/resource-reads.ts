@@ -79,7 +79,7 @@ const readBrake = makeRateBrake({
 
 export interface ResourceReadOptions {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
 }
 
@@ -98,7 +98,7 @@ function readGate(options: ResourceReadOptions): Effect.Effect<ReadGate> {
         HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
       );
     }
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }

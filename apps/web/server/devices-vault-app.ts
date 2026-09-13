@@ -65,7 +65,7 @@ const deviceBrake = makeRateBrake({
 
 export interface DevicesVaultSeams extends DeviceSeams {
   /** Reads the signed-in account behind the request's bearer, or nothing. */
-  resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
   storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
   listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
   deleteKey: (userId: string, providerId: string) => Promise<boolean>;
@@ -79,7 +79,7 @@ function bearerUserId(
 ): Effect.Effect<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const userId = yield* Effect.promise(() => seams.resolveUserId(request.headers.authorization));
+    const userId = yield* seams.resolveUserId(request.headers.authorization);
     if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
     return userId;
   });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   BRAIN_EMBEDDING_MODEL,
@@ -44,7 +45,7 @@ function upstream(answer: () => Response) {
 function options(overrides: Partial<BrainCall> & { request: Request }): BrainCall {
   return {
     apiKey: "sk-hosted-secret",
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     ...overrides,
   };

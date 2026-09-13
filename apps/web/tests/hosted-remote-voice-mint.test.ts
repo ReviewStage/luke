@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   CONTEXT_ITEM_KIND,
@@ -47,7 +48,7 @@ function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     readVaultKeys: async () => [],
     now: () => NOW,
@@ -106,7 +107,9 @@ test("the remote mint gate order is method, kill switch, token, body, quota", as
   const off = await mintAnswer(options({ httpClient, apiKey: "  " }));
   assert.equal(off.status, 503);
   assert.deepEqual(await off.json(), { error: HOSTED_API_ERROR.UNAVAILABLE });
-  const anonymous = await mintAnswer(options({ httpClient, resolveUserId: async () => undefined }));
+  const anonymous = await mintAnswer(
+    options({ httpClient, resolveUserId: () => Effect.succeed(undefined) }),
+  );
   assert.equal(anonymous.status, 401);
   const malformed = await mintAnswer(
     options({ httpClient, request: mintRequest({ voice: "nobody" }) }),

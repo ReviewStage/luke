@@ -250,7 +250,7 @@ function harness(): Harness {
     whileSleeping: async () => {},
     options: (request, userId) => ({
       request,
-      resolveUserId: async () => userId,
+      resolveUserId: () => Effect.succeed(userId),
       store: database.store,
       writer,
       asks,
