@@ -1,4 +1,4 @@
-import { RegistryContext } from "@effect-atom/atom-react/RegistryContext";
+import { RegistryContext } from "@effect/atom-react/RegistryContext";
 import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";

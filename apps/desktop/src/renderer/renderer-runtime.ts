@@ -11,11 +11,11 @@
  * arrive unnoticed.
  */
 
-import * as Atom from "@effect-atom/atom/Atom";
-import * as Registry from "@effect-atom/atom/Registry";
-import * as Result from "@effect-atom/atom/Result";
-import { scheduleTask } from "@effect-atom/atom-react/RegistryContext";
+import { scheduleTask } from "@effect/atom-react/RegistryContext";
 import { type Context, Layer } from "effect";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 /**
  * No service stands yet: what the runtime is for is holding the fibers the
@@ -31,7 +31,7 @@ export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
  * Its `scheduleTask` is the React binding's own, which is what batches a
  * delivery's redraws into one.
  */
-export const rendererRegistry = Registry.make({ scheduleTask });
+export const rendererRegistry = AtomRegistry.make({ scheduleTask });
 
 /**
  * The services that runtime was built over, for work that is a fiber of its
@@ -42,4 +42,4 @@ export const rendererRegistry = Registry.make({ scheduleTask });
  * synchronously, so there is nothing to wait for.
  */
 export const rendererServicesNow = (): Context.Context<never> =>
-  Result.getOrThrow(rendererRegistry.get(rendererRuntime));
+  AsyncResult.getOrThrow(rendererRegistry.get(rendererRuntime));

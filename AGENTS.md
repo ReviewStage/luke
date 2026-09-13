@@ -173,7 +173,7 @@ own edge because a worker starts from its own file), the two renderer roots
 `apps/desktop/src/renderer/index.tsx` and `apps/desktop/src/renderer/voice/index.tsx`
 (one browser `ManagedRuntime` each, so the panel and the voice window never
 share a registry), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's
-runtime is built from: `Atom.runtime`'s layer is built, and `Registry.get`
+runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
 reads it, the moment a root first reaches it, so the edge is here rather than
 at each of the two roots that import it), the renderer's own fiber sites —
 `apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
