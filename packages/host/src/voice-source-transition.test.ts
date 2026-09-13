@@ -7,6 +7,7 @@ import {
   BrainAgent,
   BrainStateStore,
   carryOn,
+  detachOn,
   hostedBrainToolCatalog,
   LOOK_SUBJECT,
   toolLoopRuntimeOver,
@@ -27,6 +28,9 @@ import { Effect, Runtime } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
+
+/** The transitions and their settling run on the runtime the host detaches its drains onto. */
+const onDefault = carryOn(Runtime.defaultRuntime);
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
 function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
@@ -146,8 +150,8 @@ function composition() {
     },
   });
   const host = new BrainHost({
-    carry: carryOn(Runtime.defaultRuntime),
-    follow: () => async () => undefined,
+    detach: detachOn(Runtime.defaultRuntime),
+    follow: () => Effect.succeed(Effect.void),
     publishEmpty: () => undefined,
   });
   const store = new BrainStateStore({
@@ -157,27 +161,29 @@ function composition() {
   const builds: string[] = [];
   let runs = 0;
   const rebuild = () =>
-    host.replace(() =>
-      Effect.suspend(() => {
-        const model = assembler.brainModel;
-        if (!model) return Effect.succeed(undefined);
-        builds.push(model.model ?? "hosted");
-        return BrainAgent.make({
-          conversationId: MAIN_SESSION_KEY,
-          runtime: toolLoopRuntimeOver(model),
-          observes: { kind: LOOK_SUBJECT.NONE },
-          prepareTurn: () => ({ prompt: "instructions", layers: {} }),
-          actions: fakeActionPerformer().actions,
-          roster: () => ({ text: "none", identities: [] }),
-          standingContext: () => "",
-          readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
-          readTranscript: async () => ({ status: "unsupported", reason: "no" }),
-          deliver: () => undefined,
-          store,
-          createRunId: () => `run-${runs++}`,
-          report: () => undefined,
-        });
-      }),
+    onDefault(
+      host.replace(() =>
+        Effect.suspend(() => {
+          const model = assembler.brainModel;
+          if (!model) return Effect.succeed(undefined);
+          builds.push(model.model ?? "hosted");
+          return BrainAgent.make({
+            conversationId: MAIN_SESSION_KEY,
+            runtime: toolLoopRuntimeOver(model),
+            observes: { kind: LOOK_SUBJECT.NONE },
+            prepareTurn: () => ({ prompt: "instructions", layers: {} }),
+            actions: fakeActionPerformer().actions,
+            roster: () => ({ text: "none", identities: [] }),
+            standingContext: () => "",
+            readTranscriptSince: async () => ({ status: "unsupported", reason: "no" }),
+            readTranscript: async () => ({ status: "unsupported", reason: "no" }),
+            deliver: () => undefined,
+            store,
+            createRunId: () => `run-${runs++}`,
+            report: () => undefined,
+          });
+        }),
+      ),
     );
   const transition = () =>
     Effect.runPromise(
@@ -240,7 +246,7 @@ test("a newer transition begun between publication and the caller's continuation
     newer = c.transition();
   });
   const olderInstalled = await c.transition();
-  await c.host.settled();
+  await onDefault(c.host.settled());
   assert.equal(olderInstalled, false);
   assert.deepEqual(c.builds, []);
   assert.equal(c.host.current(), undefined);
@@ -264,7 +270,7 @@ test("a newer transition that removes every capability at that boundary leaves n
     newer = c.transition();
   });
   const olderInstalled = await c.transition();
-  await c.host.settled();
+  await onDefault(c.host.settled());
   assert.equal(olderInstalled, false);
   assert.deepEqual(c.builds, []);
   assert.equal(c.host.current(), undefined);
@@ -274,7 +280,7 @@ test("a newer transition that removes every capability at that boundary leaves n
   assert.ok(newer);
   c.settings.release();
   assert.equal(await newer, true);
-  await c.host.settled();
+  await onDefault(c.host.settled());
   assertAbsentSet(c);
   assert.deepEqual(c.builds, []);
   assert.equal(c.warms.length, warmsBefore);
@@ -316,7 +322,7 @@ for (const held of Object.values(HELD_READ)) {
         c.settings.source = VOICE_SOURCE.KEY;
         c.settings.release();
         assert.equal(yield* Effect.promise(() => older), false);
-        yield* Effect.promise(() => c.host.settled());
+        yield* Effect.promise(() => onDefault(c.host.settled()));
         // Nothing of the older set was published, not even in part.
         assertHostedSet(c);
         assert.equal(c.assembler.liveSessions, live);
@@ -353,7 +359,7 @@ it.effect(
       c.settings.source = VOICE_SOURCE.ACCOUNT;
       c.settings.release();
       assert.equal(yield* Effect.promise(() => older), false);
-      yield* Effect.promise(() => c.host.settled());
+      yield* Effect.promise(() => onDefault(c.host.settled()));
       assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
       assert.equal(c.host.current(), keyedAgent);
       assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
@@ -373,7 +379,7 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     c.settings.key = undefined;
     c.gate.accountSignedIn = false;
     assert.equal(yield* Effect.promise(() => c.transition()), true);
-    yield* Effect.promise(() => c.host.settled());
+    yield* Effect.promise(() => onDefault(c.host.settled()));
     assertAbsentSet(c);
     const reportsAfterRemoval = c.reports.length;
     const warmsAfterRemoval = c.warms.length;
@@ -382,7 +388,7 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     c.settings.key = "personal-key";
     c.settings.release();
     assert.equal(yield* Effect.promise(() => older), false);
-    yield* Effect.promise(() => c.host.settled());
+    yield* Effect.promise(() => onDefault(c.host.settled()));
     assertAbsentSet(c);
     assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
     assert.equal(c.reports.length, reportsAfterRemoval);
@@ -396,7 +402,7 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     assert.equal(yield* Effect.promise(() => c.transition()), true);
     c.settings.release();
     assert.equal(yield* Effect.promise(() => heldAgain), false);
-    yield* Effect.promise(() => c.host.settled());
+    yield* Effect.promise(() => onDefault(c.host.settled()));
     assertAbsentSet(c);
     assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
   }),

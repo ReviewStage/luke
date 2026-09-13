@@ -1,11 +1,11 @@
-import type { BrainAgent, BrainRequestRecord, Carry } from "@sidecar/brain";
+import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
 import {
   BRAIN_SUBMISSION_OUTCOME,
   BRAIN_SUBMISSION_REJECTION,
   isTerminalBrainRequestStatus,
 } from "@sidecar/brain/requests";
 import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
-import { Effect } from "effect";
+import { Deferred, Effect, Fiber, Queue } from "effect";
 
 /** What the publication owner reaches: every window, and the drain. */
 export interface BrainPublicationDependencies {
@@ -15,7 +15,7 @@ export interface BrainPublicationDependencies {
    * Hands the standing follower's publication chain to the drain, so a quit
    * lets every end already reported be marked before the store closes.
    */
-  onPublication?: (settled: () => Promise<void>) => void;
+  onPublication?: (settled: Effect.Effect<void>) => void;
 }
 
 /** The one refusal a window is answered when no brain can take its ask, and what the operator reads for an answer it cannot. */
@@ -78,49 +78,89 @@ export function publishRuns(
   });
 }
 
+/** What the publication fiber takes: a report to mark, or a barrier a caller is waiting behind. */
+const PUBLICATION_ITEM = {
+  REPORT: "report",
+  BARRIER: "barrier",
+} as const;
+
+type PublicationItem =
+  | {
+      readonly kind: typeof PUBLICATION_ITEM.REPORT;
+      readonly records: readonly BrainRequestRecord[];
+    }
+  | {
+      readonly kind: typeof PUBLICATION_ITEM.BARRIER;
+      readonly reached: Deferred.Deferred<void>;
+    };
+
 /**
  * Follows the brain that currently stands: each rebuilt agent is subscribed
  * as it arrives, its records relayed to every window and its ended runs
  * marked taken. Conversation's lines come from the live session's transcript
  * alone, and the live session speaks a reply only from the run's own events,
  * never from this record.
+ *
+ * The brain's reports arrive as a listener's synchronous call, and the marks
+ * they ask for are effects, so what stands between the two is one queue and
+ * one fiber: a report is written down as it arrives — broadcast to every
+ * window, then offered — and the fiber marks what the queue hands it, one
+ * report at a time, each against the records as they then stand, so two
+ * reports of the same end cannot both find it unmarked.
+ *
  * Unfollowing retires the subscription, drains the publication of the reports
  * already taken, and then relays nothing more, so a replaced agent's records
  * are all marked once and its late ones reach no window.
  */
 export function followBrainRequests(
   agent: BrainAgent,
-  dependencies: Pick<BrainPublicationDependencies, "broadcastRequests" | "onPublication"> & {
-    /** Carries the marks and the first read to the publication chain's promises. */
-    carry: Carry;
-  },
-): () => Promise<void> {
-  let accepting = true;
-  let following = true;
-  let publishing: Promise<void> = Promise.resolve();
-  dependencies.onPublication?.(() => publishing);
-  const listener = (records: readonly BrainRequestRecord[]) => {
-    if (!accepting) return;
-    dependencies.broadcastRequests(records);
-    // Reports are published one at a time, each against the records as they
-    // then stand, so two reports of the same end cannot both find it unmarked.
-    publishing = publishing.then(() =>
-      dependencies.carry(publishRuns(agent, records, () => following)),
+  dependencies: Pick<BrainPublicationDependencies, "broadcastRequests" | "onPublication">,
+): Effect.Effect<Effect.Effect<void>> {
+  return Effect.gen(function* () {
+    let accepting = true;
+    let following = true;
+    const reports = yield* Queue.unbounded<PublicationItem>();
+    const publication = yield* Effect.forkDaemon(
+      Effect.gen(function* () {
+        while (true) {
+          const item = yield* Queue.take(reports);
+          if (item.kind === PUBLICATION_ITEM.BARRIER) {
+            yield* Deferred.succeed(item.reached, undefined);
+            continue;
+          }
+          yield* publishRuns(agent, item.records, () => following);
+        }
+      }),
     );
-  };
-  const unsubscribe = agent.subscribe(listener);
-  void dependencies.carry(
-    Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
-  );
-  // Unfollowing takes no more reports at once, but lets the ones already
-  // taken finish: the stop that retires an agent reports every run it
-  // interrupted, and those ends belong marked before the follower goes. Each
-  // mark answers promptly — the store refuses rather than hangs — so the
-  // drain is bounded by the reports already queued.
-  return async () => {
-    accepting = false;
-    unsubscribe();
-    await publishing;
-    following = false;
-  };
+    // Everything the queue holds at the moment of asking, published. A
+    // follower already retired has no fiber to reach the barrier, and its
+    // ended publication answers instead.
+    const settled = Effect.gen(function* () {
+      const reached = yield* Deferred.make<void>();
+      yield* Queue.offer(reports, { kind: PUBLICATION_ITEM.BARRIER, reached });
+      yield* Effect.raceFirst(Deferred.await(reached), Effect.asVoid(Fiber.await(publication)));
+    });
+    dependencies.onPublication?.(settled);
+    const listener = (records: readonly BrainRequestRecord[]) => {
+      if (!accepting) return;
+      dependencies.broadcastRequests(records);
+      Queue.unsafeOffer(reports, { kind: PUBLICATION_ITEM.REPORT, records });
+    };
+    const unsubscribe = agent.subscribe(listener);
+    yield* Effect.forkDaemon(
+      Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
+    );
+    // Unfollowing takes no more reports at once, but lets the ones already
+    // taken finish: the stop that retires an agent reports every run it
+    // interrupted, and those ends belong marked before the follower goes. Each
+    // mark answers promptly — the store refuses rather than hangs — so the
+    // drain is bounded by the reports already queued.
+    return Effect.gen(function* () {
+      accepting = false;
+      unsubscribe();
+      yield* settled;
+      following = false;
+      yield* Fiber.interrupt(publication);
+    });
+  });
 }

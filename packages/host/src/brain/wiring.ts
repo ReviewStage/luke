@@ -25,6 +25,7 @@ import {
   brainToolCatalog,
   brainToolNotes,
   carryOn,
+  detachOn,
   LOOK_SUBJECT,
   resolveTurnToolPolicy,
   runOriginOf,
@@ -229,7 +230,7 @@ export interface BrainWiring {
   /** Delegation: the child records, completions, and their lifecycle, for inspection and tests. */
   readonly children: ChildRunService;
   /** Settles once every standing follower has published every report taken so far. */
-  publicationSettled: () => Promise<void>;
+  publicationSettled: () => Effect.Effect<void>;
   /** The standing configuration snapshot, republished whenever the credential policy chooses a source. */
   configuration: () => ResolvedConfiguration;
   /**
@@ -319,11 +320,16 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
 const RESET_CAPTURE_SIGNAL = new AbortController().signal;
 
 export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
+  // The transition chain and the publication are the brain's own effects; what
+  // is still a promise is the face this wiring answers the host above it with,
+  // so the carrying happens here rather than inside either of them.
+  const carry = carryOn(dependencies.execution);
+  const detach = detachOn(dependencies.execution);
   const conversations = new Map<SessionKey, OpenConversation>();
   const latestRecords = new Map<SessionKey, readonly BrainRequestSnapshot[]>();
   // Each standing follower's publication, awaited by a wait that found its
   // run ended: the end is said only once the follower has written and marked it.
-  const publications = new Map<SessionKey, () => Promise<void>>();
+  const publications = new Map<SessionKey, Effect.Effect<void>>();
 
   const allRequests = (): readonly BrainRequestSnapshot[] => {
     const main = latestRecords.get(MAIN_SESSION_KEY) ?? [];
@@ -338,10 +344,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     const held = conversations.get(sessionKey);
     if (held) return held;
     const host = new BrainHost({
-      carry: carryOn(dependencies.execution),
+      detach,
       follow: (agent) =>
         followBrainRequests(agent, {
-          carry: carryOn(dependencies.execution),
           broadcastRequests: (records) => {
             latestRecords.set(sessionKey, records);
             broadcast();
@@ -637,20 +642,22 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     model: ModelAdapter | undefined,
     fork?: readonly WireRecord[],
   ): Promise<void> =>
-    opened.host.replace(() =>
-      Effect.suspend(() => {
-        if (!model) {
-          if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
-          return Effect.succeed(undefined);
-        }
-        return build(
-          model,
-          publishConfiguration(dependencies.credential()),
-          opened.store,
-          sessionKey,
-          fork,
-        );
-      }),
+    carry(
+      opened.host.replace(() =>
+        Effect.suspend(() => {
+          if (!model) {
+            if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
+            return Effect.succeed(undefined);
+          }
+          return build(
+            model,
+            publishConfiguration(dependencies.credential()),
+            opened.store,
+            sessionKey,
+            fork,
+          );
+        }),
+      ),
     );
 
   // Conversations standing down, until their store is let go.
@@ -875,7 +882,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       // meanwhile waits on this closing rather than building a second store
       // on the same envelope.
       opened.host.retire();
-      await opened.host.replace(() => Effect.succeed(undefined));
+      await carry(opened.host.replace(() => Effect.succeed(undefined)));
       opened.clock.stop();
       opened.unsubscribe();
       conversations.delete(sessionKey);
@@ -889,9 +896,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     return work;
   };
 
-  const publicationSettled = async (): Promise<void> => {
-    await Promise.all([...publications.values()].map((settled) => settled()));
-  };
+  const publicationSettled = (): Effect.Effect<void> =>
+    Effect.all([...publications.values()], { concurrency: "unbounded", discard: true });
 
   const updateConfiguration = (patch: SettableConfigurationPatch): readonly string[] => {
     const next: SettableConfiguration = { ...settable };

@@ -1,14 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  type BrainAgent,
-  type BrainRequestRecord,
-  type BrainSubmission,
-  carryOn,
-} from "@sidecar/brain";
+import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import { maximumAskLength } from "@sidecar/session";
-import { Effect, Fiber, Runtime } from "effect";
+import { Effect, Fiber } from "effect";
 import { test } from "vitest";
 import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
@@ -200,8 +195,7 @@ it.effect(
           }),
       } as unknown as BrainAgent;
       const broadcasts: (readonly BrainRequestRecord[])[] = [];
-      const unfollow = followBrainRequests(agent, {
-        carry: carryOn(Runtime.defaultRuntime),
+      const unfollow = yield* followBrainRequests(agent, {
         broadcastRequests: (snapshots) => broadcasts.push(snapshots),
       });
       // The launch's interrupted run is marked and relayed once it is read.
@@ -212,7 +206,7 @@ it.effect(
       yield* waitFor(() => broadcasts.length === 2 && marked.length === 2);
       assert.equal(broadcasts.length, 2);
       assert.deepEqual(marked, ["run-1", "run-2"]);
-      unfollow();
+      yield* unfollow;
       assert.equal(listener, undefined);
     }),
 );
@@ -241,11 +235,10 @@ it.effect("a retired follower relays nothing a late report carries", () =>
         }),
     } as unknown as BrainAgent;
     const broadcasts: (readonly BrainRequestRecord[])[] = [];
-    const unfollow = followBrainRequests(agent, {
-      carry: carryOn(Runtime.defaultRuntime),
+    const unfollow = yield* followBrainRequests(agent, {
       broadcastRequests: (snapshots) => broadcasts.push(snapshots),
     });
-    unfollow();
+    yield* unfollow;
     releaseReady?.();
     listener?.([record()]);
     // Nothing should happen after retirement: give any wrongful follow-up a
