@@ -131,6 +131,39 @@ test("an answer the kind's own guard refuses is a refusal rather than a value dr
   );
 });
 
+test("a row that answers an effect is run by the router, and its failure is the kind's refusal", async () => {
+  const ran: ActKind[] = [];
+  const router = createActRouter(
+    rowsRecording(ran, {
+      [ACT_KIND.WINDOW_SET_EXPANDED]: () =>
+        Effect.sync(() => {
+          ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
+          return "expanded";
+        }),
+      [ACT_KIND.CALENDAR_REFRESH]: () => Effect.fail(new Error("the transport closed")),
+      [ACT_KIND.WINDOW_QUIT]: () =>
+        Effect.fail(new ActRefused("A quit is held while the update installs.")),
+    }),
+  );
+  assert.deepEqual(
+    await perform(
+      router,
+      { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
+      PANEL,
+    ),
+    { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
+  );
+  assert.deepEqual(ran, [ACT_KIND.WINDOW_SET_EXPANDED]);
+  assert.deepEqual(await perform(router, { kind: ACT_KIND.CALENDAR_REFRESH }, PANEL), {
+    status: ACT_OUTCOME_STATUS.REFUSED,
+    reason: ACT[ACT_KIND.CALENDAR_REFRESH].refusal,
+  });
+  assert.deepEqual(await perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
+    status: ACT_OUTCOME_STATUS.REFUSED,
+    reason: "A quit is held while the update installs.",
+  });
+});
+
 test("a row is handed the sender's standing, which no payload can claim", async () => {
   const seen: ActSender[] = [];
   const router = createActRouter(

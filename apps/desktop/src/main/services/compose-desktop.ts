@@ -165,7 +165,11 @@ export function composeDesktop(
       });
       const telemetry = createTelemetryService({
         config,
-        recordEvent: (name, properties) => operator.host.recordEvent(name, properties),
+        // A counted event is begun rather than waited on: nothing the windows
+        // do turns on it, and the host counts it whatever this act answers.
+        recordEvent: (name, properties) => {
+          void run(operator.host.recordEvent(name, properties));
+        },
         run,
       });
       const windows = createWindowService({

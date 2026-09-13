@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
+import { Effect } from "effect";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -47,19 +48,21 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // the voice window's relay and the local brain's context — deleted
     // behind its recovery archive as before, so the two never disagree about
     // whether anything was cleared.
-    clearConversation: async () => {
-      const cleared = await operator.host.clearConversation();
-      if (!cleared) return false;
-      void operator.operator.deleteConversation(MAIN_SESSION_KEY);
-      return true;
-    },
+    clearConversation: () =>
+      Effect.gen(function* () {
+        const cleared = yield* operator.host.clearConversation();
+        if (!cleared) return false;
+        yield* Effect.forkDaemon(operator.operator.deleteConversation(MAIN_SESSION_KEY));
+        return true;
+      }),
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
     liveSession: operator.host,
     recordProductEvent,
-    recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) =>
-      operator.host.recordAgentTrace(trace),
+    recordAgentTrace: (trace: Parameters<typeof operator.host.recordAgentTrace>[0]) => {
+      void run(operator.host.recordAgentTrace(trace));
+    },
   };
 
   const rows: ActRows = {
@@ -100,7 +103,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
-    ...brainActRows({ operator: operator.operator, run }),
+    ...brainActRows({ operator: operator.operator }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),
@@ -158,13 +161,15 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // store under this window's opaque reporter, and relayed back to every
     // other panel's Conversation by the host's change event.
     appendConversationLines: (context, entries) =>
-      operator.host.appendConversation(entries, windows.reporterOf(context.sender)),
+      run(operator.host.appendConversation(entries, windows.reporterOf(context.sender))),
     reportAppGuide: (_context, snapshot) => operator.reportGuide(snapshot),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),
     // The development trace is the host's: a tapped wire event crosses to its
     // writer, which alone knows whether this run records anything.
-    recordAgentTrace: (_context, trace) => operator.host.recordAgentTrace(trace),
+    recordAgentTrace: (_context, trace) => {
+      void run(operator.host.recordAgentTrace(trace));
+    },
     notifyReady: async (context) => {
       windows.notePanelReady(context.sender);
       if (!launch.captureOutput) return;

@@ -1,6 +1,7 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
+import { Effect } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -34,7 +35,7 @@ export interface VoiceRuntimeDependencies {
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
   liveSession: LiveSessionActs;
-  liveDiagnostics: () => Promise<LiveDiagnostics | undefined>;
+  liveDiagnostics: () => Effect.Effect<LiveDiagnostics | undefined>;
   recordProductEvent: RecordProductEvent;
   /**
    * The Conversation Clear, begun here as the voice window is told, and
@@ -42,7 +43,7 @@ export interface VoiceRuntimeDependencies {
    * service's, so a false answer is what the panel shows as a Clear that did
    * not go, while the voice window has already retired its own turns at the press.
    */
-  clearConversation: () => boolean | Promise<boolean>;
+  clearConversation: () => Effect.Effect<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
 }
@@ -65,40 +66,42 @@ export function voiceRuntimeActRows(
   return {
     // A panel's command to the voice window. The act's schema has already
     // bounded it; here it is checked to come from a panel — the voice window
-    // does not command itself — and handed on. A Clear is begun here first,
-    // because the main process is every panel's relay to the service that
-    // holds the thread; the voice window is told to retire its own turns at
-    // the press, whatever the service later answers, and the panel hears
-    // whether the Clear went.
-    async [ACT_KIND.VOICE_COMMAND]({ command }, { panel }) {
-      if (!panel) return undefined;
-      // The Clear is begun in this call's synchronous prefix, and the voice
-      // window is told in the same breath — before the service is waited on
-      // — so its turns, marks, and context retire at once. The answer, the
-      // service's, comes after and goes to the panel alone.
-      const erasing =
-        command === VOICE_COMMAND.CLEAR_CONVERSATION ? dependencies.clearConversation() : undefined;
-      voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
-      if (erasing === undefined) return undefined;
-      return (await erasing) ? VOICE_COMMAND_OUTCOME.ACCEPTED : VOICE_COMMAND_OUTCOME.REFUSED;
-    },
+    // does not command itself — and handed on. A Clear reaches the service
+    // from here, because the main process is every panel's relay to the
+    // service that holds the thread; the voice window is told to retire its
+    // own turns at the press, whatever the service later answers, and the
+    // panel hears whether the Clear went.
+    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel }) =>
+      Effect.gen(function* () {
+        if (!panel) return undefined;
+        // The voice window is told in this act's synchronous prefix — before
+        // the service is waited on — so its turns, marks, and context retire
+        // at the press. The answer, the service's, comes after and goes to
+        // the panel alone.
+        voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
+        if (command !== VOICE_COMMAND.CLEAR_CONVERSATION) return undefined;
+        return (yield* dependencies.clearConversation())
+          ? VOICE_COMMAND_OUTCOME.ACCEPTED
+          : VOICE_COMMAND_OUTCOME.REFUSED;
+      }),
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
     [ACT_KIND.VOICE_CREATE_LIVE_SESSION]: ({ sdp }, { voice }) =>
-      voice ? liveSession.createLiveSession(sdp) : Promise.resolve(undefined),
-    [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) => {
-      if (voice) void liveSession.endLiveSession();
-    },
-    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: ({ state }, { voice }) => {
-      if (voice) void liveSession.reportLiveTransport(state);
-    },
-    [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) => {
-      if (voice) void liveSession.reportLiveActivity(idle);
-    },
+      voice ? liveSession.createLiveSession(sdp) : Effect.succeed(undefined),
+    [ACT_KIND.VOICE_END_LIVE_SESSION]: (_payload, { voice }) =>
+      voice ? Effect.as(liveSession.endLiveSession(), undefined) : Effect.succeed(undefined),
+    [ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT]: ({ state }, { voice }) =>
+      voice
+        ? Effect.as(liveSession.reportLiveTransport(state), undefined)
+        : Effect.succeed(undefined),
+    [ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY]: ({ idle }, { voice }) =>
+      voice
+        ? Effect.as(liveSession.reportLiveActivity(idle), undefined)
+        : Effect.succeed(undefined),
     // The stop key, pressed in the voice window that owns the session; a
     // panel has no session to stop and is answered false.
     [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>
-      voice ? liveSession.stopSpeaking() : Promise.resolve(false),
+      voice ? liveSession.stopSpeaking() : Effect.succeed(false),
     [ACT_KIND.VOICE_DIAGNOSTICS]: () => dependencies.liveDiagnostics(),
     [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: () =>
       dependencies.openExternal(

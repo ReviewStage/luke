@@ -35,17 +35,17 @@ const PANEL: ActSender = {
 };
 
 function rows(overrides: {
-  updateSetting?: () => Promise<SettingsUpdateResult>;
-  connectGoogleCalendar?: () => Promise<SettingsUpdateResult>;
+  updateSetting?: () => Effect.Effect<SettingsUpdateResult, Error>;
+  connectGoogleCalendar?: () => Effect.Effect<SettingsUpdateResult, Error>;
   applyLoginItem?: () => void;
   lastSettings?: () => AppSettings | undefined;
 }) {
   const fragment = settingsActRows({
     // SAFETY: these rows reach only the three host calls named here.
     host: {
-      updateSetting: overrides.updateSetting ?? (async () => accepted()),
-      connectGoogleCalendar: overrides.connectGoogleCalendar ?? (async () => accepted()),
-      settingsSnapshot: async () => undefined,
+      updateSetting: overrides.updateSetting ?? (() => Effect.succeed(accepted())),
+      connectGoogleCalendar: overrides.connectGoogleCalendar ?? (() => Effect.succeed(accepted())),
+      settingsSnapshot: () => Effect.succeed(undefined),
     } as unknown as HostOperator,
     reporterOf: () => "reporter",
     lastSettings: overrides.lastSettings ?? (() => SETTINGS),
@@ -94,9 +94,7 @@ test("a write the host took, whose client-side effect then failed, is refused wi
 
 test("a write the host refused is refused with the settings this client last saw", async () => {
   const router = rows({
-    updateSetting: async () => {
-      throw new Error("the host is not reachable");
-    },
+    updateSetting: () => Effect.fail(new Error("the host is not reachable")),
   });
   assert.deepEqual(await Effect.runPromise(router.performAct(OPEN_AT_LOGIN, PANEL)), {
     status: "done",
@@ -111,9 +109,7 @@ test("a write the host refused is refused with the settings this client last saw
 test("a client with no snapshot at all refuses through the act's own sentence", async () => {
   const router = rows({
     lastSettings: () => undefined,
-    connectGoogleCalendar: async () => {
-      throw new Error("the host is not reachable");
-    },
+    connectGoogleCalendar: () => Effect.fail(new Error("the host is not reachable")),
   });
   assert.deepEqual(
     await Effect.runPromise(router.performAct({ kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE }, PANEL)),

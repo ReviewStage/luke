@@ -1,3 +1,5 @@
+import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
+import { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
@@ -38,28 +40,21 @@ export function accountActRows(
   dependencies: AccountSessionDependencies,
 ): Pick<ActRows, AccountActKind> {
   const { host, haltSessionReplay, resumeSessionReplay } = dependencies;
+  /** The halt, the host's answer, and the resume an answer that never came owes. */
+  const halted = (
+    action: Effect.Effect<AccountSnapshot, Error>,
+  ): Effect.Effect<AccountSnapshot, Error> =>
+    Effect.suspend(() => {
+      haltSessionReplay();
+      return Effect.tapError(action, () => Effect.sync(resumeSessionReplay));
+    });
+
   return {
     [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: ({ provider }) => host.beginSignIn(provider),
     [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: () => host.cancelSignIn(),
-    [ACT_KIND.ACCOUNT_SIGN_OUT]: async () => {
-      haltSessionReplay();
-      try {
-        return await host.signOut();
-      } catch (error) {
-        resumeSessionReplay();
-        throw error;
-      }
-    },
-    [ACT_KIND.ACCOUNT_DELETE]: async () => {
-      haltSessionReplay();
-      try {
-        // A deletion that landed stands recording down for the run; the
-        // host says so on its replay event, which follows this answer.
-        return await host.deleteAccount();
-      } catch (error) {
-        resumeSessionReplay();
-        throw error;
-      }
-    },
+    [ACT_KIND.ACCOUNT_SIGN_OUT]: () => halted(host.signOut()),
+    // A deletion that landed stands recording down for the run; the host says
+    // so on its replay event, which follows this answer.
+    [ACT_KIND.ACCOUNT_DELETE]: () => halted(host.deleteAccount()),
   };
 }

@@ -35,7 +35,7 @@ const RUN = {
   platform: "darwin",
 } as const;
 
-function fixture(clearConversation: () => Promise<boolean>) {
+function fixture(clearConversation: () => Effect.Effect<boolean>) {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
   const liveCalls: string[] = [];
   // SAFETY: the row reads senders by identity alone; two distinct inert objects are two windows.
@@ -65,25 +65,30 @@ function fixture(clearConversation: () => Promise<boolean>) {
     state: new AppStateStore(initialAppState(RUN, false), Runtime.defaultRuntime),
     openExternal: async () => undefined,
     liveSession: {
-      createLiveSession: async (sdp: string) => {
-        liveCalls.push(`create:${sdp}`);
-        return { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" };
-      },
-      endLiveSession: async () => {
-        liveCalls.push("end");
-      },
-      reportLiveTransport: async (state: string) => {
-        liveCalls.push(`transport:${state}`);
-      },
-      reportLiveActivity: async (idle: boolean) => {
-        liveCalls.push(`activity:${idle}`);
-      },
-      stopSpeaking: async () => {
-        liveCalls.push("stop");
-        return true;
-      },
+      createLiveSession: (sdp: string) =>
+        Effect.sync(() => {
+          liveCalls.push(`create:${sdp}`);
+          return { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" };
+        }),
+      endLiveSession: () =>
+        Effect.sync(() => {
+          liveCalls.push("end");
+        }),
+      reportLiveTransport: (state: string) =>
+        Effect.sync(() => {
+          liveCalls.push(`transport:${state}`);
+        }),
+      reportLiveActivity: (idle: boolean) =>
+        Effect.sync(() => {
+          liveCalls.push(`activity:${idle}`);
+        }),
+      stopSpeaking: () =>
+        Effect.sync(() => {
+          liveCalls.push("stop");
+          return true;
+        }),
     },
-    liveDiagnostics: async () => undefined,
+    liveDiagnostics: () => Effect.succeed(undefined),
     recordProductEvent: () => undefined,
     clearConversation,
     setShortcutCapturing: () => undefined,
@@ -110,7 +115,7 @@ function fixture(clearConversation: () => Promise<boolean>) {
 }
 
 test("the five live session acts reach the host from the voice window alone", async () => {
-  const f = fixture(async () => true);
+  const f = fixture(() => Effect.succeed(true));
   const offer = "v=0\r\noffer\r\n";
   assert.deepEqual(
     await f.perform(f.voiceSender, {
@@ -163,13 +168,15 @@ test("the voice window is told to clear at the fence, before the disk answers, a
   for (const erased of [true, false]) {
     let fenced = false;
     let release: ((erased: boolean) => void) | undefined;
-    const f = fixture(() => {
-      // The row fences in its synchronous prefix, then waits on disk.
-      fenced = true;
-      return new Promise<boolean>((resolve) => {
-        release = resolve;
-      });
-    });
+    const f = fixture(() =>
+      Effect.promise(() => {
+        // The row fences in its synchronous prefix, then waits on disk.
+        fenced = true;
+        return new Promise<boolean>((resolve) => {
+          release = resolve;
+        });
+      }),
+    );
     const outcome = f.command(f.panelSender);
     assert.equal(fenced, true);
     assert.deepEqual(f.sentToVoice, [
@@ -188,10 +195,12 @@ test("the voice window is told to clear at the fence, before the disk answers, a
 
 test("a Clear from anything but a panel clears nothing and tells the voice window nothing", async () => {
   let cleared = 0;
-  const f = fixture(async () => {
-    cleared += 1;
-    return true;
-  });
+  const f = fixture(() =>
+    Effect.sync(() => {
+      cleared += 1;
+      return true;
+    }),
+  );
   assert.deepEqual(await f.command(f.voiceSender), { status: "done", value: undefined });
   assert.equal(cleared, 0);
   assert.deepEqual(f.sentToVoice, []);

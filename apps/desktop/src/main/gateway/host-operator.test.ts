@@ -55,7 +55,6 @@ function operatorOver(transport: GatewayTransport) {
     (client) =>
       createHostOperator({
         client,
-        run: Effect.runPromise,
         lastSettings: () => undefined,
         report: () => undefined,
       }),
@@ -76,8 +75,10 @@ it.scoped("a setting's value travels as the method's value field", () =>
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
 
-    const result = yield* Effect.promise(() =>
-      operator.updateSetting(APP_SETTING_SCHEMA.sessionSearchQuery.field, "review", REPORTER),
+    const result = yield* operator.updateSetting(
+      APP_SETTING_SCHEMA.sessionSearchQuery.field,
+      "review",
+      REPORTER,
     );
 
     assert.equal(result.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -97,8 +98,10 @@ it.scoped("a cleared setting travels as an absent value field, so the clear reac
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
 
-    const cleared = yield* Effect.promise(() =>
-      operator.updateSetting(APP_SETTING_SCHEMA.sessionSearchQuery.field, undefined, REPORTER),
+    const cleared = yield* operator.updateSetting(
+      APP_SETTING_SCHEMA.sessionSearchQuery.field,
+      undefined,
+      REPORTER,
     );
 
     assert.equal(cleared.status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -123,7 +126,7 @@ it.scoped("every clearable plain setting crosses the wire when cleared", () =>
       APP_SETTING_SCHEMA.stopHotkey.field,
     ] as const;
     for (const field of fields) {
-      yield* Effect.promise(() => operator.updateSetting(field, undefined, REPORTER));
+      yield* operator.updateSetting(field, undefined, REPORTER);
     }
 
     assert.equal(requests.length, fields.length);
@@ -141,13 +144,11 @@ it.scoped("a forgotten entry travels as an absent value field", () =>
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
 
-    yield* Effect.promise(() =>
-      operator.updateSettingEntry(
-        APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-        "conductor",
-        undefined,
-        REPORTER,
-      ),
+    yield* operator.updateSettingEntry(
+      APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+      "conductor",
+      undefined,
+      REPORTER,
     );
 
     const [request] = requests;

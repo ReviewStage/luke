@@ -6,23 +6,24 @@ import type {
   SessionWriteResult,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
  * The host's own session acts as this process reaches them: through the
- * Gateway client, which answers promises, and never the host's in-process
- * performer, whose acts are effects on the fiber that carries them.
+ * Gateway client, whose calls are effects this file composes and the act
+ * router runs, and never the host's in-process performer.
  */
 export interface SessionActsDependencies {
   /** The opens alone: a press is not a write, and reaches the roster's address without admission. */
   performer: {
-    openSession(identity: SessionIdentity): Promise<SessionOpenResult>;
+    openSession(identity: SessionIdentity): Effect.Effect<SessionOpenResult>;
     openSessionApplication(
       identity: SessionIdentity,
       applicationId: SessionApplicationId,
-    ): Promise<SessionOpenResult>;
-    openSessionChange(identity: SessionIdentity): Promise<SessionOpenResult>;
+    ): Effect.Effect<SessionOpenResult>;
+    openSessionChange(identity: SessionIdentity): Effect.Effect<SessionOpenResult>;
   };
   /**
    * The two writes a row asks for, carried to the host, whose `admitEffect()`
@@ -30,8 +31,8 @@ export interface SessionActsDependencies {
    * whether a session takes them.
    */
   writes: {
-    sendMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
-    executeControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
+    sendMessage(identity: SessionIdentity, text: string): Effect.Effect<SessionWriteResult>;
+    executeControl(identity: SessionIdentity, controlId: string): Effect.Effect<SessionWriteResult>;
   };
 }
 
@@ -61,46 +62,37 @@ export function sessionActRows(
   dependencies: SessionActsDependencies,
 ): Pick<ActRows, SessionActKind> {
   const { performer, writes } = dependencies;
-  const opened = async (
-    open: () => Promise<SessionOpenResult>,
+  const opened = (
+    open: Effect.Effect<SessionOpenResult>,
     refusal: string,
-  ): Promise<SessionOpenResult> => {
-    try {
-      return await open();
-    } catch {
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
-    }
-  };
+  ): Effect.Effect<SessionOpenResult> =>
+    Effect.catchAllDefect(open, () =>
+      Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal }),
+    );
   const fromRow = (sender: ActSender): void => {
     if (!sender.panel || sender.introduction) throw new ActRefused(ROW_WRITE_REFUSAL);
   };
-  const written = async (
-    write: () => Promise<SessionWriteResult>,
+  const written = (
+    write: Effect.Effect<SessionWriteResult>,
     refusal: string,
-  ): Promise<SessionWriteResult> => {
-    try {
-      return await write();
-    } catch {
-      return { status: ACTION_RESULT_STATUS.REJECTED, reason: refusal };
-    }
-  };
+  ): Effect.Effect<SessionWriteResult> =>
+    Effect.catchAllDefect(write, () =>
+      Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal }),
+    );
   return {
     [ACT_KIND.SESSION_OPEN]: ({ identity }) =>
-      opened(() => performer.openSession(identity), OPEN_REFUSAL.SESSION),
+      opened(performer.openSession(identity), OPEN_REFUSAL.SESSION),
     [ACT_KIND.SESSION_OPEN_APPLICATION]: ({ identity, applicationId }) =>
-      opened(
-        () => performer.openSessionApplication(identity, applicationId),
-        OPEN_REFUSAL.APPLICATION,
-      ),
+      opened(performer.openSessionApplication(identity, applicationId), OPEN_REFUSAL.APPLICATION),
     [ACT_KIND.SESSION_OPEN_CHANGE]: ({ identity }) =>
-      opened(() => performer.openSessionChange(identity), OPEN_REFUSAL.CHANGE),
+      opened(performer.openSessionChange(identity), OPEN_REFUSAL.CHANGE),
     [ACT_KIND.SESSION_SEND_MESSAGE]: ({ identity, text }, sender) => {
       fromRow(sender);
-      return written(() => writes.sendMessage(identity, text), WRITE_REFUSAL.MESSAGE);
+      return written(writes.sendMessage(identity, text), WRITE_REFUSAL.MESSAGE);
     },
     [ACT_KIND.SESSION_EXECUTE_CONTROL]: ({ identity, controlId }, sender) => {
       fromRow(sender);
-      return written(() => writes.executeControl(identity, controlId), WRITE_REFUSAL.CONTROL);
+      return written(writes.executeControl(identity, controlId), WRITE_REFUSAL.CONTROL);
     },
   };
 }

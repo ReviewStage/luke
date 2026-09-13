@@ -34,7 +34,7 @@ test("a cancel crosses to the operator under the run it names, and the brain row
         return CANCELLED;
       }),
   } as unknown as GatewayOperator;
-  const rows = brainActRows({ operator, run: Effect.runPromise });
+  const rows = brainActRows({ operator });
   assert.deepEqual(Object.keys(rows), [ACT_KIND.BRAIN_CANCEL_ASK]);
   // SAFETY: only the brain rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.
