@@ -32,6 +32,8 @@ interface Call {
 const HEADS = { messages: "e30", events: "e30" } as const;
 
 const PRESENT: DevicePresenceReport = { activeUntil: 1_757_505_720_000, quietUntil: null };
+/** A quiet instant the presence reads while a hold stands, as the fold in `device-presence.ts` answers one. */
+const QUIET = 1_757_512_800_000;
 
 function fakeClient(answers: {
   register?: () => { deviceId: string } | undefined;
@@ -452,6 +454,54 @@ it.scoped(
       );
       assert.equal(subject.deviceId(), OTHER_DEVICE_ID);
       yield* subject.stop({ forget: false });
+    }),
+);
+
+it.scoped(
+  "a restate beats at once with the presence read then, waits for a call already out, and beats nothing once stopped",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      let report: DevicePresenceReport = { activeUntil: PRESENT.activeUntil, quietUntil: QUIET };
+      let release: (() => void) | undefined;
+      let polls = 0;
+      const { client, calls } = fakeClient({});
+      const gated: DeviceCadenceClient = {
+        ...client,
+        poll: (request) =>
+          Effect.suspend(() => {
+            polls += 1;
+            calls.push({ kind: "poll", body: request });
+            if (polls !== 2) return Effect.succeed({ seen: true, ...HEADS });
+            return Effect.promise(
+              () =>
+                new Promise<ChangesAnswer>((resolve) => {
+                  release = () => resolve({ seen: true, ...HEADS });
+                }),
+            );
+          }),
+      };
+      const subject = yield* cadence(directory, gated, undefined, () => report);
+      yield* subject.start;
+      yield* firstBeat(() => calls.length === 2);
+      assert.deepEqual(calls[1]?.body, { deviceId: DEVICE_ID, ...PRESENT, quietUntil: QUIET });
+
+      // The pause released: the report moves and the restate carries it now,
+      // a whole interval before the cadence's own next beat would have.
+      report = PRESENT;
+      yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+      yield* waitFor(() => calls.length === 3);
+      yield* Effect.fork(subject.restate);
+      yield* settle();
+      assert.equal(calls.length, 3, "a restate waits for the poll already on the wire");
+      release?.();
+      yield* waitFor(() => calls.length === 4);
+      assert.deepEqual(calls[3], { kind: "poll", body: { deviceId: DEVICE_ID, ...PRESENT } });
+
+      yield* subject.stop({ forget: false });
+      yield* subject.restate;
+      yield* settle();
+      assert.equal(calls.length, 4, "a stopped cadence has no row to restate");
     }),
 );
 

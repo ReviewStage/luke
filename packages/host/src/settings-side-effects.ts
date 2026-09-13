@@ -29,6 +29,8 @@ export interface HostSettingSideEffectDependencies {
   applyVoiceCredential: Effect.Effect<void>;
   /** The hold read again for the panel, which draws it; nothing on this side queues speech to hold since E5-3. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
+  /** The device heartbeat sent now, carrying the quiet instant as it stands after the write. */
+  readonly reportPresence: Effect.Effect<void>;
   emitSettings: () => Effect.Effect<void>;
 }
 
@@ -52,9 +54,11 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
       Effect.zipRight(dependencies.applyVoiceCredential, dependencies.emitSettings()),
     // The hold is the service's to apply since E5-3: a briefing is spoken by
     // the service's own exchange against the quiet instant this device's
-    // heartbeat reports (the meeting hold alone today; the pause setting
-    // reaching it is LUKE-202). What the toggle still moves here is the hold
-    // the panel draws.
-    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () => dependencies.refreshAnnouncementHold,
+    // heartbeat reports, which folds the pause and the meeting hold both. So
+    // the toggle moves two things: the hold the panel draws, and the row on
+    // the service, by a heartbeat sent now rather than at the next scheduled
+    // beat, so a pause released frees the account's briefings at once.
+    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
+      Effect.zipRight(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
   } satisfies HostSettingSideEffects;
 }

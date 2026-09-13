@@ -72,6 +72,8 @@ interface SettingsLinks {
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
+  /** The device heartbeat sent now, so the quiet instant the pause or the meeting setting moved reaches the service at once. */
+  readonly reportPresence: Effect.Effect<void>;
   broadcastWorkspaceProjects: Effect.Effect<void>;
   workspaceProjectOffered: (
     providerId: string,
@@ -679,6 +681,7 @@ export const composeSettings = (): Effect.Effect<
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       applyVoiceCredential: linked((links) => links.applyVoiceCredential),
       refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
+      reportPresence: linked((links) => links.reportPresence),
       emitSettings,
     });
 

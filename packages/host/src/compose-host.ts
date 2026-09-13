@@ -116,7 +116,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
     const observation = yield* composeObservation({ settings, account, observationGate });
     const calendars = yield* composeCalendars({ settings, observationGate });
-    const devices = yield* composeDevices({ account, calendars });
+    const devices = yield* composeDevices({ account, calendars, settings });
     const conversation = composeConversation({
       kernel,
       settings,
@@ -216,10 +216,12 @@ export const hostAssemblyLayer: Layer.Layer<
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       refreshAnnouncementHold: calendars.refreshAnnouncementHold,
+      reportPresence: devices.reportPresence,
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
       workspaceProjectOffered: (providerId, providerProjectId) =>
         Effect.sync(() => observation.workspaceProjectOffered(providerId, providerProjectId)),
     });
+    yield* calendars.link({ reportPresence: devices.reportPresence });
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,

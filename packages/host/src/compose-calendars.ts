@@ -36,7 +36,7 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { conductorKeyOnboardingOwed } from "./conductor-key-onboarding-flow.js";
 import { quietUntilFrom } from "./device-presence.js";
-import { HostKernelTag } from "./effect/kernel.js";
+import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { introductionOwed } from "./introduction-flow.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { type OnboardingState, onboardingStateRecord } from "./onboarding-state.js";
@@ -73,9 +73,12 @@ export interface CalendarsComposer extends Composer {
    * have been observed and none stands; `undefined` before the first
    * observation has resolved, when whether a hold stands is not yet known.
    * It is the fact the device row reports and nothing decided from it; the
-   * manual pause has no end and is no instant.
+   * pause and the introduction, which have no end of their own, are the
+   * devices composer's to fold in beside it.
    */
   meetingQuietUntil: (at: number) => Effect.Effect<number | null | undefined>;
+  /** The one back-edge: the devices composer is built after this one and is what the introduction's move must reach. */
+  link: (links: CalendarsLinks) => Effect.Effect<void>;
   /** Whether the calendar step of onboarding still stands over the panel. */
   gateOwed: () => boolean;
   gateOfferable: () => Effect.Effect<boolean>;
@@ -105,6 +108,12 @@ export interface CalendarsComposer extends Composer {
 export interface CalendarsDependencies {
   settings: SettingsComposer;
   observationGate: () => boolean;
+}
+
+/** What the calendars concern reaches in a concern built after it. */
+interface CalendarsLinks {
+  /** The device heartbeat sent now, carrying the introduction hold as it stands after the record moved. */
+  readonly reportPresence: Effect.Effect<void>;
 }
 
 /**
@@ -220,6 +229,7 @@ export const composeCalendars = (
      * record read before the other's moment landed.
      */
     const writeGate = yield* Effect.makeSemaphore(1);
+    const late = yield* lateService<CalendarsLinks>();
     let onboardingState: OnboardingState | undefined;
     let announcedCalendarGateOwed: boolean | undefined;
     let announcedIntroductionOwed: boolean | undefined;
@@ -258,8 +268,11 @@ export const composeCalendars = (
             announcedIntroductionOwed = introduction;
             kernel.emit(GATEWAY_EVENT.INTRODUCTION_CHANGED, { owed: introduction });
             // The introduction owed is a hold the panel draws: read again
-            // here so the face it holds asleep wakes on the completion.
+            // here so the face it holds asleep wakes on the completion. It is
+            // also a hold the device heartbeat carries, so the service hears
+            // the completion now rather than at the next scheduled beat.
             yield* refreshAnnouncementHold;
+            yield* Effect.flatMap(late.value, (links) => links.reportPresence);
           }
           const keyGate = conductorKeyGateOwed();
           if (keyGate !== announcedKeyGateOwed) {
@@ -744,6 +757,7 @@ export const composeCalendars = (
       announcementsQuietNow,
       refreshAnnouncementHold,
       meetingQuietUntil,
+      link: (links) => Effect.asVoid(late.set(links)),
       gateOwed: calendarOnboardingGateOwed,
       gateOfferable: calendarGateOfferable,
       introductionOwed: spokenIntroductionOwed,

@@ -399,11 +399,15 @@ every poll and heartbeat: on a timer by the Mac, each time the phone comes
 to the foreground, and by the phone's and the watch's Conversation screens
 while they are open), an optional push token, and two instants: a presence
 instant and a quiet-until instant. The Mac reports both about once a minute
-on the same poll it uses to learn what changed: presence set only while your
-Mac has seen input in the last two minutes and its screen is unlocked, and
-quiet-until as the end of a meeting its calendar hold observes while you
-have Luke quiet during meetings. The phone and the watch each report a
-presence instant too, on the poll their Conversation screen makes every few
+on the same poll it uses to learn what changed, and once more the moment you
+flip the announcements switch or the spoken introduction finishes: presence
+set only while your Mac has seen input in the last two minutes and its screen
+is unlocked, and quiet-until as the later of two ends — the end of a meeting
+its calendar hold observes while you have Luke quiet during meetings, and,
+while announcements are switched off or the spoken introduction is still
+owed, an instant one to two hours ahead that each poll moves forward again,
+so that hold lifts on its own if the Mac stops polling. The phone and the
+watch each report a presence instant too, on the poll their Conversation screen makes every few
 seconds while it is on screen and the app is in the foreground, each holding
 for thirty seconds; neither observes a meeting, so neither reports a quiet
 instant. Each is an instant and nothing else — not what you typed, not which
