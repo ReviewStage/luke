@@ -136,7 +136,7 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
               open.close(SOCKET_CLOSE_CODE.GOING_AWAY);
             }),
         );
-        yield* Effect.async<void, SidebandNotAttached>((resume) => {
+        yield* Effect.callback<void, SidebandNotAttached>((resume) => {
           socket.once("open", () => {
             // Paused here, inside the open handler, and not by the caller: the
             // bytes that followed the handshake response are re-queued on the
@@ -149,9 +149,9 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
           socket.once("error", () => resume(Effect.fail(new SidebandNotAttached())));
           socket.once("unexpected-response", () => resume(Effect.fail(new SidebandNotAttached())));
         }).pipe(
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration: attachTimeoutMs,
-            onTimeout: () => new SidebandNotAttached(),
+            orElse: () => Effect.fail(new SidebandNotAttached()),
           }),
         );
         return socket;

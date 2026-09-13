@@ -17,7 +17,7 @@ import { Deferred, Effect, Exit, Option } from "effect";
  * outlive it by the length of a run.
  */
 export const whenAborted = (signal: AbortSignal): Effect.Effect<void> =>
-  Effect.async<void>((resume) => {
+  Effect.callback<void>((resume) => {
     if (signal.aborted) {
       resume(Effect.void);
       return;

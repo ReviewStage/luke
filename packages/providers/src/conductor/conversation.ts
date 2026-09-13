@@ -355,7 +355,7 @@ export function readConductorTranscript(
       status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: tail.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
     };
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
+  }).pipe(Effect.catch((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
 }
 
 /**
@@ -410,7 +410,7 @@ export function readConductorTranscriptSince(
           ? page.hasOlder === true || kept.length < page.messages.length
           : page.hasMore,
     };
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
+  }).pipe(Effect.catch((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
 }
 
 export function readConductorConversation(
@@ -459,5 +459,5 @@ export function readConductorConversation(
       return readConversationPage(pass, providerSessionId, page.beforeOffset);
     }
     return readTailPage(pass, ends, providerSessionId);
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "conversation"))));
+  }).pipe(Effect.catch((failure) => Effect.succeed(readRefusal(failure, "conversation"))));
 }

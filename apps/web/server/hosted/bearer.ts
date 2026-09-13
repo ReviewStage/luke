@@ -17,7 +17,7 @@ export interface OAuthUserInfo {
  */
 export type UserInfoEndpoint = (input: {
   headers: Headers;
-}) => Effect.Effect<OAuthUserInfo | undefined, Cause.UnknownException>;
+}) => Effect.Effect<OAuthUserInfo | undefined, Cause.UnknownError>;
 
 /** Parses the auth service's raw userinfo answer at the hosted API boundary. */
 export function oauthUserInfoFromAuthAnswer(value: UnparsedWireValue): OAuthUserInfo | undefined {

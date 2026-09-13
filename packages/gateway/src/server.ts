@@ -17,15 +17,17 @@ import {
   Hash,
   HashMap,
   Layer,
-  Mailbox,
   MutableRef,
   Option,
   PubSub,
+  Queue,
   Ref,
   type Result,
   type Scope,
   Stream,
+  type Types,
 } from "effect";
+import type { Headers } from "effect/unstable/http/Headers";
 import {
   type Rpc,
   type RpcGroup,
@@ -250,7 +252,7 @@ function makeGatewayEventLog(
       MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
       // The unbounded bus takes every event, so the offer is the publish an
       // effect would have awaited, made where the caller is not a fiber.
-      bus.unsafeOffer(emitted);
+      PubSub.publishUnsafe(bus, emitted);
       for (const listener of [...listeners]) listener(emitted);
       return emitted;
     };
@@ -280,7 +282,7 @@ function makeGatewayEventLog(
           };
         }),
       sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
-      events: Stream.fromPubSub(bus, { scoped: true }),
+      events: Effect.map(PubSub.subscribe(bus), Stream.fromSubscription),
       revision: () => ({
         configuration: options.configurationRevision(),
         sequence: newestSequence(MutableRef.get(ring)),
@@ -458,11 +460,12 @@ function layerGatewayRevisionCheck(
   );
 }
 
-type LedgerRun = Effect.Effect<RpcMiddleware.SuccessValue, GatewayRefusal>;
+/** What the middleware hands on: the handler still to run, whose error channel carries the marker the Rpc runtime keeps for an error no middleware has handled. */
+type LedgerRun = Effect.Effect<RpcMiddleware.SuccessValue, GatewayRefusal | Types.unhandled>;
 
 interface LedgerAnswer {
   readonly paramsText: string;
-  readonly answer: Result.Result<RpcMiddleware.SuccessValue, GatewayRefusal>;
+  readonly answer: Result.Result<RpcMiddleware.SuccessValue, GatewayRefusal | Types.unhandled>;
 }
 
 /**
@@ -523,9 +526,16 @@ export function layerGatewayLedger(options: GatewayServerLayerOptions): Layer.La
         const ledger = isGatewayMethod(rpc._tag) ? ledgers.get(rpc._tag) : undefined;
         if (key === undefined || ledger === undefined) return next;
         const paramsText = JSON.stringify(payload);
-        return Effect.flatMap(ledger.get(new LedgerEntry(key, paramsText, next)), (held) =>
+        const asked = new LedgerEntry(key, paramsText, next);
+        // An interruption is not an answer, so the key it was asked under is
+        // dropped where the interruption is seen rather than left standing
+        // over a lookup that will never settle.
+        const held = Cache.get(ledger, asked).pipe(
+          Effect.onInterrupt(() => Cache.invalidate(ledger, asked)),
+        );
+        return Effect.flatMap(held, (held) =>
           held.paramsText === paramsText
-            ? held.answer
+            ? Effect.fromResult(held.answer)
             : Effect.fail(
                 new IdempotencyConflictRefusal({
                   message: "that idempotency key was already used with other parameters",
@@ -591,7 +601,7 @@ function layerGatewayMethods(
         const handler = methods[method];
         return (
           payload: WireRecord,
-          asked: { readonly clientId: number; readonly headers: Readonly<Record<string, string>> },
+          asked: { readonly client: Rpc.ServerClient; readonly headers: Headers },
         ): Effect.Effect<WireValue | undefined, GatewayRefusal> =>
           Effect.gen(function* () {
             if (!handler) {
@@ -599,7 +609,7 @@ function layerGatewayMethods(
                 new UnknownMethodRefusal({ message: `no handler stands for ${method}` }),
               );
             }
-            const client = yield* clients.client(asked.clientId);
+            const client = yield* clients.client(asked.client.id);
             if (Option.isNone(client)) {
               return yield* Effect.fail(
                 new UnauthorizedRefusal({
@@ -622,7 +632,7 @@ function layerGatewayMethods(
             // A handler that throws rather than failing is the request's own
             // internal refusal, as it was when the table answered promises:
             // one method's defect refuses that request and no other.
-            Effect.catchAllDefect((defect) =>
+            Effect.catchDefect((defect) =>
               Effect.fail(
                 new InternalRefusal({
                   message: defect instanceof Error ? defect.message : String(defect),
@@ -685,8 +695,8 @@ export class GatewayInProcessProtocol extends Context.Service<
 
 interface InProcessClient {
   /** The envelope id each Rpc request id stands for, so an answer is echoed under the id the client wrote. */
-  readonly wireIds: Map<string, string>;
-  readonly pending: Map<string, Deferred.Deferred<string>>;
+  readonly wireIds: Map<string | number, string>;
+  readonly pending: Map<string | number, Deferred.Deferred<string>>;
   next: number;
   ended: boolean;
 }
@@ -714,16 +724,17 @@ const makeGatewayInProcessProtocol: Effect.Effect<
   never,
   RpcSerialization.RpcSerialization | GatewayClients
 > = Effect.gen(function* () {
-  const parser = (yield* RpcSerialization.RpcSerialization).unsafeMake();
+  const serialization = yield* RpcSerialization.RpcSerialization;
+  const parser = serialization.makeUnsafe();
   const decoder = new TextDecoder();
   const clients = yield* GatewayClients;
-  const disconnects = yield* Mailbox.make<number>();
+  const disconnects = yield* Queue.make<number>();
   const held = new Map<number, InProcessClient>();
 
   const frameOf = (encoded: string | Uint8Array | undefined): string | undefined =>
     encoded instanceof Uint8Array ? decoder.decode(encoded) : encoded;
 
-  const answer = (client: InProcessClient, requestId: string, frame: string) =>
+  const answer = (client: InProcessClient, requestId: string | number, frame: string) =>
     Effect.suspend(() => {
       const pending = client.pending.get(requestId);
       client.pending.delete(requestId);
@@ -791,6 +802,10 @@ const makeGatewayInProcessProtocol: Effect.Effect<
       supportsAck: false,
       supportsTransferables: false,
       supportsSpanPropagation: false,
+      // Every request here is awaited on its own `Deferred`, so a request that
+      // expects no answer is not something this seam carries.
+      supportsNotifications: false,
+      codecFor: serialization.codecFor,
     });
   });
 

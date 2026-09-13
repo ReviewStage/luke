@@ -10,7 +10,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Chunk, Context, Deferred, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
 import { Headers } from "effect/unstable/http";
 import { Rpc, RpcMessage } from "effect/unstable/rpc";
 import { test } from "vitest";
@@ -395,7 +395,7 @@ it.effect(
             [GATEWAY_METHOD.RUN_SUBMIT]: () =>
               Effect.gen(function* () {
                 runs.push("submit");
-                yield* Effect.yieldNow();
+                yield* Effect.yieldNow;
                 return { outcome: "accepted" };
               }),
           },
@@ -495,7 +495,7 @@ it.effect("the log's stream delivers every emitted event in sequence", () =>
     yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     yield* log.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
     yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] }, { runId: "run-1" });
-    const taken = Chunk.toReadonlyArray(yield* Stream.runCollect(Stream.take(events, 3)));
+    const taken = yield* Stream.runCollect(Stream.take(events, 3));
     assert.deepEqual(
       taken.map((event) => [event.sequence, event.kind, event.runId]),
       [

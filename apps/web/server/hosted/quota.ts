@@ -46,7 +46,7 @@ const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.
  * rather than an outcome a caller could act on.
  */
 function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
-  return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
+  return Option.match(row, { onNone: () => Effect.die(new Error(absent)), onSome: Effect.succeed });
 }
 
 const HostedUsageWriteSchema = Schema.Struct({ userId: Schema.String, day: Schema.String });

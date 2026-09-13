@@ -206,7 +206,7 @@ describe("the late service", () => {
       assert.deepEqual(yield* late.peek, Option.none());
       const waiting = yield* Effect.forkChild(late.value);
       yield* TestClock.adjust("1 minute");
-      assert.deepEqual(yield* Fiber.poll(waiting), Option.none());
+      assert.equal(waiting.pollUnsafe(), undefined);
 
       assert.equal(yield* late.set(4), true);
       assert.equal(yield* Fiber.join(waiting), 4);
@@ -240,7 +240,7 @@ describe("the late service", () => {
       // The drain that answers a set-once is a fork of its own, so a call
       // made right after the set is waited past that fork's own resumption
       // rather than assumed delivered by the next statement.
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
       assert.equal(yield* held.late.value, service);
       assert.equal(yield* held.late.set(stubService()), false);
@@ -270,7 +270,7 @@ describe("the late service", () => {
         // The fork that drains what queued ahead of the merge is a daemon of
         // this test's own runtime, not this fiber, so it is waited out rather
         // than assumed to have run by the next statement.
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
 
         assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
       }),

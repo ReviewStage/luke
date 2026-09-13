@@ -205,7 +205,7 @@ export function createTurnToolExecutor(
         run.checkpointFailed = true;
         return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
       }
-      const output = yield* Effect.catchAllDefect(effect, () =>
+      const output = yield* Effect.catchDefect(effect, () =>
         Effect.succeed(outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason)),
       );
       if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;

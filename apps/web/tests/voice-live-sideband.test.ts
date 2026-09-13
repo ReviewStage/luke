@@ -45,7 +45,7 @@ async function upstream() {
 /** Gives the fiber reading the socket its turns, so what the far side said has been read. */
 const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
 
-it.scopedLive(
+it.live(
   "the upstream socket reads as a sideband: Live events parsed, binary and reflected audio dropped, sends as JSON text, and the far close reported",
   () =>
     Effect.gen(function* () {
@@ -94,7 +94,7 @@ function started(id: string) {
   return { type: LIVE_SERVER_EVENT.SESSION_STARTED, event_id: `started-${id}`, session: { id } };
 }
 
-it.scopedLive(
+it.live(
   "an observed sideband hands each event to the observer once, ahead of the reader that runs its arrivals, replay included, and the sends and close pass through",
   () =>
     Effect.gen(function* () {

@@ -96,7 +96,7 @@ export class AppendChannel {
    */
   enqueue(work: Effect.Effect<void>): void {
     if (this.#shut) return;
-    Queue.unsafeOffer(this.#work, work);
+    Queue.offerUnsafe(this.#work, work);
   }
 
   /** Sends one append and answers whether the session took it. */
@@ -170,24 +170,27 @@ export class AppendChannel {
       Effect.as(Deferred.await(this.#closed), Option.none<Effect.Effect<void>>()),
       Effect.map(Queue.take(this.#work), Option.some),
     );
-    return Effect.iterate(true, {
-      while: (open) => open,
-      body: () =>
-        Effect.flatMap(next, (work) =>
-          Option.isNone(work)
-            ? Effect.succeed(false)
-            : Effect.as(
-                Effect.catchAllDefect(work.value, (defect) =>
-                  Effect.sync(() => {
-                    this.#options.report(
-                      `A live append failed: ${defect instanceof Error ? defect.message : String(defect)}`,
-                    );
-                  }),
-                ),
-                !this.#shut,
-              ),
-        ),
-    }).pipe(Effect.asVoid);
+    // The loop is the channel's own statement rather than a combinator: it
+    // stands open until the close wins the race or a take leaves the channel
+    // shut, which is the same condition the iteration carried as its state.
+    return Effect.gen({ self: this }, function* () {
+      let open = true;
+      while (open) {
+        const work = yield* next;
+        if (Option.isNone(work)) {
+          open = false;
+          continue;
+        }
+        yield* Effect.catchDefect(work.value, (defect) =>
+          Effect.sync(() => {
+            this.#options.report(
+              `A live append failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+            );
+          }),
+        );
+        open = !this.#shut;
+      }
+    });
   }
 
   #settle(eventId: string, acknowledgment: Acknowledgment): void {

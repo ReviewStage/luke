@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime, Semaphore } from "effect";
 import { detachOn } from "./carry.js";
 
 /**
@@ -22,7 +22,7 @@ describe("the detach door", () => {
       const steps: string[] = [];
       yield* Effect.forkDetach(Effect.sync(() => steps.push("forked")));
       assert.deepEqual(steps, []);
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       assert.deepEqual(steps, ["forked"]);
     }),
   );
@@ -30,7 +30,7 @@ describe("the detach door", () => {
   it("runs the first step even when the effect suspends right behind it", async () => {
     // The miniature of `BrainAgent#enqueue`: a turn is counted queued by the
     // acquisition, and only then asks for the conversation's one permit.
-    const permit = Effect.unsafeMakeSemaphore(1);
+    const permit = Semaphore.makeUnsafe(1);
     let queued = 0;
     await Effect.runPromise(permit.take(1));
     const detached = detachOn(Context.empty())(

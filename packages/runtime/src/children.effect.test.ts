@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Clock, Deferred, Duration, Effect, Schedule } from "effect";
+import { Clock, Deferred, Duration, Effect, Pull, Schedule } from "effect";
 import { TestClock } from "effect/testing";
 import {
   CHILD_RUN_STATUS,
@@ -323,15 +323,34 @@ describe("childLines", () => {
   );
 });
 
+/**
+ * Drives a schedule to exhaustion the way v4 states one: `Schedule.toStep`
+ * hands back a step, and the step is pulled with each attempt's own instant
+ * until it ends with `Cause.done`. v3's `Schedule.run` collected this for a
+ * caller; v4 has no such collector, so the walk stands here.
+ */
+const stepsOf = <Output>(
+  schedule: Schedule.Schedule<Output, undefined>,
+  attempts: number,
+): Effect.Effect<ReadonlyArray<readonly [Output, Duration.Duration]>> =>
+  Effect.gen(function* () {
+    const step = yield* Schedule.toStep(schedule);
+    const taken: Array<readonly [Output, Duration.Duration]> = [];
+    let now = 0;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const pulled = yield* Pull.catchDone(step(now, undefined), () => Effect.succeed(undefined));
+      if (pulled === undefined) break;
+      taken.push(pulled);
+      now += Duration.toMillis(pulled[1]);
+    }
+    return taken;
+  });
+
 describe("childDeliveryBackoffSchedule", () => {
   it.effect("doubles the port's own initial delay to its own cap", () =>
     Effect.gen(function* () {
-      const delays = yield* Schedule.run(
-        childDeliveryBackoffSchedule(),
-        0,
-        Array.from({ length: 8 }, () => undefined),
-      );
-      const millis = Chunk.toReadonlyArray(delays).map(Duration.toMillis);
+      const taken = yield* stepsOf(childDeliveryBackoffSchedule(), 8);
+      const millis = taken.map(([, delay]) => Duration.toMillis(delay));
       assert.deepEqual(
         millis,
         Array.from({ length: 8 }, (_, index) => deliveryBackoffMs(index + 1)),

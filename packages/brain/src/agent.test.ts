@@ -22,7 +22,7 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Fiber, type Scope } from "effect";
+import { Clock, Effect, Fiber, type Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { detachOn } from "./effect/carry.js";
 import { advanceHarness, effectHarness, effectReviewing } from "./effect/harness.js";
@@ -97,7 +97,7 @@ const generationClockOn = (
   Effect.gen(function* () {
     const clock = new BrainGenerationClock({
       store,
-      clock: yield* Effect.clock,
+      clock: yield* Clock.Clock,
       detach: detachOn(yield* Effect.context<never>()),
       scope: yield* Effect.scope,
     });
@@ -575,7 +575,7 @@ it.effect(
       const stopping = yield* Effect.forkChild(h.agent.stop());
       // Revoking is the stop's own first step: the fork's first slice runs it,
       // before the held action is released and before the stop suspends at all.
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       assert.equal(late.execution.isRevoked(), true);
       release?.();
       yield* Fiber.join(stopping);
@@ -929,7 +929,7 @@ it.effect(
       let releaseRead: ((result: ProviderTranscriptSinceResult) => void) | undefined;
       const h = yield* effectHarness({
         readTranscriptSince: () =>
-          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+          Effect.callback<ProviderTranscriptSinceResult>((resume) => {
             releaseRead = (result) => {
               resume(Effect.succeed(result));
             };
@@ -982,13 +982,13 @@ it.effect(
       const h = yield* effectHarness({
         executionDeadlineMs: 60_000,
         readTranscript: () =>
-          Effect.async<ProviderTranscriptResult>((resume) => {
+          Effect.callback<ProviderTranscriptResult>((resume) => {
             reads.push((result) => {
               resume(Effect.succeed(result));
             });
           }),
         readTranscriptSince: () =>
-          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+          Effect.callback<ProviderTranscriptSinceResult>((resume) => {
             deltas.push((result) => {
               resume(Effect.succeed(result));
             });
@@ -1244,7 +1244,7 @@ it.effect(
       yield* TestClock.setTime(born.expiresAt);
       idle.client.answers.push(answered([message("")]));
       yield* idle.agent.wake([edge(ABC)]);
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       assert.notEqual(idle.store.generationId(), born.generationId);
       assert.equal(idle.store.current()?.requests.length, 0);
     }),
@@ -1530,7 +1530,7 @@ it.effect(
             // The reopen's value is ready, but it is handed over only after the
             // test has stopped the agent, so the claim lands before the signal and
             // the host's continuation after it.
-            return Effect.async<typeof opened>((resume) => {
+            return Effect.callback<typeof opened>((resume) => {
               releaseReopen = () => resume(Effect.succeed(opened));
             });
           }),
@@ -2076,7 +2076,7 @@ it.effect(
       // Nothing is left standing to open a turn later: every cancelled ask's
       // own debounce is gone too, not merely quiet until the next one arrives.
       const cancelledInputsBefore = inner.inputs.length;
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 60_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 60_000);
       assert.equal(inner.inputs.length, cancelledInputsBefore);
       // Stale summary metadata does not hold the conversation: the next ask opens its own turn at once.
       const next = acceptedRunId(yield* submit(h, "after all of them"));
@@ -2126,7 +2126,7 @@ it.effect(
       assert.equal(inner.inputs.length, 1);
       assert.equal(h.agent.request(queued), undefined);
       const clearedInputsBefore = inner.inputs.length;
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 60_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 60_000);
       assert.equal(inner.inputs.length, clearedInputsBefore);
     }),
 );

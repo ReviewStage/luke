@@ -320,7 +320,7 @@ it.live(
         yield* Effect.sleep("20 millis");
         yield* h.binding.closeAdmissions;
         release?.();
-        assert.deepEqual(yield* refused, {
+        assert.deepEqual(yield* Fiber.join(refused), {
           ok: false,
           failure: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN,
         });
@@ -375,7 +375,7 @@ it.live(
         );
         assert.equal(outcome, "closed");
         // The attempt is refused rather than left waiting on a host that has gone.
-        assert.equal((yield* attempt).ok, false);
+        assert.equal((yield* Fiber.join(attempt)).ok, false);
       }),
     ),
 );

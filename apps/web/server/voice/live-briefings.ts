@@ -140,8 +140,8 @@ export function hostedBriefings(
     });
 
     const onSchedule = Effect.repeat(
-      Effect.catchAllCause(look, (cause) => {
-        if (Cause.isInterruptedOnly(cause)) return Effect.failCause(cause);
+      Effect.catchCause(look, (cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
         const failure = Cause.squash(cause);
         return Effect.sync(() => {
           options.report(

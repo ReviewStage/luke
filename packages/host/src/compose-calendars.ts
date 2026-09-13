@@ -26,7 +26,7 @@ import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import type { BeatKind } from "@sidecar/voice/live-session";
 import { ACTION_RESULT_STATUS, isWireBoolean, isWireString } from "@sidecar/wire";
-import { Duration, Effect, Fiber, Queue, Result, Schedule, Scope } from "effect";
+import { Duration, Effect, Fiber, Queue, Result, Schedule, Scope, Semaphore } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import {
   APPLE_CALENDAR_ACCESS_REFUSAL,
@@ -205,7 +205,7 @@ export const composeCalendars = (
      * and the write would leave the disk saying the edge never happened.
      */
     const takeOnboardingWrite = (write: Effect.Effect<void>): Effect.Effect<void> =>
-      Effect.catchAllDefect(Effect.uninterruptible(write), (defect) =>
+      Effect.catchDefect(Effect.uninterruptible(write), (defect) =>
         Effect.logError("an onboarding write failed", defect),
       );
     /**
@@ -222,7 +222,7 @@ export const composeCalendars = (
       Effect.forever(Effect.flatMap(Queue.take(onboardingWrites), takeOnboardingWrite)),
     );
     const offerOnboardingWrite = (write: Effect.Effect<void>): void => {
-      Queue.unsafeOffer(onboardingWrites, write);
+      Queue.offerUnsafe(onboardingWrites, write);
     };
     /**
      * One writer at a time over the record, which the synchronous face this
@@ -230,7 +230,7 @@ export const composeCalendars = (
      * holds at that instant, so two that overlapped would each save over a
      * record read before the other's moment landed.
      */
-    const writeGate = yield* Effect.makeSemaphore(1);
+    const writeGate = yield* Semaphore.make(1);
     let onboardingState: OnboardingState | undefined;
     let announcedCalendarGateOwed: boolean | undefined;
     let announcedIntroductionOwed: boolean | undefined;
@@ -456,7 +456,7 @@ export const composeCalendars = (
         // than caught around the yield: a rejection lifted into a fiber is a
         // defect no `try` here would see, and one failed probe must not end
         // the poll the schedule is repeating.
-        const probed = yield* Effect.either(appleCalendar.status());
+        const probed = yield* Effect.result(appleCalendar.status());
         const access = Result.getOrUndefined(probed);
         if (Result.isFailure(probed) && !appleAccessProbeFailing) {
           const error = probed.failure;

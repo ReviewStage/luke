@@ -144,7 +144,7 @@ export function followBrainRequests(
     const listener = (records: readonly BrainRequestRecord[]) => {
       if (!accepting) return;
       dependencies.broadcastRequests(records);
-      Queue.unsafeOffer(reports, { kind: PUBLICATION_ITEM.REPORT, records });
+      Queue.offerUnsafe(reports, { kind: PUBLICATION_ITEM.REPORT, records });
     };
     const unsubscribe = agent.subscribe(listener);
     yield* Effect.forkDetach(

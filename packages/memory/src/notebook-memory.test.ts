@@ -315,7 +315,7 @@ function until(condition: () => boolean): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let turn = 0; turn < 1_000; turn += 1) {
       if (condition()) return;
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });

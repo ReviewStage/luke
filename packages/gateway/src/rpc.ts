@@ -1,5 +1,5 @@
 import { isRecord, valueFromJsonText, type WireRecord } from "@sidecar/wire";
-import { Cause, Context, Exit, Layer, Option, Schema } from "effect";
+import { Cause, Context, Exit, Layer, Option, Result, Schema } from "effect";
 import { Rpc, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
 import type { FromClientEncoded, FromServerEncoded } from "effect/unstable/rpc/RpcMessage";
 import {
@@ -190,7 +190,12 @@ export type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
 /** Reads one decoded frame as a request message of the group, or nothing for any other message the parser answered. */
 export const readRpcRequestMessage = Schema.decodeUnknownOption(RpcRequestMessageSchema);
 
-const GatewayExitSchema = Schema.Exit(GatewayResultSchema, GatewayErrorSchema, Schema.Defect());
+// `Schema.Exit` declares the `Exit` value itself, so a frame's encoded exit is
+// read through the JSON codec the declaration lowers to: a success carries its
+// value, a failure the flat array of reasons a `Cause` is made of.
+const GatewayExitSchema = Schema.toCodecJson(
+  Schema.Exit(GatewayResultSchema, GatewayErrorSchema, Schema.Defect()),
+);
 
 const RpcExitMessageSchema = Schema.Struct({
   _tag: Schema.Literal(RPC_MESSAGE_TAG.EXIT),
@@ -210,11 +215,11 @@ const readRpcMessage = Schema.decodeUnknownOption(
 
 /** What an answer that never formed says: the first typed refusal in the cause, or an internal error naming the defect. */
 function gatewayErrorFromCause(cause: Cause.Cause<GatewayError>): GatewayError {
-  return Option.getOrElse(Cause.failureOption(cause), () => ({
+  return Option.getOrElse(Cause.findErrorOption(cause), () => ({
     code: GATEWAY_ERROR.INTERNAL,
-    message: Option.match(Cause.dieOption(cause), {
-      onSome: (defect) => (defect instanceof Error ? defect.message : String(defect)),
-      onNone: () => "the answer was interrupted before it formed",
+    message: Result.match(Cause.findDefect(cause), {
+      onSuccess: (defect) => (defect instanceof Error ? defect.message : String(defect)),
+      onFailure: () => "the answer was interrupted before it formed",
     }),
   }));
 }
@@ -248,8 +253,10 @@ function messagesOf(envelope: WireRecord): readonly (FromClientEncoded | FromSer
         _tag: RPC_MESSAGE_TAG.EXIT,
         requestId: response.id,
         exit: response.ok
-          ? { _tag: "Success", value: response.result }
-          : { _tag: "Failure", cause: { _tag: "Fail", error: response.error } },
+          ? // The hole a result fills is JSON, where a method that answered
+            // nothing is `null`; the envelope's absent field is that nothing.
+            { _tag: "Success", value: response.result ?? null }
+          : { _tag: "Failure", cause: [{ _tag: "Fail", error: response.error }] },
       },
     ];
   }
@@ -317,7 +324,8 @@ export function gatewayEnvelopeSerialization(
   return RpcSerialization.RpcSerialization.of({
     contentType: "application/json",
     includesFraming: false,
-    unsafeMake: () => {
+    codecFor: RpcSerialization.json.codecFor,
+    makeUnsafe: () => {
       const decoder = new TextDecoder();
       return {
         decode: (data) =>

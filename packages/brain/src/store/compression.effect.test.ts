@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { ARCHIVE_ENCODING } from "@sidecar/runtime/vocabulary";
-import { Effect } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { decodeArchiveContentEffect, ZstdUnsupported } from "./compression.effect.js";
 import { encodeArchiveContent, zstdSupported } from "./compression.js";
 
@@ -47,7 +47,7 @@ describe("decodeArchiveContentEffect", () => {
         );
 
         assert.equal(exit._tag, "Failure");
-        assert.equal(exit._tag === "Failure" && exit.cause._tag, "Die");
+        assert.equal(Exit.isFailure(exit) && Cause.hasDies(exit.cause), true);
       }),
   );
 });

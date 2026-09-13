@@ -123,7 +123,7 @@ const gatherIce = (connection: LivePeerConnection): Effect.Effect<void> =>
   connection.iceGatheringState === ICE_GATHERING_COMPLETE
     ? Effect.void
     : Effect.race(
-        Effect.async<void>((resume) => {
+        Effect.callback<void>((resume) => {
           connection.onicegatheringstatechange = () => {
             if (connection.iceGatheringState !== ICE_GATHERING_COMPLETE) return;
             resume(Effect.void);
@@ -233,7 +233,7 @@ export const acquireLivePeer = (
       },
     } satisfies LivePeerOpening;
   }).pipe(
-    Effect.catchAll((message) =>
+    Effect.catch((message) =>
       Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED, message } satisfies LivePeerOpening),
     ),
   );

@@ -3,8 +3,8 @@ import { NodeWorker } from "@effect/platform-node";
 import { MemorySeamRefused, type NotebookMemoryStore } from "@sidecar/memory";
 import type { ChildStore } from "@sidecar/runtime";
 import type { ExecutionRuntime, SessionKey, TranscriptEvent } from "@sidecar/runtime/vocabulary";
-import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
-import { type Rpc, RpcClient } from "effect/unstable/rpc";
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Scope, Semaphore } from "effect";
+import { RpcClient } from "effect/unstable/rpc";
 import type { RpcClientError } from "effect/unstable/rpc/RpcClientError";
 import type { WorkerError } from "effect/unstable/workers/WorkerError";
 import { isManagedRuntime } from "../effect/carry.js";
@@ -156,7 +156,7 @@ export const workerStoreTransport = (spawn: () => WorkerThreads.Worker): StoreTr
       return worker;
     };
     const protocol = RpcClient.layerProtocolWorker({ size: 1, concurrency: 1 }).pipe(
-      Layer.provide(NodeWorker.layerPlatform(watched)),
+      Layer.provide(NodeWorker.layer(watched)),
     );
     const ready = yield* Effect.forkDetach(
       Scope.provide(
@@ -167,7 +167,7 @@ export const workerStoreTransport = (spawn: () => WorkerThreads.Worker): StoreTr
           ),
         ),
         scope,
-      ).pipe(Effect.withUnhandledErrorLogLevel(Option.none())),
+      ),
     );
     return {
       client: Effect.raceFirst(Fiber.join(ready), Deferred.await(gone)),
@@ -210,7 +210,7 @@ const settledOn = (
  */
 export function storeClient(transport: StoreTransport, execution: ExecutionRuntime): StoreClient {
   const settled = settledOn(execution);
-  const sends = Effect.unsafeMakeSemaphore(1);
+  const sends = Semaphore.makeUnsafe(1);
   interface Standing extends StoreConnection {
     readonly scope: Scope.Closeable;
     /** Hears the server go and lets the connection down; interrupted by a close that came first. */
@@ -244,7 +244,7 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
         );
         const watcher = yield* restore(
           Effect.forkDetach(
-            Effect.catchAll(connection.gone, (failure) =>
+            Effect.catch(connection.gone, (failure) =>
               Effect.suspend(() => {
                 gone = failure;
                 standing = undefined;
@@ -263,6 +263,9 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
    * correlation the flat client cannot carry through a tag it holds generic:
    * the tag selects both ends of one Rpc, the payload sent and the answer
    * awaited, so the answer for `name` is that Rpc's own success and refusal.
+   * The implementation answers `unknown` because that is all the flat
+   * client's own conditional answer collapses to under a tag it cannot
+   * resolve; the overload above is where the correlation is stated.
    */
   function call<Name extends StoreOperationName>(
     connection: StoreConnection,
@@ -273,7 +276,7 @@ export function storeClient(transport: StoreTransport, execution: ExecutionRunti
     connection: StoreConnection,
     name: Name,
     params: OperationParams<Name>,
-  ): Effect.Effect<Rpc.Success<StoreRpc>, StoreAskFailure, unknown> {
+  ): Effect.Effect<unknown, StoreAskFailure, unknown> {
     return Effect.raceFirst(
       Effect.flatMap(connection.client, (client) => client(name, params)),
       connection.gone,

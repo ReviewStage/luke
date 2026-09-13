@@ -94,7 +94,7 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
   const stateBroadcast = Layer.effectDiscard(
     Effect.forkScoped(
       Stream.runForEach(state.changes, () =>
-        Effect.catchAllDefect(
+        Effect.catchDefect(
           Effect.sync(() => windows.publishAppState()),
           (defect) =>
             Effect.sync(() => {

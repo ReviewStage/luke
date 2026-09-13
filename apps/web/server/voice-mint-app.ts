@@ -1,10 +1,5 @@
-import { Effect, Redacted } from "effect";
-import {
-  type HttpClient,
-  HttpRouter,
-  HttpServerRequest,
-  type HttpServerResponse,
-} from "effect/unstable/http";
+import { Effect, Layer, Redacted } from "effect";
+import { type HttpClient, HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
   HOSTED_SERVICE_PATH,
@@ -18,7 +13,7 @@ import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
   hostedMethod,
-  hostedRefusalResponse,
+  hostedNotFoundRoute,
 } from "./hosted/http-effect.js";
 import {
   hostedKey,
@@ -38,6 +33,7 @@ import {
   type RemoteObserveSeams,
   remoteSessionContextItem,
 } from "./hosted/remote-voice-mint.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The two signed-in Realtime mints as the one route group their functions
@@ -153,19 +149,18 @@ function roster(
 /** The group, which is the two signed-in mints and the refusal anywhere else. */
 export function voiceMintApp(
   seams: VoiceMintSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | SqlClient.SqlClient
-  | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(HOSTED_SERVICE_PATH.VOICE_MINT, Effect.merge(voiceMint(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, Effect.merge(remoteVoiceMint(seams))),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.VOICE_MINT,
+      Effect.catch(voiceMint(seams), Effect.succeed),
     ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT,
+      Effect.catch(remoteVoiceMint(seams), Effect.succeed),
+    ),
+    hostedNotFoundRoute,
   );
 }

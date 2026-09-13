@@ -80,7 +80,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { SESSION_STATUS, type Session, type SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Cause, type Clock, Effect, Fiber, type Scope } from "effect";
+import { Cause, Clock, Effect, Fiber, type Scope } from "effect";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -313,7 +313,7 @@ export function wireBrain(
   dependencies: BrainWiringDependencies,
 ): Effect.Effect<BrainWiring, never, Scope.Scope> {
   return Effect.gen(function* () {
-    return buildBrainWiring(dependencies, yield* Effect.clock, yield* Effect.scope);
+    return buildBrainWiring(dependencies, yield* Clock.Clock, yield* Effect.scope);
   });
 }
 
@@ -786,7 +786,7 @@ function buildBrainWiring(
       return begun(
         openings,
         sessionKey,
-        Effect.catchAllCause(
+        Effect.catchCause(
           Effect.gen(function* () {
             yield* closings.get(sessionKey) ?? Effect.void;
             const model = liveModel();
@@ -1027,11 +1027,11 @@ function buildBrainWiring(
         const opened = openConversation(sessionKey);
         const agent = opened.host.current();
         if (memory && capture && agent) {
-          const items = yield* Effect.catchAllDefect(agent.contextSnapshot(), () =>
+          const items = yield* Effect.catchDefect(agent.contextSnapshot(), () =>
             Effect.succeed(undefined),
           );
           if (items && items.length > 0) {
-            const result = yield* Effect.catchAllDefect(
+            const result = yield* Effect.catchDefect(
               capture({
                 scope: memory.scope,
                 phase: MEMORY_CAPTURE_PHASE.RESET_REQUESTED,

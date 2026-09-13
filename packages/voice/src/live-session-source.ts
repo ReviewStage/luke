@@ -773,8 +773,8 @@ class ReattachRefused extends Data.TaggedError("ReattachRefused") {}
  * read it: the first entry is the wait before the very first try, which
  * `Effect.retry`'s own first attempt already stands in for, so what the
  * schedule states is the wait before every try after that — `delaysMs.length`
- * tries in all, `undefined` for no tries at all, and `Schedule.stop` for
- * exactly one.
+ * tries in all, `undefined` for no tries at all, and a schedule that recurs
+ * zero times for exactly one.
  */
 function reattachRetrySchedule(
   delaysMs: readonly number[],
@@ -782,8 +782,13 @@ function reattachRetrySchedule(
   if (delaysMs.length === 0) return undefined;
   const [, ...gaps] = delaysMs;
   const [first, ...rest] = gaps;
-  if (first === undefined) return Schedule.stop;
-  return Schedule.fromDelays(Duration.millis(first), ...rest.map((ms) => Duration.millis(ms)));
+  if (first === undefined) return Schedule.recurs(0);
+  // One `Schedule.duration` per gap, sequenced: each recurs once after its own
+  // wait and then hands the schedule on to the next.
+  return rest.reduce<Schedule.Schedule<Duration.Duration>>(
+    (schedule, ms) => Schedule.concat(schedule, Schedule.duration(Duration.millis(ms))),
+    Schedule.duration(Duration.millis(first)),
+  );
 }
 
 /**

@@ -1,7 +1,8 @@
-import { Effect, Schema, Stream } from "effect";
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { Effect, type Layer, Schema, Stream } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
+import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 
 /**
@@ -70,17 +71,32 @@ export const HOSTED_REFUSAL = {
 export function hostedRefusalResponse(
   refusal: HostedRefusal,
 ): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(refusal, {
+  return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
 }
+
+/**
+ * The route every hosted group registers last: the hosted vocabulary's own
+ * `not-found` for a path the group declares no route of its own for. The
+ * router reaches a wildcard only once every declared path has failed to
+ * match, so this answers exactly what the router's own `RouteNotFound` stood
+ * for before the routes became a layer — and, since it is a route like any
+ * other, it answers it as the group's own refusal rather than as the empty
+ * 404 an unhandled `RouteNotFound` would become.
+ */
+export const hostedNotFoundRoute: Layer.Layer<never, never, HttpRouter.HttpRouter> = HttpRouter.add(
+  ANY_METHOD,
+  ANY_PATH,
+  hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND),
+);
 
 /** An answer as the response, the way `jsonResponse` answers one today. */
 export function hostedJsonResponse<Body extends object>(
   status: number,
   body: Body,
 ): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(body, { status });
+  return HttpServerResponse.jsonUnsafe(body, { status });
 }
 
 /**
@@ -120,16 +136,14 @@ export function readJsonBodyEffect(
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const chunks: Uint8Array[] = [];
-    const received = yield* request.stream.pipe(
-      Stream.runFoldWhile(
-        0,
-        (bytes) => bytes <= maximumBytes,
-        (bytes, chunk) => {
-          chunks.push(chunk);
-          return bytes + chunk.byteLength;
-        },
-      ),
-      Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST),
+    let counted = 0;
+    const received = yield* Stream.runForEachWhile(request.stream, (chunk) => {
+      chunks.push(chunk);
+      counted += chunk.byteLength;
+      return Effect.succeed(counted <= maximumBytes);
+    }).pipe(
+      Effect.map(() => counted),
+      Effect.mapError((): HostedRefusal => HOSTED_REFUSAL.INVALID_REQUEST),
     );
     if (received > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
     const joined = new Uint8Array(received);

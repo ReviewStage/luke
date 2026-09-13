@@ -491,7 +491,7 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
  * caller could act on, so it dies with the same words it threw before.
  */
 function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
-  return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
+  return Option.match(row, { onNone: () => Effect.die(new Error(absent)), onSome: Effect.succeed });
 }
 
 const readsJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
@@ -1112,7 +1112,7 @@ function admitted(
       }
       const [stored] = read.value;
       return stored === undefined
-        ? Effect.dieMessage("the reader answered no row for one message")
+        ? Effect.die(new Error("the reader answered no row for one message"))
         : Effect.succeed({ ok: true, message: stored } as const);
     },
   );
@@ -1631,8 +1631,8 @@ function recordCompaction(
     const standing = yield* messageByClientId(context, compaction.clientId);
     if (Option.isSome(standing)) {
       if (!isCompactionRow(standing.value)) {
-        return yield* Effect.dieMessage(
-          "a compaction's client id names a message that is not a compaction",
+        return yield* Effect.die(
+          new Error("a compaction's client id names a message that is not a compaction"),
         );
       }
       return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };

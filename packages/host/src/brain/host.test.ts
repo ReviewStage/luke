@@ -89,7 +89,7 @@ it.effect(
       // A fixed, small number of fiber yields: enough for B's already-queued
       // step to start and suspend on A's still-unreleased stop, and no more,
       // since this is checking that neither builder has run yet.
-      for (let tick = 0; tick < 10; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 10; tick += 1) yield* Effect.yieldNow;
       assert.ok(!log.includes("build b") && !log.includes("build c"));
       a.release();
       yield* Effect.promise(() => Promise.all([second, third]));

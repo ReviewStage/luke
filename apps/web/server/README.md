@@ -328,14 +328,19 @@ door beside the effect under `server/hosted/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
 endpoint of its own.
 
-## A route built from an HttpApp
+## A route built from a route layer
 
-`server/route-effect.ts` holds `routeFromHttpApp(app)`, which turns the
-`HttpApp` an endpoint or an `HttpApi` group composes into the one fetch handler
-a function default-exports. It reads the runtime through `runWeb` and then
-holds the handler for the instance's life, so it is a caller of the edge rather
-than a second one, and a warm invocation reaches the services the cold one
-built. The brain group's four routes, the three mint routes, the auth group,
+`server/route-effect.ts` holds `routeFromHttpApp(routes)`, which turns the
+route layer a group registers its paths with — `WebRoutes<R>`, the same file's
+own name for it — into the one fetch handler a function default-exports. It
+reads the runtime through `runWeb` and then holds the handler for the
+instance's life, so it is a caller of the edge rather than a second one, and a
+warm invocation reaches the services the cold one built. A group's routes are
+a layer rather than a value because that is what an `HttpRouter` registration
+is: the router is a service the layer writes each path into, and the
+requirements a route's own handler has travel as request markers the handler
+provides per request from the context `runWeb` read. The brain group's four
+routes, the three mint routes, the auth group,
 the actions group, the five routes behind the observation group below, the
 account group's `server/routes/account/delete.ts` and
 `server/routes/account/preferences.ts`, the devices and vault group's three
@@ -401,11 +406,12 @@ functions on five paths — `server/routes/sessions/messages.ts`,
 `server/routes/observe.ts`, and `server/routes/observation/tick.ts` — each
 mounting the same `observationApp()`, which is organization rather than
 dispatch, since `vercel.json` already sends each function only the requests
-for its own path. Every path is declared with `HttpRouter.all` rather than a
-method-specific builder, because each handler still enforces its own method
-and answers its own 405 exactly as it did before conversion; only a path none
-of the five declares reaches the group's own `HttpRouter.empty` and the hosted
-vocabulary's `not-found`. Each handler's own logic is carried unchanged —
+for its own path. Every path is declared with `HttpRouter.add` under `ANY_METHOD`
+rather than a method-specific builder, because each handler still enforces its
+own method and answers its own 405 exactly as it did before conversion; only a
+path none of the five declares reaches the group's own wildcard route,
+`hostedNotFoundRoute`, and the hosted vocabulary's `not-found`. Each handler's
+own logic is carried unchanged —
 `server/hosted/conversation-read.ts`, `server/hosted/projects.ts`,
 `server/hosted/events.ts`, `server/hosted/observe.ts`, and
 `server/hosted/observation-tick.ts` — behind a passthrough shaped like the
@@ -429,9 +435,9 @@ this file still owns directly.
 ## The account group
 
 `server/account-app.ts` is the account route group: the signed-in desktop's
-own delete and preferences endpoints, described as an `HttpRouter` rather
-than carried as a passthrough, because both answer from this deployment's own
-database and neither owns a contract of its own the way Better Auth does.
+own delete and preferences endpoints, described as routes of the group's own
+rather than carried as a passthrough, because both answer from this
+deployment's own database and neither owns a contract of its own the way Better Auth does.
 Each endpoint resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the

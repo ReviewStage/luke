@@ -1,18 +1,6 @@
 import path from "node:path";
 import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "@sidecar/brain";
-import {
-  Cause,
-  Context,
-  Deferred,
-  Effect,
-  FiberId,
-  HashMap,
-  List,
-  Logger,
-  LogLevel,
-  Queue,
-  type Scope,
-} from "effect";
+import { Deferred, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
@@ -89,17 +77,17 @@ export interface AgentTraceWriterOptions {
 }
 
 /**
- * The trace's line format, as an Effect `Logger`: what one tapped entry
- * becomes once the moment it reached the writer is stamped on. The logger
- * only formats; `writeTraceLine` below is the effect that carries the
- * formatted line to disk, so the two halves of "an Effect Logger writing
- * through `FileSystem`" stay separate the way the library draws that line
- * everywhere else.
+ * The trace's line format: what one tapped entry becomes once the moment it
+ * reached the writer is stamped on. It only formats; `writeTraceLine` below
+ * is the effect that carries the formatted line to disk, so the two halves of
+ * "a line written through `FileSystem`" stay separate the way the library
+ * draws that line everywhere else. It is a plain function rather than an
+ * Effect `Logger`, because a v4 `Logger` is handed the live fiber of a
+ * runtime log event and nothing outside a fiber can fabricate one; the
+ * stamping is the writer's own, taken the instant `record*` was called.
  */
-function traceLineLogger(now: () => Date): Logger.Logger<PendingTraceEntry, string> {
-  return Logger.make(
-    ({ message }) => `${JSON.stringify({ at: now().toISOString(), ...message })}\n`,
-  );
+function traceLine(entry: PendingTraceEntry, now: () => Date): string {
+  return `${JSON.stringify({ at: now().toISOString(), ...entry })}\n`;
 }
 
 /** Appends one already-formatted line, making the directory on first use. */
@@ -134,7 +122,7 @@ export class AgentTraceWriter {
   readonly file: string;
   readonly #directory: string;
   readonly #report: (message: string) => void;
-  readonly #logger: Logger.Logger<PendingTraceEntry, string>;
+  readonly #now: () => Date;
   readonly #work: Queue.Queue<TraceWork>;
   #failed = false;
 
@@ -157,7 +145,7 @@ export class AgentTraceWriter {
     this.#report = options.report ?? ((text: string) => process.stderr.write(text));
     const stamp = now().toISOString().replace(/[:.]/gu, "-");
     this.file = path.join(options.directory, `agent-trace-${stamp}.jsonl`);
-    this.#logger = traceLineLogger(now);
+    this.#now = now;
     this.#work = work;
   }
 
@@ -207,17 +195,7 @@ export class AgentTraceWriter {
   }
 
   #append(entry: PendingTraceEntry): void {
-    const line = this.#logger.log({
-      fiberId: FiberId.none,
-      logLevel: LogLevel.Info,
-      message: entry,
-      cause: Cause.empty,
-      context: Context.empty(),
-      spans: List.empty(),
-      annotations: HashMap.empty(),
-      date: new Date(),
-    });
-    Queue.unsafeOffer(this.#work, { kind: TRACE_WORK.LINE, line });
+    Queue.offerUnsafe(this.#work, { kind: TRACE_WORK.LINE, line: traceLine(entry, this.#now) });
   }
 
   /**
@@ -230,7 +208,7 @@ export class AgentTraceWriter {
       Effect.flatMap(Queue.take(this.#work), (work) =>
         work.kind === TRACE_WORK.SETTLED
           ? Effect.asVoid(Deferred.succeed(work.done, undefined))
-          : Effect.catchAll(writeTraceLine(this.#directory, this.file, work.line), (error) =>
+          : Effect.catch(writeTraceLine(this.#directory, this.file, work.line), (error) =>
               Effect.sync(() => {
                 if (this.#failed) return;
                 this.#failed = true;

@@ -229,7 +229,7 @@ function openStoredContext(options: {
     ),
   ).pipe(
     Effect.map(Option.getOrElse(() => incompatibleContext(REPLACED_WHILE_OPENING))),
-    Effect.catchAllDefect((defect) =>
+    Effect.catchDefect((defect) =>
       Effect.succeed(
         incompatibleContext(
           `the runtime could not open the context: ${defect instanceof Error ? defect.message : String(defect)}`,

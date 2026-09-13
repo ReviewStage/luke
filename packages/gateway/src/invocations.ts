@@ -198,7 +198,7 @@ export function invocationMemory(
           // A handler that died answers failed on this node rather than
           // taking the connection down with it; the host reads a typed
           // refusal either way.
-          const result = yield* Effect.catchAllDefect(options.handler(invocation), (defect) =>
+          const result = yield* Effect.catchDefect(options.handler(invocation), (defect) =>
             Effect.succeed<NodeCapabilityResult>({
               status: NODE_CAPABILITY_STATUS.FAILED,
               capability: invocation.capability,

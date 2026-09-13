@@ -9,7 +9,7 @@ import { FakeLiveSocket, readSideband } from "./testing.js";
 /** Lets the fiber reading the sideband's arrivals read what the far side has said. */
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 

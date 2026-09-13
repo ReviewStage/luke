@@ -128,7 +128,7 @@ export const noRawAsyncPrimitivesRule = defineRule({
       timer:
         "Replace `{{name}}` with `Effect.sleep` for a delay or a `Schedule` for a cadence, forked into the Scope that owns it.",
       promise:
-        "Replace `new Promise` with the Effect that describes the work — `Deferred` where another fiber completes it, `Effect.async` where a callback does.",
+        "Replace `new Promise` with the Effect that describes the work — `Deferred` where another fiber completes it, `Effect.callback` where a callback does.",
       abortController:
         "Replace `new AbortController` with a fiber's own interruption; a Scope closing is what cancels the work.",
       watch:

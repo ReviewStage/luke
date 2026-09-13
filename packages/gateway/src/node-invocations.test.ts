@@ -231,7 +231,7 @@ it.scoped(
       const first = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.await(held.started);
       const duplicateWhilePending = yield* Effect.forkChild(held.memory.take(INVOCATION));
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       assert.equal(performances.count, 1);
       yield* Deferred.succeed(held.release, undefined);
       const answered = yield* Fiber.join(first);
@@ -659,7 +659,7 @@ it.scopedLive(
       const client = yield* gatewayClient({
         transport: {
           request: (request) =>
-            Effect.async<GatewayResponse>((resume) => {
+            Effect.callback<GatewayResponse>((resume) => {
               const answering = Effect.runFork(doorOf(doors, current).request(request));
               pendingAnswers.push(() => resume(Fiber.join(answering)));
             }),

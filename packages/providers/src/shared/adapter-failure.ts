@@ -66,8 +66,8 @@ export function endsPass(failure: AdapterFailureKind): boolean {
 export function tolerateItemFailureEffect<Result>(
   item: Effect.Effect<Result, AdapterFailure>,
 ): Effect.Effect<Result | undefined, AdapterFailure> {
-  return Effect.catchAllCause(item, (cause) => {
-    const failure = Cause.failureOption(cause);
+  return Effect.catchCause(item, (cause) => {
+    const failure = Cause.findErrorOption(cause);
     if (Option.isSome(failure) && endsPass(failure.value.failure))
       return Effect.fail(failure.value);
     return Effect.succeed(undefined);

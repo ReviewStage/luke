@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect } from "effect";
-import { HttpEffect } from "effect/unstable/http";
+import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { ratingApp } from "../server/rating-app";
@@ -23,7 +22,10 @@ function ratingRequest(init: { method?: string; path?: string } = {}): Request {
   return new Request(url, { method: init.method ?? "PUT" });
 }
 
-const handler = HttpEffect.toWebHandler(Effect.provide(ratingApp(), noDatabase));
+const { handler } = HttpRouter.toWebHandler(
+  ratingApp().pipe(HttpRouter.provideRequest(noDatabase)),
+  { disableLogger: true },
+);
 
 function answer(request: Request): Promise<Response> {
   return handler(request);

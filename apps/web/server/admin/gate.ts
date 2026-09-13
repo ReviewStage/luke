@@ -27,9 +27,7 @@ import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-e
  */
 export function adminViewerGate(options: {
   methods: readonly string[];
-  resolveViewer: (
-    request: Request,
-  ) => Effect.Effect<AdminViewer | undefined, Cause.UnknownException>;
+  resolveViewer: (request: Request) => Effect.Effect<AdminViewer | undefined, Cause.UnknownError>;
   handler: (
     viewer: AdminViewer,
     request: Request,
@@ -46,15 +44,15 @@ export function adminViewerGate(options: {
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const viewer = yield* options.resolveViewer(request).pipe(
-      Effect.tapErrorCause((cause) =>
+      Effect.tapCause((cause) =>
         Effect.sync(() => console.error("admin viewer resolution failed", Cause.squash(cause))),
       ),
-      Effect.catchAllCause(() => Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE))),
+      Effect.catchCause(() => Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE))),
     );
     if (!viewer) return yield* refuse(ADMIN_REFUSAL.NOT_SIGNED_IN);
     if (!isAdminRole(viewer.role)) return yield* refuse(ADMIN_REFUSAL.NOT_AUTHORIZED);
     return HttpServerResponse.raw(yield* options.handler(viewer, request));
-  }).pipe(Effect.merge);
+  }).pipe(Effect.catch(Effect.succeed));
 }
 
 function refuse(

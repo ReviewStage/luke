@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Duration, Effect, Exit, Schedule, Scope } from "effect";
+import { Duration, Effect, Exit, Pull, Schedule, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import {
   admitInput,
@@ -80,14 +80,38 @@ describe("admitInput", () => {
   );
 });
 
+/**
+ * Drives a schedule to exhaustion the way v4 states one: `Schedule.toStep`
+ * hands back a step, and the step is pulled with each attempt's own instant
+ * until it ends with `Cause.done`. v3's `Schedule.run` collected this for a
+ * caller; v4 has no such collector, so the walk stands here.
+ */
+const stepsOf = <Output>(
+  schedule: Schedule.Schedule<Output, undefined>,
+  attempts: number,
+): Effect.Effect<ReadonlyArray<readonly [Output, Duration.Duration]>> =>
+  Effect.gen(function* () {
+    const step = yield* Schedule.toStep(schedule);
+    const taken: Array<readonly [Output, Duration.Duration]> = [];
+    let now = 0;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const pulled = yield* Pull.catchDone(step(now, undefined), () => Effect.succeed(undefined));
+      if (pulled === undefined) break;
+      taken.push(pulled);
+      now += Duration.toMillis(pulled[1]);
+    }
+    return taken;
+  });
+
 describe("queueDebounceSchedule", () => {
   it.effect("states the debounce window as its first delay", () =>
     Effect.gen(function* () {
-      const delays = yield* Schedule.run(queueDebounceSchedule(), 0, [undefined]);
+      const taken = yield* stepsOf(queueDebounceSchedule(), 1);
 
-      assert.deepEqual(Chunk.toReadonlyArray(delays).map(Duration.toMillis), [
-        DEFAULT_QUEUE_SETTINGS.debounceMs,
-      ]);
+      assert.deepEqual(
+        taken.map(([, delay]) => Duration.toMillis(delay)),
+        [DEFAULT_QUEUE_SETTINGS.debounceMs],
+      );
     }),
   );
 });

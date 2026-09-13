@@ -205,7 +205,7 @@ export const composeObservation = (
           if (!isCurrent()) return;
           const expected = defaults?.[providerId];
           if (expected === undefined) continue;
-          const outcome = yield* Effect.either(
+          const outcome = yield* Effect.result(
             settings.store.clearEntryIfUnchanged(
               APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
               providerId,
@@ -287,7 +287,7 @@ export const composeObservation = (
       }).pipe(
         // The reply is the creation's; a failed remember has no line in it,
         // exactly as the try/catch this replaced swallowed every step's own.
-        Effect.catchAll(() => Effect.void),
+        Effect.catch(() => Effect.void),
       );
 
     function openCreatedWorkspaces(sessions: readonly Session[]): void {

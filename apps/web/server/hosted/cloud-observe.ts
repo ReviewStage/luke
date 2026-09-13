@@ -92,7 +92,7 @@ export function observeCloudProviders(options: {
           // failed, so an interruption fails the fan-out rather than being
           // written down as this provider's answer.
           if (Exit.isFailure(exit)) {
-            return Cause.isInterruptedOnly(exit.cause)
+            return Cause.hasInterruptsOnly(exit.cause)
               ? Effect.failCause(exit.cause)
               : Effect.succeed(unread);
           }

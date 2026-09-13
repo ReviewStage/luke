@@ -316,7 +316,7 @@ export class TurnRunner {
           events: inboxEvents(generation.inbox),
           run,
         };
-        const { result, events } = yield* Effect.catchAllDefect(
+        const { result, events } = yield* Effect.catchDefect(
           this.#underDeadline(
             run,
             this.#turn(
@@ -416,7 +416,7 @@ export class TurnRunner {
   /** The turn and its teller, for the ask's settlement that tells the turn's end after the record's. */
   #turn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<Omit<OpenedTurn, "run">> {
     return Effect.gen({ self: this }, function* () {
-      const outcome = yield* Effect.catchAllDefect(this.#openTurn(plan, riders), () =>
+      const outcome = yield* Effect.catchDefect(this.#openTurn(plan, riders), () =>
         Effect.succeed<OpenedTurn>({
           result: { outcome: TURN_OUTCOME.FAILED },
           run: plan.run,
@@ -521,7 +521,7 @@ export class TurnRunner {
       // stands under the one its own opening already armed.
       const running = this.#runTurn(plan, turnContext, execution, riders);
       const result = yield* Effect.ensuring(
-        Effect.catchAllDefect(plan.run ? running : this.#underDeadline(run, running), () =>
+        Effect.catchDefect(plan.run ? running : this.#underDeadline(run, running), () =>
           Effect.succeed<TurnResult>({ outcome: TURN_OUTCOME.FAILED }),
         ),
         Effect.sync(() => {
@@ -622,7 +622,7 @@ export class TurnRunner {
           contextMark = context.mark();
           cursorMark = generation.cursors.persisted();
         };
-        return yield* Effect.catchAllDefect(
+        return yield* Effect.catchDefect(
           Effect.gen({ self: this }, function* () {
             preparation = yield* awaited(() =>
               this.#options.prepareTurn({
@@ -634,7 +634,7 @@ export class TurnRunner {
             policy = this.#resolvePolicy(preparation, plan.trigger);
             const prepared = this.#revoked(turnContext)
               ? Result.succeed(undefined)
-              : yield* Effect.either(
+              : yield* Effect.result(
                   this.#options.compactIfNeeded(turnContext, preparation.prompt),
                 );
             if (this.#revoked(turnContext)) return revocation();
@@ -700,7 +700,7 @@ export class TurnRunner {
       );
       const exit = yield* Fiber.await(running);
       if (Exit.isSuccess(exit)) failure = exit.value;
-      else if (Cause.isInterruptedOnly(exit.cause)) failure = revocation();
+      else if (Cause.hasInterruptsOnly(exit.cause)) failure = revocation();
       else return yield* Effect.failCause(exit.cause);
 
       // An unrecorded run's journal has done its work once the turn's actions have
@@ -738,7 +738,7 @@ export class TurnRunner {
             gathering.error = "turn revoked before delivery";
             break;
           }
-          yield* Effect.catchAllDefect(
+          yield* Effect.catchDefect(
             awaited(() => this.#options.deliver(delivery)),
             (deliverError) =>
               Effect.sync(() => {
@@ -852,7 +852,7 @@ export class TurnRunner {
       }
       const memory = this.#options.memory;
       if (!memory) return { opening: [], standing: [] };
-      const recalled = yield* Effect.catchAllDefect(
+      const recalled = yield* Effect.catchDefect(
         memory.provider.recall(memory.scope, {
           items: context.checkpoint().items,
           signal: turnContext.signal,

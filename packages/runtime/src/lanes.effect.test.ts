@@ -83,7 +83,7 @@ describe("withLane", () => {
       const scheduler = new LaneScheduler(uniformWidths(1));
       const outcome = yield* Effect.exit(withLane(scheduler, LANE.CHILD, Effect.fail("boom")));
       assert.ok(Exit.isFailure(outcome));
-      assert.equal(Option.getOrThrow(Cause.failureOption(outcome.cause)), "boom");
+      assert.equal(Option.getOrThrow(Cause.findErrorOption(outcome.cause)), "boom");
       yield* tick;
       assert.deepEqual(yield* laneSnapshot(scheduler, LANE.CHILD), {
         width: 1,

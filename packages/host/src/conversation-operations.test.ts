@@ -27,7 +27,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -165,7 +165,7 @@ it.effect(
 
       yield* Scope.close(scope, Exit.void);
       yield* TestClock.adjust(Duration.millis(CONVERSATION_MAINTENANCE_INTERVAL_MS));
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
       assert.deepEqual(runs, [[THREAD], [THREAD]]);
     }),
 );

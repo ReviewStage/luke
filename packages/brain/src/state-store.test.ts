@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Chunk, Effect } from "effect";
+import { Clock, Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { detachOn } from "./effect/carry.js";
@@ -658,7 +658,7 @@ it.scoped(
       assert.equal(store.expireIfDue(now), false);
       const clock = new BrainGenerationClock({
         store,
-        clock: yield* Effect.clock,
+        clock: yield* Clock.Clock,
         detach: detachOn(yield* Effect.context<never>()),
         scope: yield* Effect.scope,
       });
@@ -666,8 +666,12 @@ it.scoped(
       now += BRAIN_GENERATION_LIFETIME_MS;
       assert.equal((yield* Effect.promise(() => store.load())).generationId, previous.generationId);
       assert.deepEqual(store.current()?.items, previous.items);
-      // The default policy arms nothing, so no wait stands on this test's clock.
-      assert.deepEqual(Chunk.toReadonlyArray(yield* TestClock.sleeps()), []);
+      // The default policy arms nothing, so nothing fires on this test's clock:
+      // v4's TestClock keeps its pending sleeps private, so the claim is read
+      // from advancing a whole lifetime past the deadline and finding the
+      // generation still standing rather than from the queue.
+      yield* TestClock.adjust(Duration.millis(BRAIN_GENERATION_LIFETIME_MS));
+      assert.equal(store.current()?.generationId, previous.generationId);
       assert.equal(yield* Effect.promise(() => store.reset(now)), true);
       assert.equal(store.current()?.generationId, "explicit-reset");
       assert.deepEqual(store.current()?.items, []);

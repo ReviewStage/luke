@@ -158,7 +158,7 @@ export const deviceCadence = (
           // under way rather than opening it, so a registration on the wire
           // keeps its place in the order however many sign-outs arrive while
           // it is out; only a wait that reached its own work releases it.
-          Exit.isInterrupted(exit)
+          Exit.hasInterrupts(exit)
             ? Deferred.completeWith(done, standingCall)
             : Deferred.succeed(done, undefined),
         );
@@ -223,7 +223,7 @@ export const deviceCadence = (
           yield* registerAndPoll(gen);
         }
       }).pipe(
-        Effect.catchAllDefect((error) =>
+        Effect.catchDefect((error) =>
           Effect.sync(() => {
             options.report?.(
               `The device poll failed and will be tried again: ${error instanceof Error ? error.message : String(error)}`,

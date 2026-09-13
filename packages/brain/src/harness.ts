@@ -682,7 +682,7 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
     value: (...args: Parameters<typeof inner.openContext>) => {
       opens += 1;
       if (opens > 1) return inner.openContext(...args);
-      return Effect.async<ContextOpening>((resume) => {
+      return Effect.callback<ContextOpening>((resume) => {
         release = () =>
           resume(Effect.succeed({ context, bootstrap: { loaded: true, repaired: 0 } }));
       });

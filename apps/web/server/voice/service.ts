@@ -181,7 +181,7 @@ export function listening(
   host: string,
 ): Effect.Effect<number, never, Scope.Scope> {
   return Effect.acquireRelease(
-    Effect.async<number>((resume) => {
+    Effect.callback<number>((resume) => {
       const failed = (error: Error) => resume(Effect.die(error));
       voice.server.once("error", failed);
       voice.server.listen(port, host, () => {
@@ -192,7 +192,7 @@ export function listening(
       });
     }),
     () =>
-      Effect.async<void>((resume) => {
+      Effect.callback<void>((resume) => {
         voice.server.close(() => resume(Effect.void));
       }),
   );
@@ -388,7 +388,7 @@ export class VoiceService {
             }),
         ),
         (server) =>
-          Effect.async<void>((resume) => {
+          Effect.callback<void>((resume) => {
             server.close(() => resume(Effect.void));
           }),
       );
@@ -467,7 +467,7 @@ export class VoiceService {
    * session but that one of its own rows did not land.
    */
   #session(socket: WebSocket, admission: Admission): Effect.Effect<void> {
-    return Effect.catchAll(
+    return Effect.catch(
       Effect.tryPromise(() => this.#run(Effect.scoped(this.#serve(socket, admission)))),
       () =>
         Effect.sync(() => {
@@ -644,7 +644,7 @@ export class VoiceService {
         this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route });
         return { exchange };
       }),
-      Effect.catchAll(() =>
+      Effect.catch(() =>
         Effect.sync(() => {
           this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
           return { refused: true } as const;
@@ -655,7 +655,7 @@ export class VoiceService {
 
   /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
   #stopExchange(exchange: AttachedExchange): Effect.Effect<void> {
-    return Effect.catchAll(
+    return Effect.catch(
       Effect.tryPromise(() => exchange.stop()),
       () =>
         Effect.sync(() => {
@@ -847,7 +847,7 @@ export class VoiceService {
     upstream: LiveUpstream,
     sessionId: string,
   ): Effect.Effect<WebSocket | undefined, never, Scope.Scope> {
-    return Effect.catchAll(upstream.attach(sessionId), () => Effect.succeed(undefined));
+    return Effect.catch(upstream.attach(sessionId), () => Effect.succeed(undefined));
   }
 
   #recordUsage(
@@ -875,10 +875,9 @@ export class VoiceService {
         const payload = decodeLivePayload(text.value);
         return payload === undefined ? undefined : sessionOpeningFrameFromWire(payload);
       }),
-      Effect.timeoutTo({
+      Effect.timeoutOrElse({
         duration: timeoutMs,
-        onTimeout: () => undefined,
-        onSuccess: (opening) => opening,
+        orElse: () => Effect.succeed(undefined),
       }),
     );
   }

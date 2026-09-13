@@ -164,7 +164,7 @@ export class Maintenance {
             async () => await this.#options.prepareTurn({ kind: BRAIN_TURN_KIND.MAINTENANCE }),
           );
           if (signal.aborted || generation !== this.#seam.generation()) return;
-          const compacted = yield* Effect.either(
+          const compacted = yield* Effect.result(
             this.compactIfNeeded(
               { generation, context, signal, events },
               prepared.prompt,
@@ -266,7 +266,7 @@ export class Maintenance {
       });
       if (!due) return;
       const cycle = generation.compactionCount;
-      const captured = yield* Effect.catchAllDefect(
+      const captured = yield* Effect.catchDefect(
         capture({
           scope: memory.scope,
           phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
@@ -325,7 +325,7 @@ export class Maintenance {
         generation.flush.read = true;
         return true;
       }
-      const read = yield* Effect.either(
+      const read = yield* Effect.result(
         Effect.tryPromise({
           try: () => store.read(generation.id),
           catch: (error) =>
@@ -368,7 +368,7 @@ export class Maintenance {
       // what this method owes the next assessment.
       const writing = yield* Effect.forkDetach(
         Effect.tap(
-          Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)),
+          Effect.result(writeFlushMarkerEffect(store, generation.id, cycle, signal)),
           (outcome) =>
             Effect.sync(() => {
               if (Result.isSuccess(outcome)) generation.flush.lastCompactionCount = cycle;

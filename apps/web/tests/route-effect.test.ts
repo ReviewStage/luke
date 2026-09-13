@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Effect } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { brainApp } from "../server/brain-app.js";
 import {
@@ -12,11 +13,12 @@ import {
   hostedRefusalResponse,
   readJsonBodyEffect,
 } from "../server/hosted/http-effect.js";
+import { ANY_METHOD, ANY_PATH } from "../server/route.js";
 import { routeFromHttpApp } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
 /**
- * The adaptor's proof: a route built from an `HttpApp` answers what the
+ * The adaptor's proof: a route built from a route layer answers what the
  * promise-shaped route beside it answers, byte for byte, on the answer and on
  * every refusal of the gate.
  */
@@ -114,9 +116,13 @@ test("the route reads a bearer the request carries", async () => {
 
 function bodyRoute() {
   return routeFromHttpApp(
-    readJsonBodyEffect(BODY_BOUND_BYTES).pipe(
-      Effect.map((value) => hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { read: value })),
-      Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+    HttpRouter.add(
+      ANY_METHOD,
+      ANY_PATH,
+      readJsonBodyEffect(BODY_BOUND_BYTES).pipe(
+        Effect.map((value) => hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { read: value })),
+        Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+      ),
     ),
   );
 }
@@ -146,7 +152,7 @@ test("the bounded body read refuses what the promise-shaped read refuses", async
   }
 });
 
-test("the route built from an HttpApp answers the gate's own refusals", async () => {
+test("the route built from a route layer answers the gate's own refusals", async () => {
   const gate: number[] = [];
   for (const entry of CASES) {
     vi.stubEnv(OPENAI_API_KEY, entry.apiKey ?? "");

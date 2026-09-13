@@ -57,7 +57,7 @@ export const ADMIN_REFUSAL = {
 
 /** A refusal as the response the group answers with. */
 export function adminRefusalResponse(refusal: AdminRefusal): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(refusal, {
+  return HttpServerResponse.jsonUnsafe(refusal, {
     status: ADMIN_REFUSAL_STATUS[refusal.error],
     headers: { [RESPONSE_HEADER.CACHE_CONTROL]: NO_STORE },
   });

@@ -190,7 +190,7 @@ function admitActionRequest(
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const parsed = yield* Effect.either(Effect.tryPromise(() => request.json()));
+    const parsed = yield* Effect.result(Effect.tryPromise(() => request.json()));
     if (Result.isFailure(parsed)) return invalidRequest();
     // SAFETY: request.json() returns unknown; isRecord below validates the shape.
     const body = parsed.success as UnparsedWireValue;

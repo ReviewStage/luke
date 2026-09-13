@@ -18,7 +18,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -151,7 +151,7 @@ it.effect(
       const agent: Pick<BrainAgent, "request" | "markConversationRecorded"> = {
         request: (runId) => live.find((entry) => entry.runId === runId),
         markConversationRecorded: (runId) =>
-          Effect.async((resume) => {
+          Effect.callback((resume) => {
             marked.push(runId);
             holdMark = () => resume(Effect.succeed(true));
           }),
@@ -227,7 +227,7 @@ it.effect("a retired follower relays nothing a late report carries", () =>
         return () => undefined;
       },
       ready: () =>
-        Effect.async<void>((resume) => {
+        Effect.callback<void>((resume) => {
           releaseReady = () => resume(Effect.void);
         }),
       requests: () => [record()],
@@ -247,7 +247,7 @@ it.effect("a retired follower relays nothing a late report carries", () =>
     listener?.([record()]);
     // Nothing should happen after retirement: give any wrongful follow-up a
     // full round to occur before asserting its absence.
-    for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+    for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     assert.deepEqual(broadcasts, []);
     assert.deepEqual(marked, []);
   }),

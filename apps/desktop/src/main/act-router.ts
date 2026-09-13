@@ -114,12 +114,12 @@ export function createActRouter(rows: ActRows): ActRouter {
       // SAFETY: the kind's own result guard admitted this value.
       return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
     }).pipe(
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.succeed(refused(error instanceof ActRefused ? error.message : declared.refusal)),
       ),
       // A row's effect that died carries no more to the window than a row that
       // threw: the kind's own sentence, and never what the defect held.
-      Effect.catchAllDefect(() => Effect.succeed(refused(declared.refusal))),
+      Effect.catchDefect(() => Effect.succeed(refused(declared.refusal))),
     );
   }
 

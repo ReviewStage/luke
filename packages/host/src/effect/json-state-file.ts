@@ -69,7 +69,7 @@ export function jsonStateFileEffect<A extends object, I>(
       yield* fs
         .writeFileString(target, `${JSON.stringify(encode(next))}\n`)
         .pipe(
-          Effect.catchAll((error) =>
+          Effect.catch((error) =>
             Effect.flatMap(Reporter, (reporter) =>
               Effect.sync(() =>
                 reporter.report(`Could not persist ${options.fileName}: ${error.message}`),

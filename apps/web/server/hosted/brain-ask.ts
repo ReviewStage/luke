@@ -294,7 +294,7 @@ export function acceptAsk(seams: AskSeams, input: AskInput): AskEffect<AskOutcom
       }
       conversationId = input.conversationId;
     } else {
-      const opened = yield* Effect.either(standingMain(userId, now));
+      const opened = yield* Effect.result(standingMain(userId, now));
       if (Result.isFailure(opened))
         return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.failure };
       conversationId = opened.success;

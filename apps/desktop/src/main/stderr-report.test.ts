@@ -30,7 +30,7 @@ test("the reporter and the Logger sink write the same line", async () => {
     reportToStderr("the service did not stop cleanly");
     await Effect.runPromise(
       Effect.log("the service did not stop cleanly").pipe(
-        Effect.provide(Logger.replace(Logger.defaultLogger, stderrLogger)),
+        Effect.provide(Logger.layer([stderrLogger])),
       ),
     );
   } finally {

@@ -1,5 +1,5 @@
-import { Effect, type Layer, Redacted } from "effect";
-import { FetchHttpClient, HttpEffect } from "effect/unstable/http";
+import { Effect, Layer, Redacted } from "effect";
+import { FetchHttpClient, HttpRouter } from "effect/unstable/http";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
 import {
@@ -49,25 +49,28 @@ export function mintAnswer(call: MintCall): Promise<Response> {
   const app = new URL(call.request.url).pathname.endsWith(INTRODUCTION_MINT_SUFFIX)
     ? introductionMintApp(seams)
     : voiceMintApp(seams);
-  const handler = HttpEffect.toWebHandler(
+  const { handler } = HttpRouter.toWebHandler(
     app.pipe(
-      Effect.provideService(HostedEnvironment, {
-        openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),
-        brainModel: undefined,
-        prefetchModel: undefined,
-        realtimeModel: present(call.model),
-        providerKeyEncryptionSecret: undefined,
-        posthogPersonalApiKey: undefined,
-        posthogProjectId: undefined,
-        posthogApiHost: undefined,
-        posthogProjectApiKey: undefined,
-        posthogIngestHost: undefined,
-        cronSecret: undefined,
-        apnsCredentials: undefined,
-      }),
-      Effect.provide(call.httpClient ?? FetchHttpClient.layer),
-      Effect.provide(noDatabase),
+      HttpRouter.provideRequest(
+        Layer.succeed(HostedEnvironment, {
+          openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),
+          brainModel: undefined,
+          prefetchModel: undefined,
+          realtimeModel: present(call.model),
+          providerKeyEncryptionSecret: undefined,
+          posthogPersonalApiKey: undefined,
+          posthogProjectId: undefined,
+          posthogApiHost: undefined,
+          posthogProjectApiKey: undefined,
+          posthogIngestHost: undefined,
+          cronSecret: undefined,
+          apnsCredentials: undefined,
+        }),
+      ),
+      HttpRouter.provideRequest(call.httpClient ?? FetchHttpClient.layer),
+      HttpRouter.provideRequest(noDatabase),
     ),
+    { disableLogger: true },
   );
   return handler(call.request);
 }

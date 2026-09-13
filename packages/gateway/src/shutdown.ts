@@ -67,20 +67,20 @@ export function shutdownGatewayEffect(
       // out of the quit: a cancellation nobody counted and a settling nobody
       // saw are what the report already says of a step the deadline cut.
       const cancelled = yield* steps.cancelActive.pipe(
-        Effect.catchAllDefect(() => Effect.succeed<readonly string[]>([])),
+        Effect.catchDefect(() => Effect.succeed<readonly string[]>([])),
       );
       yield* Ref.set(cancelledRef, cancelled);
       const settled = yield* steps.awaitSettled.pipe(
         Effect.as(true),
-        Effect.catchAllDefect(() => Effect.succeed(false)),
+        Effect.catchDefect(() => Effect.succeed(false)),
       );
       yield* Ref.set(settledRef, settled);
     });
     const timedOut = yield* work.pipe(
-      Effect.timeoutTo({
+      Effect.as(false),
+      Effect.timeoutOrElse({
         duration: Duration.millis(deadlineMs),
-        onTimeout: () => true,
-        onSuccess: () => false,
+        orElse: () => Effect.succeed(true),
       }),
     );
     const cancelled = yield* Ref.get(cancelledRef);

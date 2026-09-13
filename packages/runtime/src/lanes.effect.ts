@@ -29,7 +29,7 @@ export const acquireLane = (
   lane: Lane,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.async<() => void>((resume) => {
+    Effect.callback<() => void>((resume) => {
       let free: () => void = () => {};
       const held = new Promise<void>((resolve) => {
         free = resolve;

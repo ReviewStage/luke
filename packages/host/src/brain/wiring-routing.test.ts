@@ -48,7 +48,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -526,7 +526,7 @@ it.scoped(
       // Nothing should stand it down while the analysis is still in flight:
       // give any wrongful teardown a full round to occur before asserting
       // its absence.
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
       yield* Effect.promise(() => pause(20));
       // Still standing: an analysis in flight is never cut mid-thought.
       assert.ok(c.wiring.current(abcKey));

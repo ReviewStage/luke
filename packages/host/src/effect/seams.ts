@@ -73,15 +73,19 @@ export class Reporter extends Context.Service<Reporter, HostReporter>()("@sideca
 export const reporterLayer = (report: (message: string) => void): Layer.Layer<Reporter> =>
   Layer.merge(
     Layer.succeed(Reporter, { report }),
-    Logger.replace(
-      Logger.defaultLogger,
+    // v4 states the whole active set rather than swapping one logger out of
+    // it, so the tracer's own logger is named here beside this one: it is what
+    // puts a log line on the span it was written under, and the default
+    // logger's console line is what this set leaves behind.
+    Logger.layer([
       // The message alone: a reported line is a sentence about the host's own
       // running, and a logfmt envelope around it would be a new shape on a sink
       // that already has one.
       Logger.make((options) => {
         report(String(options.message));
       }),
-    ),
+      Logger.tracerLogger,
+    ]),
   );
 
 /**

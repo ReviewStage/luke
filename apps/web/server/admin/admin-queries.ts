@@ -83,7 +83,7 @@ function toNumber(value: number | string | null | undefined): number {
  * answer rather than the read's, because the health card is what reports it.
  */
 const probeDatabase = Effect.map(
-  Effect.timed(Effect.either(statement((sql) => sql`select 1`))),
+  Effect.timed(Effect.result(statement((sql) => sql`select 1`))),
   ([elapsed, probed]) => ({
     reachable: Result.isSuccess(probed),
     latencyMs: Math.round(Duration.toMillis(elapsed)),

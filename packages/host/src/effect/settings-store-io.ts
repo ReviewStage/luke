@@ -48,8 +48,13 @@ export function parsePersistedSettingsEither(
 }
 
 function isIgnorableReadFailure(error: PlatformError): boolean {
-  if (error._tag !== "SystemError") return false;
-  const cause = error.cause;
+  // v4 wraps the reason rather than tagging the error itself, and normalizes
+  // only some of the host's codes onto its own tags — `EPERM` lands on
+  // `Unknown` — so the errno the platform keeps on the reason's own cause is
+  // still what names these four. A rejected argument is none of them.
+  const reason = error.reason;
+  if (reason._tag === "BadArgument") return false;
+  const cause = reason.cause;
   return (
     cause instanceof Error &&
     "code" in cause &&

@@ -84,8 +84,7 @@ export const admitInput = (
  */
 export const queueDebounceSchedule = (
   settings: Pick<QueueSettings, "debounceMs"> = DEFAULT_QUEUE_SETTINGS,
-): Schedule.Schedule<Duration.Duration> =>
-  Schedule.fromDelays(Duration.millis(settings.debounceMs));
+): Schedule.Schedule<Duration.Duration> => Schedule.duration(Duration.millis(settings.debounceMs));
 
 /** The live queue's operations, each as an effect, with the refusals typed. */
 export interface EffectPendingInputQueue {

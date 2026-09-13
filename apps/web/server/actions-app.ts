@@ -1,4 +1,4 @@
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import {
   type HttpMethod,
   HttpRouter,
@@ -16,8 +16,9 @@ import {
   handleWorkspaceAction,
 } from "./hosted/action-session.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { type HostedVaultRoute, hostedVaultSeams } from "./hosted/vault-route.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The actions surface as one route group: the six endpoints through which the
@@ -122,35 +123,28 @@ function actionPassthrough(
  * the hosted vocabulary's own `not-found`, since nothing routes another path
  * to one of these functions.
  */
-export function buildActionsApp(
-  handlers: ActionsGroupHandlers,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  ActionsServices | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.AGENT, actionPassthrough(handlers.agent)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.RENAME_SESSION, actionPassthrough(handlers.renameSession)),
-    HttpRouter.all(
+export function buildActionsApp(handlers: ActionsGroupHandlers): WebRoutes<ActionsServices> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.AGENT, actionPassthrough(handlers.agent)),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACTIONS_ROUTE_PATH.RENAME_SESSION,
+      actionPassthrough(handlers.renameSession),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
       ACTIONS_ROUTE_PATH.RENAME_WORKSPACE,
       actionPassthrough(handlers.renameWorkspace),
     ),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.WORKSPACE, actionPassthrough(handlers.workspace)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.WORKSPACE, actionPassthrough(handlers.workspace)),
+    hostedNotFoundRoute,
   );
 }
 
 /** The deployment's own group, wired to the real endpoints every route file answered with before. */
-export function actionsApp(): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  ActionsServices | HttpServerRequest.HttpServerRequest
-> {
+export function actionsApp(): WebRoutes<ActionsServices> {
   return buildActionsApp({
     message: handleMessageAction,
     control: handleControlAction,

@@ -33,7 +33,7 @@ import { type RawData, WebSocket } from "ws";
  * own.
  */
 export const openSocketOverWs: OpenSocket = (url, headers) =>
-  Effect.async<SocketOpening>((resume) => {
+  Effect.callback<SocketOpening>((resume) => {
     const socket = new WebSocket(url, { headers: { ...headers } });
     const hold = holdSocket({
       send: (data) => socket.send(data),

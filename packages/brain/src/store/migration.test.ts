@@ -342,7 +342,7 @@ describe("the store's schema migration", () => {
         db.close();
         const before = yield* overStore(filename, standing);
 
-        const outcome = yield* Effect.either(overStore(filename, migrateStoreSchema));
+        const outcome = yield* Effect.result(overStore(filename, migrateStoreSchema));
 
         assert.equal(Result.isFailure(outcome), true);
         if (Result.isFailure(outcome)) assert.equal(outcome.failure._tag, "SqlError");
@@ -359,7 +359,7 @@ describe("the store's schema migration", () => {
         for (const version of [STORE_SCHEMA_VERSION + 1, 0]) {
           const filename = seed(directory, "v11.sql", version);
 
-          const outcome = yield* Effect.either(overStore(filename, migrateStoreSchema));
+          const outcome = yield* Effect.result(overStore(filename, migrateStoreSchema));
 
           assert.equal(
             Result.isFailure(outcome) && outcome.failure instanceof StoreSchemaRefused,

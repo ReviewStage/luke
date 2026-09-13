@@ -231,7 +231,7 @@ export function createSessionActionPerformer(
     Effect.tryPromise({ try: () => openExternal(url, kind), catch: (error) => error }).pipe(
       Effect.as<SessionOpenResult>({ status: ACTION_RESULT_STATUS.ACCEPTED }),
       Effect.tap(() => Effect.sync(() => countOpen(identity))),
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.succeed<SessionOpenResult>(
           error instanceof ExternalOpenAnswerLostError
             ? unknownOpen(error)

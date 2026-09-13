@@ -36,7 +36,7 @@ const liveBrain = (agent: () => LiveBrainAgent | undefined) =>
   Effect.runPromise(Scope.provide(brainAgentLiveBrain({ agent }), scope));
 
 /** The adapter pumps the agent's stream on a fiber of its own, so a fired event is heard a turn later. */
-const settle = () => Effect.runPromise(Effect.repeatN(Effect.yieldNow(), 20));
+const settle = () => Effect.runPromise(Effect.repeat(Effect.yieldNow, { times: 20 }));
 
 /** The stamp every run event carries beside its own fields, as the agent's teller adds it: the conversation, the turn, its place in it. */
 function stamped(published: PubSub.PubSub<BrainRunEvent>) {
@@ -51,7 +51,7 @@ function stamped(published: PubSub.PubSub<BrainRunEvent>) {
         turnId: "runId" in body ? body.runId : body.kind,
         sequence,
       } as BrainRunEvent;
-      published.unsafeOffer(event);
+      PubSub.publishUnsafe(published, event);
     },
   };
 }
@@ -61,7 +61,7 @@ function fakeAgent(options: { reject?: boolean } = {}) {
   const events = stamped(published);
   const submissions: BrainSubmission[] = [];
   const agent: LiveBrainAgent = {
-    runEvents: Stream.fromPubSub(published, { scoped: true }),
+    runEvents: Effect.map(PubSub.subscribe(published), Stream.fromSubscription),
     submitAsk: (submission) =>
       Effect.sync(() => {
         submissions.push(submission);
@@ -155,7 +155,10 @@ test("an ask follows the agent before it submits, so the first event of the run 
   const agent: LiveBrainAgent = {
     // A subscription that takes a tick of its own, as the agent's does once a
     // fiber stands between the caller and the pubsub it subscribes to.
-    runEvents: Effect.andThen(Effect.yieldNow(), Stream.fromPubSub(published, { scoped: true })),
+    runEvents: Effect.andThen(
+      Effect.yieldNow,
+      Effect.map(PubSub.subscribe(published), Stream.fromSubscription),
+    ),
     submitAsk: () =>
       Effect.sync(() => {
         events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });

@@ -39,7 +39,7 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect, Redacted, Result } from "effect";
+import { Effect, Redacted, Result, Semaphore } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
 // The reader owns the shape it is fed: what this store resolves a stored
@@ -512,7 +512,7 @@ export class SettingsStore {
    * nothing behind, so the next reader tries the file again.
    */
   #held: PersistedSettings | undefined;
-  readonly #reads = Effect.unsafeMakeSemaphore(1);
+  readonly #reads = Semaphore.makeUnsafe(1);
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
@@ -522,7 +522,7 @@ export class SettingsStore {
    * before the first lands, and both would read the same stored keys before
    * either wrote, so the later write would drop the other provider's key.
    */
-  readonly #writes = Effect.unsafeMakeSemaphore(1);
+  readonly #writes = Semaphore.makeUnsafe(1);
 
   get<Field extends AppSettingField>(
     field: Field,

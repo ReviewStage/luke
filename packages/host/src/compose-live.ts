@@ -95,7 +95,7 @@ export const composeLive = (
     yield* Effect.forkScoped(
       Effect.forever(
         Effect.flatMap(Queue.take(beats), (beat) =>
-          Effect.catchAllDefect(beat, (defect) =>
+          Effect.catchDefect(beat, (defect) =>
             Effect.logError("an onboarding beat failed", defect),
           ),
         ),
@@ -267,7 +267,7 @@ export const composeLive = (
       methods,
       service,
       requestOnboardingBeat: () => {
-        Queue.unsafeOffer(beats, onboardingBeat);
+        Queue.offerUnsafe(beats, onboardingBeat);
       },
       seedArrivalOnFirstSignIn: () => {
         if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;

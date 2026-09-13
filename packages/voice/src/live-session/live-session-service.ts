@@ -42,7 +42,7 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import {
-  type Clock,
+  Clock,
   Deferred,
   Duration,
   Effect,
@@ -474,7 +474,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         options,
         collaborators,
         tasks,
-        yield* Effect.clock,
+        yield* Clock.Clock,
         yield* Scope.fork(scope),
       );
       yield* Effect.forkScoped(
@@ -486,12 +486,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** Begins what nothing waits for, on the service's own fiber. */
   #start(effect: Effect.Effect<void>): void {
-    Queue.unsafeOffer(this.#tasks, effect);
+    Queue.offerUnsafe(this.#tasks, effect);
   }
 
   /** The instant this session reads everything by: its scope's own clock, which a test drives. */
   #now(): number {
-    return this.#clock.unsafeCurrentTimeMillis();
+    return this.#clock.currentTimeMillisUnsafe();
   }
 
   /**
@@ -907,7 +907,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   ): Effect.Effect<LiveSideband | undefined> {
     return Scope.provide(opened.attach(), scope).pipe(
       Effect.tap((sideband) => Scope.addFinalizer(scope, sideband.close)),
-      Effect.catchAll((failure) =>
+      Effect.catch((failure) =>
         Effect.sync(() => {
           this.#options.report(`Live sideband could not attach: ${failure.message}`);
           this.#setPhase({

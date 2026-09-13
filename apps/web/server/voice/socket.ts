@@ -1,10 +1,10 @@
-import { Deferred, Effect, Exit, Mailbox, type Option, type Scope, type Stream } from "effect";
+import { type Cause, Deferred, Effect, Exit, Option, Queue, type Scope, Stream } from "effect";
 import * as Socket from "effect/unstable/socket/Socket";
 import type { WebSocket } from "ws";
 
 /**
  * One `ws` socket as `effect/unstable/socket` speaks it: the frames the peer sent
- * read into a mailbox by a fiber of the caller's own scope, so the service
+ * read into a queue by a fiber of the caller's own scope, so the service
  * takes the opening frame from the same reader the relay then streams the
  * rest from and nothing arriving between the two lands nowhere. A frame
  * crosses as the bytes it arrived as — text as text, binary as binary — since
@@ -23,7 +23,7 @@ import type { WebSocket } from "ws";
  * to whoever listens at that instant: a caller holding a paused socket resumes
  * it on this answer and loses nothing that arrived meanwhile. Reading ends
  * when the peer goes, whether by a close handshake or by an error; either way
- * the mailbox ends, so a stream over it completes rather than hanging on a
+ * the queue ends, so a stream over it completes rather than hanging on a
  * socket that is not there, nothing more is written to it, and closing the
  * scope closes the socket.
  */
@@ -90,36 +90,43 @@ export function voiceSocket(
       ),
       // A socket handed over already gone never emits the `open` this would
       // otherwise wait the platform's ten seconds for: there is nothing to
-      // wait for, so the reader ends at once and the mailbox with it.
-      { closeCodeIsError: () => false, openTimeout: 0 },
+      // wait for, so the reader ends at once and the queue with it. Every
+      // ending is a failure of the read, a close handshake as much as an
+      // error, which is why the reader is ignored rather than matched on.
+      { openTimeout: 0 },
     );
-    const inbound = yield* Mailbox.make<VoiceFrame>();
-    const writeRaw = yield* platform.writer;
+    const inbound = yield* Queue.make<VoiceFrame, Cause.Done>();
+    const writer = yield* platform.writer;
     const standing = yield* Deferred.make<void>();
     const overspent = yield* Deferred.make<void>();
     let reading = false;
     let spent = 0;
+    const receive = (data: Uint8Array | string): void => {
+      const frame = data instanceof Uint8Array ? { bytes: data } : { text: data };
+      if (options.byteBudget !== undefined) {
+        spent += frameBytes(frame);
+        if (spent > options.byteBudget) {
+          Deferred.doneUnsafe(overspent, Exit.void);
+          return;
+        }
+      }
+      Queue.offerUnsafe(inbound, frame);
+    };
     yield* Effect.forkScoped(
       Effect.ensuring(
         Effect.ignore(
-          platform.runRaw(
-            (data) => {
-              const frame = data instanceof Uint8Array ? { bytes: data } : { text: data };
-              if (options.byteBudget !== undefined) {
-                spent += frameBytes(frame);
-                if (spent > options.byteBudget) {
-                  Deferred.doneUnsafe(overspent, Exit.void);
-                  return;
+          Effect.scoped(
+            Effect.gen(function* () {
+              const reader = yield* platform.reader;
+              reading = true;
+              Deferred.doneUnsafe(standing, Effect.void);
+              while (true) {
+                const batch = yield* reader.pull;
+                for (const data of batch) {
+                  receive(data);
                 }
               }
-              inbound.unsafeOffer(frame);
-            },
-            {
-              onOpen: Effect.sync(() => {
-                reading = true;
-                Deferred.doneUnsafe(standing, Effect.void);
-              }),
-            },
+            }),
           ),
         ),
         Effect.andThen(
@@ -127,13 +134,13 @@ export function voiceSocket(
             reading = false;
             Deferred.doneUnsafe(standing, Effect.void);
           }),
-          inbound.end,
+          Queue.end(inbound),
         ),
       ),
     );
     yield* Deferred.await(standing);
     const write = (chunk: string | Uint8Array | Socket.CloseEvent): Effect.Effect<void> =>
-      Effect.suspend(() => (reading ? Effect.ignore(writeRaw(chunk)) : Effect.void));
+      Effect.suspend(() => (reading ? Effect.ignore(writer.write(chunk)) : Effect.void));
     yield* Effect.forkScoped(
       Effect.andThen(
         Deferred.await(overspent),
@@ -141,8 +148,11 @@ export function voiceSocket(
       ),
     );
     return {
-      next: Effect.optionFromOptional(inbound.take),
-      frames: Mailbox.toStream(inbound),
+      next: Queue.take(inbound).pipe(
+        Effect.map((frame): Option.Option<VoiceFrame> => Option.some(frame)),
+        Effect.catchTag("Done", () => Effect.succeed(Option.none<VoiceFrame>())),
+      ),
+      frames: Stream.fromQueue(inbound),
       send: (frame) => write("text" in frame ? frame.text : frame.bytes),
       close: (code, reason) => write(new Socket.CloseEvent(code, reason)),
       isOpen: Effect.sync(() => reading && socket.readyState === socket.OPEN),

@@ -47,7 +47,7 @@ type ObservationEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlC
  * pass replaces rather than one that fails the account's read.
  */
 const optionally = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.option(Effect.catchAllDefect(effect, () => Effect.fail(undefined)));
+  Effect.option(Effect.catchDefect(effect, () => Effect.fail(undefined)));
 
 export interface ObservationPassInput {
   userId: string;

@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Chunk, Effect, Option, Result, type Schema, Stream } from "effect";
+import { Effect, Option, Result, type Schema, Stream } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -272,11 +272,16 @@ export function handleTurnEventStream(
     // abort, which the next read of the attachment sees and stops on.
     const gone = () => request.signal.aborted;
 
-    const frames = Stream.unfoldChunkEffect(
+    const frames = Stream.paginate(
       { told: after, quietSince: attachedAt, polled: false, last: false } satisfies Attachment,
       (attachment: Attachment) =>
         Effect.gen(function* () {
-          const none = Option.none<readonly [Chunk.Chunk<string>, Attachment]>();
+          // Nothing more to write and nothing more to wait for: an empty
+          // batch with no next attachment is how a paginated stream ends.
+          const none: readonly [ReadonlyArray<string>, Option.Option<Attachment>] = [
+            [],
+            Option.none(),
+          ];
           if (attachment.last || gone()) return none;
           if (attachment.polled) yield* sleep(bounds.POLL_MS);
           if (gone()) return none;
@@ -291,15 +296,15 @@ export function handleTurnEventStream(
             now() - attachedAt >= bounds.ATTACHMENT_MS;
           const heartbeat = !last && now() - quietSince >= bounds.HEARTBEAT_MS;
           if (heartbeat) written.push(TURN_EVENT_STREAM.HEARTBEAT_FRAME);
-          return Option.some([
-            Chunk.fromIterable(written),
-            {
+          return [
+            written,
+            Option.some({
               told,
               quietSince: heartbeat ? now() : quietSince,
               polled: true,
               last,
-            } satisfies Attachment,
-          ] as const);
+            } satisfies Attachment),
+          ] as const;
         }),
     );
     // The polling runs inside the stream this handler answers with, so it

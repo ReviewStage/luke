@@ -435,7 +435,7 @@ export class StreamRelay {
       // failed write, a defect — leaves the turn nowhere in relay state, so
       // the start eve emits again opens it from the beginning, and the failure
       // is eve's to see.
-      Effect.tapErrorCause(() =>
+      Effect.tapCause(() =>
         Effect.sync(() => standing.state.update((state) => this.#without(state, eveTurnId))),
       ),
     );

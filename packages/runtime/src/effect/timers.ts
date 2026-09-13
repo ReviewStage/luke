@@ -29,7 +29,7 @@ export const scheduleOnce = <A, E, R>(
  * interruptible for the reason {@link scheduleOnce}'s is.
  */
 export const scheduleRepeat = <A, E, R, Out>(
-  schedule: Schedule.Schedule<Out, A, R>,
+  schedule: Schedule.Schedule<Out, A, never, R>,
   work: Effect.Effect<A, E, R>,
 ): Effect.Effect<Fiber.Fiber<Out, E>, never, R | Scope.Scope> =>
   Effect.forkScoped(Effect.interruptible(Effect.repeat(work, schedule)));

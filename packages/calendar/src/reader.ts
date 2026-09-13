@@ -104,13 +104,15 @@ function jsonRequest(
             }),
           ),
     ),
-    Effect.timeoutFail({
+    Effect.timeoutOrElse({
       duration: Duration.millis(REQUEST_TIMEOUT_MS),
-      onTimeout: () =>
-        new GoogleCalendarRequestError({
-          fault: CALENDAR_REQUEST_FAULT.TRANSPORT,
-          message: "Google Calendar did not answer in time",
-        }),
+      orElse: () =>
+        Effect.fail(
+          new GoogleCalendarRequestError({
+            fault: CALENDAR_REQUEST_FAULT.TRANSPORT,
+            message: "Google Calendar did not answer in time",
+          }),
+        ),
     }),
   );
 }
@@ -221,7 +223,7 @@ export class GoogleCalendarReader {
       }
       const observations: CalendarAccountObservation[] = [];
       for (const account of accounts) {
-        const attempt = yield* Effect.either(this.#observeAccount(account));
+        const attempt = yield* Effect.result(this.#observeAccount(account));
         if (Result.isSuccess(attempt)) {
           this.#lastObservations.set(account.id, attempt.success);
           observations.push(attempt.success);

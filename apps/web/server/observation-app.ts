@@ -1,4 +1,4 @@
-import { Effect, Option, Redacted, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -23,7 +23,7 @@ import { deviceSeams } from "./hosted/device-store.js";
 import { payloadKeyRing } from "./hosted/encryption.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { observeAndSnapshot } from "./hosted/observation-pass.js";
 import { handleObservationTick, type ObservationTickOptions } from "./hosted/observation-tick.js";
 import { handleObserve } from "./hosted/observe.js";
@@ -39,6 +39,7 @@ import {
 import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
 import { hostedEncryptionSecretEffect, hostedVaultSeams } from "./hosted/vault-route.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The observation group: the routes that read and are read from the roster
@@ -371,23 +372,17 @@ function observationTickEffect(
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
  */
-export function observationApp(): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  SqlClient.SqlClient | HostedEnvironment | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    // `all`, not `get`/`post`: each handler decides its own method refusal,
-    // as it did before conversion, so a request to the right path on the
-    // wrong method still answers 405 rather than falling through to the
+export function observationApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+  return Layer.mergeAll(
+    // `ANY_METHOD`, not `GET`/`POST`: each handler decides its own method
+    // refusal, as it did before conversion, so a request to the right path on
+    // the wrong method still answers 405 rather than falling through to the
     // group's own 404.
-    HttpRouter.all(PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
-    HttpRouter.all(PATH.PROJECTS, effectPassthrough(projectsEffect)),
-    HttpRouter.all(PATH.EVENTS, effectPassthrough(eventsEffect)),
-    HttpRouter.all(PATH.OBSERVE, effectPassthrough(observeEffect)),
-    HttpRouter.all(PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+    HttpRouter.add(ANY_METHOD, PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.PROJECTS, effectPassthrough(projectsEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.EVENTS, effectPassthrough(eventsEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.OBSERVE, effectPassthrough(observeEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
+    hostedNotFoundRoute,
   );
 }

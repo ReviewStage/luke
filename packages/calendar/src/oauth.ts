@@ -205,13 +205,13 @@ function exchangeEffect(
 
   return Effect.gen(function* () {
     const response = yield* HttpClient.execute(request).pipe(
-      Effect.catchAll(() => Effect.fail(networkFault())),
+      Effect.catch(() => Effect.fail(networkFault())),
     );
     if (!answeredOk(response.status)) {
       return yield* Effect.fail(new GoogleCalendarExchangeError({ fault: EXCHANGE_FAULT.REFUSED }));
     }
     const payload = yield* HttpClientResponse.schemaBodyJson(WireValueSchema)(response).pipe(
-      Effect.catchAll(() => Effect.fail(networkFault())),
+      Effect.catch(() => Effect.fail(networkFault())),
     );
     const tokens = tokensFrom(payload);
     if (!tokens)
@@ -220,9 +220,9 @@ function exchangeEffect(
       );
     return tokens;
   }).pipe(
-    Effect.timeoutFail({
+    Effect.timeoutOrElse({
       duration: Duration.millis(TOKEN_REQUEST_TIMEOUT_MS),
-      onTimeout: networkFault,
+      orElse: () => Effect.fail(networkFault()),
     }),
   );
 }

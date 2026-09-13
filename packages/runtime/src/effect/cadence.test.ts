@@ -30,7 +30,7 @@ it.effect("a disarm ends the fibers an arming forked from inside an uninterrupti
 
     yield* gate.disarm;
     assert.ok(armedFiber !== undefined);
-    assert.equal(Exit.isInterrupted(yield* Fiber.await(armedFiber)), true);
+    assert.equal(Exit.hasInterrupts(yield* Fiber.await(armedFiber)), true);
 
     yield* TestClock.adjust("1 minute");
     assert.deepEqual(beats, [0, 1, 2]);

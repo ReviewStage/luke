@@ -238,7 +238,7 @@ export const composeSettings = (): Effect.Effect<
       label: string,
       work: Effect.Effect<void, unknown>,
     ): void => {
-      Queue.unsafeOffer(accountPreferencesActions, { label, work });
+      Queue.offerUnsafe(accountPreferencesActions, { label, work });
     };
 
     const failureReason = (cause: Cause.Cause<unknown>): string => {
@@ -249,11 +249,11 @@ export const composeSettings = (): Effect.Effect<
     /** The queue drained one action at a time, for as long as the fiber running it stands. */
     const drainAccountPreferencesSync = Queue.take(accountPreferencesActions).pipe(
       Effect.flatMap(({ label, work }) =>
-        Effect.catchAllCause(work, (cause) =>
+        Effect.catchCause(work, (cause) =>
           // An interruption is this fiber being ended rather than the action
           // going wrong; every other way it could not be carried, a defect
           // included, is the line the promise chain's own `catch` reported.
-          Cause.isInterruptedOnly(cause)
+          Cause.hasInterruptsOnly(cause)
             ? Effect.interrupt
             : Effect.sync(() => {
                 report(`Account preferences ${label} failed: ${failureReason(cause)}`);
@@ -313,12 +313,12 @@ export const composeSettings = (): Effect.Effect<
     /** The queue drained one step at a time, for as long as the fiber running it stands. */
     const drainVaultActions = Queue.take(vaultActions).pipe(
       Effect.flatMap((step) =>
-        Effect.catchAllCause(step, (cause) =>
+        Effect.catchCause(step, (cause) =>
           // An interruption is this fiber being ended rather than a step going
           // wrong, so it stands; every other way a step could not be carried
           // is quiet here, since a waited-for step has already answered its
           // hand through its own deferred.
-          Cause.isInterruptedOnly(cause) ? Effect.interrupt : Effect.void,
+          Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.void,
         ),
       ),
       Effect.forever,
@@ -729,8 +729,8 @@ export const composeSettings = (): Effect.Effect<
         // than the request's failure, and a step that threw is one of those
         // ways, which is what the promise door's own `catch` already read it
         // as. An interruption is not: it is the caller ending this fiber.
-        Effect.catchAllCause((cause) =>
-          Cause.isInterruptedOnly(cause) ? Effect.interrupt : refusedSettings(refusal),
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.interrupt : refusedSettings(refusal),
         ),
       );
     }
