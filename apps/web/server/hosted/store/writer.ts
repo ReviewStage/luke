@@ -12,6 +12,7 @@ import {
 } from "ai";
 import { Effect, Option, type ParseResult, Schema } from "effect";
 import {
+  type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -249,6 +250,45 @@ interface UserMessageWrite {
   readonly metadata: UserMessageMetadata;
 }
 
+/**
+ * One of Luke's own spoken utterances, as the voice writer cuts it from the
+ * session's segments: a finished assistant row no turn owns, authored by the
+ * voice model, written once per client id.
+ */
+interface SpokenReplyWrite {
+  readonly clientId: string;
+  readonly text: string;
+  readonly metadata: AssistantMessageMetadata;
+}
+
+/** The latest spoken developer line of one voice session ending at or before an instant of the session's clock. */
+interface SpokenLineQuery {
+  readonly voiceSessionId: string;
+  readonly endingAtOrBeforeMs: number;
+}
+
+interface SpokenLineFound {
+  readonly id: string;
+  readonly clientId: string;
+  /** Whether a delegation already owns the line. */
+  readonly delegated: boolean;
+}
+
+type SpokenLineResult =
+  | { readonly ok: true; readonly line: SpokenLineFound | undefined }
+  | typeof NO_CONVERSATION;
+
+/** An undelegated spoken line and the delegation that arrived after it settled. */
+interface SpokenLineAdoption {
+  readonly lineClientId: string;
+  readonly delegationId: string;
+}
+
+type SpokenLineAdoptionResult =
+  | { readonly ok: true; readonly id: string; readonly effect: StoreWriteEffect }
+  | typeof NO_CONVERSATION
+  | Refused<typeof STORE_WRITE_REFUSAL.NO_MESSAGE>;
+
 /** What the relay's attach did for one turn: the user rows it took into the turn, by id; or the conversation no longer stands. */
 type AskLinesAttached =
   | { readonly ok: true; readonly attached: readonly string[] }
@@ -344,6 +384,26 @@ export interface StoreWriter {
   attachAskLines(target: ConversationTarget, turnId: string): Write<AskLinesAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
   spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Write<SpokenAskEndResult>;
+  /** Writes one of Luke's own spoken utterances as a finished assistant row under no turn, once per client id. */
+  recordSpokenReply(
+    target: ConversationTarget,
+    write: SpokenReplyWrite,
+  ): Write<UserMessageWriteResult>;
+  /** The latest developer line one voice session left ending at or before an instant, and whether a delegation owns it. */
+  latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
+  /**
+   * Places a spoken line that settled undelegated under the delegation that
+   * arrived after it: the row is re-keyed to the delegation's id and names
+   * it, so the ask and its line share one id as they do when the delegation
+   * comes first, and where the ask has learned its turn the line is taken
+   * into it ahead of the turn's work. The row's own id, which is what every
+   * device holds it by, does not change; it moves to a fresh position where
+   * the turn takes it, as any line taken into a turn does.
+   */
+  adoptSpokenLine(
+    target: ConversationTarget,
+    adoption: SpokenLineAdoption,
+  ): Write<SpokenLineAdoptionResult>;
 }
 
 /**
@@ -742,6 +802,56 @@ const findSpokenAskEnd = SqlSchema.findOne({
         where conversation_id = ${request.conversationId}
           and client_id <> ${request.delegationId}
           and metadata ->> 'voice_session_id' = ${request.voiceSessionId}
+      `,
+    ),
+});
+
+/**
+ * The latest developer line one voice session left at or before an instant
+ * of the session's clock, by the span its metadata names: the line a
+ * delegation that arrived after the utterance settled would be about, and
+ * the line one of Luke's utterances answered.
+ */
+const findLatestSpokenLine = SqlSchema.findOne({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    voiceSessionId: Schema.String,
+    endingAtOrBeforeMs: Schema.Int,
+  }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
+    delegationId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
+      Schema.fromKey("delegation_id"),
+    ),
+  }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select id, client_id, metadata ->> 'delegation_id' as delegation_id
+        from messages
+        where conversation_id = ${request.conversationId}
+          and role = ${MESSAGE_ROLE.USER}
+          and metadata ->> 'voice_session_id' = ${request.voiceSessionId}
+          and (metadata ->> 'to_ms')::int <= ${request.endingAtOrBeforeMs}
+        order by (metadata ->> 'to_ms')::int desc, seq desc
+        limit 1
+      `,
+    ),
+});
+
+/** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, while no turn owns it. */
+const rekeySpokenLine = SqlSchema.findOne({
+  Request: Schema.Struct({ id: Schema.String, delegationId: Schema.String }),
+  Result: RowIdSchema,
+  execute: (row) =>
+    statement(
+      (sql) => sql`
+        update messages
+        set client_id = ${row.delegationId},
+            metadata = metadata || jsonb_build_object('delegation_id', ${row.delegationId}::text)
+        where id = ${row.id} and role = ${MESSAGE_ROLE.USER} and turn_id is null
+        returning id
       `,
     ),
 });
@@ -1480,6 +1590,82 @@ function recordUserMessage(
   });
 }
 
+function recordSpokenReply(
+  context: WriterContext,
+  write: SpokenReplyWrite,
+): Write<UserMessageWriteResult> {
+  return Effect.gen(function* () {
+    const standing = yield* messageByClientId(context, write.clientId);
+    if (Option.isSome(standing)) {
+      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+    }
+    const read = yield* admitted(context, {
+      id: write.clientId,
+      role: MESSAGE_ROLE.ASSISTANT,
+      metadata: write.metadata,
+      parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
+    });
+    if (!read.ok) return read;
+    const { id } = yield* insertMessage(context, {
+      clientId: write.clientId,
+      turnId: undefined,
+      message: read.message,
+      finishedAt: context.now(),
+    });
+    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+  });
+}
+
+function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write<SpokenLineResult> {
+  return Effect.map(
+    findLatestSpokenLine({
+      conversationId: context.target.conversationId,
+      voiceSessionId: query.voiceSessionId,
+      endingAtOrBeforeMs: query.endingAtOrBeforeMs,
+    }),
+    (found) => ({
+      ok: true,
+      line: Option.match(found, {
+        onNone: () => undefined,
+        onSome: (row) => ({
+          id: row.id,
+          clientId: row.clientId,
+          delegated: row.delegationId !== null,
+        }),
+      }),
+    }),
+  );
+}
+
+function adoptSpokenLine(
+  context: WriterContext,
+  adoption: SpokenLineAdoption,
+): Write<SpokenLineAdoptionResult> {
+  return Effect.gen(function* () {
+    // A delegation told twice adopts once: the second telling finds its row standing.
+    const standing = yield* messageByClientId(context, adoption.delegationId);
+    if (Option.isSome(standing)) {
+      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+    }
+    const line = yield* messageByClientId(context, adoption.lineClientId);
+    if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+    const rekeyed = yield* rekeySpokenLine({
+      id: line.value.id,
+      delegationId: adoption.delegationId,
+    });
+    if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+    const turnId = yield* askTurnOf({
+      conversationId: context.target.conversationId,
+      clientId: adoption.delegationId,
+    });
+    if (turnId !== undefined) {
+      const seq = yield* takeLineIntoTurn(context, turnId, line.value.id);
+      yield* moveTurnWorkAfter(context, turnId, seq);
+    }
+    return { ok: true, id: line.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
+  });
+}
+
 /**
  * The turn an ask of the conversation has learned, by the ask's client id,
  * where the turn's row stands: a first ask learns its turn's id at dispatch,
@@ -1722,6 +1908,12 @@ export function storeWriter({
       underConversation(target, (context) => attachAskLines(context, turnId)),
     spokenAskEnd: (target, end) =>
       underConversation(target, (context) => spokenAskEnd(context, end)),
+    recordSpokenReply: (target, write) =>
+      underConversation(target, (context) => recordSpokenReply(context, write)),
+    latestSpokenLine: (target, query) =>
+      underConversation(target, (context) => latestSpokenLine(context, query)),
+    adoptSpokenLine: (target, adoption) =>
+      underConversation(target, (context) => adoptSpokenLine(context, adoption)),
   };
 
   return Effect.flatMap(toolsRefusingUnknownOutcome(tools), (refusing) =>
