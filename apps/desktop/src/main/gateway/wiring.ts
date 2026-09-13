@@ -39,8 +39,6 @@ import { createHostOperator, type HostOperator } from "./host-operator";
 export interface GatewayWiringDependencies {
   transport: GatewayTransport;
   createId: () => string;
-  /** Runs one of the client's calls on the launch's own runtime, for the surfaces below that still answer promises. */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   report: (message: string) => void;
   /** What the host says, written down once; the windows are told from it. */
   state: AppStateStore;
@@ -90,7 +88,7 @@ export function wireGateway(
   dependencies: GatewayWiringDependencies,
 ): Effect.Effect<GatewayWiring, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const { transport, state, report, run } = dependencies;
+    const { transport, state, report } = dependencies;
     const client = yield* gatewayClient({
       transport,
       createId: dependencies.createId,
@@ -108,7 +106,6 @@ export function wireGateway(
     const operator = createGatewayOperator({ client });
     const host = createHostOperator({
       client,
-      run,
       lastSettings: () => state.snapshot().settings,
       report,
     });

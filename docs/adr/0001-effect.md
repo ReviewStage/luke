@@ -503,12 +503,19 @@ and would move that; `Runtime.runFork` starts on the calling stack, the same
 lesson `detachOn` recorded in P6-04's paragraph, so the client reads the
 runtime of the fiber that built it and forks the reconnection there, in its
 own scope, and every reconnection-race assertion reads exactly as before.
-The two surfaces still answering the windows promises — `HostOperator` in
+The two surfaces that answered the windows promises — `HostOperator` in
 `apps/desktop/src/main/gateway/host-operator.ts` and the act row in
-`ipc/brain.ts` — run nothing of their own: they are handed
-`compose-desktop.ts`'s `run`, the same closure over the launch's one runtime
-that every act already crosses, and P12-20e4 takes that hand-off out by
-making those methods effects the act rows yield.
+`ipc/brain.ts` — answer effects since P12-20e4. Each of `HostOperator`'s
+verbs composes its one request and reads its answer without running it, an
+`ActRow` answers a value, a promise, or an effect, and the act router runs
+whichever it was handed once, on the runtime `compose-desktop.ts` already
+hands the bridge. So `wiring.ts`, `host-operator.ts`, and `ipc/brain.ts` are
+handed no `run` at all. Two faces keep one, because what they answer is still
+a promise rather than an act: `operator-client.ts`, whose `DesktopService`
+start and bootstrap read the composition awaits, and
+`register-desktop-ipc.ts`, whose report handlers answer Electron. Neither is
+an allowlist row, because neither runs a runtime of its own: the closure both
+hold is the launch's one edge, handed down.
 The two faces beside it that used to run on the same runtime for the same
 reason — `createGatewayService`'s own `emit` and `closeAdmissions` in
 `packages/host/src/service.ts` — are off the allowlist, and P12-15b took

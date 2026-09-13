@@ -289,7 +289,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (!introductionPlaying() || !launchStanding()) return;
     introductionSession.end();
     if (given) {
-      void operator.host.completeIntroduction();
+      operator.completeIntroduction();
       recordProductEvent(PRODUCT_EVENT.INTRODUCTION_COMPLETE, {});
     }
     state.update({ introduction: { playing: false } });

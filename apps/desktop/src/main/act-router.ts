@@ -39,11 +39,15 @@ export interface ActSender {
  */
 export class ActRefused extends Error {}
 
-/** What one kind does. The payload is the one its own schema admitted. */
+/**
+ * What one kind does. The payload is the one its own schema admitted, and the
+ * answer is a value, an effect the router runs on the launch's own runtime, or
+ * — for the rows that still reach a service answering promises — a promise.
+ */
 type ActRow<Kind extends ActKind> = (
   payload: ActPayload<Kind>,
   sender: ActSender,
-) => ActResultFor<Kind> | Promise<ActResultFor<Kind>>;
+) => ActResultFor<Kind> | Promise<ActResultFor<Kind>> | Effect.Effect<ActResultFor<Kind>, Error>;
 
 /**
  * Every kind's row, total by construction: a kind added to the vocabulary
@@ -94,10 +98,18 @@ export function createActRouter(rows: ActRows): ActRouter {
     return Effect.gen(function* () {
       // SAFETY: ActRows types every row by its own kind; the erasure is the
       // union index this dispatch is, and the answer is guarded below.
-      const value = yield* Effect.tryPromise({
-        try: async () => (rows[act.kind] as ErasedRow)(read.value, sender),
+      const answer = yield* Effect.try({
+        try: () => (rows[act.kind] as ErasedRow)(read.value, sender),
         catch: (error) => error,
       });
+      // A row that answered an effect is run here, on the runtime the bridge
+      // handed this router; a row that answered a value or a promise settles
+      // the same way it always has.
+      // SAFETY: `ActRows` types every row's effect as one needing nothing of
+      // its environment, which is the channel the guard below erases.
+      const value = yield* Effect.isEffect(answer)
+        ? (answer as Effect.Effect<unknown, unknown>)
+        : Effect.tryPromise({ try: async () => answer, catch: (error) => error });
       if (declared.result(value) === false) return refused(declared.refusal);
       // SAFETY: the kind's own result guard admitted this value.
       return { status: ACT_OUTCOME_STATUS.DONE, value: value as ActResultFor<ActKind> };
@@ -105,6 +117,9 @@ export function createActRouter(rows: ActRows): ActRouter {
       Effect.catchAll((error) =>
         Effect.succeed(refused(error instanceof ActRefused ? error.message : declared.refusal)),
       ),
+      // A row's effect that died carries no more to the window than a row that
+      // threw: the kind's own sentence, and never what the defect held.
+      Effect.catchAllDefect(() => Effect.succeed(refused(declared.refusal))),
     );
   }
 

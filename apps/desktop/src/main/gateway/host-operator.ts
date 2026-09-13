@@ -51,13 +51,15 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Effect, Either } from "effect";
+import { Effect, Either } from "effect";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
  * integration, session, voice, and client-fact methods the runtime host
- * answers, and the events it pushes. Each call composes one request and reads
- * its answer; a host that cannot be reached answers the typed disconnected
+ * answers, and the events it pushes. Every method answers an effect: it
+ * composes one request and reads its answer, and nothing here runs it — the
+ * act row that asked yields it, and the router runs it once on the launch's
+ * own runtime. A host that cannot be reached answers the typed disconnected
  * error, which reads here as an absent value or, for a settings write, as a
  * refusal worded for the row, never as a throw into the renderer. Nothing
  * here holds host state beyond the last settings snapshot a refusal is
@@ -94,82 +96,94 @@ interface HostSessionReplay {
 }
 
 export interface HostOperator {
-  bootstrap(): Promise<HostBootstrap | undefined>;
-  settingsSnapshot(): Promise<AppSettings | undefined>;
+  bootstrap(): Effect.Effect<HostBootstrap | undefined>;
+  settingsSnapshot(): Effect.Effect<AppSettings | undefined>;
   updateSetting<Field extends Exclude<AppSettingField, KeyedAppSettingField>>(
     field: Field,
     value: AppSettingValue<Field>,
     reporter: string,
-  ): Promise<SettingsUpdateResult>;
+  ): Effect.Effect<SettingsUpdateResult, Error>;
   updateSettingEntry<Field extends KeyedAppSettingField>(
     field: Field,
     key: string,
     value: SettingEntryValue<Field> | undefined,
     reporter: string,
-  ): Promise<SettingsUpdateResult>;
-  resetSettings(scope: SettingsResetScope, reporter: string): Promise<SettingsUpdateResult>;
+  ): Effect.Effect<SettingsUpdateResult, Error>;
+  resetSettings(
+    scope: SettingsResetScope,
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult, Error>;
   setProviderApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
     reporter: string,
-  ): Promise<SettingsUpdateResult>;
-  accountSnapshot(): Promise<AccountSnapshot | undefined>;
-  beginSignIn(provider: AccountProvider): Promise<AccountSnapshot>;
-  cancelSignIn(): Promise<void>;
-  signOut(): Promise<AccountSnapshot>;
-  deleteAccount(): Promise<AccountSnapshot>;
-  connectGoogleCalendar(reporter: string): Promise<SettingsUpdateResult>;
-  cancelGoogleCalendarSignIn(): Promise<void>;
-  reopenGoogleCalendarSignIn(): Promise<void>;
-  removeCalendarAccount(accountId: string, reporter: string): Promise<SettingsUpdateResult>;
-  connectAppleCalendar(reporter: string): Promise<SettingsUpdateResult>;
-  disconnectAppleCalendar(reporter: string): Promise<SettingsUpdateResult>;
-  appleCalendarAccessStatus(): Promise<AppleCalendarAccess | undefined>;
-  cancelAppleCalendarConnect(): Promise<void>;
-  refreshCalendars(): Promise<void>;
+  ): Effect.Effect<SettingsUpdateResult, Error>;
+  accountSnapshot(): Effect.Effect<AccountSnapshot | undefined>;
+  beginSignIn(provider: AccountProvider): Effect.Effect<AccountSnapshot, Error>;
+  cancelSignIn(): Effect.Effect<void>;
+  signOut(): Effect.Effect<AccountSnapshot, Error>;
+  deleteAccount(): Effect.Effect<AccountSnapshot, Error>;
+  connectGoogleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
+  cancelGoogleCalendarSignIn(): Effect.Effect<void>;
+  reopenGoogleCalendarSignIn(): Effect.Effect<void>;
+  removeCalendarAccount(
+    accountId: string,
+    reporter: string,
+  ): Effect.Effect<SettingsUpdateResult, Error>;
+  connectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
+  disconnectAppleCalendar(reporter: string): Effect.Effect<SettingsUpdateResult, Error>;
+  appleCalendarAccessStatus(): Effect.Effect<AppleCalendarAccess | undefined>;
+  cancelAppleCalendarConnect(): Effect.Effect<void>;
+  refreshCalendars(): Effect.Effect<void>;
   setCalendarSelected(
     accountId: string,
     calendarId: string,
     selected: boolean,
     reporter: string,
-  ): Promise<SettingsUpdateResult>;
-  sessionRoster(): Promise<{ sessions: readonly Session[]; settled: boolean }>;
-  openSession(identity: SessionIdentity): Promise<ActionResult>;
+  ): Effect.Effect<SettingsUpdateResult, Error>;
+  sessionRoster(): Effect.Effect<{ sessions: readonly Session[]; settled: boolean }>;
+  openSession(identity: SessionIdentity): Effect.Effect<ActionResult>;
   openSessionApplication(
     identity: SessionIdentity,
     applicationId: SessionApplicationId,
-  ): Promise<ActionResult>;
-  openSessionChange(identity: SessionIdentity): Promise<ActionResult>;
+  ): Effect.Effect<ActionResult>;
+  openSessionChange(identity: SessionIdentity): Effect.Effect<ActionResult>;
   /** The two writes a session's row asks for; the host admits each against the roster before any provider sees it. */
-  sendSessionMessage(identity: SessionIdentity, text: string): Promise<SessionWriteResult>;
-  executeSessionControl(identity: SessionIdentity, controlId: string): Promise<SessionWriteResult>;
-  workspaceProjects(): Promise<readonly ObservedWorkspaceProject[]>;
+  sendSessionMessage(identity: SessionIdentity, text: string): Effect.Effect<SessionWriteResult>;
+  executeSessionControl(
+    identity: SessionIdentity,
+    controlId: string,
+  ): Effect.Effect<SessionWriteResult>;
+  workspaceProjects(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /** Why voice is or is not available, carrying no credential; a host that cannot be reached answers nothing. */
-  liveDiagnostics(): Promise<LiveDiagnostics | undefined>;
+  liveDiagnostics(): Effect.Effect<LiveDiagnostics | undefined>;
   /** The peer's SDP offer, answered with the session the host created; a host that creates none answers nothing. */
-  createLiveSession(sdp: string): Promise<VoiceCreateLiveSessionResult | undefined>;
-  endLiveSession(): Promise<void>;
-  reportLiveTransport(state: LiveTransportState): Promise<void>;
+  createLiveSession(sdp: string): Effect.Effect<VoiceCreateLiveSessionResult | undefined>;
+  endLiveSession(): Effect.Effect<void>;
+  reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
-  reportLiveActivity(idle: boolean): Promise<void>;
+  reportLiveActivity(idle: boolean): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
-  stopSpeaking(): Promise<boolean>;
+  stopSpeaking(): Effect.Effect<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
-  recordAgentTrace(trace: AgentWireTrace): void;
-  reportGuide(guide: AppGuideSnapshot): Promise<void>;
+  recordAgentTrace(trace: AgentWireTrace): Effect.Effect<void>;
+  reportGuide(guide: AppGuideSnapshot): Effect.Effect<void>;
   recordEvent<Name extends ProductEventName>(
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
-  ): void;
-  appendConversation(entries: readonly ConversationEntry[], reporter: string): Promise<boolean>;
+  ): Effect.Effect<void>;
+  appendConversation(
+    entries: readonly ConversationEntry[],
+    reporter: string,
+  ): Effect.Effect<boolean>;
   /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
-  clearConversation(): Promise<boolean>;
+  clearConversation(): Effect.Effect<boolean>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
   rateConversationMessage(
     messageId: string,
     rating: MessageRating,
-  ): Promise<ConversationRateMessageResult>;
-  onboardingState(): Promise<
+  ): Effect.Effect<ConversationRateMessageResult>;
+  onboardingState(): Effect.Effect<
     | {
         calendarOnboardingOwed: boolean;
         introductionOwed: boolean;
@@ -177,12 +191,12 @@ export interface HostOperator {
       }
     | undefined
   >;
-  skipCalendarOnboarding(): Promise<void>;
-  completeCalendarOnboarding(): Promise<void>;
+  skipCalendarOnboarding(): Effect.Effect<void>;
+  completeCalendarOnboarding(): Effect.Effect<void>;
   /** The developer declined the Conductor key step; the Connections row stays the way to connect later. */
-  skipConductorKeyOnboarding(): Promise<void>;
+  skipConductorKeyOnboarding(): Effect.Effect<void>;
   /** The introduction given to its end: the host writes the completion, drops its hold, and asks for the beats that waited. */
-  completeIntroduction(): Promise<void>;
+  completeIntroduction(): Effect.Effect<void>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onSessionsChanged(
@@ -205,14 +219,6 @@ export interface HostOperator {
 
 export interface HostOperatorOptions {
   client: GatewayClient;
-  /**
-   * Runs one of the client's calls on the launch's own runtime, handed down
-   * from the runtime edge that built it. Every method here still answers the
-   * windows a promise, so this is where the effects the client composes are
-   * run; P12-20e4 takes it out by making these methods effects the act rows
-   * yield.
-   */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The settings a refused write is answered with when the host cannot say; the last snapshot the client saw. */
   lastSettings: () => AppSettings | undefined;
   report: (message: string) => void;
@@ -243,48 +249,56 @@ function answeredList<Value>(value: UnparsedWireValue): readonly Value[] {
 }
 
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
-  const { client, run } = options;
+  const { client } = options;
 
-  const settingsResult = async (
+  const settingsResult = (
     result: Effect.Effect<GatewayCallResult>,
-  ): Promise<SettingsUpdateResult> => {
-    const answer = record(await run(result));
-    const parsed = answered<SettingsUpdateResult>(answer);
-    if (parsed?.settings !== undefined) return parsed;
-    const settings = options.lastSettings();
-    if (!settings) throw new Error(HOST_UNREACHABLE_REFUSAL);
-    return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: HOST_UNREACHABLE_REFUSAL };
-  };
+  ): Effect.Effect<SettingsUpdateResult, Error> =>
+    Effect.flatMap(result, (answer) => {
+      const parsed = answered<SettingsUpdateResult>(record(answer));
+      if (parsed?.settings !== undefined) return Effect.succeed(parsed);
+      const settings = options.lastSettings();
+      if (!settings) return Effect.fail(new Error(HOST_UNREACHABLE_REFUSAL));
+      return Effect.succeed<SettingsUpdateResult>({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        settings,
+        reason: HOST_UNREACHABLE_REFUSAL,
+      });
+    });
 
-  const accountResult = async (
+  const accountResult = (
     result: Effect.Effect<GatewayCallResult>,
-  ): Promise<AccountSnapshot> => {
-    const answer = record(await run(result));
-    const account = answered<AccountSnapshot>(answer?.account);
-    if (account) return account;
-    throw new Error(HOST_UNREACHABLE_REFUSAL);
-  };
+  ): Effect.Effect<AccountSnapshot, Error> =>
+    Effect.flatMap(result, (answer) => {
+      const account = answered<AccountSnapshot>(record(answer)?.account);
+      return account ? Effect.succeed(account) : Effect.fail(new Error(HOST_UNREACHABLE_REFUSAL));
+    });
 
-  const actionResult = async (result: Effect.Effect<GatewayCallResult>): Promise<ActionResult> => {
-    const answer = answered<ActionResult>(record(await run(result)));
-    return answer ?? { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
-  };
+  const actionResult = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<ActionResult> =>
+    Effect.map(
+      result,
+      (answer) =>
+        answered<ActionResult>(record(answer)) ?? {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: HOST_UNREACHABLE_REFUSAL,
+        },
+    );
 
   // A write's answer is read against its own shape rather than restored by
   // assertion: the host may answer unknown where a write's answer was lost,
   // and a row must draw that as neither a failure nor a success.
-  const writeResult = async (
+  const writeResult = (
     result: Effect.Effect<GatewayCallResult>,
-  ): Promise<SessionWriteResult> => {
-    const answer = record(await run(result));
-    return isSessionWriteResult(answer)
-      ? answer
-      : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
-  };
+  ): Effect.Effect<SessionWriteResult> =>
+    Effect.map(result, (answer) => {
+      const written = record(answer);
+      return isSessionWriteResult(written)
+        ? written
+        : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
+    });
 
-  const fire = async (result: Effect.Effect<GatewayCallResult>): Promise<void> => {
-    await run(result);
-  };
+  const fire = (result: Effect.Effect<GatewayCallResult>): Effect.Effect<void> =>
+    Effect.asVoid(result);
 
   const on = gatewayEventReader(client);
 
@@ -300,11 +314,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     value !== undefined ? { value: carried(value) } : undefined;
 
   return {
-    bootstrap: async () =>
-      answered<HostBootstrap>(record(await run(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP)))),
-    settingsSnapshot: async () =>
-      answered<AppSettings>(
-        record(await run(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT)))?.settings,
+    bootstrap: () =>
+      Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
+        answered<HostBootstrap>(record(answer)),
+      ),
+    settingsSnapshot: () =>
+      Effect.map(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT), (answer) =>
+        answered<AppSettings>(record(answer)?.settings),
       ),
     updateSetting: (field, value, reporter) =>
       settingsResult(
@@ -335,9 +351,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    accountSnapshot: async () =>
-      answered<AccountSnapshot>(
-        record(await run(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT)))?.account,
+    accountSnapshot: () =>
+      Effect.map(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT), (answer) =>
+        answered<AccountSnapshot>(record(answer)?.account),
       ),
     beginSignIn: (provider) =>
       accountResult(client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider })),
@@ -361,9 +377,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       settingsResult(client.call(GATEWAY_METHOD.CALENDAR_CONNECT_APPLE, wireReporter(reporter))),
     disconnectAppleCalendar: (reporter) =>
       settingsResult(client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter))),
-    appleCalendarAccessStatus: async () =>
-      answered<AppleCalendarAccess>(
-        record(await run(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS)))?.access,
+    appleCalendarAccessStatus: () =>
+      Effect.map(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS), (answer) =>
+        answered<AppleCalendarAccess>(record(answer)?.access),
       ),
     cancelAppleCalendarConnect: () =>
       fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT)),
@@ -377,13 +393,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           ...wireReporter(reporter),
         }),
       ),
-    sessionRoster: async () => {
-      const answer = record(await run(client.call(GATEWAY_METHOD.SESSION_ROSTER)));
-      return {
-        sessions: answeredList<Session>(answer?.sessions),
-        settled: answer?.settled === true,
-      };
-    },
+    sessionRoster: () =>
+      Effect.map(client.call(GATEWAY_METHOD.SESSION_ROSTER), (result) => {
+        const answer = record(result);
+        return {
+          sessions: answeredList<Session>(answer?.sessions),
+          settled: answer?.settled === true,
+        };
+      }),
     openSession: (identity) =>
       actionResult(client.call(GATEWAY_METHOD.SESSION_OPEN, { identity: { ...identity } })),
     openSessionApplication: (identity, applicationId) =>
@@ -406,85 +423,77 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           controlId,
         }),
       ),
-    workspaceProjects: async () =>
-      answeredList<ObservedWorkspaceProject>(
-        record(await run(client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS)))?.projects,
+    workspaceProjects: () =>
+      Effect.map(client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS), (answer) =>
+        answeredList<ObservedWorkspaceProject>(record(answer)?.projects),
       ),
-    liveDiagnostics: async () =>
-      answered<LiveDiagnostics>(
-        record(await run(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS)))?.diagnostics,
+    liveDiagnostics: () =>
+      Effect.map(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS), (answer) =>
+        answered<LiveDiagnostics>(record(answer)?.diagnostics),
       ),
-    createLiveSession: async (sdp) => {
-      const answer = await run(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }));
-      return answer.ok
-        ? Either.getOrUndefined(readEither(voiceCreateLiveSessionResultSchema)(answer.result))
-        : undefined;
-    },
+    createLiveSession: (sdp) =>
+      Effect.map(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }), (answer) =>
+        answer.ok
+          ? Either.getOrUndefined(readEither(voiceCreateLiveSessionResultSchema)(answer.result))
+          : undefined,
+      ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
     reportLiveTransport: (state) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
-    stopSpeaking: async () => {
-      const answer = await run(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING));
-      return answer.ok
-        ? (Either.getOrUndefined(readEither(voiceStopSpeakingResultSchema)(answer.result))
-            ?.stopped ?? false)
-        : false;
-    },
-    recordAgentTrace: (trace) => {
-      void run(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) }));
-    },
+    stopSpeaking: () =>
+      Effect.map(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING), (answer) =>
+        answer.ok
+          ? (Either.getOrUndefined(readEither(voiceStopSpeakingResultSchema)(answer.result))
+              ?.stopped ?? false)
+          : false,
+      ),
+    recordAgentTrace: (trace) =>
+      fire(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) })),
     reportGuide: (guide) =>
       fire(client.call(GATEWAY_METHOD.GUIDE_REPORT, { guide: carried(guide) })),
-    recordEvent: (name, properties) => {
-      void run(
-        client.call(GATEWAY_METHOD.ANALYTICS_RECORD, {
-          // The host reads the event against the allowlist again before it is queued.
-          event: { name, at: Date.now(), properties: carried(properties) },
-        }),
-      );
-    },
-    appendConversation: async (entries, reporter) => {
-      const answer = record(
-        await run(
-          client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
-            entries: carried(entries),
-            ...wireReporter(reporter),
+    recordEvent: (name, properties) =>
+      Effect.suspend(() =>
+        fire(
+          client.call(GATEWAY_METHOD.ANALYTICS_RECORD, {
+            // The host reads the event against the allowlist again before it is queued.
+            event: { name, at: Date.now(), properties: carried(properties) },
           }),
         ),
-      );
-      return answer?.accepted === true;
-    },
-    clearConversation: async () => {
-      const answer = record(await run(client.call(GATEWAY_METHOD.CONVERSATION_CLEAR)));
-      return answer?.cleared === true;
-    },
-    rateConversationMessage: async (messageId, rating) => {
-      const answer = await run(
-        client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, {
-          messageId,
-          rating,
+      ),
+    appendConversation: (entries, reporter) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
+          entries: carried(entries),
+          ...wireReporter(reporter),
         }),
-      );
-      return (
-        (answer.ok
-          ? Either.getOrUndefined(readEither(conversationRateMessageResultSchema)(answer.result))
-          : undefined) ?? {
-          status: CONVERSATION_RATE_STATUS.UNAVAILABLE,
-        }
-      );
-    },
-    onboardingState: async () => {
-      const answer = record(await run(client.call(GATEWAY_METHOD.ONBOARDING_STATE)));
-      return answer
-        ? {
-            calendarOnboardingOwed: answer.calendarOnboardingOwed === true,
-            introductionOwed: answer.introductionOwed === true,
-            conductorKeyOnboardingOwed: answer.conductorKeyOnboardingOwed === true,
-          }
-        : undefined;
-    },
+        (answer) => record(answer)?.accepted === true,
+      ),
+    clearConversation: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_CLEAR),
+        (answer) => record(answer)?.cleared === true,
+      ),
+    rateConversationMessage: (messageId, rating) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),
+        (answer) =>
+          (answer.ok
+            ? Either.getOrUndefined(readEither(conversationRateMessageResultSchema)(answer.result))
+            : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
+      ),
+    onboardingState: () =>
+      Effect.map(client.call(GATEWAY_METHOD.ONBOARDING_STATE), (result) => {
+        const answer = record(result);
+        return answer
+          ? {
+              calendarOnboardingOwed: answer.calendarOnboardingOwed === true,
+              introductionOwed: answer.introductionOwed === true,
+              conductorKeyOnboardingOwed: answer.conductorKeyOnboardingOwed === true,
+            }
+          : undefined;
+      }),
     skipCalendarOnboarding: () => fire(client.call(GATEWAY_METHOD.ONBOARDING_SKIP_CALENDAR)),
     completeCalendarOnboarding: () =>
       fire(client.call(GATEWAY_METHOD.ONBOARDING_COMPLETE_CALENDAR)),

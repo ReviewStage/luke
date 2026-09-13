@@ -1,5 +1,4 @@
 import type { GatewayOperator } from "@sidecar/host";
-import type { Effect } from "effect";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActRows } from "../act-router";
 
@@ -10,15 +9,13 @@ import type { ActRows } from "../act-router";
  */
 export interface BrainActDependencies {
   operator: GatewayOperator;
-  /** Runs the operator's own effect on the launch's runtime, since an act row answers a value or a promise. */
-  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
 }
 
 type BrainActKind = typeof ACT_KIND.BRAIN_CANCEL_ASK;
 
 export function brainActRows(dependencies: BrainActDependencies): Pick<ActRows, BrainActKind> {
-  const { operator, run } = dependencies;
+  const { operator } = dependencies;
   return {
-    [ACT_KIND.BRAIN_CANCEL_ASK]: ({ runId }) => run(operator.cancel(runId)),
+    [ACT_KIND.BRAIN_CANCEL_ASK]: ({ runId }) => operator.cancel(runId),
   };
 }

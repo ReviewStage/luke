@@ -50,11 +50,23 @@ export interface OperatorClient extends DesktopService {
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
   reportGuide: (snapshot: AppGuideSnapshot) => void;
+  /**
+   * The introduction given to its end: the host writes the completion and
+   * drops the hold it stood behind. Begun here rather than waited on, because
+   * the ending the windows run is not the host's to hold up.
+   */
+  completeIntroduction: () => void;
 }
 
 export interface OperatorClientDependencies {
   config: DesktopConfig;
-  /** Runs one of the client's calls on the launch's own runtime, handed down from the runtime edge. */
+  /**
+   * Runs one of the host's effects on the launch's own runtime, handed down
+   * from the runtime edge that built it. The act rows yield the host's effects
+   * themselves; what is left here is this service's own promise surface — the
+   * start, the bootstrap read, and the settings a window is decided from —
+   * which the composition still calls as promises.
+   */
   run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The host this client operates, reached over the in-process transport. */
   gateway: GatewayInProcessHost;
@@ -100,7 +112,6 @@ export function createOperatorClient(
         role: GATEWAY_CLIENT_ROLE.OPERATOR,
       }),
       createId: () => randomUUID(),
-      run,
       report: config.report,
       state,
       node: dependencies.node,
@@ -193,7 +204,7 @@ export function createOperatorClient(
       ensureSettings: async () => {
         const held = state.snapshot().settings;
         if (held) return held;
-        const settings = await gateway.host.settingsSnapshot();
+        const settings = await run(gateway.host.settingsSnapshot());
         if (settings) state.update({ settings });
         return settings;
       },
@@ -201,7 +212,7 @@ export function createOperatorClient(
       voiceAvailable: () => voiceAvailable,
       introductionOwed: () => introductionOwed,
       readBootstrap: async () => {
-        const boot = await gateway.host.bootstrap();
+        const boot = await run(gateway.host.bootstrap());
         if (boot) adoptBootstrap(boot);
         return boot;
       },
@@ -209,7 +220,10 @@ export function createOperatorClient(
       resumeSessionReplay: () => setSessionReplayHalted(false),
       reportGuide: (guide) => {
         state.update({ guide });
-        void gateway.host.reportGuide(guide);
+        void run(gateway.host.reportGuide(guide));
+      },
+      completeIntroduction: () => {
+        void run(gateway.host.completeIntroduction());
       },
       /**
        * What every attachment owes the host: its stream adopted and this
@@ -223,8 +237,8 @@ export function createOperatorClient(
         attachments += 1;
         await run(gateway.attached());
         const guide = state.snapshot().guide;
-        if (guide !== EMPTY_APP_GUIDE) void gateway.host.reportGuide(guide);
-        const boot = await gateway.host.bootstrap();
+        if (guide !== EMPTY_APP_GUIDE) void run(gateway.host.reportGuide(guide));
+        const boot = await run(gateway.host.bootstrap());
         if (!boot) throw new Error("the host answered no bootstrap");
         adoptBootstrap(boot);
         if (attachments === 1) return;
