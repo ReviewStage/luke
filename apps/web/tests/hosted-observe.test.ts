@@ -43,7 +43,7 @@ function observeOptions(
     request: observeRequest(),
     encryptionSecret: SECRET,
     resolveUserId: () => Effect.succeed("user-1"),
-    readVaultKeys: async (_userId: string): Promise<VaultKeyRow[]> => [],
+    readVaultKeys: (_userId: string): Effect.Effect<VaultKeyRow[]> => Effect.succeed([]),
     store: () => store,
     ...overrides,
   };
@@ -120,7 +120,7 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   const seeded = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: api.layer,
         now: () => TEST_TIME,
@@ -138,7 +138,7 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   const stored = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: fakeHttpClientLayer(async () => {
           throw new Error("a stored roster is not re-observed");
@@ -159,7 +159,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
   await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: conductorApi().layer,
         now: () => TEST_TIME,
@@ -174,7 +174,7 @@ test("a snapshot observed under a replaced key is not served: the read runs a pa
   const response = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => replaced,
+        readVaultKeys: () => Effect.succeed(replaced),
         store: () => store,
         httpClient: api.layer,
         now: () => TEST_TIME + 1_000,
@@ -196,7 +196,7 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
   await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: working.layer,
         now: () => TEST_TIME,
@@ -209,7 +209,7 @@ test("a fresh read runs the pass again, stores it, and answers the new roster", 
     handleObserve(
       observeOptions({
         request: observeRequest({}, true),
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: idle.layer,
         now: () => TEST_TIME + 1_000,
@@ -233,7 +233,7 @@ test("a pass the provider refuses answers what stood before, and stores no roste
   await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: api.layer,
         now: () => TEST_TIME,
@@ -245,7 +245,7 @@ test("a pass the provider refuses answers what stood before, and stores no roste
     handleObserve(
       observeOptions({
         request: observeRequest({}, true),
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
         now: () => TEST_TIME + 1_000,
@@ -266,7 +266,7 @@ test("a first pass the provider refuses answers an empty roster and stores none"
   const response = await runWithoutDatabase(
     handleObserve(
       observeOptions({
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 401 })),
       }),
@@ -511,9 +511,9 @@ test("readVaultKeys is called with the resolved user id", async () => {
     handleObserve(
       observeOptions({
         resolveUserId: () => Effect.succeed("user-xyz"),
-        readVaultKeys: async (userId) => {
+        readVaultKeys: (userId) => {
           calledWithUserId = userId;
-          return [];
+          return Effect.succeed([]);
         },
       }),
     ),
@@ -535,7 +535,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
     observeOptions({
       request: observeRequest({}, true),
       resolveUserId: () => Effect.succeed(userId),
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       store: () => store,
       httpClient: api.layer,
       now,
@@ -555,7 +555,7 @@ test("fresh reads return 429 after too many in the same window, while stored rea
     handleObserve(
       observeOptions({
         resolveUserId: () => Effect.succeed(userId),
-        readVaultKeys: async () => KEY_ROWS,
+        readVaultKeys: () => Effect.succeed(KEY_ROWS),
         store: () => store,
         now,
       }),

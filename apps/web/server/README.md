@@ -273,9 +273,9 @@ operation spends — so the group yields the seam on the request's own fiber
 and the edge that serves the request is the one place the client behind it is
 provided. What still holds a runner is everything a route composes apart from
 the store and that still hands a promise up — the writers, the speech module,
-the ask record, the brain host's own seams, the admin dashboard's queries, the
-observation handlers' `readVaultKeys`, and the store route's own secret read —
-each handed its edge's own, `runWeb` in a function and the store tests'
+the ask record, the brain host's own seams, the admin dashboard's queries, and
+the store route's own secret read — each handed its edge's own, `runWeb` in a
+function and the store tests'
 runtime in a test; the conversation row lock every write runs under is the
 client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`

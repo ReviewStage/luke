@@ -440,7 +440,7 @@ async function snapshotRoster(api: ConductorApi): Promise<ActionRoster> {
       store,
       // The key rows are read to check the snapshot was observed under them;
       // the provider itself is never asked while a matching snapshot stands.
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       seams: {
         httpClient: fakeHttpClientLayer(async () => {
           throw new Error("no pass runs for a user with a snapshot");
@@ -535,7 +535,7 @@ async function seededRoster(httpClient: Layer.Layer<HttpClient.HttpClient>) {
       providerId: "conductor",
       secret: SECRET,
       store,
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       seams: { httpClient },
       now: NOW,
     }),
@@ -598,7 +598,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
       providerId: "conductor",
       secret: SECRET,
       store,
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       seams: { httpClient: api.layer },
       now: NOW,
     }),
@@ -613,7 +613,7 @@ test("a user with no snapshot yet is seeded by the action's own pass, once", asy
       providerId: "conductor",
       secret: SECRET,
       store,
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       seams: { httpClient: api.layer },
       now: NOW + 1,
     }),
@@ -631,7 +631,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
       providerId: "conductor",
       secret: SECRET,
       store,
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       seams: { httpClient: api.layer },
       now: NOW,
     }),
@@ -647,7 +647,7 @@ test("an action under a replaced key is admitted against a fresh pass, not the o
       providerId: "conductor",
       secret: SECRET,
       store,
-      readVaultKeys: async () => replaced,
+      readVaultKeys: () => Effect.succeed(replaced),
       seams: { httpClient: api.layer },
       now: NOW + 1,
     }),

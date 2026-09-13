@@ -138,7 +138,7 @@ function roster(
   seams: VoiceMintSeams,
   encryptionSecret: string | undefined,
   userId: string,
-): Effect.Effect<readonly ObservedSession[], never> {
+): Effect.Effect<readonly ObservedSession[], never, SqlClient.SqlClient> {
   return observeCloudSessions(userId, { ...seams, encryptionSecret }).pipe(
     Effect.timeout(OBSERVE_TIMEOUT_MS),
     Effect.orElseSucceed((): readonly ObservedSession[] => []),

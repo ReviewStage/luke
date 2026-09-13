@@ -45,7 +45,7 @@ export interface HostedVaultRoute {
     providerId: string,
   ) => VaultKeyEffect<{ ciphertext: string } | undefined>;
   /** Reads every vault key row the user has stored, for decryption in the handler. */
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
+  readVaultKeys: (userId: string) => VaultKeyEffect<VaultKeyRow[]>;
   /** Lists what is stored — provider ids and timestamps, never ciphertext. */
   listKeys: (userId: string) => VaultKeyEffect<{ providerId: string; updatedAt: Date }[]>;
   storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
@@ -121,7 +121,7 @@ export const hostedEncryptionSecretEffect: Effect.Effect<
 export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,
   readKey: readVaultKey,
-  readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
+  readVaultKeys: readStoredVaultKeys,
   listKeys: listVaultKeys,
   storeKey: storeVaultKey,
   deleteKey: deleteVaultKey,

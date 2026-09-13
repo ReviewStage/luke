@@ -43,7 +43,7 @@ export function mintAnswer(call: MintCall): Promise<Response> {
     resolveUserId: () => Effect.succeed(undefined),
     spend: () => Effect.succeed({ allowed: false, quota: { used: 0, limit: 0, resetsAt: 0 } }),
     spendIntroduction: () => Effect.succeed({ allowed: false }),
-    readVaultKeys: async () => [],
+    readVaultKeys: () => Effect.succeed([]),
     ...call,
   } satisfies VoiceMintSeams & IntroductionMintSeams;
   const app = new URL(call.request.url).pathname.endsWith(INTRODUCTION_MINT_SUFFIX)
