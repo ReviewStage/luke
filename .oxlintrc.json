@@ -43,7 +43,7 @@
       }
     },
     {
-      "files": ["packages/wire/src/effect/**"],
+      "files": ["packages/wire/src/effect/json-schema.ts"],
       "rules": {
         "anti-slop/no-unknown-parameters": "off"
       }

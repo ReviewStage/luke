@@ -1,13 +1,15 @@
 import { spawn } from "node:child_process";
 
-// The four checks are independent of one another and of the build, so they
+// The five checks are independent of one another and of the build, so they
 // run at once; the build follows because it is the one step that reads what
-// typecheck and the tests have vouched for. Each check's output is held and
+// typecheck and the tests have vouched for. `discarded-effect` builds a
+// program of its own rather than reading typecheck's, which is why it is a
+// check beside it rather than a step after it. Each check's output is held and
 // printed whole when it ends, so two failing checks never interleave.
 // CI runs the tests in its own sharded jobs beside this one, so it asks for
 // everything but them with `--without test`; the local check runs the same
 // shards in turn through `pnpm test`.
-const CONCURRENT_CHECKS = ["lint", "knip", "typecheck", "test"];
+const CONCURRENT_CHECKS = ["lint", "knip", "typecheck", "discarded-effect", "test"];
 const WITHOUT_FLAG = "--without";
 const withoutIndex = process.argv.indexOf(WITHOUT_FLAG);
 const without = withoutIndex === -1 ? [] : process.argv.slice(withoutIndex + 1);

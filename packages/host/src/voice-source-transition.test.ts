@@ -254,8 +254,9 @@ test("a newer transition begun between publication and the caller's continuation
   assert.equal(await newer, true);
   assertHostedSet(c);
   assert.deepEqual(c.builds, ["hosted"]);
-  assert.ok(c.host.current());
-  await c.host.current()?.stop();
+  const standing = c.host.current();
+  assert.ok(standing);
+  await onDefault(standing.stop());
 });
 
 test("a newer transition that removes every capability at that boundary leaves nothing standing", async () => {

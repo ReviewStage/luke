@@ -1,5 +1,4 @@
-import { Context, Effect, Exit, type Layer, Scope } from "effect";
-import type { TestContext } from "vitest";
+import { Context, Effect, type Layer } from "effect";
 
 /**
  * The `report: (message: string) => void` seam many packages inject, as an
@@ -44,19 +43,4 @@ export function runTest<A, E, R>(
     return Effect.runPromise(effect as Effect.Effect<A, E>);
   }
   return Effect.runPromise(Effect.provide(effect, layer));
-}
-
-/**
- * A `Scope` of this test's own, closed when the test ends. It is for a test
- * still written on promises rather than inside `it.effect` or `it.scoped`, and
- * which must build something scoped and then read it across several `await`s:
- * `Effect.scoped` would close the scope the moment the build answered, and
- * what the build put in it — an armed wait, a running fiber — would end with
- * it. The close is registered before the scope is handed back, so a test that
- * forgets its own teardown still lets go of what it opened.
- */
-export async function temporaryScope(t: TestContext): Promise<Scope.CloseableScope> {
-  const scope = await Effect.runPromise(Scope.make());
-  t.onTestFinished(() => Effect.runPromise(Scope.close(scope, Exit.void)));
-  return scope;
 }
