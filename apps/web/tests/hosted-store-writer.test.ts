@@ -52,6 +52,7 @@ import {
   type StoreWriteResult,
   storeWriter,
 } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -1324,4 +1325,159 @@ test("a queued turn the opener has handed to eve is removed; one eve has started
     effect: STORE_WRITE_EFFECT.IGNORED,
   });
   assert.equal((await storedTurn(named.turnId))?.status, TURN_STATUS.QUEUED);
+});
+
+test("a spoken reply is a finished assistant row under no turn, once per client id; the latest spoken line is found by its span and says whether a delegation owns it", async () => {
+  const target = await conversation();
+  const spokenLine = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
+    database.run(
+      writer.recordUserMessage(target, {
+        clientId,
+        text: `line ${fromMs}`,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_fixture_1",
+          ...(delegationId === undefined ? undefined : { delegation_id: delegationId }),
+          from_ms: fromMs,
+          to_ms: toMs,
+        },
+      }),
+    );
+  assert.ok((await spokenLine("line-1", 1000, 2000)).ok);
+  assert.ok((await spokenLine("dl_1", 3000, 4000, "dl_1")).ok);
+
+  const reply = await database.run(
+    writer.recordSpokenReply(target, {
+      clientId: "reply-1",
+      text: "Answered aloud.",
+      metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
+    }),
+  );
+  assert.ok(reply.ok);
+  assert.equal(reply.effect, STORE_WRITE_EFFECT.WRITTEN);
+  const again = await database.run(
+    writer.recordSpokenReply(target, {
+      clientId: "reply-1",
+      text: "Answered aloud.",
+      metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
+    }),
+  );
+  assert.ok(again.ok);
+  assert.deepEqual([again.id, again.effect], [reply.id, STORE_WRITE_EFFECT.REPEATED]);
+  const rows = await storedMessages(target);
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.role, row.turnId, row.finishedAt !== null]),
+    [
+      ["line-1", MESSAGE_ROLE.USER, null, true],
+      ["dl_1", MESSAGE_ROLE.USER, null, true],
+      ["reply-1", MESSAGE_ROLE.ASSISTANT, null, true],
+    ],
+  );
+
+  const ownLine = await database.run(
+    writer.latestSpokenLine(target, { voiceSessionId: "vs_fixture_1", endingAtOrBeforeMs: 2500 }),
+  );
+  assert.ok(ownLine.ok);
+  assert.deepEqual([ownLine.line?.clientId, ownLine.line?.delegated], ["line-1", false]);
+  const delegatedLine = await database.run(
+    writer.latestSpokenLine(target, { voiceSessionId: "vs_fixture_1", endingAtOrBeforeMs: 4000 }),
+  );
+  assert.ok(delegatedLine.ok);
+  assert.deepEqual([delegatedLine.line?.clientId, delegatedLine.line?.delegated], ["dl_1", true]);
+  const none = await database.run(
+    writer.latestSpokenLine(target, { voiceSessionId: "vs_fixture_1", endingAtOrBeforeMs: 500 }),
+  );
+  assert.ok(none.ok);
+  assert.equal(none.line, undefined);
+  const otherSession = await database.run(
+    writer.latestSpokenLine(target, { voiceSessionId: "vs_fixture_2", endingAtOrBeforeMs: 9000 }),
+  );
+  assert.ok(otherSession.ok);
+  assert.equal(otherSession.line, undefined);
+});
+
+test("adopting a spoken line re-keys it to the delegation, names the delegation in its metadata, takes it into the ask's turn ahead of the turn's work, and is one adoption however often it is asked", async () => {
+  const target = await conversation();
+  const line = await database.run(
+    writer.recordUserMessage(target, {
+      clientId: "settled-line",
+      text: "Open the failing one.",
+      metadata: {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_fixture_3",
+        from_ms: 1000,
+        to_ms: 2200,
+      },
+    }),
+  );
+  assert.ok(line.ok);
+  // The ask has learned its turn, and the turn's first step already opened its journal.
+  const asks = askRecord();
+  const ask = await database.run(
+    asks.record({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      clientId: "dl_late",
+      origin: "spoken",
+      question: "Open the failing one.",
+      createdAt: new Date(NOW),
+    }),
+  );
+  const stream = new Stream();
+  await feed(target, [stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK)]);
+  await database.run(
+    asks.dispatchOnce(target, ask.id, async () => ({
+      sessionId: "wrun_late",
+      turnId: stream.turnId,
+    })),
+  );
+  await feed(target, [stream.step(1)]);
+  const before = await storedMessages(target);
+  assert.deepEqual(
+    before.map((row) => [row.clientId, row.turnId]),
+    [
+      ["settled-line", null],
+      [stream.turnId, stream.turnId],
+    ],
+  );
+
+  const adopted = await database.run(
+    writer.adoptSpokenLine(target, { lineClientId: "settled-line", delegationId: "dl_late" }),
+  );
+  assert.ok(adopted.ok);
+  assert.deepEqual([adopted.id, adopted.effect], [line.id, STORE_WRITE_EFFECT.WRITTEN]);
+  const twice = await database.run(
+    writer.adoptSpokenLine(target, { lineClientId: "settled-line", delegationId: "dl_late" }),
+  );
+  assert.ok(twice.ok);
+  assert.deepEqual([twice.id, twice.effect], [line.id, STORE_WRITE_EFFECT.REPEATED]);
+
+  const after = await storedMessages(target);
+  // The same row (its id is what every device holds it by), now the delegation's, in the turn and ahead of the journal at fresh positions.
+  assert.deepEqual(
+    after.map((row) => [row.id, row.clientId, row.turnId, row.role]),
+    [
+      [line.id, "dl_late", stream.turnId, MESSAGE_ROLE.USER],
+      [before[1]?.id, stream.turnId, stream.turnId, MESSAGE_ROLE.ASSISTANT],
+    ],
+  );
+  assert.ok((after[0]?.seq ?? 0) > (before[1]?.seq ?? 0));
+  assert.ok((after[1]?.seq ?? 0) > (after[0]?.seq ?? 0));
+  assert.deepEqual(after[0]?.metadata, {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_3",
+    delegation_id: "dl_late",
+    from_ms: 1000,
+    to_ms: 2200,
+  });
+  // A line no row stands for is a refusal by name.
+  assert.deepEqual(
+    await database.run(
+      writer.adoptSpokenLine(target, { lineClientId: "nowhere", delegationId: "dl_other" }),
+    ),
+    { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE },
+  );
 });
