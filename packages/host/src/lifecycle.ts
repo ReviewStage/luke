@@ -9,7 +9,7 @@ import { Cause, Effect, type Fiber, Ref, type Scope } from "effect";
 
 export interface StartupStoreOptions {
   /** Seeds the workspace's missing files; a failure is reported and stops nothing else. */
-  readonly seedWorkspace: Effect.Effect<void>;
+  readonly seedWorkspace: Effect.Effect<void, unknown>;
   /** Starts the notebook index; its own settling is nobody's to wait on. */
   readonly startMemory: Effect.Effect<void>;
   readonly report: (message: string) => void;
