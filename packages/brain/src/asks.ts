@@ -1,8 +1,10 @@
 import {
   PendingInputQueue,
+  type PendingInputQueueOptions,
   type QueueBatch,
   type QueuedInput,
   queueSummaryLine,
+  type ScheduledTimer,
 } from "@sidecar/runtime";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
 import { Effect, MutableRef } from "effect";
@@ -17,7 +19,7 @@ import {
   type BrainSubmissionResult,
   isTerminalBrainRequestStatus,
 } from "./requests.js";
-import type { AgentSeam, ScheduledTimer } from "./seam.js";
+import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { type AskInput, BRAIN_TURN_TRIGGER, newRunControl, type RunControl } from "./turn.js";
 import type { ActiveExecution } from "./turn-runner.js";
@@ -57,6 +59,41 @@ export interface AskLedgerOptions {
   disarmWakes: () => void;
   /** A developer's ask outranks housekeeping still waiting its turn. */
   cancelMaintenance: () => void;
+}
+
+/**
+ * The `schedule`/`cancel` pair `PendingInputQueue` still takes. The queue is a
+ * port of OpenClaw `b7528507` and imports nothing from `effect`, so the
+ * debounce it arms is one of the conversation's own waits — `Effect.sleep` on
+ * the agent's `Clock`, forked into the agent's scope — behind two closures,
+ * with the opaque handle the port traffics in standing for the disarm that
+ * wait answered. Disarming is not awaited: what it guarantees is that the
+ * callback does not run afterwards, never that the fiber has already ended.
+ */
+function queueTimersOn(seam: AgentSeam): Pick<PendingInputQueueOptions, "schedule" | "cancel"> {
+  const armed = new Map<ScheduledTimer, () => void>();
+  return {
+    schedule: (callback, delayMs) => {
+      const handle: ScheduledTimer = {};
+      armed.set(
+        handle,
+        seam.arm(
+          delayMs,
+          Effect.sync(() => {
+            armed.delete(handle);
+            callback();
+          }),
+        ),
+      );
+      return handle;
+    },
+    cancel: (handle) => {
+      const disarm = armed.get(handle);
+      if (disarm === undefined) return;
+      armed.delete(handle);
+      disarm();
+    },
+  };
 }
 
 /**
@@ -104,8 +141,7 @@ export class AskLedger {
       steer: (input) => this.#steer(input),
       interrupt: () => this.#interrupt(),
       flush: (batches) => this.#openBatches(batches),
-      schedule: this.#seam.schedule,
-      cancel: this.#seam.cancel,
+      ...queueTimersOn(this.#seam),
     });
   }
 
@@ -502,23 +538,31 @@ export class AskLedger {
    * Answers the record once the run ends, or as it stands when the wait runs
    * out first. A wait that runs out changes nothing about the run, and a run
    * this generation does not know answers nothing.
+   *
+   * A stopped conversation answers as it stands too, and at once rather than
+   * on the wait: the wait is armed on the agent's own scope, which the stop
+   * closes, so a caller left on that fiber would be left there for good. The
+   * stop settles what it can and then notifies, which ends every wait
+   * outstanding under it by this same reading.
    */
   async wait(runId: string, timeoutMs: number): Promise<BrainRequestRecord | undefined> {
     const record = this.record(runId);
     if (!record) return undefined;
-    if (isTerminalBrainRequestStatus(record.status)) return record;
+    if (isTerminalBrainRequestStatus(record.status) || this.#seam.stopped()) return record;
     return new Promise((resolve) => {
-      let timer: ScheduledTimer | undefined;
+      let disarm: (() => void) | undefined;
       const finish = () => {
         unsubscribe();
-        if (timer !== undefined) this.#seam.cancel(timer);
+        disarm?.();
         resolve(this.record(runId));
       };
       const unsubscribe = this.subscribe(() => {
         const current = this.record(runId);
-        if (!current || isTerminalBrainRequestStatus(current.status)) finish();
+        if (!current || isTerminalBrainRequestStatus(current.status) || this.#seam.stopped()) {
+          finish();
+        }
       });
-      timer = this.#seam.schedule(finish, timeoutMs);
+      disarm = this.#seam.arm(timeoutMs, Effect.sync(finish));
     });
   }
 

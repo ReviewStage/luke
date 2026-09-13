@@ -17,7 +17,12 @@
  *   to its first suspension, so `BrainAgent#enqueue`'s own acquisition — the
  *   step that puts the turn in the conversation's queue and counts it busy —
  *   and a retirement's revocation of every standing run each stand in the
- *   step that asked for them. `Effect.fork`, `Effect.forkIn`, and
+ *   step that asked for them. P12-20f put the conversation's own armed waits
+ *   — the wake window and the ask ledger's wait — through the same door, for
+ *   the opposite half of the same reason: a wait's first step is a sleep on
+ *   the agent's `Clock`, so nothing of it has to stand in the step that armed
+ *   it, and what a run gives there is a fiber a synchronous collaborator can
+ *   arm and disarm at all. `Effect.fork`, `Effect.forkIn`, and
  *   `Effect.forkDaemon` all only tell the child fiber to resume, which the
  *   scheduler runs as a task later, so a stop arriving between the fork and
  *   that task would drain a queue the turn had not yet joined. P12-16m
@@ -67,9 +72,15 @@ import { type Effect, type Exit, type Fiber, ManagedRuntime, Runtime } from "eff
  * that asked for it rather than in a scheduler task later, which is all
  * `Effect.forkDaemon` would give. What it answers is the fiber, so a caller
  * that must know how the work ended awaits it as one.
+ *
+ * The one option a caller passes is the scope the fiber belongs to, which is
+ * what `BrainAgent#arm` hands its armed waits: a wait sleeping on the
+ * conversation's clock is ended by the stop that closes the agent's scope,
+ * whether or not the collaborator that armed it disarmed it first.
  */
 export type Detach = <Value, Failure>(
   effect: Effect.Effect<Value, Failure>,
+  options?: Runtime.RunForkOptions,
 ) => Fiber.RuntimeFiber<Value, Failure>;
 
 /**
@@ -91,7 +102,10 @@ export const runtimeExit =
       ? execution.runPromiseExit(effect, options)
       : Runtime.runPromiseExit(execution)(effect, options);
 
-export const detachOn = (execution: ExecutionRuntime): Detach =>
-  ManagedRuntime.TypeId in execution
-    ? (effect) => execution.runFork(effect)
-    : Runtime.runFork(execution);
+export const detachOn = (execution: ExecutionRuntime): Detach => {
+  if (ManagedRuntime.TypeId in execution) {
+    return (effect, options) => execution.runFork(effect, options);
+  }
+  const fork = Runtime.runFork(execution);
+  return (effect, options) => fork(effect, options);
+};

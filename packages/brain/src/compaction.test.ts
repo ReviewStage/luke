@@ -351,13 +351,6 @@ function agentOver(model: ModelAdapter, repository: FakeBrainStateRepository) {
       report: (message) => {
         reports.push(message);
       },
-      now: () => NOW,
-      schedule: (callback) => {
-        const handle = {};
-        setImmediate(callback);
-        return handle;
-      },
-      cancel: () => undefined,
     }),
   );
   return { agent, store, reports };

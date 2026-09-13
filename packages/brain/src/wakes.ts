@@ -89,8 +89,7 @@ export class WakeCapture {
       coalesceMs: BRAIN_DEFAULTS.WAKE_COALESCE_MS,
       capacity: BRAIN_DEFAULTS.PENDING_WAKE_CAPACITY,
       now: this.#seam.now,
-      schedule: this.#seam.schedule,
-      cancel: this.#seam.cancel,
+      arm: this.#seam.arm,
       quietUntil: options.quietUntil,
       flush: (events) => this.#flush(events),
     });

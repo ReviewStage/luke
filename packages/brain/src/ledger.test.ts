@@ -11,7 +11,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect, Fiber } from "effect";
 import { BrainAgent, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
-import { advanceHarness, effectHarness, timerSeamFromRuntime } from "./effect/harness.js";
+import { advanceHarness, effectHarness } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
 import {
   ABC,
@@ -327,7 +327,6 @@ it.effect(
       // — here, a mark — lands nowhere, while the successor's own writes do.
       const successorModel = adapterOf(new FakeClient());
       const successorRuntime = yield* Effect.runtime<never>();
-      const successorTimers = timerSeamFromRuntime(successorRuntime);
       const successor = yield* BrainAgent.make({
         conversationId: MAIN_SESSION_KEY,
         runtime: toolLoopRuntimeOver(successorModel),
@@ -343,9 +342,6 @@ it.effect(
         createRunId: () => `successor-${nextRunId()}`,
         report: () => {},
         execution: successorRuntime,
-        now: successorTimers.now,
-        schedule: successorTimers.schedule,
-        cancel: successorTimers.cancel,
       });
       yield* successor.ready();
       const runId = h.agent.requests()[0]?.runId ?? "";

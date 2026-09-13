@@ -1,23 +1,22 @@
-import { MutableRef } from "effect";
+import { Effect, MutableRef } from "effect";
 import { sameObservation } from "./observation-inbox.js";
-import type { ScheduledTimer } from "./seam.js";
 import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The wakes waiting for a turn. Nothing opens at once: wakes inside the
  * coalescing window open one turn together — two edges landing for the same
  * change — and wakes during a model's quiet wait for it to end rather than
- * being dropped. The queue owns the events and the timer; the host owns
- * what a flush does with them, and hands events back when the turn they
- * opened sent nothing, so they open again once the quiet ends.
+ * being dropped. The queue owns the events and the wait its window stands on;
+ * the host owns what a flush does with them, and hands events back when the
+ * turn they opened sent nothing, so they open again once the quiet ends.
  */
 export interface WakeQueueOptions {
   coalesceMs: number;
   /** The most wakes held for one turn. */
   capacity: number;
   now: () => number;
-  schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel: (timer: ScheduledTimer) => void;
+  /** Arms a wait of `delayMs` on the conversation's own clock; answers the disarm. */
+  arm: (delayMs: number, work: Effect.Effect<void>) => () => void;
   /** The moment the model may be asked again, or nothing when it may be asked now. */
   quietUntil: () => number | undefined;
   /** Opens a turn over the events taken; the host decides in what and how. */
@@ -39,7 +38,8 @@ export class WakeQueue {
   readonly #events: MutableRef.MutableRef<readonly BrainWakeEvent[]> = MutableRef.make<
     readonly BrainWakeEvent[]
   >([]);
-  #timer: ScheduledTimer | undefined;
+  /** The disarm of the coalescing window's own wait, while one is armed. */
+  #disarmWindow: (() => void) | undefined;
 
   constructor(options: WakeQueueOptions) {
     this.#options = options;
@@ -103,17 +103,20 @@ export class WakeQueue {
   }
 
   #arm(delayMs: number): void {
-    if (this.#timer !== undefined) return;
-    this.#timer = this.#options.schedule(() => {
-      this.#timer = undefined;
-      this.#flush();
-    }, delayMs);
+    if (this.#disarmWindow !== undefined) return;
+    this.#disarmWindow = this.#options.arm(
+      delayMs,
+      Effect.sync(() => {
+        this.#disarmWindow = undefined;
+        this.#flush();
+      }),
+    );
   }
 
   #disarm(): void {
-    if (this.#timer === undefined) return;
-    this.#options.cancel(this.#timer);
-    this.#timer = undefined;
+    if (this.#disarmWindow === undefined) return;
+    this.#disarmWindow();
+    this.#disarmWindow = undefined;
   }
 
   #flush(): void {

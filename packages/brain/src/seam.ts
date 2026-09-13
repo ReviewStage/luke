@@ -1,10 +1,7 @@
 import type { Effect } from "effect";
 import type { Generation } from "./generation.js";
 import type { BrainRequestLedger } from "./ledger.js";
-import type { ScheduledTimer } from "./scheduled-timer.js";
 import type { BrainTurnTrigger, RunControl } from "./turn.js";
-
-export type { ScheduledTimer } from "./scheduled-timer.js";
 
 /**
  * What every collaborator of {@link BrainAgent} reads of the conversation's
@@ -13,6 +10,7 @@ export type { ScheduledTimer } from "./scheduled-timer.js";
  * collaborator holds the agent and none of them can own the standing twice.
  */
 export interface AgentSeam {
+  /** This conversation's own instant, read off the `Clock` the agent was built on. */
   readonly now: () => number;
   /**
    * Runs one of this conversation's effects on a fiber of its own, for an
@@ -24,8 +22,15 @@ export interface AgentSeam {
    * counted busy, by the time this returns.
    */
   readonly detach: (work: Effect.Effect<unknown>) => void;
-  readonly schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly cancel: (timer: ScheduledTimer) => void;
+  /**
+   * Waits `delayMs` on this conversation's own `Clock` and then runs `work`,
+   * on a fiber forked into the agent's own scope. The stop that closes that
+   * scope ends every wait standing on it, so nothing fires into a
+   * conversation that is gone, and what this answers is the disarm, which
+   * interrupts the fiber before its wait is out. Disarming a wait already
+   * run changes nothing.
+   */
+  readonly arm: (delayMs: number, work: Effect.Effect<void>) => () => void;
   readonly report: (message: string) => void;
   readonly ledger: BrainRequestLedger;
   /** The generation that stands, or nothing before the first load. */

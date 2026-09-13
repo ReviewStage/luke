@@ -18,7 +18,6 @@ import {
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Effect, Schema as EffectSchema, Fiber, TestClock } from "effect";
-import { ambientTimers } from "./effect/harness.js";
 import {
   ABC,
   answered,
@@ -175,7 +174,7 @@ const rig = (
 ): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const timers = yield* ambientTimers;
+    const clock = yield* Effect.clock;
     const model = new DeferredModel();
     const transcriptReads: SessionIdentity[] = [];
     const searches: WireRecord[] = [];
@@ -201,7 +200,7 @@ const rig = (
           }),
         memory: options.memory ?? answeringMemory(searches),
         policy: async () => options.policy ?? ASK_POLICY,
-        now: timers.now,
+        now: () => clock.unsafeCurrentTimeMillis(),
         createId: () => `id-${++ids}`,
         report: () => undefined,
         trace: (record) => traces.push(record),

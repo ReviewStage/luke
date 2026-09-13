@@ -155,7 +155,6 @@ function composed(t: TestContext) {
           store,
           createRunId: () => `run-${++ids}`,
           report: () => undefined,
-          now: () => clock,
         }),
       );
       followers.set(

@@ -15,7 +15,18 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Either, Exit, PubSub, Runtime, Scope, Stream } from "effect";
+import {
+  type Clock,
+  Duration,
+  Effect,
+  Either,
+  Exit,
+  FiberId,
+  PubSub,
+  Runtime,
+  Scope,
+  Stream,
+} from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -55,7 +66,7 @@ import {
   isTerminalBrainRequestStatus,
 } from "./requests.js";
 import type { BrainRunEvent } from "./run-events.js";
-import type { AgentSeam, ScheduledTimer } from "./seam.js";
+import type { AgentSeam } from "./seam.js";
 import type { BrainStateStore } from "./state-store.js";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 import type { BrainChildAccess, BrainWorkspaceAccess } from "./tool-executor.js";
@@ -183,9 +194,6 @@ export interface BrainAgentOptions {
   createRunId: () => string;
   trace?: (record: BrainTurnTraceRecord) => void;
   report?: (message: string) => void;
-  now?: () => number;
-  schedule?: (callback: () => void, delayMs: number) => ScheduledTimer;
-  cancel?: (timer: ScheduledTimer) => void;
   maximumOutputTokens?: number;
   reasoningEffort?: ReasoningEffort;
   /**
@@ -240,9 +248,15 @@ export interface BrainAgentOptions {
  */
 export class BrainAgent {
   readonly #options: BrainAgentOptions;
+  /**
+   * The `Clock` this conversation keeps its own time on: every instant it
+   * stamps and every wait it arms is read from this one, so an agent built
+   * under a `TestClock` never stamps one clock and sleeps on another.
+   */
+  readonly #clock: Clock.Clock;
+  /** The scope every wait this conversation arms is forked into, closed by `stop()`. */
+  readonly #scope: Scope.CloseableScope;
   readonly #now: () => number;
-  readonly #schedule: (callback: () => void, delayMs: number) => ScheduledTimer;
-  readonly #cancel: (timer: ScheduledTimer) => void;
   readonly #report: (message: string) => void;
   readonly #detached: Detach;
   readonly #execution: ExecutionRuntime;
@@ -319,29 +333,32 @@ export class BrainAgent {
 
   /**
    * The agent as an effect: everything of it is built synchronously except
-   * the pubsub its run events are published into, which Effect gives no
-   * constructor for that is not itself an effect. A host yields one where it
-   * built one before, and nothing in the class runs an effect of its own.
+   * the three things only a fiber can hand it — the pubsub its run events are
+   * published into, the `Clock` this conversation reads every instant and
+   * arms every wait on, and the scope those waits are forked into. A host
+   * yields one where it built one before, and nothing in the class runs an
+   * effect of its own.
    */
   static make(options: BrainAgentOptions): Effect.Effect<BrainAgent> {
-    return Effect.map(
-      PubSub.unbounded<BrainRunEvent>(),
-      (runEvents) => new BrainAgent(options, runEvents),
-    );
+    return Effect.gen(function* () {
+      const runEvents = yield* PubSub.unbounded<BrainRunEvent>();
+      const clock = yield* Effect.clock;
+      const scope = yield* Scope.make();
+      return new BrainAgent(options, runEvents, clock, scope);
+    });
   }
 
-  private constructor(options: BrainAgentOptions, runEvents: PubSub.PubSub<BrainRunEvent>) {
+  private constructor(
+    options: BrainAgentOptions,
+    runEvents: PubSub.PubSub<BrainRunEvent>,
+    clock: Clock.Clock,
+    scope: Scope.CloseableScope,
+  ) {
     this.#options = options;
     this.#runEvents = runEvents;
-    this.#now = options.now ?? Date.now;
-    this.#schedule =
-      options.schedule ?? ((callback, delayMs) => globalThis.setTimeout(callback, delayMs));
-    this.#cancel =
-      options.cancel ??
-      ((timer) => {
-        // SAFETY: a timer this agent scheduled itself came from setTimeout above.
-        globalThis.clearTimeout(timer as ReturnType<typeof setTimeout>);
-      });
+    this.#clock = clock;
+    this.#scope = scope;
+    this.#now = () => clock.unsafeCurrentTimeMillis();
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
     this.#execution = options.execution ?? Runtime.defaultRuntime;
     this.#detached = detachOn(this.#execution);
@@ -371,8 +388,7 @@ export class BrainAgent {
     const seam: AgentSeam = {
       now: this.#now,
       detach: (work) => this.#detach(work),
-      schedule: this.#schedule,
-      cancel: this.#cancel,
+      arm: (delayMs, work) => this.#arm(delayMs, work),
       report: this.#report,
       ledger: this.#ledger,
       generation: () => this.#generations.standing(),
@@ -798,6 +814,16 @@ export class BrainAgent {
       // it was handed back: a retired agent's followers stop hearing rather
       // than parking a fiber for the rest of the process.
       yield* PubSub.shutdown(this.#runEvents);
+      // Every wait still outstanding is answered the record as it stands
+      // before the scope that carries its timer closes under it: the wake
+      // window and the ask queue's debounce were disarmed above, and a wait
+      // whose fiber is interrupted with nothing to answer would leave its
+      // caller holding a promise nothing resolves.
+      this.#asks.notify();
+      // Closing the scope interrupts every wait still armed on this
+      // conversation's clock, so nothing left over fires into a conversation
+      // that is gone.
+      yield* Scope.close(this.#scope, Exit.void);
     });
   }
 
@@ -863,6 +889,28 @@ export class BrainAgent {
    */
   #detach(work: Effect.Effect<unknown>): void {
     this.#detached(work);
+  }
+
+  /**
+   * Arms a wait of `delayMs` on this conversation's own clock — the wake
+   * window and the ask ledger's wait are the two that take one — and answers
+   * the disarm. It goes through the same detach door every turn nobody waits
+   * for does, because only a run gives a synchronous collaborator a fiber at
+   * all; unlike a turn, nothing of a wait has to stand in the step that armed
+   * it, since its first step is the sleep. The fiber is forked into the
+   * agent's own scope, so a wait nobody disarmed ends when `stop()` closes
+   * that scope rather than firing into a conversation that is gone, and the
+   * sleep is the agent's `Clock`'s own rather than the calling fiber's, so a
+   * wait is out exactly when the instants this conversation stamps say it is.
+   */
+  #arm(delayMs: number, work: Effect.Effect<void>): () => void {
+    const fiber = this.#detached(
+      Effect.andThen(this.#clock.sleep(Duration.millis(delayMs)), work),
+      { scope: this.#scope },
+    );
+    return () => {
+      fiber.unsafeInterruptAsFork(FiberId.none);
+    };
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
