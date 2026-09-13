@@ -47,7 +47,7 @@ export const withLane = <A, E, R>(
   scheduler: LaneScheduler,
   lane: Lane,
   effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> => Effect.scoped(Effect.zipRight(acquireLane(scheduler, lane), effect));
+): Effect.Effect<A, E, R> => Effect.scoped(Effect.andThen(acquireLane(scheduler, lane), effect));
 
 /** The lane's current width, active count, and queue depth. */
 export const laneSnapshot = (scheduler: LaneScheduler, lane: Lane): Effect.Effect<LaneSnapshot> =>

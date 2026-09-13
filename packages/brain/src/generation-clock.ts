@@ -1,4 +1,4 @@
-import { type Clock, Duration, Effect, FiberId, type Scope } from "effect";
+import { type Clock, Duration, Effect, type Scope } from "effect";
 import type { Detach } from "./effect/carry.js";
 import { type BrainPersistedState, brainGenerationExpired } from "./envelope.js";
 import type { BrainStateStore } from "./state-store.js";
@@ -58,7 +58,7 @@ export class BrainGenerationClock {
 
   /** Loads the store, arms the wait for the generation that stands, and follows every replacement. */
   start(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#unsubscribe ??= this.#store.onReplaced((state) => this.#arm(state));
       const state = yield* Effect.promise(() => this.#store.load());
       if (!this.#stopped) this.#arm(this.#store.current() ?? state);
@@ -94,7 +94,7 @@ export class BrainGenerationClock {
       { scope: this.#scope },
     );
     this.#disarm = () => {
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     };
   }
 

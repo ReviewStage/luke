@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { type Clock, Duration, Effect, Runtime } from "effect";
+import { type Clock, Duration, Effect } from "effect";
 import { advanceHarness } from "./harness.js";
 
 /**
- * `BrainAgent#arm`'s own shape, built here from the test's runtime and clock:
+ * `BrainAgent#arm`'s own shape, built here from the test's services and clock:
  * a wait begun on the calling stack, so its sleep stands registered on the
  * `TestClock` by the time the call returns, running a synchronous callback
  * when it is out. That is the caller `advanceHarness` exists for, and running
  * the fiber here is the test's own edge rather than the harness's.
  */
 const arming = Effect.gen(function* () {
-  const runtime = yield* Effect.runtime<never>();
+  const context = yield* Effect.context<never>();
   const clock: Clock.Clock = yield* Effect.clock;
-  const fork = Runtime.runFork(runtime);
+  const fork = Effect.runForkWith(context);
   return {
     now: () => clock.unsafeCurrentTimeMillis(),
     arm: (delayMs: number, callback: () => void): void => {

@@ -171,7 +171,7 @@ function accountWithin(
   deadlineMs: number,
 ): Effect.Effect<AccountOutcome, never, SqlClient.SqlClient> {
   return Effect.gen(function* () {
-    const fiber = yield* Effect.forkDaemon(account);
+    const fiber = yield* Effect.forkDetach(account);
     return yield* Effect.race(
       Fiber.join(fiber),
       Effect.as(Effect.sleep(Duration.millis(deadlineMs)), TIMED_OUT_ACCOUNT),

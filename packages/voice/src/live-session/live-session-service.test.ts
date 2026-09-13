@@ -1082,7 +1082,7 @@ it.scoped(
         event_id: "u1",
         usage: { seconds: 40 },
       });
-      const ending = yield* Effect.fork(f.service.endSession());
+      const ending = yield* Effect.forkChild(f.service.endSession());
       yield* settle();
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
       // The close waits exactly the timeout out: a tick short of it, nothing has given up yet.
@@ -1261,7 +1261,7 @@ it.scoped(
       assert.ok(instruction && "delegation_id" in instruction && "content" in instruction);
       assert.equal(instruction.delegation_id, null);
       assert.equal(instruction.content, STOP_SPEAKING_INSTRUCTION);
-      const ending = yield* Effect.fork(f.service.endSession());
+      const ending = yield* Effect.forkChild(f.service.endSession());
       yield* settle();
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 9);
       yield* Fiber.join(ending);
@@ -1381,7 +1381,7 @@ it.scoped("creating a session while one stands closes the standing one first", (
     const f = yield* fixture();
     const first = yield* f.open();
     yield* settle();
-    const creating = yield* Effect.fork(f.service.createSession("offer-2"));
+    const creating = yield* Effect.forkChild(f.service.createSession("offer-2"));
     yield* settle();
     assert.equal(appends(first, LIVE_CLIENT_EVENT.CLOSE).length, 1);
     first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 9);
@@ -1396,7 +1396,7 @@ it.scoped("stop closes the session gracefully and takes nothing else with it", (
     const f = yield* fixture();
     const sideband = yield* f.open();
     yield* settle();
-    const stopping = yield* Effect.fork(f.service.stop());
+    const stopping = yield* Effect.forkChild(f.service.stop());
     yield* settle();
     assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
     sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 2);
@@ -1449,7 +1449,7 @@ it.scoped(
       yield* settle();
       assert.equal(f.service.sessionStands(), false);
       assert.equal(sideband.closed, true);
-      const stopping = yield* Effect.fork(f.service.stop());
+      const stopping = yield* Effect.forkChild(f.service.stop());
       yield* settle();
       assert.equal(Option.isNone(yield* Fiber.poll(stopping)), true);
       f.record.release(true);
@@ -1474,7 +1474,7 @@ it.scoped(
       f.record.hold();
       sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 3);
       yield* settle();
-      const ending = yield* Effect.fork(f.service.endSession());
+      const ending = yield* Effect.forkChild(f.service.endSession());
       yield* settle();
       assert.equal(Option.isNone(yield* Fiber.poll(ending)), true);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);

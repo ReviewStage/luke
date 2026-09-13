@@ -16,8 +16,8 @@ it.effect(
         }),
       );
 
-      const first = yield* Effect.fork(refresh());
-      const second = yield* Effect.fork(refresh());
+      const first = yield* Effect.forkChild(refresh());
+      const second = yield* Effect.forkChild(refresh());
       assert.equal(runs, 1);
 
       yield* Deferred.succeed(release, undefined);
@@ -25,7 +25,7 @@ it.effect(
 
       // A finished flight is over: the next ask holds the newly rotated token
       // and may start a refresh of its own.
-      const third = yield* Effect.fork(refresh());
+      const third = yield* Effect.forkChild(refresh());
       assert.equal(runs, 2);
       yield* third.await;
     }),
@@ -45,8 +45,8 @@ it.effect("a failed flight fails every waiter and still ends, so the next ask ca
       }),
     );
 
-    const first = yield* Effect.fork(refresh());
-    const second = yield* Effect.fork(refresh());
+    const first = yield* Effect.forkChild(refresh());
+    const second = yield* Effect.forkChild(refresh());
     for (const fiber of [first, second]) {
       assert.equal(Exit.isFailure(yield* fiber.await), true);
     }

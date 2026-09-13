@@ -37,9 +37,9 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../test
  * sleeps on whichever `Clock` that fiber carries — the `TestClock` an
  * `it.effect` test already stands on — set to the same `NOW` every fixture in
  * this package's tests is written against, so a repository seeded with
- * timestamps relative to it needs no conversion. The runtime is handed over
- * beside it, so every turn of the harness's conversation is a fiber of the
- * test's own.
+ * timestamps relative to it needs no conversion. The test's own services are
+ * handed over beside it, so every turn of the harness's conversation is a
+ * fiber of the test's own.
  */
 export const effectHarness = (
   overrides: HarnessOverrides = {},
@@ -48,9 +48,9 @@ export const effectHarness = (
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
     const clock = yield* Effect.clock;
-    const runtime = yield* Effect.runtime<never>();
+    const context = yield* Effect.context<never>();
     return yield* plainHarness(
-      { execution: runtime, now: () => clock.unsafeCurrentTimeMillis(), ...overrides },
+      { execution: context, now: () => clock.unsafeCurrentTimeMillis(), ...overrides },
       repository,
     );
   });

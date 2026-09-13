@@ -88,7 +88,7 @@ export const claimedUnlessAborted = <A, E, R>(
       // race or a scope of its own — a context open does — and under an
       // uninterruptible region it could interrupt neither, so what is meant to
       // be a daemon nothing cuts would be a daemon nothing can finish either.
-      yield* Effect.forkDaemon(
+      yield* Effect.forkDetach(
         Effect.interruptible(
           Effect.matchCauseEffect(work, {
             onFailure: (cause) => Deferred.failCause(decision, cause),
@@ -108,7 +108,7 @@ export const claimedUnlessAborted = <A, E, R>(
       // would wait on it forever for a signal that never fires.
       yield* Effect.forkScoped(
         Effect.interruptible(
-          Effect.zipRight(whenAborted(signal), Deferred.succeed(decision, Option.none())),
+          Effect.andThen(whenAborted(signal), Deferred.succeed(decision, Option.none())),
         ),
       );
       // The waiting fiber can be interrupted by something other than this

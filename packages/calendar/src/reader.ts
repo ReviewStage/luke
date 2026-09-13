@@ -206,7 +206,7 @@ export class GoogleCalendarReader {
   }
 
   observe(): Effect.Effect<readonly CalendarAccountObservation[] | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const accounts = yield* this.#readAccounts();
       // No accounts, no request: the calendar is not connected, which is a
       // different answer from a connected calendar with no meetings.
@@ -297,7 +297,7 @@ export class GoogleCalendarReader {
   #observeAccount(
     account: CalendarAccountCredential,
   ): Effect.Effect<CalendarAccountObservation, GoogleCalendarRequestError, HttpClient.HttpClient> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const now = this.#now();
       const accessToken = yield* this.#accessTokenFor(account, now);
       const calendars = yield* this.#listCalendars(accessToken);
@@ -384,7 +384,7 @@ export class GoogleCalendarReader {
     account: CalendarAccountCredential,
     now: number,
   ): Effect.Effect<string, GoogleCalendarRequestError, HttpClient.HttpClient> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const cached = this.#accessTokens.get(account.id);
       if (
         cached &&

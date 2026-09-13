@@ -49,7 +49,7 @@ describe("whenAborted", () => {
   it.effect("completes when the signal fires and leaves nothing attached", () =>
     Effect.gen(function* () {
       const counted = countedSignal();
-      const fiber = yield* Effect.fork(whenAborted(counted.signal));
+      const fiber = yield* Effect.forkChild(whenAborted(counted.signal));
       yield* Effect.yieldNow();
       assert.equal(counted.listening(), 1);
 
@@ -63,7 +63,7 @@ describe("whenAborted", () => {
   it.effect("leaves nothing attached when it is interrupted instead", () =>
     Effect.gen(function* () {
       const counted = countedSignal();
-      const fiber = yield* Effect.fork(whenAborted(counted.signal));
+      const fiber = yield* Effect.forkChild(whenAborted(counted.signal));
       yield* Effect.yieldNow();
       assert.equal(counted.listening(), 1);
 
@@ -89,7 +89,7 @@ describe("settledUnlessAborted", () => {
   it.effect("refuses the work when the signal fires before it completes", () =>
     Effect.gen(function* () {
       const counted = countedSignal();
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         settledUnlessAborted(answeredAfter(Duration.minutes(1), "answer"), counted.signal),
       );
       yield* Effect.yieldNow();
@@ -105,7 +105,7 @@ describe("settledUnlessAborted", () => {
   it.effect("answers the work's value when it completes while the signal stands", () =>
     Effect.gen(function* () {
       const counted = countedSignal();
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         settledUnlessAborted(answeredAfter(Duration.minutes(1), "answer"), counted.signal),
       );
 
@@ -146,7 +146,7 @@ describe("claimedUnlessAborted", () => {
     Effect.gen(function* () {
       const counted = countedSignal();
       const discarded: string[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         claimedUnlessAborted(answeredAfter(Duration.minutes(1), "held"), counted.signal, (value) =>
           discarded.push(value),
         ),
@@ -168,7 +168,7 @@ describe("claimedUnlessAborted", () => {
     Effect.gen(function* () {
       const counted = countedSignal();
       const discarded: string[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         claimedUnlessAborted(answeredAfter(Duration.minutes(1), "held"), counted.signal, (value) =>
           discarded.push(value),
         ),
@@ -247,7 +247,7 @@ describe("claimedUnlessAborted", () => {
         const counted = countedSignal();
         const discarded: string[] = [];
         const gate = yield* Deferred.make<string>();
-        const fiber = yield* Effect.fork(
+        const fiber = yield* Effect.forkChild(
           claimedUnlessAborted(Deferred.await(gate), counted.signal, (value) =>
             discarded.push(value),
           ),
@@ -270,7 +270,7 @@ describe("claimedUnlessAborted", () => {
     Effect.gen(function* () {
       const counted = countedSignal();
       const discarded: string[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         Effect.uninterruptible(
           claimedUnlessAborted(
             answeredAfter(Duration.minutes(1), "held"),
@@ -293,7 +293,7 @@ describe("claimedUnlessAborted", () => {
     Effect.gen(function* () {
       const counted = countedSignal();
       const discarded: string[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         claimedUnlessAborted(answeredAfter(Duration.minutes(1), "held"), counted.signal, (value) =>
           discarded.push(value),
         ),

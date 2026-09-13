@@ -54,7 +54,7 @@ export function closeGracefully(
   options: GracefulCloseOptions,
 ): Effect.Effect<SidebandCloseResult> {
   return Effect.ensuring(
-    Effect.zipRight(
+    Effect.andThen(
       sideband.send(closeEvent(options.eventId)),
       Effect.timeoutTo(options.settled, {
         duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),

@@ -48,7 +48,7 @@ const launch = (
     const generationClock = new BrainGenerationClock({
       store,
       clock,
-      detach: detachOn(yield* Effect.runtime<never>()),
+      detach: detachOn(yield* Effect.context<never>()),
       scope: yield* Effect.scope,
     });
     return { store, generationClock, reports };

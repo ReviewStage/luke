@@ -89,8 +89,8 @@ import {
 function reading(agent: BrainAgent, body: (event: BrainRunEvent) => void): Effect.Effect<void> {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
-    const stream = yield* Scope.extend(agent.runEvents, scope);
-    yield* Effect.forkDaemon(
+    const stream = yield* Scope.provide(agent.runEvents, scope);
+    yield* Effect.forkDetach(
       Stream.runForEach(stream, (event) =>
         Effect.catchAllDefect(
           Effect.sync(() => body(event)),

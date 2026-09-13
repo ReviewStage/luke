@@ -145,7 +145,7 @@ export const composeObservation = (
      * there rather than a run: the write's answer goes back the moment the
      * pass is started, exactly as the detached run it replaces did.
      */
-    const pokeRefresh = Effect.asVoid(Effect.forkDaemon(Effect.suspend(() => loop.refresh)));
+    const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
 
     const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
     let unsubscribeSessions: (() => void) | undefined;

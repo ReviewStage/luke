@@ -23,18 +23,18 @@
  * runtime interrupted on its way down ends every wait of it rather than
  * leaving one standing on a fiber that will never finish.
  */
-import { Deferred, Effect, FiberId, MutableRef } from "effect";
+import { Deferred, Effect, MutableRef } from "effect";
 
 export const joinedOnce = <Value>(work: Effect.Effect<Value>): Effect.Effect<Value> => {
   const standing = MutableRef.make<Effect.Effect<Value> | undefined>(undefined);
   return Effect.suspend(() => {
     const held = MutableRef.get(standing);
     if (held) return held;
-    const settled = Deferred.unsafeMake<Value>(FiberId.none);
+    const settled = Deferred.makeUnsafe<Value>();
     const wait = Deferred.await(settled);
     MutableRef.set(standing, wait);
     return Effect.flatMap(
-      Effect.forkDaemon(
+      Effect.forkDetach(
         Effect.interruptible(Effect.onExit(work, (exit) => Deferred.done(settled, exit))),
       ),
       () => wait,

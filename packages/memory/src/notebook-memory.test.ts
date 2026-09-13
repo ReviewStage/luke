@@ -596,21 +596,21 @@ it.scoped(
           Effect.suspend(() => {
             plans += 1;
             return plans === 1
-              ? Effect.zipRight(Deferred.await(gate), plan(identity))
+              ? Effect.andThen(Deferred.await(gate), plan(identity))
               : plan(identity);
           });
         let asked = 0;
-        const askSync = Effect.zipRight(
+        const askSync = Effect.andThen(
           Effect.sync(() => {
             asked += 1;
           }),
           h.memory.sync,
         );
-        const launch = yield* Effect.fork(h.memory.sync);
+        const launch = yield* Effect.forkChild(h.memory.sync);
         yield* until(() => plans === 1);
         credential = h.embedding;
-        const requested = yield* Effect.fork(askSync);
-        const again = yield* Effect.fork(askSync);
+        const requested = yield* Effect.forkChild(askSync);
+        const again = yield* Effect.forkChild(askSync);
         yield* until(() => asked === 2);
         yield* Deferred.succeed(gate, undefined);
         const first = yield* Fiber.join(launch);

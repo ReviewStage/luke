@@ -136,7 +136,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
   const voice = voiceServer();
   const scope = await runWithoutDatabase(Scope.make());
   const standing = await runWithoutDatabase(
-    Scope.extend(
+    Scope.provide(
       Effect.gen(function* () {
         const port = yield* listening(voice, 0, "127.0.0.1");
         const service = yield* VoiceService.make({
@@ -545,7 +545,7 @@ test("a socket past its byte budget before it ever opened a session is closed an
 test("a server with no service standing on it refuses every upgrade with 503", async () => {
   const voice = voiceServer();
   const scope = await runWithoutDatabase(Scope.make());
-  const port = await runWithoutDatabase(Scope.extend(listening(voice, 0, "127.0.0.1"), scope));
+  const port = await runWithoutDatabase(Scope.provide(listening(voice, 0, "127.0.0.1"), scope));
   onTestFinished(() => runWithoutDatabase(Scope.close(scope, Exit.void)));
 
   assert.deepEqual(await connect(`ws://127.0.0.1:${port}${VOICE_SERVICE_PATH.INTRODUCTION}`), {

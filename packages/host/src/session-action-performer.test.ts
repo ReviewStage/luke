@@ -237,7 +237,9 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       let revoked = false;
-      const pending = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => revoked }));
+      const pending = yield* Effect.forkChild(
+        performer.perform(CREATE, { isRevoked: () => revoked }),
+      );
       yield* waitFor(() => settings.reads() === 1);
       assert.equal(settings.reads(), 1);
       assert.deepEqual(recorded.carried, []);
@@ -257,7 +259,9 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       let revoked = false;
-      const pending = yield* Effect.fork(performer.perform(SPAWN, { isRevoked: () => revoked }));
+      const pending = yield* Effect.forkChild(
+        performer.perform(SPAWN, { isRevoked: () => revoked }),
+      );
       yield* waitFor(() => settings.reads() === 1);
       assert.equal(settings.reads(), 1);
       revoked = true;
@@ -276,7 +280,7 @@ it.effect(
       const settings = heldSettings();
       const { performer, recorded } = fixture({ settingsStore: settings.store });
       const controller = new AbortController();
-      const pending = yield* Effect.fork(
+      const pending = yield* Effect.forkChild(
         performer.perform(CREATE, {
           isRevoked: () => controller.signal.aborted,
           signal: controller.signal,
@@ -292,7 +296,7 @@ it.effect(
       yield* settleMicrotasks();
       assert.deepEqual(recorded.carried, []);
       // A call with no signal waits the read out, as before.
-      const direct = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => false }));
+      const direct = yield* Effect.forkChild(performer.perform(CREATE, { isRevoked: () => false }));
       yield* waitFor(() => settings.reads() === 2);
       settings.release();
       assert.equal((yield* Fiber.join(direct)).status, ACTION_RESULT_STATUS.ACCEPTED);
@@ -314,7 +318,9 @@ it.effect(
         },
       });
 
-      const creating = yield* Effect.fork(performer.perform(CREATE, { isRevoked: () => false }));
+      const creating = yield* Effect.forkChild(
+        performer.perform(CREATE, { isRevoked: () => false }),
+      );
       yield* waitFor(() => settings.reads() === 1);
       settings.release();
       const result = yield* Fiber.join(creating);
@@ -367,13 +373,13 @@ it.effect("a spawn carries the stored model only for the very agent it pairs wit
     const withPair = fixture({ settingsStore: paired.store });
     const withOther = fixture({ settingsStore: other.store });
 
-    const spawning = yield* Effect.fork(
+    const spawning = yield* Effect.forkChild(
       withPair.performer.perform(SPAWN, { isRevoked: () => false }),
     );
     yield* waitFor(() => paired.reads() === 1);
     paired.release();
     assert.equal((yield* Fiber.join(spawning)).status, ACTION_RESULT_STATUS.ACCEPTED);
-    const unpaired = yield* Effect.fork(
+    const unpaired = yield* Effect.forkChild(
       withOther.performer.perform(SPAWN, { isRevoked: () => false }),
     );
     yield* waitFor(() => other.reads() === 1);

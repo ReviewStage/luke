@@ -34,7 +34,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Fiber, Runtime } from "effect";
+import { Context, Effect, Fiber } from "effect";
 import type { TestContext } from "vitest";
 import { ConversationThread } from "../conversation-thread.js";
 import { operatorOverBrain } from "../testing/index.js";
@@ -106,7 +106,7 @@ function repository(client: StoreClient) {
 function composed(t: TestContext) {
   return Effect.gen(function* () {
     const root = yield* Effect.promise(() => temporaryDirectory(t, "luke-clear-"));
-    const client = storeClient(inProcessStoreTransport(), Runtime.defaultRuntime);
+    const client = storeClient(inProcessStoreTransport(), Context.empty());
     let clock = NOW;
     let ids = 0;
     let generations = 0;
@@ -436,7 +436,7 @@ it.scoped(
       );
       yield* waitFor(() => client.inputs.length > beforeSecondAsk);
       const pressedAt = c.tick();
-      // Run rather than forked: `Effect.fork` hands the body to the scheduler,
+      // Run rather than forked: `Effect.forkChild` hands the body to the scheduler,
       // where the fences below would not yet stand on the next statement.
       const clearing = Effect.runFork(c.clear());
       // The fences are synchronous: the store already stands on the successor,

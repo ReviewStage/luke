@@ -316,7 +316,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
   }
 
   create(input: LiveSessionCreateInput): Effect.Effect<LiveSessionOpened | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#outcome.attempt();
       this.#sidebandAttached = false;
       const call = accountCall({
@@ -391,7 +391,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
    * key that created the session, as the server-controls guide requires.
    */
   #attach(sessionId: string): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
       address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
       const opening = yield* this.#openSocket(address.toString(), {
@@ -517,7 +517,7 @@ class ServiceLiveSessionSource {
   protected createSession(
     input: LiveSessionCreateInput,
   ): Effect.Effect<{ created: LiveSessionCreated; socket: HeldSocket } | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#outcome.attempt();
       this.#sidebandAttached = false;
       const authorization = this.#authorization;
@@ -602,14 +602,14 @@ class ServiceLiveSessionSource {
    * the attempts.
    */
   protected attachOnce(sessionId: string): Effect.Effect<ReattachAttempt> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const bearer = yield* this.#bearer();
       if (this.#authorization && bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
       // The open and the guard over what it answered are one uninterruptible step, so a hang-up
       // that interrupts this fiber can never land between them and leave a socket nobody holds;
       // only the wait for the answer is interruptible, and interrupting it closes that socket.
       return yield* Effect.uninterruptibleMask((restore) =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const opening = yield* this.#open(bearer);
           if (!socketOpened(opening)) {
             return {
@@ -631,7 +631,7 @@ class ServiceLiveSessionSource {
 
   /** The attach frame's own exchange on a socket that stands: the answer decides, and every answer but the attachment closes it. */
   #attachAnswer(socket: HeldSocket, sessionId: string): Effect.Effect<ReattachAttempt> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       if (answer === undefined) {
@@ -681,7 +681,7 @@ class ServiceLiveSessionSource {
    * request deadline, is recorded as the service unavailable.
    */
   #firstFrame(socket: HeldSocket, send: () => void): Effect.Effect<WireRecord | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* Effect.sync(send);
       const arrival = yield* Effect.timeoutOption(
         socket.takeFirst,
@@ -828,7 +828,7 @@ function reattachingSocket(options: {
       close: () => {
         if (closedByClient) return;
         closedByClient = true;
-        Deferred.unsafeDone(hungUp, Exit.void);
+        Deferred.doneUnsafe(hungUp, Exit.void);
         inner.close();
       },
     });
@@ -955,7 +955,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
   create(
     input: LiveSessionCreateInput,
   ): Effect.Effect<LiveSessionOpened | undefined, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const opened = yield* this.createSession(input);
       if (!opened) return undefined;
       // The socket that answered is already the session's: the sideband is held
@@ -997,7 +997,7 @@ export class IntroductionLiveSessionSource
   }
 
   create(input: LiveSessionCreateInput): Effect.Effect<IntroductionLiveSessionOpened | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const opened = yield* this.createSession(input);
       if (!opened) return undefined;
       // Kept open and never read: the frames the service might send are dropped rather than held,

@@ -4,32 +4,45 @@ import { defineRule } from "@oxlint/plugins";
 import { isAllowedFile, RUN_ALLOWLIST } from "../shared/effect-edges.ts";
 
 /**
- * `Effect.run*` and `Runtime.run*` run a description; `ManagedRuntime.make`
- * builds the thing that runs one, and `NodeRuntime.runMain` runs one as a
- * whole process. All of them belong at an edge, because a runtime built where
- * the work lives is a second runtime, and two runtimes are two copies of every
- * service a `Context.Service` was supposed to identify.
+ * `Effect.run*` runs a description, and so does each `Effect.run*With`, which
+ * is where a `Runtime<R>` went: v4 removed the type, so the services a caller
+ * used to carry as a runtime are a `Context` it hands one of these instead.
+ * `ManagedRuntime.make` builds the thing that runs one, `Runtime.makeRunMain`
+ * mints one for a host, and `NodeRuntime.runMain` runs one as a whole process.
+ * All of them belong at an edge, because a runtime built where the work lives
+ * is a second runtime, and two runtimes are two copies of every service a
+ * `Context.Service` was supposed to identify.
  */
 const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [
     "Effect",
-    new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]),
-  ],
-  [
-    "Runtime",
-    new Set(["runPromise", "runPromiseExit", "runSync", "runSyncExit", "runFork", "runCallback"]),
+    new Set([
+      "runPromise",
+      "runPromiseWith",
+      "runPromiseExit",
+      "runPromiseExitWith",
+      "runSync",
+      "runSyncWith",
+      "runSyncExit",
+      "runSyncExitWith",
+      "runFork",
+      "runForkWith",
+      "runCallback",
+      "runCallbackWith",
+    ]),
   ],
   ["ManagedRuntime", new Set(["make"])],
+  ["Runtime", new Set(["makeRunMain"])],
   ["NodeRuntime", new Set(["runMain"])],
 ]);
 
 /**
  * Names whose call answers a runner rather than a result: the brain's own
- * dispatch between a `ManagedRuntime` and a plain `Runtime`
+ * dispatch between a `ManagedRuntime` and a bare `Context`
  * (`packages/brain/src/effect/carry.ts`), where `runtimeExit(execution)(effect)`
- * runs the effect as surely as `Runtime.runPromiseExit` does, the same file's
- * `detachOn(execution)(effect)`, which forks it as surely as `Runtime.runFork`
- * does, and the web edge's `webRuntime()` (`apps/web/server/runtime.ts`),
+ * runs the effect as surely as `Effect.runPromiseExitWith` does, the same file's
+ * `detachOn(execution)(effect)`, which forks it as surely as
+ * `Effect.runForkWith` does, and the web edge's `webRuntime()` (`apps/web/server/runtime.ts`),
  * whose `webRuntime().runPromise(effect)` is the same run one member deeper
  * than `RUNNING_MEMBERS` reaches. Naming them here is what keeps their
  * callers on the allowlist rather than invisible to it.
@@ -73,7 +86,7 @@ export const noRunPromiseOutsideEdgesRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Effect.run*, Runtime.run*, ManagedRuntime.make, NodeRuntime.runMain, the brain's runtimeExit and detachOn dispatch, and the web edge's runWeb and webRuntime runners outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
+        "Disallow Effect.run* and Effect.run*With, ManagedRuntime.make, Runtime.makeRunMain, NodeRuntime.runMain, the brain's runtimeExit and detachOn dispatch, and the web edge's runWeb and webRuntime runners outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
     },
     messages: {
       runOutsideEdge:

@@ -313,7 +313,7 @@ export function openStore(
       (database) => Effect.sync(() => database.close()),
     );
     yield* Effect.provide(
-      Effect.zipRight(
+      Effect.andThen(
         createConversationEffect({
           agentId: options.agentId,
           sessionKey: options.sessionKey,

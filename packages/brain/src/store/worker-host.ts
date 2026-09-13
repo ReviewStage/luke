@@ -70,7 +70,7 @@ import {
 /** The database a `store.open` stood up, and the scope that releases it. */
 interface HeldStore {
   readonly store: OpenStore;
-  readonly scope: Scope.CloseableScope;
+  readonly scope: Scope.Closeable;
 }
 
 const failed = (cause: unknown): StoreOperationFailed =>
@@ -127,7 +127,7 @@ const storeHandlers: Layer.Layer<Rpc.ToHandler<StoreRpc>> = StoreRpcs.toLayer(
           // uninterrupted so no scope is made that nothing then holds.
           yield* release;
           const scope = yield* Scope.make();
-          const store = yield* Scope.extend(openStore(options), scope).pipe(
+          const store = yield* Scope.provide(openStore(options), scope).pipe(
             Effect.onError(() => Scope.close(scope, Exit.void)),
           );
           yield* Ref.set(held, Option.some({ store, scope }));
@@ -202,7 +202,7 @@ const storeHandlers: Layer.Layer<Rpc.ToHandler<StoreRpc>> = StoreRpcs.toLayer(
  * supplies is what the worker's entry provides; nothing here knows it is a
  * `node:worker_threads` worker rather than any other runner.
  */
-export const storeWorkerLayer: Layer.Layer<never, WorkerError, WorkerRunner.PlatformRunner> =
+export const storeWorkerLayer: Layer.Layer<never, WorkerError, WorkerRunner.WorkerRunnerPlatform> =
   RpcServer.layer(StoreRpcs, {
     concurrency: 1,
     disableTracing: true,

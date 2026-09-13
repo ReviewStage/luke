@@ -113,13 +113,13 @@ export class HostTag extends Context.Service<HostTag, StandingHost>()("@sidecar/
  * this layer is built in closes as the quit: drain, disarm, then every
  * composer's stop in the reverse of its start.
  */
-export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrapEffect(
+export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrap(
   Effect.map(HostAssemblyTag, (assembly) => {
     const composers = layersInOrder(
-      assembly.startOrder.map((composer) => Layer.scopedDiscard(composer.lifetime)),
+      assembly.startOrder.map((composer) => Layer.effectDiscard(composer.lifetime)),
     );
-    const armed = Layer.scopedDiscard(assembly.armed);
-    const standing = Layer.scoped(
+    const armed = Layer.effectDiscard(assembly.armed);
+    const standing = Layer.effect(
       HostTag,
       Effect.as(
         Effect.addFinalizer(() => Effect.ignore(assembly.drain())),

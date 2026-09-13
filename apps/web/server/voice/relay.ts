@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
+import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
 import {
   closeEvent,
   LIVE_SERVER_EVENT,
@@ -129,7 +129,7 @@ export function relaySession<R = never>(
     let closed: LiveSessionClosed | undefined;
     /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
     let openingEventId: string | undefined;
-    let openingWait: Fiber.RuntimeFiber<void> | undefined;
+    let openingWait: Fiber.Fiber<void> | undefined;
 
     const settled = yield* Deferred.make<Finalization>();
     const settle = (finalization: Finalization): Effect.Effect<void> =>
@@ -156,7 +156,10 @@ export function relaySession<R = never>(
         const sending = next === undefined ? Effect.void : sendUpstream(next);
         return waiting === undefined
           ? sending
-          : Effect.zipRight(Fiber.interruptFork(waiting), sending);
+          : Effect.andThen(
+              Effect.sync(() => waiting.interruptUnsafe()),
+              sending,
+            );
       });
 
     /** How a server event answers the opening command, or nothing when it is about something else. */
@@ -184,12 +187,12 @@ export function relaySession<R = never>(
           Effect.sleep(openingTimeoutMs).pipe(
             // Cleared before the settle it runs, so the settle interrupts no
             // fiber: the one it would interrupt is this one.
-            Effect.zipRight(
+            Effect.andThen(
               Effect.sync(() => {
                 openingWait = undefined;
               }),
             ),
-            Effect.zipRight(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
+            Effect.andThen(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
           ),
         );
       });
@@ -203,7 +206,7 @@ export function relaySession<R = never>(
      */
     const finalize: Effect.Effect<void, never, R> = Effect.suspend(() =>
       closed !== undefined && options.onSessionClosed
-        ? Effect.zipRight(
+        ? Effect.andThen(
             Effect.exit(options.onSessionClosed(closed)),
             settle(FINALIZATION.CONFIRMED),
           )
@@ -303,7 +306,7 @@ export function relaySession<R = never>(
       yield* upstream.send({ text: JSON.stringify(closeEvent(randomUUID())) });
       yield* Effect.forkScoped(
         Effect.sleep(closeTimeoutMs).pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.suspend(() => (closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED))),
           ),
         ),
@@ -311,10 +314,10 @@ export function relaySession<R = never>(
     });
 
     yield* Effect.forkScoped(
-      Effect.zipRight(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
+      Effect.andThen(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
     );
     yield* Effect.forkScoped(
-      Effect.zipRight(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
+      Effect.andThen(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
     );
 
     const finalization = yield* Deferred.await(settled);

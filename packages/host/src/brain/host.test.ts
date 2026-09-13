@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { type BrainAgent, detachOn } from "@sidecar/brain";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./host.js";
 
-/** The transitions run on the same default runtime the host detaches its drains onto. */
+/** The transitions run under the same empty services the host detaches its drains under. */
 const run = <Value>(effect: Effect.Effect<Value>): Promise<Value> => Effect.runPromise(effect);
-const detach = detachOn(Runtime.defaultRuntime);
+const detach = detachOn(Context.empty());
 
 /** An agent whose stop the test releases, recording the order things happened in. */
 function fakeAgent(name: string, log: string[]) {

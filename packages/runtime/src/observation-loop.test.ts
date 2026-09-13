@@ -19,7 +19,7 @@ it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
         }),
     });
 
-    const running = yield* Effect.fork(loop.refresh);
+    const running = yield* Effect.forkChild(loop.refresh);
     yield* Effect.yieldNow();
     yield* loop.refresh;
     yield* loop.refresh;
@@ -46,7 +46,7 @@ it.scoped("a disarm invalidates work already in flight and prevents gated work",
     yield* gate.arm;
 
     const generation = loop.generation;
-    const running = yield* Effect.fork(loop.refresh);
+    const running = yield* Effect.forkChild(loop.refresh);
     yield* gate.disarm;
     enabled = false;
     assert.equal(loop.isCurrent(generation), false);
@@ -124,7 +124,7 @@ it.scoped("a pass that outlives its disarm does not run the after-run hook", () 
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;
 
-    const running = yield* Effect.fork(loop.refresh);
+    const running = yield* Effect.forkChild(loop.refresh);
     yield* gate.disarm;
     enabled = false;
     yield* Deferred.succeed(pending, undefined);

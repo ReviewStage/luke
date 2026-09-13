@@ -31,7 +31,7 @@ it.effect(
       const order: string[] = [];
       const reports: string[] = [];
       const scope = yield* Scope.make();
-      yield* Scope.extend(
+      yield* Scope.provide(
         seedWorkspaceThenStartMemory({
           seedWorkspace: Effect.sync(() => {
             order.push("seed");
@@ -59,10 +59,10 @@ it.effect(
       const settleMemory = yield* Deferred.make<void>();
       let started = false;
       const scope = yield* Scope.make();
-      yield* Scope.extend(
+      yield* Scope.provide(
         seedWorkspaceThenStartMemory({
           seedWorkspace: Effect.void,
-          startMemory: Effect.zipRight(
+          startMemory: Effect.andThen(
             Effect.sync(() => {
               started = true;
             }),
@@ -118,7 +118,7 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleFlush, "flush"),
       );
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
       );
       yield* waitFor(() => order.includes("settled"));
@@ -144,7 +144,7 @@ it.effect(
     Effect.gen(function* () {
       const order: string[] = [];
       const steps = yield* shutdownStepsFlushingEvents(baseSteps(order), Effect.never);
-      const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 20 }));
+      const fiber = yield* Effect.forkChild(shutdownGatewayEffect(steps, { deadlineMs: 20 }));
       yield* TestClock.adjust(20);
       const outcome = yield* Fiber.join(fiber);
       assert.equal(outcome.settled, false);
@@ -194,7 +194,7 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleClose, "live"),
       );
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
       );
       yield* waitFor(() => order.includes("settled"));
@@ -216,7 +216,9 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleClose, "live"),
       );
-      const hangingFiber = yield* Effect.fork(shutdownGatewayEffect(hanging, { deadlineMs: 20 }));
+      const hangingFiber = yield* Effect.forkChild(
+        shutdownGatewayEffect(hanging, { deadlineMs: 20 }),
+      );
       yield* TestClock.adjust(20);
       const outcome = yield* Fiber.join(hangingFiber);
       assert.equal(outcome.settled, false);

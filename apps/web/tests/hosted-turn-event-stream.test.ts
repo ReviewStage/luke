@@ -351,7 +351,7 @@ test("a client that disconnects stops the polling", async () => {
         ATTACHMENT_MS: 60_000,
       }),
       sleep: (ms) =>
-        Effect.zipRight(
+        Effect.andThen(
           Effect.sync(() => {
             polls += 1;
           }),

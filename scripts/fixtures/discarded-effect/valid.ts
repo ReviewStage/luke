@@ -3,7 +3,7 @@ import { Effect, Fiber, Layer, Stream } from "effect";
 declare const deleteConversation: (sessionKey: string) => Effect.Effect<void>;
 declare const frames: Stream.Stream<string>;
 declare const services: Layer.Layer<never>;
-declare const detach: <A, E>(effect: Effect.Effect<A, E>) => Fiber.RuntimeFiber<A, E>;
+declare const detach: <A, E>(effect: Effect.Effect<A, E>) => Fiber.Fiber<A, E>;
 declare const report: (sessionKey: string) => Promise<void>;
 
 /** An await that really did have a promise under it discards nothing. */
@@ -19,7 +19,7 @@ export function clearConversation(sessionKey: string): Effect.Effect<void> {
     const provided = Layer.orDie(services);
     yield* Layer.build(provided).pipe(Effect.scoped);
     detach(deleteConversation(sessionKey));
-    const fiber = yield* Effect.fork(deleteConversation(sessionKey));
+    const fiber = yield* Effect.forkChild(deleteConversation(sessionKey));
     yield* Fiber.join(fiber);
   });
 }

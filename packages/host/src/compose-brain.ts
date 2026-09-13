@@ -41,7 +41,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, ExecutionStrategy, Exit, type FileSystem, Queue, Scope } from "effect";
+import { Effect, Exit, type FileSystem, Queue, Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -101,11 +101,11 @@ export const composeBrain = (
     // the notebook's own scope closing is what used to be `memory.stop()`,
     // and a file event arriving after it can no longer begin a reconcile
     // against a store that has closed.
-    const indexScope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
-    // The runtime the store's asks and every run of the tool loop are fibers
-    // of: the host's own, so a turn and the host that cancels it stand on one
-    // runtime rather than on a second one built where the work lives.
-    const execution = yield* Effect.runtime<never>();
+    const indexScope = yield* Scope.fork(yield* Effect.scope);
+    // The services the store's asks and every run of the tool loop are begun
+    // under: the host's own, so a turn and the host that cancels it stand on
+    // one set rather than on a second one built where the work lives.
+    const execution = yield* Effect.context<never>();
     const { runMode, report, now, createId } = kernel;
 
     /**
@@ -159,7 +159,7 @@ export const composeBrain = (
     let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
 
     const memory: MemoryWiring = runMode.observesProviders
-      ? yield* Scope.extend(
+      ? yield* Scope.provide(
           composeNotebookMemory({
             client: store.client,
             embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
@@ -371,12 +371,12 @@ export const composeBrain = (
       syncMemory: memory.requestSync,
       // The hourly pass is armed after the start that opened the store and
       // ends with the scope this composer's lifetime is, before its stop.
-      lifetime: Effect.zipRight(
+      lifetime: Effect.andThen(
         startedAndStopped(
           Effect.gen(function* () {
             if (!runMode.observesProviders) return;
             yield* Effect.promise(() => store.open());
-            yield* Scope.extend(
+            yield* Scope.provide(
               seedWorkspaceThenStartMemory({
                 seedWorkspace: Effect.asVoid(
                   Effect.mapError(wiring.seedWorkspace(), (error) => error.cause),

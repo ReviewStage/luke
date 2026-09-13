@@ -46,7 +46,7 @@ function harness(
     reasons: { refused: REASON.REFUSED, timedOut: REASON.TIMED_OUT },
     authorizationUrl: (input) => {
       authorizations.push(input);
-      Deferred.unsafeDone(armed, Exit.succeed(input));
+      Deferred.doneUnsafe(armed, Exit.succeed(input));
       return `https://example.test/consent?state=${encodeURIComponent(input.state)}`;
     },
     exchange: (input) =>
@@ -64,7 +64,7 @@ function harness(
 
 /** One trip in a scope of its own, the way a press runs one. */
 function trip(consent: ReturnType<typeof harness>["consent"]) {
-  return Effect.fork(Effect.scoped(consent.signInEffect()));
+  return Effect.forkChild(Effect.scoped(consent.signInEffect()));
 }
 
 /**
@@ -132,9 +132,7 @@ function untilDeadline(
 ): Effect.Effect<LoopbackConsentOutcome<Grant>> {
   return Effect.raceFirst(
     Fiber.join(waiting),
-    Effect.forever(
-      Effect.zipRight(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow()),
-    ),
+    Effect.forever(Effect.andThen(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow())),
   );
 }
 
@@ -313,14 +311,14 @@ it.effect("the first valid callback claims the one-time code; a second is spent"
       exchange: (input) =>
         Effect.suspend(() => {
           exchanges.push(input);
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const first = yield* Effect.fork(
+    const first = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -378,14 +376,14 @@ it.effect("the deadline leaves a claimed callback alone", () =>
       timeoutMs: 20,
       exchange: (input) =>
         Effect.suspend(() => {
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const answering = yield* Effect.fork(
+    const answering = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -446,14 +444,14 @@ it.effect("a callback already claimed is left to finish when the trip is cancell
       exchange: (input) =>
         Effect.suspend(() => {
           exchanges.push(input);
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const answering = yield* Effect.fork(
+    const answering = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -473,7 +471,7 @@ it.effect("a cancel while the port is still binding is not lost", () =>
 
     // The cancel runs the moment the trip suspends, which it first does while
     // the loopback is binding.
-    yield* Effect.fork(Effect.sync(() => consent.cancel()));
+    yield* Effect.forkChild(Effect.sync(() => consent.cancel()));
     assert.deepEqual(yield* Effect.scoped(consent.signInEffect()), {
       reason: LOOPBACK_CONSENT_CANCELLED,
     });

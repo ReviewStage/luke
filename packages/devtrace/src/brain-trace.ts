@@ -7,7 +7,7 @@ import {
   type ModelResponse,
 } from "@sidecar/runtime/vocabulary";
 import { text, type WireRecord } from "@sidecar/wire";
-import { Cause, Effect, Exit, Option, Runtime } from "effect";
+import { Cause, Context, Effect, Exit, Option } from "effect";
 import type { BrainRequestTraceRecord } from "./trace-writer.js";
 
 interface AnsweredSummary {
@@ -66,7 +66,7 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
 export function tracedModelAdapter(
   adapter: ModelAdapter,
   record: (record: BrainRequestTraceRecord) => void,
-  execution: ExecutionRuntime = Runtime.defaultRuntime,
+  execution: ExecutionRuntime = Context.empty(),
   now: () => number = Date.now,
 ): ModelAdapter {
   const recordQuietly = (entry: BrainRequestTraceRecord): void => {

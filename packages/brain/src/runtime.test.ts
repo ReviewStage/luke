@@ -818,7 +818,7 @@ it.effect(
       const run = toolLoop(h.model).start(
         effectRequest(h.request({ context: held.engine }), events),
       );
-      const running = yield* Effect.fork(run.done);
+      const running = yield* Effect.forkChild(run.done);
       yield* Effect.promise(() => held.entered);
 
       run.cancel();
@@ -845,7 +845,7 @@ it.effect(
       h.model.hold = true;
       const events: RuntimeEvent[] = [];
       const run = toolLoop(h.model).start(effectRequest(h.request(), events));
-      const carrying = yield* Effect.fork(run.done);
+      const carrying = yield* Effect.forkChild(run.done);
       while (h.model.requests.length === 0) {
         yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
       }

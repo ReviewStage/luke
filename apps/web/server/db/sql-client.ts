@@ -15,8 +15,8 @@ import { createPool } from "./index.js";
  * eager round trip would land on the cold start of functions that never query.
  * `pg.Pool` connects on its first query instead, which is when Drizzle's does.
  */
-export const webSqlClient = Layer.unwrapEffect(
-  Effect.map(Config.redacted("DATABASE_URL"), (url) =>
+export const webSqlClient = Layer.unwrap(
+  Effect.map(Config.Redacted("DATABASE_URL"), (url) =>
     PgClient.layerFromPool({
       acquire: Effect.acquireRelease(
         Effect.sync(() => createPool(Redacted.value(url))),

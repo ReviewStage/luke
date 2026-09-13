@@ -1,5 +1,5 @@
 import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
-import { Deferred, Effect, FiberId, Runtime, type Scope } from "effect";
+import { Deferred, Effect, Fiber, type Scope } from "effect";
 import {
   GATEWAY_ERROR,
   GATEWAY_METHOD,
@@ -95,9 +95,9 @@ export function gatewayClient(
     const scope = yield* Effect.scope;
     // The gap a synchronous event callback finds has to open its reconnection
     // on the stack that found it — the host is asked before the callback
-    // returns — so the client forks on the runtime its own scope was built on
-    // rather than handing the work to the scheduler.
-    const runtime = yield* Effect.runtime<never>();
+    // returns — so the client runs it on the services its own scope was built
+    // with rather than handing the work to the scheduler.
+    const services = yield* Effect.context<never>();
     const listeners = new Map<GatewayEventKind, Set<GatewayClientEventListener>>();
     const everyListener = new Set<GatewayClientEventListener>();
     let lastSequence = 0;
@@ -143,7 +143,10 @@ export function gatewayClient(
         // event that showed it arrives inside the replay, in its place.
         // Without one, the host is adopted as it stands: nothing before this
         // client's arrival is replayed to it.
-        Runtime.runFork(runtime)(baselined ? reconnect() : adoptHost(), { scope });
+        // The fiber the run answers is registered against this client's own
+        // scope, so closing the scope ends a reconnection still in flight;
+        // the fiber itself is nobody's to await.
+        Fiber.runIn(Effect.runForkWith(services)(baselined ? reconnect() : adoptHost()), scope);
         return;
       }
       baselined = true;
@@ -158,7 +161,7 @@ export function gatewayClient(
           const arrived = arrivedDuringReconnect.splice(0).sort((a, b) => a.sequence - b.sequence);
           for (const event of arrived) take(event);
         }
-        Deferred.unsafeDone(which, Effect.void);
+        Deferred.doneUnsafe(which, Effect.void);
       });
 
     const adopt = (answer: GatewayReconnectAnswer): void => {
@@ -224,7 +227,7 @@ export function gatewayClient(
     const begin = (once: (asked: number) => Effect.Effect<void>): Effect.Effect<void> => {
       generation += 1;
       const asked = generation;
-      const deferred = Deferred.unsafeMake<void>(FiberId.none);
+      const deferred = Deferred.makeUnsafe<void>();
       standing = deferred;
       return Effect.ensuring(once(asked), settle(deferred));
     };

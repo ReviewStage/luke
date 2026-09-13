@@ -355,7 +355,7 @@ class EffectExecutor implements EffectChildExecutor {
   /** What the `start` seam read of the clock it ran on, in the order the children were started. */
   readonly observed: number[] = [];
   start(record: ChildRunRecord) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.observed.push(yield* Clock.currentTimeMillis);
       const end = yield* Deferred.make<ChildEnd>();
       this.started.push({ record, end });
@@ -366,7 +366,7 @@ class EffectExecutor implements EffectChildExecutor {
     return this.start(record);
   }
   cancel(record: ChildRunRecord) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.cancelled.push(record.childId);
       const held = this.started.find((one) => one.record.childId === record.childId);
       if (held) yield* Deferred.succeed(held.end, { status: CHILD_RUN_STATUS.CANCELLED });
@@ -401,14 +401,14 @@ const effectHarness = () =>
       store,
       createId: () => `id-${++ids}`,
       now: () => 0,
-      ...childSeamsOnRuntime(yield* Effect.runtime<never>(), { executor, deliverer }),
+      ...childSeamsOnRuntime(yield* Effect.context<never>(), { executor, deliverer }),
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
     return { service, store, executor, deliverer };
   });
 
 describe("childSeamsOnRuntime", () => {
-  it.effect("runs a start seam on the runtime it was handed", () =>
+  it.effect("runs a start seam on the services it was handed", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { service, executor } = yield* effectHarness();

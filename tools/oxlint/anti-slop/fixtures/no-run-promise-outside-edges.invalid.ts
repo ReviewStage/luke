@@ -1,6 +1,6 @@
 import { detachOn, runtimeExit } from "@sidecar/brain";
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
-import { Effect, type Exit } from "effect";
+import { Context, Effect, type Exit } from "effect";
 import { runWeb, webRuntime } from "../../../../apps/web/server/runtime.js";
 
 /** Declared rather than imported: this fixture is read as syntax, never resolved. */
@@ -12,6 +12,11 @@ export function greeting(name: string): Promise<string> {
 
 export function main(): void {
   NodeRuntime.runMain(Effect.sync(() => undefined));
+}
+
+/** The services a caller carries are where a v3 `Runtime` went; running on them is still running. */
+export function greetingWithServices(name: string): Promise<string> {
+  return Effect.runPromiseWith(Context.empty())(Effect.sync(() => `hello ${name}`));
 }
 
 export function greetingExit(

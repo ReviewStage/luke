@@ -55,12 +55,12 @@ const ENV = {
   STEP_SUMMARY: "GITHUB_STEP_SUMMARY",
 } as const;
 
-const doorConfig = Config.literal(...ProbeDoorSchema.literals)(ENV.DOOR);
+const doorConfig = Config.Literals(ProbeDoorSchema.literals, ENV.DOOR);
 /** A workflow hands an absent secret over as the empty string, which is no secret. */
-const bypassSecretConfig = Config.option(Config.redacted(ENV.BYPASS_SECRET)).pipe(
+const bypassSecretConfig = Config.option(Config.Redacted(ENV.BYPASS_SECRET)).pipe(
   Config.map(Option.filter((secret) => Redacted.value(secret).length > 0)),
 );
-const stepSummaryConfig = Config.option(Config.string(ENV.STEP_SUMMARY));
+const stepSummaryConfig = Config.option(Config.String(ENV.STEP_SUMMARY));
 
 class BypassSecretMissing extends Schema.TaggedError<BypassSecretMissing>()(
   "BypassSecretMissing",
@@ -149,9 +149,9 @@ const resolveTarget = (bypassSecret: ProbeTarget["bypassSecret"]) =>
     const given = addressArgument(process.argv.slice(2));
     if (given !== undefined) return { address: given, bypassSecret };
     const source = {
-      repository: yield* Config.string(ENV.REPOSITORY),
-      sha: yield* Config.string(ENV.SHA),
-      token: yield* Config.redacted(ENV.TOKEN),
+      repository: yield* Config.String(ENV.REPOSITORY),
+      sha: yield* Config.String(ENV.SHA),
+      token: yield* Config.Redacted(ENV.TOKEN),
     };
     const reading = yield* waitForPreview(source, { onReading: describeReading });
     switch (reading.kind) {

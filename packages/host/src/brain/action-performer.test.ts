@@ -635,8 +635,8 @@ it.effect(
       const h = performer({
         refreshSessions: () =>
           Deferred.succeed(started, undefined).pipe(
-            Effect.zipRight(Deferred.await(release)),
-            Effect.zipRight(
+            Effect.andThen(Deferred.await(release)),
+            Effect.andThen(
               Effect.sync(() => {
                 finished = true;
               }),
@@ -657,7 +657,7 @@ it.effect(
         isRevoked: () => controller.signal.aborted,
         signal: controller.signal,
       };
-      const pending = yield* Effect.fork(performCall(h.actions, MESSAGE_CALL, execution));
+      const pending = yield* Effect.forkChild(performCall(h.actions, MESSAGE_CALL, execution));
       yield* Deferred.await(started);
       controller.abort();
       const outcome = yield* Fiber.join(pending);
@@ -709,7 +709,7 @@ it.effect(
         };
         // Only a creation reads the defaults, so each held read is exercised by the
         // act that actually waits on it.
-        const pending = yield* Effect.fork(
+        const pending = yield* Effect.forkChild(
           performCall(
             h.actions,
             held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,

@@ -153,7 +153,7 @@ export const deviceCadence = (
           current,
           Deferred.await(done),
         ]);
-        return yield* Effect.onExit(Effect.zipRight(standingCall, work), (exit) =>
+        return yield* Effect.onExit(Effect.andThen(standingCall, work), (exit) =>
           // A wait the disarm interrupted hands the slot on to the call still
           // under way rather than opening it, so a registration on the wire
           // keeps its place in the order however many sign-outs arrive while
@@ -255,15 +255,15 @@ export const deviceCadence = (
         gen === generation ? settle(Effect.uninterruptible(beat(gen))) : Effect.void,
       );
       yield* Effect.acquireRelease(
-        Effect.forkDaemon(
+        Effect.forkDetach(
           Effect.interruptible(
-            Effect.zipRight(
+            Effect.andThen(
               pass,
               Effect.schedule(pass, Schedule.spaced(Duration.millis(intervalMs))),
             ),
           ),
         ),
-        Fiber.interruptFork,
+        (fiber) => Effect.sync(() => fiber.interruptUnsafe()),
       );
       // Registered after the fork, so it runs before the interruption: a beat
       // the interruption has not reached yet reads the bumped generation and
@@ -296,7 +296,7 @@ export const deviceCadence = (
           options.state.update((current) => ({
             installationId: current?.installationId ?? installationId(),
           }));
-          const forgetting = yield* Effect.forkDaemon(
+          const forgetting = yield* Effect.forkDetach(
             options.client.forget({ deviceId }, stopOptions.forget),
           );
           yield* Ref.update(inFlight, (standingCall) =>

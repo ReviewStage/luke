@@ -10,19 +10,7 @@
  */
 import type { WireRecord } from "@sidecar/wire";
 import type { Fiber } from "effect";
-import {
-  Cause,
-  Clock,
-  Data,
-  Duration,
-  Effect,
-  Exit,
-  FiberId,
-  ManagedRuntime,
-  Runtime,
-  Schedule,
-  type Scope,
-} from "effect";
+import { Cause, Clock, Context, Data, Duration, Effect, Exit, Schedule, type Scope } from "effect";
 import type { ChildCompletionRecord, ChildRunRecord, ChildSpawnReceipt } from "./child-records.js";
 import {
   CHILD_DEFAULTS,
@@ -95,23 +83,23 @@ export type EffectChildRunServiceOptions = Omit<
 
 /**
  * The `now`/`schedule`/`cancel` triple the port's constructor still takes,
- * answered from this runtime's own `Clock` so a service armed on this bridge
- * reads and schedules against whichever clock that runtime carries — the
- * real one in production, a `TestClock` in a test — without the port itself
- * importing `effect`. Starting the fiber here is a run outside an Effect,
- * which the "runtime only at an edge" rule allows precisely because this is
- * that edge: it starts the work on the runtime it was handed rather than
- * building a second one. `cancel` has no way to be awaited, so it interrupts
- * the fiber without waiting for the interruption to finish: what it must
+ * answered from the `Clock` the handed services carry, so a service armed on
+ * this bridge reads and schedules against that clock — the real one in
+ * production, a `TestClock` in a test — without the port itself importing
+ * `effect`. Starting the fiber here is a run outside an Effect, which the
+ * "runtime only at an edge" rule allows precisely because this is that edge:
+ * it starts the work on the services it was handed rather than building a
+ * runtime of its own. `cancel` has no way to be awaited, so it interrupts the
+ * fiber without waiting for the interruption to finish: what it must
  * guarantee is that the callback does not run afterwards, never that the
  * fiber has already ended.
  */
-const timersOnRuntime = (
-  runtime: Runtime.Runtime<never>,
+const timersOnServices = (
+  services: Context.Context<never>,
 ): Pick<ChildRunServiceOptions, "now" | "schedule" | "cancel"> => {
-  const sync = Runtime.runSync(runtime);
-  const fork = Runtime.runFork(runtime);
-  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  const sync = Effect.runSyncWith(services);
+  const fork = Effect.runForkWith(services);
+  const armed = new Map<ScheduledTimer, Fiber.Fiber<void>>();
   return {
     now: () => sync(Clock.currentTimeMillis),
     schedule: (callback, delayMs) => {
@@ -128,23 +116,23 @@ const timersOnRuntime = (
       const fiber = armed.get(timer);
       if (fiber === undefined) return;
       armed.delete(timer);
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     },
   };
 };
 
 /**
- * The live service, armed on the runtime's own `Clock` and owned by a
- * `Scope`: acquiring starts it (loading and recovering what the last launch
- * left) and releasing stops it, disarming every delivery and archive timer
- * so nothing fires after the scope that held it is gone.
+ * The live service, armed on the `Clock` its caller's own services carry and
+ * owned by a `Scope`: acquiring starts it (loading and recovering what the
+ * last launch left) and releasing stops it, disarming every delivery and
+ * archive timer so nothing fires after the scope that held it is gone.
  */
 export const makeChildRunService = (
   options: EffectChildRunServiceOptions,
 ): Effect.Effect<ChildRunService, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.flatMap(Effect.runtime<never>(), (runtime) => {
-      const service = new ChildRunService({ ...options, ...timersOnRuntime(runtime) });
+    Effect.flatMap(Effect.context<never>(), (services) => {
+      const service = new ChildRunService({ ...options, ...timersOnServices(services) });
       return Effect.promise(async () => {
         // A failed load can still have armed some of the record's own
         // archive or delivery timers before it rejected; `acquireRelease`
@@ -195,12 +183,12 @@ export interface EffectChildSeams {
 /**
  * The executor and deliverer pair the port's constructor takes, over seams
  * their owner writes as effects. The port awaits promises — it imports
- * nothing from `effect` — so each seam is run here, on the runtime the host
- * handed in, which is the same runtime its conversations are fibers of; this
- * is the one place that carrying happens rather than each seam's own. A
- * defect is squashed back to the error that caused it, so a store or an
- * agent that threw reaches the port's own error handling as the error it
- * threw rather than as the fiber failure that carried it. A `start` answers
+ * nothing from `effect` — so each seam is run here, on what the host handed
+ * in: the managed runtime it holds, or the bare services its conversations'
+ * own fibers carry; this is the one place that carrying happens rather than
+ * each seam's own. A defect is squashed back to the error that caused it, so
+ * a store or an agent that threw reaches the port's own error handling as the
+ * error it threw rather than as the fiber failure that carried it. A `start` answers
  * its end as an effect, and running it is what the port's `done` promise is:
  * the run begins where the port would have begun awaiting it.
  */
@@ -209,9 +197,9 @@ export const childSeamsOnRuntime = (
   seams: EffectChildSeams,
 ): Pick<ChildRunServiceOptions, "executor" | "deliverer"> => {
   const carry = <Value>(effect: Effect.Effect<Value>): Promise<Value> =>
-    (ManagedRuntime.TypeId in execution
-      ? execution.runPromiseExit(effect)
-      : Runtime.runPromiseExit(execution)(effect)
+    (Context.isContext(execution)
+      ? Effect.runPromiseExitWith(execution)(effect)
+      : execution.runPromiseExit(effect)
     ).then((exit) => {
       if (Exit.isSuccess(exit)) return exit.value;
       throw Cause.squash(exit.cause);

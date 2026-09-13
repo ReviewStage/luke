@@ -490,7 +490,7 @@ export function makeNotebookMemory(
     ): Effect.Effect<void> {
       return Effect.asVoid(
         Effect.onExit(passOnce, (exit) =>
-          Effect.zipRight(
+          Effect.andThen(
             decision.withPermits(1)(
               Effect.gen(function* () {
                 const { follow } = yield* Ref.get(passes);
@@ -578,7 +578,7 @@ export function makeNotebookMemory(
 
     return {
       mode: Effect.map(Ref.get(standing), (held) => held.mode),
-      start: Effect.zipRight(Effect.asVoid(sync), watching),
+      start: Effect.andThen(Effect.asVoid(sync), watching),
       sync,
       requestSync,
       accessFor,

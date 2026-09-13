@@ -141,7 +141,7 @@ export class Maintenance {
     countedTokens: number | undefined,
     abort: AbortController,
   ): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation, context, events } = turnContext;
       if (
         abort.signal.aborted ||
@@ -159,7 +159,7 @@ export class Maintenance {
       // so the roster look waits for it the way it waits for a turn.
       this.#options.holdTurnInFlight(true);
       yield* Effect.ensuring(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const prepared = yield* Effect.promise(
             async () => await this.#options.prepareTurn({ kind: BRAIN_TURN_KIND.MAINTENANCE }),
           );
@@ -193,7 +193,7 @@ export class Maintenance {
     prompt: string,
     countedTokens?: number,
   ): Effect.Effect<void, CompactionRefused> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { context, signal } = turnContext;
       const capabilities = yield* this.#options.runtime.capabilities();
       if (this.#revoked(turnContext)) return;
@@ -248,7 +248,7 @@ export class Maintenance {
     turnContext: Omit<TurnContext, "run"> & { run?: RunControl },
     assessment: CompactionAssessment,
   ): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation, context, signal } = turnContext;
       const memory = this.#options.memory;
       const capture = memory?.provider.capture?.bind(memory.provider);
@@ -308,7 +308,7 @@ export class Maintenance {
   #readFlushMarker(
     turnContext: Pick<TurnContext, "generation" | "signal">,
   ): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation } = turnContext;
       const settling = generation.flush.settling;
       if (settling) {
@@ -360,13 +360,13 @@ export class Maintenance {
   ): Effect.Effect<Option.Option<Result.Result<void, FlushMarkerWriteFailed>>> {
     const store = this.#options.flushMarker;
     if (!store) return Effect.succeed(Option.some(Result.succeed(undefined)));
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation, signal } = turnContext;
       // The attempt is a daemon, so the turn ending — of its own accord or
       // by the interruption its revocation raises — leaves the write running
       // and its own late success marking the cycle, which is the whole of
       // what this method owes the next assessment.
-      const writing = yield* Effect.forkDaemon(
+      const writing = yield* Effect.forkDetach(
         Effect.tap(
           Effect.either(writeFlushMarkerEffect(store, generation.id, cycle, signal)),
           (outcome) =>

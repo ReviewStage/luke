@@ -168,7 +168,7 @@ function serverLayer(harness: Harness = {}) {
     layerGatewayClients,
     layerGatewayAdmissions,
   );
-  const serialization = Layer.unwrapEffect(
+  const serialization = Layer.unwrap(
     Effect.map(GatewayEventLog, (log) =>
       layerGatewayEnvelopeSerialization({ revision: log.revision }),
     ),
@@ -522,7 +522,7 @@ it.effect(
         headers: Headers.fromInput({ [GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY]: "k" }),
       };
       const started = yield* Deferred.make<void>();
-      const first = yield* Effect.fork(
+      const first = yield* Effect.forkChild(
         ledger(Effect.andThen(Deferred.succeed(started, undefined), Effect.never), asked),
       );
       yield* Deferred.await(started);

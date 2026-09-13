@@ -1,5 +1,5 @@
 import type { LiveRecord } from "@sidecar/voice/live-session";
-import { Deferred, Effect, FiberId, type ParseResult, Queue, type Scope } from "effect";
+import { Deferred, Effect, type ParseResult, Queue, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_ENTRY_KIND } from "../core.js";
@@ -109,9 +109,7 @@ export function hostedLiveRecord({
     function enqueue(
       write: Write,
     ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError> {
-      const landed = Deferred.unsafeMake<VoiceWriteResult, SqlError | ParseResult.ParseError>(
-        FiberId.none,
-      );
+      const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | ParseResult.ParseError>();
       last = landed;
       Queue.unsafeOffer(waiting, { write, landed });
       return Deferred.await(landed);

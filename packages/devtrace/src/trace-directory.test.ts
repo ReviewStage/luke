@@ -4,7 +4,11 @@ import { ConfigProvider, Effect, Option } from "effect";
 import { AGENT_TRACE_DIRECTORY_VARIABLE, agentTraceDirectory } from "./trace-directory.js";
 
 const readUnder = (entries: readonly (readonly [string, string])[]) =>
-  Effect.withConfigProvider(agentTraceDirectory, ConfigProvider.fromMap(new Map(entries)));
+  Effect.provideService(
+    agentTraceDirectory,
+    ConfigProvider.ConfigProvider,
+    ConfigProvider.fromEnvRecord(Object.fromEntries(entries)),
+  );
 
 it.effect("a provider naming the trace directory answers that directory", () =>
   Effect.gen(function* () {

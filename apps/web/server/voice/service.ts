@@ -433,7 +433,7 @@ export class VoiceService {
    * fibers to finalize under their own timeouts.
    */
   get #drain(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#options.server.serve(undefined);
       for (const socket of this.#sockets.clients) {
         socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
@@ -503,7 +503,7 @@ export class VoiceService {
    * nothing of itself behind.
    */
   #serve(socket: WebSocket, admission: Admission): SessionEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const upstream = this.#upstream;
       if (upstream === undefined) return;
       const { route } = admission;
@@ -515,7 +515,7 @@ export class VoiceService {
       });
       yield* Effect.sync(() => socket.resume());
       const refuse = (reason: HostedApiError): Effect.Effect<void> =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           this.#log({ event: LOG_EVENT.SESSION_REFUSED, route, reason });
           if (!(yield* desktop.isOpen)) return;
           yield* desktop.send({ text: JSON.stringify({ error: reason }) });
@@ -605,7 +605,7 @@ export class VoiceService {
             ? undefined
             : (closed) =>
                 Effect.ignore(
-                  Effect.gen(this, function* () {
+                  Effect.gen({ self: this }, function* () {
                     yield* this.#record.close({
                       sessionId,
                       seconds: closed.usage.seconds,
@@ -708,7 +708,7 @@ export class VoiceService {
     admission: Admission,
     frame: SessionCreateFrame,
   ): SessionEffect<Opened> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { route } = admission;
       if (route === VOICE_ROUTE.INTRODUCTION) {
         if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
@@ -780,7 +780,7 @@ export class VoiceService {
   #admitAccount(
     admission: SessionsAdmission,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
       if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
       if (
@@ -807,7 +807,7 @@ export class VoiceService {
     admission: Admission,
     frame: SessionAttachFrame,
   ): SessionEffect<Opened> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (admission.route !== VOICE_ROUTE.SESSIONS) {
         return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
       }

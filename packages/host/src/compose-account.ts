@@ -102,11 +102,11 @@ export const composeAccount = (
     const environment = yield* Environment;
     const identity = yield* AppIdentity;
     const { runMode, report } = kernel;
-    // The runtime the host is being built on, threaded through
+    // The services the host is being built on, threaded through
     // `VoiceCapabilityAssembler` to every model adapter it builds, so the
-    // promise each of those still answers is run on the host's own runtime
-    // rather than on an ambient default one.
-    const runtime = yield* Effect.runtime<never>();
+    // promise each of those still answers is run under the host's own
+    // services rather than under an ambient empty set.
+    const execution = yield* Effect.context<never>();
     const late = yield* lateService<AccountLinks>();
     /**
      * The device row's id, mirrored for the one link a caller reads from a
@@ -193,14 +193,14 @@ export const composeAccount = (
     const traceDirectory =
       identity.packaged || !runMode.sendsNetwork
         ? Option.none<string>()
-        : yield* Effect.orDie(environment.load(agentTraceDirectory));
+        : yield* Effect.orDie(agentTraceDirectory.parse(environment));
     const agentTrace = Option.isSome(traceDirectory)
       ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
       : undefined;
     if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
     const voiceServiceOrigin = yield* Effect.orDie(
-      environment.load(Config.option(Config.string(VOICE_SERVICE_ORIGIN_VARIABLE))),
+      Config.option(Config.String(VOICE_SERVICE_ORIGIN_VARIABLE)).parse(environment),
     );
 
     function capabilitiesActive(): boolean {
@@ -243,11 +243,15 @@ export const composeAccount = (
       openSocket: openSocketOverWs,
       refreshAccount: session.refreshOnce,
       deviceId: () => MutableRef.get(deviceIdReader)(),
-      execution: runtime,
+      execution,
       ...(agentTrace
         ? {
             wrapBrainModel: (model) =>
-              tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record), runtime),
+              tracedModelAdapter(
+                model,
+                (record) => agentTrace.recordBrainRequest(record),
+                execution,
+              ),
           }
         : undefined),
     });
@@ -345,7 +349,7 @@ export const composeAccount = (
           // fiber ends the moment this returns, and a fork supervised by it
           // would be interrupted with it, dropping the very reply that is
           // supposed to stand recording down.
-          yield* Effect.forkDaemon(emitSessionReplay);
+          yield* Effect.forkDetach(emitSessionReplay);
           return { account: carried(snapshot) };
         }),
     };

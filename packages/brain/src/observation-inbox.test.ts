@@ -285,7 +285,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
       await slow;
       return respond(input, options);
     };
-    const asked = yield* Effect.fork(ask(h, "what's up?"));
+    const asked = yield* Effect.forkChild(ask(h, "what's up?"));
     yield* Effect.promise(() => settle());
     yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());

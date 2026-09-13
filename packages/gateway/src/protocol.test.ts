@@ -450,7 +450,7 @@ it.scopedLive(
       });
       const c = yield* client(transport);
       let answered = false;
-      const pending = yield* Effect.fork(
+      const pending = yield* Effect.forkChild(
         Effect.tap(c.call(GATEWAY_METHOD.RUN_LIST), () =>
           Effect.sync(() => {
             answered = true;

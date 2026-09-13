@@ -53,7 +53,7 @@ export class BrainHost {
   readonly #detach: Detach;
   #agent: BrainAgent | undefined;
   #unfollow: Effect.Effect<void> | undefined;
-  #retiring: Fiber.RuntimeFiber<RetirementOutcome>[] = [];
+  #retiring: Fiber.Fiber<RetirementOutcome>[] = [];
   #transitions = 0;
   /**
    * One permit held for the whole of a transition, handed to the transitions
@@ -101,7 +101,7 @@ export class BrainHost {
     this.#retiring.push(
       this.#detach(
         settledOutcome(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.catchAllCause(previous.stop(), () => Effect.void),
             unfollow ?? Effect.void,
           ),
@@ -121,7 +121,7 @@ export class BrainHost {
       this.retire();
       const transition = ++this.#transitions;
       return this.#queue.withPermits(1)(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           // Every retirement queued so far drains before a successor stands. A
           // drain that failed has still ended, and its failure is this
           // transition's to answer with, as it always was.

@@ -126,7 +126,7 @@ it.effect("the wait reads the records on its schedule until the preview's record
       ],
       reads,
     );
-    const fiber = yield* Effect.fork(
+    const fiber = yield* Effect.forkChild(
       waitForPreview(SOURCE, { wait: { intervalMs: 15_000, attempts: 5 } }).pipe(
         Effect.provide(layer),
       ),
@@ -161,7 +161,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reads: GithubRead[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         waitForPreview(SOURCE, { wait: { intervalMs: 1_000, attempts: 2 } }).pipe(
           Effect.provide(github([], reads)),
         ),

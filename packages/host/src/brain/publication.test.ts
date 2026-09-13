@@ -157,7 +157,7 @@ it.effect(
           }),
       };
       let following = true;
-      const publishing = yield* Effect.fork(publishRuns(agent, live, () => following));
+      const publishing = yield* Effect.forkChild(publishRuns(agent, live, () => following));
       yield* waitFor(() => marked.length === 1);
       assert.deepEqual(marked, ["run-1"]);
       following = false;

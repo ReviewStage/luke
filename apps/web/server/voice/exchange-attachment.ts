@@ -97,7 +97,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     const scope = await deps.run(Scope.make());
     const close = () => deps.run(Scope.close(scope, Exit.void));
     try {
-      const exchange = await deps.run(Scope.extend(standing(session), scope));
+      const exchange = await deps.run(Scope.provide(standing(session), scope));
       return { ...exchange, stop: close };
     } catch (error) {
       await close();

@@ -338,11 +338,11 @@ it.effect(
 
       const asked = yield* Deferred.make<void>();
 
-      const sending = yield* Effect.fork(
+      const sending = yield* Effect.forkChild(
         Effect.provide(
           held.send({ method: HTTP_METHOD.GET, path: PATH }),
           fakeHttpClientLayer(() => {
-            Deferred.unsafeDone(asked, Effect.void);
+            Deferred.doneUnsafe(asked, Effect.void);
             return new Promise<Response>(() => undefined);
           }),
         ),

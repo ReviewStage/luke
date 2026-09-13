@@ -275,7 +275,7 @@ export class ProductEventSender {
    * hold again with the batch back in it.
    */
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.zipRight(
+    return Effect.andThen(
       this.#adoptHold(),
       Effect.suspend(() => {
         if (this.#queue.length === 0) return this.#persistHold();
@@ -283,7 +283,7 @@ export class ProductEventSender {
         // authenticated at all.
         const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
         return this.#persistHold().pipe(
-          Effect.zipRight(this.#send(events)),
+          Effect.andThen(this.#send(events)),
           Effect.flatMap((requeued) => (requeued ? this.#persistHold() : Effect.void)),
         );
       }),

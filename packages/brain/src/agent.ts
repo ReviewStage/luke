@@ -15,18 +15,7 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import {
-  type Clock,
-  Duration,
-  Effect,
-  Exit,
-  FiberId,
-  PubSub,
-  Result,
-  Runtime,
-  Scope,
-  Stream,
-} from "effect";
+import { type Clock, Context, Duration, Effect, Exit, PubSub, Result, Scope, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -255,7 +244,7 @@ export class BrainAgent {
    */
   readonly #clock: Clock.Clock;
   /** The scope every wait this conversation arms is forked into, closed by `stop()`. */
-  readonly #scope: Scope.CloseableScope;
+  readonly #scope: Scope.Closeable;
   readonly #now: () => number;
   readonly #report: (message: string) => void;
   readonly #detached: Detach;
@@ -326,7 +315,7 @@ export class BrainAgent {
     options: BrainAgentOptions,
     runEvents: PubSub.PubSub<BrainRunEvent>,
     clock: Clock.Clock,
-    scope: Scope.CloseableScope,
+    scope: Scope.Closeable,
   ) {
     this.#options = options;
     this.#runEvents = runEvents;
@@ -335,7 +324,7 @@ export class BrainAgent {
     this.#scope = scope;
     this.#now = () => clock.unsafeCurrentTimeMillis();
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
-    this.#execution = options.execution ?? Runtime.defaultRuntime;
+    this.#execution = options.execution ?? Context.empty();
     this.#detached = detachOn(this.#execution);
     this.#lease = options.store.lease();
     this.#ledger = new BrainRequestLedger({
@@ -538,7 +527,7 @@ export class BrainAgent {
    * the way forward is a runtime that reads them or a Clear.
    */
   incompatibility(): Effect.Effect<string | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.ready();
       const generation = this.#generations.standing();
       if (!generation) return undefined;
@@ -575,7 +564,7 @@ export class BrainAgent {
    * under the backend preamble, and it needs no entry of its own.
    */
   submitAsk(submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.ready();
       return yield* this.#asks.submit(submission);
     });
@@ -609,7 +598,7 @@ export class BrainAgent {
    * this generation does not know answers nothing.
    */
   waitAsk(runId: string, timeoutMs: number): Effect.Effect<BrainRequestRecord | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.ready();
       return yield* this.#asks.wait(runId, timeoutMs);
     });
@@ -623,7 +612,7 @@ export class BrainAgent {
    * already sent.
    */
   cancelAsk(runId: string): Effect.Effect<BrainRequestRecord | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.ready();
       return yield* Effect.promise(() => this.#asks.cancel(runId));
     });
@@ -646,7 +635,7 @@ export class BrainAgent {
   }
 
   #mark(runId: string, field: PendingMarkField, recordedAt: number): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.ready();
       const generation = this.#generations.standing();
       if (!generation) return false;
@@ -676,7 +665,7 @@ export class BrainAgent {
    * knowing everything that happened during the hold.
    */
   releaseHeld(held: readonly BrainDelivery[]): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#stopped || held.length === 0) return;
       const generation = this.#generations.standing();
       if (!generation) {
@@ -749,7 +738,7 @@ export class BrainAgent {
    * standing before the effect suspends for the first time.
    */
   stop(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#stopped = true;
       this.#maintenance.cancel();
       this.#wakes.clear();
@@ -812,7 +801,7 @@ export class BrainAgent {
    * never handed out.
    */
   contextSnapshot(): Effect.Effect<readonly WireRecord[] | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const generation = this.#generations.standing();
       if (!generation) return undefined;
       const standing = yield* generation.opened;
@@ -854,7 +843,7 @@ export class BrainAgent {
    * `detachOn` starts the work on the calling stack: `#enqueue`'s own
    * acquisition is the fiber's first step, so the turn takes its place in the
    * conversation's queue, and is counted busy, in the same step that asked for
-   * it. `Effect.forkDaemon` would only schedule the fiber, and a stop or a
+   * it. `Effect.forkDetach` would only schedule the fiber, and a stop or a
    * host reading `busy()` between the fork and the scheduler task would find a
    * queue the turn had not yet joined. The fiber is dropped rather than held:
    * what the conversation is drained by is the queue, which this turn is
@@ -872,7 +861,7 @@ export class BrainAgent {
    * the disarm. It goes through the same detach door every turn nobody waits
    * for does, because only a run gives a synchronous collaborator a fiber at
    * all; unlike a turn, nothing of a wait has to stand in the step that armed
-   * it, since its first step is the sleep. The fiber is forked into the
+   * it, since its first step is the sleep. The fiber is registered with the
    * agent's own scope, so a wait nobody disarmed ends when `stop()` closes
    * that scope rather than firing into a conversation that is gone, and the
    * sleep is the agent's `Clock`'s own rather than the calling fiber's, so a
@@ -884,7 +873,7 @@ export class BrainAgent {
       { scope: this.#scope },
     );
     return () => {
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     };
   }
 
@@ -893,7 +882,7 @@ export class BrainAgent {
   }
 
   #restore(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const loaded = yield* Effect.either(
         Effect.tryPromise({ try: () => this.#options.store.load(), catch: (error) => error }),
       );

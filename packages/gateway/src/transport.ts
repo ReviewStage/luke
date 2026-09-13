@@ -1,5 +1,5 @@
 import { valueFromJsonText } from "@sidecar/wire";
-import { Deferred, Effect, FiberId, type Scope } from "effect";
+import { Deferred, Effect, type Scope } from "effect";
 import {
   type InvocationMemory,
   invocationMemory,
@@ -77,7 +77,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   readonly #sinks = new Set<GatewayEventSink>();
   readonly #closedListeners = new Set<() => void>();
   /** The door, once opened: the first request to arrive completes it and every later one reads it back. */
-  #door = Deferred.unsafeMake<GatewayInProcessConnection>(FiberId.none);
+  #door = Deferred.makeUnsafe<GatewayInProcessConnection>();
   #opening = false;
   #memory: InvocationMemory | undefined;
   #unsubscribe: (() => void) | undefined;
@@ -101,7 +101,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   }
 
   serveInvocations(handler: NodeInvocationHandler): Effect.Effect<void, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const memory = yield* invocationMemory({ handler });
       yield* Effect.acquireRelease(
         Effect.sync(() => {
@@ -174,7 +174,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
       this.#closedListeners.clear();
       if (!this.#opening) return Effect.void;
       const opened = this.#door;
-      this.#door = Deferred.unsafeMake<GatewayInProcessConnection>(FiberId.none);
+      this.#door = Deferred.makeUnsafe<GatewayInProcessConnection>();
       this.#opening = false;
       return Effect.flatMap(Deferred.await(opened), (admitted) => admitted.close);
     });
@@ -186,7 +186,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
    * with the protocol's own reader.
    */
   protected handle(request: GatewayRequest): Effect.Effect<GatewayResponse> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const door = yield* this.open();
       const frame = yield* door.carry(JSON.stringify(gatewayRequestToWire(request)));
       return (

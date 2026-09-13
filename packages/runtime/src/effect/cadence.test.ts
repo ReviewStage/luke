@@ -7,7 +7,7 @@ import { cadenceGate } from "./cadence.js";
 it.effect("a disarm ends the fibers an arming forked from inside an uninterruptible region", () =>
   Effect.gen(function* () {
     const beats: number[] = [];
-    let armedFiber: Fiber.RuntimeFiber<number, never> | undefined;
+    let armedFiber: Fiber.Fiber<number, never> | undefined;
     const armed = Effect.gen(function* () {
       armedFiber = yield* Effect.forkScoped(
         Effect.interruptible(

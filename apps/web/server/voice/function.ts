@@ -57,7 +57,7 @@ let standing: VoiceServer | undefined;
 function standService(voice: VoiceServer): void {
   void runWeb(
     Effect.scoped(
-      Effect.zipRight(
+      Effect.andThen(
         VoiceService.make({
           server: voice,
           apiKey: process.env[VOICE_FUNCTION_ENVIRONMENT.API_KEY],

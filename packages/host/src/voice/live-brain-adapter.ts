@@ -107,7 +107,7 @@ export function brainAgentLiveBrain(
       Effect.gen(function* () {
         if (subscribed.has(agent)) return;
         subscribed.add(agent);
-        const events = yield* Scope.extend(agent.runEvents, scope);
+        const events = yield* Scope.provide(agent.runEvents, scope);
         yield* Effect.forkIn(
           Stream.runForEach(events, (event) =>
             Effect.catchAllDefect(
@@ -156,7 +156,7 @@ export function brainAgentLiveBrain(
         Effect.suspend(() => {
           const agent = options.agent();
           if (!agent?.anticipateAsk) return Effect.void;
-          return Effect.zipRight(
+          return Effect.andThen(
             follow(agent),
             agent.anticipateAsk({
               id: String(anticipation.rowId),

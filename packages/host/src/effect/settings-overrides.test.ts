@@ -19,7 +19,7 @@ const CONDUCTOR_KEY = "conductor-live-key";
 const CONDUCTOR_TOKEN = "conductor-live-token";
 
 const environmentOf = (entries: Record<string, string>) =>
-  Layer.succeed(Environment, ConfigProvider.fromMap(new Map(Object.entries(entries))));
+  Layer.succeed(Environment, ConfigProvider.fromEnvRecord(entries));
 
 const read = (entries: Record<string, string>) =>
   Effect.provide(settingsOverrides, environmentOf(entries));
@@ -69,7 +69,7 @@ describe("the settings store's environment overrides", () => {
     Effect.gen(function* () {
       const overrides = yield* Effect.provide(
         settingsOverrides,
-        Layer.succeed(Environment, ConfigProvider.fromMap(new Map())),
+        Layer.succeed(Environment, ConfigProvider.fromEnvRecord({})),
       );
 
       assert.equal(overrides.voice, undefined);

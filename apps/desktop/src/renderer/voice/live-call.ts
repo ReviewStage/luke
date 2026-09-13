@@ -27,17 +27,7 @@ import type {
 } from "@sidecar/voice/orchestrator";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import {
-  Deferred,
-  Duration,
-  Effect,
-  Exit,
-  type Fiber,
-  FiberId,
-  Result,
-  Runtime,
-  type Scope,
-} from "effect";
+import { type Context, Deferred, Duration, Effect, Exit, Fiber, Result, type Scope } from "effect";
 import { LiveCaptions } from "./live-captions";
 import {
   acquireLivePeer,
@@ -89,12 +79,12 @@ export interface LiveCallOptions {
   /** The development trace's tap, handed each event as it crossed the channel. */
   onWireEvent?: (direction: TraceDirection, event: WireRecord) => void;
   /**
-   * The renderer's own runtime edge, which this bundle has one of: every wait
-   * and every bound of the call is a fiber forked on it, and the clock the
-   * captions are stamped from is its clock, so a test drives both by advancing
-   * a `TestClock` rather than by standing a timer seam in.
+   * The services the renderer's one runtime was built over: every wait and
+   * every bound of the call is a fiber run under them, and the clock the
+   * captions are stamped from is the clock they carry, so a test drives both
+   * by advancing a `TestClock` rather than by standing a timer seam in.
    */
-  runtime: Runtime.Runtime<never>;
+  services: Context.Context<never>;
 }
 
 /** One pending microphone switch, settled by its acknowledgment or the error naming it. */
@@ -122,7 +112,7 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  * rather than from transcript events. Every append is the host's, over its
  * sideband.
  *
- * The session's life is one fiber on the renderer's runtime, holding the scope
+ * The session's life is one fiber under the renderer's own services, holding the scope
  * the peer was acquired into: the fiber ends when the call does, and the peer
  * is released then — or when the fiber is interrupted — exactly once, because
  * a scope closes once. Every bound the call keeps is an `Effect.sleep` forked
@@ -133,17 +123,17 @@ type ServerEventHandlers = { [Type in LiveServerEvent["type"]]?: ServerEventHand
  */
 export class LiveCall implements LiveVoiceCall {
   readonly #options: LiveCallOptions;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #services: Context.Context<never>;
   readonly #captions: LiveCaptions;
   /** The session's life: while it stands, so does the scope the peer was acquired into. */
-  #lifecycle: Fiber.RuntimeFiber<void> | undefined;
+  #lifecycle: Fiber.Fiber<void> | undefined;
   /** The open still negotiating, so a second ask reads its answer rather than a session that is not standing yet. */
   #opening: Deferred.Deferred<boolean> | undefined;
   #scope: Scope.Scope | undefined;
   /** Completed by every end of the call, which is what lets the lifecycle fiber unwind. */
-  readonly #ending = Deferred.unsafeMake<void>(FiberId.none);
-  readonly #announcedStart = Deferred.unsafeMake<boolean>(FiberId.none);
-  readonly #announcedClose = Deferred.unsafeMake<void>(FiberId.none);
+  readonly #ending = Deferred.makeUnsafe<void>();
+  readonly #announcedStart = Deferred.makeUnsafe<boolean>();
+  readonly #announcedClose = Deferred.makeUnsafe<void>();
   #peer: LivePeer | undefined;
   #status: LiveStatus = LIVE_STATUS.IDLE;
   #started = false;
@@ -158,10 +148,10 @@ export class LiveCall implements LiveVoiceCall {
    */
   #reportedSpeakers: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
   #pendingSwitch: PendingSwitch | undefined;
-  #idleTimer: Fiber.RuntimeFiber<void> | undefined;
+  #idleTimer: Fiber.Fiber<void> | undefined;
   #idleReported = false;
-  #speakingHangover: Fiber.RuntimeFiber<void> | undefined;
-  #captionTick: Fiber.RuntimeFiber<void> | undefined;
+  #speakingHangover: Fiber.Fiber<void> | undefined;
+  #captionTick: Fiber.Fiber<void> | undefined;
   /** Counts the mutes, so an unmute still opening its device learns the key came up while it waited. */
   #muteEpoch = 0;
   /** The mute under way, so a press landing before its release has settled waits for the device to be let go of first. */
@@ -170,7 +160,7 @@ export class LiveCall implements LiveVoiceCall {
 
   constructor(options: LiveCallOptions) {
     this.#options = options;
-    this.#runtime = options.runtime;
+    this.#services = options.services;
     this.#captions = new LiveCaptions({
       onRows: (rows) => this.#onRows(rows),
     });
@@ -196,9 +186,9 @@ export class LiveCall implements LiveVoiceCall {
     const negotiating = this.#opening;
     if (negotiating) return Deferred.await(negotiating);
     if (this.#lifecycle) return Effect.succeed(this.standing);
-    const opened = Deferred.unsafeMake<boolean>(FiberId.none);
+    const opened = Deferred.makeUnsafe<boolean>();
     this.#opening = opened;
-    this.#lifecycle = Runtime.runFork(this.#runtime)(
+    this.#lifecycle = Effect.runForkWith(this.#services)(
       Effect.scoped(this.#lifecycleEffect(opening, opened)).pipe(
         Effect.ensuring(this.#settleOpening(opened, false)),
       ),
@@ -233,12 +223,12 @@ export class LiveCall implements LiveVoiceCall {
     const peer = this.#peer;
     if (!peer || !this.#started || this.#ended) return Effect.succeed(false);
     this.#muteEpoch += 1;
-    const muting = Deferred.unsafeMake<boolean>(FiberId.none);
+    const muting = Deferred.makeUnsafe<boolean>();
     this.#muting = muting;
     return Effect.onExit(this.#muteAndRelease(peer), (exit) =>
       Effect.sync(() => {
         this.#muting = undefined;
-        Deferred.unsafeDone(muting, exit);
+        Deferred.doneUnsafe(muting, exit);
       }),
     );
   }
@@ -297,12 +287,12 @@ export class LiveCall implements LiveVoiceCall {
   readonly #handlers: ServerEventHandlers = {
     [LIVE_SERVER_EVENT.SESSION_STARTED]: () => {
       this.#started = true;
-      Deferred.unsafeDone(this.#announcedStart, Exit.succeed(true));
+      Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(true));
       this.#refreshStatus();
       this.#armIdle();
     },
     [LIVE_SERVER_EVENT.SESSION_CLOSED]: () => {
-      Deferred.unsafeDone(this.#announcedClose, Exit.void);
+      Deferred.doneUnsafe(this.#announcedClose, Exit.void);
       this.#tearDown(LIVE_STATUS.IDLE);
     },
     [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED]: (event) => this.#acknowledge(event.client_event_id),
@@ -331,7 +321,7 @@ export class LiveCall implements LiveVoiceCall {
     opening: LiveVoiceCallOpening,
     opened: Deferred.Deferred<boolean>,
   ): Effect.Effect<void, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#scope = yield* Effect.scope;
       const standing = yield* this.#openEffect(opening);
       yield* this.#settleOpening(opened, standing);
@@ -352,7 +342,7 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #openEffect(opening: LiveVoiceCallOpening): Effect.Effect<boolean, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#setStatus(LIVE_STATUS.CONNECTING);
       const opened = yield* acquireLivePeer({
         createPeerConnection: this.#options.createPeerConnection,
@@ -391,7 +381,7 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #unmuteEffect(): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       for (let muting = this.#muting; muting; muting = this.#muting) yield* Deferred.await(muting);
       const peer = this.#peer;
       if (!peer || !this.#started || this.#ended) return false;
@@ -435,7 +425,7 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #muteAndRelease(peer: LivePeer): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const unmuting = this.#pendingSwitch !== undefined;
       const acknowledged =
         this.#micLive || unmuting ? yield* this.#switchMicrophone(muteEvent) : true;
@@ -448,7 +438,7 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #closeEffect(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const peer = this.#peer;
       if (!peer || this.#ended || this.#closing) return;
       this.#closing = true;
@@ -485,7 +475,7 @@ export class LiveCall implements LiveVoiceCall {
     return Effect.suspend(() => {
       if (this.#pendingSwitch) this.#settleSwitch(false);
       const eventId = this.#nextId();
-      const acknowledged = Deferred.unsafeMake<boolean>(FiberId.none);
+      const acknowledged = Deferred.makeUnsafe<boolean>();
       this.#pendingSwitch = { eventId, acknowledged };
       this.#send(build(eventId));
       return Effect.race(
@@ -510,7 +500,7 @@ export class LiveCall implements LiveVoiceCall {
     const pending = this.#pendingSwitch;
     if (!pending) return;
     this.#pendingSwitch = undefined;
-    Deferred.unsafeDone(pending.acknowledged, Exit.succeed(acknowledged));
+    Deferred.doneUnsafe(pending.acknowledged, Exit.succeed(acknowledged));
   }
 
   #send(event: LiveClientEvent): void {
@@ -533,15 +523,15 @@ export class LiveCall implements LiveVoiceCall {
     if (state === undefined) return;
     this.#options.acts.reportTransport(state);
     if (state === LIVE_TRANSPORT_STATE.FAILED && !this.#ended) {
-      Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
+      Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
       this.#tearDown(LIVE_STATUS.FAILED);
     }
   }
 
   #onChannelClosed(): void {
     if (this.#ended) return;
-    Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
-    Deferred.unsafeDone(this.#announcedClose, Exit.void);
+    Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
+    Deferred.doneUnsafe(this.#announcedClose, Exit.void);
     this.#tearDown(LIVE_STATUS.IDLE);
   }
 
@@ -622,7 +612,7 @@ export class LiveCall implements LiveVoiceCall {
     if (this.#speakingHangover !== undefined) this.#disarm(this.#speakingHangover);
     this.#speakingHangover = undefined;
     this.#settleSwitch(false);
-    Deferred.unsafeDone(this.#announcedStart, Exit.succeed(false));
+    Deferred.doneUnsafe(this.#announcedStart, Exit.succeed(false));
     if (peer) {
       peer.channel.onmessage = null;
       peer.channel.onclose = null;
@@ -635,7 +625,7 @@ export class LiveCall implements LiveVoiceCall {
     this.#options.onLocalStream(undefined);
     this.#options.onRemoteStream(undefined);
     this.#setStatus(status);
-    Deferred.unsafeDone(this.#ending, Exit.void);
+    Deferred.doneUnsafe(this.#ending, Exit.void);
   }
 
   /** Takes the device off the sending line, silence in its place, and stops it, so the system's indicator goes out with the key. */
@@ -671,16 +661,18 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   /**
-   * A bound, forked into the session's own scope so it goes with the call.
+   * A bound, run under the renderer's services and then registered with the
+   * session's own scope so it goes with the call: a run takes no scope of its
+   * own, and `Fiber.runIn` is what hangs the interrupt off the scope's close.
    * Nothing hands a handle back to be cancelled: what a caller holds is the
    * fiber, and re-arming interrupts the one it replaces.
    */
-  #arm(delayMs: number, work: () => void): Fiber.RuntimeFiber<void> {
+  #arm(delayMs: number, work: () => void): Fiber.Fiber<void> {
     const scope = this.#scope;
-    return Runtime.runFork(this.#runtime)(
+    const fiber = Effect.runForkWith(this.#services)(
       Effect.andThen(Effect.sleep(Duration.millis(delayMs)), Effect.sync(work)),
-      scope ? { scope } : undefined,
     );
+    return scope ? Fiber.runIn(fiber, scope) : fiber;
   }
 
   /**
@@ -688,7 +680,7 @@ export class LiveCall implements LiveVoiceCall {
    * has to guarantee is that the work does not run afterwards, never that the
    * fiber has already ended.
    */
-  #disarm(fiber: Fiber.RuntimeFiber<void>): void {
-    fiber.unsafeInterruptAsFork(FiberId.none);
+  #disarm(fiber: Fiber.Fiber<void>): void {
+    fiber.interruptUnsafe();
   }
 }

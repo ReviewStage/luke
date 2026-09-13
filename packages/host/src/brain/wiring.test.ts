@@ -4,7 +4,7 @@ import type { BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { type BrainWiringDependencies, wireBrain } from "./wiring.js";
 
 /**
@@ -87,7 +87,7 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     skillRoots: () => [],
     runnable: () => false,
     dropBriefings: () => undefined,
-    execution: Runtime.defaultRuntime,
+    execution: Context.empty(),
     ...overrides,
   };
   return { wiring, loads };

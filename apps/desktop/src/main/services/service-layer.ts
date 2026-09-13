@@ -20,8 +20,8 @@ export const serviceLayer = (
   service: DesktopService,
   report: (message: string) => void,
 ): Layer.Layer<never> =>
-  Layer.scopedDiscard(
-    Effect.zipRight(
+  Layer.effectDiscard(
+    Effect.andThen(
       Effect.addFinalizer(() =>
         Effect.catchAllDefect(
           Effect.promise(() => service.stop()),
@@ -46,8 +46,8 @@ export const effectServiceLayer = (
   service: EffectDesktopService,
   report: (message: string) => void,
 ): Layer.Layer<never> =>
-  Layer.scopedDiscard(
-    Effect.zipRight(
+  Layer.effectDiscard(
+    Effect.andThen(
       Effect.addFinalizer(() =>
         Effect.catchAllDefect(service.stop(), (cause) =>
           Effect.sync(() => {

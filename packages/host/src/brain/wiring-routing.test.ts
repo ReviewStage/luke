@@ -36,7 +36,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Fiber, Runtime, Scope } from "effect";
+import { Context, Effect, Fiber, Scope } from "effect";
 import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
@@ -178,7 +178,7 @@ async function composed(t: TestContext, scope: Scope.Scope, gate?: Gate): Promis
   let builds = 0;
   const workspace = await temporaryDirectory(t, "luke-wiring-");
   const building = wireBrain({
-    execution: Runtime.defaultRuntime,
+    execution: Context.empty(),
     repositoryFor: (sessionKey) => {
       repositories.set(sessionKey, (repositories.get(sessionKey) ?? 0) + 1);
       let repository = held.get(sessionKey);
@@ -637,8 +637,8 @@ it.scopedLive(
       assert.ok(c.wiring.current(threadKey));
       assert.equal(c.repositories.get(threadKey), 1);
       // Archive then unarchive before the close has drained.
-      const closing = yield* Effect.fork(c.wiring.closeConversation(threadKey));
-      const reopening = yield* Effect.fork(c.wiring.openConversation(threadKey));
+      const closing = yield* Effect.forkChild(c.wiring.closeConversation(threadKey));
+      const reopening = yield* Effect.forkChild(c.wiring.openConversation(threadKey));
       yield* Fiber.join(closing);
       yield* Fiber.join(reopening);
       // The reopen built on nothing the close discards: its brain stands in the

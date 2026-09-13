@@ -146,9 +146,9 @@ it.scoped("a sign-out interrupted mid-way runs to the cleared account rather tha
     const subject = yield* manager({ stored: STORED, beforeClear: Deferred.await(holding) });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
 
-    const signingOut = yield* Effect.fork(subject.instance.signOut());
+    const signingOut = yield* Effect.forkChild(subject.instance.signOut());
     yield* Effect.yieldNow();
-    yield* Effect.fork(Fiber.interrupt(signingOut));
+    yield* Effect.forkChild(Fiber.interrupt(signingOut));
     // Enough turns for the interruption to have been delivered wherever the
     // sign-out could take it. The departure is reported before the credential
     // is cleared, so it must not be taken anywhere: the fiber is still
@@ -246,7 +246,7 @@ async function armed(authorizations: readonly unknown[]): Promise<void> {
 it.scoped("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
   Effect.gen(function* () {
     const subject = yield* manager({});
-    const pending = yield* Effect.fork(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
+    const pending = yield* Effect.forkChild(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
     yield* Effect.promise(() => armed(subject.authorizations));
 
     subject.instance.cancelSignIn();
@@ -259,7 +259,7 @@ it.scoped("an exchange the account refuses is a failure the panel can report", (
     const subject = yield* manager({
       exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),
     });
-    const refused = yield* Effect.fork(
+    const refused = yield* Effect.forkChild(
       Effect.exit(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB)),
     );
     yield* Effect.promise(() => armed(subject.authorizations));

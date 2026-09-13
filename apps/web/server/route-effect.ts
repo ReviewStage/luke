@@ -11,11 +11,12 @@ type WebHandler = (request: Request) => Promise<Response>;
  * runtime and then held for the instance's life, so a warm invocation reaches
  * the same services the cold one built.
  *
- * `runWeb` is where the runtime is read, which keeps this file a caller of
- * the edge rather than a second one: the handler `HttpApp` hands back does
- * its own running on that runtime. A build that failed is not held, because
- * the failure is the layer's — a missing `DATABASE_URL` today — and a held
- * rejection would answer every later invocation from it without trying again.
+ * `runWeb` is where the edge's services are read, which keeps this file a
+ * caller of the edge rather than a second one: the handler `HttpEffect` builds
+ * over that context does its own running on it, a fiber to the request. A
+ * build that failed is not held, because the failure is the layer's — a
+ * missing `DATABASE_URL` today — and a held rejection would answer every later
+ * invocation from it without trying again.
  */
 export function routeFromHttpApp(
   app: Effect.Effect<
@@ -27,8 +28,8 @@ export function routeFromHttpApp(
   let building: Promise<WebHandler> | undefined;
   return {
     async fetch(request: Request): Promise<Response> {
-      building ??= runWeb(Effect.runtime<WebServices>()).then((runtime) =>
-        HttpEffect.toWebHandlerRuntime(runtime)(app),
+      building ??= runWeb(Effect.context<WebServices>()).then((context) =>
+        HttpEffect.toWebHandlerWith(context)(app),
       );
       const attempt = building;
       let handler: WebHandler;

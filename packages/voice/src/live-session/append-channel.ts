@@ -1,5 +1,5 @@
 import { LIVE_CLIENT_EVENT, type LiveAppendEvent } from "@sidecar/live";
-import { Clock, Deferred, Duration, Effect, Exit, FiberId, Option, Queue } from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Option, Queue } from "effect";
 import type { LiveSideband } from "../live-socket.js";
 import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
@@ -59,7 +59,7 @@ export class AppendChannel {
   readonly #spoken: AwaitingSpeech[] = [];
   readonly #work: Queue.Queue<Effect.Effect<void>>;
   /** Settled by `close`, so the fiber serializing the sends ends where it waits rather than outliving the session. */
-  readonly #closed = Deferred.unsafeMake<void>(FiberId.none);
+  readonly #closed = Deferred.makeUnsafe<void>();
   #shut = false;
   /**
    * When the host last appended anything the session is worth keeping open
@@ -101,7 +101,7 @@ export class AppendChannel {
 
   /** Sends one append and answers whether the session took it. */
   send(event: LiveAppendEvent, options: SendOptions = {}): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#shut) return false;
       const { onSpoken, countsForIdle = true } = options;
       const speech =
@@ -159,10 +159,10 @@ export class AppendChannel {
     this.#shut = true;
     for (const [eventId, pending] of [...this.#pending]) {
       this.#pending.delete(eventId);
-      Deferred.unsafeDone(pending.acknowledged, Effect.succeed(NOT_TAKEN));
+      Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(NOT_TAKEN));
     }
     this.#awaiting = [];
-    Deferred.unsafeDone(this.#closed, Exit.void);
+    Deferred.doneUnsafe(this.#closed, Exit.void);
   }
 
   #serve(): Effect.Effect<void> {
@@ -197,6 +197,6 @@ export class AppendChannel {
     if (acknowledgment.ok && pending.onSpoken) {
       this.#awaiting.push({ endMs: acknowledgment.endMs, onSpoken: pending.onSpoken });
     }
-    Deferred.unsafeDone(pending.acknowledged, Effect.succeed(acknowledgment));
+    Deferred.doneUnsafe(pending.acknowledged, Effect.succeed(acknowledgment));
   }
 }

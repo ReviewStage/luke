@@ -25,7 +25,7 @@ import { Effect, Fiber } from "effect";
  * that ended under the call still neither cuts it nor drops what it earns.
  */
 export function carriedHostedCall<Answer>(call: Effect.Effect<Answer>): Effect.Effect<Answer> {
-  return Effect.flatMap(Effect.forkDaemon(Effect.interruptible(call)), Fiber.join);
+  return Effect.flatMap(Effect.forkDetach(Effect.interruptible(call)), Fiber.join);
 }
 
 /** What a caller hears of a service call that ended short of the provider's own answer. */

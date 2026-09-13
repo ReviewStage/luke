@@ -1,4 +1,4 @@
-import { Deferred, Effect, Exit, FiberId, FiberSet, Ref, type Scope } from "effect";
+import { Deferred, Effect, Exit, FiberSet, Ref, type Scope } from "effect";
 import {
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
@@ -69,7 +69,7 @@ export class PendingInvocations {
         unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
       );
     }
-    const deferred = Deferred.unsafeMake<NodeCapabilityResult>(FiberId.none);
+    const deferred = Deferred.makeUnsafe<NodeCapabilityResult>();
     this.#pending.set(invocation.invocationId, { capability: invocation.capability, deferred });
     return Deferred.await(deferred);
   }
@@ -79,7 +79,7 @@ export class PendingInvocations {
     const held = this.#pending.get(answer.invocationId);
     if (!held) return false;
     this.#pending.delete(answer.invocationId);
-    Deferred.unsafeDone(held.deferred, Exit.succeed(answer.result));
+    Deferred.doneUnsafe(held.deferred, Exit.succeed(answer.result));
     return true;
   }
 
@@ -92,7 +92,7 @@ export class PendingInvocations {
     this.#closed = true;
     for (const [id, held] of [...this.#pending]) {
       this.#pending.delete(id);
-      Deferred.unsafeDone(
+      Deferred.doneUnsafe(
         held.deferred,
         Exit.succeed(unknownInvocation({ capability: held.capability })),
       );
@@ -146,7 +146,7 @@ function openInvocation(
 ): readonly [OpenedInvocation, InvocationLedger] {
   const standing = ledger.held.get(invocationId);
   if (standing) return [{ answer: standing, first: false }, ledger];
-  const answer = Deferred.unsafeMake<NodeCapabilityResult>(FiberId.none);
+  const answer = Deferred.makeUnsafe<NodeCapabilityResult>();
   const held = new Map(ledger.held);
   held.set(invocationId, answer);
   return [

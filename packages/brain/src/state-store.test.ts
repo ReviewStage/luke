@@ -659,7 +659,7 @@ it.scoped(
       const clock = new BrainGenerationClock({
         store,
         clock: yield* Effect.clock,
-        detach: detachOn(yield* Effect.runtime<never>()),
+        detach: detachOn(yield* Effect.context<never>()),
         scope: yield* Effect.scope,
       });
       yield* clock.start();
