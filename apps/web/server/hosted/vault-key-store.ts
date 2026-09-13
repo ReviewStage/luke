@@ -12,6 +12,9 @@ import { Effect, Option, type ParseResult, Schema } from "effect";
 
 type VaultKeyFailure = SqlError | ParseResult.ParseError;
 
+/** What a vault seam answers: an effect over the ambient client, composed into the request that read or wrote it. */
+export type VaultKeyEffect<A> = Effect.Effect<A, VaultKeyFailure, SqlClient.SqlClient>;
+
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);

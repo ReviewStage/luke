@@ -1,5 +1,4 @@
 import type { AccountAppSeams } from "../account-app.js";
-import { runWeb } from "../runtime.js";
 import { deleteAccount, readAccountPreferences, writeAccountPreferences } from "./account-store.js";
 import { resolveHostedUserId } from "./vault-route.js";
 
@@ -12,16 +11,17 @@ import { resolveHostedUserId } from "./vault-route.js";
  * `api/account/**` functions build the group from the same wiring.
  *
  * The reads and writes themselves are `account-store.ts`'s effects over the
- * ambient `SqlClient`; what this file adds is the edge that runs them and the
- * auth session the bearer is resolved against.
+ * ambient `SqlClient`, handed on as the effects they are: the group yields
+ * them on the request's own fiber, and the edge that serves the request is
+ * the one place the client behind them is provided.
  */
 
 /** This deployment's account group, over its real database and auth session. The analytics erasure key and project are read from `HostedEnvironment`, not here. */
 export function accountAppSeams(): AccountAppSeams {
   return {
     resolveUserId: resolveHostedUserId,
-    deleteUser: (userId) => runWeb(deleteAccount(userId)),
-    readPreferences: (userId) => runWeb(readAccountPreferences(userId)),
-    writePreferences: (userId, preferences) => runWeb(writeAccountPreferences(userId, preferences)),
+    deleteUser: deleteAccount,
+    readPreferences: readAccountPreferences,
+    writePreferences: writeAccountPreferences,
   };
 }

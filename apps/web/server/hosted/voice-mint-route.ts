@@ -1,4 +1,3 @@
-import { runWeb } from "../runtime.js";
 import type { VoiceMintSeams } from "../voice-mint-app.js";
 import { userIdForAuthorization } from "./bearer.js";
 import { spendHostedMeter } from "./quota.js";
@@ -15,7 +14,7 @@ import { hostedVaultSeams, hostedVaultUserInfo } from "./vault-route.js";
 export function hostedVoiceMintSeams(): VoiceMintSeams {
   return {
     resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedVaultUserInfo),
-    spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
+    spend: (userId) => spendHostedMeter({ userId, now: Date.now() }),
     readVaultKeys: hostedVaultSeams.readVaultKeys,
   };
 }

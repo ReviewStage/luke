@@ -63,7 +63,7 @@ function voice(overrides: Partial<MintCall> = {}) {
     request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT),
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     now: () => NOW,
     httpClient: upstream(minted),
     ...overrides,
@@ -75,7 +75,7 @@ function remote(overrides: Partial<MintCall> = {}) {
     request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT),
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     readVaultKeys: async () => [],
     now: () => NOW,
     httpClient: upstream(minted),
@@ -87,7 +87,7 @@ function introduction(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(HOSTED_SERVICE_PATH.INTRODUCTION_MINT),
     apiKey: API_KEY,
-    spendIntroduction: async () => OPEN_INTRODUCTION,
+    spendIntroduction: () => Effect.succeed(OPEN_INTRODUCTION),
     now: () => NOW,
     httpClient: upstream(minted),
     ...overrides,
@@ -113,7 +113,7 @@ const CASES: [string, () => Promise<Response>][] = [
         voice({ request: mintRequest(HOSTED_SERVICE_PATH.VOICE_MINT, { voice: "nobody" }) }),
       ),
   ],
-  ["mint-quota-exhausted", () => mintAnswer(voice({ spend: async () => SPENT }))],
+  ["mint-quota-exhausted", () => mintAnswer(voice({ spend: () => Effect.succeed(SPENT) }))],
   [
     "mint-upstream-error",
     () =>
@@ -139,7 +139,7 @@ const CASES: [string, () => Promise<Response>][] = [
         remote({ request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, { scene: "phone" }) }),
       ),
   ],
-  ["remote-mint-quota-exhausted", () => mintAnswer(remote({ spend: async () => SPENT }))],
+  ["remote-mint-quota-exhausted", () => mintAnswer(remote({ spend: () => Effect.succeed(SPENT) }))],
   ["introduction-mint", () => mintAnswer(introduction())],
   [
     "introduction-mint-method-not-allowed",
@@ -162,7 +162,7 @@ const CASES: [string, () => Promise<Response>][] = [
   ],
   [
     "introduction-mint-quota-exhausted",
-    () => mintAnswer(introduction({ spendIntroduction: async () => SPENT_INTRODUCTION })),
+    () => mintAnswer(introduction({ spendIntroduction: () => Effect.succeed(SPENT_INTRODUCTION) })),
   ],
 ];
 

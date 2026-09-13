@@ -266,13 +266,18 @@ directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
 close are steps of that effect rather than promises a callback awaited.
 `hostedStore()` takes the payload key ring and nothing else, and answers an
 `Effect<A, SqlError | ParseError, SqlClient>` from every method, so the caller
-composes a store read into whatever it already runs. What still holds a
-runner is everything a route composes apart from the store and that still
-hands a promise up — the writers, the speech module, the ask record, the
-device seams, the brain host's own seams — each handed its edge's own,
-`runWeb` in a function and the store tests' runtime in a test; the
-conversation row lock every write runs under is the client's own
-transaction. What the layer does need at build
+composes a store read into whatever it already runs. A route group's own seams are effects
+over that same ambient client — the account group's reads and writes, the
+vault group's three key statements, and the meter every brain and mint
+operation spends — so the group yields the seam on the request's own fiber
+and the edge that serves the request is the one place the client behind it is
+provided. What still holds a runner is everything a route composes apart from
+the store and that still hands a promise up — the writers, the speech module,
+the ask record, the brain host's own seams, the admin dashboard's queries, the
+observation handlers' `readVaultKeys`, and the store route's own secret read —
+each handed its edge's own, `runWeb` in a function and the store tests'
+runtime in a test; the conversation row lock every write runs under is the
+client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
@@ -429,8 +434,9 @@ snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
 store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
 the same group from the same wiring; the reads and the writes themselves are
-`server/hosted/account-store.ts`'s effects over the ambient `SqlClient`, which
-names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
+`server/hosted/account-store.ts`'s effects over the ambient `SqlClient`,
+handed to the group as the effects they are rather than run at the seam, and
+that store names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real
 dialect; the analytics erasure key and project are
 read from `HostedEnvironment` instead, the way the brain group's own key and

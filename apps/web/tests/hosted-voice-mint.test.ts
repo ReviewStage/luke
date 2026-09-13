@@ -60,7 +60,7 @@ function options(overrides: Partial<MintCall> = {}) {
     request: mintRequest(),
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     now: () => NOW,
     ...overrides,
   };
@@ -139,10 +139,11 @@ test("a blank model override is no override at all", async () => {
 
 test("a voice or pace outside the build's sets is refused before anything is spent", async () => {
   let spent = 0;
-  const spend = async () => {
-    spent += 1;
-    return OPEN_SPEND;
-  };
+  const spend = () =>
+    Effect.sync(() => {
+      spent += 1;
+      return OPEN_SPEND;
+    });
   const badVoice = await mintAnswer(
     options({ request: mintRequest({ voice: "not-a-voice" }), spend }),
   );
@@ -172,7 +173,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 
-  const exhausted = await mintAnswer(options({ spend: async () => SPENT }));
+  const exhausted = await mintAnswer(options({ spend: () => Effect.succeed(SPENT) }));
   assert.equal(exhausted.status, 429);
   const body = await exhausted.json();
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

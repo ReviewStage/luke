@@ -1,4 +1,5 @@
 import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
+import type { SqlClient } from "@effect/sql";
 import { Effect, Redacted } from "effect";
 import {
   HOSTED_SERVICE_PATH,
@@ -25,7 +26,7 @@ import {
   refuseMint,
   refusingMint,
 } from "./hosted/mint-effect.js";
-import type { HostedSpend } from "./hosted/quota.js";
+import type { HostedSpend, QuotaEffect } from "./hosted/quota.js";
 import {
   MOBILE_MINT_STRICT_FIELDS,
   observeCloudSessions,
@@ -54,7 +55,7 @@ import {
 /** What the group is handed that the deployment alone can answer for. */
 export interface VoiceMintSeams extends MintSeams, Omit<RemoteObserveSeams, "encryptionSecret"> {
   resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
-  spend: (userId: string) => Promise<HostedSpend>;
+  spend: (userId: string) => QuotaEffect<HostedSpend>;
 }
 
 /**
@@ -86,7 +87,7 @@ function voiceMint(seams: VoiceMintSeams) {
     const environment = yield* HostedEnvironment;
     const userId = yield* signedIn(seams);
     const read = yield* mintPreferences();
-    const spend = yield* Effect.promise(() => seams.spend(userId));
+    const spend = yield* Effect.orDie(seams.spend(userId));
     if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
     const connection = yield* mintedConnection(
       mintOptions(seams, apiKey, environment.realtimeModel, read, realtimeClientSecretRequest),
@@ -107,7 +108,7 @@ function remoteVoiceMint(seams: VoiceMintSeams) {
     const environment = yield* HostedEnvironment;
     const userId = yield* signedIn(seams);
     const read = yield* mintPreferences(MOBILE_MINT_STRICT_FIELDS);
-    const spend = yield* Effect.promise(() => seams.spend(userId));
+    const spend = yield* Effect.orDie(seams.spend(userId));
     if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
     const [connection, sessions] = yield* Effect.all(
       [
@@ -147,7 +148,7 @@ function roster(
 /** The group, which is the two signed-in mints and the refusal anywhere else. */
 export function voiceMintApp(
   seams: VoiceMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient> {
+): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.VOICE_MINT, Effect.merge(voiceMint(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, Effect.merge(remoteVoiceMint(seams))),

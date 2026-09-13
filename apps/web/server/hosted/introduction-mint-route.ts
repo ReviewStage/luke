@@ -1,5 +1,4 @@
 import type { IntroductionMintSeams } from "../introduction-mint-app.js";
-import { runWeb } from "../runtime.js";
 import { spendIntroductionMeter } from "./quota.js";
 
 /**
@@ -9,5 +8,5 @@ import { spendIntroductionMeter } from "./quota.js";
  * function a first run touches has no use for.
  */
 export function hostedIntroductionMintSeams(): IntroductionMintSeams {
-  return { spendIntroduction: () => runWeb(spendIntroductionMeter({ now: Date.now() })) };
+  return { spendIntroduction: () => spendIntroductionMeter({ now: Date.now() }) };
 }

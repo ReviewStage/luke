@@ -2,7 +2,6 @@ import { Effect } from "effect";
 import { auth } from "../auth.js";
 import type { BrainSeams } from "../brain-app.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
-import { runWeb } from "../runtime.js";
 import {
   oauthUserInfoFromAuthAnswer,
   type UserInfoEndpoint,
@@ -30,6 +29,6 @@ const hostedBrainUserInfo: UserInfoEndpoint = (input) =>
 export function hostedBrainSeams(): BrainSeams {
   return {
     resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedBrainUserInfo),
-    spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
+    spend: (userId) => spendHostedMeter({ userId, now: Date.now() }),
   };
 }

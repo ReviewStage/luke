@@ -17,6 +17,7 @@ import {
 } from "../server/hosted/account-preferences.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
+import { noDatabase } from "./support/no-database.js";
 import {
   type RecordedResponse,
   recordedGoldenNames,
@@ -122,12 +123,19 @@ function writePreferences(state: Backing) {
   };
 }
 
+/**
+ * The group's seams are effects over the ambient client now, where the
+ * promise-shaped handler beside them still takes promises; both sides of the
+ * comparison drive the same backing, so what the oracle pins is the answer
+ * rather than the shape the seam is stated in.
+ */
 function groupSeams(state: Backing): AccountAppSeams {
   return {
     resolveUserId: resolveUserIdEffect,
-    deleteUser: deleteUser(state),
-    readPreferences: readPreferences(state),
-    writePreferences: writePreferences(state),
+    deleteUser: (userId) => Effect.promise(() => deleteUser(state)(userId)),
+    readPreferences: (userId) => Effect.promise(() => readPreferences(state)(userId)),
+    writePreferences: (userId, preferences) =>
+      Effect.promise(() => writePreferences(state)(userId, preferences)),
   };
 }
 
@@ -137,6 +145,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
     accountApp(groupSeams(state)).pipe(
       Effect.provideService(HostedEnvironment, ENVIRONMENT),
       Effect.provide(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
+      Effect.provide(noDatabase),
     ),
   );
   return handler(request);

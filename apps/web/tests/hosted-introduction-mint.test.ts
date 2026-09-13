@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -53,7 +54,7 @@ function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
-    spendIntroduction: async () => OPEN,
+    spendIntroduction: () => Effect.succeed(OPEN),
     now: () => NOW,
     ...overrides,
   };
@@ -109,10 +110,11 @@ test("an empty body mints the build's own defaults", async () => {
 
 test("a field beyond voice and speed is refused before anything is spent", async () => {
   let spent = 0;
-  const spendIntroduction = async () => {
-    spent += 1;
-    return OPEN;
-  };
+  const spendIntroduction = () =>
+    Effect.sync(() => {
+      spent += 1;
+      return OPEN;
+    });
 
   const unknownField = await mintAnswer(
     options({
@@ -149,7 +151,7 @@ test("the gate order is method, kill switch, body, meter", async () => {
   const blankKey = await mintAnswer(options({ apiKey: "   " }));
   assert.equal(blankKey.status, 503);
 
-  const exhausted = await mintAnswer(options({ spendIntroduction: async () => SPENT }));
+  const exhausted = await mintAnswer(options({ spendIntroduction: () => Effect.succeed(SPENT) }));
   assert.equal(exhausted.status, 429);
   const body = await exhausted.json();
   assert.equal(body.error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

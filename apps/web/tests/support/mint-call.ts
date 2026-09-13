@@ -7,6 +7,7 @@ import {
   introductionMintApp,
 } from "../../server/introduction-mint-app.js";
 import { type VoiceMintSeams, voiceMintApp } from "../../server/voice-mint-app.js";
+import { noDatabase } from "./no-database.js";
 
 /**
  * The mint group answered the way a function answers it, with the
@@ -14,7 +15,11 @@ import { type VoiceMintSeams, voiceMintApp } from "../../server/voice-mint-app.j
  * and the Realtime model override the same way `hostedEnvironment` resolves
  * them from `Config`, and reaches no runtime of its own. `httpClient` is the
  * test's own upstream double, the layer the group's OpenAI mint runs its
- * request over, where the deployment always runs the platform's own.
+ * request over, where the deployment always runs the platform's own. The
+ * client behind the group's meter seam is the one that refuses every
+ * statement: a test names what its own `spend` answers, so a statement
+ * reaching a connection here is the group reading a database this test never
+ * opened.
  */
 export interface MintCall extends Partial<VoiceMintSeams>, Partial<IntroductionMintSeams> {
   request: Request;
@@ -36,8 +41,8 @@ export function mintAnswer(call: MintCall): Promise<Response> {
   const apiKey = present(call.apiKey);
   const seams = {
     resolveUserId: () => Effect.succeed(undefined),
-    spend: async () => ({ allowed: false, quota: { used: 0, limit: 0, resetsAt: 0 } }),
-    spendIntroduction: async () => ({ allowed: false }),
+    spend: () => Effect.succeed({ allowed: false, quota: { used: 0, limit: 0, resetsAt: 0 } }),
+    spendIntroduction: () => Effect.succeed({ allowed: false }),
     readVaultKeys: async () => [],
     ...call,
   } satisfies VoiceMintSeams & IntroductionMintSeams;
@@ -61,6 +66,7 @@ export function mintAnswer(call: MintCall): Promise<Response> {
         apnsCredentials: undefined,
       }),
       Effect.provide(call.httpClient ?? FetchHttpClient.layer),
+      Effect.provide(noDatabase),
     ),
   );
   return handler(call.request);

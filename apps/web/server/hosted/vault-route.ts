@@ -1,6 +1,4 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult, Redacted } from "effect";
+import { Effect, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
@@ -17,6 +15,7 @@ import {
   readStoredVaultKeys,
   readVaultKey,
   storeVaultKey,
+  type VaultKeyEffect,
 } from "./vault-key-store.js";
 
 /**
@@ -44,17 +43,13 @@ export interface HostedVaultRoute {
   readKey: (
     userId: string,
     providerId: string,
-  ) => Effect.Effect<
-    { ciphertext: string } | undefined,
-    SqlError | ParseResult.ParseError,
-    SqlClient.SqlClient
-  >;
+  ) => VaultKeyEffect<{ ciphertext: string } | undefined>;
   /** Reads every vault key row the user has stored, for decryption in the handler. */
   readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
   /** Lists what is stored — provider ids and timestamps, never ciphertext. */
-  listKeys: (userId: string) => Promise<{ providerId: string; updatedAt: Date }[]>;
-  storeKey: (userId: string, providerId: string, ciphertext: string) => Promise<void>;
-  deleteKey: (userId: string, providerId: string) => Promise<boolean>;
+  listKeys: (userId: string) => VaultKeyEffect<{ providerId: string; updatedAt: Date }[]>;
+  storeKey: (userId: string, providerId: string, ciphertext: string) => VaultKeyEffect<void>;
+  deleteKey: (userId: string, providerId: string) => VaultKeyEffect<boolean>;
   /** The hosted store under the deployment's payload key ring, for the routes that read or write it. */
   store: (secret: string) => HostedStore;
 }
@@ -127,10 +122,9 @@ export const hostedVaultSeams = {
   resolveUserId: resolveHostedUserId,
   readKey: readVaultKey,
   readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
-  listKeys: (userId: string) => runWeb(listVaultKeys(userId)),
-  storeKey: (userId: string, providerId: string, ciphertext: string) =>
-    runWeb(storeVaultKey(userId, providerId, ciphertext)),
-  deleteKey: (userId: string, providerId: string) => runWeb(deleteVaultKey(userId, providerId)),
+  listKeys: listVaultKeys,
+  storeKey: storeVaultKey,
+  deleteKey: deleteVaultKey,
   store: storeFor,
 } satisfies Omit<HostedVaultRoute, "request" | "encryptionSecret">;
 

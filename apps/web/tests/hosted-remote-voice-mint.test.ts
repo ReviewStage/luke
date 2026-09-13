@@ -49,7 +49,7 @@ function options(overrides: Partial<MintCall> = {}) {
     request: mintRequest(),
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
-    spend: async () => OPEN_SPEND,
+    spend: () => Effect.succeed(OPEN_SPEND),
     readVaultKeys: async () => [],
     now: () => NOW,
     ...overrides,
@@ -117,7 +117,7 @@ test("the remote mint gate order is method, kill switch, token, body, quota", as
   assert.equal(malformed.status, 400);
   const quota = { used: 5_000, limit: 5_000, resetsAt: NOW + 1_000 };
   const spent = await mintAnswer(
-    options({ httpClient, spend: async () => ({ allowed: false, quota }) }),
+    options({ httpClient, spend: () => Effect.succeed({ allowed: false, quota }) }),
   );
   assert.equal(spent.status, 429);
   assert.deepEqual(await spent.json(), { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota });
