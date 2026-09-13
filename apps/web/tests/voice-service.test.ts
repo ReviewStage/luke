@@ -8,6 +8,7 @@ import {
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
+import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Either, Exit, Scope } from "effect";
@@ -34,7 +35,7 @@ import {
 } from "../server/live";
 import { VOICE_ROUTE } from "../server/voice/frames";
 import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
-import { UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
+import { UNPERMITTED_FRAME_REASON, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
   INTRODUCTION_INPUT_BOUNDS,
   listening,
@@ -325,20 +326,19 @@ test("a session is authorized, created, registered to its account, attached, and
   assert.equal(await context.sessions(), 1);
 });
 
-test("frames pass through untouched in both directions, except reflected audio, which is dropped by type", async () => {
+test("the desktop's stop and hang-up pass through untouched, every OpenAI frame reaches the desktop untouched, and reflected audio is dropped by type", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
   const { desktop, upstream, created } = await openSession(context);
 
   const toUpstream = [
-    JSON.stringify({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "u1" }),
     JSON.stringify({
-      type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
-      event_id: "c1",
+      type: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+      event_id: "s1",
       delegation_id: null,
-      content: "Two sessions are working.",
+      content: STOP_SPEAKING_INSTRUCTION,
     }),
-    JSON.stringify({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "m1" }),
+    JSON.stringify({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "x1" }),
   ];
   for (const frame of toUpstream) await sendText(desktop.socket, frame);
   const received: string[] = [];
@@ -994,9 +994,14 @@ test("a fresh connection re-attaches its account's session, answers session.atta
   assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
   assert.deepEqual(context.accounts.resolved, [BEARER, BEARER]);
 
-  const mute = JSON.stringify({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "m1" });
-  await sendText(second.desktop.socket, mute);
-  assert.equal(await second.upstream.next(), mute);
+  const stop = JSON.stringify({
+    type: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+    event_id: "s1",
+    delegation_id: null,
+    content: STOP_SPEAKING_INSTRUCTION,
+  });
+  await sendText(second.desktop.socket, stop);
+  assert.equal(await second.upstream.next(), stop);
   const caption = JSON.stringify({
     type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
     event_id: "e4",
@@ -1006,6 +1011,100 @@ test("a fresh connection re-attaches its account's session, answers session.atta
   });
   await sendText(second.upstream.socket, caption);
   assert.equal(await second.desktop.next(), caption);
+});
+
+test("a desktop frame the sessions route does not admit closes the socket with a policy violation, and the session still ends gracefully with its seconds recorded", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream, created } = await openSession(context);
+
+  // An older build's own exchange: the reply it would have appended.
+  await send(desktop.socket, {
+    type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+    event_id: "c1",
+    delegation_id: "dlg_1",
+    content: "One agent finished.",
+  });
+  const end = await desktop.closed;
+  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(end.reason, UNPERMITTED_FRAME_REASON);
+  // Nothing of the refused frame reached OpenAI; the relay's own close did.
+  const close = record(await upstream.next());
+  assert.equal(close.type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "e9",
+      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      usage: { seconds: 7 },
+    }),
+  );
+  assert.equal((await upstream.closed).code, SOCKET_CLOSE_CODE.NORMAL);
+  assert.deepEqual(context.accounts.reports, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, seconds: 7 },
+  ]);
+  const refused = context.log.find((entry) => entry.event === LOG_EVENT.FRAME_REFUSED);
+  assert.ok(refused && refused.event === LOG_EVENT.FRAME_REFUSED);
+  assert.equal(refused.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+  const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+  assert.equal(ended.refusedUnpermitted, 1);
+  assert.equal(ended.framesToUpstream, 0);
+});
+
+test("a frame whose type cannot be read, or one of the service's own vocabulary that is not a report, closes the socket the same way, and the type logged is only a name this build knows", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  for (const frame of [
+    "not json",
+    JSON.stringify({ type: "session.anything.else", event_id: "z" }),
+  ]) {
+    const { desktop, upstream } = await openSession(context);
+    await sendText(desktop.socket, frame);
+    const end = await desktop.closed;
+    assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+    assert.equal(end.reason, UNPERMITTED_FRAME_REASON);
+    assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  }
+  assert.deepEqual(
+    context.log
+      .filter((entry) => entry.event === LOG_EVENT.FRAME_REFUSED)
+      .map((entry) => (entry.event === LOG_EVENT.FRAME_REFUSED ? entry.type : "?")),
+    [undefined, undefined],
+  );
+});
+
+test("the desktop's idle report is read by the service and forwarded nowhere; one that is not a report is refused", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream } = await openSession(context);
+
+  await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true });
+  await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: false });
+  assert.equal(await upstream.arrives(), false);
+  assert.equal(await desktop.arrives(), false);
+
+  await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: "yes" });
+  const end = await desktop.closed;
+  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(end.reason, UNPERMITTED_FRAME_REASON);
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  await sendText(
+    upstream.socket,
+    JSON.stringify({
+      type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+      event_id: "e9",
+      reason: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+      usage: { seconds: 1 },
+    }),
+  );
+  await upstream.closed;
+  const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+  assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+  assert.equal(ended.reportsRead, 2);
+  assert.equal(ended.refusedUnpermitted, 1);
+  assert.equal(ended.framesToUpstream, 0);
 });
 
 test("seconds are recorded once across a re-attach, whichever connection sees session.closed", async () => {

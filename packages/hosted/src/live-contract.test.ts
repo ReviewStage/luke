@@ -9,6 +9,7 @@ import {
   isHostedVoiceServiceAddress,
   liveSessionCreatedFromWire,
   SESSION_CREATE_BOUNDS,
+  sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionAttachFrameFromWire,
   sessionCreatedFrameFromWire,
@@ -176,8 +177,24 @@ test("a session.attached frame answers the id it stands on, ignoring what a newe
   );
 });
 
-test("the frame types are four distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 4);
+test("a session.activity frame is the type and one boolean, and nothing else", () => {
+  const idle = { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true };
+  assert.deepEqual(sessionActivityFrameFromWire(idle), idle);
+  assert.deepEqual(sessionActivityFrameFromWire({ ...idle, idle: false }), {
+    ...idle,
+    idle: false,
+  });
+  assert.equal(sessionActivityFrameFromWire({ ...idle, idle: "yes" }), undefined);
+  assert.equal(sessionActivityFrameFromWire({ ...idle, later: true }), undefined);
+  assert.equal(
+    sessionActivityFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY }),
+    undefined,
+  );
+  assert.equal(sessionOpeningFrameFromWire(idle), undefined);
+});
+
+test("the frame types are five distinct members", () => {
+  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 5);
 });
 
 test("the voice service origin is the service's own origin in socket form", () => {

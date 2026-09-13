@@ -110,6 +110,14 @@ export const VOICE_SERVICE_FRAME = {
   SESSION_ATTACH: "session.attach",
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
+  /**
+   * The one frame the desktop sends after the handshake in this vocabulary:
+   * whether its peer has gone quiet, as the renderer's own idle window reads
+   * it. The service's exchange decides the idle close against the appends
+   * it made itself, so the report crosses to it; the relay reads the frame
+   * and forwards it nowhere.
+   */
+  SESSION_ACTIVITY: "session.activity",
 } as const;
 
 /**
@@ -174,6 +182,12 @@ export interface SessionAttachedFrame {
 
 /** Either frame a socket may open with. */
 export type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
+
+/** The desktop's word on its peer after the handshake: idle, or heard again. */
+export interface SessionActivityFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_ACTIVITY;
+  idle: boolean;
+}
 
 /**
  * A declaration handed the interface it decodes into, since Effect's `Schema`
@@ -312,6 +326,13 @@ export const sessionOpeningFrameSchema = schemaAs<SessionOpeningFrame>(
   ),
 );
 
+export const sessionActivityFrameSchema = schemaAs<SessionActivityFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ACTIVITY),
+    idle: Schema.Boolean,
+  }),
+);
+
 export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
   tolerantRecord({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -367,6 +388,12 @@ export function sessionOpeningFrameFromWire(
   value: UnparsedWireValue,
 ): SessionOpeningFrame | undefined {
   return admitted(sessionOpeningFrameSchema, value);
+}
+
+export function sessionActivityFrameFromWire(
+  value: UnparsedWireValue,
+): SessionActivityFrame | undefined {
+  return admitted(sessionActivityFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

@@ -107,8 +107,8 @@ import {
  * and the hang-up; the trusted side owns every append and the close
  * decision, one owner per action as the server-controls guide has it. The
  * service is transport-neutral on purpose — whoever holds the sideband
- * composes it: the desktop's host today, the hosted voice service where it
- * owns the exchange — so the brain is reached only through `LiveBrain`, the
+ * composes it, which since E5-3 is the hosted voice service alone, standing
+ * it on the session the desktop's holder created — so the brain is reached only through `LiveBrain`, the
  * record only through `LiveRecord`, and the session only through the
  * `LiveSessionSource` and `LiveSideband` seams. It is built by `make` in the
  * `Scope` its composition opened and runs for that scope: the verbs a caller

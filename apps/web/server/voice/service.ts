@@ -27,6 +27,7 @@ import {
   greetingCue,
   greetingInstruction,
   instructionsAppend,
+  LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
@@ -127,6 +128,16 @@ export interface VoiceServer {
   readonly server: http.Server;
   /** The one service answering this server's upgrades: none until one stands, and none again once its scope closes. */
   readonly serve: (handle: VoiceUpgrade | undefined) => void;
+}
+
+/** The names this build knows a desktop frame by, so the log names the frame it refused and never a string the desktop chose. */
+const KNOWN_FRAME_TYPES: ReadonlySet<string> = new Set<string>([
+  ...Object.values(LIVE_CLIENT_EVENT),
+  ...Object.values(VOICE_SERVICE_FRAME),
+]);
+
+function knownFrameType(type: string | undefined): string | undefined {
+  return type !== undefined && KNOWN_FRAME_TYPES.has(type) ? type : undefined;
 }
 
 /** Refuses one upgrade before any socket stands, with the status the decision named. */
@@ -238,8 +249,8 @@ export interface VoiceServiceOptions {
   run: WebStoreRun;
   /**
    * The hosted exchange to stand on each signed-in session, adopted over the
-   * same sideband the relay pipes; absent, the service only pipes, and the
-   * desktop's own exchange is the one that answers.
+   * same sideband the relay pipes. The route passes one; absent, as a test
+   * may leave it, the service only pipes and nobody answers a spoken ask.
    */
   exchange?: ExchangeAttachment;
   /** The OpenAI `/v1` base; a test points it at a fake. */
@@ -614,6 +625,17 @@ export class VoiceService {
                     yield* this.#recordUsage(accountId, sessionId, closed.usage.seconds);
                   }),
                 ),
+        // The desktop's idle report reaches the exchange that holds the idle
+        // decision; with no exchange standing it is read and goes nowhere.
+        onDesktopReport:
+          exchange === undefined
+            ? undefined
+            : (report) => {
+                exchange.service.reportActivity(report.idle);
+              },
+        onFrameRefused: (type) => {
+          this.#log({ event: LOG_EVENT.FRAME_REFUSED, route, type: knownFrameType(type) });
+        },
       });
       // The relay has settled and closed both transports; the exchange ends its
       // follows and its look, closes the session it holds (already gone, which

@@ -70,7 +70,8 @@ interface SettingsLinks {
   readonly cloudKeyHeld: Effect.Effect<void>;
   applyVoiceCredential: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
-  readonly reconcileSpeech: Effect.Effect<void>;
+  /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
+  readonly refreshAnnouncementHold: Effect.Effect<void>;
   broadcastWorkspaceProjects: Effect.Effect<void>;
   workspaceProjectOffered: (
     providerId: string,
@@ -677,7 +678,7 @@ export const composeSettings = (): Effect.Effect<
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       applyVoiceCredential: linked((links) => links.applyVoiceCredential),
-      reconcileSpeech: linked((links) => links.reconcileSpeech),
+      refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
       emitSettings,
     });
 
