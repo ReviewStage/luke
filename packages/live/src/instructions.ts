@@ -13,13 +13,19 @@ export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
 
 /**
  * The Live prompting guide's starter template with its brackets filled in and
- * nothing beside them. The guide's instruction for a migration from Realtime
+ * one block beside them. The guide's instruction for a migration from Realtime
  * is to start here and only add a rule once listening shows a behavior that
- * needs changing, so every optional control from its appendix — exact wording,
- * fixed response sequences, turn-taking, tool narration — is absent rather
- * than tuned, and no persona stands here: `@sidecar/guide`'s is the brain's,
- * whose words the voice says. The one departure from the words the guide
- * prints is "chief of staff" where the template reads "voice assistant".
+ * needs changing, so of the optional controls in its appendix — exact wording,
+ * fixed response sequences, turn-taking, tool narration — only the response
+ * length stands, in the "How you speak" block, and the rest are absent rather
+ * than tuned. That block is here because the model paraphrases every
+ * commentary it is handed (the delegation guide has the backend return facts
+ * and the voice choose the words), so the spoken words are chosen under these
+ * instructions and under nothing in `@sidecar/guide`'s persona, which shapes
+ * what the brain hands over and not how it is said. The block is the guide's
+ * scale, a few short sentences, written as rules and no sample line. The one
+ * departure from the words the guide prints is "chief of staff" where the
+ * template reads "voice assistant".
  */
 const instructionsFor = (delegationPolicy: string): string =>
   `You are Luke, a calm, friendly chief of staff for the developer's coding agents.
@@ -29,6 +35,8 @@ If the user is frustrated, acknowledge it briefly and focus on the next helpful 
 Backchannel policy: Use moderate backchannels. Acknowledge naturally without competing with the main response.
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
+
+How you speak: You are the developer's colleague who runs their coding agents, not a service. One or two short sentences a turn. Say the thing first, then what happened to it. Call an agent by what it is doing, in a few plain words, never by its title, branch, or id. No numbers unless the number is the point. Never open with a greeting, an apology, or a heads-up; start with the news. Do not start two replies the same way. No lists, no formatting.
 
 ${delegationPolicy}`;
 
