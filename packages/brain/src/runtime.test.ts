@@ -22,7 +22,7 @@ import {
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Either, Fiber } from "effect";
+import { Effect, Fiber, Result } from "effect";
 import { test } from "vitest";
 import { COMPACTION_POLICY } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
@@ -150,7 +150,7 @@ function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
           inner.resume(checkpoint, { ...request, onEvent: listener(request.onEvent) }, lostResult),
         ),
       ).then((resumed) =>
-        Either.isLeft(resumed) ? { refused: resumed.left.reason } : started(resumed.right),
+        Result.isFailure(resumed) ? { refused: resumed.failure.reason } : started(resumed.success),
       ),
   };
 }

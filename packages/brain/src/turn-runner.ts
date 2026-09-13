@@ -21,7 +21,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import type { UserMessageMetadata, WireRecord } from "@sidecar/wire";
-import { Cause, Duration, Effect, Either, Exit, Fiber, Option } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Option, Result } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { whenAborted } from "./effect/settled.js";
 import { CONTEXT_OPENING, claimOpenedContext, retireContext } from "./generation.js";
@@ -633,16 +633,16 @@ export class TurnRunner {
             );
             policy = this.#resolvePolicy(preparation, plan.trigger);
             const prepared = this.#revoked(turnContext)
-              ? Either.right(undefined)
+              ? Result.succeed(undefined)
               : yield* Effect.either(
                   this.#options.compactIfNeeded(turnContext, preparation.prompt),
                 );
             if (this.#revoked(turnContext)) return revocation();
-            if (Either.isLeft(prepared)) {
+            if (Result.isFailure(prepared)) {
               // The request would not fit and the context could not be folded:
               // the run fails recoverably, and what stands is exactly what stood.
               run.compactionFailed = true;
-              gathering.error = `compaction required: ${prepared.left.reason}`;
+              gathering.error = `compaction required: ${prepared.failure.reason}`;
               return { outcome: TURN_OUTCOME.FAILED };
             }
             // The admission's compaction, if any, is the new rollback point: a

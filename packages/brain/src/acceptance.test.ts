@@ -63,7 +63,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Clock, Duration, Effect, TestClock, type TestServices } from "effect";
+import { Clock, Duration, Effect } from "effect";
+import { TestClock, type TestConsole } from "effect/testing";
 import { test } from "vitest";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
@@ -357,7 +358,11 @@ async function settle(): Promise<void> {
  * arms one wait of `WAKE_COALESCE_MS` on the agent's clock, and advancing
  * past it is what opens the turn those wakes were held for.
  */
-const runCoalescingWindow = (): Effect.Effect<void, never, TestServices.TestServices> =>
+const runCoalescingWindow = (): Effect.Effect<
+  void,
+  never,
+  TestClock.TestClock | TestConsole.TestConsole
+> =>
   Effect.gen(function* () {
     yield* TestClock.adjust(Duration.millis(BRAIN_DEFAULTS.WAKE_COALESCE_MS));
     yield* Effect.promise(() => settle());

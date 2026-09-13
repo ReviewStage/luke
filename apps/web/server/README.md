@@ -6,7 +6,7 @@ Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
 migrations; the connection strings live nowhere in this repository. There is
 no ORM and no generated schema module: every query is a statement the
-`@effect/sql` `SqlClient` runs, and a table's shape lives in its migration
+`effect/unstable/sql` `SqlClient` runs, and a table's shape lives in its migration
 alone. Better Auth reaches its tables through its Drizzle adapter over
 `server/db/auth-schema.ts` (see below), the one schema module the app keeps,
 so a migration that changes an auth column's type changes that declaration
@@ -30,7 +30,7 @@ connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `@effect/sql`'s own migrator: `server/db/effect-migrator.ts`
+What applies them is `effect/unstable/sql`'s own migrator: `server/db/effect-migrator.ts`
 reads `drizzle/meta/_journal.json` and the `.sql` file each entry names, in
 order, and records what it applied in its own `effect_sql_migrations` table
 rather than `drizzle.__drizzle_migrations`, which a database an older
@@ -234,7 +234,7 @@ process's others.
 The layer carries what a Vercel function's own platform already offers: an
 `HttpClient` over `fetch`, and the `SqlClient` of `server/db/sql-client.ts` over
 the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
-`repository-checks.sh` refuses that specifier and `@effect/sql*` in the
+`repository-checks.sh` refuses that specifier and `effect/unstable/sql` in the
 renderer, where there is no Node; a function inlines its whole graph and the
 isolation guard proves it loads. The layer itself is behind
 `server/`, which is what the builder traces. A function is handed no shutdown
@@ -287,10 +287,9 @@ client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
-`effect`, `@effect/platform`, `@effect/experimental`, `@effect/sql`, and
-`@effect/sql-pg` are declared dependencies of this app, which is what leaves
-them external to the bundles rather than inlined into each of them, so Vercel's
-builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
+`effect` and `@effect/sql-pg` are declared dependencies of this app, which is
+what leaves them external to the bundles rather than inlined into each of them,
+so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
 `pg`, which is external on the same terms and already was.
 
 A test reads the same client through `tests/support/sql-client.ts`, which
@@ -722,7 +721,7 @@ with.
 One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
 function hands the service. Both sockets are the platform's:
 `server/voice/socket.ts` reads a `ws` socket through
-`@effect/platform`'s `Socket`, a fiber of that scope filling a mailbox with
+`effect/unstable/socket`'s `Socket`, a fiber of that scope filling a mailbox with
 every frame in arrival order, so the opening frame is taken from the same
 reader the relay then streams the rest from and nothing between the two lands
 nowhere. `server/voice/relay.ts` pipes the two streams, settles on a

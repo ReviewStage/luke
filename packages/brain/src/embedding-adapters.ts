@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
   HOSTED_BRAIN_CONTRACT_VERSION,
@@ -27,6 +26,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import type { Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type BrainTransport, hostedBrainTransport, keyedBrainTransport } from "./client.js";
 import { failed, notServed, payloadOf, throttled } from "./model-adapter-shared.js";
 import { BRAIN_OPENAI_DEFAULTS } from "./openai-model-adapter.js";

@@ -1,8 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   bm25RankToScore,
   buildFtsQuery,
@@ -37,6 +34,9 @@ import {
 import { DAILY_NOTES_DIRECTORY, WORKSPACE_FILE } from "@sidecar/runtime";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import type { NotebookEntry } from "./notebook-table.js";
 import { columnsDecoded } from "./rows.js";
 

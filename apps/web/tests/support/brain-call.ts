@@ -1,6 +1,6 @@
-import { FetchHttpClient, HttpApp } from "@effect/platform";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { Effect, type Layer, Redacted } from "effect";
+import { FetchHttpClient, HttpEffect } from "effect/unstable/http";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type BrainSeams, brainApp } from "../../server/brain-app.js";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
 import { noDatabase } from "./no-database.js";
@@ -32,7 +32,7 @@ function present(value: string | undefined): string | undefined {
 
 export function brainAnswer(call: BrainCall): Promise<Response> {
   const apiKey = present(call.apiKey);
-  const handler = HttpApp.toWebHandler(
+  const handler = HttpEffect.toWebHandler(
     brainApp(call).pipe(
       Effect.provideService(HostedEnvironment, {
         openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),

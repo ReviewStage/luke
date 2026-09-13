@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HTTP_METHOD } from "../json.js";
 import { fakeCloudApi, recordedRoutes } from "./cloud-fake.js";
 import { fakeHttpClient } from "./http-client-fake.js";

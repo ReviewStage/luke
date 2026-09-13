@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Chunk, Effect, Either, Option, type ParseResult, Stream } from "effect";
+import { Chunk, Effect, Option, type ParseResult, Result, Stream } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
@@ -229,7 +229,7 @@ function cursorOf(query: URLSearchParams): number | undefined {
   const text = query.get(READ_QUERY.AFTER);
   if (text === null) return 0;
   if (!CURSOR_DIGITS.test(text)) return undefined;
-  return Either.getOrUndefined(readEither(turnEventCursorSchema)(unparsedWire(Number(text))));
+  return Result.getOrUndefined(readEither(turnEventCursorSchema)(unparsedWire(Number(text))));
 }
 
 export function handleTurnEventStream(
@@ -259,7 +259,7 @@ export function handleTurnEventStream(
       return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }
     // An id that is not a uuid names no row and answers as none, the same as another account's.
-    const turnId = Either.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
+    const turnId = Result.getOrUndefined(readEither(wireUuidSchema)(unparsedWire(id)));
     if (turnId === undefined) return notFound();
     const [turn] = yield* store.turns.named(userId, [turnId]);
     if (turn === undefined) return notFound();

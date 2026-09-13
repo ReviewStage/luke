@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them and admission reads them. */
 export interface HostedWorkspaceDefaults {

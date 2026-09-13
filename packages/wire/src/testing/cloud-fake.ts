@@ -1,5 +1,5 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   HTTP_STATUS,
   jsonResponse,

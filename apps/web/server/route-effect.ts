@@ -1,5 +1,5 @@
-import { HttpApp } from "@effect/platform";
 import { Effect, type Scope } from "effect";
+import { HttpEffect, type HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { Route } from "./route.js";
 import { runWeb, type WebServices } from "./runtime.js";
 
@@ -17,12 +17,18 @@ type WebHandler = (request: Request) => Promise<Response>;
  * the failure is the layer's — a missing `DATABASE_URL` today — and a held
  * rejection would answer every later invocation from it without trying again.
  */
-export function routeFromHttpApp(app: HttpApp.Default<never, WebServices | Scope.Scope>): Route {
+export function routeFromHttpApp(
+  app: Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    WebServices | Scope.Scope | HttpServerRequest.HttpServerRequest
+  >,
+): Route {
   let building: Promise<WebHandler> | undefined;
   return {
     async fetch(request: Request): Promise<Response> {
       building ??= runWeb(Effect.runtime<WebServices>()).then((runtime) =>
-        HttpApp.toWebHandlerRuntime(runtime)(app),
+        HttpEffect.toWebHandlerRuntime(runtime)(app),
       );
       const attempt = building;
       let handler: WebHandler;

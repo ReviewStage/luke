@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM } from "@sidecar/hosted";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { VOICE_CLOSE_REASON, VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { registerDevice } from "../server/hosted/device-store";
 import { voiceSessionRecord } from "../server/voice/session-record";
@@ -38,7 +38,7 @@ const readVoiceSession = (liveSessionId: string) =>
     return yield* sql`select * from voice_sessions where live_session_id = ${liveSessionId}`;
   });
 
-it.layer(testSqlClient)("the voice session record over @effect/sql", (it) => {
+it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
     "a registered session names its account, keeps its first owner, and answers the owner's re-attach alone",
     () =>

@@ -2,10 +2,6 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingHttpHeaders, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import * as Socket from "@effect/platform/Socket";
-import * as SocketServer from "@effect/platform/SocketServer";
-import { RpcSerialization, RpcServer } from "@effect/rpc";
-import type { FromClientEncoded } from "@effect/rpc/RpcMessage";
 import { isIdentifier } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireString, type UnparsedWireValue, valueFromJsonText } from "@sidecar/wire";
 import {
@@ -20,6 +16,10 @@ import {
   type Scope,
   Stream,
 } from "effect";
+import { RpcSerialization, RpcServer } from "effect/unstable/rpc";
+import type { FromClientEncoded } from "effect/unstable/rpc/RpcMessage";
+import * as Socket from "effect/unstable/socket/Socket";
+import * as SocketServer from "effect/unstable/socket/SocketServer";
 import { WebSocket, WebSocketServer } from "ws";
 import {
   type InvocationMemory,
@@ -70,7 +70,7 @@ import type { GatewayEventSink, GatewayHostConnection, GatewayTransport } from "
 
 /**
  * The Gateway on a socket: the protocol's envelopes carried as text over a
- * WebSocket the host binds, each accepted connection an `@effect/platform`
+ * WebSocket the host binds, each accepted connection an `effect/unstable/socket`
  * `Socket` run in the binding's own `Scope`, and the frames that cross it the
  * `RpcServer.Protocol` `layerGatewayServer` answers over. This is the
  * transport that crosses a machine boundary, so the handshake decides

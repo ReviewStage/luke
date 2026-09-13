@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Cause, Effect, type ParseResult } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
 
 /**

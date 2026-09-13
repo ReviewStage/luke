@@ -1,9 +1,9 @@
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import type { SessionKey } from "@sidecar/runtime/vocabulary";
 import type { WireRecord, WireValue } from "@sidecar/wire";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import {
   type BrainPersistedState,
   type BrainTranscriptCursors,

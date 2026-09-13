@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { type AuthFn, ForbiddenError, routeAuth } from "eve/channels/auth";
 import type { EveMessageContext } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
@@ -60,7 +60,7 @@ const refusalBody = EffectSchema.Struct({ error: trimmedText }).annotations({
 async function refusalMessageOf(response: Response): Promise<string> {
   // SAFETY: eve's own JSON refusal body; the schema read that follows is what holds it to a shape.
   const body = readEither(refusalBody)(unparsedWire((await response.json()) as WireBoundaryInput));
-  return Either.isRight(body) ? body.right.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
+  return Result.isSuccess(body) ? body.success.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
 }
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 

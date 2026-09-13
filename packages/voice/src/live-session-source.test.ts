@@ -19,7 +19,8 @@ import {
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
 import { fakeHttpClientLayer, type ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect, Exit, TestClock } from "effect";
+import { Effect, Exit } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   HOSTED_REATTACH_DELAYS_MS,

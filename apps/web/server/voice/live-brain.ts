@@ -1,4 +1,3 @@
-import { SqlClient } from "@effect/sql";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -8,6 +7,7 @@ import {
   type LiveBrainRunEvent,
 } from "@sidecar/voice/live-session";
 import { Cause, Duration, Effect, Schedule, type Scope } from "effect";
+import { SqlClient } from "effect/unstable/sql";
 import {
   ASK_ORIGIN,
   TURN_END,

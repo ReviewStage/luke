@@ -10,7 +10,7 @@ import {
 import type { ConversationViewMessage } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ConversationViewSync,
@@ -101,8 +101,9 @@ async function answered<Value, Encoded>(
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
   const read = readEither(schema)(body);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {

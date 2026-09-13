@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,

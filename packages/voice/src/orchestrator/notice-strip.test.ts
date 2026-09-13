@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Runtime, TestClock } from "effect";
+import { Duration, Effect, Runtime } from "effect";
+import { TestClock } from "effect/testing";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 
 /** Lets a fiber the strip forked on this test's runtime run what fell due, with no time passing. */

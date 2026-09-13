@@ -8,7 +8,8 @@ import {
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { Duration, Effect, Exit, Scope, TestClock } from "effect";
+import { Duration, Effect, Exit, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   CONVERSATION_MAINTENANCE_INTERVAL_MS,

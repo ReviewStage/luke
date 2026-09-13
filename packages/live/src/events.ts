@@ -6,7 +6,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 
 /**
  * The Live wire grammar: how far a session has progressed, the events both
@@ -180,7 +180,7 @@ function dropped<Value, Encoded>(
 ): Schema.Schema<Value | undefined, UnparsedWireValue> {
   const read = readEither(inner);
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }
@@ -516,7 +516,7 @@ export function parseLiveServerEvent(data: UnparsedWireValue): LiveServerEvent |
   const payload = decodeLivePayload(data);
   return payload === undefined
     ? undefined
-    : Either.getOrUndefined(readEither(liveServerEventSchema)(payload));
+    : Result.getOrUndefined(readEither(liveServerEventSchema)(payload));
 }
 
 /**

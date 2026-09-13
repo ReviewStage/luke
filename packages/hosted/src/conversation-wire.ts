@@ -6,7 +6,7 @@ import {
   readEither,
   verbatimJsonSchema,
 } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { countedNumber, writtenText } from "./service-wire.js";
 
 /**
@@ -101,7 +101,7 @@ function dropped<Value, Encoded>(
 ): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
   const read = readEither(inner);
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }

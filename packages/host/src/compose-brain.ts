@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import type { FileSystem } from "@effect/platform";
+
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { workerStoreTransport } from "@sidecar/brain/store";
@@ -41,7 +41,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, ExecutionStrategy, Exit, Queue, Scope } from "effect";
+import { Effect, ExecutionStrategy, Exit, type FileSystem, Queue, Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";

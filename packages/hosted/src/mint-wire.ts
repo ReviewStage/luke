@@ -1,6 +1,6 @@
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -98,7 +98,7 @@ function admitted<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /** The value a `dropRefused` field admits: whatever the schema read, or nothing. */

@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
 import { Effect, Option, type ParseResult } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";

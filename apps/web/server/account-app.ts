@@ -1,8 +1,13 @@
-import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Redacted } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   type AccountPreferencesRow,
   type HostedAccountPreferences,
@@ -103,7 +108,14 @@ function forgetAnalytics(
  */
 function accountDeleteEndpoint(
   seams: AccountAppSeams,
-): HttpApp.Default<HostedRefusal, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     yield* hostedMethod(HTTP_METHOD.POST);
     const userId = yield* resolvedUserId(seams);
@@ -170,7 +182,11 @@ function preferencesWriteEndpoint(
 /** GET or PUT on the same path; any other method is the same refusal the two branches would answer separately. */
 function accountPreferencesEndpoint(
   seams: AccountAppSeams,
-): HttpApp.Default<HostedRefusal, SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  HostedRefusal,
+  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* preferencesReadEndpoint(seams);
@@ -186,7 +202,14 @@ function accountPreferencesEndpoint(
  */
 export function accountApp(
   seams: AccountAppSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(ACCOUNT_PATH.DELETE, accountDeleteEndpoint(seams)),
     HttpRouter.all(ACCOUNT_PATH.PREFERENCES, accountPreferencesEndpoint(seams)),

@@ -34,7 +34,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { ACTION_KIND, type CarriedAction, type SessionActionKind } from "./action-kinds.js";
 import { maximumIdentifierLength } from "./action-schemas.js";
 
@@ -137,7 +137,7 @@ function droppedField<Value, Encoded>(
 ): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
   const read = readEither(schema);
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(schema),
   );
 }

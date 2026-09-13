@@ -12,7 +12,7 @@ import type { GatewayHostConnection } from "./transport.js";
  * What a host's method handler is handed and what it answers. This is the
  * vocabulary the barrel carries: a handler table is written against these
  * shapes wherever the host composes one, and nothing here reaches
- * `@effect/rpc`, which stays behind the `./server` door that runs the table.
+ * `effect/unstable/rpc`, which stays behind the `./server` door that runs the table.
  */
 
 /**

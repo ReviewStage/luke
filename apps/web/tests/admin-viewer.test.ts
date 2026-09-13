@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { HttpApp } from "@effect/platform";
 import { Effect } from "effect";
+import { HttpEffect } from "effect/unstable/http";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { adminViewerGate } from "../server/admin/gate";
@@ -21,7 +21,7 @@ function gate(overrides: Partial<Parameters<typeof adminViewerGate>[0]> = {}) {
     handler: () => Effect.succeed(new Response("{}", { status: 200 })),
     ...overrides,
   });
-  return { fetch: HttpApp.toWebHandler(Effect.provide(app, noDatabase)) };
+  return { fetch: HttpEffect.toWebHandler(Effect.provide(app, noDatabase)) };
 }
 
 test("the gate answers 405, 503, 401, 403, and the handler as distinct outcomes", async () => {

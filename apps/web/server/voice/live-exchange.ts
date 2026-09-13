@@ -1,5 +1,3 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
@@ -10,6 +8,8 @@ import {
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
 import { Effect, Layer, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";

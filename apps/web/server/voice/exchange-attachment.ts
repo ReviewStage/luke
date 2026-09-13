@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Exit, type ParseResult, Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";

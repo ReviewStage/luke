@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import {
   CONTEXT_INPUT_KIND,
@@ -7,6 +6,7 @@ import {
   TRANSCRIPT_EVENT_KIND,
 } from "@sidecar/runtime/vocabulary";
 import { Effect } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
   type BrainPersistedState,

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   ACCOUNT_FAILURE_ACTION,

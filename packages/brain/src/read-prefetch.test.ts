@@ -17,7 +17,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema, Fiber, TestClock } from "effect";
+import { Effect, Schema as EffectSchema, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import {
   ABC,
   answered,

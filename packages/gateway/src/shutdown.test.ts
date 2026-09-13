@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Fiber, TestClock } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import {
   GATEWAY_SHUTDOWN_DEFAULTS,
   type GatewayShutdownSteps,

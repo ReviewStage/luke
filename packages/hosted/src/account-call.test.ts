@@ -10,7 +10,8 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Fiber, Schema, TestClock } from "effect";
+import { Deferred, Duration, Effect, Fiber, Schema } from "effect";
+import { TestClock } from "effect/testing";
 import {
   accountBearer,
   accountCall,

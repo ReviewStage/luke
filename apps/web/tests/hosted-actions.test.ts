@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
 import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";

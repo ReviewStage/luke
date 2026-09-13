@@ -1,6 +1,11 @@
-import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { Effect, Redacted } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   HOSTED_SERVICE_PATH,
   type ObservedSession,
@@ -148,7 +153,14 @@ function roster(
 /** The group, which is the two signed-in mints and the refusal anywhere else. */
 export function voiceMintApp(
   seams: VoiceMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.VOICE_MINT, Effect.merge(voiceMint(seams))),
     HttpRouter.all(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, Effect.merge(remoteVoiceMint(seams))),

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   changesAnswerSchema,
   DEVICE_PLATFORM,
@@ -18,7 +17,8 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change-signal";
@@ -83,15 +83,16 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 async function answered(response: Response) {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const read = readEither(changesAnswerSchema)((await response.json()) as UnparsedWireValue);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 function positionsOf(cursor: string): [string, number][] {

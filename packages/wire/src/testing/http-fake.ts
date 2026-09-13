@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { HTTP_STATUS as BOUNDARY_HTTP_STATUS } from "../json.js";
 import { fakeHttpClientLayer } from "./http-client-fake.js";
 import type { JsonValue } from "./json.js";

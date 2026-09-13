@@ -1,6 +1,6 @@
 /**
  * Bringing a store's schema to this build's version, as one Effect over the
- * `@effect/sql` client. `STORE_SCHEMA_MIGRATIONS` stays what it is — data,
+ * `effect/unstable/sql` client. `STORE_SCHEMA_MIGRATIONS` stays what it is — data,
  * read here and written nowhere — and the version the file stands at stays
  * where it has always been, the one row of the `schema_version` table, rather
  * than a marker of a migrator's own: a second place to look is a second place
@@ -15,9 +15,9 @@
  * could tell from a database at either version.
  */
 
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type SchemaMigrationStep,
   STORE_SCHEMA_FLOOR,

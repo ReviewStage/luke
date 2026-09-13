@@ -28,7 +28,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Either, Fiber, Option } from "effect";
+import { Deferred, Effect, Fiber, Option, Result } from "effect";
 import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
@@ -269,7 +269,7 @@ test("every answer is the envelope: a session action's target as the roster held
   });
 
   for (const envelope of [sent, stopped, created]) {
-    assert.deepEqual(Either.getOrUndefined(readEither(ACTION_OUTPUT)(envelope)), envelope);
+    assert.deepEqual(Result.getOrUndefined(readEither(ACTION_OUTPUT)(envelope)), envelope);
   }
 });
 

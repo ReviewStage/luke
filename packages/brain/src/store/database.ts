@@ -1,7 +1,7 @@
 import type { DatabaseSync, StatementSync } from "node:sqlite";
-import type { SqlClient } from "@effect/sql/SqlClient";
-import { SqlError } from "@effect/sql/SqlError";
 import { Cause, type Context, Effect, Exit, Layer, Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql/SqlClient";
+import { SqlError } from "effect/unstable/sql/SqlError";
 import { migrateStoreSchema, type StoreSchemaRefused } from "./migration.js";
 import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
 
@@ -20,7 +20,7 @@ import { layerFromHandle, openDatabaseHandle } from "./sql-node-sqlite.js";
  * generation deletes the old one's checkpoints, cursors, requests, and
  * receipts in the same statement that removes the session.
  *
- * The handle is opened by `sql-node-sqlite.ts`, and one `@effect/sql` client
+ * The handle is opened by `sql-node-sqlite.ts`, and one `effect/unstable/sql` client
  * over it is built by `open`, once, on the runtime that opens it: `sql`
  * hands that one client out as a layer, which is what every table module's
  * effect runs over. The synchronous surface below — `run`, `prepare`,
@@ -37,7 +37,7 @@ export class StoreDatabase {
   readonly #client: Context.Context<SqlClient>;
   #transactionDepth = 0;
   /**
-   * This handle as an `@effect/sql` client, built once at the open and handed
+   * This handle as an `effect/unstable/sql` client, built once at the open and handed
    * out as the layer that already holds it, so every effect run over this
    * database speaks to one client: one prepared-statement cache, and the one
    * permit that is the store's one-writer rule. The client and the

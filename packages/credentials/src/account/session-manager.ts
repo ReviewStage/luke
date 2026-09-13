@@ -1,4 +1,4 @@
-import { Cause, Effect, Either, Fiber, PubSub, type Scope, Stream } from "effect";
+import { Cause, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -205,8 +205,8 @@ export class AccountSessionManager {
       if (!stored)
         return yield* Effect.fail(new Error("No stored account credential to delete with"));
       const deleted = yield* Effect.either(this.#deleteHosted(stored.accessToken));
-      if (Either.isLeft(deleted)) {
-        if (!accessTokenNeedsRefresh(deleted.left)) return yield* Effect.fail(deleted.left);
+      if (Result.isFailure(deleted)) {
+        if (!accessTokenNeedsRefresh(deleted.failure)) return yield* Effect.fail(deleted.failure);
         const generation = this.#generation;
         const tokens = yield* this.#options.client.refresh(stored.refreshToken);
         yield* this.#storeCurrent(generation, { ...stored, ...tokens });
@@ -224,25 +224,25 @@ export class AccountSessionManager {
       const identity = yield* Effect.either(
         this.#options.client.userInfo(stored.accessToken, stored.provider),
       );
-      if (Either.isRight(identity)) {
-        if (sameIdentity(stored, identity.right)) return;
-        if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.right))))
+      if (Result.isSuccess(identity)) {
+        if (sameIdentity(stored, identity.success)) return;
+        if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.success))))
           return;
         yield* this.#publishChange();
         return;
       }
-      if (!accessTokenNeedsRefresh(identity.left)) return;
+      if (!accessTokenNeedsRefresh(identity.failure)) return;
       const renewed = yield* Effect.either(this.#options.client.refresh(stored.refreshToken));
-      if (Either.isLeft(renewed)) {
+      if (Result.isFailure(renewed)) {
         if (
-          accountFailureAction(renewed.left) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
+          accountFailureAction(renewed.failure) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
           this.#isCurrent(generation)
         ) {
           yield* this.signOut();
         }
         return;
       }
-      const tokens = renewed.right;
+      const tokens = renewed.success;
       // The renewed tokens are already stored by the time the identity read
       // below is made, so a read that fails leaves the account signed in on
       // them rather than undoing the renewal.

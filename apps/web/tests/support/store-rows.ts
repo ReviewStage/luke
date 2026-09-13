@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { MessageRoleSchema } from "@sidecar/wire";
 import { Cause, Effect, Option, Runtime, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { StoredUIMessage } from "../../server/core";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
 import { EpochMillisColumnSchema } from "../../server/hosted/store/database";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   DEVICE_PLATFORM,
@@ -22,7 +22,7 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";

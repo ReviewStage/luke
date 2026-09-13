@@ -1,4 +1,3 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
@@ -19,6 +18,7 @@ import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import { Effect, Layer } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { composeAccount } from "./compose-account.js";
 import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";

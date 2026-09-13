@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /**
  * What a turn ran under, addressed by the SHA-256 of the bytes as the model

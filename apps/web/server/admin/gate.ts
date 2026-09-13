@@ -1,6 +1,6 @@
-import { type HttpApp, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { Cause, Effect } from "effect";
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-effect.js";
@@ -34,7 +34,11 @@ export function adminViewerGate(options: {
     viewer: AdminViewer,
     request: Request,
   ) => Effect.Effect<Response, never, SqlClient.SqlClient>;
-}): HttpApp.Default<never, SqlClient.SqlClient> {
+}): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (!options.methods.includes(incoming.method)) {

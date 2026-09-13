@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import type { FileSystem } from "@effect/platform";
+
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { inProcessStoreTransport, storeClient } from "@sidecar/brain/store";
@@ -20,7 +20,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { Effect, Runtime, type Scope } from "effect";
+import { Effect, type FileSystem, Runtime, type Scope } from "effect";
 import { composeNotebookMemory, type NotebookMemoryDependencies } from "./notebook-memory.js";
 
 const NOW = 1_800_000_000_000;

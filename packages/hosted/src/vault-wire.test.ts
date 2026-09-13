@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   VAULT_KEY_MAX_LENGTH,
@@ -16,7 +16,7 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 test("a storable key is non-empty, whitespace-free, and bounded", () => {

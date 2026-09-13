@@ -1,10 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as Headers from "@effect/platform/Headers";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import type * as HttpClientError from "@effect/platform/HttpClientError";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   ACTION_RESULT_STATUS,
   type ProviderActionResult,
@@ -22,6 +15,13 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { Cause, Duration, Effect, type Layer, Option } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as Headers from "effect/unstable/http/Headers";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import {
   ADAPTER_DIAGNOSTIC_KIND,
   type AdapterDiagnosticCallback,

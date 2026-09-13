@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Duration, Effect, Either, Option, type ParseResult, Schema } from "effect";
+import { Duration, Effect, Option, type ParseResult, Result, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
@@ -79,7 +79,7 @@ function toNumber(value: number | string | null | undefined): number {
 const probeDatabase = Effect.map(
   Effect.timed(Effect.either(statement((sql) => sql`select 1`))),
   ([elapsed, probed]) => ({
-    reachable: Either.isRight(probed),
+    reachable: Result.isSuccess(probed),
     latencyMs: Math.round(Duration.toMillis(elapsed)),
   }),
 );

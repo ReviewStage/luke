@@ -11,7 +11,7 @@ import {
   type ValidatedAction,
 } from "@sidecar/actions";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /**
@@ -61,11 +61,11 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
             { ...context.admission, origin: context.origin, guard: context },
           ),
         );
-        if (Either.isLeft(admitted)) return refusedActionOutput(admitted.left.reason);
+        if (Result.isFailure(admitted)) return refusedActionOutput(admitted.failure.reason);
         // Asked once more after admission's own reads, so an action whose turn
         // ended while the roster was refreshing is refused rather than carried.
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
-        return yield* context.carry(admitted.right);
+        return yield* context.carry(admitted.success);
       });
     },
   };

@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**

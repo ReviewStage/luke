@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { HOSTED_API_ERROR, hostedErrorSchema, hostedQuotaSchema } from "./service-wire.js";
 
@@ -9,7 +9,7 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 test("a quota is four counts at or above zero, and anything else is no quota", () => {

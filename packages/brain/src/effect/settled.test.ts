@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Deferred, Duration, Effect, Fiber, Option, TestClock } from "effect";
+import { Deferred, Duration, Effect, Fiber, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { claimedUnlessAborted, settledUnlessAborted, whenAborted } from "./settled.js";
 
 interface CountedSignal {

@@ -1,4 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type { StoredAccount } from "@sidecar/credentials";
 import {
   type ChangesAnswer,
@@ -16,6 +15,7 @@ import {
 import { cadenceGate } from "@sidecar/runtime/effect";
 import { text, type WireRecord } from "@sidecar/wire";
 import { Deferred, Duration, Effect, Exit, Fiber, Ref, Schedule, type Scope } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { Composer } from "./composer.js";

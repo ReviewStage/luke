@@ -9,7 +9,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import {
   admitBrainInput,
   maximumHostedBrainInputItems,
@@ -227,7 +227,7 @@ function admitted<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 export function hostedBrainCapabilitiesFromWire(
@@ -341,9 +341,9 @@ function hostedBrainRequestRead<Request, Encoded>(
   schema: Schema.Schema<Request, Encoded>,
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<Request> {
-  return Either.match(readEither(schema)(value), {
-    onLeft: ({ refusal, path }) => ({ ok: false, refusal: requestRefusal(refusal, path) }),
-    onRight: (request) => ({ ok: true, request }),
+  return Result.match(readEither(schema)(value), {
+    onFailure: ({ refusal, path }) => ({ ok: false, refusal: requestRefusal(refusal, path) }),
+    onSuccess: (request) => ({ ok: true, request }),
   });
 }
 

@@ -1,7 +1,7 @@
-import { FetchHttpClient } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import type { Effect } from "effect";
 import { Layer, ManagedRuntime } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./hosted/environment.js";
 

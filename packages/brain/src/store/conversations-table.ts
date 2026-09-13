@@ -1,6 +1,3 @@
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   type AgentId,
   type ArchiveReason,
@@ -14,6 +11,9 @@ import {
   sessionKey as sessionKeyOf,
 } from "@sidecar/runtime/vocabulary";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import type { StoreDatabase } from "./database.js";
 import { changedRows, columnsDecoded } from "./rows.js";
 

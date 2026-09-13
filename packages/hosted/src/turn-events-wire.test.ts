@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { SCHEMA_REFUSAL, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import {
   decodeTurnEventFrame,
@@ -28,7 +28,7 @@ test("every kind of event reads back as itself", () => {
   for (const event of EVENTS) {
     assert.deepEqual(
       readEither(turnEventSchema)(unparsedWire(JSON.parse(JSON.stringify(event)))),
-      Either.right(event),
+      Result.succeed(event),
     );
   }
 });
@@ -53,7 +53,7 @@ test("a heartbeat, a frame whose id disagrees with its event, and an unreadable 
 
 test("an event outside the vocabulary is refused: an unnumbered one, a step kind no build names, an empty sentence, a turn id that is no uuid", () => {
   const refused = (value: WireBoundaryInput) =>
-    Either.isLeft(readEither(turnEventSchema)(unparsedWire(value)));
+    Result.isFailure(readEither(turnEventSchema)(unparsedWire(value)));
   assert.equal(refused({ turnId: TURN, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), true);
   assert.equal(refused({ turnId: TURN, seq: 0, kind: TURN_EVENT_KIND.ACTIONS_SETTLED }), true);
   assert.equal(
@@ -68,12 +68,12 @@ test("an event outside the vocabulary is refused: an unnumbered one, a step kind
 });
 
 test("the cursor is a whole number from zero", () => {
-  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(0)), Either.right(0));
-  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(12)), Either.right(12));
-  assert.equal(Either.isLeft(readEither(turnEventCursorSchema)(unparsedWire(-1))), true);
+  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(0)), Result.succeed(0));
+  assert.deepEqual(readEither(turnEventCursorSchema)(unparsedWire(12)), Result.succeed(12));
+  assert.equal(Result.isFailure(readEither(turnEventCursorSchema)(unparsedWire(-1))), true);
   const negative = readEither(turnEventCursorSchema)(unparsedWire(-1));
-  assert.ok(Either.isLeft(negative));
-  assert.equal(negative.left.refusal, SCHEMA_REFUSAL.MALFORMED);
-  assert.deepEqual(negative.left.path, []);
-  assert.equal(Either.isLeft(readEither(turnEventCursorSchema)(unparsedWire(1.5))), true);
+  assert.ok(Result.isFailure(negative));
+  assert.equal(negative.failure.refusal, SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(negative.failure.path, []);
+  assert.equal(Result.isFailure(readEither(turnEventCursorSchema)(unparsedWire(1.5))), true);
 });

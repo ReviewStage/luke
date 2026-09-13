@@ -1,8 +1,8 @@
 import { pathToFileURL } from "node:url";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import * as Migrator from "@effect/sql/Migrator";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { Config, Effect, Layer, Redacted } from "effect";
+import * as Migrator from "effect/unstable/sql/Migrator";
 import { Client } from "pg";
 import { runWebMigrations } from "./effect-migrator.js";
 import { createPool } from "./index.js";
@@ -73,7 +73,7 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
     ),
   });
   yield* withMigrationLock(new Client({ connectionString: url }), runWebMigrations()).pipe(
-    Effect.provide(Layer.mergeAll(client, NodeContext.layer)),
+    Effect.provide(Layer.mergeAll(client, NodeServices.layer)),
   );
 });
 

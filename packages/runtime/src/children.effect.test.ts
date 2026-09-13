@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Clock, Deferred, Duration, Effect, Schedule, TestClock } from "effect";
+import { Chunk, Clock, Deferred, Duration, Effect, Schedule } from "effect";
+import { TestClock } from "effect/testing";
 import {
   CHILD_RUN_STATUS,
   type ChildCompletionRecord,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Scope, TestClock } from "effect";
+import { Deferred, Effect, Exit, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { cadenceGate } from "./effect/cadence.js";
 import { ObservationLoop, observationSupervisor } from "./observation-loop.js";
 

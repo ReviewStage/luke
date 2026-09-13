@@ -6,7 +6,7 @@ import {
   unparsedWire,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   hostedMessageRatingAnswerSchema,
@@ -19,13 +19,13 @@ function parse<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 function requestRefusal(value: Parameters<typeof unparsedWire>[0]) {
-  return Either.match(readEither(hostedMessageRatingRequestSchema)(unparsedWire(value)), {
-    onLeft: (refused) => [refused.refusal, refused.path],
-    onRight: () => "admitted",
+  return Result.match(readEither(hostedMessageRatingRequestSchema)(unparsedWire(value)), {
+    onFailure: (refused) => [refused.refusal, refused.path],
+    onSuccess: () => "admitted",
   });
 }
 
@@ -69,7 +69,7 @@ test("a rating answer carries the event's id and sequence, and ignores what a ne
     seq: 4,
   });
   assert.equal(
-    Either.isLeft(
+    Result.isFailure(
       readEither(hostedMessageRatingAnswerSchema)(unparsedWire({ id: "e-1", seq: -1 })),
     ),
     true,

@@ -1,5 +1,3 @@
-import { type Rpc, type RpcGroup, RpcMiddleware, RpcSerialization, RpcServer } from "@effect/rpc";
-import { constEof, type FromClientEncoded } from "@effect/rpc/RpcMessage";
 import {
   isRecord,
   isWireNumber,
@@ -15,7 +13,6 @@ import {
   Deferred,
   Duration,
   Effect,
-  type Either,
   Equal,
   Hash,
   HashMap,
@@ -25,9 +22,18 @@ import {
   Option,
   PubSub,
   Ref,
+  type Result,
   type Scope,
   Stream,
 } from "effect";
+import {
+  type Rpc,
+  type RpcGroup,
+  RpcMiddleware,
+  RpcSerialization,
+  RpcServer,
+} from "effect/unstable/rpc";
+import { constEof, type FromClientEncoded } from "effect/unstable/rpc/RpcMessage";
 import type { GatewayMethodHandler, GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -450,7 +456,7 @@ type LedgerRun = Effect.Effect<RpcMiddleware.SuccessValue, GatewayRefusal>;
 
 interface LedgerAnswer {
   readonly paramsText: string;
-  readonly answer: Either.Either<RpcMiddleware.SuccessValue, GatewayRefusal>;
+  readonly answer: Result.Result<RpcMiddleware.SuccessValue, GatewayRefusal>;
 }
 
 /**

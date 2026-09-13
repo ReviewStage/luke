@@ -1,7 +1,7 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, Either, type Layer, type Scope } from "effect";
+import { Data, Effect, type Layer, Result, type Scope } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { WebSocket } from "ws";
 import {
   accountCall,
@@ -107,7 +107,7 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
           Effect.tryPromise(() => answer.response.json()),
           () => undefined,
         );
-        const created = Either.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
+        const created = Result.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
         return created
           ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
           : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };

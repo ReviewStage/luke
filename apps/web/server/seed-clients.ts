@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,

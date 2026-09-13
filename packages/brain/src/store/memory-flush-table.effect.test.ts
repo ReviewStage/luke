@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import { MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { Effect } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import { flushStateEffect, recordFlushEffect } from "./memory-flush-table.js";
 import { NOW, overStore } from "./testing.js";
 

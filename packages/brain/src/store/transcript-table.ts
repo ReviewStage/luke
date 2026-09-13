@@ -1,6 +1,3 @@
-import * as Client from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
-import * as SqlSchema from "@effect/sql/SqlSchema";
 import {
   type SessionKey,
   type StoredTranscriptEvent,
@@ -9,6 +6,9 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Option, Schema } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import * as SqlSchema from "effect/unstable/sql/SqlSchema";
 import { touchConversationEffect } from "./conversations-table.js";
 import type { StoreDatabase } from "./database.js";
 import { columnsDecoded } from "./rows.js";

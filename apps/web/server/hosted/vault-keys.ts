@@ -1,5 +1,5 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { Cause, Effect, Exit, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,

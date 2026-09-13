@@ -1,5 +1,5 @@
-import type * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { Effect, Stream } from "effect";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 /**
  * The statuses whose answer carries no body at all. `Response` refuses a body

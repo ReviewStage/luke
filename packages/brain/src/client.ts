@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -29,7 +27,9 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cause, Effect, Either, Exit, type Layer, Runtime } from "effect";
+import { Cause, Effect, Exit, type Layer, Result, Runtime } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { runtimeExit } from "./effect/carry.js";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
@@ -171,7 +171,7 @@ export class BrainTransport {
     const record = wireRecord(unparsedWire(body));
     const quota =
       record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? Either.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(record.quota)))
+        ? Result.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(record.quota)))
         : undefined;
     const resetsAt = quota?.resetsAt;
     if (resetsAt !== undefined && resetsAt > this.#now()) {

@@ -1,8 +1,8 @@
-import type { WorkerError } from "@effect/platform/WorkerError";
-import type * as WorkerRunner from "@effect/platform/WorkerRunner";
-import { type Rpc, RpcServer, RpcTest } from "@effect/rpc";
-import type { SqlClient } from "@effect/sql/SqlClient";
 import { Effect, Exit, Layer, Option, Ref, Scope } from "effect";
+import { type Rpc, RpcServer, RpcTest } from "effect/unstable/rpc";
+import type { SqlClient } from "effect/unstable/sql/SqlClient";
+import type { WorkerError } from "effect/unstable/workers/WorkerError";
+import type * as WorkerRunner from "effect/unstable/workers/WorkerRunner";
 import { deleteConversation } from "./archives.js";
 import { loadBrainEnvelopeEffect, saveBrainEnvelopeEffect } from "./brain-envelope.js";
 import {

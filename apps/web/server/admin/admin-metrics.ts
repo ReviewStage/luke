@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,

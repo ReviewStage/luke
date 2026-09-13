@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   ACTION_KIND,
   type AdvertisedAction,
@@ -14,6 +13,7 @@ import {
 } from "@sidecar/session";
 import { HTTP_METHOD } from "@sidecar/wire";
 import type { Effect } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { type ObserveAnswer, type ObservedSession, observeAnswerSchema } from "./observe-wire.js";

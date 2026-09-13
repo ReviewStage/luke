@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import {
   ACTION_KIND,
   type AdvertisedAction,
@@ -64,7 +64,7 @@ function admitted<Value>(
   schema: EffectSchema.Schema<Value, UnparsedWireValue>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /** A declaration handed the interface it decodes into, matching the assembled struct's shape. */

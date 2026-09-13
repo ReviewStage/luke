@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type ParseResult } from "effect";
+import { Effect, type ParseResult, Result } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type ChangesAnswer,
   type ChangesRequest,
@@ -92,7 +92,7 @@ export function handleChanges(
     }
     const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES));
     if (parsed instanceof Response) return parsed;
-    const body: ChangesRequest | undefined = Either.getOrUndefined(
+    const body: ChangesRequest | undefined = Result.getOrUndefined(
       readEither(changesRequestSchema)(parsed),
     );
     if (!body) {

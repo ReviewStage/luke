@@ -9,7 +9,7 @@ import {
 } from "@sidecar/live";
 import { SCHEMA_REFUSAL, type SchemaRead, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
 
 /**
@@ -251,10 +251,10 @@ function onlyPart<Part, Encoded>(
   const read = readEither(list);
   return declareReader<readonly [Part]>((value) => {
     const result = read(value);
-    if (Either.isLeft(result)) {
-      return { ok: false, refusal: result.left.refusal, path: result.left.path };
+    if (Result.isFailure(result)) {
+      return { ok: false, refusal: result.failure.refusal, path: result.failure.path };
     }
-    const [only] = result.right;
+    const [only] = result.success;
     return only === undefined
       ? { ok: false, refusal: SCHEMA_REFUSAL.MALFORMED, path: [] }
       : { ok: true, value: [only] };
@@ -333,7 +333,7 @@ function admitted<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /** The value a schema admitted, or the refusal and where it happened. */
@@ -341,9 +341,9 @@ function read<Value, Encoded>(
   schema: Schema.Schema<Value, Encoded>,
   value: UnparsedWireValue,
 ): SchemaRead<Value> {
-  return Either.match(readEither(schema)(value), {
-    onLeft: ({ refusal, path }) => ({ ok: false, refusal, path }),
-    onRight: (parsed) => ({ ok: true, value: parsed }),
+  return Result.match(readEither(schema)(value), {
+    onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
+    onSuccess: (parsed) => ({ ok: true, value: parsed }),
   });
 }
 

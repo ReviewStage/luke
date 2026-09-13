@@ -1,6 +1,11 @@
-import { type HttpApp, type HttpClient, HttpRouter } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import {
+  type HttpClient,
+  HttpRouter,
+  type HttpServerRequest,
+  type HttpServerResponse,
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_SERVICE_PATH } from "./core.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -68,7 +73,14 @@ function introductionMint(seams: IntroductionMintSeams) {
 /** The group, which is the introduction's own mint and the refusal anywhere else. */
 export function introductionMintApp(
   seams: IntroductionMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  | HostedEnvironment
+  | HttpClient.HttpClient
+  | SqlClient.SqlClient
+  | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, Effect.merge(introductionMint(seams))),
     Effect.catchTag("RouteNotFound", () =>

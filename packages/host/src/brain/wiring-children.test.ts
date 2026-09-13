@@ -35,7 +35,8 @@ import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
-import { Chunk, Duration, Effect, FiberId, Runtime, Scope, TestClock } from "effect";
+import { Chunk, Duration, Effect, FiberId, Runtime, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 

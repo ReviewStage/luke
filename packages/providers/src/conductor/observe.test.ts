@@ -1,6 +1,4 @@
 import assert from "node:assert/strict";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   ACTION_KIND,
   advertisedActionFor,
@@ -15,6 +13,8 @@ import {
   runTest,
 } from "@sidecar/wire/testing";
 import { Effect, Layer } from "effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { test } from "vitest";
 import {
   ERRORED_SESSION_UUID,

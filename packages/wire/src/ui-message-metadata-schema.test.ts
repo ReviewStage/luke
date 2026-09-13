@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
@@ -35,9 +35,9 @@ function settlesVocabulary<Member extends string>(
   members: readonly Member[],
 ): void {
   const decode = Schema.decodeUnknownEither(schema);
-  for (const member of members) assert.deepEqual(decode(member), Either.right(member));
+  for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
   for (const refused of NOTHING_ANY_VOCABULARY_HOLDS) {
-    assert.equal(Either.isLeft(decode(refused)), true);
+    assert.equal(Result.isFailure(decode(refused)), true);
   }
 }
 
@@ -52,18 +52,21 @@ test("MessageRoleSchema admits the three roles a stored row may carry, and nothi
   const decode = Schema.decodeUnknownEither(MessageRoleSchema);
   assert.deepEqual(
     ["user", "assistant", "system"].map((role) => decode(role)),
-    ["user", "assistant", "system"].map((role) => Either.right(role)),
+    ["user", "assistant", "system"].map((role) => Result.succeed(role)),
   );
-  assert.equal(Either.isLeft(decode("developer")), true);
+  assert.equal(Result.isFailure(decode("developer")), true);
 });
 
 test("the accepted action result carries exactly its one field", () => {
   const decode = Schema.decodeUnknownEither(ActionResultSchema);
   assert.deepEqual(
     decode({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-    Either.right({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+    Result.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   );
-  assert.equal(Either.isLeft(decode({ status: ACTION_RESULT_STATUS.ACCEPTED, reason: "x" })), true);
+  assert.equal(
+    Result.isFailure(decode({ status: ACTION_RESULT_STATUS.ACCEPTED, reason: "x" })),
+    true,
+  );
 });
 
 test("the standard schema twin of the user metadata validates the same shape its wire schema admits", async () => {

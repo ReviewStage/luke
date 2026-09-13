@@ -1,12 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
-import type * as HttpApp from "@effect/platform/HttpApp";
-import * as HttpRouter from "@effect/platform/HttpRouter";
-import * as HttpServer from "@effect/platform/HttpServer";
-import * as HttpServerRequest from "@effect/platform/HttpServerRequest";
-import * as HttpServerResponse from "@effect/platform/HttpServerResponse";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
-import { Deferred, Duration, Effect, Either, Exit, type Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Result, type Scope } from "effect";
+import * as HttpRouter from "effect/unstable/http/HttpRouter";
+import * as HttpServer from "effect/unstable/http/HttpServer";
+import * as HttpServerRequest from "effect/unstable/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse";
 import {
   accountLoopbackPage,
   LOOPBACK_PAGE_TONE,
@@ -235,7 +234,11 @@ function parameter(
  * releases as a no-op, so a port tried past costs the trip nothing.
  */
 function serveConsent(
-  app: HttpApp.Default,
+  app: Effect.Effect<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    HttpServerRequest.HttpServerRequest
+  >,
   ports: readonly number[],
   onRequest: () => void,
 ): Effect.Effect<number | undefined, never, Scope.Scope> {
@@ -247,8 +250,8 @@ function serveConsent(
       const bound = yield* Effect.either(
         NodeHttpServer.make(() => node, { port, host: LOOPBACK_HOST }),
       );
-      if (Either.isLeft(bound)) continue;
-      const server = bound.right;
+      if (Result.isFailure(bound)) continue;
+      const server = bound.success;
       yield* Effect.provideService(HttpServer.serveEffect(app), HttpServer.HttpServer, server);
       // A request is announced here rather than in the handler because this is
       // where the old synchronous callback cleared its timer: the handler runs
@@ -374,7 +377,7 @@ export function loopbackConsent<Grant extends object>(
       );
       // A page that never opened is a trip nobody can complete, and saying
       // so beats waiting out the timeout on a tab that does not exist.
-      if (Either.isLeft(opened)) return { reason: SHARED_REASON.BROWSER };
+      if (Result.isFailure(opened)) return { reason: SHARED_REASON.BROWSER };
 
       yield* Effect.forkScoped(
         Effect.sleep(Duration.millis(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)).pipe(

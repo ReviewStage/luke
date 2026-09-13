@@ -1,7 +1,7 @@
-import { Rpc, RpcGroup, RpcSerialization } from "@effect/rpc";
-import type { FromClientEncoded, FromServerEncoded } from "@effect/rpc/RpcMessage";
 import { isRecord, valueFromJsonText, type WireRecord } from "@sidecar/wire";
 import { Cause, Context, Exit, Layer, Option, Schema } from "effect";
+import { Rpc, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
+import type { FromClientEncoded, FromServerEncoded } from "effect/unstable/rpc/RpcMessage";
 import {
   GATEWAY_ERROR,
   GATEWAY_HANDSHAKE_HEADER,
@@ -171,7 +171,7 @@ function requestFromMessage(message: RpcRequestMessage): GatewayRequest {
  * runtime says — a ping, an ack, an interrupt, a defect with no request to
  * answer — has no envelope and is written as nothing.
  */
-/** The three Rpc message kinds the envelope has a shape for, as `@effect/rpc` tags them. */
+/** The three Rpc message kinds the envelope has a shape for, as `effect/unstable/rpc` tags them. */
 const RPC_MESSAGE_TAG = {
   REQUEST: "Request",
   EXIT: "Exit",

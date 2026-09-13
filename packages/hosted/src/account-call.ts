@@ -1,7 +1,3 @@
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   HTTP_STATUS,
   type HttpMethod,
@@ -11,6 +7,10 @@ import {
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, type Schema as EffectSchema } from "effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type { AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {

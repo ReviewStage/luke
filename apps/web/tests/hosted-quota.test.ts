@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import {
   HOSTED_DAILY_LIMIT,
@@ -35,7 +35,7 @@ test("the emergency ceiling stays high", () => {
   assert.equal(HOSTED_DAILY_LIMIT, 5_000);
 });
 
-it.layer(testSqlClient)("the quota meters over @effect/sql", (it) => {
+it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
   it.effect("a hosted spend increments the day's one counter", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

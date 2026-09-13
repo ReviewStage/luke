@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -18,6 +16,8 @@ import {
   WireValueSchema,
 } from "@sidecar/wire";
 import { Effect, Schema as EffectSchema, type Layer, ParseResult } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;

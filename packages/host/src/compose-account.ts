@@ -1,4 +1,3 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
 import {
   AccountClient,
@@ -26,6 +25,7 @@ import {
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { Config, Effect, MutableRef, Option, type Scope, Stream } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";

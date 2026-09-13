@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either, Redacted } from "effect";
+import { Effect, type Schema as EffectSchema, Redacted, Result } from "effect";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   DEVICE_METHOD,
   deviceForgetRequestSchema,
@@ -91,9 +91,9 @@ function decodeBody<Value, Encoded>(
   schema: EffectSchema.Schema<Value, Encoded>,
   payload: UnparsedWireValue,
 ): Effect.Effect<Value, HostedRefusal> {
-  return Either.match(readEither(schema)(payload), {
-    onLeft: () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST),
-    onRight: Effect.succeed,
+  return Result.match(readEither(schema)(payload), {
+    onFailure: () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST),
+    onSuccess: Effect.succeed,
   });
 }
 
@@ -103,7 +103,13 @@ function decodeBody<Value, Encoded>(
  * documented shape is one 400 whatever was wrong with it, so a refused
  * request tells a caller nothing about which field the service reads.
  */
-function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default<never, SqlClient.SqlClient> {
+function devicesEffect(
+  seams: DevicesVaultSeams,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const method = request.method;
@@ -172,7 +178,11 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
 /** Stores, replaces, or deletes the provider API key for the signed-in user. */
 function vaultKeyEffect(
   seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "POST" && request.method !== "DELETE") {
@@ -203,7 +213,11 @@ function vaultKeyEffect(
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
 function vaultKeysEffect(
   seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "GET") return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -232,7 +246,11 @@ function vaultKeysEffect(
  */
 export function devicesVaultApp(
   seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(DEVICES_PATH, devicesEffect(seams)),
     HttpRouter.all(VAULT_KEY_PATH, vaultKeyEffect(seams)),

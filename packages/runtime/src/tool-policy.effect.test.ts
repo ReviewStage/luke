@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { TOOL_EFFECT, TOOL_EXECUTION, type ToolDescriptor } from "./registry.js";
 import { requireAllowed, resolvePolicy, TOOL_CALL_REFUSAL } from "./tool-policy.effect.js";
 import { TOOL_POLICY_LAYER } from "./tool-policy.js";
@@ -40,8 +40,8 @@ describe("requireAllowed", () => {
       const policy = yield* resolvePolicy(CATALOG, {});
       const result = requireAllowed(policy, CATALOG, "list_sessions");
 
-      assert.ok(Either.isRight(result));
-      assert.equal(result.right.schema.name, "list_sessions");
+      assert.ok(Result.isSuccess(result));
+      assert.equal(result.success.schema.name, "list_sessions");
     }),
   );
 
@@ -50,11 +50,11 @@ describe("requireAllowed", () => {
       const policy = yield* resolvePolicy(CATALOG, {});
       const result = requireAllowed(policy, CATALOG, "not_a_tool");
 
-      assert.ok(Either.isLeft(result));
-      assert.equal(result.left._tag, "ToolCallRefused");
-      assert.equal(result.left.code, TOOL_CALL_REFUSAL.UNCATALOGED);
-      assert.equal(result.left.tool, "not_a_tool");
-      assert.equal(result.left.layer, undefined);
+      assert.ok(Result.isFailure(result));
+      assert.equal(result.failure._tag, "ToolCallRefused");
+      assert.equal(result.failure.code, TOOL_CALL_REFUSAL.UNCATALOGED);
+      assert.equal(result.failure.tool, "not_a_tool");
+      assert.equal(result.failure.layer, undefined);
     }),
   );
 
@@ -63,10 +63,10 @@ describe("requireAllowed", () => {
       const policy = yield* resolvePolicy(CATALOG, { global: { deny: ["message"] } });
       const result = requireAllowed(policy, CATALOG, "message");
 
-      assert.ok(Either.isLeft(result));
-      assert.equal(result.left.code, TOOL_CALL_REFUSAL.DENIED);
-      assert.equal(result.left.tool, "message");
-      assert.equal(result.left.layer, TOOL_POLICY_LAYER.GLOBAL);
+      assert.ok(Result.isFailure(result));
+      assert.equal(result.failure.code, TOOL_CALL_REFUSAL.DENIED);
+      assert.equal(result.failure.tool, "message");
+      assert.equal(result.failure.layer, TOOL_POLICY_LAYER.GLOBAL);
     }),
   );
 });

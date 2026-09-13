@@ -1,14 +1,14 @@
 import { fileURLToPath } from "node:url";
-import { FileSystem } from "@effect/platform/FileSystem";
-import { Path } from "@effect/platform/Path";
-import * as Migrator from "@effect/sql/Migrator";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { Path } from "effect/Path";
+import * as Migrator from "effect/unstable/sql/Migrator";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /**
  * The migration runner: the same SQL files Drizzle's runner applied, recorded
- * as `@effect/sql` migrations. Nothing here rewrites a migration — the loader
+ * as `effect/unstable/sql` migrations. Nothing here rewrites a migration — the loader
  * reads the generated folder and its journal, so the statements and their order
  * are Drizzle's own, and the only thing that changes is which table says which
  * of them a database has seen.

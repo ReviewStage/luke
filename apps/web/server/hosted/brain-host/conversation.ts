@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";

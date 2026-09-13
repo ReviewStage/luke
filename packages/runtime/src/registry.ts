@@ -1,4 +1,4 @@
-import { Data, Either } from "effect";
+import { Data, Result } from "effect";
 import type { ReasoningEffort, ToolSchema } from "./execution.js";
 import { type AgentId, DEFAULT_AGENT_ID } from "./identifiers.js";
 import type { ToolPolicyLayers } from "./tool-policy.js";
@@ -303,13 +303,13 @@ export type ConfigurationOutcome =
 /**
  * Checks the names a configuration gives against the built-ins and its own
  * numbers; answers the configuration frozen, or the one reason it cannot
- * stand, as an `Either`. Only a name that arrived over the wire can be one
+ * stand, as a `Result`. Only a name that arrived over the wire can be one
  * the built-ins do not hold: every name a build spells is checked by the
  * derived id unions.
  */
 export function resolveConfigurationEither(
   names: AgentConfiguration,
-): Either.Either<AgentConfiguration, ConfigurationRefused> {
+): Result.Result<AgentConfiguration, ConfigurationRefused> {
   // Read through the declared shape rather than the const literal, which is
   // what lets a name no built-in holds be looked up at all.
   const table: Builtins = BUILTINS;
@@ -320,10 +320,10 @@ export function resolveConfigurationEither(
     !adapter ||
     (names.memoryProviderId !== undefined && !table.memoryProviders[names.memoryProviderId])
   ) {
-    return Either.left(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.UNKNOWN_ID }));
+    return Result.fail(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.UNKNOWN_ID }));
   }
   if (adapter.credentialKind !== names.credential.kind) {
-    return Either.left(
+    return Result.fail(
       new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH }),
     );
   }
@@ -331,14 +331,14 @@ export function resolveConfigurationEither(
     names.maximumOutputTokens !== undefined &&
     !(Number.isSafeInteger(names.maximumOutputTokens) && names.maximumOutputTokens > 0)
   ) {
-    return Either.left(
+    return Result.fail(
       new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.INVALID_OUTPUT_TOKENS }),
     );
   }
   if (names.workspaceDirectory.trim().length === 0) {
-    return Either.left(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.EMPTY_WORKSPACE }));
+    return Result.fail(new ConfigurationRefused({ code: CONFIGURATION_REFUSAL.EMPTY_WORKSPACE }));
   }
-  return Either.right(deepFreeze(structuredClone(names)));
+  return Result.succeed(deepFreeze(structuredClone(names)));
 }
 
 /**
@@ -353,10 +353,10 @@ export class ConfigurationStore {
 
   constructor(initial: AgentConfiguration) {
     const resolved = resolveConfigurationEither(initial);
-    if (Either.isLeft(resolved)) {
-      throw new Error(`initial configuration refused: ${resolved.left.code}`);
+    if (Result.isFailure(resolved)) {
+      throw new Error(`initial configuration refused: ${resolved.failure.code}`);
     }
-    this.#snapshot = Object.freeze({ revision: 1, configuration: resolved.right });
+    this.#snapshot = Object.freeze({ revision: 1, configuration: resolved.success });
   }
 
   snapshot(): ResolvedConfiguration {
@@ -369,15 +369,15 @@ export class ConfigurationStore {
    */
   publish(next: AgentConfiguration): ConfigurationOutcome {
     const resolved = resolveConfigurationEither(next);
-    if (Either.isRight(resolved)) {
+    if (Result.isSuccess(resolved)) {
       this.#snapshot = Object.freeze({
         revision: this.#snapshot.revision + 1,
-        configuration: resolved.right,
+        configuration: resolved.success,
       });
     }
-    return Either.match(resolved, {
-      onLeft: (refusal) => ({ outcome: CONFIGURATION_OUTCOME.REFUSED, refusal: refusal.code }),
-      onRight: (configuration) => ({ outcome: CONFIGURATION_OUTCOME.RESOLVED, configuration }),
+    return Result.match(resolved, {
+      onFailure: (refusal) => ({ outcome: CONFIGURATION_OUTCOME.REFUSED, refusal: refusal.code }),
+      onSuccess: (configuration) => ({ outcome: CONFIGURATION_OUTCOME.RESOLVED, configuration }),
     });
   }
 }

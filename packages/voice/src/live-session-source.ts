@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
   accountCall,
@@ -53,14 +51,16 @@ import {
   Deferred,
   Duration,
   Effect,
-  Either,
   Exit,
   type Layer,
   Option,
+  Result,
   Schedule,
   type Scope,
   Stream,
 } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type HeldSocket, holdSocket } from "./held-socket.js";
 import {
   type LiveSideband,
@@ -356,7 +356,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
       const created =
         payload === undefined
           ? undefined
-          : Either.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
+          : Result.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
       if (!created) {
         this.#outcome.record(
           LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
@@ -718,11 +718,11 @@ class ServiceLiveSessionSource {
       this.#quota = created.quota ?? this.#quota;
       return { sessionId: created.sessionId, sdpAnswer: created.sdpAnswer };
     }
-    const error = Either.getOrUndefined(readEither(hostedErrorSchema)(payload));
+    const error = Result.getOrUndefined(readEither(hostedErrorSchema)(payload));
     if (error) {
       if (error === HOSTED_API_ERROR.QUOTA_EXHAUSTED) {
         this.#quota =
-          Either.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(payload.quota))) ??
+          Result.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(payload.quota))) ??
           this.#quota;
       }
       this.#refuse(HOSTED_ERROR_OUTCOME.get(error) ?? LIVE_SESSION_OUTCOME.HTTP_ERROR, error);

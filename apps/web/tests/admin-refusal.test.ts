@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { HttpApiSchema, HttpServerResponse } from "@effect/platform";
+import { HttpServerResponse } from "effect/unstable/http";
+import { HttpApiSchema } from "effect/unstable/httpapi";
 import { test } from "vitest";
 import { ADMIN_HTTP_STATUS, errorResponse } from "../server/admin/http.js";
 import {

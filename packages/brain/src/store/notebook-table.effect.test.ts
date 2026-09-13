@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import * as Client from "@effect/sql/SqlClient";
 import { describe, it } from "@effect/vitest";
 import { MEMORY_ORIGIN, parseNotebook } from "@sidecar/memory";
 import { WORKSPACE_FILE } from "@sidecar/runtime";
 import { Effect } from "effect";
+import * as Client from "effect/unstable/sql/SqlClient";
 import {
   forgetNotebookEntryEffect,
   listNotebookEntriesEffect,

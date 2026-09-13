@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, TestClock } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { makeRateBrake } from "../server/hosted/rate-brake.js";
 
 /**

@@ -5,7 +5,8 @@ import {
   type GatewayShutdownSteps,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
-import { Deferred, Effect, Exit, Fiber, Scope, TestClock } from "effect";
+import { Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import {
   seedWorkspaceThenStartMemory,
   shutdownStepsClosingLiveSession,

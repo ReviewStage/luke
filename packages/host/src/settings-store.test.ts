@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
@@ -48,6 +47,7 @@ import {
 } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { ConfigProvider, Effect, Layer, Runtime } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import { test } from "vitest";
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 import { Environment } from "./effect/seams.js";

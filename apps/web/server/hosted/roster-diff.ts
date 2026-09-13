@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import type {
   CloudAgentProviderId,
   ProviderSessionObservation,
@@ -260,7 +260,7 @@ const rosterDiffSchema: EffectSchema.Schema<RosterDiff, UnparsedWireValue> = sch
 
 /** Reads a stored diff, or nothing for a payload that is not one this build wrote. */
 export function decodeRosterDiff(payload: string): RosterDiff | undefined {
-  return Either.getOrUndefined(readEither(rosterDiffSchema)(parseStoredJson(payload)));
+  return Result.getOrUndefined(readEither(rosterDiffSchema)(parseStoredJson(payload)));
 }
 
 /**

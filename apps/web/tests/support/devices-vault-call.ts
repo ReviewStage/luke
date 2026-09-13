@@ -1,5 +1,5 @@
-import { HttpApp } from "@effect/platform";
 import { Effect, Redacted } from "effect";
+import { HttpEffect } from "effect/unstable/http";
 import { type DevicesVaultSeams, devicesVaultApp } from "../../server/devices-vault-app.js";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
 import { noDatabase } from "./no-database.js";
@@ -25,7 +25,7 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
   const secret = present(call.encryptionSecret);
   // The seams a test hands in reach no connection, so the group runs over the
   // refusing client rather than one this suite would have to open.
-  const handler = HttpApp.toWebHandler(
+  const handler = HttpEffect.toWebHandler(
     devicesVaultApp(call).pipe(
       Effect.provide(noDatabase),
       Effect.provideService(HostedEnvironment, {

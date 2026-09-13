@@ -1,11 +1,10 @@
+import { Effect } from "effect";
 import {
-  type HttpApp,
   type HttpMethod,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import { Effect } from "effect";
+} from "effect/unstable/http";
 import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
 
 /**
@@ -63,7 +62,13 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * OAuth callbacks are made of. A HEAD is the exception the helper above
  * covers, since there the record is all the web handler reads.
  */
-function authPassthrough(handle: WebRequestHandler): HttpApp.Default {
+function authPassthrough(
+  handle: WebRequestHandler,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HttpServerRequest.HttpServerRequest
+> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -80,7 +85,13 @@ function authPassthrough(handle: WebRequestHandler): HttpApp.Default {
  * function, so the refusal says what the group declares rather than what a
  * caller can reach.
  */
-export function authApp(handle: WebRequestHandler): HttpApp.Default {
+export function authApp(
+  handle: WebRequestHandler,
+): Effect.Effect<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HttpServerRequest.HttpServerRequest
+> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(AUTH_PATH_SET, authPassthrough(handle)),
     Effect.catchTag("RouteNotFound", () =>

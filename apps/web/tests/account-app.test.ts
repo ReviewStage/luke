@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { HttpApp } from "@effect/platform";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Redacted } from "effect";
+import { HttpEffect } from "effect/unstable/http";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core.js";
@@ -116,7 +116,7 @@ function groupSeams(state: Backing): AccountAppSeams {
 
 /** The group's answer, with the deployment's environment handed in directly rather than read from `process.env`. */
 function groupAnswer(state: Backing, request: Request): Promise<Response> {
-  const handler = HttpApp.toWebHandler(
+  const handler = HttpEffect.toWebHandler(
     accountApp(groupSeams(state)).pipe(
       Effect.provideService(HostedEnvironment, ENVIRONMENT),
       Effect.provide(fakeHttpClientLayer(forgetAnalyticsResponder(state))),

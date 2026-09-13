@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import type { FileSystem } from "@effect/platform";
+
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
@@ -17,7 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { Deferred, Effect, Fiber, type Scope } from "effect";
+import { Deferred, Effect, Fiber, type FileSystem, type Scope } from "effect";
 import { chunkMarkdown, hashText } from "./chunking.js";
 import {
   type ConversationLineHit,

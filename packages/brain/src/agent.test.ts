@@ -22,7 +22,8 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Fiber, type Scope, TestClock } from "effect";
+import { Effect, Fiber, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { detachOn } from "./effect/carry.js";
 import { advanceHarness, effectHarness, effectReviewing } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";

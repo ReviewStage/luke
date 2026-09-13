@@ -6,7 +6,7 @@ import {
 import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { jsonSchema, type Tool, type ToolSet, tool } from "ai";
-import { Either, type Schema } from "effect";
+import { Result, type Schema } from "effect";
 import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
 
 /**
@@ -31,9 +31,9 @@ function validatedInput(schema: Schema.Schema<unknown, UnparsedWireValue>) {
       validate: (value) => {
         // SAFETY: the SDK hands the part's input back as it was stored, which is JSON; the read is the validation.
         const read = readEither(schema)(unparsedWire(value as WireBoundaryInput));
-        return Either.match(read, {
-          onRight: (value) => ({ success: true as const, value }),
-          onLeft: (refused) => ({
+        return Result.match(read, {
+          onSuccess: (value) => ({ success: true as const, value }),
+          onFailure: (refused) => ({
             success: false as const,
             error: new Error(`${refused.refusal} at ${refused.path.map(String).join(".")}`),
           }),

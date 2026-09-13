@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,

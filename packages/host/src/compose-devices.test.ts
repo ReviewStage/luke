@@ -3,10 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { it } from "@effect/vitest";
 import { type ChangesAnswer, DEVICE_PLATFORM, type DeviceRegisterAnswer } from "@sidecar/hosted";
-
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Duration, Effect, TestClock } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   DEVICE_STATE_FILE,

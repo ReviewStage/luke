@@ -1,7 +1,7 @@
 import { pbkdf2Sync } from "node:crypto";
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "../core.js";
 import { type ActionRoster, actionRosterFor } from "./action-execute.js";
 import {

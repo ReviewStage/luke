@@ -24,7 +24,7 @@ import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import type { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Queue, type Scope } from "effect";
+import { Effect, Queue, Result, type Scope } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -206,7 +206,7 @@ export const composeLive = (
       // retried offer creating and billing a second one.
       [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: (params) =>
         Effect.gen(function* () {
-          const request = Either.getOrUndefined(
+          const request = Result.getOrUndefined(
             readEither(voiceCreateLiveSessionParamsSchema)(params),
           );
           if (!request) return yield* invalid("sdp must be the peer's offer");
@@ -219,7 +219,7 @@ export const composeLive = (
         }),
       [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
-        const report = Either.getOrUndefined(
+        const report = Result.getOrUndefined(
           readEither(voiceReportLiveTransportParamsSchema)(params),
         );
         if (!report) return invalid("state is not one the peer connection reports");
@@ -227,7 +227,7 @@ export const composeLive = (
         return Effect.succeed({});
       },
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY]: (params) => {
-        const report = Either.getOrUndefined(
+        const report = Result.getOrUndefined(
           readEither(voiceReportLiveActivityParamsSchema)(params),
         );
         if (!report) return invalid("idle must be a boolean");

@@ -19,10 +19,10 @@ import {
   type Clock,
   Duration,
   Effect,
-  Either,
   Exit,
   FiberId,
   PubSub,
+  Result,
   Runtime,
   Scope,
   Stream,
@@ -897,16 +897,16 @@ export class BrainAgent {
       const loaded = yield* Effect.either(
         Effect.tryPromise({ try: () => this.#options.store.load(), catch: (error) => error }),
       );
-      if (Either.isLeft(loaded)) {
+      if (Result.isFailure(loaded)) {
         this.#report(
-          `Brain memory could not be restored: ${loaded.left instanceof Error ? loaded.left.name : "unknown error"}`,
+          `Brain memory could not be restored: ${loaded.failure instanceof Error ? loaded.failure.name : "unknown error"}`,
         );
         return;
       }
       // A generation adopted from the store's announcement while the load was
       // out — a Clear or expiry pressed under a starting agent — is the one
       // that stands; the loaded copy is not built over it.
-      const current = this.#options.store.current() ?? loaded.right;
+      const current = this.#options.store.current() ?? loaded.success;
       const adoption = this.#generations.adopt(current.generationId, (previous) => {
         if (previous) retireGeneration(previous);
         return this.#generationFrom(current);

@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -10,7 +10,7 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * contents are sealed whole and rewritten whole, the way the desktop's
  * workspace files land through a rename.
  *
- * The first module here on `@effect/sql`: every read and write below is an
+ * The first module here on `effect/unstable/sql`: every read and write below is an
  * `Effect<A, SqlError | ParseError, SqlClient>`, the statement is the client's
  * own tagged template, and the row a statement answers is decoded by a
  * `Schema` rather than trusted. The rule about a path is that schema too, so

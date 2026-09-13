@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import type * as HttpClient from "@effect/platform/HttpClient";
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, FiberSet, type Layer, Option, type ParseResult, type Scope } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,

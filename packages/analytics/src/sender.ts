@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -12,6 +10,8 @@ import {
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
 import { Duration, Effect, type Layer, Schedule, type Scope } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   adoptableHeldProductEvents,
   HELD_PRODUCT_EVENTS_VERSION,

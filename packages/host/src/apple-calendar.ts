@@ -21,7 +21,7 @@ import {
   type UnparsedWireValue,
   unparsedWire,
 } from "@sidecar/wire";
-import { Duration, Effect, Either } from "effect";
+import { Duration, Effect, Result } from "effect";
 
 const ACCESS_WORDS = new Set<string>(Object.values(APPLE_CALENDAR_ACCESS));
 
@@ -215,8 +215,8 @@ export class AppleCalendarReader {
         return undefined;
       }
       const attempt = yield* Effect.either(this.#observeConnection(connection));
-      if (Either.isRight(attempt)) {
-        const observation = attempt.right;
+      if (Result.isSuccess(attempt)) {
+        const observation = attempt.success;
         // What the next failing pass stands: a clean read's lists, or a
         // refusal's emptiness with its `revoked` — a transient failure after
         // a withdrawal must not resurrect what the withdrawal already took,
@@ -232,7 +232,7 @@ export class AppleCalendarReader {
       // A read that merely failed — the helper crashed, or answered
       // unreadably — says nothing about the user's intent, so what the Mac
       // last showed stands, with the why beside it.
-      const error = attempt.left;
+      const error = attempt.failure;
       const message = error instanceof Error ? error.message : String(error);
       return {
         accountId: APPLE_CALENDAR_ID,

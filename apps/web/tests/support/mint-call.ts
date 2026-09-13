@@ -1,6 +1,6 @@
-import { FetchHttpClient, HttpApp } from "@effect/platform";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { Effect, type Layer, Redacted } from "effect";
+import { FetchHttpClient, HttpEffect } from "effect/unstable/http";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { HostedEnvironment } from "../../server/hosted/environment.js";
 import {
   type IntroductionMintSeams,
@@ -49,7 +49,7 @@ export function mintAnswer(call: MintCall): Promise<Response> {
   const app = new URL(call.request.url).pathname.endsWith(INTRODUCTION_MINT_SUFFIX)
     ? introductionMintApp(seams)
     : voiceMintApp(seams);
-  const handler = HttpApp.toWebHandler(
+  const handler = HttpEffect.toWebHandler(
     app.pipe(
       Effect.provideService(HostedEnvironment, {
         openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),

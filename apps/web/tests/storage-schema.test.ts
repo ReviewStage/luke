@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -9,6 +8,7 @@ import {
   TURN_STATUS,
 } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";

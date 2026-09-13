@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type HostedProjectsAnswer,
   type HostedRosterClient,
@@ -11,6 +10,7 @@ import {
   type SessionRoster,
 } from "@sidecar/session";
 import { Effect } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 export interface SnapshotRosterDependencies {
   client: Pick<HostedRosterClient, "observe">;

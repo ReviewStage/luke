@@ -7,7 +7,8 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@sidecar/wire/testing";
-import { Effect, TestClock } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import {
   HELD_PRODUCT_EVENTS_VERSION,
   type HeldProductEvents,

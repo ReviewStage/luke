@@ -1,4 +1,4 @@
-import { Array as Arr, Data, Either, Option, ParseResult, Schema, SchemaAST } from "effect";
+import { Array as Arr, Data, Option, ParseResult, Result, Schema, SchemaAST } from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
   type JsonSchemaNode,
@@ -454,12 +454,12 @@ function refusalOf(issue: ParseResult.ParseIssue, path: SchemaPath): SchemaRefus
  */
 export const readEither =
   <A, I>(schema: Schema.Schema<A, I>) =>
-  (value: UnparsedWireValue): Either.Either<A, SchemaRefusalError> => {
+  (value: UnparsedWireValue): Result.Result<A, SchemaRefusalError> => {
     const decoded = Schema.decodeUnknownEither(schema, {
       errors: "first",
       onExcessProperty: "error",
     })(value);
-    return Either.mapLeft(decoded, (error) => refusalOf(error.issue, []));
+    return Result.mapError(decoded, (error) => refusalOf(error.issue, []));
   };
 
 /**

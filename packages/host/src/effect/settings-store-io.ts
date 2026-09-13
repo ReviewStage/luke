@@ -1,7 +1,7 @@
 /**
  * The settings store's body: the bytes on disk and the shape parsed out of
- * them, stated as an `Effect` over `@effect/platform`'s `FileSystem` and as an
- * `Either` rather than a throw. `readSettingsFileText` and
+ * them, stated as an `Effect` over `effect`'s `FileSystem` and as an
+ * `Result` rather than a throw. `readSettingsFileText` and
  * `writeSettingsFileAtomic` never construct a `FileSystem` layer themselves —
  * a caller with a runtime edge hands one in, the way the host's own
  * composition eventually will — and `parsePersistedSettingsEither` answers the
@@ -10,9 +10,9 @@
  * text a caller already discards into `defaultPersistedSettings()`.
  */
 import path from "node:path";
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { type PersistedSettings, parsePersistedSettingsThrowing } from "../settings-store.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -37,8 +37,8 @@ export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal
  */
 export function parsePersistedSettingsEither(
   source: string,
-): Either.Either<PersistedSettings, SettingsParseRefusal> {
-  return Either.try({
+): Result.Result<PersistedSettings, SettingsParseRefusal> {
+  return Result.try({
     try: () => parsePersistedSettingsThrowing(source),
     catch: (error) =>
       new SettingsParseRefusal({

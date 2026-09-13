@@ -1,5 +1,5 @@
 /**
- * What every table module over the store's `@effect/sql` client shares: how a
+ * What every table module over the store's `effect/unstable/sql` client shares: how a
  * row whose columns do not decode is treated, and how a conditional write's
  * refusal is read.
  *
@@ -13,9 +13,9 @@
  * and a column carries what these modules wrote.
  */
 
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Schema } from "effect";
 import type { ParseError } from "effect/ParseResult";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /** A row read whose column decode is a defect rather than a failure a caller handles. */
 export const columnsDecoded = <A, R>(
