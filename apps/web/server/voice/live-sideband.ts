@@ -5,7 +5,7 @@ import {
 } from "@sidecar/voice/live-session";
 import type { RawData, WebSocket } from "ws";
 import type { LiveServerEvent } from "../live.js";
-import { SOCKET_CLOSE_CODE } from "./relay.js";
+import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**
  * The service's half of the trusted sideband: the socket the upstream

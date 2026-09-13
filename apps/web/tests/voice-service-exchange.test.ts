@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
@@ -31,9 +31,14 @@ import {
 import { exchangeAttachment } from "../server/voice/exchange-attachment";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
-import { SOCKET_CLOSE_CODE } from "../server/voice/relay";
-import { VoiceService, type VoiceServiceOptions } from "../server/voice/service";
+import {
+  listening,
+  VoiceService,
+  type VoiceServiceOptions,
+  voiceServer,
+} from "../server/voice/service";
 import { voiceSessionRecord } from "../server/voice/session-record";
+import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { announceTurn, FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import {
@@ -211,7 +216,7 @@ async function stand(offer: Offer): Promise<Stand> {
   const eve = fakeEve();
   const log: LogEntry[] = [];
   const reports: string[] = [];
-  const accounts = { ...fakeAccounts(), resolveUserId: async () => target.userId };
+  const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeed(target.userId) };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
@@ -242,21 +247,32 @@ async function stand(offer: Offer): Promise<Stand> {
           if (offer === OFFER.GATED) await gate;
           return attachment(session);
         };
-  const service = new VoiceService({
-    apiKey: API_KEY,
-    accounts,
-    record: sessionRecord,
-    run: database.run,
-    openAiBaseUrl: openAi.baseUrl,
-    log: (entry) => {
-      log.push(entry);
-    },
-    closeTimeoutMs: CLOSE_TIMEOUT_MS,
-    firstFrameTimeoutMs: 1_000,
-    attachTimeoutMs: 2_000,
-    ...(exchange === undefined ? undefined : { exchange }),
-  });
-  const port = await service.listen(0, "127.0.0.1");
+  const voice = voiceServer();
+  const scope = await database.run(Scope.make());
+  const port = await database.run(
+    Scope.extend(
+      Effect.gen(function* () {
+        const listener = yield* listening(voice, 0, "127.0.0.1");
+        yield* VoiceService.make({
+          server: voice,
+          apiKey: API_KEY,
+          accounts,
+          record: sessionRecord,
+          run: database.run,
+          openAiBaseUrl: openAi.baseUrl,
+          log: (entry) => {
+            log.push(entry);
+          },
+          closeTimeoutMs: CLOSE_TIMEOUT_MS,
+          firstFrameTimeoutMs: 1_000,
+          attachTimeoutMs: 2_000,
+          ...(exchange === undefined ? undefined : { exchange }),
+        });
+        return listener;
+      }),
+      scope,
+    ),
+  );
   return {
     target,
     eve,
@@ -267,7 +283,7 @@ async function stand(offer: Offer): Promise<Stand> {
     release: () => release(),
     url: (path) => `ws://127.0.0.1:${port}${path}`,
     stop: async () => {
-      await service.close();
+      await database.run(Scope.close(scope, Exit.void));
       await openAi.close();
     },
   };

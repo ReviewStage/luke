@@ -65,7 +65,6 @@
     "apps/web/server/hosted/brain-ask.ts",
     "apps/web/server/hosted/brain-host/eve-sessions.ts",
     "apps/web/server/hosted/observation-tick.ts",
-    "apps/web/server/voice/service.ts",
     "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",
     "apps/web/tests/support/voice-fakes.ts",

@@ -31,6 +31,8 @@ export const LOG_EVENT = {
   /** The composition offered an exchange and it could not stand on the session; the session is refused rather than run with no one to answer. */
   EXCHANGE_FAILED: "exchange-failed",
   SESSION_ENDED: "session-ended",
+  /** A session's own `voice_sessions` write failed; the route is all it says, as every other line is. */
+  SESSION_FAILED: "session-failed",
 } as const;
 
 /** Whether `session.closed` was seen before the transports went, as the docs define finalization. */
@@ -80,7 +82,8 @@ export type LogEntry =
       route: VoiceRoute;
       finalization: Finalization;
       seconds: number | undefined;
-    } & RelayCounts);
+    } & RelayCounts)
+  | { event: typeof LOG_EVENT.SESSION_FAILED; route: VoiceRoute };
 
 export type Log = (entry: LogEntry) => void;
 
