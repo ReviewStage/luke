@@ -16,7 +16,6 @@
  * ships composes. The handler vocabulary a host writes its table against
  * stays here, in `./methods`.
  */
-export * from "./attachment.js";
 export * from "./client.js";
 export * from "./invocations.js";
 export * from "./methods.js";

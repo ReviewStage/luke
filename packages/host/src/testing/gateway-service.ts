@@ -16,10 +16,10 @@ export interface ScopedGatewayService {
  * The host's Gateway service composed in a scope of this harness's own, for
  * a test that holds it without a host to own it.
  *
- * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-09:
+ * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-20e2:
  * the runs here are the test's own edge while these suites are plain `test`
  * bodies, and they go when each builds the service in the test's own scope
- * on `it.effect`.
+ * on `it.scoped`, as the gateway's own suites do since P12-20e.
  */
 export async function scopedGatewayService(
   dependencies: GatewayServiceDependencies,

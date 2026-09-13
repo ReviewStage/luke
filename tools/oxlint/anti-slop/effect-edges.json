@@ -32,8 +32,6 @@
     "packages/credentials/src/account/client.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/trace-writer.ts",
-    "packages/gateway/src/attachment.ts",
-    "packages/gateway/src/testing.ts",
     "packages/gateway/src/transport.ts",
     "packages/host/src/compose-calendars.ts",
     "packages/host/src/compose-devices.ts",
