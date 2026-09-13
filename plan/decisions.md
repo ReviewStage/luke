@@ -3522,3 +3522,8 @@ LUKE-200 (E5-3) landed under Dean's GO: `voice/function.ts` passes `deploymentEx
 **Escalated to Dean, open:** LUKE-202 §2 — whether a Mac with no call open should open a muted session when the account has an open briefing offer (today the offer is pushed to the phone after the grace instead). And the keyed voice source, which after E5-3 has no exchange behind it; the plan says keyed mode is removed, and a ticket to remove it should be confirmed or filed.
 
 The LUKE-143 hold lifted at the same instant: #1294 rebases once, then #1298 follows, orchestrator-word both.
+
+
+## 2026-09-13 23:41Z — LUKE-201 (2c) pressed as #1385: the stop is a service frame
+
+Dean's 2c ruling of 2026-09-13 lands: `VOICE_SERVICE_FRAME.SESSION_STOP` joins `session.activity` as a frame the relay reads and never forwards, handed to the exchange's own `stopSpeaking()`; `session.instructions.append` leaves the sessions route's allowlist, so the one Live event a signed-in desktop may still send is `session.close`, and no instruction text of the desktop's choosing can reach a session through the route. `STOP_SPEAKING_INSTRUCTION` stands on the service alone. Contract: one new frame type with its JSON-schema golden (`live-contract-sessionStopFrameSchema.json`) and a `sessionReportFrame` union golden. Trust rule as it now reads: the route's allowlist, not the attachment, is what stops a desktop from appending; the exchange's gauntlet (`acceptAsk`, eve's tool policy, `admit()`) is what stops model output becoming an action.
