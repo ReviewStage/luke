@@ -1406,6 +1406,89 @@ it.scoped("stop closes the session gracefully and takes nothing else with it", (
 );
 
 it.scoped(
+  "a close the session's own reader reads releases the scope that session stood in, finalizing what its attach left standing there",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = new FakeSideband();
+      const finalized: string[] = [];
+      assert.equal(
+        yield* f.service.adoptSession({
+          sessionId: "sess-adopted",
+          attach: () =>
+            Effect.as(
+              Effect.addFinalizer(() => Effect.sync(() => finalized.push("attached"))),
+              sideband,
+            ),
+          started: true,
+        }),
+        true,
+      );
+      yield* settle();
+      assert.deepEqual(finalized, []);
+      assert.equal(sideband.closed, false);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 7);
+      yield* settle();
+      assert.equal(f.service.sessionStands(), false);
+      assert.equal(sideband.closed, true);
+      assert.deepEqual(finalized, ["attached"]);
+    }),
+);
+
+it.scoped(
+  "a stop that lands between a tear-down's decision and its release waits for that release rather than answering with the session's last words still out",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Ship it.", 0, 800);
+      yield* settle();
+      f.record.hold();
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
+      yield* settle();
+      assert.equal(f.service.sessionStands(), false);
+      assert.equal(sideband.closed, true);
+      const stopping = yield* Effect.fork(f.service.stop());
+      yield* settle();
+      assert.equal(Option.isNone(yield* Fiber.poll(stopping)), true);
+      f.record.release(true);
+      yield* Fiber.join(stopping);
+      assert.deepEqual(
+        f.record.developer.map((line) => line.text),
+        ["Ship it."],
+      );
+    }),
+);
+
+it.scoped(
+  "an end asked for while the reader's own tear-down is still releasing waits on that one release and begins no second close",
+  () =>
+    Effect.gen(function* () {
+      const brain = new AnticipatingBrain();
+      const f = yield* fixture(brain);
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Ship it.", 0, 800);
+      yield* settle();
+      f.record.hold();
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 3);
+      yield* settle();
+      const ending = yield* Effect.fork(f.service.endSession());
+      yield* settle();
+      assert.equal(Option.isNone(yield* Fiber.poll(ending)), true);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
+      f.record.release(true);
+      yield* Fiber.join(ending);
+      assert.equal(brain.drops, 1);
+      assert.deepEqual(
+        f.record.developer.map((line) => line.text),
+        ["Ship it."],
+      );
+    }),
+);
+
+it.scoped(
   "a run's reply is appended once per sentence, in order, and nothing of the run is appended after its end",
   () =>
     Effect.gen(function* () {
