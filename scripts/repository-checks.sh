@@ -471,7 +471,7 @@ fi
 # fake clock are no longer this check's concern: `TestClock` is the clock an
 # `it.effect` test drives, and a plain vitest test's own wait is a
 # package-owned helper beside the suite that needs it, never a shared runtime
-# export — see P12-03.
+# export.
 hand_rolled_fixtures=$(grep -rnaE --include='*.test.ts' --include='*.test.tsx' \
     'mkdtemp' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src" "$SIDECAR_REPO_ROOT/packages/host/src" || true)
@@ -655,12 +655,12 @@ node --input-type=module -e '
         offenders.push(`${group.name}: ${entry} no longer exists`);
         continue;
       }
-      // The whole path, never a tail of it. A basename was enough until P12-10,
-      // and two files named `testing.ts` were one file to it: the paragraph
-      // about `packages/gateway/src/testing.ts` — which is not even on the
-      // allowlist any more — answered for `packages/brain/src/store/testing.ts`,
-      // which had no paragraph at all. The path is also never the tail of a
-      // longer one, so `queue.effect.ts` is not satisfied by a mention of
+      // The whole path, never a tail of it: a basename lets two files named
+      // `testing.ts` collide, so the paragraph about
+      // `packages/gateway/src/testing.ts` could answer for
+      // `packages/brain/src/store/testing.ts`, which had no paragraph at all.
+      // The path is also never the tail of a longer one, so `queue.effect.ts`
+      // is not satisfied by a mention of
       // `packages/runtime/src/queue.effect.ts.bak`.
       const named = new RegExp(`(?<![\\w.\\-/])${entry.replaceAll(".", "\\.")}(?![\\w\\-/])`, "u");
       if (group.named && !named.test(section)) {

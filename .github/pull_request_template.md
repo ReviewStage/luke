@@ -35,7 +35,7 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] No new `setTimeout`/`setInterval`/`new Promise`/`AbortController`/`fs.watch` outside the files `tools/oxlint/anti-slop/effect-edges.json` records. (CI via `anti-slop/no-raw-async-primitives`)
 - [ ] No Effect, Stream, or Layer written as a statement and dropped; a description a caller walks past runs nothing. (CI via `pnpm discarded-effect`)
 - [ ] Test count equals the pre-PR count or the delta is listed. (manual: `vitest run --reporter=json`)
-- [ ] Each hand-rolled file the PR replaces is deleted or marked `@deprecated` with its deletion PR named.
+- [ ] Each hand-rolled file the PR replaces is deleted, or the part that remains is a permanent adaptor named in root `AGENTS.md`'s "The permanent adaptors" with the reason it stays.
 - [ ] Every `CLAUDE.md`/`AGENTS.md` sentence naming a changed part is edited; root pair stays byte-identical. (CI for pair existence; manual for wording)
 - [ ] `PRIVACY.md` unchanged, or the change is a product decision called out in the PR body.
 - [ ] Package `package.json` deps match what the sources import by bare specifier; `effect` via `catalog:`. (CI)

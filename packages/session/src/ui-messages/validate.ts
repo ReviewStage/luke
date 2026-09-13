@@ -200,7 +200,7 @@ export async function readStoredUIMessagesEither(
   return Either.right(stored);
 }
 
-/** The strangler-shim entry point every store caller still holds a `SchemaRead` for. */
+/** The boundary entry point every store caller reads a `SchemaRead` from. */
 export async function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,
