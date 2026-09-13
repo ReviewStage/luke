@@ -1,10 +1,11 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
+  accountCall,
   CALL_FAULT,
   type CallFailure,
   callAnswered,
-  createAccountCall,
   fixedBearer,
   HOSTED_API_ERROR,
   type HostedApiError,
@@ -265,10 +266,9 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
   async create(input: LiveSessionCreateInput): Promise<LiveSessionOpened | undefined> {
     this.#outcome.attempt();
     this.#sidebandAttached = false;
-    const call = createAccountCall({
+    const call = accountCall({
       baseUrl: this.#baseUrl,
       credential: fixedBearer(this.#apiKey),
-      httpClient: this.#httpClient,
       requestTimeoutMs: this.#requestTimeoutMs,
     });
     const session = liveSessionConfig({
@@ -277,11 +277,19 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
       voice: this.#voice,
       input: input.input,
     });
-    const answer = await call.send({
-      method: HTTP_METHOD.POST,
-      path: LIVE_SESSIONS_PATH,
-      body: JSON.stringify(liveCreateRequest(session, input.sdpOffer)),
-    });
+    // This source answers its caller a promise and holds no runtime edge of
+    // its own, so the one request it makes begins here, over the client the
+    // source was built on or the ambient fetch one.
+    const answer = await Effect.runPromise(
+      Effect.provide(
+        call.send({
+          method: HTTP_METHOD.POST,
+          path: LIVE_SESSIONS_PATH,
+          body: JSON.stringify(liveCreateRequest(session, input.sdpOffer)),
+        }),
+        this.#httpClient ?? FetchHttpClient.layer,
+      ),
+    );
     if (!callAnswered(answer)) {
       this.#refuseCall(answer);
       return undefined;

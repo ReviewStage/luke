@@ -1,4 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import * as HttpBody from "@effect/platform/HttpBody";
 import * as HttpClient from "@effect/platform/HttpClient";
 import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
@@ -14,15 +13,7 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
-import {
-  Cause,
-  Data,
-  Duration,
-  Effect,
-  type Schema as EffectSchema,
-  Exit,
-  type Layer,
-} from "effect";
+import { Data, Duration, Effect, type Schema as EffectSchema } from "effect";
 import type { AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
@@ -105,12 +96,6 @@ interface CallRequest {
   body?: string | undefined;
   /** Extra headers the build fixes; the authorization and content type are the call's own. */
   headers?: Record<string, string> | undefined;
-  /**
-   * The caller's own cancellation. An Effect caller has interruption instead
-   * and hands none: the deadline and the cancellation are both the fiber's,
-   * and only {@link createAccountCall}'s promise reads this.
-   */
-  signal?: AbortSignal | undefined;
 }
 
 export interface AccountCallOptions {
@@ -118,17 +103,6 @@ export interface AccountCallOptions {
   baseUrl: string;
   credential: CallCredential;
   requestTimeoutMs?: number | undefined;
-}
-
-/**
- * @deprecated The options {@link createAccountCall} still takes for a caller
- * that awaits a `Promise` rather than holding a runtime edge of its own;
- * deleted once every caller of `createAccountCall` takes `accountCall`
- * instead.
- */
-export interface AccountFetchCallOptions extends AccountCallOptions {
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
-  httpClient?: Layer.Layer<HttpClient.HttpClient> | undefined;
 }
 
 /**
@@ -172,17 +146,6 @@ export interface AccountCallEffects {
     request: CallRequest,
     read: (payload: UnparsedWireValue) => Answer | undefined,
   ): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient>;
-}
-
-/** The promise-answering face of {@link AccountCallEffects}. */
-export interface AccountCall {
-  readonly requestTimeoutMs: number;
-  address(path: string): string;
-  send(request: CallRequest): Promise<CallAnswer>;
-  ask<Answer>(
-    request: CallRequest,
-    read: (payload: UnparsedWireValue) => Answer | undefined,
-  ): Promise<Answer | undefined>;
 }
 
 interface Identity {
@@ -232,15 +195,6 @@ function answeredOk(status: number): boolean {
 
 function errorName(cause: unknown): string | undefined {
   return cause instanceof Error ? cause.name : undefined;
-}
-
-/** The end a caller's own cancellation names, as their signal's reason named it. */
-function cancelled(signal: AbortSignal): CallFailure {
-  const name = errorName(signal.reason);
-  return {
-    fault: CALL_FAULT.NETWORK,
-    ...(name === undefined ? undefined : { errorName: name }),
-  };
 }
 
 function transportFailure(error: CallTransportError): CallFailure {
@@ -439,41 +393,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
           () => Effect.succeed(undefined),
         ),
       ),
-  };
-}
-
-/**
- * The same call as a promise, over the caller's own `HttpClient`.
- *
- * @deprecated Superseded by {@link accountCall}, which takes the ambient
- * `HttpClient` and answers effects; deleted once every remaining caller
- * (`apps/web`'s hosted PostHog and voice routes) takes `accountCall` instead.
- */
-export function createAccountCall(options: AccountFetchCallOptions): AccountCall {
-  const call = accountCall(options);
-  const client = options.httpClient ?? FetchHttpClient.layer;
-
-  async function run<Answer>(
-    effect: Effect.Effect<Answer, never, HttpClient.HttpClient>,
-    fallback: (signal: AbortSignal) => Answer,
-    signal: AbortSignal | undefined,
-  ): Promise<Answer> {
-    const exit = await Effect.runPromiseExit(Effect.provide(effect, client), {
-      ...(signal === undefined ? undefined : { signal }),
-    });
-    if (Exit.isSuccess(exit)) return exit.value;
-    // The caller's own cancellation is the run's interruption here, so the end
-    // it names is the reason their signal carried, exactly as an aborted fetch
-    // named it.
-    if (signal?.aborted === true && Cause.isInterruptedOnly(exit.cause)) return fallback(signal);
-    throw Cause.squash(exit.cause);
-  }
-
-  return {
-    requestTimeoutMs: call.requestTimeoutMs,
-    address: call.address,
-    send: (request) => run(call.send(request), cancelled, request.signal),
-    ask: (request, read) => run(call.read(request, read), () => undefined, request.signal),
   };
 }
 

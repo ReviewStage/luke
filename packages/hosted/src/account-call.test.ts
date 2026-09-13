@@ -11,14 +11,12 @@ import {
   recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Deferred, Duration, Effect, Fiber, Schema, TestClock } from "effect";
-import { test } from "vitest";
 import {
   accountBearer,
   accountCall,
   CALL_FAULT,
   type CallCredential,
   callAnswered,
-  createAccountCall,
   fixedBearer,
   NO_CREDENTIAL,
 } from "./account-call.js";
@@ -389,42 +387,3 @@ it.effect(
       assert.equal(answer.errorName, "TimeoutError");
     }),
 );
-
-test("the promise the migration keeps answers a validated body over the caller's own fetch", async () => {
-  const recording = recordingHttpClient(() => jsonResponse({ voice: "marin" }));
-  const call = createAccountCall({
-    baseUrl: BASE_URL,
-    credential: fixedBearer("sk-test"),
-    httpClient: recording.layer,
-  });
-
-  const answer = await call.ask({ method: HTTP_METHOD.GET, path: PATH }, (payload) => payload);
-
-  assert.deepEqual(answer, { voice: "marin" });
-  assert.equal(recordedRequest(recording.requests).authorization, "Bearer sk-test");
-  assert.equal(call.address(PATH), `${BASE_URL}${PATH}`);
-});
-
-test("the caller's own cancellation ends the request, named by the reason it carried", async () => {
-  const cancellation = new AbortController();
-  const call = createAccountCall({
-    baseUrl: BASE_URL,
-    credential: fixedBearer("sk-test"),
-    httpClient: fakeHttpClientLayer(
-      () =>
-        new Promise<Response>((_settle, reject) => {
-          cancellation.abort();
-          cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
-        }),
-    ),
-  });
-
-  const answer = await call.send({
-    method: HTTP_METHOD.GET,
-    path: PATH,
-    signal: cancellation.signal,
-  });
-
-  assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NETWORK);
-  assert.equal(answer.errorName, "AbortError");
-});

@@ -9,7 +9,6 @@ import {
   recordingHttpClient,
 } from "@sidecar/wire/testing";
 import { Effect } from "effect";
-import { test } from "vitest";
 import { feedbackDelivery, feedbackDeliveryFromEnvironment } from "./delivery.js";
 import { FEEDBACK_KIND, type FeedbackSubmission } from "./submission.js";
 
@@ -63,20 +62,22 @@ it.effect("an unreachable endpoint comes back as a reason, not a failure", () =>
   }),
 );
 
-test("the promise face carries a submission over the caller's own fetch", async () => {
-  const requests: { input: string; body: string }[] = [];
-  const courier = feedbackDeliveryFromEnvironment({
-    url: URL,
-    httpClient: fakeHttpClientLayer((input, init) => {
-      requests.push({ input, body: String(init.body) });
-      return Promise.resolve(new Response("{}", { status: 200 }));
-    }),
-  });
+it.effect("the delivery every run gets carries a submission over the client it was built on", () =>
+  Effect.gen(function* () {
+    const requests: { input: string; body: string }[] = [];
+    const delivery = feedbackDeliveryFromEnvironment({
+      url: URL,
+      httpClient: fakeHttpClientLayer((input, init) => {
+        requests.push({ input, body: String(init.body) });
+        return Promise.resolve(new Response("{}", { status: 200 }));
+      }),
+    });
 
-  const result = await courier.deliver(SUBMISSION);
+    const result = yield* delivery.deliver(SUBMISSION);
 
-  assert.deepEqual(result, { delivered: true });
-  assert.equal(requests.length, 1);
-  assert.equal(requests[0]?.input, URL);
-  assert.deepEqual(JSON.parse(requests[0]?.body ?? ""), SUBMISSION);
-});
+    assert.deepEqual(result, { delivered: true });
+    assert.equal(requests.length, 1);
+    assert.equal(requests[0]?.input, URL);
+    assert.deepEqual(JSON.parse(requests[0]?.body ?? ""), SUBMISSION);
+  }),
+);

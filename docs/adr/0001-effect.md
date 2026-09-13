@@ -318,7 +318,8 @@ is an effect, which no PR in this plan schedules.
 is on the allowlist too: every caller of the brain's model transport still
 holds a promise, not a fiber, so the request effect built over
 `@sidecar/hosted`'s `accountCall` is run to a promise there, joining the
-caller's own `AbortSignal` to the run exactly as `createAccountCall` does.
+caller's own `AbortSignal` to the run exactly as `createAccountCall` did
+before P12-20b deleted it.
 P12-04d moved what it runs on: `BrainTransport` takes an
 `execution?: ExecutionRuntime` (the host's own, captured once in
 `compose-account.ts` as `Effect.runtime<never>()` and threaded through
@@ -332,15 +333,25 @@ OpenClaw `b7528507` that awaits `model.respond` and imports nothing from
 `effect`, so no adapter above this transport can answer an effect while that
 port stands.
 
-`createAccountCall` in `packages/hosted/src/account-call.ts` is on it as well:
-it provides the caller's own `httpClient` layer, or `FetchHttpClient.layer` for
-the ambient ones, joins the caller's `AbortSignal` to the run, and answers
-the `Promise` its callers still hold. P12-04 moved every caller inside this
-package onto `accountCall` directly and deleted the `CloudFetch` seam this
-door used to take its layer from; what is left is the promise door itself,
-kept for its two remaining callers outside this package — the web app's
-hosted PostHog batch and its voice session mint — and deleted once both take
-`accountCall` instead. `HostedChangesClient`'s, `HostedRosterClient`'s, and
+`createAccountCall` in `packages/hosted/src/account-call.ts` was on it as
+well, the promise door `accountCall` sat behind: it provided the caller's own
+`httpClient` layer, or `FetchHttpClient.layer` for the ambient ones, joined
+the caller's `AbortSignal` to the run, and answered the `Promise` its callers
+held. P12-04 moved every caller inside that package onto `accountCall`
+directly and deleted the `CloudFetch` seam the door took its layer from;
+P12-20b deleted the door itself along with `AccountCall`,
+`AccountFetchCallOptions`, and the `signal` only its promise read, and took
+its three remaining callers outside the package onto `accountCall` — the
+hosted PostHog batch in `apps/web/server/hosted/posthog.ts`, the voice session
+mint in `apps/web/server/voice/openai.ts`, and `KeyedLiveSessionSource#create`
+in `packages/voice/src/live-session-source.ts`. None of the three is an Effect
+composition yet, so each runs the one request it makes where the promise it
+answers begins, over the client it was built on or the ambient fetch one,
+rather than behind a door shared by all of them; the last two were already on
+this allowlist for their own runs, and `posthog.ts` is a new entry whose
+`postPosthogBatch` is deleted with the promise-shaped `events.ts` route above
+it, whose handler would yield the batch effect beneath that door instead — the
+same deletion `createRateBrake` waits on. `HostedChangesClient`'s, `HostedRosterClient`'s, and
 `HostedConversationClient`'s own `#run` in `changes-client.ts`,
 `roster-client.ts`, and `conversation-client.ts` were the seventh; P12-04b
 deleted it, so `observe`, `projects`, `poll`, `messages`, `events`, `turns`,
@@ -368,17 +379,20 @@ runs them rather than the host's own. P7-03 deletes the runtime this class
 holds once that composer is a `Layer` and can hand the sender an edge to fork
 on instead.
 
-`createLiveUpstream#attach` in `apps/web/server/voice/openai.ts` is on the
+`createLiveUpstream` in `apps/web/server/voice/openai.ts` is on the
 same allowlist: the hosted voice function's OpenAI upstream is plain callback code over `ws`'s
 `WebSocket`, never an `Effect` composition, and P12-14 made `CallCredential`'s
 `authorization` an Effect so `accountCall` never bridges a caller's own
-`Promise` internally. The one credential this upstream ever holds is
-`fixedBearer`'s, which answers `Effect.succeed` and nothing else, so
-`Effect.runSync` here runs no asynchronous work and defers nothing past the
-call that reads it; `Effect.runSync` stands in for the `await` this file held
-before the credential became an Effect. It goes if this file's WebSocket
-plumbing is ever rebuilt over `@effect/platform`'s `Socket`, which no PR in
-this plan schedules.
+`Promise` internally. `attach`'s one credential is `fixedBearer`'s, which
+answers `Effect.succeed` and nothing else, so `Effect.runSync` here runs no
+asynchronous work and defers nothing past the call that reads it;
+`Effect.runSync` stands in for the `await` this file held before the
+credential became an Effect. Beside it, since P12-20b deleted
+`createAccountCall`, `create` runs the one session request itself with
+`Effect.runPromise` over the client the upstream was built on — the door it
+awaited before ran exactly that, one file further down. Both go if this
+file's WebSocket plumbing is ever rebuilt over `@effect/platform`'s `Socket`,
+which no PR in this plan schedules.
 
 `ServerBoundTransport#run` in `packages/gateway/src/transport.ts` is on the
 same allowlist, and it is what is left of the `GatewayServer` class P6-02
@@ -911,7 +925,12 @@ socket it wraps is a plain, synchronous `LiveSocket`, so the tries themselves
 are a fiber this class forks and interrupts on its own, with no promise
 anywhere above it waiting to be freed of one. It goes when the socket it
 wraps answers effects itself; the orchestrator's conversion above did not
-reach it, since the two share only a package.
+reach it, since the two share only a package. `KeyedLiveSessionSource#create`
+in the same file joined it at P12-20b, when `createAccountCall` was deleted:
+the source answers its caller a promise and holds no runtime edge of its own,
+so the one session request it makes is run there over the client the source
+was built on, which is what the deleted door did for it. It goes when that
+`create` answers an effect its caller yields.
 
 `fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` was on this
 allowlist from P10-16, the PR that deleted `HostedStoreRun` and
@@ -1472,13 +1491,12 @@ public methods takes a caller's own `AbortSignal`, and each runs its request
 effect over its own `httpClient` layer (a test's fake, or
 `FetchHttpClient.layer` for the ambient one — P12-04 deleted the `CloudFetch`
 seam these four used to build that layer from) to the Promise those methods
-answer. They go in P12-04b with the seam. `feedbackCourier` in
-`packages/feedback/src/delivery.ts` is the same shape one package over: the
-courier its callers hold answers a Promise, so the delivery effect is run over
-the caller's own `httpClient` layer or `FetchHttpClient.layer` right there —
-P12-04 deleted the `CloudFetch` seam this door used to build that layer from
-too — and it goes in P12-04b once its own caller runs the effect on its own
-runtime edge instead.
+answer. They go in P12-04b with the seam. The feedback delivery's own courier one
+package over was the same shape and is gone: P12-20b took
+`feedbackDeliveryFromEnvironment` onto an effect per submission with its
+`HttpClient` already provided, and the desktop's telemetry service runs it on
+the launch's own edge — the `run` `compose-desktop.ts` reads out of the fiber
+building it — rather than on a runtime the package built for itself.
 
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
@@ -1540,7 +1558,7 @@ design decision stated as such:
 | `cloudFetchFromHttpClient` | P1-07 | P12-04e |
 | `timersFromRuntime` | P2-01 | P12-03 |
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
-| `createAccountCall` Promise door over `accountCall` | P3-06 | P12-04b |
+| `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | with the promise-shaped `events.ts` route |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |

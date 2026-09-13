@@ -13,16 +13,11 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
-import {
-  accountCall,
-  callAnswered,
-  createAccountCall,
-  fixedBearer,
-  NO_CREDENTIAL,
-} from "../core.js";
+import { accountCall, callAnswered, fixedBearer, NO_CREDENTIAL } from "../core.js";
 
 export const POSTHOG_ENVIRONMENT = {
   PROJECT_API_KEY: "POSTHOG_PROJECT_API_KEY",
@@ -94,27 +89,46 @@ function resolvePosthogApiHost(host: string | undefined): string {
 }
 
 /**
- * Posts one batch document, resolving to nothing on a network fault so the
- * caller answers 502 without ever holding an error that could name the key.
+ * Posts one batch document over the ambient `HttpClient`, answering nothing on
+ * a network fault so the caller answers 502 without ever holding an error that
+ * could name the key.
  */
-export async function postPosthogBatch(
+function postBatchEffect(
+  body: PosthogBatch,
+  options: PosthogUpstreamOptions = {},
+): Effect.Effect<Response | undefined, never, HttpClient.HttpClient> {
+  // The project token travels in the batch document itself, so ingestion takes
+  // no identity of its own.
+  const call = accountCall({
+    baseUrl: options.host?.trim() || POSTHOG_DEFAULTS.HOST,
+    credential: NO_CREDENTIAL,
+    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
+  });
+  return Effect.map(
+    call.send({
+      method: HTTP_METHOD.POST,
+      path: POSTHOG_DEFAULTS.BATCH_PATH,
+      body: JSON.stringify(body),
+    }),
+    (answer) => (callAnswered(answer) ? answer.response : undefined),
+  );
+}
+
+/**
+ * The same post as the promise `handleEvents` still awaits, over the caller's
+ * own `HttpClient` or the ambient fetch one.
+ *
+ * @deprecated Runs the effect where the batch is posted rather than at a
+ * runtime edge; deleted with the promise-shaped `events.ts` route, whose
+ * handler is what would yield the batch effect beneath it instead.
+ */
+export function postPosthogBatch(
   body: PosthogBatch,
   options: PosthogUpstreamOptions = {},
 ): Promise<Response | undefined> {
-  // The project token travels in the batch document itself, so ingestion takes
-  // no identity of its own.
-  const call = createAccountCall({
-    baseUrl: options.host?.trim() || POSTHOG_DEFAULTS.HOST,
-    credential: NO_CREDENTIAL,
-    ...(options.httpClient ? { httpClient: options.httpClient } : undefined),
-    requestTimeoutMs: options.timeoutMs ?? POSTHOG_DEFAULTS.REQUEST_TIMEOUT_MS,
-  });
-  const answer = await call.send({
-    method: HTTP_METHOD.POST,
-    path: POSTHOG_DEFAULTS.BATCH_PATH,
-    body: JSON.stringify(body),
-  });
-  return callAnswered(answer) ? answer.response : undefined;
+  return Effect.runPromise(
+    Effect.provide(postBatchEffect(body, options), options.httpClient ?? FetchHttpClient.layer),
+  );
 }
 
 export interface PosthogForgetOptions {

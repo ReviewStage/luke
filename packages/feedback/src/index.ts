@@ -1,4 +1,4 @@
-export { feedbackDeliveryFromEnvironment } from "./delivery.js";
+export { type AmbientFeedbackDelivery, feedbackDeliveryFromEnvironment } from "./delivery.js";
 export {
   FEEDBACK_IMAGE_TYPE,
   FEEDBACK_KIND,
