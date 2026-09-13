@@ -29,7 +29,6 @@ import {
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import { LiveSessionHolder } from "./live-session-holder.js";
-import { STOP_SPEAKING_INSTRUCTION } from "./live-session-service.js";
 
 /**
  * The peer's holder of one hosted session, over a scripted source and
@@ -106,11 +105,13 @@ interface Fixture {
   changes: VoiceLiveSessionChanged[];
   /** Every idle report the source's door was handed, in order. */
   reports: boolean[];
+  /** How many times the source's stop door was asked. */
+  stops: number;
   created: number;
   entries: ConversationEntry[];
   roster: RosterSeedSession[];
   sourceAvailable: boolean;
-  /** Whether the source opens a door for the idle report, as the hosted source does and the keyed one does not. */
+  /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
   attachFails: boolean;
   open(): Effect.Effect<FakeSideband>;
@@ -125,7 +126,13 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
     let ids = 0;
-    const state = { sourceAvailable: true, reportsActivity: true, attachFails: false, created: 0 };
+    const state = {
+      sourceAvailable: true,
+      reportsActivity: true,
+      attachFails: false,
+      created: 0,
+      stops: 0,
+    };
     const source: LiveSessionSource = {
       create: (input) =>
         Effect.sync(() => {
@@ -143,6 +150,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
               ? {
                   reportActivity: (idle: boolean) => {
                     reports.push(idle);
+                  },
+                  stopSpeaking: () => {
+                    state.stops += 1;
                   },
                 }
               : undefined),
@@ -181,6 +191,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       set sourceAvailable(value: boolean) {
         state.sourceAvailable = value;
+      },
+      get stops() {
+        return state.stops;
       },
       get reportsActivity() {
         return state.reportsActivity;
@@ -320,7 +333,7 @@ it.scoped(
 );
 
 it.scoped(
-  "the stop key sends one instruction append under no delegation once the session has started, and answers false before or after",
+  "the stop key asks the source's door once the session has started, appends nothing on the sideband itself, and answers false before, after, or with no door",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -331,30 +344,30 @@ it.scoped(
       assert.ok(sideband);
       // Created and not yet started: the instruction would be standing text a session has not begun on.
       assert.equal(f.holder.stopSpeaking(), false);
+      assert.equal(f.stops, 0);
       sideband.started(created.sessionId);
       yield* settle();
       assert.equal(f.holder.stopSpeaking(), true);
       yield* settle();
-      assert.deepEqual(sideband.sent, [
-        {
-          type: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
-          event_id: "id-1",
-          delegation_id: null,
-          content: STOP_SPEAKING_INSTRUCTION,
-        },
-      ]);
-      // Its acknowledgment is nothing the holder waits on or reads.
-      sideband.receive({
-        type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
-        event_id: "ack",
-        client_event_id: "id-1",
-        start_ms: 0,
-        end_ms: 0,
-      });
+      assert.equal(f.stops, 1);
+      // The instruction is the service's to append: nothing named it here, and nothing left the sideband.
+      assert.deepEqual(sideband.sent, []);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 12);
       yield* settle();
       assert.equal(f.holder.stopSpeaking(), false);
-      assert.equal(sideband.sent.length, 1);
+      assert.equal(f.stops, 1);
+
+      // A source with no door, the keyed one straight to OpenAI, has no one to ask.
+      f.reportsActivity = false;
+      const again = yield* f.holder.createSession("offer-2");
+      assert.ok(again);
+      const second = f.sidebands[1];
+      assert.ok(second);
+      second.started(again.sessionId);
+      yield* settle();
+      assert.equal(f.holder.stopSpeaking(), false);
+      assert.equal(f.stops, 1);
+      assert.deepEqual(second.sent, []);
     }),
 );
 

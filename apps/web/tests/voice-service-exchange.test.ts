@@ -544,7 +544,7 @@ it.effect(
 );
 
 it.effect(
-  "the desktop's stop passes to the session byte for byte, its acknowledgment is nothing the exchange asked for, and the desktop's idle report closes the session through the exchange",
+  "the desktop's stop is read by the relay and handed to the exchange, which appends the one instruction itself under its own id; and the desktop's idle report closes the session through the exchange",
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
@@ -553,22 +553,21 @@ it.effect(
       await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
       assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
 
-      // The stop, as the desktop's holder sends it: one instruction append under no delegation.
-      const stop = JSON.stringify({
-        type: LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
-        event_id: "desktop-stop-1",
-        delegation_id: null,
-        content: STOP_SPEAKING_INSTRUCTION,
-      });
-      await sendText(session.desktop.socket, stop);
-      assert.equal(await session.upstream.next(), stop);
-      // OpenAI acknowledges it by the desktop's own id; the exchange's channel never asked and ignores it.
+      // The stop, as the desktop's holder sends it: the service's own frame, forwarded nowhere.
+      await send(session.desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_STOP });
+      // What reaches the session is the exchange's own instruction append: its id, no delegation, the service's text.
+      const instructed = clientEvent(await session.upstream.next(5_000));
+      assert.equal(instructed.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.ok(instructed.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.equal(instructed.delegation_id, null);
+      assert.equal(instructed.content, STOP_SPEAKING_INSTRUCTION);
+      // OpenAI acknowledges it by the exchange's id, and the desktop is shown the acknowledgment as it is shown every server frame.
       await sendText(
         session.attach.socket,
         JSON.stringify({
           type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
           event_id: "ack-1",
-          client_event_id: "desktop-stop-1",
+          client_event_id: instructed.event_id,
           start_ms: 0,
           end_ms: 0,
         }),
@@ -608,8 +607,8 @@ it.effect(
       );
       const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
       assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
-      assert.equal(ended.reportsRead, 1);
-      assert.equal(ended.framesToUpstream, 1);
+      assert.equal(ended.reportsRead, 2);
+      assert.equal(ended.framesToUpstream, 0);
       assert.equal(ended.seconds, 9);
       await context.stop();
     }),

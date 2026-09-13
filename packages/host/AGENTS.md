@@ -63,17 +63,18 @@ exchange stands on the voice service: every spoken ask is admitted through
 socket the relay pipes, and the account's record is the service's. What this
 package keeps is `LiveSessionHolder`, which creates the session for the peer's
 offer (seeded from the desk and the recent Conversation as this Mac sees them),
-ends it on the peer's hang-up or the drain, sends the stop key's one
-`session.instructions.append` under no delegation, and carries the peer's idle
-to the service as `session.activity`, since the idle decision is made against
-appends only the service made. It appends nothing else and wants no session of
-its own: the `wanted` phase is never announced from here, and nothing on this
+ends it on the peer's hang-up or the drain, and carries the peer's idle and the
+stop key to the service as `session.activity` and `session.stop`, since the
+idle decision is made against appends only the service made and the stop's
+instruction is the service's to append. It appends nothing at all and wants no
+session of its own: the `wanted` phase is never announced from here, and nothing on this
 side speaks unprompted. The sessions route closes a desktop socket that sends
 any other frame, so a re-wired local exchange is refused at the relay rather
 than heard twice.
 
-The stop key's instruction is asked for only while Luke is speaking, since the
-append is standing text a silent model would read as a rule for its next answer.
+The stop is asked for only while Luke is speaking, since the instruction the
+service appends for it is standing text a silent model would read as a rule for
+its next answer.
 
 ## Two doors that exist for the graph
 

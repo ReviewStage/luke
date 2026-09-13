@@ -7,7 +7,6 @@ import {
 import {
   conversationSeedItems,
   type InitialItem,
-  instructionsAppend,
   LIVE_CLOSE_REASON,
   LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
@@ -39,7 +38,6 @@ import {
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
 } from "./graceful-close.js";
-import { STOP_SPEAKING_INSTRUCTION } from "./live-session-service.js";
 
 /**
  * The peer's side of one hosted voice session, which is everything the Mac
@@ -48,11 +46,11 @@ import { STOP_SPEAKING_INSTRUCTION } from "./live-session-service.js";
  * and the desk as the Mac sees them, and holds the sideband the service
  * answered on for exactly three things: the graceful close, which sends
  * `session.close` and waits for `session.closed` as the conversations guide
- * prescribes; the stop key, one `session.instructions.append` carrying the
- * build-fixed stop under no delegation; and the idle report, told to the
- * service in its own vocabulary through the door the source opened, because
- * the idle decision is made against the appends the service's exchange made
- * itself. Nothing else leaves this side. Every delegation the session
+ * prescribes; and the stop key and the idle report, each told to the service
+ * in its own vocabulary through the door the source opened, because the
+ * instruction the stop appends and the idle decision both belong to the
+ * exchange the service holds. Nothing else leaves this side, and no append
+ * at all: the desktop never appends to a session. Every delegation the session
  * creates, every transcript delta, and every acknowledgment reaches the
  * service's exchange over the same socket ahead of this holder, and this
  * holder reads of them only what its phases need: the start, the usage, and
@@ -370,26 +368,19 @@ export class LiveSessionHolder {
   }
 
   /**
-   * The stop key: the model is told to stop and then wait, once, as one
-   * instruction append under no delegation, minted here with its own event
-   * id. Its acknowledgment comes back to a sideband nothing here waits on,
-   * and the service's exchange ignores an acknowledgment it did not ask for;
-   * the stop's effect is what both read from the transcript. Answers whether
-   * a started session was there to tell; the microphone is the peer's to
-   * mute and is not touched here.
+   * The stop key: the service is asked, through the source's door, to tell
+   * the model to stop and then wait, and the service's exchange appends the
+   * one instruction that says so, so nothing here names or appends it.
+   * Answers whether a started session with someone to ask was there; a
+   * session opened through no service has no door, and the microphone is
+   * the peer's to mute and is not touched here.
    */
   stopSpeaking(): boolean {
     const session = this.#held;
     if (!session?.started || session.ended) return false;
-    this.#start(
-      session.sideband.send(
-        instructionsAppend({
-          eventId: this.#options.createId(),
-          delegationId: null,
-          content: STOP_SPEAKING_INSTRUCTION,
-        }),
-      ),
-    );
+    const stop = session.opened.stopSpeaking;
+    if (stop === undefined) return false;
+    stop();
     return true;
   }
 

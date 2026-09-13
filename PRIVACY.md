@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 12 September 2026
+Last updated: 13 September 2026
 
 Luke is a macOS app that watches your coding agent sessions, with companion
 iOS and Apple Watch apps for the cloud sessions your account can see. This

@@ -111,13 +111,20 @@ export const VOICE_SERVICE_FRAME = {
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
   /**
-   * The one frame the desktop sends after the handshake in this vocabulary:
-   * whether its peer has gone quiet, as the renderer's own idle window reads
-   * it. The service's exchange decides the idle close against the appends
-   * it made itself, so the report crosses to it; the relay reads the frame
-   * and forwards it nowhere.
+   * One of the two frames the desktop sends after the handshake in this
+   * vocabulary: whether its peer has gone quiet, as the renderer's own idle
+   * window reads it. The service's exchange decides the idle close against
+   * the appends it made itself, so the report crosses to it; the relay reads
+   * the frame and forwards it nowhere.
    */
   SESSION_ACTIVITY: "session.activity",
+  /**
+   * The other: the stop key. The desktop asks the service to tell the model
+   * to stop and wait, and the service's exchange appends the one build-fixed
+   * instruction that says so, so the desktop appends nothing to a session
+   * and the relay forwards no instruction text of the desktop's choosing.
+   */
+  SESSION_STOP: "session.stop",
 } as const;
 
 /**
@@ -188,6 +195,14 @@ export interface SessionActivityFrame {
   type: typeof VOICE_SERVICE_FRAME.SESSION_ACTIVITY;
   idle: boolean;
 }
+
+/** The stop key pressed: the type alone, since what is said to the model is the service's fixed sentence. */
+export interface SessionStopFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_STOP;
+}
+
+/** Either frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
+export type SessionReportFrame = SessionActivityFrame | SessionStopFrame;
 
 /**
  * A declaration handed the interface it decodes into, since Effect's `Schema`
@@ -333,6 +348,18 @@ export const sessionActivityFrameSchema = schemaAs<SessionActivityFrame>(
   }),
 );
 
+export const sessionStopFrameSchema = schemaAs<SessionStopFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_STOP),
+  }),
+);
+
+export const sessionReportFrameSchema = schemaAs<SessionReportFrame>(
+  Schema.Union(sessionActivityFrameSchema, sessionStopFrameSchema).annotations(
+    wireRefusal(SCHEMA_REFUSAL.MALFORMED),
+  ),
+);
+
 export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
   tolerantRecord({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -394,6 +421,16 @@ export function sessionActivityFrameFromWire(
   value: UnparsedWireValue,
 ): SessionActivityFrame | undefined {
   return admitted(sessionActivityFrameSchema, value);
+}
+
+export function sessionStopFrameFromWire(value: UnparsedWireValue): SessionStopFrame | undefined {
+  return admitted(sessionStopFrameSchema, value);
+}
+
+export function sessionReportFrameFromWire(
+  value: UnparsedWireValue,
+): SessionReportFrame | undefined {
+  return admitted(sessionReportFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

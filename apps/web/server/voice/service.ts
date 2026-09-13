@@ -625,13 +625,24 @@ export class VoiceService {
                     yield* this.#recordUsage(accountId, sessionId, closed.usage.seconds);
                   }),
                 ),
-        // The desktop's idle report reaches the exchange that holds the idle
-        // decision; with no exchange standing it is read and goes nowhere.
+        // The desktop's reports reach the exchange: its idle, which the
+        // exchange decides the idle close on, and its stop, which the exchange
+        // answers with the one instruction it appends itself. With no exchange
+        // standing a report is read and goes nowhere.
         onDesktopReport:
           exchange === undefined
             ? undefined
             : (report) => {
-                exchange.service.reportActivity(report.idle);
+                switch (report.type) {
+                  case VOICE_SERVICE_FRAME.SESSION_ACTIVITY:
+                    exchange.service.reportActivity(report.idle);
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_STOP:
+                    exchange.service.stopSpeaking();
+                    return;
+                  default:
+                    return;
+                }
               },
         onFrameRefused: (type) => {
           this.#log({ event: LOG_EVENT.FRAME_REFUSED, route, type: knownFrameType(type) });
