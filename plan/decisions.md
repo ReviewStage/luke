@@ -3506,3 +3506,8 @@ deletion), LUKE-201 (2c), LUKE-202 (re-homing), LUKE-107's three ADR sentences.
 **"And I just set the Vercel and GitHub settings."** The LUKE-164 door: OPTIONS Allowlist over `/api`
 and `/eve`, `PREVIEW_PROBE_DOOR=options-allowlist`. **Verification is the next PR push** — `Preview
 shape` should run rather than skip; #1327's rebase is the first candidate.
+
+
+## 2026-09-13 19:10Z — LUKE-164 door verified end to end; ticket Done
+
+Dean set the two settings at ~18:23Z (Vercel Deployment Protection OPTIONS Allowlist on `/api` and `/eve`; GitHub repository variable `PREVIEW_PROBE_DOOR=options-allowlist`). The `Preview shape` job ran on #1327's rebase push (run 34776740940, head `c4aa7209`, success): every probe went through the allowlist as OPTIONS, no 302 to the protection page, the caller-path codes answered as designed (405 on the POST-only routes, 426 on the socket routes), and `/eve/v1/health` answering 404 to an OPTIONS is held acceptable by the job's own design. No decision changed a schema, wire, or trust rule; this records that the gate is live. One known limitation, noted on the ticket: the probe imports `ParseResult` from `effect`, which Effect v4 no longer exports, so the job crashes before probing on the Effect-v4 branch — the upgrade PR must move that import.
