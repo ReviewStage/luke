@@ -175,13 +175,15 @@ class FakeBrain implements LiveBrain {
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
-  async submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission> {
-    this.asks.push(ask);
-    if (this.refuse !== undefined) {
-      return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: this.refuse };
-    }
-    this.#runs += 1;
-    return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+    return Effect.sync(() => {
+      this.asks.push(ask);
+      if (this.refuse !== undefined) {
+        return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: this.refuse };
+      }
+      this.#runs += 1;
+      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+    });
   }
 
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {
@@ -202,12 +204,16 @@ class AnticipatingBrain extends FakeBrain {
   drops = 0;
   readonly #factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
 
-  anticipate(anticipation: LiveBrainAnticipation): void {
-    this.anticipations.push(anticipation);
+  anticipate(anticipation: LiveBrainAnticipation): Effect.Effect<void> {
+    return Effect.sync(() => {
+      this.anticipations.push(anticipation);
+    });
   }
 
-  dropAnticipation(): void {
-    this.drops += 1;
+  dropAnticipation(): Effect.Effect<void> {
+    return Effect.sync(() => {
+      this.drops += 1;
+    });
   }
 
   onAnticipationFacts(listener: (facts: LiveBrainAnticipationFacts) => void): () => void {
@@ -240,21 +246,32 @@ class FakeRecord implements LiveRecord {
     held(written);
   }
 
-  async writeDeveloperUtterance(record: DeveloperUtteranceRecord): Promise<boolean> {
-    if (this.#held === undefined) {
-      this.developer.push(record);
-      return true;
-    }
-    const written = await new Promise<boolean>((resolve) => {
-      this.#held?.push(resolve);
+  writeDeveloperUtterance(record: DeveloperUtteranceRecord): Effect.Effect<boolean> {
+    return Effect.suspend(() => {
+      if (this.#held === undefined) {
+        this.developer.push(record);
+        return Effect.succeed(true);
+      }
+      return Effect.map(
+        Effect.promise(
+          () =>
+            new Promise<boolean>((resolve) => {
+              this.#held?.push(resolve);
+            }),
+        ),
+        (written) => {
+          if (written) this.developer.push(record);
+          return written;
+        },
+      );
     });
-    if (written) this.developer.push(record);
-    return written;
   }
 
-  async writeLukeUtterance(record: LukeUtteranceRecord): Promise<boolean> {
-    this.luke.push(record);
-    return true;
+  writeLukeUtterance(record: LukeUtteranceRecord): Effect.Effect<boolean> {
+    return Effect.sync(() => {
+      this.luke.push(record);
+      return true;
+    });
   }
 }
 
@@ -373,6 +390,7 @@ function fixture(runtime: Runtime.Runtime<never>, brain: FakeBrain = new FakeBra
     source: () => (state.sourceAvailable ? source : undefined),
     brain,
     record,
+    runtime,
     conversationEntries: () => entries,
     roster: () => roster,
     quietNow: async () => state.quiet,

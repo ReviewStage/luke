@@ -5,8 +5,8 @@ import type { LiveRecord } from "../live-session/live-record.js";
 import { LiveRecordTag, liveRecordLayer } from "./live-record.js";
 
 const fakeRecord: LiveRecord = {
-  writeDeveloperUtterance: () => Promise.resolve(true),
-  writeLukeUtterance: () => Promise.resolve(true),
+  writeDeveloperUtterance: () => Effect.succeed(true),
+  writeLukeUtterance: () => Effect.succeed(true),
 };
 
 describe("liveRecordLayer", () => {

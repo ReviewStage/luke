@@ -17,7 +17,6 @@
   "runShims": [
     "apps/desktop/src/main/update-service.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
-    "apps/web/server/hosted/fiber-runner.ts",
     "apps/web/server/hosted/rate-brake.ts",
     "apps/web/server/voice/openai.ts",
     "apps/web/tests/support/hosted-store-database.ts",
@@ -52,9 +51,9 @@
     "apps/desktop/src/main/app-state.ts",
     "packages/brain/src/effect/harness.ts",
     "packages/host/src/compose-live.ts",
-    "packages/host/src/voice/live-brain-adapter.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
+    "packages/voice/src/live-session/live-session-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [

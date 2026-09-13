@@ -153,6 +153,10 @@ export const composeLive = (
       source: () => account.voiceCapabilities.liveSessions,
       brain: liveBrain,
       record: liveRecord,
+      // The two doors answer effects, and the service is a promise-shaped
+      // class, so it runs each of them on this composition's own runtime —
+      // the one the adapter above used to hold for itself.
+      runtime,
       conversationEntries: () => brain.store.thread().entries(),
       roster: () => voiceRoster(observation.rosterForClients()),
       // `LiveSessionService` asks for the hold as a promise, so the calendars

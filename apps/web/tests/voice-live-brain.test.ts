@@ -184,7 +184,7 @@ it.effect(
       const submissionId = randomUUID();
       const ask = { submissionId, question: "Developer: what needs me?" };
 
-      const accepted = await f.brain.submitAsk(ask);
+      const accepted = await database.run(f.brain.submitAsk(ask));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       assert.deepEqual(
@@ -197,7 +197,7 @@ it.effect(
         [ASK_ORIGIN.SPOKEN, submissionId, target.conversationId],
       );
 
-      const again = await f.brain.submitAsk(ask);
+      const again = await database.run(f.brain.submitAsk(ask));
       assert.deepEqual(again, accepted);
       assert.equal(f.eve.opened.length, 1);
       await f.stop();
@@ -211,10 +211,10 @@ it.effect(
       const target = await account();
       const f = await stand(target);
       const ask = { submissionId: randomUUID(), question: "q" };
-      const accepted = await f.brain.submitAsk(ask);
+      const accepted = await database.run(f.brain.submitAsk(ask));
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
-      assert.deepEqual(await f.brain.submitAsk(ask), accepted);
+      assert.deepEqual(await database.run(f.brain.submitAsk(ask)), accepted);
       const standing: RelayStanding = {
         sessionId: await sessionOf(target, accepted.runId),
         target,
@@ -270,7 +270,9 @@ it.effect(
       const target = await account();
       const f = await stand(target);
       f.eve.failNext = 502;
-      const refused = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+      const refused = await database.run(
+        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      );
       assert.deepEqual(refused, {
         outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
         refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.UPSTREAM],
@@ -291,7 +293,9 @@ it.effect(
     Effect.promise(async () => {
       const target = await account();
       const f = await stand(target, BOUNDED);
-      const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+      const accepted = await database.run(
+        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      );
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       await until(() => f.events.length === 1, "the follow bound");
@@ -319,7 +323,9 @@ it.effect(
         turns: database.store.turns,
         messages: { ...database.store.messages, byClientId: () => Effect.succeed(unreadable) },
       });
-      const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+      const accepted = await database.run(
+        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      );
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       await play(spokenTurn(FIRST_EVE_TURN, NOW), {
@@ -345,7 +351,9 @@ it.effect(
     Effect.promise(async () => {
       const target = await account();
       const f = await stand(target);
-      const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+      const accepted = await database.run(
+        f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+      );
       assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
       if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
       await deleteConversation(database.run, target.conversationId);
@@ -361,7 +369,9 @@ it.effect("stop ends every follow: a turn that completes after it reaches no lis
   Effect.promise(async () => {
     const target = await account();
     const f = await stand(target);
-    const accepted = await f.brain.submitAsk({ submissionId: randomUUID(), question: "q" });
+    const accepted = await database.run(
+      f.brain.submitAsk({ submissionId: randomUUID(), question: "q" }),
+    );
     assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
     if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
     await f.stop();

@@ -73,7 +73,9 @@ function fakeAgent(options: { reject?: boolean } = {}) {
 test("a spoken ask crosses under the spoken origin with the caller's submission id, and an acceptance names the run", async () => {
   const fake = fakeAgent();
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => fake.agent }));
-  const result = await brain.submitAsk({ submissionId: "sub-1", question: "Developer: hi" });
+  const result = await Effect.runPromise(
+    brain.submitAsk({ submissionId: "sub-1", question: "Developer: hi" }),
+  );
   assert.deepEqual(result, { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" });
   assert.deepEqual(fake.submissions, [
     { submissionId: "sub-1", question: "Developer: hi", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
@@ -83,15 +85,18 @@ test("a spoken ask crosses under the spoken origin with the caller's submission 
 test("a rejection carries the brain's standing refusal for its reason, and no agent at all the absent one", async () => {
   const fake = fakeAgent({ reject: true });
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => fake.agent }));
-  assert.deepEqual(await brain.submitAsk({ submissionId: "s", question: "q" }), {
+  assert.deepEqual(await Effect.runPromise(brain.submitAsk({ submissionId: "s", question: "q" })), {
     outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
     refusal: BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.FULL],
   });
   const absent = await Effect.runPromise(brainAgentLiveBrain({ agent: () => undefined }));
-  assert.deepEqual(await absent.submitAsk({ submissionId: "s", question: "q" }), {
-    outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-    refusal: BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT],
-  });
+  assert.deepEqual(
+    await Effect.runPromise(absent.submitAsk({ submissionId: "s", question: "q" })),
+    {
+      outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+      refusal: BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT],
+    },
+  );
 });
 
 test("the run seams are read by name and translated; a kind this build does not know is dropped", async () => {
@@ -99,7 +104,7 @@ test("the run seams are read by name and translated; a kind this build does not 
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => fake.agent }));
   const heard: LiveBrainRunEvent[] = [];
   brain.onRunEvent((event) => heard.push(event));
-  await brain.submitAsk({ submissionId: "s", question: "q" });
+  await Effect.runPromise(brain.submitAsk({ submissionId: "s", question: "q" }));
   fake.events.fire({ kind: BRAIN_RUN_EVENT.SLOW_STEP, runId: "run-1", step: "transcript_read" });
   fake.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
   fake.events.fire({ kind: BRAIN_RUN_EVENT.REPLY_SENTENCE, runId: "run-1", sentence: "Done." });
@@ -158,7 +163,7 @@ test("an ask follows the agent before it submits, so the first event of the run 
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => agent }));
   const heard: string[] = [];
   brain.onRunEvent((event) => heard.push(event.runId));
-  await brain.submitAsk({ submissionId: "s", question: "q" });
+  await Effect.runPromise(brain.submitAsk({ submissionId: "s", question: "q" }));
   assert.deepEqual(heard, ["run-1"]);
 });
 
@@ -169,10 +174,10 @@ test("an agent rebuilt between asks is followed once each, and a listener let go
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => current.agent }));
   const heard: string[] = [];
   const stop = brain.onRunEvent((event) => heard.push(event.runId));
-  await brain.submitAsk({ submissionId: "a", question: "q" });
-  await brain.submitAsk({ submissionId: "b", question: "q" });
+  await Effect.runPromise(brain.submitAsk({ submissionId: "a", question: "q" }));
+  await Effect.runPromise(brain.submitAsk({ submissionId: "b", question: "q" }));
   current = second;
-  await brain.submitAsk({ submissionId: "c", question: "q" });
+  await Effect.runPromise(brain.submitAsk({ submissionId: "c", question: "q" }));
   first.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "from-first" });
   second.events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "from-second" });
   assert.deepEqual(heard, ["from-first", "from-second"]);
@@ -216,24 +221,32 @@ test("an anticipation crosses with the row as the brain's key, a drop reaches th
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => fake.agent }));
   const heard: { rowId: number; text: string }[] = [];
   brain.onAnticipationFacts?.((facts) => heard.push(facts));
-  brain.anticipate?.({ rowId: 7, partialAsk: "what is", recentTurns: "Developer: what is" });
+  await Effect.runPromise(
+    brain.anticipate?.({ rowId: 7, partialAsk: "what is", recentTurns: "Developer: what is" }) ??
+      Effect.void,
+  );
   assert.deepEqual(fake.anticipations, [
     { id: "7", partialAsk: "what is", recentTurns: "Developer: what is" },
   ]);
   fake.facts.fire({ id: "7", text: "The agent finished the tests." });
   fake.facts.fire({ id: "not-a-row", text: "dropped" });
   assert.deepEqual(heard, [{ rowId: 7, text: "The agent finished the tests." }]);
-  brain.dropAnticipation?.();
+  await Effect.runPromise(brain.dropAnticipation?.() ?? Effect.void);
   assert.equal(fake.drops(), 1);
 });
 
 test("an agent without the prefetch, or no agent at all, takes no anticipation and reports no facts", async () => {
   const plain = fakeAgent();
   const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => plain.agent }));
-  brain.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" });
-  brain.dropAnticipation?.();
+  await Effect.runPromise(
+    brain.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" }) ?? Effect.void,
+  );
+  await Effect.runPromise(brain.dropAnticipation?.() ?? Effect.void);
   const absent = await Effect.runPromise(brainAgentLiveBrain({ agent: () => undefined }));
-  absent.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" });
-  absent.dropAnticipation?.();
+  await Effect.runPromise(
+    absent.anticipate?.({ rowId: 1, partialAsk: "hi", recentTurns: "Developer: hi" }) ??
+      Effect.void,
+  );
+  await Effect.runPromise(absent.dropAnticipation?.() ?? Effect.void);
   assert.deepEqual(plain.submissions, []);
 });

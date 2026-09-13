@@ -5,7 +5,7 @@ import { LIVE_BRAIN_SUBMISSION, type LiveBrain } from "../live-session/live-brai
 import { LiveBrainTag, liveBrainLayer } from "./live-brain.js";
 
 const fakeBrain: LiveBrain = {
-  submitAsk: () => Promise.resolve({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" }),
+  submitAsk: () => Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" }),
   onRunEvent: () => () => undefined,
 };
 

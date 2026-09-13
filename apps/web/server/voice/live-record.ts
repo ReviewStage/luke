@@ -1,8 +1,7 @@
-import { SqlClient } from "@effect/sql";
+import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import type { LiveRecord } from "@sidecar/voice/live-session";
 import { Deferred, Effect, FiberId, type ParseResult, Queue, type Scope } from "effect";
-import { runOverClient } from "../hosted/fiber-runner.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
@@ -33,6 +32,11 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
  * when the ask is on record and the service speaks no reply to an ask the
  * record refused. The writer's own idempotency on the delegation id makes a
  * repeated write the same message.
+ *
+ * Every face here answers an effect and none of them runs one: the write
+ * itself is made on the scoped fiber below, under the `SqlClient` the
+ * socket's scope was built on, and what a caller is handed is the wait on
+ * that write's own `Deferred`.
  */
 
 type DelegationCreated = Extract<
@@ -47,9 +51,11 @@ export interface HostedLiveRecordOptions {
 
 export interface HostedLiveRecord extends LiveRecord {
   /** One server event of the session's stream, in arrival order; answers what the writer did with it. */
-  observe(event: LiveServerEvent): Promise<VoiceWriteResult>;
+  observe(
+    event: LiveServerEvent,
+  ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>;
   /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */
-  drained(): Promise<void>;
+  drained(): Effect.Effect<void>;
 }
 
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
@@ -70,7 +76,6 @@ export function hostedLiveRecord({
   Scope.Scope | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
-    const run = runOverClient(yield* SqlClient.SqlClient);
     const held = new Map<string, DelegationCreated>();
     const waiting = yield* Queue.unbounded<PendingWrite>();
     let last: PendingWrite["landed"] | undefined;
@@ -85,38 +90,49 @@ export function hostedLiveRecord({
       ),
     );
 
-    /** Every write of one session takes its turn, so a segment's place in the sequence is its arrival. */
-    function consume(event: LiveServerEvent): Promise<VoiceWriteResult> {
+    /**
+     * Every write of one session takes its turn, so a segment's place in the
+     * sequence is its arrival: the event is put on the queue where `consume`
+     * is called, and the effect handed back is the wait on that write alone.
+     */
+    function consume(
+      event: LiveServerEvent,
+    ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError> {
       const landed = Deferred.unsafeMake<VoiceWriteResult, SqlError | ParseResult.ParseError>(
         FiberId.none,
       );
       last = landed;
       Queue.unsafeOffer(waiting, { event, landed });
-      return run(Deferred.await(landed));
+      return Deferred.await(landed);
     }
 
     return {
       observe(event) {
         if (event.type === LIVE_SERVER_EVENT.DELEGATION_CREATED) {
           held.set(event.delegation.id, event);
-          return Promise.resolve(HELD);
+          return Effect.succeed(HELD);
         }
         return consume(event);
       },
-      async writeDeveloperUtterance(record) {
-        if (record.delegationId === null) return true;
-        const delegation = held.get(record.delegationId);
-        if (delegation === undefined) return false;
-        try {
-          const written = await consume(delegation);
-          return written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED;
-        } catch {
-          return false;
-        }
-      },
-      writeLukeUtterance: () => Promise.resolve(true),
+      writeDeveloperUtterance: (record) =>
+        Effect.suspend(() => {
+          if (record.delegationId === null) return Effect.succeed(true);
+          const delegation = held.get(record.delegationId);
+          if (delegation === undefined) return Effect.succeed(false);
+          // A write the store refused and one it died on are both an ask not
+          // on record, as they were when the promise rejected; an interruption
+          // is neither, and is the socket's scope closing under the wait.
+          return consume(delegation).pipe(
+            Effect.map((written) => written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED),
+            Effect.catchAll(() => Effect.succeed(false)),
+            Effect.catchAllDefect(() => Effect.succeed(false)),
+          );
+        }),
+      writeLukeUtterance: () => Effect.succeed(true),
       drained: () =>
-        last === undefined ? Promise.resolve() : run(Effect.ignore(Deferred.await(last))),
+        Effect.suspend(() =>
+          last === undefined ? Effect.void : Effect.ignore(Deferred.await(last)),
+        ),
     };
   });
 }

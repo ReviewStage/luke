@@ -25,7 +25,6 @@ import {
   askStanding,
 } from "../hosted/brain-ask.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
-import { runOverClient } from "../hosted/fiber-runner.js";
 import type { HostedStore } from "../hosted/store/index.js";
 import { projectTurnEvents } from "../hosted/turn-event-stream.js";
 
@@ -48,8 +47,10 @@ import { projectTurnEvents } from "../hosted/turn-event-stream.js";
  *
  * The brain is built in the socket's own scope and every follow an accepted
  * ask starts is a fiber in it, so the socket detaching interrupts each of
- * them and nothing is emitted after; the one promise `LiveBrain` declares is
- * run over the client that scope was built on, through `runOverClient`.
+ * them and nothing is emitted after; the submission `LiveBrain` declares is
+ * an effect of the caller's own fiber, with the `SqlClient` the scope was
+ * built on provided to it where the ask door asks for one, exactly as
+ * `runTool` provides it to the brain's seams.
  */
 
 const LIVE_BRAIN_FOLLOW_BOUNDS = {
@@ -137,7 +138,7 @@ export function hostedLiveBrain(
   options: HostedLiveBrainOptions,
 ): Effect.Effect<HostedLiveBrain, never, Scope.Scope | SqlClient.SqlClient> {
   return Effect.gen(function* () {
-    const run = runOverClient(yield* SqlClient.SqlClient);
+    const sql = yield* SqlClient.SqlClient;
     const socket = yield* Effect.scope;
     const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
     const listeners = new Set<(event: LiveBrainRunEvent) => void>();
@@ -239,22 +240,20 @@ export function hostedLiveBrain(
           clientId: ask.submissionId,
         };
         const pinned = options.conversationId;
-        return run(
-          Effect.gen(function* () {
-            const outcome = yield* acceptAsk(
-              options.asks,
-              pinned === undefined ? input : { ...input, conversationId: pinned },
-            );
-            if (!outcome.ok) {
-              return {
-                outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-                refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.refusal],
-              };
-            }
-            yield* follow(outcome.answer.id);
-            return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.answer.id };
-          }),
-        );
+        return Effect.gen(function* () {
+          const outcome = yield* acceptAsk(
+            options.asks,
+            pinned === undefined ? input : { ...input, conversationId: pinned },
+          );
+          if (!outcome.ok) {
+            return {
+              outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+              refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.refusal],
+            };
+          }
+          yield* follow(outcome.answer.id);
+          return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.answer.id };
+        }).pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie);
       },
       onRunEvent(listener) {
         listeners.add(listener);
