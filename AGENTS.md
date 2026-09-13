@@ -169,7 +169,9 @@ own edge because a worker starts from its own file), the two renderer roots
 (one browser `ManagedRuntime` each, so the panel and the voice window never
 share a registry), `apps/desktop/src/renderer/renderer-runtime.ts` (the module
 each root's runtime is built from), the renderer's own fiber sites —
-`apps/desktop/src/renderer/introduction/introduction-takeover.tsx` and the
+`apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
+panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
+strip forks its own clock the same way the voice window's does), and the
 voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — each `apps/web/api/**`
 function module through the module-scope memoized runtime `apps/web/server/runtime.ts`
@@ -258,9 +260,11 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   must open its reconnection on the tick that found it: `Effect.fork*` would
   hand the work to the scheduler and move the in-flight count
   `node-invocations.test.ts` asserts on the statement right after a publish.
-- **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — one
-  `runFork`, blocked on Effect itself: a fork cannot be both detached and
-  started at once.
+- **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — every
+  fork, the standing call's lifecycle and the notice strip's two clocks
+  alike, starts on the one runtime the orchestrator was constructed with:
+  a fork cannot be both detached and started at once, and the strip owns no
+  runtime of its own to fork the other one on.
 - **`packages/runtime/src/children.effect.ts` and
   `packages/runtime/src/queue.effect.ts`** — each wraps an OpenClaw port
   (`children.ts`, `queue.ts`) that awaits promises and may not import

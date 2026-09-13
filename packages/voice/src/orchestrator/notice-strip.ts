@@ -4,14 +4,17 @@
  * enough that the shape does not wear a fault all afternoon. The next attempt
  * clears it sooner — connecting starts by reporting nothing wrong.
  */
-import type { TimerHandle } from "../scheduled-timer.js";
+import { Duration, Effect, type Fiber, FiberId } from "effect";
 
 export const VOICE_ERROR_NOTICE_MS = 12_000;
 
 export interface NoticeStripOptions {
   onChanged(): void;
-  schedule?: (callback: () => void, delayMs: number) => TimerHandle;
-  cancel?: (timer: TimerHandle) => void;
+  /**
+   * Forks the expiry effect on whichever runtime the caller holds; the strip
+   * never runs one itself, only holds the fiber back to interrupt it early.
+   */
+  fork(effect: Effect.Effect<void>): Fiber.RuntimeFiber<void>;
 }
 
 /**
@@ -25,8 +28,8 @@ export class NoticeStrip {
   readonly #options: NoticeStripOptions;
   #error: string | undefined;
   #notice: string | undefined;
-  #errorTimer: TimerHandle | undefined;
-  #noticeTimer: TimerHandle | undefined;
+  #errorTimer: Fiber.RuntimeFiber<void> | undefined;
+  #noticeTimer: Fiber.RuntimeFiber<void> | undefined;
 
   constructor(options: NoticeStripOptions) {
     this.#options = options;
@@ -75,20 +78,19 @@ export class NoticeStrip {
   }
 
   #arm(
-    standing: TimerHandle | undefined,
+    standing: Fiber.RuntimeFiber<void> | undefined,
     message: string | undefined,
     expire: () => void,
-  ): TimerHandle | undefined {
+  ): Fiber.RuntimeFiber<void> | undefined {
     this.#cancel(standing);
     if (message === undefined) return undefined;
-    return (this.#options.schedule ?? setTimeout)(expire, VOICE_ERROR_NOTICE_MS);
+    return this.#options.fork(
+      Effect.andThen(Effect.sleep(Duration.millis(VOICE_ERROR_NOTICE_MS)), Effect.sync(expire)),
+    );
   }
 
-  #cancel(timer: TimerHandle | undefined): void {
-    if (timer === undefined) return;
-    // SAFETY: the handle is whatever `schedule ?? setTimeout` returned, and
-    // the fallbacks are paired — a handle from `setTimeout` can only reach
-    // `clearTimeout`.
-    (this.#options.cancel ?? clearTimeout)(timer as never);
+  /** Interrupts a bound without waiting for it to finish: what it guarantees is that the work does not run after, never that the fiber has already ended. */
+  #cancel(fiber: Fiber.RuntimeFiber<void> | undefined): void {
+    fiber?.unsafeInterruptAsFork(FiberId.none);
   }
 }

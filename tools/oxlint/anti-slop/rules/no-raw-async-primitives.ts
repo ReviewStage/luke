@@ -56,6 +56,56 @@ function fileSystemNamespaceName(callee: ESTree.Expression | ESTree.Super): stri
   return inner !== null && inner.type === "Identifier" ? inner.name : null;
 }
 
+function includesNode(list: readonly unknown[], node: ESTree.Identifier): boolean {
+  return list.includes(node);
+}
+
+/**
+ * Whether an `Identifier` node stands for the value itself rather than being
+ * called, constructed, imported, or declared — the shapes a raw primitive
+ * escapes the two checks above through: held in a `??`, passed to another
+ * function, read off an object. `node.parent` is the same tree the two
+ * checks above already read; this is the one place both a call's callee and
+ * a `new`'s callee are excluded, since those are already reported by
+ * `CallExpression`/`NewExpression` below and would otherwise be reported
+ * twice.
+ */
+function isBareReference(node: ESTree.Identifier): boolean {
+  const parent = node.parent;
+  switch (parent.type) {
+    case "CallExpression":
+      return parent.callee !== node;
+    case "NewExpression":
+      return parent.callee !== node;
+    case "MemberExpression":
+      return parent.property !== node || parent.computed;
+    case "ImportSpecifier":
+    case "ImportDefaultSpecifier":
+    case "ImportNamespaceSpecifier":
+      return false;
+    case "VariableDeclarator":
+      return parent.id !== node;
+    case "AssignmentPattern":
+      return parent.left !== node;
+    case "CatchClause":
+      return parent.param !== node;
+    case "FunctionDeclaration":
+    case "FunctionExpression":
+    case "TSDeclareFunction":
+    case "TSEmptyBodyFunctionExpression":
+      return parent.id !== node && !includesNode(parent.params, node);
+    case "ArrowFunctionExpression":
+      return !includesNode(parent.params, node);
+    case "ClassDeclaration":
+    case "ClassExpression":
+      return parent.id !== node;
+    case "Property":
+      return parent.value === node || parent.key !== node;
+    default:
+      return true;
+  }
+}
+
 /**
  * The raw primitives Effect replaces: a delay is `Effect.sleep`, a cadence a
  * `Schedule`, a value another fiber completes a `Deferred`, a cancellation a
@@ -118,6 +168,17 @@ export const noRawAsyncPrimitivesRule = defineRule({
           }
           if (WATCH_MODULES.has(source)) bindings.fileSystemNamespaces.add(specifier.local.name);
         }
+      },
+      Identifier(node) {
+        const isTimer = bindings.timerNames.has(node.name);
+        const isAbortController = node.name === CONSTRUCTED.ABORT_CONTROLLER;
+        if (!isTimer && !isAbortController) return;
+        if (!isBareReference(node)) return;
+        context.report({
+          node,
+          messageId: isAbortController ? "abortController" : "timer",
+          data: { name: node.name },
+        });
       },
       NewExpression(node) {
         const callee = node.callee;
