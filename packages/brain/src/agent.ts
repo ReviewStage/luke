@@ -15,11 +15,12 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Exit, PubSub, Runtime, Scope, Stream } from "effect";
+import { Effect, Either, Exit, PubSub, Runtime, Scope, Stream } from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { type Carry, carryOn } from "./effect/carry.js";
+import { joinedOnce } from "./effect/once.js";
 import {
   type BrainPersistedState,
   type BrainStoreLease,
@@ -255,7 +256,7 @@ export class BrainAgent {
   readonly #maintenance: Maintenance;
   readonly #prefetch: ReadPrefetch | undefined;
   #turnsQueued = 0;
-  #restored: Promise<void> | undefined;
+  #restored: Effect.Effect<void> | undefined;
   /**
    * The conversation's serial queue: one permit, taken for the whole of a
    * turn and handed to the waiters in the order they asked, so the turns of
@@ -533,8 +534,8 @@ export class BrainAgent {
    * before its first ask awaits it here.
    */
   ready(): Effect.Effect<void> {
-    return Effect.promise(() => {
-      this.#restored ??= this.#restore();
+    return Effect.suspend(() => {
+      this.#restored ??= joinedOnce(this.#restore());
       return this.#restored;
     });
   }
@@ -550,7 +551,7 @@ export class BrainAgent {
       yield* this.ready();
       const generation = this.#generations.standing();
       if (!generation) return undefined;
-      const opened = yield* Effect.promise(() => generation.opened);
+      const opened = yield* generation.opened;
       return opened.kind === CONTEXT_OPENING.INCOMPATIBLE ? opened.reason : undefined;
     });
   }
@@ -585,7 +586,7 @@ export class BrainAgent {
   submitAsk(submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> {
     return Effect.gen(this, function* () {
       yield* this.ready();
-      return yield* Effect.promise(() => this.#asks.submit(submission));
+      return yield* this.#asks.submit(submission);
     });
   }
 
@@ -813,7 +814,7 @@ export class BrainAgent {
     return Effect.gen(this, function* () {
       const generation = this.#generations.standing();
       if (!generation) return undefined;
-      const standing = yield* Effect.promise(() => generation.opened);
+      const standing = yield* generation.opened;
       if (standing.kind !== CONTEXT_OPENING.LOADED) return undefined;
       return [...standing.context.checkpoint().items];
     });
@@ -860,79 +861,76 @@ export class BrainAgent {
   }
 
   #generationFrom(state: BrainPersistedState): Generation {
-    return generationFrom(
-      state,
-      this.#options.runtime,
-      UNKNOWN_ACTION_RESULT,
-      this.#carry,
-      this.#now,
-    );
+    return generationFrom(state, this.#options.runtime, UNKNOWN_ACTION_RESULT, this.#now);
   }
 
-  async #restore(): Promise<void> {
-    let state: BrainPersistedState;
-    try {
-      state = await this.#options.store.load();
-    } catch (error) {
-      this.#report(
-        `Brain memory could not be restored: ${error instanceof Error ? error.name : "unknown error"}`,
+  #restore(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      const loaded = yield* Effect.either(
+        Effect.tryPromise({ try: () => this.#options.store.load(), catch: (error) => error }),
       );
-      return;
-    }
-    // A generation adopted from the store's announcement while the load was
-    // out — a Clear or expiry pressed under a starting agent — is the one
-    // that stands; the loaded copy is not built over it.
-    const current = this.#options.store.current() ?? state;
-    const adoption = this.#generations.adopt(current.generationId, (previous) => {
-      if (previous) retireGeneration(previous);
-      return this.#generationFrom(current);
+      if (Either.isLeft(loaded)) {
+        this.#report(
+          `Brain memory could not be restored: ${loaded.left instanceof Error ? loaded.left.name : "unknown error"}`,
+        );
+        return;
+      }
+      // A generation adopted from the store's announcement while the load was
+      // out — a Clear or expiry pressed under a starting agent — is the one
+      // that stands; the loaded copy is not built over it.
+      const current = this.#options.store.current() ?? loaded.right;
+      const adoption = this.#generations.adopt(current.generationId, (previous) => {
+        if (previous) retireGeneration(previous);
+        return this.#generationFrom(current);
+      });
+      if (adoption.kind === GENERATION_ADOPTION.STANDING) return;
+      const generation = adoption.generation;
+      const opened = yield* generation.opened;
+      if (generation !== this.#generations.standing()) return;
+      this.#wakes.armInbox(generation);
+      if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+        this.#reportIncompatible(generation, opened.reason);
+      }
+      const interrupted = interruptedUnfinishedRequests(current.requests, this.#now());
+      // An action found started with no result may have happened: the runtime's
+      // context paired it as unknown at load, and the interrupted run says so
+      // in its count; neither is ever a call to make again.
+      const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
+      // A journal row under a run no record names is what an observation turn
+      // that died mid-action left behind. Its result already stands in the context,
+      // paired at load, and no record waits for its count, so it goes here
+      // rather than standing where a later turn's call could be matched to it.
+      const recorded = new Set(current.requests.map((record) => record.runId));
+      const orphaned = current.journal.filter((entry) => !recorded.has(entry.runId));
+      if (orphaned.length > 0) {
+        generation.journal.dropRuns(new Set(orphaned.map((entry) => entry.runId)));
+      }
+      if (interrupted === current.requests && repaired === 0 && orphaned.length === 0) return;
+      const unfinished = new Set(
+        current.requests
+          .filter((record) => !isTerminalBrainRequestStatus(record.status))
+          .map((record) => record.runId),
+      );
+      // An interrupted run's accounting is what its journal established: actions
+      // whose result was accepted went through, actions whose result says unknown
+      // or never arrived may have. Counted from the journal alone, so a copy
+      // taken mid-run and a copy taken after it both say the same.
+      generation.requests = new Map(
+        interrupted.map((record) => [
+          record.runId,
+          unfinished.has(record.runId)
+            ? { ...record, ...journalActionCounts(current.journal, record.runId) }
+            : record,
+        ]),
+      );
+      yield* Effect.promise(() =>
+        this.#ledger.restored(
+          generation,
+          opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
+        ),
+      );
+      this.#asks.notify();
     });
-    if (adoption.kind === GENERATION_ADOPTION.STANDING) return;
-    state = current;
-    const generation = adoption.generation;
-    const opened = await generation.opened;
-    if (generation !== this.#generations.standing()) return;
-    this.#wakes.armInbox(generation);
-    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
-      this.#reportIncompatible(generation, opened.reason);
-    }
-    const interrupted = interruptedUnfinishedRequests(state.requests, this.#now());
-    // An action found started with no result may have happened: the runtime's
-    // context paired it as unknown at load, and the interrupted run says so
-    // in its count; neither is ever a call to make again.
-    const repaired = opened.kind === CONTEXT_OPENING.LOADED ? opened.repaired : 0;
-    // A journal row under a run no record names is what an observation turn
-    // that died mid-action left behind. Its result already stands in the context,
-    // paired at load, and no record waits for its count, so it goes here
-    // rather than standing where a later turn's call could be matched to it.
-    const recorded = new Set(state.requests.map((record) => record.runId));
-    const orphaned = state.journal.filter((entry) => !recorded.has(entry.runId));
-    if (orphaned.length > 0) {
-      generation.journal.dropRuns(new Set(orphaned.map((entry) => entry.runId)));
-    }
-    if (interrupted === state.requests && repaired === 0 && orphaned.length === 0) return;
-    const unfinished = new Set(
-      state.requests
-        .filter((record) => !isTerminalBrainRequestStatus(record.status))
-        .map((record) => record.runId),
-    );
-    // An interrupted run's accounting is what its journal established: actions
-    // whose result was accepted went through, actions whose result says unknown
-    // or never arrived may have. Counted from the journal alone, so a copy
-    // taken mid-run and a copy taken after it both say the same.
-    generation.requests = new Map(
-      interrupted.map((record) => [
-        record.runId,
-        unfinished.has(record.runId)
-          ? { ...record, ...journalActionCounts(state.journal, record.runId) }
-          : record,
-      ]),
-    );
-    await this.#ledger.restored(
-      generation,
-      opened.kind === CONTEXT_OPENING.LOADED ? opened.context : undefined,
-    );
-    this.#asks.notify();
   }
 
   #reportIncompatible(generation: Generation, reason: string): void {

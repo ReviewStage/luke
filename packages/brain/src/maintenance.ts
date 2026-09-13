@@ -151,7 +151,7 @@ export class Maintenance {
       ) {
         return;
       }
-      const standing = yield* Effect.promise(() => generation.opened);
+      const standing = yield* generation.opened;
       if (standing.kind !== CONTEXT_OPENING.LOADED || standing.context !== context) return;
       const signal = AbortSignal.any([abort.signal, generation.abort.signal]);
       if (signal.aborted) return;

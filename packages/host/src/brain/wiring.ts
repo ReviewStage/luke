@@ -225,7 +225,7 @@ export interface BrainWiring {
    * is cancelled first; a cancellation that did not land refuses the reset
    * rather than reporting a success over a child still running.
    */
-  resetConversation: (sessionKey: SessionKey) => Promise<boolean>;
+  resetConversation: (sessionKey: SessionKey) => Effect.Effect<boolean>;
   /** Delegation: the child records, completions, and their lifecycle, for inspection and tests. */
   readonly children: ChildRunService;
   /** Settles once every standing follower has published every report taken so far. */
@@ -943,28 +943,30 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     rosterLook,
     releaseHeld,
     pendingNotices: () => notices,
-    resetConversation: async (sessionKey) => {
-      const cancelled = await children.service.cancelDescendantsOf(sessionKey);
-      if (!cancelled.ok) {
-        dependencies.report(
-          `Start fresh refused: ${cancelled.remaining.length} child run(s) could not be cancelled first`,
+    resetConversation: (sessionKey) =>
+      Effect.gen(function* () {
+        const cancelled = yield* Effect.promise(() =>
+          children.service.cancelDescendantsOf(sessionKey),
         );
-        return false;
-      }
-      // The capture reads a copy of the context the reset is about to let go
-      // of and writes only today's note; whatever it answers, the reset goes
-      // ahead, and a capture that did not complete is said so.
-      const memory = memoryFor(sessionKey);
-      const capture = memory?.provider.capture?.bind(memory.provider);
-      const opened = openConversation(sessionKey);
-      const agent = opened.host.current();
-      if (memory && capture && agent) {
-        const items = await carryOn(dependencies.execution)(
-          Effect.catchAllDefect(agent.contextSnapshot(), () => Effect.succeed(undefined)),
-        );
-        if (items && items.length > 0) {
-          const result = await carryOn(dependencies.execution)(
-            Effect.catchAllDefect(
+        if (!cancelled.ok) {
+          dependencies.report(
+            `Start fresh refused: ${cancelled.remaining.length} child run(s) could not be cancelled first`,
+          );
+          return false;
+        }
+        // The capture reads a copy of the context the reset is about to let go
+        // of and writes only today's note; whatever it answers, the reset goes
+        // ahead, and a capture that did not complete is said so.
+        const memory = memoryFor(sessionKey);
+        const capture = memory?.provider.capture?.bind(memory.provider);
+        const opened = openConversation(sessionKey);
+        const agent = opened.host.current();
+        if (memory && capture && agent) {
+          const items = yield* Effect.catchAllDefect(agent.contextSnapshot(), () =>
+            Effect.succeed(undefined),
+          );
+          if (items && items.length > 0) {
+            const result = yield* Effect.catchAllDefect(
               capture({
                 scope: memory.scope,
                 phase: MEMORY_CAPTURE_PHASE.RESET_REQUESTED,
@@ -979,17 +981,16 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
                 Effect.succeed(
                   failedHousekeeping(defect instanceof Error ? defect.message : String(defect)),
                 ),
-            ),
-          );
-          if (housekeepingFellShort(result.outcome)) {
-            dependencies.report(
-              `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,
             );
+            if (housekeepingFellShort(result.outcome)) {
+              dependencies.report(
+                `Reset capture did not complete (${result.outcome}${result.reason ? `: ${result.reason}` : ""}); ${result.writes} note write(s) stand and the reset proceeds`,
+              );
+            }
           }
         }
-      }
-      return opened.store.reset();
-    },
+        return yield* Effect.promise(() => opened.store.reset());
+      }),
     children: children.service,
     publicationSettled,
     configuration: () => configurationStore.snapshot(),

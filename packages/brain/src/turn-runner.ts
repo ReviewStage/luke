@@ -465,7 +465,7 @@ export class TurnRunner {
       if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
         return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
       }
-      const opened = yield* awaited(() => generation.opened);
+      const opened = yield* generation.opened;
       if (generation !== this.#seam.generation() || generation.abort.signal.aborted) {
         return { result: { outcome: TURN_OUTCOME.REVOKED }, run: plan.run, events: undefined };
       }
@@ -810,7 +810,7 @@ export class TurnRunner {
       );
       if (Option.isNone(reopened)) return;
       const opened = reopened.value;
-      const standing = yield* awaited(() => generation.opened);
+      const standing = yield* generation.opened;
       const stillUsed = standing.kind === CONTEXT_OPENING.LOADED && standing.context === context;
       if (generation !== this.#seam.generation() || !stillUsed) {
         if (opened.kind === CONTEXT_OPENING.LOADED) retireContext(opened.context);
@@ -819,7 +819,7 @@ export class TurnRunner {
       // The engine the turn used is not re-admitted either way: it may hold
       // what a late hook applied. A refused reopen leaves the generation
       // standing without a context, every turn over it refused as incompatible.
-      generation.opened = Promise.resolve(opened);
+      generation.opened = Effect.succeed(opened);
       retireContext(context);
       if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
         this.#seam.reportIncompatible(generation, opened.reason);

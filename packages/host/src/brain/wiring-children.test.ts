@@ -551,7 +551,7 @@ it.effect(
       const child = [...c.children.values()][0];
       assert.ok(child);
       assert.equal(child.status, CHILD_RUN_STATUS.RUNNING);
-      const reset = yield* Effect.promise(() => c.wiring.resetConversation(MAIN_SESSION_KEY));
+      const reset = yield* c.wiring.resetConversation(MAIN_SESSION_KEY);
       assert.equal(reset, true);
       yield* waitFor(() => c.children.get(child.childId)?.status === CHILD_RUN_STATUS.CANCELLED);
       assert.equal(c.children.get(child.childId)?.status, CHILD_RUN_STATUS.CANCELLED);
@@ -595,7 +595,7 @@ it("a reset capture that was skipped reports nothing, while one that failed is s
     assert.ok(main);
     const runId = await ask(c, "remember this");
     await Effect.runPromise(main.waitAsk(runId, 60_000));
-    assert.equal(await c.wiring.resetConversation(MAIN_SESSION_KEY), true);
+    assert.equal(await Effect.runPromise(c.wiring.resetConversation(MAIN_SESSION_KEY)), true);
     assert.equal(captures, 1, "the capture ran over the context the reset let go of");
     c.wiring.retire();
   }

@@ -47,7 +47,6 @@ function generation(generationId: string, order: string[] = []): Generation {
     freshBrainState(generationId, NOW),
     openedRuntime(order),
     UNKNOWN_ACTION_RESULT,
-    (effect) => Effect.runPromise(effect),
   );
 }
 
@@ -116,7 +115,7 @@ test("retiring a generation fires its signal and then lets go of its context, on
   const order: string[] = [];
   const retiring = generation("gen-1", order);
   retiring.abort.signal.addEventListener("abort", () => order.push("aborted"));
-  await retiring.opened;
+  await Effect.runPromise(retiring.opened);
 
   retireGeneration(retiring);
   assert.equal(retiring.abort.signal.aborted, true);

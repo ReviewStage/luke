@@ -196,7 +196,7 @@ export class ChildRuns {
       if (this.#seam.stopped() || !generation)
         return { delivered: false, reason: "no conversation stands" };
       if (this.#delivered.has(completion.completionId)) return { delivered: true };
-      const opened = yield* Effect.promise(() => generation.opened);
+      const opened = yield* generation.opened;
       if (generation !== this.#seam.generation() || this.#seam.stopped()) {
         return { delivered: false, reason: "the conversation was replaced" };
       }

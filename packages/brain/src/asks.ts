@@ -5,7 +5,7 @@ import {
   queueSummaryLine,
 } from "@sidecar/runtime";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
-import { MutableRef } from "effect";
+import { Effect, MutableRef } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -187,110 +187,118 @@ export class AskLedger {
    * the words; the same id with other words or another origin is refused as a
    * conflict rather than guessed at. Pending wakes ride in the run's turn.
    */
-  async submit(submission: BrainSubmission): Promise<BrainSubmissionResult> {
-    this.#seam.expireIfDue();
-    const generation = this.#seam.generation();
-    if (this.#seam.stopped() || !generation) {
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-      };
-    }
-    const question = submission.question.trim();
-    if (!question) {
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.EMPTY,
-      };
-    }
-    // The generation's context is awaited before the pending checks below, so
-    // that two retries of one id racing this point read the same generation;
-    // the check and the registration themselves are one uninterrupted step
-    // below, so neither can slip past the other regardless.
-    const opened = await generation.opened;
-    if (generation !== this.#seam.generation() || this.#seam.stopped()) {
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-      };
-    }
-    if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
-      // The memory stands, whole, and nothing runs over it: an ask into it
-      // would be a run this runtime cannot give a context to.
-      this.#seam.reportIncompatible(generation, opened.reason);
-      return {
-        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-        reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
-      };
-    }
-    const sameAsk = (held: { question: string; origin: BrainSubmission["origin"] }) =>
-      held.question === question && held.origin === submission.origin;
-    const conflict: BrainSubmissionResult = {
-      outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-      reason: BRAIN_SUBMISSION_REJECTION.CONFLICT,
-    };
-    /**
-     * Every way this submission id can be decided, read and answered as one
-     * atomic step against the pending map: an in-flight duplicate joins the
-     * first's own promise, a persisted acceptance is reused, a mismatched
-     * question or origin under either is a conflict, a full store is refused
-     * at the door, and only a submission that is none of those starts
-     * `#accept` and registers its promise for the next retry to find.
-     *
-     * The decision is described here and applied below in one step that
-     * suspends nowhere, so `#accept` is invoked exactly where the map is
-     * written and `cancelMaintenance` still runs in the same turn a caller's
-     * `await` on this method resumes in.
-     */
-    const decideSubmission = (
-      pending: Map<string, PendingSubmission>,
-    ): readonly [SubmitDecision, Map<string, PendingSubmission>] => {
-      const held = pending.get(submission.submissionId);
-      if (held) {
-        const result = sameAsk(held) ? held.result : Promise.resolve(conflict);
-        return [{ kind: "answer", result }, pending];
-      }
-      const existing = this.records().find(
-        (record) => record.submissionId === submission.submissionId,
-      );
-      if (existing) {
-        const result = Promise.resolve<BrainSubmissionResult>(
-          sameAsk(existing)
-            ? {
-                outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
-                runId: existing.runId,
-                acceptedAt: existing.acceptedAt,
-              }
-            : conflict,
-        );
-        return [{ kind: "answer", result }, pending];
-      }
-      if (!this.#options.store.admits(generation.id)) {
-        // The record count is a hard bound on the file: a run the store
-        // could not then write is refused at the door, in a word the host
-        // can say.
-        const result = Promise.resolve<BrainSubmissionResult>({
+  submit(submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> {
+    return Effect.gen(this, function* () {
+      this.#seam.expireIfDue();
+      const generation = this.#seam.generation();
+      if (this.#seam.stopped() || !generation) {
+        return {
           outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-          reason: BRAIN_SUBMISSION_REJECTION.FULL,
-        });
-        return [{ kind: "answer", result }, pending];
+          reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+        };
       }
-      // A developer's ask outranks housekeeping: maintenance still waiting
-      // its turn is cancelled so the ask does not queue behind a compaction.
-      this.#options.cancelMaintenance();
-      const result = this.#accept(generation, { ...submission, question });
-      const registered = new Map(pending);
-      registered.set(submission.submissionId, { question, origin: submission.origin, result });
-      return [{ kind: "started", result }, registered];
-    };
-    const [decision, registered] = decideSubmission(MutableRef.get(this.#pendingSubmissions));
-    MutableRef.set(this.#pendingSubmissions, registered);
-    if (decision.kind === "answer") return decision.result;
-    try {
-      return await decision.result;
-    } finally {
-      this.#forgetPending(submission.submissionId, decision.result);
-    }
+      const question = submission.question.trim();
+      if (!question) {
+        return {
+          outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+          reason: BRAIN_SUBMISSION_REJECTION.EMPTY,
+        };
+      }
+      // The generation's context is awaited before the pending checks below, so
+      // that two retries of one id racing this point read the same generation;
+      // the check and the registration themselves are one uninterrupted step
+      // below, so neither can slip past the other regardless.
+      const opened = yield* generation.opened;
+      if (generation !== this.#seam.generation() || this.#seam.stopped()) {
+        return {
+          outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+          reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+        };
+      }
+      if (opened.kind === CONTEXT_OPENING.INCOMPATIBLE) {
+        // The memory stands, whole, and nothing runs over it: an ask into it
+        // would be a run this runtime cannot give a context to.
+        this.#seam.reportIncompatible(generation, opened.reason);
+        return {
+          outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+          reason: BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE,
+        };
+      }
+      const sameAsk = (held: { question: string; origin: BrainSubmission["origin"] }) =>
+        held.question === question && held.origin === submission.origin;
+      const conflict: BrainSubmissionResult = {
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.CONFLICT,
+      };
+      /**
+       * Every way this submission id can be decided, read and answered as one
+       * atomic step against the pending map: an in-flight duplicate joins the
+       * first's own promise, a persisted acceptance is reused, a mismatched
+       * question or origin under either is a conflict, a full store is refused
+       * at the door, and only a submission that is none of those starts
+       * `#accept` and registers its promise for the next retry to find.
+       *
+       * The decision is described here and applied below in one step that
+       * suspends nowhere, so `#accept` is invoked exactly where the map is
+       * written and `cancelMaintenance` still runs on the fiber that yielded
+       * this effect, in the step that took the decision.
+       */
+      const decideSubmission = (
+        pending: Map<string, PendingSubmission>,
+      ): readonly [SubmitDecision, Map<string, PendingSubmission>] => {
+        const held = pending.get(submission.submissionId);
+        if (held) {
+          const result = sameAsk(held) ? held.result : Promise.resolve(conflict);
+          return [{ kind: "answer", result }, pending];
+        }
+        const existing = this.records().find(
+          (record) => record.submissionId === submission.submissionId,
+        );
+        if (existing) {
+          const result = Promise.resolve<BrainSubmissionResult>(
+            sameAsk(existing)
+              ? {
+                  outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED,
+                  runId: existing.runId,
+                  acceptedAt: existing.acceptedAt,
+                }
+              : conflict,
+          );
+          return [{ kind: "answer", result }, pending];
+        }
+        if (!this.#options.store.admits(generation.id)) {
+          // The record count is a hard bound on the file: a run the store
+          // could not then write is refused at the door, in a word the host
+          // can say.
+          const result = Promise.resolve<BrainSubmissionResult>({
+            outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+            reason: BRAIN_SUBMISSION_REJECTION.FULL,
+          });
+          return [{ kind: "answer", result }, pending];
+        }
+        // A developer's ask outranks housekeeping: maintenance still waiting
+        // its turn is cancelled so the ask does not queue behind a compaction.
+        this.#options.cancelMaintenance();
+        const result = this.#accept(generation, { ...submission, question });
+        const registered = new Map(pending);
+        registered.set(submission.submissionId, { question, origin: submission.origin, result });
+        return [{ kind: "started", result }, registered];
+      };
+      const [decision, registered] = decideSubmission(MutableRef.get(this.#pendingSubmissions));
+      MutableRef.set(this.#pendingSubmissions, registered);
+      if (decision.kind === "answer") return yield* Effect.promise(() => decision.result);
+      // The entry is forgotten when its own answer settles rather than when
+      // this fiber leaves: a caller interrupted while the write is out must
+      // not take the entry a retry of the same id would otherwise join, or
+      // the retry would start a second run under that id.
+      return yield* Effect.promise(async () => {
+        try {
+          return await decision.result;
+        } finally {
+          this.#forgetPending(submission.submissionId, decision.result);
+        }
+      });
+    });
   }
 
   /** Forgets a submission's pending entry once its own answer has settled, never one that replaced it. */
