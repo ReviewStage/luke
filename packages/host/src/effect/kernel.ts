@@ -7,16 +7,16 @@
  * composed it suspends until it stands, which is what a late reference was
  * always for. The write is a set-once — a second write answers `false` and the
  * first service stands — so which service a concern holds cannot depend on the
- * order the merge folded it in. The one sync read beside it answers the same
- * `Deferred`'s value, for the host's event door alone.
+ * order the merge folded it in.
  */
+import type { GatewayEventKind } from "@sidecar/gateway";
+import type { WireValue } from "@sidecar/wire";
 import { Config, Context, Deferred, Effect, Layer, Option } from "effect";
 import {
   ACCOUNT_BASE_URL_VARIABLE,
   accountBaseUrlFor,
   type HostKernel,
   hostKernelOver,
-  SERVICE_READ_BEFORE_MERGE,
 } from "../host-kernel.js";
 import type { GatewayService } from "../service.js";
 import {
@@ -37,11 +37,6 @@ export interface LateService<A> {
   readonly set: (value: A) => Effect.Effect<boolean>;
   /** What stands now, for a reader that must not suspend. */
   readonly peek: Effect.Effect<Option.Option<A>>;
-  /**
-   * The sync read, for the one caller that publishes from a synchronous
-   * statement: the host's event door.
-   */
-  readonly unsafePeek: () => Option.Option<A>;
 }
 
 export const lateService = <A>(): Effect.Effect<LateService<A>> =>
@@ -57,7 +52,55 @@ export const lateService = <A>(): Effect.Effect<LateService<A>> =>
           return true;
         }),
       peek: Effect.sync(() => held),
-      unsafePeek: () => held,
+    };
+  });
+
+/**
+ * The event door, built once over the late service rather than read from it:
+ * a socket's phase change, a store's subscription callback, publishes from a
+ * synchronous statement with no fiber to suspend on, so this is the one
+ * synchronous face left standing over the `Deferred` above. A call that
+ * lands before the merge composed the service is held rather than thrown —
+ * several composers wire callbacks of exactly that shape before
+ * `compose-host.ts` supplies the service — and reaches it the moment the
+ * fork below resumes; every call after the service stands reaches it
+ * directly. The fork itself and the closure it returns never run an Effect
+ * from outside an edge, so this needs no entry on the strangler-shim list:
+ * the queue is plain state a synchronous callback reads and writes, held for
+ * the kernel's own life rather than a scope's.
+ *
+ * The fork is marked interruptible on top of being a daemon: `kernelLayer`
+ * builds inside `Layer.build`'s own `uninterruptibleMask`, and a fork made
+ * from an uninterruptible region inherits that status forever, which no
+ * `Fiber.interrupt` could then end. It is deliberately not tied to this
+ * kernel's own scope — `Layer.effect` has none of its own — because the
+ * `Deferred` it awaits settles at most once, ever: once the merge sets the
+ * service, this fork drains what queued ahead of it and finishes on its
+ * own. A build that never reaches the merge leaves it suspended holding
+ * the queue, which is bounded because the kernel is built exactly once per
+ * process life; the one runtime edge disposing is what ends it then.
+ */
+const kernelEmit = (service: LateService<GatewayService>): Effect.Effect<HostKernel["emit"]> =>
+  Effect.gen(function* () {
+    let standing: GatewayService | undefined;
+    const pending: Array<{ readonly kind: GatewayEventKind; readonly payload: WireValue }> = [];
+
+    yield* Effect.forkDaemon(
+      Effect.interruptible(
+        Effect.map(service.value, (resolved) => {
+          standing = resolved;
+          for (const queued of pending) resolved.emit(queued.kind, queued.payload);
+          pending.length = 0;
+        }),
+      ),
+    );
+
+    return (kind, payload) => {
+      if (standing) {
+        standing.emit(kind, payload);
+      } else {
+        pending.push({ kind, payload });
+      }
     };
   });
 
@@ -100,6 +143,7 @@ const kernelLayer = Layer.effect(
     const service = yield* HostService;
     const override = yield* accountBaseUrlOverride;
     const clock = yield* Effect.clock;
+    const emit = yield* kernelEmit(service);
 
     return hostKernelOver({
       stateRoot,
@@ -115,11 +159,7 @@ const kernelLayer = Layer.effect(
       now: () => clock.unsafeCurrentTimeMillis(),
       createId: idSource.create,
       report: reporter.report,
-      service: () => {
-        const standing = service.unsafePeek();
-        if (Option.isNone(standing)) throw new Error(SERVICE_READ_BEFORE_MERGE);
-        return standing.value;
-      },
+      emit,
     });
   }),
 );

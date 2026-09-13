@@ -10,7 +10,6 @@ import {
   type HostNodeOpenKind,
 } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
-import type { GatewayService } from "./service.js";
 import { NodeAnswerLostError } from "./session-action-performer.js";
 import type { SecretCipher } from "./settings-store.js";
 import { agentRootPath } from "./store-path.js";
@@ -86,17 +85,6 @@ export interface HostKernel {
 }
 
 /**
- * The one late service, as the event door reads it. Every other reader awaits
- * the `Deferred` the merge writes; `emit` publishes from a synchronous
- * statement and cannot, so the read it holds is synchronous and answers a
- * named failure before the merge composed the service.
- */
-type HostServiceRead = () => GatewayService;
-
-/** What reading the service before the merge composed it says. */
-export const SERVICE_READ_BEFORE_MERGE = "the host's service is read before the merge composed it";
-
-/**
  * The account service this build may be pointed at. A development build may be
  * pointed at a local one; a packaged one may not. The override redirects the
  * whole sign-in — including the identity request that carries the access token
@@ -130,11 +118,17 @@ export interface HostKernelParts {
   readonly now: () => number;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  readonly service: HostServiceRead;
+  /**
+   * The event door itself, already resolved against the late service: the
+   * merge composes the service after several composers have begun wiring
+   * their callbacks, so this is built to hold what it cannot yet deliver
+   * rather than to read a service that may not stand.
+   */
+  readonly emit: (kind: GatewayEventKind, payload: WireValue) => void;
 }
 
 export function hostKernelOver(parts: HostKernelParts): HostKernel {
-  const { stateRoot, runMode, accountBaseUrl, now, createId, report, service } = parts;
+  const { stateRoot, runMode, accountBaseUrl, now, createId, report, emit } = parts;
   const nodes = new NodeRegistry();
   const agentWorkspacePath = () => path.join(agentRootPath(stateRoot), AGENT_WORKSPACE_DIRECTORY);
 
@@ -147,9 +141,7 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     accountBaseUrl,
     hostedServiceBaseUrl: hostedServiceBaseUrlFor(accountBaseUrl),
     nodes,
-    emit: (kind, payload) => {
-      service().emit(kind, payload);
-    },
+    emit,
     openExternalThroughNode: async (url, kind = HOST_NODE_OPEN_KIND.ADDRESS) => {
       const result = await Effect.runPromise(
         nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url, kind }),

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, it } from "@effect/vitest";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
 import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option, TestClock } from "effect";
-import { ACCOUNT_BASE_URL_VARIABLE, SERVICE_READ_BEFORE_MERGE } from "../host-kernel.js";
+import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
 import type { GatewayService } from "../service.js";
 import type { SecretCipher } from "../settings-store.js";
@@ -238,15 +238,43 @@ describe("the late service", () => {
         emitted.push(kind);
       });
 
-      assert.throws(() => held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {}), {
-        message: SERVICE_READ_BEFORE_MERGE,
-      });
       assert.equal(yield* held.late.set(service), true);
+      // The drain that answers a set-once is a fork of its own, so a call
+      // made right after the set is waited past that fork's own resumption
+      // rather than assumed delivered by the next statement.
+      yield* Effect.yieldNow();
       held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
       assert.equal(yield* held.late.value, service);
       assert.equal(yield* held.late.set(stubService()), false);
       held.kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, {});
       assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
     }),
+  );
+
+  it.effect(
+    "holds a call raised before the merge composed the service, and delivers it once set",
+    () =>
+      Effect.gen(function* () {
+        const held = yield* Effect.provide(
+          Effect.all({ kernel: HostKernelTag, late: HostService }),
+          kernelLayerOver(seams()),
+        );
+        const emitted: GatewayEventKind[] = [];
+        const service = stubService((kind) => {
+          emitted.push(kind);
+        });
+
+        held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
+        held.kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, {});
+        assert.deepEqual(emitted, []);
+
+        assert.equal(yield* held.late.set(service), true);
+        // The fork that drains what queued ahead of the merge is a daemon of
+        // this test's own runtime, not this fiber, so it is waited out rather
+        // than assumed to have run by the next statement.
+        yield* Effect.yieldNow();
+
+        assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
+      }),
   );
 });
