@@ -1,4 +1,3 @@
-import { isRealtimeVoice } from "@sidecar/actions";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import {
   APP_SETTING_ID,
@@ -100,12 +99,9 @@ const VOICE_SOURCE_CHOICE = {
   [VOICE_SOURCE.KEY]: "your OpenAI key",
 } as const satisfies Record<VoiceSource, string>;
 
-/* The voice is an account preference every device applies, and the phone
-   still speaks through the Realtime API, whose reader refuses a snapshot
-   naming a voice it does not know. So the row offers the Live voices the
-   Realtime contract also names, until the phone moves to Live; the guard
-   still admits any Live voice, so a stored one stands whatever is offered. */
-const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST.filter(isRealtimeVoice);
+/* The voice is an account preference every device applies, and every device
+   reads the one Live vocabulary, so the row offers the whole of it. */
+const OFFERED_VOICE_LIST: readonly LiveVoice[] = LIVE_VOICE_LIST;
 
 /* The API names its voices in lowercase; on a control they read as names. The
    default carries its status into the menu, so returning to it never needs the

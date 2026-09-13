@@ -47,6 +47,7 @@ import {
   READ_PAGE_BOUNDS,
   VAULT_KEY_MAX_LENGTH,
 } from "@sidecar/hosted";
+import { LIVE_VOICE } from "@sidecar/live";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
@@ -263,6 +264,14 @@ test("every VoiceToolName is a ACTION_TOOL", () => {
     swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
     Object.values(ACTION_TOOL),
     "a tool renamed in the actions table leaves the phone naming a tool that does not exist",
+  );
+});
+
+test("LiveVoice is LIVE_VOICE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "LiveVoice"),
+    LIVE_VOICE,
+    "a voice the desktop synced that the phone cannot name refuses the whole snapshot",
   );
 });
 

@@ -1,4 +1,5 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
+import { LIVE_VOICE, type LiveVoice } from "@sidecar/live";
 import { SESSION_NO_LONGER_OBSERVED_NOTE } from "@sidecar/session";
 import { isWireNumber, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
 import { type ActionToolDefinition, remoteRealtimeToolDefinitions } from "./actions.js";
@@ -14,27 +15,28 @@ import { type ActionToolDefinition, remoteRealtimeToolDefinitions } from "./acti
  * would point behavior below transport. This is the lowest package that may
  * name both. The credential the mint answers with is read into the contract
  * where that contract lives, in `@sidecar/hosted`'s `realtime-contract.ts`.
- *
- * `@sidecar/settings` reads the voice set from here so the desktop offers
- * only voices the phone's Realtime reader still accepts. Everything in this
- * file goes when the phone moves.
+ * The voices are the Live vocabulary's, narrowed to the ones the Realtime
+ * API documents: the desktop offers every Live voice, and a synced preference
+ * outside this set falls to the default on the phone before any mint reads
+ * it. Everything in this file goes when the phone moves.
  */
 
 /** The endpoint that mints a client secret. */
 export const REALTIME_CLIENT_SECRETS_PATH = "/realtime/client_secrets";
 
+/** The Live voices the Realtime API also speaks; a Live voice outside it is refused at mint time. */
 export const REALTIME_VOICE = {
-  ALLOY: "alloy",
-  ASH: "ash",
-  BALLAD: "ballad",
-  CEDAR: "cedar",
-  CORAL: "coral",
-  ECHO: "echo",
-  MARIN: "marin",
-  SAGE: "sage",
-  SHIMMER: "shimmer",
-  VERSE: "verse",
-} as const;
+  ALLOY: LIVE_VOICE.ALLOY,
+  ASH: LIVE_VOICE.ASH,
+  BALLAD: LIVE_VOICE.BALLAD,
+  CEDAR: LIVE_VOICE.CEDAR,
+  CORAL: LIVE_VOICE.CORAL,
+  ECHO: LIVE_VOICE.ECHO,
+  MARIN: LIVE_VOICE.MARIN,
+  SAGE: LIVE_VOICE.SAGE,
+  SHIMMER: LIVE_VOICE.SHIMMER,
+  VERSE: LIVE_VOICE.VERSE,
+} as const satisfies Record<string, LiveVoice>;
 
 export type RealtimeVoice = (typeof REALTIME_VOICE)[keyof typeof REALTIME_VOICE];
 
@@ -46,6 +48,11 @@ export function isRealtimeVoice(value: UnparsedWireValue): value is RealtimeVoic
   if (!isWireString(value)) return false;
   // SAFETY: value is a string; list membership is the voice vocabulary contract check.
   return REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
+}
+
+/** The voice a Realtime session is minted with for a Live voice the phone chose or synced. */
+export function realtimeVoiceFor(voice: LiveVoice): RealtimeVoice {
+  return isRealtimeVoice(voice) ? voice : REALTIME_DEFAULTS.VOICE;
 }
 
 /**
@@ -75,7 +82,7 @@ export function isRealtimeVoiceSpeed(value: UnparsedWireValue): value is Realtim
 
 export const REALTIME_DEFAULTS = {
   MODEL: "gpt-realtime-2.1",
-  VOICE: REALTIME_VOICE.ECHO,
+  VOICE: REALTIME_VOICE.MARIN,
   SPEED: REALTIME_VOICE_SPEED.NORMAL,
   /** What hands the caller's spoken turns back as text, beside the audio the same service already hears. */
   TRANSCRIPTION_MODEL: "gpt-live-transcribe",

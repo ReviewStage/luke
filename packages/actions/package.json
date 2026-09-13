@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@sidecar/guide": "workspace:*",
+    "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*",

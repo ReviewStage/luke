@@ -19,7 +19,6 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@sidecar/actions": "workspace:*",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/calendar": "workspace:*",
     "@sidecar/credentials": "workspace:*",

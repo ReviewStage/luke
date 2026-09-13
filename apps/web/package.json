@@ -36,6 +36,7 @@
     "@sidecar/analytics": "workspace:*",
     "@sidecar/brain": "workspace:*",
     "@sidecar/hosted": "workspace:*",
+    "@sidecar/live": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/providers": "workspace:*",
     "@sidecar/runtime": "workspace:*",
