@@ -1,6 +1,6 @@
 import type { BriefingDelivery } from "@sidecar/voice/live-session";
 import type { ToolSet } from "ai";
-import { Cause, Duration, Effect, type ParseResult, Schedule, type Scope } from "effect";
+import { Cause, Duration, Effect, Schedule, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { briefingWordsOf } from "../hosted/briefing-words.js";
@@ -59,7 +59,7 @@ const HOSTED_BRIEFING_BOUNDS = {
 type BriefingBounds = Readonly<Record<keyof typeof HOSTED_BRIEFING_BOUNDS, number>>;
 
 /** How a look fails: the driver's own refusal, or a row the schema refused. */
-type BriefingLookFailure = SqlError | ParseResult.ParseError;
+type BriefingLookFailure = SqlError | Schema.SchemaError;
 
 /** What a look and the reads it composes answer, over the ambient client. */
 type BriefingLookEffect<A> = Effect.Effect<A, BriefingLookFailure, SqlClient.SqlClient>;

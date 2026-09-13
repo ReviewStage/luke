@@ -14,22 +14,21 @@
  */
 
 import { Effect, Schema } from "effect";
-import type { ParseError } from "effect/ParseResult";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
 /** A row read whose column decode is a defect rather than a failure a caller handles. */
 export const columnsDecoded = <A, R>(
-  read: Effect.Effect<A, ParseError | SqlError, R>,
+  read: Effect.Effect<A, Schema.SchemaError | SqlError, R>,
 ): Effect.Effect<A, SqlError, R> =>
-  Effect.catchTag(read, "ParseError", (issue) => Effect.die(issue));
+  Effect.catchTag(read, "SchemaError", (issue) => Effect.die(issue));
 
 const Changes = Schema.Struct({
-  changes: Schema.Union(Schema.Number, Schema.BigIntFromSelf),
+  changes: Schema.Union([Schema.Number, Schema.BigInt]),
 });
 
 type Changes = Schema.Schema.Type<typeof Changes>;
 
-const decodeChanges = Schema.decodeUnknown(Changes);
+const decodeChanges = Schema.decodeUnknownEffect(Changes);
 
 const countOf = (changes: Changes): number => Number(changes.changes);
 

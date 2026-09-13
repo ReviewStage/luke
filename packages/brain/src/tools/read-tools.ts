@@ -2,7 +2,7 @@ import { maximumIdentifierLength } from "@sidecar/actions";
 import type { SessionIdentity } from "@sidecar/session";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { identityFromRecord, rejection, sameIdentity } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -27,37 +27,27 @@ export interface ReadToolContext extends ToolContext {
 export type ReadToolModule = ToolModule<WireRecord, ReadToolContext>;
 
 /** A text trimmed, refused when left with nothing, and bounded to `max` characters. */
-function boundedText(description: string, max: number): EffectSchema.Schema<string, string> {
+function boundedText(description: string, max: number): EffectSchema.Codec<string, string> {
   return describeWire(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-      strict: true,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }).pipe(
-      EffectSchema.filter((value) => value.trim().length > 0, {
-        schemaId: EffectSchema.MinLengthSchemaId,
-        jsonSchema: { minLength: 1 },
-      }),
-      EffectSchema.maxLength(max),
+    EffectSchema.String.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.String.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(max)),
+        SchemaTransformation.trim(),
+      ),
     ),
     description,
   );
 }
 
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
-function erase<A, I>(
-  schema: EffectSchema.Schema<A, I>,
-): EffectSchema.Schema<unknown, UnparsedWireValue> {
+/** Effect's `Codec` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase(schema: EffectSchema.Top): EffectSchema.Codec<unknown, UnparsedWireValue> {
   return EffectSchema.make(schema.ast);
 }
 
-const LIST_SESSIONS_INPUT = erase(tolerantRecord({}));
+const LIST_SESSIONS_INPUT = erase(EffectSchema.Struct({}));
 
 const READ_TRANSCRIPT_INPUT = erase(
-  tolerantRecord({
+  EffectSchema.Struct({
     provider_id: boundedText("The session provider ID.", maximumIdentifierLength),
     provider_session_id: boundedText("The session ID.", maximumIdentifierLength),
   }),

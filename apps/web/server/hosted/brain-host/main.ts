@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
@@ -20,7 +20,7 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
  */
 
 /** How the open fails: the driver's own refusal, or a row the schema refused. */
-type StandingMainFailure = SqlError | ParseResult.ParseError;
+type StandingMainFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -32,7 +32,7 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 const lockUser = (userId: string) =>
   statement((sql) => sql`select id from "user" where id = ${userId} for update`);
 
-const findStandingMain = SqlSchema.findOne({
+const findStandingMain = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: IdRowSchema,
   execute: (userId) =>
@@ -45,9 +45,9 @@ const findStandingMain = SqlSchema.findOne({
     ),
 });
 
-const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.DateFromSelf });
+const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.Date });
 
-const openMain = SqlSchema.findOne({
+const openMain = SqlSchema.findOneOption({
   Request: OpenMainSchema,
   Result: IdRowSchema,
   execute: (write) =>

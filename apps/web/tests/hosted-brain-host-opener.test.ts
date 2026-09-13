@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { SqlError } from "effect/unstable/sql/SqlError";
+import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
@@ -288,13 +288,14 @@ async function bookmarkOf(
 
 const ObservedConversationRowSchema = Schema.Struct({
   id: Schema.String,
-  providerSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("provider_session_id"),
-  ),
-  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("runtime_session_id"),
-  ),
-});
+  providerSessionId: Schema.NullOr(Schema.String),
+  runtimeSessionId: Schema.NullOr(Schema.String),
+}).pipe(
+  Schema.encodeKeys({
+    providerSessionId: "provider_session_id",
+    runtimeSessionId: "runtime_session_id",
+  }),
+);
 
 async function observedConversations(
   userId: string,
@@ -395,8 +396,10 @@ function sessionReadsRefused(sql: SqlClient.SqlClient): SqlClient.SqlClient {
       if (Array.isArray(strings) && strings.join("?").includes("select runtime_session_id")) {
         return Effect.fail(
           new SqlError({
-            cause: new Error("the connection dropped"),
-            message: "the conversation's session could not be read",
+            reason: new ConnectionError({
+              cause: new Error("the connection dropped"),
+              message: "the conversation's session could not be read",
+            }),
           }),
         );
       }

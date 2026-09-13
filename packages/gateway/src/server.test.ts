@@ -527,13 +527,13 @@ it.effect(
       );
       yield* Deferred.await(started);
       yield* Fiber.interrupt(first);
-      const retried = yield* Effect.either(
+      const retried = yield* Effect.result(
         ledger(Effect.fail(new NotFoundRefusal({ message: "ran" })), asked),
       );
       assert.ok(Result.isFailure(retried));
       assert.ok(retried.failure instanceof NotFoundRefusal);
       // The refusal is an answer, and the same key finds it again without running anything.
-      const again = yield* Effect.either(ledger(Effect.never, asked));
+      const again = yield* Effect.result(ledger(Effect.never, asked));
       assert.ok(Result.isFailure(again));
       assert.equal(again.failure, retried.failure);
     }).pipe(

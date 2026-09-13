@@ -1,4 +1,4 @@
-import { Cause, Effect, Option, type ParseResult } from "effect";
+import { Cause, Effect, Option, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
@@ -118,7 +118,7 @@ const TURN_OPENER = {
 } as const;
 
 /** What an opening answers: an effect over the ambient client, run by the tick's own edge. */
-type OpenerEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type OpenerEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 /**
  * A read whose answer is optional however it failed: the payload envelope

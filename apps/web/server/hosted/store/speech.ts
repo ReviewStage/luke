@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Option, type ParseResult, Result, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -7,6 +7,7 @@ import {
   BRAIN_TOOL,
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
+  EXCESS_KEYS,
   isRecord,
   isSpeechEventKind,
   isWireString,
@@ -97,7 +98,7 @@ import {
  * rule out. `markSpeechSpoken` therefore admits the mark only from the
  * device that claimed, and a speaker with no claim has nothing to say.
  *
- * Every read below is an `Effect<A, SqlError | ParseError, SqlClient>` whose
+ * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` whose
  * rows a `Schema` decodes rather than trusts; the transitions stay promises,
  * because their writes are the store writer's, and each runs its reads
  * through the runner its caller's edge composed.
@@ -205,7 +206,7 @@ export interface SpeechStore {
 type SpeechEffect<A> = Effect.Effect<A, SpeechReadFailure, SqlClient.SqlClient>;
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type SpeechReadFailure = SqlError | ParseResult.ParseError;
+type SpeechReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -237,21 +238,21 @@ export interface SpeechOffer extends SpeechStanding {
  * so a row naming anything else is refused rather than folded.
  */
 const SpeechEventRowSchema = Schema.Struct({
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  messageId: Schema.String,
   kind: ConversationEventKindSchema,
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
+  deviceId: Schema.NullOr(Schema.String),
   payload: WireValueSchema,
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: Schema.Date,
+}).pipe(
+  Schema.encodeKeys({ messageId: "message_id", deviceId: "device_id", createdAt: "created_at" }),
+);
 
 type SpeechEventRow = Schema.Schema.Type<typeof SpeechEventRowSchema>;
 
 /** The conversation a message belongs to, where the message is the account's and its conversation stands. */
 const MessageConversationSchema = Schema.Struct({
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-});
+  conversationId: Schema.String,
+}).pipe(Schema.encodeKeys({ conversationId: "conversation_id" }));
 
 const MessageKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -264,7 +265,7 @@ const EventPositionSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
 });
 
-const findMessageConversation = SqlSchema.findOne({
+const findMessageConversation = SqlSchema.findOneOption({
   Request: MessageKeySchema,
   Result: MessageConversationSchema,
   execute: (key) =>
@@ -293,7 +294,7 @@ const findSpeechEvents = SqlSchema.findAll({
     ),
 });
 
-const findOfferedEvent = SqlSchema.findOne({
+const findOfferedEvent = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: EventPositionSchema,
   execute: (messageId) =>
@@ -641,10 +642,16 @@ const OpenOffersRequestSchema = Schema.Struct({
 
 /** An offer's rows before its standing is folded: the account, the conversation, and the message announcing it. */
 const OfferedMessageSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
-});
+  userId: Schema.String,
+  conversationId: Schema.String,
+  messageId: Schema.String,
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    messageId: "message_id",
+  }),
+);
 
 const findOfferedMessages = SqlSchema.findAll({
   Request: OpenOffersRequestSchema,
@@ -731,12 +738,12 @@ export interface SpeechSweepOptions {
 
 /** The latest quiet instant of one account's devices still ahead of the read. */
 const QuietAccountSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  quietUntil: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("quiet_until")),
-});
+  userId: Schema.String,
+  quietUntil: Schema.Date,
+}).pipe(Schema.encodeKeys({ userId: "user_id", quietUntil: "quiet_until" }));
 
 const QuietRequestSchema = Schema.Struct({
-  now: Schema.DateFromSelf,
+  now: Schema.Date,
   userIds: Schema.NullOr(Schema.Array(Schema.String)),
 });
 
@@ -915,26 +922,16 @@ function briefingOf(parts: ReadParts): string | undefined {
  * own input item spells them: the marker line, then the JSON the host
  * wrote. A message this build cannot read as one names nothing.
  */
-const ignoringExtraKeys = { parseOptions: { onExcessProperty: "ignore" } } as const;
+const trimmedText = Schema.Trim.check(Schema.isNonEmpty());
 
-const trimmedText = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    schemaId: Schema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
-
+/**
+ * The words are read with excess keys dropped, so an item the host later
+ * widens still names what it named here; the tolerance stands at the read
+ * because v4 settles parse options there and a declaration carries none.
+ */
 const heldBriefingsWords = Schema.Struct({
-  held_briefings: Schema.Array(
-    Schema.Struct({ briefing: trimmedText, decided_at: trimmedText }).annotations(
-      ignoringExtraKeys,
-    ),
-  ),
-}).annotations(ignoringExtraKeys);
+  held_briefings: Schema.Array(Schema.Struct({ briefing: trimmedText, decided_at: trimmedText })),
+});
 
 /** One briefing as a hold-release item names it: what it said and, in epoch milliseconds, when the brain decided it. */
 export interface NamedBriefing {
@@ -992,7 +989,9 @@ export function heldBriefingsNamed(text: string): readonly NamedBriefing[] {
     } catch {
       continue;
     }
-    const words = readEither(heldBriefingsWords)(unparsedWire(parsed));
+    const words = readEither(heldBriefingsWords, { excess: EXCESS_KEYS.DROP })(
+      unparsedWire(parsed),
+    );
     if (Result.isFailure(words)) continue;
     for (const held of words.success.held_briefings) {
       const decidedAt = Date.parse(held.decided_at);
@@ -1078,11 +1077,17 @@ const ReleasesRequestSchema = Schema.Struct({
 
 const ReleaseRowSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  messageId: Schema.String,
   parts: ReadPartsColumnSchema,
-  decidedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("decided_at")),
-  releasedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("released_at")),
-});
+  decidedAt: Schema.Date,
+  releasedAt: Schema.Date,
+}).pipe(
+  Schema.encodeKeys({
+    messageId: "message_id",
+    decidedAt: "decided_at",
+    releasedAt: "released_at",
+  }),
+);
 
 const findReleases = SqlSchema.findAll({
   Request: ReleasesRequestSchema,

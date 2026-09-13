@@ -1,4 +1,4 @@
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "../../auth.js";
@@ -38,7 +38,7 @@ const DEFAULT_BRAIN_MODEL = "gpt-5.4";
  * into whatever it already runs, so the edge serving the request is the one
  * place the client behind it is provided.
  */
-type BrainHostEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type BrainHostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 interface OpenAiAccess {
   readonly apiKey: string;
@@ -80,9 +80,9 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 /** A stored provider key as the vault holds it, still sealed: the roster and the actions are admitted under these. */
 const VaultKeyRowSchema = Schema.Struct({
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
+  providerId: Schema.String,
   ciphertext: Schema.String,
-});
+}).pipe(Schema.encodeKeys({ providerId: "provider_id" }));
 
 const findVaultRows = SqlSchema.findAll({
   Request: Schema.String,

@@ -1,4 +1,4 @@
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -149,11 +149,7 @@ export interface RelayStanding {
  * on. The relay runs nothing: `brainHost`'s `relay` composes this into the
  * effect it already answers, and a test runs it on its own database.
  */
-type RelayEffect<Value> = Effect.Effect<
-  Value,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient
->;
+type RelayEffect<Value> = Effect.Effect<Value, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 export interface StreamRelaySeams {
   /** The three writes the relay makes. */

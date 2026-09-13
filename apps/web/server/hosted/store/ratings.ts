@@ -1,4 +1,4 @@
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -54,7 +54,7 @@ export function rateMessage(
   userId: string,
   messageId: string,
   rating: HostedMessageRatingRequest,
-): Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<RatingWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const authorship = yield* messageAuthorship(userId, messageId);
     if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };

@@ -1,4 +1,4 @@
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationClearAnswer } from "../core.js";
@@ -42,7 +42,7 @@ export interface ConversationClearOptions {
 
 export function handleConversationClear(
   options: ConversationClearOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const { request, resolveUserId, store } = options;
     const now = options.now ?? Date.now;

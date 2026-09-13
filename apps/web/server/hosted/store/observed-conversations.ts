@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
@@ -16,7 +16,7 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
-type ObservedConversationFailure = SqlError | ParseResult.ParseError;
+type ObservedConversationFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -30,7 +30,7 @@ const ObservedSessionSchema = Schema.Struct({
 
 const ConversationIdRowSchema = Schema.Struct({ id: Schema.String });
 
-const findStandingObservedConversationId = SqlSchema.findOne({
+const findStandingObservedConversationId = SqlSchema.findOneOption({
   Request: ObservedSessionSchema,
   Result: ConversationIdRowSchema,
   execute: (request) =>
@@ -65,7 +65,7 @@ const insertObservedConversation = SqlSchema.void({
     userId: Schema.String,
     providerId: Schema.String,
     providerSessionId: Schema.String,
-    now: Schema.DateFromSelf,
+    now: Schema.Date,
   }),
   execute: (write) =>
     statement(

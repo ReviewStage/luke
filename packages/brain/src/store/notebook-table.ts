@@ -99,7 +99,7 @@ const entryRows = SqlSchema.findAll({
 const selectEntriesEffect: Effect.Effect<readonly NotebookEntry[], SqlError, Client.SqlClient> =
   Effect.map(columnsDecoded(entryRows(NOTEBOOK_FILE.USER)), (rows) => rows.map(entryOf));
 
-const hashRowAt = SqlSchema.findOne({
+const hashRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ hash: Schema.String }),
   execute: (path) =>

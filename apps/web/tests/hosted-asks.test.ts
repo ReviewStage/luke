@@ -73,7 +73,7 @@ async function conversation(userId: string): Promise<string> {
         values (${userId}, ${CONVERSATION_KIND.MAIN})
         returning id
       `;
-      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+      return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;

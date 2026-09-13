@@ -8,6 +8,7 @@ import {
   TURN_WAIT_QUERY,
 } from "@sidecar/hosted";
 import {
+  EXCESS_KEYS,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
@@ -320,10 +321,12 @@ async function body(response: Response): Promise<UnparsedWireValue> {
 }
 
 function parse<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Result.getOrUndefined(readEither(schema)(value));
+  // Every answer read here belongs to a family declared tolerant, so the read
+  // drops a key a newer service may have added.
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 async function errorOf(response: Response): Promise<[number, string]> {
@@ -354,7 +357,7 @@ async function conversation(
         )
         returning id
       `;
-      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+      return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;
@@ -388,7 +391,7 @@ async function turnRow(
         )
         returning id
       `;
-      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+      return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;

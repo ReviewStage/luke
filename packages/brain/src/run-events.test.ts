@@ -172,12 +172,12 @@ const messageAbc = (callId: string) =>
 /** The tools the turns below call, as the storage reader is registered with them. */
 const STORED_TOOLS: ToolSet = {
   [BRAIN_TOOL.READ_TRANSCRIPT]: tool({
-    inputSchema: Schema.standardSchemaV1(
+    inputSchema: Schema.toStandardSchemaV1(
       Schema.Struct({ provider_id: Schema.String, provider_session_id: Schema.String }),
     ),
   }),
   [ACTION_TOOL.SEND_SESSION_MESSAGE]: tool({
-    inputSchema: Schema.standardSchemaV1(
+    inputSchema: Schema.toStandardSchemaV1(
       Schema.Struct({
         provider_id: Schema.String,
         provider_session_id: Schema.String,

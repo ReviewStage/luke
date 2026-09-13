@@ -119,7 +119,7 @@ export interface MemoryToolContext extends ToolExecutionContext {
 export interface MemoryTool {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
+  readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
   readonly effect: typeof TOOL_EFFECT.READ | typeof TOOL_EFFECT.WRITE;
   execute(input: WireRecord, context: MemoryToolContext): Effect.Effect<WireRecord>;
 }

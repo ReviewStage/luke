@@ -43,23 +43,23 @@ const Journal = Schema.Struct({ entries: Schema.Array(JournalEntry) });
 
 export type JournalEntry = Schema.Schema.Type<typeof JournalEntry>;
 
-const decodeJournal = Schema.decodeUnknown(Schema.parseJson(Journal));
+const decodeJournal = Schema.decodeUnknownEffect(Schema.fromJsonString(Journal));
 
 /** The latest instant Drizzle's history carries, as its journal wrote it. */
 const DrizzleHistoryRow = Schema.Struct({
-  latest: Schema.Union(Schema.NumberFromString, Schema.Null),
+  latest: Schema.Union([Schema.NumberFromString, Schema.Null]),
 });
 
-const decodeHistoryRow = Schema.decodeUnknown(DrizzleHistoryRow);
+const decodeHistoryRow = Schema.decodeUnknownEffect(DrizzleHistoryRow);
 
 const MigrationCountRow = Schema.Struct({ recorded: Schema.Int });
 
-const decodeCountRow = Schema.decodeUnknown(MigrationCountRow);
+const decodeCountRow = Schema.decodeUnknownEffect(MigrationCountRow);
 
 function failed(cause: unknown): Migrator.MigrationError {
   return new Migrator.MigrationError({
     cause,
-    reason: "failed",
+    kind: "Failed",
     message: "Could not read the generated migrations",
   });
 }

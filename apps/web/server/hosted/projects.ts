@@ -1,4 +1,4 @@
-import { Effect, type Layer, type ParseResult } from "effect";
+import { Effect, type Layer, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -59,7 +59,7 @@ export interface ProjectsOptions
  */
 export function handleProjects(
   options: ProjectsOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
 

@@ -21,7 +21,7 @@ import {
   sessionKey,
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
-import { Effect, Schema, type Scope } from "effect";
+import { Effect, Schema, SchemaTransformation, type Scope } from "effect";
 import { Rpc, RpcGroup } from "effect/unstable/rpc";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { DeletionOptions, DeletionOutcome } from "./archives.js";
@@ -78,20 +78,25 @@ export interface OpenStore {
  * everything, because both ends are the same build and the sender typed the
  * value against this same declaration.
  */
-const carried = <A>(): Schema.Schema<A> => Schema.declare((_value): _value is A => true);
+const carried = <A>(): Schema.Codec<A> => Schema.declare((_value): _value is A => true);
 
 /** A session key on the boundary: the non-empty string the runtime's own constructor brands. */
-const SessionKeySchema: Schema.Schema<SessionKey, string> = Schema.transform(
-  Schema.NonEmptyString,
-  carried<SessionKey>(),
-  { strict: true, decode: sessionKey, encode: (key) => key },
+const SessionKeySchema: Schema.Codec<SessionKey, string> = Schema.NonEmptyString.pipe(
+  Schema.decodeTo(
+    carried<SessionKey>(),
+    SchemaTransformation.transform<SessionKey, string>({
+      decode: sessionKey,
+      encode: (key) => key,
+    }),
+  ),
 );
 
 /** An agent id on the boundary, branded the same way. */
-const AgentIdSchema: Schema.Schema<AgentId, string> = Schema.transform(
-  Schema.NonEmptyString,
-  carried<AgentId>(),
-  { strict: true, decode: agentId, encode: (id) => id },
+const AgentIdSchema: Schema.Codec<AgentId, string> = Schema.NonEmptyString.pipe(
+  Schema.decodeTo(
+    carried<AgentId>(),
+    SchemaTransformation.transform<AgentId, string>({ decode: agentId, encode: (id) => id }),
+  ),
 );
 
 /** An operation that takes nothing beyond the open store. */
@@ -120,7 +125,7 @@ const StoreOpenOptionsSchema = Schema.Struct({
   /** The agent's own directory under Luke's application data; the database lives in it. */
   agentRoot: Schema.String,
   /** The agent's identity workspace, the notebook's root; `<agentRoot>/workspace` by default. */
-  workspaceDirectory: Schema.optionalWith(Schema.String, { exact: true }),
+  workspaceDirectory: Schema.optionalKey(Schema.String),
   agentId: AgentIdSchema,
   sessionKey: SessionKeySchema,
   conversationName: Schema.String,
@@ -130,8 +135,8 @@ export type StoreOpenOptions = Schema.Schema.Type<typeof StoreOpenOptionsSchema>
 
 const operation = <
   const Tag extends string,
-  Payload extends Schema.Schema.Any | Schema.Struct.Fields,
-  Success extends Schema.Schema.Any,
+  Payload extends Schema.Top | Schema.Struct.Fields,
+  Success extends Schema.Top,
 >(
   tag: Tag,
   payload: Payload,
@@ -148,7 +153,7 @@ export const StoreRpcs = RpcGroup.make(
   Rpc.make("store.open", {
     payload: StoreOpenOptionsSchema,
     success: Schema.Boolean,
-    error: Schema.Union(StoreSchemaRefused, StoreOperationFailed),
+    error: Schema.Union([StoreSchemaRefused, StoreOperationFailed]),
   }),
   operation("store.close", NoParams, Schema.Boolean),
 
@@ -195,7 +200,7 @@ export const StoreRpcs = RpcGroup.make(
     {
       id: Schema.String,
       words: Schema.String,
-      replaces: Schema.optionalWith(Schema.String, { exact: true }),
+      replaces: Schema.optionalKey(Schema.String),
       now: Schema.Number,
     },
     carried<NotebookMutation>(),
@@ -209,7 +214,7 @@ export const StoreRpcs = RpcGroup.make(
   operation(
     "memory.plan-sync",
     {
-      identity: Schema.optionalWith(carried<EmbeddingModelIdentity>(), { exact: true }),
+      identity: Schema.optionalKey(carried<EmbeddingModelIdentity>()),
       now: Schema.Number,
     },
     carried<MemoryScanPlan>(),
@@ -220,7 +225,7 @@ export const StoreRpcs = RpcGroup.make(
       changed: carried<readonly IndexedFileWrite[]>(),
       removed: Schema.Array(Schema.String),
       embeddings: carried<readonly EmbeddingWrite[]>(),
-      identity: Schema.optionalWith(carried<EmbeddingModelIdentity>(), { exact: true }),
+      identity: Schema.optionalKey(carried<EmbeddingModelIdentity>()),
       now: Schema.Number,
     },
     carried<MemoryApplyReport>(),
@@ -230,8 +235,8 @@ export const StoreRpcs = RpcGroup.make(
     "memory.get",
     {
       path: Schema.String,
-      from: Schema.optionalWith(Schema.Number, { exact: true }),
-      lines: Schema.optionalWith(Schema.Number, { exact: true }),
+      from: Schema.optionalKey(Schema.Number),
+      lines: Schema.optionalKey(Schema.Number),
     },
     carried<MemoryReadResult | undefined>(),
   ),
@@ -258,7 +263,7 @@ export const StoreRpcs = RpcGroup.make(
   operation("conversations.unarchive", { sessionKey: SessionKeySchema }, Schema.Boolean),
   operation(
     "conversations.pin",
-    { sessionKey: SessionKeySchema, pinnedAt: Schema.optionalWith(Schema.Number, { exact: true }) },
+    { sessionKey: SessionKeySchema, pinnedAt: Schema.optionalKey(Schema.Number) },
     Schema.Boolean,
   ),
   operation(

@@ -56,3 +56,16 @@ export type JsonSchemaNode =
       readonly additionalProperties: false;
     }
   | { readonly anyOf: readonly JsonSchemaNode[]; readonly description?: string };
+
+/**
+ * Whether a key the declaration does not name refuses the read or is dropped.
+ * Effect v4 settles this at the read rather than on the declaration — a schema
+ * carries no parse options of its own — so a family of declarations that used
+ * to be written tolerant is now read tolerantly instead.
+ */
+export const EXCESS_KEYS = {
+  REFUSE: "error",
+  DROP: "ignore",
+} as const;
+
+export type ExcessKeys = (typeof EXCESS_KEYS)[keyof typeof EXCESS_KEYS];

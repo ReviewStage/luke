@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
-import { ACTION_RESULT_STATUS, type UnparsedWireValue } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { hostedActionAnswerSchema, hostedActionWorkspaceAnswerSchema } from "./action-wire.js";
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
-  return Result.getOrUndefined(readEither(schema)(value));
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 test("an action answer names one of the three outcomes and carries its reason as written", () => {

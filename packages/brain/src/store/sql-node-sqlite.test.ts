@@ -4,19 +4,7 @@ import path from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import {
-  Context,
-  Data,
-  Deferred,
-  Effect,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Result,
-  Schema,
-  Scope,
-} from "effect";
+import { Context, Data, Deferred, Effect, Exit, Fiber, Layer, Result, Schema, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import * as Client from "effect/unstable/sql/SqlClient";
 import { layer } from "./sql-node-sqlite.js";
@@ -96,7 +84,7 @@ describe("the node:sqlite client", () => {
         yield* sql.withTransaction(
           Effect.gen(function* () {
             yield* sql`INSERT INTO steps (name) VALUES ('outer-before')`;
-            const inner = yield* Effect.either(
+            const inner = yield* Effect.result(
               sql.withTransaction(
                 Effect.gen(function* () {
                   yield* sql`INSERT INTO steps (name) VALUES ('inner')`;
@@ -122,7 +110,7 @@ describe("the node:sqlite client", () => {
         const sql = yield* openClient(databaseIn(directory));
         yield* sql`CREATE TABLE steps (name TEXT NOT NULL)`;
 
-        const outcome = yield* Effect.either(
+        const outcome = yield* Effect.result(
           sql.withTransaction(
             Effect.gen(function* () {
               yield* sql`INSERT INTO steps (name) VALUES ('outer')`;
@@ -164,7 +152,7 @@ describe("the node:sqlite client", () => {
         );
         yield* TestClock.adjust("1 second");
 
-        assert.equal(Option.isNone(yield* Fiber.poll(outsider)), true);
+        assert.equal(outsider.pollUnsafe(), undefined);
 
         yield* Deferred.succeed(release, undefined);
         yield* Fiber.join(holder);
@@ -199,14 +187,14 @@ describe("the node:sqlite client", () => {
           );
           yield* Deferred.await(began);
 
-          const refused = yield* Effect.either(
+          const refused = yield* Effect.result(
             second.withTransaction(second`INSERT INTO writers (name) VALUES ('second')`),
           );
 
           assert.equal(Result.isFailure(refused), true);
           if (Result.isFailure(refused)) {
             assert.equal(refused.failure._tag, "SqlError");
-            assert.equal(readErrorCode(refused.failure.cause).errcode, SQLITE_BUSY);
+            assert.equal(readErrorCode(refused.failure.reason.cause).errcode, SQLITE_BUSY);
           }
 
           yield* Deferred.succeed(release, undefined);
@@ -234,7 +222,7 @@ describe("the node:sqlite client", () => {
         assert.equal(row?.t, "seven");
         assert.deepEqual(row?.b, bytes);
 
-        const refused = yield* Effect.either(sql`INSERT INTO kinds (i) VALUES (${true})`);
+        const refused = yield* Effect.result(sql`INSERT INTO kinds (i) VALUES (${true})`);
 
         assert.equal(Result.isFailure(refused), true);
         if (Result.isFailure(refused)) assert.equal(refused.failure._tag, "SqlError");
@@ -255,7 +243,7 @@ describe("the node:sqlite client", () => {
           const [safe] = yield* sql`SELECT ${large} AS big`.pipe(
             Effect.provideService(Client.SafeIntegers, true),
           );
-          const refused = yield* Effect.either(sql`SELECT ${large} AS big`);
+          const refused = yield* Effect.result(sql`SELECT ${large} AS big`);
 
           assert.equal(safe?.big, large);
           assert.equal(Result.isFailure(refused), true);

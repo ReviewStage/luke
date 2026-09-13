@@ -38,7 +38,7 @@ const StandingLineageRow = Schema.Struct({
   reset_cleared_at: Schema.NullOr(Schema.Number),
 });
 
-const standingLineage = SqlSchema.findOne({
+const standingLineage = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: StandingLineageRow,
   execute: (key) =>
@@ -61,9 +61,10 @@ export const conversationClearedAtEffect = (
   Effect.gen(function* () {
     const durable = yield* conversationCutoffEffect(key);
     const standing = yield* columnsDecoded(standingLineage(key));
-    const marker = Option.flatMapNullable(standing, (row) => row.reset_cleared_at).pipe(
-      Option.getOrUndefined,
-    );
+    const marker = Option.flatMap(
+      standing,
+      Option.liftNullishOr((row) => row.reset_cleared_at),
+    ).pipe(Option.getOrUndefined);
     if (durable === undefined) return marker;
     return marker === undefined ? durable : Math.max(durable, marker);
   });
@@ -105,7 +106,7 @@ const HeldLineRow = Schema.Struct({
   request_id: Schema.NullOr(Schema.String),
 });
 
-const heldLine = SqlSchema.findOne({
+const heldLine = SqlSchema.findOneOption({
   Request: Schema.Struct({ sessionKey: Schema.String, eventKey: Schema.String }),
   Result: HeldLineRow,
   execute: ({ sessionKey, eventKey }) =>
@@ -117,7 +118,7 @@ const heldLine = SqlSchema.findOne({
     ),
 });
 
-const publishedLine = SqlSchema.findOne({
+const publishedLine = SqlSchema.findOneOption({
   Request: Schema.Struct({
     sessionKey: Schema.String,
     requestId: Schema.String,
@@ -184,7 +185,7 @@ const insertLine = (
                        ${conversationPayload(entry)})`;
   });
 
-const takenConversationSequence = SqlSchema.findOne({
+const takenConversationSequence = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ sequence: Schema.Number }),
   execute: (key) =>

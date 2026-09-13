@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  EXCESS_KEYS,
   MESSAGE_RATING,
   SCHEMA_REFUSAL,
   type UnparsedWireValue,
@@ -15,11 +16,20 @@ import {
 
 const DEVICE_ID = "6C1F2F14-9A0B-4C2D-8E3F-0A1B2C3D4E50";
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** A request read: a key the declaration does not name refuses it. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
+): S["Type"] | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
+}
+
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parseAnswer<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 function requestRefusal(value: Parameters<typeof unparsedWire>[0]) {
@@ -64,13 +74,18 @@ test("a rating request refuses a malformed device, a missing one, and a key it d
 });
 
 test("a rating answer carries the event's id and sequence, and ignores what a newer service adds", () => {
-  assert.deepEqual(parse(hostedMessageRatingAnswerSchema, { id: "e-1", seq: 4, later: true }), {
-    id: "e-1",
-    seq: 4,
-  });
+  assert.deepEqual(
+    parseAnswer(hostedMessageRatingAnswerSchema, { id: "e-1", seq: 4, later: true }),
+    {
+      id: "e-1",
+      seq: 4,
+    },
+  );
   assert.equal(
     Result.isFailure(
-      readEither(hostedMessageRatingAnswerSchema)(unparsedWire({ id: "e-1", seq: -1 })),
+      readEither(hostedMessageRatingAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+        unparsedWire({ id: "e-1", seq: -1 }),
+      ),
     ),
     true,
   );

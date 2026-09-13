@@ -31,6 +31,7 @@ import {
 } from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
   isWireString,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
@@ -93,20 +94,12 @@ const REFUSAL = {
 } as const;
 
 /** A trimmed text, refused when only whitespace remains. */
-const text: EffectSchema.Schema<string, string> = EffectSchema.transform(
-  EffectSchema.String,
-  EffectSchema.String,
-  {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  },
-).pipe(EffectSchema.minLength(1));
+const text: EffectSchema.Codec<string, string> = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
 /** The value a dropped field admits: whatever the inner schema read, or nothing. */
 function dropped<Value, Encoded>(
-  inner: EffectSchema.Schema<Value, Encoded>,
-): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
+  inner: EffectSchema.Codec<Value, Encoded>,
+): EffectSchema.Codec<Value | undefined, UnparsedWireValue> {
   const read = readEither(inner);
   return declareReader<Value | undefined>(
     (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
@@ -117,22 +110,27 @@ function dropped<Value, Encoded>(
 /**
  * The panel's answer to an app action, read as untrusted: the status and the
  * sentence beside it, in the panel's own dialect — a refusal's reason, or the
- * note or outcome an acceptance sometimes carries — and nothing else it says.
+ * note or outcome an acceptance sometimes carries. A key the declaration does
+ * not name is dropped rather than refused, which the read below asks for: a
+ * declaration carries no parse options of its own, so the tolerance stands at
+ * the one place this answer is read.
  */
 const PANEL_ANSWER = EffectSchema.Struct({
-  status: EffectSchema.Literal(
+  status: EffectSchema.Literals([
     ACTION_RESULT_STATUS.ACCEPTED,
     ACTION_RESULT_STATUS.REJECTED,
     ACTION_RESULT_STATUS.UNSUPPORTED,
     UNKNOWN_ACTION_STATUS,
-  ),
-  reason: EffectSchema.optionalWith(dropped(text), { exact: true }),
-  note: EffectSchema.optionalWith(dropped(text), { exact: true }),
-  outcome: EffectSchema.optionalWith(dropped(text), { exact: true }),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+  ]),
+  reason: EffectSchema.optionalKey(dropped(text)),
+  note: EffectSchema.optionalKey(dropped(text)),
+  outcome: EffectSchema.optionalKey(dropped(text)),
+});
 
 function panelResult(answered: WireRecord): CarriedActionResult | undefined {
-  const read = Result.getOrUndefined(readEither(PANEL_ANSWER)(answered));
+  const read = Result.getOrUndefined(
+    readEither(PANEL_ANSWER, { excess: EXCESS_KEYS.DROP })(answered),
+  );
   if (read === undefined) return undefined;
   if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
     const note = read.note ?? read.outcome;

@@ -4,9 +4,8 @@ import { PGlite } from "@electric-sql/pglite";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { Pool } from "pg";
 import { runWebMigrations } from "../../server/db/effect-migrator";
-import { sqlClientOverPool } from "../../server/db/sql-client";
+import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
 import { type HostedStore, hostedStore } from "../../server/hosted/store";
 import { sqlClientOverPglite } from "./sql-client";
@@ -94,12 +93,10 @@ async function openPglite(): Promise<OpenedDatabase> {
 /** Migrates nothing: `db:migrate` is what applies the migrations to the Postgres this clones. */
 async function openNodePostgres(connectionString: string): Promise<OpenedDatabase> {
   const clone = await cloneStoreTestPostgres(connectionString);
-  const pool = new Pool({ connectionString: clone.connectionString, max: 1 });
   return {
-    sql: sqlClientOverPool(pool),
-    async close() {
-      await pool.end();
-      await clone.drop();
-    },
+    sql: sqlClientOverUrl(clone.connectionString),
+    // The client's own pool goes with the runtime the caller disposes before
+    // this runs, so all that is left to end here is the clone itself.
+    close: () => clone.drop(),
   };
 }

@@ -11,7 +11,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the reads simply stop listing them.
  *
  * Declared directly with Effect's `Schema.Struct` and exported under its own
- * name.
+ * name. A key the service added and this declaration does not name is dropped
+ * rather than refused, which is what the body read this answer travels through
+ * does by default.
  */
 export interface ConversationClearAnswer {
   readonly opened: string;
@@ -25,10 +27,10 @@ export interface ConversationClearAnswer {
  * large: a count of minus three is not a count that overflowed.
  */
 const wholeNumber = (minimum: number) =>
-  EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(minimum));
+  EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(minimum));
 
 export const conversationClearAnswerSchema = EffectSchema.Struct({
   opened: wireUuidSchema,
   openedAt: countedNumber,
   cleared: wholeNumber(0),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+});

@@ -22,7 +22,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
 import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON, SPAWN_REFUSAL_REASON } from "./refusals.js";
@@ -100,26 +100,22 @@ const SUBAGENTS_ACTION = {
 } as const;
 
 /** A text trimmed and refused when left with nothing. */
-function trimmedText(description: string): EffectSchema.Schema<string, string> {
+function trimmedText(description: string): EffectSchema.Codec<string, string> {
   return describeWire(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-      strict: true,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }).pipe(
-      EffectSchema.filter((value) => value.trim().length > 0, {
-        schemaId: EffectSchema.MinLengthSchemaId,
-        jsonSchema: { minLength: 1 },
-      }),
+    EffectSchema.String.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.String.check(EffectSchema.isNonEmpty()),
+        SchemaTransformation.trim(),
+      ),
     ),
     description,
   );
 }
 
 /** A whole number, with no bound beyond being finite and integral. */
-function wholeNumber(description: string): EffectSchema.Schema<number, number> {
+function wholeNumber(description: string): EffectSchema.Codec<number, number> {
   return describeWire(
-    EffectSchema.Number.pipe(EffectSchema.finite(), EffectSchema.int()),
+    EffectSchema.Number.check(EffectSchema.isFinite(), EffectSchema.isInt()),
     description,
   );
 }
@@ -127,74 +123,60 @@ function wholeNumber(description: string): EffectSchema.Schema<number, number> {
 function memberEnum<const Member extends string>(
   members: readonly Member[],
   description: string,
-): EffectSchema.Schema<Member, Member> {
-  return describeWire(EffectSchema.Literal(...members), description);
+): EffectSchema.Codec<Member, Member> {
+  return describeWire(EffectSchema.Literals(members), description);
 }
 
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
-function erase<A, I>(
-  schema: EffectSchema.Schema<A, I>,
-): EffectSchema.Schema<unknown, UnparsedWireValue> {
+/** Effect's `Codec` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase(schema: EffectSchema.Top): EffectSchema.Codec<unknown, UnparsedWireValue> {
   return EffectSchema.make(schema.ast);
 }
 
 const SESSIONS_SPAWN_INPUT = erase(
-  tolerantRecord({
+  EffectSchema.Struct({
     task: trimmedText(`The task, briefed in full, under ${maximumChildTaskLength} characters.`),
-    label: EffectSchema.optionalWith(trimmedText("A short title for the work, for listings."), {
-      exact: true,
-    }),
-    context: EffectSchema.optionalWith(
+    label: EffectSchema.optionalKey(trimmedText("A short title for the work, for listings.")),
+    context: EffectSchema.optionalKey(
       memberEnum(
         Object.values(CHILD_CONTEXT_MODE),
         "How the child's context starts; isolated by default.",
       ),
-      { exact: true },
     ),
-    cleanup: EffectSchema.optionalWith(
+    cleanup: EffectSchema.optionalKey(
       memberEnum(
         Object.values(CHILD_CLEANUP),
         "Whether the child's conversation is kept for an hour after it ends (default) or archived at once.",
       ),
-      { exact: true },
     ),
-    run_timeout_seconds: EffectSchema.optionalWith(
+    run_timeout_seconds: EffectSchema.optionalKey(
       wholeNumber(
         "A deadline for this child alone; 0, the default, means none beyond the ordinary run deadline.",
       ),
-      { exact: true },
     ),
-    expects_completion: EffectSchema.optionalWith(
+    expects_completion: EffectSchema.optionalKey(
       describeWire(
         EffectSchema.Boolean,
         "False for a fire-and-forget child whose end is not reported back; true by default.",
       ),
-      { exact: true },
     ),
   }),
 );
 
 const SUBAGENTS_INPUT = erase(
-  tolerantRecord({
-    action: EffectSchema.optionalWith(
+  EffectSchema.Struct({
+    action: EffectSchema.optionalKey(
       memberEnum(Object.values(SUBAGENTS_ACTION), "What to do; list by default."),
-      { exact: true },
     ),
-    child_id: EffectSchema.optionalWith(trimmedText("The child to cancel, as the list gave it."), {
-      exact: true,
-    }),
+    child_id: EffectSchema.optionalKey(trimmedText("The child to cancel, as the list gave it.")),
   }),
 );
 
-const SESSIONS_LIST_INPUT = erase(tolerantRecord({}));
+const SESSIONS_LIST_INPUT = erase(EffectSchema.Struct({}));
 
 const SESSIONS_HISTORY_INPUT = erase(
-  tolerantRecord({
+  EffectSchema.Struct({
     child_id: trimmedText("The child, as the subagents list gave it."),
-    limit: EffectSchema.optionalWith(wholeNumber("How many lines at most."), { exact: true }),
+    limit: EffectSchema.optionalKey(wholeNumber("How many lines at most.")),
   }),
 );
 

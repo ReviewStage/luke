@@ -1,4 +1,4 @@
-import { Cause, Effect, type ParseResult } from "effect";
+import { Cause, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
@@ -12,7 +12,7 @@ import { ADMIN_ERROR, ADMIN_HTTP_STATUS, errorResponse } from "./http.js";
  */
 export type AdminSeamEffect<A> = Effect.Effect<
   A,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 >;
 

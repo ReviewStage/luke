@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -208,7 +208,7 @@ export interface SpeechPushOptions {
 }
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type DeviceReadFailure = SqlError | ParseResult.ParseError;
+type DeviceReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -216,18 +216,19 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  userId: Schema.String,
   platform: Schema.String,
-  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("active_until"),
-  ),
-  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_token"),
-  ),
-  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_environment"),
-  ),
-});
+  activeUntil: Schema.NullOr(Schema.Date),
+  pushToken: Schema.NullOr(Schema.String),
+  pushEnvironment: Schema.NullOr(Schema.String),
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    activeUntil: "active_until",
+    pushToken: "push_token",
+    pushEnvironment: "push_environment",
+  }),
+);
 
 const findDevicesByAccount = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
@@ -285,7 +286,7 @@ function devicesByAccount(
 export function pushSpeech(
   seams: SpeechPushSeams,
   options: SpeechPushOptions,
-): Effect.Effect<SpeechPushOutcome, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<SpeechPushOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const { now, limit, userIds, clock = Date.now } = options;
     const until = clock() + SPEECH_PUSH.BUDGET_MS;

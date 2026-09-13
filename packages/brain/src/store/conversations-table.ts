@@ -83,7 +83,7 @@ const everyConversationRow = SqlSchema.findAll({
     ),
 });
 
-const conversationRowAt = SqlSchema.findOne({
+const conversationRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRow,
   execute: (key) =>
@@ -147,12 +147,13 @@ export const conversationCutoffEffect = (
   key: SessionKey,
 ): Effect.Effect<number | undefined, SqlError, Client.SqlClient> =>
   Effect.map(columnsDecoded(cutoffRowAt(key)), (row) =>
-    Option.flatMapNullable(row, ({ conversation_cleared_at }) => conversation_cleared_at).pipe(
-      Option.getOrUndefined,
-    ),
+    Option.flatMap(
+      row,
+      Option.liftNullishOr(({ conversation_cleared_at }) => conversation_cleared_at),
+    ).pipe(Option.getOrUndefined),
   );
 
-const cutoffRowAt = SqlSchema.findOne({
+const cutoffRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ conversation_cleared_at: Schema.NullOr(Schema.Number) }),
   execute: (key) =>

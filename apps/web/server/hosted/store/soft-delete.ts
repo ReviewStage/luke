@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
@@ -30,7 +30,7 @@ export interface ClearOutcome {
   readonly opened: string;
 }
 
-type ClearFailure = SqlError | ParseResult.ParseError;
+type ClearFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -42,7 +42,7 @@ const IdRowSchema = Schema.Struct({ id: Schema.String });
 const lockUser = (userId: string) =>
   statement((sql) => sql`select id from "user" where id = ${userId} for update`);
 
-const StampMainSchema = Schema.Struct({ userId: Schema.String, deletedAt: Schema.DateFromSelf });
+const StampMainSchema = Schema.Struct({ userId: Schema.String, deletedAt: Schema.Date });
 
 const stampMain = SqlSchema.findAll({
   Request: StampMainSchema,
@@ -60,7 +60,7 @@ const stampMain = SqlSchema.findAll({
 
 const StampChildrenSchema = Schema.Struct({
   parents: Schema.Array(Schema.String),
-  deletedAt: Schema.DateFromSelf,
+  deletedAt: Schema.Date,
 });
 
 const stampChildren = SqlSchema.findAll({
@@ -94,9 +94,9 @@ function stampDescendants(
   });
 }
 
-const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.DateFromSelf });
+const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.Date });
 
-const openMain = SqlSchema.findOne({
+const openMain = SqlSchema.findOneOption({
   Request: OpenMainSchema,
   Result: IdRowSchema,
   execute: (write) =>
@@ -129,7 +129,7 @@ export function clearMainConversation(
 }
 
 const purgeRows = SqlSchema.findAll({
-  Request: Schema.DateFromSelf,
+  Request: Schema.Date,
   Result: IdRowSchema,
   execute: (edge) =>
     statement((sql) => sql`delete from conversations where deleted_at <= ${edge} returning id`),

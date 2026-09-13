@@ -16,7 +16,7 @@ const MARK_IDS: readonly string[] = [
 ];
 
 test("the mark id schema holds exactly the ids the registry is required to draw", () => {
-  const decode = Schema.decodeUnknownEither(MarkIdSchema);
+  const decode = Schema.decodeUnknownResult(MarkIdSchema);
   for (const markId of MARK_IDS) assert.deepEqual(decode(markId), Result.succeed(markId));
   for (const refused of ["a-provider-luke-has-no-mark-for", "", 17, true, {}, [], undefined]) {
     assert.equal(Result.isFailure(decode(refused)), true);

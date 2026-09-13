@@ -201,16 +201,14 @@ export function encodeRosterDiff(diff: RosterDiff): string {
 }
 
 /** A declaration handed the interface it decodes into, matching the assembled struct's shape. */
-function schemaAs<Value>(
-  schema: EffectSchema.Schema.Any,
-): EffectSchema.Schema<Value, UnparsedWireValue> {
-  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: EffectSchema.Top): EffectSchema.Codec<Value, UnparsedWireValue> {
+  return EffectSchema.make<EffectSchema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
 
 const storedText = EffectSchema.String;
-const optionalText = EffectSchema.optionalWith(storedText, { exact: true });
+const optionalText = EffectSchema.optionalKey(storedText);
 
-const diffSessionSchema: EffectSchema.Schema<RosterDiffSession, UnparsedWireValue> = schemaAs(
+const diffSessionSchema: EffectSchema.Codec<RosterDiffSession, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     providerId: cloudProviderIdSchema,
     providerSessionId: storedText,
@@ -221,7 +219,7 @@ const diffSessionSchema: EffectSchema.Schema<RosterDiffSession, UnparsedWireValu
   }),
 );
 
-const diffWorkspaceSchema: EffectSchema.Schema<RosterDiffWorkspace, UnparsedWireValue> = schemaAs(
+const diffWorkspaceSchema: EffectSchema.Codec<RosterDiffWorkspace, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     providerId: cloudProviderIdSchema,
     providerWorkspaceId: storedText,
@@ -229,7 +227,7 @@ const diffWorkspaceSchema: EffectSchema.Schema<RosterDiffWorkspace, UnparsedWire
   }),
 );
 
-const statusTransitionSchema: EffectSchema.Schema<RosterStatusTransition, UnparsedWireValue> =
+const statusTransitionSchema: EffectSchema.Codec<RosterStatusTransition, UnparsedWireValue> =
   schemaAs(
     EffectSchema.Struct({
       session: diffSessionSchema,
@@ -238,7 +236,7 @@ const statusTransitionSchema: EffectSchema.Schema<RosterStatusTransition, Unpars
     }),
   );
 
-const lineChangeSchema: EffectSchema.Schema<RosterLineChange, UnparsedWireValue> = schemaAs(
+const lineChangeSchema: EffectSchema.Codec<RosterLineChange, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     session: diffSessionSchema,
     from: optionalText,
@@ -246,7 +244,7 @@ const lineChangeSchema: EffectSchema.Schema<RosterLineChange, UnparsedWireValue>
   }),
 );
 
-const rosterDiffSchema: EffectSchema.Schema<RosterDiff, UnparsedWireValue> = schemaAs(
+const rosterDiffSchema: EffectSchema.Codec<RosterDiff, UnparsedWireValue> = schemaAs(
   EffectSchema.Struct({
     appeared: EffectSchema.Array(diffSessionSchema),
     vanished: EffectSchema.Array(diffSessionSchema),

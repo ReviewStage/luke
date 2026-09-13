@@ -53,7 +53,7 @@ export type PanelFormFactor = (typeof PANEL_FORM_FACTOR)[keyof typeof PANEL_FORM
 
 export const PANEL_FORM_FACTOR_LIST: readonly PanelFormFactor[] = Object.values(PANEL_FORM_FACTOR);
 
-export const PanelFormFactorSchema = Schema.Literal(...Object.values(PANEL_FORM_FACTOR));
+export const PanelFormFactorSchema = Schema.Literals(Object.values(PANEL_FORM_FACTOR));
 
 const readsPanelFormFactor = Schema.is(PanelFormFactorSchema);
 

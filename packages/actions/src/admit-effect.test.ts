@@ -218,7 +218,7 @@ describe("admitEffect", () => {
         }),
       );
       assert.ok(Exit.isFailure(exit));
-      assert.equal(Cause.isDie(exit.cause), true);
+      assert.equal(Cause.hasDies(exit.cause), true);
       assert.equal(Cause.squash(exit.cause), failure);
     }),
   );

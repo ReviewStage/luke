@@ -66,7 +66,7 @@ const GenerationRow = Schema.Struct({
 
 type GenerationRow = Schema.Schema.Type<typeof GenerationRow>;
 
-const generationRowAt = SqlSchema.findOne({
+const generationRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: GenerationRow,
   execute: (key) =>

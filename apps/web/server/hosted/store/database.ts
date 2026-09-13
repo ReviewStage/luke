@@ -38,4 +38,4 @@ export function optionalField<Value>(name: string, value: Value | null): Record<
  * since the epoch, well inside the safe integer range, so both readings
  * decode to the same number and neither dialect's rows read differently.
  */
-export const EpochMillisColumnSchema = Schema.Union(Schema.Number, Schema.NumberFromString);
+export const EpochMillisColumnSchema = Schema.Union([Schema.Number, Schema.NumberFromString]);

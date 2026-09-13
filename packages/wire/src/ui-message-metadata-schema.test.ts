@@ -6,6 +6,7 @@ import {
   ActionResultSchema,
   ActionResultStatusSchema,
 } from "./action-result.js";
+import { readEither } from "./effect/json-schema.js";
 import { type UnparsedWireValue, unparsedWire } from "./json.js";
 import {
   ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA,
@@ -31,10 +32,10 @@ const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
 ];
 
 function settlesVocabulary<Member extends string>(
-  schema: Schema.Schema<Member>,
+  schema: Schema.Codec<Member>,
   members: readonly Member[],
 ): void {
-  const decode = Schema.decodeUnknownEither(schema);
+  const decode = Schema.decodeUnknownResult(schema);
   for (const member of members) assert.deepEqual(decode(member), Result.succeed(member));
   for (const refused of NOTHING_ANY_VOCABULARY_HOLDS) {
     assert.equal(Result.isFailure(decode(refused)), true);
@@ -49,7 +50,7 @@ test("the message vocabularies hold exactly the members the build declares", () 
 });
 
 test("MessageRoleSchema admits the three roles a stored row may carry, and nothing else", () => {
-  const decode = Schema.decodeUnknownEither(MessageRoleSchema);
+  const decode = Schema.decodeUnknownResult(MessageRoleSchema);
   assert.deepEqual(
     ["user", "assistant", "system"].map((role) => decode(role)),
     ["user", "assistant", "system"].map((role) => Result.succeed(role)),
@@ -58,7 +59,9 @@ test("MessageRoleSchema admits the three roles a stored row may carry, and nothi
 });
 
 test("the accepted action result carries exactly its one field", () => {
-  const decode = Schema.decodeUnknownEither(ActionResultSchema);
+  // The read is what refuses a key the declaration does not name: v4 settles
+  // parse options at the read rather than on the declaration.
+  const decode = readEither(ActionResultSchema);
   assert.deepEqual(
     decode({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     Result.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED }),

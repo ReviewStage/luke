@@ -23,6 +23,7 @@ import {
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  EXCESS_KEYS,
   isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -261,19 +262,21 @@ function options(userId: string, req: Request): ResourceReadOptions {
 
 async function answered<Value, Encoded>(
   response: Response,
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
 ): Promise<Value> {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
-  const read = readEither(schema)(body);
+  // An answer's family was declared tolerant, so the read drops a key a newer
+  // service may have added rather than refusing the answer for it.
+  const read = readEither(schema, { excess: EXCESS_KEYS.DROP })(body);
   if (Result.isFailure(read))
     assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
   return read.success;
 }
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
@@ -1217,7 +1220,7 @@ it.effect(
       assert.equal(after.messages.length, 4);
       assert.equal(
         EffectSchema.decodeUnknownSync(
-          EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+          EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
         )(after.conversation[0]?.next_message_seq),
         5,
       );
@@ -1237,7 +1240,7 @@ it.effect(
       const { main, turns: ids } = await populate(userId);
       const MessageIdRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        seq: EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
       });
       const sent = (await readMessagesByConversation(database.run, main))
         .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
@@ -1270,7 +1273,7 @@ it.effect(
 
       const EventRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        seq: EffectSchema.Union([EffectSchema.Number, EffectSchema.NumberFromString]),
         kind: EffectSchema.String,
         payload: EffectSchema.Unknown,
       });

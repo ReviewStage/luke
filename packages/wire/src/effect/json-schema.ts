@@ -1,6 +1,8 @@
-import { Array as Arr, Data, Option, ParseResult, Result, Schema, SchemaAST } from "effect";
+import { Array as Arr, Data, Effect, Option, Result, Schema, SchemaAST, SchemaIssue } from "effect";
 import type { UnparsedWireValue } from "../json.js";
 import {
+  EXCESS_KEYS,
+  type ExcessKeys,
   type JsonSchemaNode,
   SCHEMA_REFUSAL,
   type SchemaPath,
@@ -12,18 +14,17 @@ import {
  * The JSON Schema a model is shown for an Effect `Schema`, emitted by walking
  * its AST into the same `JsonSchemaNode` the `s.*` builder answers for the
  * equivalent declaration, key for key and in the same order. Effect's own
- * `JSONSchema.make` is never called: its output is a different dialect with
+ * `JsonSchema` module is never called: its output is a different dialect with
  * different keys in a different order, and these bytes are prompt-cache bytes,
  * held still by the goldens under every package's `fixtures/json-schema/`.
  *
  * Nothing here reads Effect's own `title` and `description` annotations,
- * because Effect writes them on every primitive and every built-in filter
- * (`Schema.String` says "a string", `minLength(1)` says "a string at least 1
- * character(s) long"), so a sentence a model is shown has to be one wire was
- * handed on purpose, under wire's own annotation. The same goes for the
- * refusal a failed rule earns and for a node declared verbatim beside a
- * reader: each is wire's own annotation, set through the helpers below and
- * read nowhere else.
+ * because Effect writes them on every primitive and every built-in check
+ * (`Schema.isMinLength(1)` says "a value with a length of at least 1"), so a
+ * sentence a model is shown has to be one wire was handed on purpose, under
+ * wire's own annotation. The same goes for the refusal a failed rule earns and
+ * for a node declared verbatim beside a reader: each is wire's own annotation,
+ * set through the helpers below and read nowhere else.
  *
  * A declaration the wire cannot show — a class, a symbol, a tuple with
  * positions, an index signature, a bound on a kind of node that cannot carry
@@ -32,47 +33,45 @@ import {
  * not ship.
  */
 
-/** The sentence a node carries as its `description`. */
-export const WireDescriptionAnnotationId: unique symbol = Symbol.for(
-  "@sidecar/wire/effect/WireDescription",
-);
-
-/** Which {@link SchemaRefusal} a failed refinement or transformation answers; set by {@link wireRefusal}. */
-const WireRefusalAnnotationId: unique symbol = Symbol.for("@sidecar/wire/effect/WireRefusal");
-
 /**
- * A node declared beside its reader and emitted as written, for the one kind
- * of rule no combinator can express: the `s.reader` of the builder. Set by
- * {@link verbatimJsonSchema}.
+ * Wire's own annotations are keyed by name rather than by symbol, because v4
+ * annotations are a string-keyed record; each name is namespaced to this
+ * package so it can never collide with Effect's own.
  */
-const WireJsonSchemaAnnotationId: unique symbol = Symbol.for("@sidecar/wire/effect/WireJsonSchema");
+const WIRE_ANNOTATION = {
+  /** The sentence a node carries as its `description`. */
+  DESCRIPTION: "@sidecar/wire/effect/WireDescription",
+  /** Which {@link SchemaRefusal} a failed check or transformation answers. */
+  REFUSAL: "@sidecar/wire/effect/WireRefusal",
+  /** A node declared verbatim beside its reader, emitted as written. */
+  JSON_SCHEMA: "@sidecar/wire/effect/WireJsonSchema",
+} as const;
+
+/** The name a node's own sentence is carried under; a test reads it directly. */
+export const WIRE_DESCRIPTION_ANNOTATION = WIRE_ANNOTATION.DESCRIPTION;
 
 const readDescription = Schema.decodeUnknownOption(Schema.String);
-const readRefusal = Schema.decodeUnknownOption(Schema.Literal(...Object.values(SCHEMA_REFUSAL)));
+const readRefusal = Schema.decodeUnknownOption(Schema.Literals(Object.values(SCHEMA_REFUSAL)));
 
 /** Carries `description` into the emitted node, the way the builder's `describe` does. */
-export const describeWire = <S extends Schema.Annotable.All>(
-  schema: S,
-  description: string,
-): Schema.Annotable.Self<S> => schema.annotations({ [WireDescriptionAnnotationId]: description });
+export const describeWire = <S extends Schema.Top>(schema: S, description: string): S["Rebuild"] =>
+  schema.annotate({ [WIRE_ANNOTATION.DESCRIPTION]: description });
 
-/** The annotation a `Schema.filter` or transformation carries to name the refusal its failure earns. */
-export const wireRefusal = (refusal: SchemaRefusal) => ({ [WireRefusalAnnotationId]: refusal });
+/** The annotation a check or transformation carries to name the refusal its failure earns. */
+export const wireRefusal = (refusal: SchemaRefusal) => ({ [WIRE_ANNOTATION.REFUSAL]: refusal });
 
 /** Declares the node a schema emits, verbatim, in place of anything its AST would say. */
-export const verbatimJsonSchema = <S extends Schema.Annotable.All>(
+export const verbatimJsonSchema = <S extends Schema.Top>(
   schema: S,
   node: JsonSchemaNode,
-): Schema.Annotable.Self<S> => schema.annotations({ [WireJsonSchemaAnnotationId]: node });
+): S["Rebuild"] => schema.annotate({ [WIRE_ANNOTATION.JSON_SCHEMA]: node });
 
-/** Every bound a recognized refinement can add to the node beneath it. */
+/** Every bound a recognized check can add to the node beneath it. */
 interface Bounds {
   readonly minLength?: number;
   readonly maxLength?: number;
   readonly minimum?: number;
   readonly maximum?: number;
-  readonly minItems?: number;
-  readonly maxItems?: number;
   readonly integer?: true;
 }
 
@@ -80,93 +79,182 @@ type BoundKey = keyof Bounds;
 
 type BoundReader = (payload: unknown) => Option.Option<Bounds>;
 
-const boundReader = <A extends Bounds, I>(payload: Schema.Schema<A, I>): BoundReader => {
+const boundReader = <A>(
+  payload: Schema.Codec<A, unknown>,
+  bounds: (payload: A) => Bounds,
+): BoundReader => {
   const read = Schema.decodeUnknownOption(payload);
-  return (annotation) => read(annotation);
+  return (annotation) => Option.map(read(annotation), bounds);
 };
 
 const INTEGER: Bounds = { integer: true };
 
 /**
- * The refinements whose bound the node carries, by the schema id Effect's own
- * filters annotate themselves with, each read from the `jsonSchema` annotation
- * the same filter writes. Any other refinement is a rule the node cannot say —
- * a uniqueness, a field bounded by another — and emits the node beneath it,
- * exactly as the builder's `refine` does.
+ * The identifiers Effect's own checks carry in their `representation`
+ * annotation. v4 states a check's identity and its payload there rather than
+ * in a pair of annotations keyed by a symbol, so this is the whole of what
+ * says which bound a check stands for.
  */
-const BOUND_READERS = new Map<symbol, BoundReader>([
-  [Schema.MinLengthSchemaId, boundReader(Schema.Struct({ minLength: Schema.Number }))],
-  [Schema.MaxLengthSchemaId, boundReader(Schema.Struct({ maxLength: Schema.Number }))],
+const EFFECT_CHECK = {
+  MIN_LENGTH: "effect/schema/isMinLength",
+  MAX_LENGTH: "effect/schema/isMaxLength",
+  LENGTH_BETWEEN: "effect/schema/isLengthBetween",
+  GREATER_THAN_OR_EQUAL_TO: "effect/schema/isGreaterThanOrEqualTo",
+  LESS_THAN_OR_EQUAL_TO: "effect/schema/isLessThanOrEqualTo",
+  BETWEEN: "effect/schema/isBetween",
+  INT: "effect/schema/isInt",
+} as const;
+
+/**
+ * The checks whose bound the node carries, by the identifier Effect's own
+ * checks annotate themselves with, each read from the payload that same check
+ * writes. Any other check is a rule the node cannot say — a uniqueness, a
+ * field bounded by another — and emits the node beneath it, exactly as the
+ * builder's `refine` does.
+ *
+ * v4 has one length check for strings and arrays alike, so a length bound is
+ * gathered under `minLength`/`maxLength` whatever it was declared over and
+ * written out as `minItems`/`maxItems` once the node's kind is known.
+ */
+const BOUND_READERS = new Map<string, BoundReader>([
   [
-    Schema.LengthSchemaId,
-    boundReader(Schema.Struct({ minLength: Schema.Number, maxLength: Schema.Number })),
+    EFFECT_CHECK.MIN_LENGTH,
+    boundReader(Schema.Struct({ minLength: Schema.Number }), (payload) => payload),
   ],
-  [Schema.GreaterThanOrEqualToSchemaId, boundReader(Schema.Struct({ minimum: Schema.Number }))],
-  [Schema.LessThanOrEqualToSchemaId, boundReader(Schema.Struct({ maximum: Schema.Number }))],
   [
-    Schema.BetweenSchemaId,
-    boundReader(Schema.Struct({ minimum: Schema.Number, maximum: Schema.Number })),
+    EFFECT_CHECK.MAX_LENGTH,
+    boundReader(Schema.Struct({ maxLength: Schema.Number }), (payload) => payload),
   ],
-  [Schema.MinItemsSchemaId, boundReader(Schema.Struct({ minItems: Schema.Number }))],
-  [Schema.MaxItemsSchemaId, boundReader(Schema.Struct({ maxItems: Schema.Number }))],
   [
-    Schema.ItemsCountSchemaId,
-    boundReader(Schema.Struct({ minItems: Schema.Number, maxItems: Schema.Number })),
+    EFFECT_CHECK.LENGTH_BETWEEN,
+    boundReader(
+      Schema.Struct({ minimum: Schema.Number, maximum: Schema.Number }),
+      ({ minimum, maximum }) => ({ minLength: minimum, maxLength: maximum }),
+    ),
   ],
-  [Schema.IntSchemaId, () => Option.some(INTEGER)],
+  [
+    EFFECT_CHECK.GREATER_THAN_OR_EQUAL_TO,
+    boundReader(Schema.Struct({ minimum: Schema.Number }), (payload) => payload),
+  ],
+  [
+    EFFECT_CHECK.LESS_THAN_OR_EQUAL_TO,
+    boundReader(Schema.Struct({ maximum: Schema.Number }), (payload) => payload),
+  ],
+  [
+    EFFECT_CHECK.BETWEEN,
+    boundReader(
+      Schema.Struct({ minimum: Schema.Number, maximum: Schema.Number }),
+      (payload) => payload,
+    ),
+  ],
+  [EFFECT_CHECK.INT, () => Option.some(INTEGER)],
 ]);
 
 /**
  * The bounds whose failure reads as too large rather than malformed, which is
  * the builder's rule for a `max`: a text past its bound, an array past its
  * count, a number above its maximum. Below a minimum is malformed — a count of
- * minus three is not a count that overflowed — and a refinement carrying its
- * own {@link WireRefusalAnnotationId} says so for itself.
+ * minus three is not a count that overflowed — and a check carrying its own
+ * refusal annotation says so for itself.
  */
-const TOO_LARGE_SCHEMA_IDS: ReadonlySet<symbol> = new Set([
-  Schema.MaxLengthSchemaId,
-  Schema.LessThanOrEqualToSchemaId,
-  Schema.MaxItemsSchemaId,
+const TOO_LARGE_CHECKS: ReadonlySet<string> = new Set([
+  EFFECT_CHECK.MAX_LENGTH,
+  EFFECT_CHECK.LESS_THAN_OR_EQUAL_TO,
 ]);
 
 /** What the walk has gathered above the node it is about to emit. */
 interface Gathered {
   readonly description: string | undefined;
+  readonly verbatim: JsonSchemaNode | undefined;
   readonly bounds: Bounds;
 }
 
-const NOTHING_GATHERED: Gathered = { description: undefined, bounds: {} };
+const NOTHING_GATHERED: Gathered = {
+  description: undefined,
+  verbatim: undefined,
+  bounds: {},
+};
 
 const isString = Schema.is(Schema.String);
 const isNumber = Schema.is(Schema.Number);
 const isBoolean = Schema.is(Schema.Boolean);
-const isSymbol = Schema.is(Schema.SymbolFromSelf);
 
 function unshowable(ast: SchemaAST.AST, reason: string): Error {
   return new Error(`The wire cannot show ${String(ast)}: ${reason}.`);
 }
 
-function gatherDescription(annotated: SchemaAST.Annotated, gathered: Gathered): Gathered {
-  if (gathered.description !== undefined) return gathered;
-  const description = readDescription(annotated.annotations[WireDescriptionAnnotationId]);
-  return Option.isNone(description) ? gathered : { ...gathered, description: description.value };
+/**
+ * A check's own identity, or nothing for a group and for a check declared
+ * without one: a group states no single bound, and a check with no
+ * representation is a rule the node cannot say.
+ */
+function checkIdentifier(check: SchemaAST.Check<unknown>): string | undefined {
+  return check.annotations?.representation?.id;
 }
 
-function gatherBounds(refinement: SchemaAST.Refinement, gathered: Gathered): Gathered {
-  const schemaId = SchemaAST.getSchemaIdAnnotation(refinement);
-  if (Option.isNone(schemaId) || !isSymbol(schemaId.value)) return gathered;
-  const reader = BOUND_READERS.get(schemaId.value);
+type Annotations = Schema.Annotations.Annotations | undefined;
+
+function gatherAnnotations(annotations: Annotations, gathered: Gathered): Gathered {
+  if (annotations === undefined) return gathered;
+  const described =
+    gathered.description === undefined
+      ? Option.getOrUndefined(readDescription(annotations[WIRE_ANNOTATION.DESCRIPTION]))
+      : undefined;
+  // SAFETY: wire's own annotation namespace is written only by the helpers above, and
+  // `verbatimJsonSchema` is the one that writes this key, taking a `JsonSchemaNode`.
+  const verbatim =
+    gathered.verbatim === undefined
+      ? (annotations[WIRE_ANNOTATION.JSON_SCHEMA] as JsonSchemaNode | undefined)
+      : undefined;
+  if (described === undefined && verbatim === undefined) return gathered;
+  return {
+    ...gathered,
+    description: described ?? gathered.description,
+    verbatim: verbatim ?? gathered.verbatim,
+  };
+}
+
+function gatherBounds(
+  ast: SchemaAST.AST,
+  check: SchemaAST.Check<unknown>,
+  gathered: Gathered,
+): Gathered {
+  const identifier = checkIdentifier(check);
+  if (identifier === undefined) return gathered;
+  const reader = BOUND_READERS.get(identifier);
   if (reader === undefined) return gathered;
-  const bounds = reader(refinement.annotations[SchemaAST.JSONSchemaAnnotationId]);
+  const bounds = reader(check.annotations?.representation?.payload);
   if (Option.isNone(bounds)) {
-    throw unshowable(refinement, "its bound annotation does not carry the bound its id names");
+    throw unshowable(ast, "its bound annotation does not carry the bound its id names");
   }
   for (const key of Object.keys(bounds.value)) {
     if (Object.hasOwn(gathered.bounds, key)) {
-      throw unshowable(refinement, `${key} is declared twice`);
+      throw unshowable(ast, `${key} is declared twice`);
     }
   }
   return { ...gathered, bounds: { ...gathered.bounds, ...bounds.value } };
+}
+
+/**
+ * What a node says about itself, outermost first. A v4 schema carries its
+ * checks in one array beside the node rather than as nodes wrapped around it,
+ * and `annotate` writes onto the last check a schema carries, so the checks
+ * are read last to first — the order they were piped in reversed — and the
+ * node's own annotations last of all. First description wins, the way the
+ * outermost `describe` did.
+ */
+function gatherNode(ast: SchemaAST.AST, above: Gathered): Gathered {
+  let gathered = above;
+  const checks = ast.checks;
+  if (checks !== undefined) {
+    for (let index = checks.length - 1; index >= 0; index -= 1) {
+      const check = checks[index];
+      if (check === undefined) continue;
+      gathered = gatherAnnotations(check.annotations, gathered);
+      gathered = gatherBounds(ast, check, gathered);
+    }
+  }
+  return gatherAnnotations(ast.annotations, gathered);
 }
 
 /**
@@ -195,7 +283,7 @@ type ArrayNodeDraft = Draft<Extract<JsonSchemaNode, { type: "array" }>>;
 
 /**
  * A `string` node's keys in the builder's order: `type`, then `minLength`, then
- * `maxLength`. The order is fixed here rather than by the order the filters
+ * `maxLength`. The order is fixed here rather than by the order the checks
  * were piped, because the bytes are what is being held still.
  */
 function stringNode(ast: SchemaAST.AST, bounds: Bounds): JsonSchemaNode {
@@ -214,11 +302,16 @@ function numberNode(ast: SchemaAST.AST, bounds: Bounds): JsonSchemaNode {
   return node;
 }
 
+/**
+ * An array's count is the same length bound a text carries, because v4 states
+ * one length check for both; which of the two names it is written under is
+ * decided here, where the node's kind is known.
+ */
 function arrayNode(ast: SchemaAST.AST, items: JsonSchemaNode, bounds: Bounds): JsonSchemaNode {
-  const { minItems, maxItems } = takeBounds(ast, bounds, ["minItems", "maxItems"]);
+  const { minLength, maxLength } = takeBounds(ast, bounds, ["minLength", "maxLength"]);
   const node: ArrayNodeDraft = { type: "array", items };
-  if (minItems !== undefined) node.minItems = minItems;
-  if (maxItems !== undefined) node.maxItems = maxItems;
+  if (minLength !== undefined) node.minItems = minLength;
+  if (maxLength !== undefined) node.maxItems = maxLength;
   return node;
 }
 
@@ -228,7 +321,6 @@ function arrayNode(ast: SchemaAST.AST, items: JsonSchemaNode, bounds: Bounds): J
  */
 function literalNode(ast: SchemaAST.Literal): JsonSchemaNode {
   const { literal } = ast;
-  if (literal === null) return { type: "null" };
   if (isString(literal)) return { type: "string", enum: [literal] };
   if (isNumber(literal)) {
     return { type: Number.isSafeInteger(literal) ? "integer" : "number", enum: [literal] };
@@ -241,7 +333,8 @@ function literalNode(ast: SchemaAST.Literal): JsonSchemaNode {
  * A union of literals of one primitive kind is the builder's `enumOf`, one
  * `enum` node; any other union is its `union`, an `anyOf` of members. `null`
  * is never a member of an `enum`, because the builder's null node has no
- * `enum` to join.
+ * `enum` to join, and v4 states `null` as a node of its own rather than as a
+ * literal, so a union naming it never reads as one kind.
  */
 function enumNode(literals: readonly SchemaAST.LiteralValue[]): JsonSchemaNode | undefined {
   if (literals.every(isString)) return { type: "string", enum: literals };
@@ -262,9 +355,7 @@ function unionNode(
 ): JsonSchemaNode {
   takeBounds(ast, bounds, []);
   const members = ast.types;
-  const literals = members.flatMap((member) =>
-    SchemaAST.isLiteral(member) ? [member.literal] : [],
-  );
+  const literals = members.flatMap((member) => (member._tag === "Literal" ? [member.literal] : []));
   if (literals.length === members.length) {
     const asEnum = enumNode(literals);
     if (asEnum !== undefined) return asEnum;
@@ -273,21 +364,22 @@ function unionNode(
 }
 
 /**
- * An optional property's type, with the `undefined` an inexact `Schema.optional`
- * adds taken back out: the builder's `optional` emits the inner node, because
- * a JSON value is never `undefined` and the key's absence is what `required`
- * already says.
+ * An optional property's type, with the `undefined` an inexact
+ * `Schema.optional` adds taken back out: the builder's `optional` emits the
+ * inner node, because a JSON value is never `undefined` and the key's absence
+ * is what `required` already says.
  */
 function propertyType(type: SchemaAST.AST): SchemaAST.AST {
-  if (!SchemaAST.isUnion(type)) return type;
-  const defined = type.types.filter((member) => !SchemaAST.isUndefinedKeyword(member));
-  return defined.length === type.types.length
-    ? type
-    : SchemaAST.Union.make(defined, type.annotations);
+  if (type._tag !== "Union") return type;
+  const defined = type.types.filter((member) => member._tag !== "Undefined");
+  if (defined.length === type.types.length) return type;
+  const only = defined[0];
+  if (defined.length === 1 && only !== undefined) return only;
+  return new SchemaAST.Union(defined, type.options, type.annotations);
 }
 
 function objectNode(
-  ast: SchemaAST.TypeLiteral,
+  ast: SchemaAST.Objects,
   bounds: Bounds,
   visiting: Set<SchemaAST.AST>,
 ): JsonSchemaNode {
@@ -299,11 +391,9 @@ function objectNode(
   const required: string[] = [];
   for (const signature of ast.propertySignatures) {
     if (!isString(signature.name)) throw unshowable(ast, "a property is keyed by a symbol");
-    properties.push([
-      signature.name,
-      emit(propertyType(signature.type), gatherDescription(signature, NOTHING_GATHERED), visiting),
-    ]);
-    if (!signature.isOptional) required.push(signature.name);
+    const key = gatherAnnotations(signature.type.context?.annotations, NOTHING_GATHERED);
+    properties.push([signature.name, emit(propertyType(signature.type), key, visiting)]);
+    if (signature.type.context?.isOptional !== true) required.push(signature.name);
   }
   return {
     type: "object",
@@ -313,8 +403,8 @@ function objectNode(
   };
 }
 
-function tupleNode(
-  ast: SchemaAST.TupleType,
+function arraysNode(
+  ast: SchemaAST.Arrays,
   bounds: Bounds,
   visiting: Set<SchemaAST.AST>,
 ): JsonSchemaNode {
@@ -322,51 +412,59 @@ function tupleNode(
   if (ast.elements.length > 0 || rest === undefined || more.length > 0) {
     throw unshowable(ast, "only an array of one item type has a wire form");
   }
-  return arrayNode(ast, emit(rest.type, NOTHING_GATHERED, visiting), bounds);
+  return arrayNode(ast, emit(rest, NOTHING_GATHERED, visiting), bounds);
 }
 
 function emit(ast: SchemaAST.AST, above: Gathered, visiting: Set<SchemaAST.AST>): JsonSchemaNode {
-  const gathered = gatherDescription(ast, above);
-  const verbatim = SchemaAST.getAnnotation<JsonSchemaNode>(WireJsonSchemaAnnotationId)(ast);
-  if (Option.isSome(verbatim)) {
+  const gathered = gatherNode(ast, above);
+  if (gathered.verbatim !== undefined) {
     takeBounds(ast, gathered.bounds, []);
-    return withDescription(verbatim.value, gathered.description);
+    return withDescription(gathered.verbatim, gathered.description);
+  }
+  /**
+   * A transformation states its wire side as the node it decodes from, which
+   * in v4 is the last link of the node's own encoding rather than a node
+   * wrapped around it.
+   */
+  const encoding = ast.encoding;
+  if (encoding !== undefined) {
+    const link = encoding[encoding.length - 1];
+    if (link !== undefined) return emit(link.to, gathered, visiting);
   }
   switch (ast._tag) {
-    case "Refinement":
-      return emit(ast.from, gatherBounds(ast, gathered), visiting);
-    case "Transformation":
-      return emit(ast.from, gathered, visiting);
     case "Suspend": {
       if (visiting.has(ast)) throw unshowable(ast, "a recursive declaration has no finite node");
       visiting.add(ast);
-      const node = emit(ast.f(), gathered, visiting);
+      const node = emit(ast.thunk(), gathered, visiting);
       visiting.delete(ast);
       return node;
     }
-    case "StringKeyword":
+    case "String":
       return withDescription(stringNode(ast, gathered.bounds), gathered.description);
-    case "NumberKeyword":
+    case "Number":
       return withDescription(numberNode(ast, gathered.bounds), gathered.description);
-    case "BooleanKeyword":
+    case "Boolean":
       takeBounds(ast, gathered.bounds, []);
       return withDescription({ type: "boolean" }, gathered.description);
+    case "Null":
+      takeBounds(ast, gathered.bounds, []);
+      return withDescription({ type: "null" }, gathered.description);
     case "Literal":
       takeBounds(ast, gathered.bounds, []);
       return withDescription(literalNode(ast), gathered.description);
     case "Union":
       return withDescription(unionNode(ast, gathered.bounds, visiting), gathered.description);
-    case "TypeLiteral":
+    case "Objects":
       return withDescription(objectNode(ast, gathered.bounds, visiting), gathered.description);
-    case "TupleType":
-      return withDescription(tupleNode(ast, gathered.bounds, visiting), gathered.description);
+    case "Arrays":
+      return withDescription(arraysNode(ast, gathered.bounds, visiting), gathered.description);
     default:
       throw unshowable(ast, `a ${ast._tag} has no wire form`);
   }
 }
 
 /** The JSON Schema node a model is shown for this declaration. */
-export function emitJsonSchema(schema: Schema.Schema.All): JsonSchemaNode {
+export function emitJsonSchema(schema: Schema.Top): JsonSchemaNode {
   return emit(schema.ast, NOTHING_GATHERED, new Set());
 }
 
@@ -376,26 +474,35 @@ export class SchemaRefusalError extends Data.TaggedError("SchemaRefusalError")<{
   readonly path: SchemaPath;
 }> {}
 
-const isPathSegment = Schema.is(Schema.Union(Schema.String, Schema.Number));
+const isPathSegment = Schema.is(Schema.Union([Schema.String, Schema.Number]));
 
-function pathSegments(path: ParseResult.Path): SchemaPath {
-  const keys = Array.isArray(path) ? path : [path];
-  return keys.map((key) => (isPathSegment(key) ? key : String(key)));
+function pathSegments(path: ReadonlyArray<PropertyKey>): SchemaPath {
+  return path.map((key) => (isPathSegment(key) ? key : String(key)));
 }
 
-function annotatedRefusal(annotated: SchemaAST.Annotated): SchemaRefusal | undefined {
-  return Option.getOrUndefined(readRefusal(annotated.annotations[WireRefusalAnnotationId]));
+function annotatedRefusal(annotations: Annotations): SchemaRefusal | undefined {
+  if (annotations === undefined) return undefined;
+  return Option.getOrUndefined(readRefusal(annotations[WIRE_ANNOTATION.REFUSAL]));
 }
 
-function refinementRefusal(refinement: SchemaAST.Refinement): SchemaRefusal {
-  const named = annotatedRefusal(refinement);
+/**
+ * The refusal a node itself answers, and never one of its checks'. v4 lays
+ * every `check` a declaration piped onto one node's `checks` array where v3
+ * wrapped each in a `Refinement` of its own, so a word annotated on one check
+ * would otherwise speak for failures that check had no part in: a value that
+ * was never a string failed no check at all, and a value that failed two at
+ * once is reported as the checks in the order they were declared. A check's
+ * own word is read where that check's own failure is, in {@link checkRefusal}.
+ */
+function nodeRefusal(ast: SchemaAST.AST): SchemaRefusal | undefined {
+  return annotatedRefusal(ast.annotations);
+}
+
+function checkRefusal(check: SchemaAST.Check<unknown>): SchemaRefusal {
+  const named = annotatedRefusal(check.annotations);
   if (named !== undefined) return named;
-  const schemaId = SchemaAST.getSchemaIdAnnotation(refinement);
-  if (
-    Option.isSome(schemaId) &&
-    isSymbol(schemaId.value) &&
-    TOO_LARGE_SCHEMA_IDS.has(schemaId.value)
-  ) {
+  const identifier = checkIdentifier(check);
+  if (identifier !== undefined && TOO_LARGE_CHECKS.has(identifier)) {
     return SCHEMA_REFUSAL.TOO_LARGE;
   }
   return SCHEMA_REFUSAL.MALFORMED;
@@ -407,41 +514,56 @@ function refinementRefusal(refinement: SchemaAST.Refinement): SchemaRefusal {
  * outermost first. A wrong type, a missing key, an unlisted key, and a
  * literal outside its set are each malformed; a built-in maximum is too
  * large; and a node carrying its own refusal annotation answers that word
- * wherever it fails — a refinement's predicate, a transformation's decode, a
- * type check, or a union none of whose members admitted the value — at the
- * path of the node itself. A transformation that failed with an issue of its
- * own and names no word is read through to that issue, so a decode that ran
- * another schema inside it reports where that schema refused.
+ * wherever it fails — a check, a transformation's decode, a type check, or a
+ * union none of whose members admitted the value — at the path of the node
+ * itself. A transformation that failed with an issue of its own and names no
+ * word is read through to that issue, so a decode that ran another schema
+ * inside it reports where that schema refused.
  */
-function refusalOf(issue: ParseResult.ParseIssue, path: SchemaPath): SchemaRefusalError {
+function refusalOf(issue: SchemaIssue.Issue, path: SchemaPath): SchemaRefusalError {
   switch (issue._tag) {
     case "Pointer":
       return refusalOf(issue.issue, [...path, ...pathSegments(issue.path)]);
     case "Composite": {
-      const named = annotatedRefusal(issue.ast);
+      const named = nodeRefusal(issue.ast);
       return named === undefined
-        ? refusalOf(Array.isArray(issue.issues) ? issue.issues[0] : issue.issues, path)
+        ? refusalOf(issue.issues[0], path)
         : new SchemaRefusalError({ refusal: named, path });
     }
-    case "Refinement":
-      return issue.kind === "From"
-        ? refusalOf(issue.issue, path)
-        : new SchemaRefusalError({ refusal: refinementRefusal(issue.ast), path });
-    case "Transformation": {
-      if (issue.kind !== "Transformation") return refusalOf(issue.issue, path);
-      const named = annotatedRefusal(issue.ast);
+    case "AnyOf": {
+      const named = nodeRefusal(issue.ast);
+      if (named !== undefined) return new SchemaRefusalError({ refusal: named, path });
+      const first = issue.issues[0];
+      return first === undefined
+        ? new SchemaRefusalError({ refusal: SCHEMA_REFUSAL.MALFORMED, path })
+        : refusalOf(first, path);
+    }
+    case "Filter":
+      return new SchemaRefusalError({ refusal: checkRefusal(issue.filter), path });
+    case "Encoding": {
+      const named = nodeRefusal(issue.ast);
       return named === undefined
         ? refusalOf(issue.issue, path)
         : new SchemaRefusalError({ refusal: named, path });
     }
-    case "Type":
+    case "InvalidType":
       return new SchemaRefusalError({
-        refusal: annotatedRefusal(issue.ast) ?? SCHEMA_REFUSAL.MALFORMED,
+        refusal: nodeRefusal(issue.ast) ?? SCHEMA_REFUSAL.MALFORMED,
         path,
       });
-    case "Missing":
-    case "Unexpected":
+    case "UnexpectedKey":
+      return new SchemaRefusalError({
+        refusal: nodeRefusal(issue.ast) ?? SCHEMA_REFUSAL.MALFORMED,
+        path,
+      });
+    case "InvalidValue":
     case "Forbidden":
+      return new SchemaRefusalError({
+        refusal: annotatedRefusal(issue.annotations) ?? SCHEMA_REFUSAL.MALFORMED,
+        path,
+      });
+    case "MissingKey":
+    case "OneOf":
       return new SchemaRefusalError({ refusal: SCHEMA_REFUSAL.MALFORMED, path });
   }
 }
@@ -450,14 +572,20 @@ function refusalOf(issue: ParseResult.ParseIssue, path: SchemaPath): SchemaRefus
  * Reads a wire value against a schema, answering the value or the refusal.
  * The read is strict the way a builder record is: a key the declaration does
  * not name is refused, and the first refusal is the one reported, because a
- * caller can action on one word and one path.
+ * caller can action on one word and one path. A family of answers a newer
+ * service may have widened is read with `excess` set to drop instead, which is
+ * where that tolerance now stands: v4 settles parse options at the read, and a
+ * declaration carries none of its own.
  */
 export const readEither =
-  <A, I>(schema: Schema.Schema<A, I>) =>
-  (value: UnparsedWireValue): Result.Result<A, SchemaRefusalError> => {
-    const decoded = Schema.decodeUnknownEither(schema, {
+  <S extends Schema.ConstraintDecoder<unknown>>(
+    schema: S,
+    options?: { readonly excess?: ExcessKeys },
+  ) =>
+  (value: UnparsedWireValue): Result.Result<S["Type"], SchemaRefusalError> => {
+    const decoded = Schema.decodeUnknownResult(schema, {
       errors: "first",
-      onExcessProperty: "error",
+      onExcessProperty: options?.excess ?? EXCESS_KEYS.REFUSE,
     })(value);
     return Result.mapError(decoded, (error) => refusalOf(error.issue, []));
   };
@@ -472,29 +600,26 @@ export const readEither =
 export function declareReader<Value>(
   read: (value: UnparsedWireValue) => SchemaRead<Value>,
   node: JsonSchemaNode,
-): Schema.Schema<Value, UnparsedWireValue> {
-  const declaration = Schema.declare([], {
-    decode: () => (input: unknown) => {
+): Schema.Codec<Value, UnparsedWireValue> {
+  const declaration = Schema.declareConstructor<Value, UnparsedWireValue>()(
+    [],
+    () => (input: unknown) => {
       // SAFETY: a decode is handed the value `readEither` took as an `UnparsedWireValue`, erased to
       // `unknown` by Effect's own decode signature; the reader is the boundary's own defensive parser.
       const value = input as UnparsedWireValue;
       const result = read(value);
       return result.ok
-        ? ParseResult.succeed(result.value)
-        : ParseResult.fail(refusalIssue(result.refusal, result.path, value));
+        ? Effect.succeed(result.value)
+        : Effect.fail(refusalIssue(result.refusal, result.path, value));
     },
-    encode: () => (input: unknown, _options, ast) =>
-      ParseResult.fail(
-        new ParseResult.Forbidden(ast, input, "a wire reader decodes and never encodes"),
-      ),
-  });
-  return verbatimJsonSchema(Schema.make<Value, UnparsedWireValue>(declaration.ast), node);
+  );
+  return verbatimJsonSchema(declaration, node);
 }
 
 const REFUSAL_AST = {
-  [SCHEMA_REFUSAL.MALFORMED]: Schema.Unknown.annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED)).ast,
-  [SCHEMA_REFUSAL.TOO_LARGE]: Schema.Unknown.annotations(wireRefusal(SCHEMA_REFUSAL.TOO_LARGE)).ast,
-  [SCHEMA_REFUSAL.NOT_REGISTERED]: Schema.Unknown.annotations(
+  [SCHEMA_REFUSAL.MALFORMED]: Schema.Unknown.annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)).ast,
+  [SCHEMA_REFUSAL.TOO_LARGE]: Schema.Unknown.annotate(wireRefusal(SCHEMA_REFUSAL.TOO_LARGE)).ast,
+  [SCHEMA_REFUSAL.NOT_REGISTERED]: Schema.Unknown.annotate(
     wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED),
   ).ast,
 } satisfies { readonly [Refusal in SchemaRefusal]: SchemaAST.AST };
@@ -508,7 +633,7 @@ export function refusalIssue(
   refusal: SchemaRefusal,
   path: SchemaPath,
   actual: unknown,
-): ParseResult.ParseIssue {
-  const issue = new ParseResult.Type(REFUSAL_AST[refusal], actual);
-  return Arr.isNonEmptyReadonlyArray(path) ? new ParseResult.Pointer(path, actual, issue) : issue;
+): SchemaIssue.Issue {
+  const issue = new SchemaIssue.InvalidType(REFUSAL_AST[refusal], actual);
+  return Arr.isReadonlyArrayNonEmpty(path) ? new SchemaIssue.Pointer(path, issue) : issue;
 }

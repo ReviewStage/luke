@@ -74,7 +74,7 @@ export const CONVERSATION_KIND = {
 
 export type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
-export const ConversationKindSchema = Schema.Literal(...Object.values(CONVERSATION_KIND));
+export const ConversationKindSchema = Schema.Literals(Object.values(CONVERSATION_KIND));
 
 const readsConversationKind = Schema.is(ConversationKindSchema);
 
@@ -216,7 +216,7 @@ export const RUN_ORIGIN = {
 
 export type RunOrigin = (typeof RUN_ORIGIN)[keyof typeof RUN_ORIGIN];
 
-export const RunOriginSchema = Schema.Literal(...Object.values(RUN_ORIGIN));
+export const RunOriginSchema = Schema.Literals(Object.values(RUN_ORIGIN));
 
 const readsRunOrigin = Schema.is(RunOriginSchema);
 

@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 
@@ -9,26 +9,22 @@ export interface HostedWorkspaceDefaults {
 }
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type WorkspaceDefaultsFailure = SqlError | ParseResult.ParseError;
+type WorkspaceDefaultsFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
 const DefaultProviderSchema = Schema.Struct({
-  defaultWorkspaceProvider: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("default_workspace_provider"),
-  ),
-});
+  defaultWorkspaceProvider: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ defaultWorkspaceProvider: "default_workspace_provider" }));
 
 const DefaultProjectSchema = Schema.Struct({
-  providerId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("provider_id")),
-  defaultProjectId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("default_project_id"),
-  ),
-});
+  providerId: Schema.String,
+  defaultProjectId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ providerId: "provider_id", defaultProjectId: "default_project_id" }));
 
-const findDefaultProvider = SqlSchema.findOne({
+const findDefaultProvider = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: DefaultProviderSchema,
   execute: (userId) =>
@@ -71,7 +67,7 @@ export function readWorkspaceDefaults(
       if (row.defaultProjectId) defaultProjectIds[row.providerId] = row.defaultProjectId;
     }
     const defaultProviderId = preference.pipe(
-      Option.flatMapNullable((row) => row.defaultWorkspaceProvider),
+      Option.flatMapNullishOr((row) => row.defaultWorkspaceProvider),
       Option.getOrUndefined,
     );
     return {

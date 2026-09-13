@@ -54,16 +54,16 @@ function isWireRecordValue(value: unknown): value is WireRecord {
  * values, or an array of them. `Schema.suspend` is what lets the record and
  * array arms refer to the whole union before it finishes being declared.
  */
-export const WireValueSchema: Schema.Schema<WireValue> = Schema.suspend(
-  (): Schema.Schema<WireValue> =>
-    Schema.Union(
+export const WireValueSchema: Schema.Codec<WireValue> = Schema.suspend(
+  (): Schema.Codec<WireValue> =>
+    Schema.Union([
       Schema.String,
       Schema.Number,
       Schema.Boolean,
       Schema.Null,
       Schema.declare(isWireRecordValue),
       Schema.Array(WireValueSchema),
-    ),
+    ]),
 );
 
 const readsWireValue = Schema.is(WireValueSchema);
@@ -81,7 +81,7 @@ export function isWireString(value: UnparsedWireValue): value is string {
   return readsWireString(value);
 }
 
-const readsOptionalWireString = Schema.is(Schema.Union(Schema.String, Schema.Undefined));
+const readsOptionalWireString = Schema.is(Schema.Union([Schema.String, Schema.Undefined]));
 
 /** An optional wire string: present as a string, or absent. */
 export function isOptionalWireString(value: UnparsedWireValue): value is string | undefined {
@@ -95,7 +95,7 @@ export function isWireNumber(value: UnparsedWireValue): value is number {
   return readsWireNumber(value);
 }
 
-const readsUnitLevel = Schema.is(Schema.Number.pipe(Schema.finite(), Schema.between(0, 1)));
+const readsUnitLevel = Schema.is(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 })));
 
 /**
  * A level a fraction of full, as every volume and pace on the wire is said:
@@ -159,7 +159,7 @@ export function text(value: UnparsedWireValue): string | undefined {
   return normalized || undefined;
 }
 
-const readsInstant = Schema.is(Schema.Number.pipe(Schema.finite(), Schema.nonNegative()));
+const readsInstant = Schema.is(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)));
 
 /**
  * An instant on the wire: epoch milliseconds, finite and never before the
@@ -298,7 +298,7 @@ export const HTTP_METHOD = {
 
 export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
-export const HttpMethodSchema = Schema.Literal(...Object.values(HTTP_METHOD));
+export const HttpMethodSchema = Schema.Literals(Object.values(HTTP_METHOD));
 
 /** The statuses this build branches on at the HTTP boundary. */
 export const HTTP_STATUS = {
@@ -312,7 +312,7 @@ export const HTTP_STATUS = {
 
 export type HttpStatus = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
 
-export const HttpStatusSchema = Schema.Literal(...Object.values(HTTP_STATUS));
+export const HttpStatusSchema = Schema.Literals(Object.values(HTTP_STATUS));
 
 /**
  * A base address with no trailing separator, so a path joined to it cannot

@@ -29,7 +29,7 @@ const FlushRow = Schema.Struct({
   flushed_at: Schema.Number,
 });
 
-const flushRowAt = SqlSchema.findOne({
+const flushRowAt = SqlSchema.findOneOption({
   Request: Schema.Struct({ sessionKey: Schema.String, generationId: Schema.String }),
   Result: FlushRow,
   execute: ({ sessionKey, generationId }) =>

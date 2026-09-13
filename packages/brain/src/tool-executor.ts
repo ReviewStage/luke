@@ -22,7 +22,12 @@ import {
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import { estimateTokens } from "./compaction.js";
@@ -302,8 +307,9 @@ export function createTurnToolExecutor(
                 Effect.map(
                   dependencies.actions.carry(action, execution),
                   (answer) =>
-                    Result.getOrUndefined(readEither(ACTION_OUTPUT)(answer)) ??
-                    unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
+                    Result.getOrUndefined(
+                      readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(answer),
+                    ) ?? unknownActionOutput(REFUSAL_REASON.UNREADABLE_ANSWER),
                 ),
             });
           }),

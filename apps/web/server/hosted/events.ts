@@ -1,4 +1,4 @@
-import { Effect, type Layer, type ParseResult } from "effect";
+import { Effect, type Layer, type Schema } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -67,11 +67,7 @@ export interface EventsOptions {
    */
   readPerson?: (
     userId: string,
-  ) => Effect.Effect<
-    PosthogPerson | undefined,
-    SqlError | ParseResult.ParseError,
-    SqlClient.SqlClient
-  >;
+  ) => Effect.Effect<PosthogPerson | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   timeoutMs?: number;

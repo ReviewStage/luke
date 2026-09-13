@@ -1,4 +1,4 @@
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
@@ -38,7 +38,7 @@ export type StandingConversation =
       readonly journalRevision: number;
     };
 
-type StandingConversationFailure = SqlError | ParseResult.ParseError;
+type StandingConversationFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -47,24 +47,23 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 /** The row as `conversations` holds it for the view: only a main or an observed row ever reaches this select. */
 const StandingConversationRowSchema = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literal(CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED),
-  providerId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("provider_id"),
-  ),
-  providerSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("provider_session_id"),
-  ),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  nextMessageSeq: Schema.propertySignature(EpochMillisColumnSchema).pipe(
-    Schema.fromKey("next_message_seq"),
-  ),
-  nextEventSeq: Schema.propertySignature(EpochMillisColumnSchema).pipe(
-    Schema.fromKey("next_event_seq"),
-  ),
-  journalRevision: Schema.propertySignature(EpochMillisColumnSchema).pipe(
-    Schema.fromKey("journal_revision"),
-  ),
-});
+  kind: Schema.Literals([CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED]),
+  providerId: Schema.NullOr(Schema.String),
+  providerSessionId: Schema.NullOr(Schema.String),
+  createdAt: Schema.Date,
+  nextMessageSeq: EpochMillisColumnSchema,
+  nextEventSeq: EpochMillisColumnSchema,
+  journalRevision: EpochMillisColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    providerId: "provider_id",
+    providerSessionId: "provider_session_id",
+    createdAt: "created_at",
+    nextMessageSeq: "next_message_seq",
+    nextEventSeq: "next_event_seq",
+    journalRevision: "journal_revision",
+  }),
+);
 
 const findStandingConversations = SqlSchema.findAll({
   Request: Schema.String,

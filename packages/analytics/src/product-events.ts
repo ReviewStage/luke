@@ -60,7 +60,7 @@ export const PRODUCT_EVENT = {
 
 export type ProductEventName = (typeof PRODUCT_EVENT)[keyof typeof PRODUCT_EVENT];
 
-export const ProductEventNameSchema = Schema.Literal(...Object.values(PRODUCT_EVENT));
+export const ProductEventNameSchema = Schema.Literals(Object.values(PRODUCT_EVENT));
 
 /**
  * The events the renderer may ask the main process to count, and the whole of
@@ -148,7 +148,7 @@ export const PRODUCT_SESSION_ACTION = {
 export type ProductSessionAction =
   (typeof PRODUCT_SESSION_ACTION)[keyof typeof PRODUCT_SESSION_ACTION];
 
-export const ProductSessionActionSchema = Schema.Literal(...Object.values(PRODUCT_SESSION_ACTION));
+export const ProductSessionActionSchema = Schema.Literals(Object.values(PRODUCT_SESSION_ACTION));
 
 /**
  * Which kind of fault an observation pass reported, never the fault itself:
@@ -186,7 +186,7 @@ export const PRODUCT_ACCOUNT_ACTION = {
 export type ProductAccountAction =
   (typeof PRODUCT_ACCOUNT_ACTION)[keyof typeof PRODUCT_ACCOUNT_ACTION];
 
-export const ProductAccountActionSchema = Schema.Literal(...Object.values(PRODUCT_ACCOUNT_ACTION));
+export const ProductAccountActionSchema = Schema.Literals(Object.values(PRODUCT_ACCOUNT_ACTION));
 
 /**
  * The things the Updates section's buttons ever do. It repeats the guide's
@@ -310,7 +310,7 @@ export const PRODUCT_SETTING_VALUE = {
 export type ProductSettingValue =
   (typeof PRODUCT_SETTING_VALUE)[keyof typeof PRODUCT_SETTING_VALUE];
 
-export const ProductSettingValueSchema = Schema.Literal(...Object.values(PRODUCT_SETTING_VALUE));
+export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_SETTING_VALUE));
 
 /**
  * Which kind of Luke's messages a rating landed on, never the message: a
@@ -327,8 +327,8 @@ export const PRODUCT_RATED_MESSAGE_KIND = {
 export type ProductRatedMessageKind =
   (typeof PRODUCT_RATED_MESSAGE_KIND)[keyof typeof PRODUCT_RATED_MESSAGE_KIND];
 
-export const ProductRatedMessageKindSchema = Schema.Literal(
-  ...Object.values(PRODUCT_RATED_MESSAGE_KIND),
+export const ProductRatedMessageKindSchema = Schema.Literals(
+  Object.values(PRODUCT_RATED_MESSAGE_KIND),
 );
 
 /**
@@ -564,7 +564,7 @@ export const PRODUCT_EVENT_CLIENT = {
 
 export type ProductEventClient = (typeof PRODUCT_EVENT_CLIENT)[keyof typeof PRODUCT_EVENT_CLIENT];
 
-export const ProductEventClientSchema = Schema.Literal(...Object.values(PRODUCT_EVENT_CLIENT));
+export const ProductEventClientSchema = Schema.Literals(Object.values(PRODUCT_EVENT_CLIENT));
 
 /** The `$lib` tag the service stamps on each client's batches. */
 export const PRODUCT_EVENT_CLIENT_LIB = {

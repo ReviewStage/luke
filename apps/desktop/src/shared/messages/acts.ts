@@ -44,6 +44,7 @@ import {
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
 import type { WindowMode } from "@sidecar/surface";
 import {
+  EXCESS_KEYS,
   isRecord,
   isWireString,
   SCHEMA_REFUSAL,
@@ -52,7 +53,7 @@ import {
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import type { MicrophoneRoute, MicrophoneStatus } from "./audio";
 import { isSessionIdentity, type SessionOpenResult } from "./session";
 import type { UpdateSnapshot } from "./update";
@@ -225,7 +226,7 @@ function fields<Value>(guards: {
 }
 
 /** An `ActSchema` read through an Effect `Schema`, so `.read()` answers the same word and path `readEither` does. */
-function actSchema<Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>): ActSchema<Value> {
+function actSchema<Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>): ActSchema<Value> {
   const read = readEither(schema);
   return {
     read: (value) =>
@@ -236,11 +237,16 @@ function actSchema<Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>):
   };
 }
 
-/** Whether a value reads under a schema at all, for a result the payload's own row only checks admits. */
+/**
+ * Whether a value reads under a schema at all, for a result the payload's own
+ * row only checks admits. Every schema read here is a Gateway answer, so a key
+ * a newer host added is dropped rather than refused: which keys a read tolerates
+ * is the read's to say now that a declaration carries no parse options of its own.
+ */
 const isReadable =
-  <Value, Encoded>(schema: EffectSchema.Schema<Value, Encoded>) =>
+  <Value, Encoded>(schema: EffectSchema.Codec<Value, Encoded>) =>
   (value: UnparsedWireValue): boolean =>
-    Result.isSuccess(readEither(schema)(value));
+    Result.isSuccess(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 
 /** A payload's field table as a struct, refusing a key it did not name. */
 function record<Fields extends EffectSchema.Struct.Fields>(
@@ -248,38 +254,34 @@ function record<Fields extends EffectSchema.Struct.Fields>(
 ): ActSchema<EffectSchema.Schema.Type<EffectSchema.Struct<Fields>>> {
   type Value = EffectSchema.Schema.Type<EffectSchema.Struct<Fields>>;
   const struct = EffectSchema.Struct(fields);
-  return actSchema(EffectSchema.make<Value, UnparsedWireValue>(struct.ast));
+  return actSchema(EffectSchema.make<EffectSchema.Codec<Value, UnparsedWireValue>>(struct.ast));
 }
 
 /** An identifier's ends, admitted as written rather than trimmed, and refused when it carries nothing. */
-function exactText(max?: number): EffectSchema.Schema<string, string> {
-  const nonBlank = EffectSchema.String.pipe(
-    EffectSchema.filter((value) => value.trim().length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
+function exactText(max?: number): EffectSchema.Codec<string, string> {
+  const nonBlank = EffectSchema.String.check(
+    EffectSchema.makeFilter((value) => value.trim().length > 0),
   );
-  return max === undefined ? nonBlank : nonBlank.pipe(EffectSchema.maxLength(max));
+  return max === undefined ? nonBlank : nonBlank.check(EffectSchema.isMaxLength(max));
 }
 
 /** An identifier's ends, admitted as written and admitting nothing at all. */
-function exactTextAllowingEmpty(max: number): EffectSchema.Schema<string, string> {
-  return EffectSchema.String.pipe(EffectSchema.maxLength(max));
+function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string> {
+  return EffectSchema.String.check(EffectSchema.isMaxLength(max));
 }
 
 /** A text collapsed to one line and trimmed, refused when nothing is left. */
-function oneLineText(max?: number): EffectSchema.Schema<string, string> {
-  const collapsed = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => value.replace(/\s+/gu, " ").trim(),
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-  );
-  return max === undefined ? collapsed : collapsed.pipe(EffectSchema.maxLength(max));
+function oneLineText(max?: number): EffectSchema.Codec<string, string> {
+  const collapsed = EffectSchema.String.pipe(
+    EffectSchema.decodeTo(
+      EffectSchema.String,
+      SchemaTransformation.transform({
+        decode: (value: string) => value.replace(/\s+/gu, " ").trim(),
+        encode: (value: string) => value,
+      }),
+    ),
+  ).check(EffectSchema.makeFilter((value) => value.length > 0));
+  return max === undefined ? collapsed : collapsed.check(EffectSchema.isMaxLength(max));
 }
 
 /**
@@ -407,7 +409,7 @@ const settingsPress = (refusal: string): ActDeclaration<undefined, SettingsUpdat
 export const ACT = {
   [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
     payload: record({
-      provider: EffectSchema.Literal(...Object.values(ACCOUNT_PROVIDER)),
+      provider: EffectSchema.Literals(Object.values(ACCOUNT_PROVIDER)),
     }),
     result: answersAccount,
     refusal: "Could not start signing in on this system.",
@@ -435,22 +437,22 @@ export const ACT = {
   },
   [ACT_KIND.SETTINGS_RESET]: {
     payload: record({
-      scope: EffectSchema.Literal(...Object.values(SETTINGS_RESET_SCOPE)),
+      scope: EffectSchema.Literals(Object.values(SETTINGS_RESET_SCOPE)),
     }),
     result: answersSettings,
     refusal: "Could not reset those settings on this system.",
   },
   [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
     payload: record({
-      providerId: EffectSchema.Literal(...CREDENTIAL_PROVIDER_IDS),
-      apiKey: EffectSchema.optionalWith(exactTextAllowingEmpty(4096), { exact: true }),
+      providerId: EffectSchema.Literals(CREDENTIAL_PROVIDER_IDS),
+      apiKey: EffectSchema.optionalKey(exactTextAllowingEmpty(4096)),
     }),
     result: answersSettings,
     refusal: "Could not save that API key on this system.",
   },
   [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
     payload: record({
-      providerId: EffectSchema.Literal(...CREDENTIAL_PROVIDER_IDS),
+      providerId: EffectSchema.Literals(CREDENTIAL_PROVIDER_IDS),
     }),
     result: answersNothing,
     refusal: "Could not open that provider's keys page.",
@@ -548,7 +550,7 @@ export const ACT = {
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
-      command: EffectSchema.Literal(...Object.values(VOICE_COMMAND)),
+      command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
     }),
     result: wireResult<VoiceCommandOutcome | undefined>(
       (value) => value === undefined || isVoiceCommandOutcome(value),
@@ -599,7 +601,7 @@ export const ACT = {
   [ACT_KIND.WINDOW_SET_EXPANDED]: {
     payload: record({
       expanded: EffectSchema.Boolean,
-      focus: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+      focus: EffectSchema.optionalKey(EffectSchema.Boolean),
     }),
     result: wireResult<WindowMode>(),
     refusal: "Could not resize the panel on this system.",
@@ -612,7 +614,7 @@ export const ACT = {
   },
   [ACT_KIND.WINDOW_QUIT]: press("Could not quit on this system."),
   [ACT_KIND.FEEDBACK_SUMMON]: {
-    payload: record({ kind: EffectSchema.Literal(...Object.values(FEEDBACK_KIND)) }),
+    payload: record({ kind: EffectSchema.Literals(Object.values(FEEDBACK_KIND)) }),
     result: answersNothing,
     refusal: "Could not open the composer on this system.",
   },
@@ -629,8 +631,8 @@ export const ACT = {
   [ACT_KIND.INTRODUCTION_CREATE_SESSION]: {
     payload: record({
       sdp: exactText(LIVE_SDP_MAX_CHARACTERS),
-      titles: EffectSchema.Array(oneLineText(INTRODUCTION_SEED_BOUNDS.TITLE_CHARS)).pipe(
-        EffectSchema.maxItems(INTRODUCTION_SEED_BOUNDS.TITLES),
+      titles: EffectSchema.Array(oneLineText(INTRODUCTION_SEED_BOUNDS.TITLE_CHARS)).check(
+        EffectSchema.isMaxLength(INTRODUCTION_SEED_BOUNDS.TITLES),
       ),
     }),
     result: wireResult<VoiceCreateLiveSessionResult | undefined>(

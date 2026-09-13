@@ -1,4 +1,5 @@
 import {
+  EXCESS_KEYS,
   isRecord,
   isWireString,
   SCHEMA_REFUSAL,
@@ -6,7 +7,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Result, Schema } from "effect";
+import { Result, Schema, SchemaTransformation } from "effect";
 
 /**
  * The Live wire grammar: how far a session has progressed, the events both
@@ -33,7 +34,7 @@ export const LIVE_STATUS = {
 
 export type LiveStatus = (typeof LIVE_STATUS)[keyof typeof LIVE_STATUS];
 
-export const LiveStatusSchema = Schema.Literal(...Object.values(LIVE_STATUS));
+export const LiveStatusSchema = Schema.Literals(Object.values(LIVE_STATUS));
 
 /**
  * Whether a spoken exchange is live: the session coming up for a press, the
@@ -75,7 +76,7 @@ export const LIVE_CLIENT_EVENT = {
 
 export type LiveClientEventType = (typeof LIVE_CLIENT_EVENT)[keyof typeof LIVE_CLIENT_EVENT];
 
-export const LiveClientEventTypeSchema = Schema.Literal(...Object.values(LIVE_CLIENT_EVENT));
+export const LiveClientEventTypeSchema = Schema.Literals(Object.values(LIVE_CLIENT_EVENT));
 
 export const LIVE_SERVER_EVENT = {
   SESSION_STARTED: "session.started",
@@ -99,7 +100,7 @@ export const LIVE_SERVER_EVENT = {
 
 export type LiveServerEventType = (typeof LIVE_SERVER_EVENT)[keyof typeof LIVE_SERVER_EVENT];
 
-export const LiveServerEventTypeSchema = Schema.Literal(...Object.values(LIVE_SERVER_EVENT));
+export const LiveServerEventTypeSchema = Schema.Literals(Object.values(LIVE_SERVER_EVENT));
 
 /** Why a session ended, as `session.closed` names it. */
 export const LIVE_CLOSE_REASON = {
@@ -112,7 +113,7 @@ export const LIVE_CLOSE_REASON = {
 
 export type LiveCloseReason = (typeof LIVE_CLOSE_REASON)[keyof typeof LIVE_CLOSE_REASON];
 
-export const LiveCloseReasonSchema = Schema.Literal(...Object.values(LIVE_CLOSE_REASON));
+export const LiveCloseReasonSchema = Schema.Literals(Object.values(LIVE_CLOSE_REASON));
 
 export const LIVE_DELEGATION_TARGET = {
   CLIENT: "client",
@@ -122,34 +123,26 @@ export const LIVE_DELEGATION_TARGET = {
 export type LiveDelegationTarget =
   (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
 
-export const LiveDelegationTargetSchema = Schema.Literal(...Object.values(LIVE_DELEGATION_TARGET));
+export const LiveDelegationTargetSchema = Schema.Literals(Object.values(LIVE_DELEGATION_TARGET));
 
 /** A schema handed the interface it decodes into, since a struct assembled field by field only agrees with that interface rather than restating it. */
-function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
-  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: Schema.Top): Schema.Codec<Value, UnparsedWireValue> {
+  return Schema.make<Schema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
 
-/** A record that ignores a key a newer service added, which is what every answer here does. */
-const tolerant = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
 /** A trimmed text, refused when only whitespace remains. */
-const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(Schema.minLength(1));
+const text: Schema.Codec<string, string> = Schema.Trim.check(Schema.isNonEmpty());
 
 /**
  * An identifier as the service wrote it. Session and delegation ids are
  * opaque and are returned unchanged, prefix included, so nothing here trims
- * or reshapes one; only a blank one is refused.
+ * or reshapes one; only a blank one is refused, by a check of its own beside
+ * the length bound, since the bound is what a model is shown and the blank is
+ * the rule no node can say.
  */
-const opaqueId: Schema.Schema<string, string> = Schema.String.pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    schemaId: Schema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
+const opaqueId: Schema.Codec<string, string> = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.makeFilter<string>((value) => value.trim().length > 0),
 );
 
 /**
@@ -157,33 +150,33 @@ const opaqueId: Schema.Schema<string, string> = Schema.String.pipe(
  * trimming a fragment or inserting a space between two, so a delta of one
  * space is a delta and not a blank.
  */
-const transcriptDelta: Schema.Schema<string, string> = Schema.String;
+const transcriptDelta: Schema.Codec<string, string> = Schema.String;
 
-const sessionTimeMs = Schema.Number.pipe(
-  Schema.finite(),
-  Schema.int(),
-  Schema.greaterThanOrEqualTo(0),
-);
+const sessionTimeMs = Schema.Finite.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 
-const nonNegativeNumber = Schema.Number.pipe(Schema.finite(), Schema.greaterThanOrEqualTo(0));
+const nonNegativeNumber = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0));
 
 /**
  * The value a dropped field admits: whatever the inner schema read, or
- * nothing. Wrapped with `Schema.optionalWith(_, { exact: true })` at the
- * field, this is the per-field counterpart of an array that skips a refused
- * entry: a value worth having when well formed and worth nothing when it is
- * not, where refusing the whole event over one of them would cost the reader
- * everything else it carried.
+ * nothing. Wrapped with `Schema.optionalKey` at the field, this is the
+ * per-field counterpart of an array that skips a refused entry: a value worth
+ * having when well formed and worth nothing when it is not, where refusing
+ * the whole event over one of them would cost the reader everything else it
+ * carried. The inner read drops a key the declaration does not name, on the
+ * same terms as the read of the event around it.
  */
 function dropped<Value, Encoded>(
-  inner: Schema.Schema<Value, Encoded>,
-): Schema.Schema<Value | undefined, UnparsedWireValue> {
-  const read = readEither(inner);
+  inner: Schema.Codec<Value, Encoded>,
+): Schema.Codec<Value | undefined, UnparsedWireValue> {
+  const read = readEither(inner, { excess: EXCESS_KEYS.DROP });
   return declareReader<Value | undefined>(
     (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }
+
+/** The open record a cleanup's two ends are stated in, since it keeps no key table of its own. */
+const anyRecord = Schema.Record(Schema.String, Schema.Unknown);
 
 /**
  * A struct that carries a dropped field leaves the key out entirely when
@@ -192,14 +185,18 @@ function dropped<Value, Encoded>(
  * even holding nothing, so this is the cleanup every such record needs on top
  * of it.
  */
-function cleaned<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
+function cleaned<Value>(schema: Schema.Top): Schema.Codec<Value, UnparsedWireValue> {
   return schemaAs<Value>(
-    Schema.transform(schema, Schema.Unknown, {
-      strict: false,
-      decode: (value) =>
-        Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
-      encode: (value) => value,
-    }),
+    schemaAs<typeof anyRecord.Type>(schema).pipe(
+      Schema.decodeTo(
+        anyRecord,
+        SchemaTransformation.transform({
+          decode: (value) =>
+            Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+          encode: (value) => value,
+        }),
+      ),
+    ),
   );
 }
 
@@ -210,7 +207,7 @@ function cleaned<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, Unparse
  */
 const acknowledgment = {
   event_id: opaqueId,
-  client_event_id: Schema.optionalWith(opaqueId, { exact: true }),
+  client_event_id: Schema.optionalKey(opaqueId),
 };
 
 export type LiveSessionSnapshot = {
@@ -220,10 +217,10 @@ export type LiveSessionSnapshot = {
 };
 
 const sessionSnapshotSchema = cleaned<LiveSessionSnapshot>(
-  tolerant({
+  Schema.Struct({
     id: opaqueId,
-    model: Schema.optionalWith(dropped(text), { exact: true }),
-    expires_at: Schema.optionalWith(dropped(sessionTimeMs), { exact: true }),
+    model: Schema.optionalKey(dropped(text)),
+    expires_at: Schema.optionalKey(dropped(sessionTimeMs)),
   }),
 );
 
@@ -231,8 +228,8 @@ export type LiveUsageSnapshot = {
   seconds: number;
 };
 
-const usageSchema: Schema.Schema<LiveUsageSnapshot, UnparsedWireValue> = schemaAs(
-  tolerant({ seconds: nonNegativeNumber }),
+const usageSchema: Schema.Codec<LiveUsageSnapshot, UnparsedWireValue> = schemaAs(
+  Schema.Struct({ seconds: nonNegativeNumber }),
 );
 
 type Acknowledged = {
@@ -241,7 +238,7 @@ type Acknowledged = {
 };
 
 function appended<const Type extends string>(type: Type) {
-  return tolerant({
+  return Schema.Struct({
     type: Schema.Literal(type),
     ...acknowledgment,
     start_ms: sessionTimeMs,
@@ -256,7 +253,7 @@ export type LiveAppendedEvent<Type extends string> = Acknowledged & {
 };
 
 function transcriptDeltaEvent<const Type extends string>(type: Type) {
-  return tolerant({
+  return Schema.Struct({
     type: Schema.Literal(type),
     ...acknowledgment,
     delta: transcriptDelta,
@@ -273,7 +270,7 @@ export type LiveTranscriptDeltaEvent<Type extends string> = Acknowledged & {
 };
 
 function microphoneAcknowledgment<const Type extends string>(type: Type) {
-  return tolerant({ type: Schema.Literal(type), ...acknowledgment });
+  return Schema.Struct({ type: Schema.Literal(type), ...acknowledgment });
 }
 
 export type LiveMicrophoneAckEvent<Type extends string> = Acknowledged & {
@@ -285,8 +282,8 @@ export type LiveSessionStartedEvent = Acknowledged & {
   session: LiveSessionSnapshot;
 };
 
-const sessionStartedSchema: Schema.Schema<LiveSessionStartedEvent, UnparsedWireValue> = schemaAs(
-  tolerant({
+const sessionStartedSchema: Schema.Codec<LiveSessionStartedEvent, UnparsedWireValue> = schemaAs(
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.SESSION_STARTED),
     ...acknowledgment,
     session: sessionSnapshotSchema,
@@ -301,12 +298,12 @@ export type LiveSessionClosed = Acknowledged & {
 };
 
 const sessionClosedSchema = cleaned<LiveSessionClosed>(
-  tolerant({
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.SESSION_CLOSED),
     ...acknowledgment,
     reason: LiveCloseReasonSchema,
     usage: usageSchema,
-    session: Schema.optionalWith(dropped(sessionSnapshotSchema), { exact: true }),
+    session: Schema.optionalKey(dropped(sessionSnapshotSchema)),
   }),
 );
 
@@ -325,10 +322,10 @@ export type LiveDelegation = {
 };
 
 const delegationSchema = cleaned<LiveDelegation>(
-  tolerant({
+  Schema.Struct({
     id: opaqueId,
     target: LiveDelegationTargetSchema,
-    response_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
+    response_id: Schema.optionalKey(dropped(opaqueId)),
   }),
 );
 
@@ -343,8 +340,8 @@ export type LiveDelegationCreated = Acknowledged & {
  * the developer's words: what was asked is read from the transcript the
  * application kept, from the previous delegation's offset on.
  */
-const delegationCreatedSchema: Schema.Schema<LiveDelegationCreated, UnparsedWireValue> = schemaAs(
-  tolerant({
+const delegationCreatedSchema: Schema.Codec<LiveDelegationCreated, UnparsedWireValue> = schemaAs(
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.DELEGATION_CREATED),
     ...acknowledgment,
     offset_ms: sessionTimeMs,
@@ -364,13 +361,11 @@ export type LiveUsageUpdatedEvent = Acknowledged & {
 
 /** Cumulative seconds as a snapshot, never an increment to sum. */
 const usageUpdatedSchema = cleaned<LiveUsageUpdatedEvent>(
-  tolerant({
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.USAGE_UPDATED),
     ...acknowledgment,
     usage: usageSchema,
-    context_window: Schema.optionalWith(dropped(tolerant({ usage_ratio: nonNegativeNumber })), {
-      exact: true,
-    }),
+    context_window: Schema.optionalKey(dropped(Schema.Struct({ usage_ratio: nonNegativeNumber }))),
   }),
 );
 
@@ -386,10 +381,12 @@ export type LiveOutputAudioDeltaEvent = {
  * Reflected audio, read for its type alone: a sideband drops both by type
  * before anything else looks at them, and the payload is never parsed.
  */
-const inputAudioAppendSchema: Schema.Schema<LiveInputAudioAppendEvent, UnparsedWireValue> =
-  schemaAs(tolerant({ type: Schema.Literal(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND) }));
-const outputAudioDeltaSchema: Schema.Schema<LiveOutputAudioDeltaEvent, UnparsedWireValue> =
-  schemaAs(tolerant({ type: Schema.Literal(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA) }));
+const inputAudioAppendSchema: Schema.Codec<LiveInputAudioAppendEvent, UnparsedWireValue> = schemaAs(
+  Schema.Struct({ type: Schema.Literal(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND) }),
+);
+const outputAudioDeltaSchema: Schema.Codec<LiveOutputAudioDeltaEvent, UnparsedWireValue> = schemaAs(
+  Schema.Struct({ type: Schema.Literal(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA) }),
+);
 
 /**
  * Which client event an error is about may sit at the event's top level as
@@ -408,13 +405,13 @@ export type LiveErrorDetail = {
 };
 
 const errorDetailSchema = cleaned<LiveErrorDetail>(
-  tolerant({
-    type: Schema.optionalWith(dropped(text), { exact: true }),
-    code: Schema.optionalWith(dropped(text), { exact: true }),
-    message: Schema.optionalWith(dropped(text), { exact: true }),
-    param: Schema.optionalWith(dropped(text), { exact: true }),
-    event_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
-    client_event_id: Schema.optionalWith(dropped(opaqueId), { exact: true }),
+  Schema.Struct({
+    type: Schema.optionalKey(dropped(text)),
+    code: Schema.optionalKey(dropped(text)),
+    message: Schema.optionalKey(dropped(text)),
+    param: Schema.optionalKey(dropped(text)),
+    event_id: Schema.optionalKey(dropped(opaqueId)),
+    client_event_id: Schema.optionalKey(dropped(opaqueId)),
   }),
 );
 
@@ -427,8 +424,8 @@ export type LiveErrorEvent = Acknowledged & {
  * An error may or may not name the client event it is about, and its code
  * may be null; one that names none is never read as any command's success.
  */
-const errorEventSchema: Schema.Schema<LiveErrorEvent, UnparsedWireValue> = schemaAs(
-  tolerant({
+const errorEventSchema: Schema.Codec<LiveErrorEvent, UnparsedWireValue> = schemaAs(
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.ERROR),
     ...acknowledgment,
     error: errorDetailSchema,
@@ -442,11 +439,11 @@ export type LiveInfoEvent = Acknowledged & {
 };
 
 const infoEventSchema = cleaned<LiveInfoEvent>(
-  tolerant({
+  Schema.Struct({
     type: Schema.Literal(LIVE_SERVER_EVENT.INFO),
     ...acknowledgment,
-    code: Schema.optionalWith(dropped(text), { exact: true }),
-    message: Schema.optionalWith(dropped(text), { exact: true }),
+    code: Schema.optionalKey(dropped(text)),
+    message: Schema.optionalKey(dropped(text)),
   }),
 );
 
@@ -467,8 +464,8 @@ export type LiveServerEvent =
   | LiveErrorEvent
   | LiveInfoEvent;
 
-export const liveServerEventSchema: Schema.Schema<LiveServerEvent, UnparsedWireValue> = schemaAs(
-  Schema.Union(
+export const liveServerEventSchema: Schema.Codec<LiveServerEvent, UnparsedWireValue> = schemaAs(
+  Schema.Union([
     sessionStartedSchema,
     sessionClosedSchema,
     inputAudioMutedSchema,
@@ -484,7 +481,7 @@ export const liveServerEventSchema: Schema.Schema<LiveServerEvent, UnparsedWireV
     outputAudioDeltaSchema,
     errorEventSchema,
     infoEventSchema,
-  ).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
+  ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
 );
 
 /**
@@ -510,13 +507,17 @@ export function decodeLivePayload(data: UnparsedWireValue): WireRecord | undefin
  * Reads one inbound Live event: a JSON string from the data channel or the
  * sideband, or an already-decoded payload. An event this build does not
  * act on, or one missing a field its schema requires, is discarded rather
- * than repaired.
+ * than repaired. The read drops a key a newer service added rather than
+ * refusing the event over it, which is the grain every answer here is read
+ * with and is the read's to decide, not the declaration's.
  */
 export function parseLiveServerEvent(data: UnparsedWireValue): LiveServerEvent | undefined {
   const payload = decodeLivePayload(data);
   return payload === undefined
     ? undefined
-    : Result.getOrUndefined(readEither(liveServerEventSchema)(payload));
+    : Result.getOrUndefined(
+        readEither(liveServerEventSchema, { excess: EXCESS_KEYS.DROP })(payload),
+      );
 }
 
 /**

@@ -370,9 +370,9 @@ test("an utterance that settled before its delegation arrived is still the deleg
       ],
     ],
   );
-  const settledMetadata = Schema.decodeUnknownSync(
-    Schema.Record({ key: Schema.String, value: Schema.Unknown }),
-  )(undelegated.metadata);
+  const settledMetadata = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(
+    undelegated.metadata,
+  );
   assert.deepEqual(rows[0]?.metadata, {
     ...settledMetadata,
     delegation_id: "dl_late",

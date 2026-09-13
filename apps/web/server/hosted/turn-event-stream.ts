@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Chunk, Effect, Option, type ParseResult, Result, Stream } from "effect";
+import { Chunk, Effect, Option, Result, type Schema, Stream } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -195,7 +195,7 @@ function lookAtTurn(
   turnId: string,
 ): Effect.Effect<
   readonly TurnEvent[] | undefined,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
@@ -234,7 +234,7 @@ function cursorOf(query: URLSearchParams): number | undefined {
 
 export function handleTurnEventStream(
   options: TurnEventStreamOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const { request, resolveUserId, store } = options;
     if (request.method !== "GET") {

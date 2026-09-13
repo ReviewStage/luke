@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result, type Schema } from "effect";
 import { test } from "vitest";
@@ -21,10 +21,23 @@ import {
 } from "./protocol.js";
 
 function parse<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
+}
+
+/**
+ * The same read for an answer, which drops a key a newer host added rather
+ * than refusing the whole shape. The grain lives at the read now that a schema
+ * cannot carry a parse option of its own, so an answer's tolerance is asserted
+ * here exactly where the readers in the desktop ask for it.
+ */
+function parseAnswer<Value, Encoded>(
+  schema: Schema.Codec<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 const LIVE_METHODS = [
@@ -44,12 +57,14 @@ test("the five live session methods are in the vocabulary, and every one of them
 });
 
 test("a stop answer carries one boolean and nothing else is read from it", () => {
-  assert.deepEqual(parse(voiceStopSpeakingResultSchema, { stopped: true }), { stopped: true });
-  assert.deepEqual(parse(voiceStopSpeakingResultSchema, { stopped: false, extra: 1 }), {
+  assert.deepEqual(parseAnswer(voiceStopSpeakingResultSchema, { stopped: true }), {
+    stopped: true,
+  });
+  assert.deepEqual(parseAnswer(voiceStopSpeakingResultSchema, { stopped: false, extra: 1 }), {
     stopped: false,
   });
-  assert.equal(parse(voiceStopSpeakingResultSchema, {}), undefined);
-  assert.equal(parse(voiceStopSpeakingResultSchema, { stopped: "yes" }), undefined);
+  assert.equal(parseAnswer(voiceStopSpeakingResultSchema, {}), undefined);
+  assert.equal(parseAnswer(voiceStopSpeakingResultSchema, { stopped: "yes" }), undefined);
 });
 
 test("the retired Realtime vocabulary is no longer in the contract", () => {
@@ -89,12 +104,15 @@ test("a create request carries the offer and nothing else", () => {
 
 test("a create answer names the session and the SDP answer, tolerating what a newer host adds", () => {
   const answer = { sessionId: "sess_1", sdpAnswer: "v=0\r\n", quota: { remaining: 1 } };
-  assert.deepEqual(parse(voiceCreateLiveSessionResultSchema, answer), {
+  assert.deepEqual(parseAnswer(voiceCreateLiveSessionResultSchema, answer), {
     sessionId: "sess_1",
     sdpAnswer: "v=0\r\n",
   });
-  assert.equal(parse(voiceCreateLiveSessionResultSchema, { sessionId: "sess_1" }), undefined);
-  assert.equal(parse(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }), undefined);
+  assert.equal(parseAnswer(voiceCreateLiveSessionResultSchema, { sessionId: "sess_1" }), undefined);
+  assert.equal(
+    parseAnswer(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }),
+    undefined,
+  );
 });
 
 test("a transport report names one of the declared states", () => {
@@ -114,20 +132,20 @@ test("an activity report is one boolean", () => {
 
 test("a session change carries a phase, and a session id and reason only when the host has one", () => {
   for (const phase of Object.values(LIVE_SESSION_PHASE)) {
-    assert.deepEqual(parse(voiceLiveSessionChangedSchema, { phase }), { phase });
+    assert.deepEqual(parseAnswer(voiceLiveSessionChangedSchema, { phase }), { phase });
   }
   assert.deepEqual(
-    parse(voiceLiveSessionChangedSchema, {
+    parseAnswer(voiceLiveSessionChangedSchema, {
       sessionId: "sess_1",
       phase: LIVE_SESSION_PHASE.CLOSED,
       reason: "expired",
     }),
     { sessionId: "sess_1", phase: LIVE_SESSION_PHASE.CLOSED, reason: "expired" },
   );
-  assert.equal(parse(voiceLiveSessionChangedSchema, { phase: "speaking" }), undefined);
-  assert.equal(parse(voiceLiveSessionChangedSchema, { sessionId: "sess_1" }), undefined);
+  assert.equal(parseAnswer(voiceLiveSessionChangedSchema, { phase: "speaking" }), undefined);
+  assert.equal(parseAnswer(voiceLiveSessionChangedSchema, { sessionId: "sess_1" }), undefined);
   assert.equal(
-    parse(voiceLiveSessionChangedSchema, { phase: LIVE_SESSION_PHASE.STARTED, sessionId: 7 }),
+    parseAnswer(voiceLiveSessionChangedSchema, { phase: LIVE_SESSION_PHASE.STARTED, sessionId: 7 }),
     undefined,
   );
 });

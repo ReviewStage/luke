@@ -13,7 +13,13 @@ import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@si
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
 import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
-import { isRecord, isWireBoolean, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import {
+  EXCESS_KEYS,
+  isRecord,
+  isWireBoolean,
+  isWireString,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
@@ -271,7 +277,9 @@ export const BRIDGE = {
     channel: "app:voice-live-session-changed",
     args: noArgs,
     result: result<VoiceLiveSessionChanged>((value) =>
-      Result.isSuccess(readEither(voiceLiveSessionChangedSchema)(value)),
+      Result.isSuccess(
+        readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(value),
+      ),
     ),
   }),
   /**

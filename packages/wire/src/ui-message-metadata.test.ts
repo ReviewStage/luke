@@ -14,14 +14,14 @@ import {
 } from "./ui-message-metadata.js";
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
   return Result.getOrUndefined(readEither(schema)(value));
 }
 
 function refusalOf<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): string {
   return Result.match(readEither(schema)(value), {
@@ -31,7 +31,7 @@ function refusalOf<Value, Encoded>(
 }
 
 function pathOf<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): SchemaPath {
   return Result.match(readEither(schema)(value), {

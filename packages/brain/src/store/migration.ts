@@ -46,7 +46,7 @@ export class StoreSchemaRefused extends Schema.TaggedError<StoreSchemaRefused>()
  * a row of any other shape is a violation of the schema this file owns rather
  * than a version to reason about.
  */
-const decodeVersions = Schema.decodeUnknown(
+const decodeVersions = Schema.decodeUnknownEffect(
   Schema.Array(Schema.Struct({ version: Schema.Number })),
 );
 

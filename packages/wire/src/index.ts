@@ -69,6 +69,8 @@ export {
   withoutTrailingSlash,
 } from "./json.js";
 export {
+  EXCESS_KEYS,
+  type ExcessKeys,
   type JsonSchemaNode,
   SCHEMA_REFUSAL,
   type SchemaPath,

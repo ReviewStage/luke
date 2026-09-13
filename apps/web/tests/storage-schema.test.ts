@@ -290,13 +290,13 @@ test("a new conversation numbers its messages and events from one and stands und
   assert.ok(row);
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({
-      next_message_seq: Schema.Union(Schema.Number, Schema.NumberFromString),
-      next_event_seq: Schema.Union(Schema.Number, Schema.NumberFromString),
+      next_message_seq: Schema.Union([Schema.Number, Schema.NumberFromString]),
+      next_event_seq: Schema.Union([Schema.Number, Schema.NumberFromString]),
       deleted_at: Schema.Null,
       parent_conversation_id: Schema.Null,
       spawned_by_message_id: Schema.Null,
-      created_at: Schema.DateFromSelf,
-      last_activity_at: Schema.DateFromSelf,
+      created_at: Schema.Date,
+      last_activity_at: Schema.Date,
     }),
   )(row);
   assert.equal(decoded.next_message_seq, 1);

@@ -9,7 +9,7 @@ export const LIVE_SCENE = {
 
 export type LiveScene = (typeof LIVE_SCENE)[keyof typeof LIVE_SCENE];
 
-export const LiveSceneSchema = Schema.Literal(...Object.values(LIVE_SCENE));
+export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
 
 /**
  * The Live prompting guide's starter template with its brackets filled in and

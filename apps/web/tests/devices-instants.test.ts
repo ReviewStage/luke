@@ -140,9 +140,9 @@ test("the migration keeps every recorded instant, whatever zone the migrating se
 
 const DeviceInstantsRowSchema = Schema.Struct({
   id: Schema.String,
-  last_seen_at: Schema.DateFromSelf,
-  active_until: Schema.NullOr(Schema.DateFromSelf),
-  quiet_until: Schema.NullOr(Schema.DateFromSelf),
+  last_seen_at: Schema.Date,
+  active_until: Schema.NullOr(Schema.Date),
+  quiet_until: Schema.NullOr(Schema.Date),
 });
 
 test("a device's instants round-trip through the schema as points on the timeline, and a hold or an eligibility is compared against now by the instant under any session zone", async () => {

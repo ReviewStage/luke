@@ -26,10 +26,7 @@ export const HeldProductEventsRecordSchema = Schema.Struct({
     Schema.Struct({
       name: Schema.String,
       at: Schema.Number,
-      properties: Schema.Record({
-        key: Schema.String,
-        value: Schema.Union(Schema.String, Schema.Number),
-      }),
+      properties: Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Number])),
     }),
   ),
 });

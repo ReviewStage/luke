@@ -1,5 +1,5 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type ParseResult, Result } from "effect";
+import { Effect, Result, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -72,7 +72,7 @@ function reportedInstant(value: number | null | undefined): Date | null | undefi
 
 export function handleChanges(
   options: ChangeSignalOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const { request, resolveUserId, store } = options;
     const now = options.now ?? Date.now;

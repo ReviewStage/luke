@@ -150,8 +150,8 @@ const ISSUED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 /** What the adapter answers for the row: its scopes as an array and its instants as `Date`s. */
 const StoredAccessTokenSchema = Schema.Struct({
   scopes: Schema.Array(Schema.String),
-  createdAt: Schema.DateFromSelf,
-  expiresAt: Schema.DateFromSelf,
+  createdAt: Schema.Date,
+  expiresAt: Schema.Date,
 });
 
 /**

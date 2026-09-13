@@ -1,5 +1,5 @@
 import type { CloudAgentProviderId } from "@sidecar/session";
-import { HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { EXCESS_KEYS, HTTP_METHOD, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, type Schema as EffectSchema, type Layer, Result } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -182,7 +182,7 @@ export class HostedActionClient {
   #post<Answer extends HostedActionAnswer, Encoded>(
     path: string,
     body: WireRecord,
-    answerSchema: EffectSchema.Schema<Answer, Encoded>,
+    answerSchema: EffectSchema.Codec<Answer, Encoded>,
   ): Effect.Effect<{ answer: Answer } | { failure: HostedActionFailure }> {
     return Effect.provide(
       Effect.gen({ self: this }, function* () {
@@ -206,7 +206,9 @@ export class HostedActionClient {
         const answer =
           payload === undefined
             ? undefined
-            : Result.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
+            : Result.getOrUndefined(
+                readEither(answerSchema, { excess: EXCESS_KEYS.DROP })(unparsedWire(payload)),
+              );
         return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
       }),
       this.#client,

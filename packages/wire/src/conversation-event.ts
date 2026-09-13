@@ -29,23 +29,13 @@ export function isSpeechEventKind(kind: ConversationEventKind): kind is SpeechEv
 }
 
 /** An integer at or above zero, the way `s.wholeNumber({ minimum: 0 })` reads one. */
-const nonNegativeInteger = EffectSchema.Number.pipe(
-  EffectSchema.finite(),
-  EffectSchema.int(),
-  EffectSchema.greaterThanOrEqualTo(0),
+const nonNegativeInteger = EffectSchema.Finite.check(
+  EffectSchema.isInt(),
+  EffectSchema.isGreaterThanOrEqualTo(0),
 );
 
 /** A trimmed text, refused when nothing but whitespace remains, the way `s.text()` reads one. */
-const text = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  EffectSchema.filter((value) => value.length > 0, {
-    schemaId: EffectSchema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
+const text = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
 /**
  * What `speech.offered` carries: the instant, in epoch milliseconds, past
@@ -98,7 +88,7 @@ export const SPEECH_EXPIRY_REASON = {
 export type SpeechExpiryReason = (typeof SPEECH_EXPIRY_REASON)[keyof typeof SPEECH_EXPIRY_REASON];
 
 export const SPEECH_EXPIRED_EVENT_PAYLOAD = EffectSchema.Struct({
-  reason: EffectSchema.Literal(...Object.values(SPEECH_EXPIRY_REASON)),
+  reason: EffectSchema.Literals(Object.values(SPEECH_EXPIRY_REASON)),
 });
 
 export type SpeechExpiredEventPayload = EffectSchema.Schema.Type<
@@ -113,7 +103,7 @@ export const MESSAGE_RATING = {
 
 export type MessageRating = (typeof MESSAGE_RATING)[keyof typeof MESSAGE_RATING];
 
-export const MessageRatingSchema = EffectSchema.Literal(...Object.values(MESSAGE_RATING));
+export const MessageRatingSchema = EffectSchema.Literals(Object.values(MESSAGE_RATING));
 
 /** The most characters a rating's note may carry; it is the developer's own free text, so the bound is the whole of its shape. */
 export const maximumRatingNoteLength = 500;
@@ -128,7 +118,7 @@ export const maximumRatingNoteLength = 500;
  */
 export const RATING_EVENT_PAYLOAD = EffectSchema.Struct({
   rating: MessageRatingSchema,
-  note: EffectSchema.optional(text.pipe(EffectSchema.maxLength(maximumRatingNoteLength))),
+  note: EffectSchema.optional(text.check(EffectSchema.isMaxLength(maximumRatingNoteLength))),
 });
 
 export type RatingEventPayload = EffectSchema.Schema.Type<typeof RATING_EVENT_PAYLOAD>;

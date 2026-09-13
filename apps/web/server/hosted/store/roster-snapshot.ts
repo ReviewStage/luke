@@ -1,4 +1,4 @@
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
@@ -9,7 +9,7 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * titles, branches, error lines — and is sealed; the instant it was observed
  * stands clear, because it is what decides whether the snapshot is current.
  *
- * Every function here is an `Effect<A, SqlError | ParseResult.ParseError,
+ * Every function here is an `Effect<A, SqlError | Schema.SchemaError,
  * SqlClient.SqlClient>` over `effect/unstable/sql`.
  */
 export interface RosterSnapshotRecord {
@@ -46,18 +46,18 @@ export interface ObservationEligibility {
 }
 
 /** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
-type RosterFailure = SqlError | ParseResult.ParseError;
+type RosterFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
 const RosterSnapshotRowSchema = Schema.Struct({
-  sealedBody: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_body")),
-  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
-});
+  sealedBody: Schema.String,
+  observedAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ sealedBody: "sealed_body", observedAt: "observed_at" }));
 
-const findRosterSnapshot = SqlSchema.findOne({
+const findRosterSnapshot = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RosterSnapshotRowSchema,
   execute: (userId) =>
@@ -80,10 +80,10 @@ export function readRosterSnapshot(
 }
 
 const RosterSnapshotObservedAtRowSchema = Schema.Struct({
-  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
-});
+  observedAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ observedAt: "observed_at" }));
 
-const findObservedAt = SqlSchema.findOne({
+const findObservedAt = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RosterSnapshotObservedAtRowSchema,
   execute: (userId) =>
@@ -141,11 +141,11 @@ const lockObservationPass = (userId: string) =>
   );
 
 const ConsumedRosterRowSchema = Schema.Struct({
-  sealedBody: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_body")),
-  observedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("observed_at")),
-});
+  sealedBody: Schema.String,
+  observedAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ sealedBody: "sealed_body", observedAt: "observed_at" }));
 
-const findConsumedRoster = SqlSchema.findOne({
+const findConsumedRoster = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConsumedRosterRowSchema,
   execute: (userId) =>
@@ -199,8 +199,8 @@ const ConsumedRosterWriteSchema = Schema.Struct({
 });
 
 const KeptRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
 /** A first bookmark: lands only where none stands. */
 const insertConsumedRoster = SqlSchema.findAll({
@@ -280,16 +280,12 @@ export function advanceRosterSnapshot(
 }
 
 const ObservationPassRowSchema = Schema.Struct({
-  attemptedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(
-    Schema.fromKey("attempted_at"),
-  ),
-  observedAt: Schema.propertySignature(Schema.NullOr(EpochMillisColumnSchema)).pipe(
-    Schema.fromKey("observed_at"),
-  ),
-  failure: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("failure")),
-});
+  attemptedAt: EpochMillisColumnSchema,
+  observedAt: Schema.NullOr(EpochMillisColumnSchema),
+  failure: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ attemptedAt: "attempted_at", observedAt: "observed_at" }));
 
-const findObservationPass = SqlSchema.findOne({
+const findObservationPass = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ObservationPassRowSchema,
   execute: (userId) =>

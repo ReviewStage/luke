@@ -6,6 +6,7 @@ import {
 } from "@sidecar/hosted";
 import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
 import {
+  EXCESS_KEYS,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
@@ -55,10 +56,12 @@ async function body(response: Response): Promise<UnparsedWireValue> {
 }
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Result.getOrUndefined(readEither(schema)(value));
+  // Every answer read here belongs to a family declared tolerant, so the read
+  // drops a key a newer service may have added.
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 async function populate(userId: string): Promise<string> {

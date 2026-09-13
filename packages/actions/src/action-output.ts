@@ -28,13 +28,14 @@ import {
 import {
   ACTION_RESULT_STATUS,
   type ActionResult,
+  EXCESS_KEYS,
   SCHEMA_REFUSAL,
   UNKNOWN_ACTION_STATUS,
   type UnknownActionResult,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { ACTION_KIND, type CarriedAction, type SessionActionKind } from "./action-kinds.js";
 import { maximumIdentifierLength } from "./action-schemas.js";
 
@@ -92,114 +93,108 @@ export type ActionOutputEnvelope = AcceptedActionOutput | UnknownActionOutput | 
 export const maximumActionOutputSentenceLength = 2_000;
 
 /** A declaration handed the interface it decodes into; Effect's `Schema` is invariant in its decoded type. */
-function schemaAs<Value>(
-  schema: EffectSchema.Schema.Any,
-): EffectSchema.Schema<Value, UnparsedWireValue> {
-  return EffectSchema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: EffectSchema.Top): EffectSchema.Codec<Value, UnparsedWireValue> {
+  return EffectSchema.make<EffectSchema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
 
 /** A text trimmed and refused when left with nothing, bounded to `max` characters. */
-function boundedText(max: number): EffectSchema.Schema<string, string> {
-  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-    EffectSchema.maxLength(max),
-  );
+function boundedText(max: number): EffectSchema.Codec<string, string> {
+  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(max));
 }
 
 /** A sentence collapsed to one line and cut with an ellipsis rather than lost whole past `max`. */
-function sentenceText(max: number): EffectSchema.Schema<string, string> {
-  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => {
-      const collapsed = value.replace(/\s+/gu, " ").trim();
-      return collapsed.length > max ? `${collapsed.slice(0, max - 1).trimEnd()}…` : collapsed;
-    },
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-    EffectSchema.maxLength(max),
-  );
+function sentenceText(max: number): EffectSchema.Codec<string, string> {
+  return EffectSchema.String.pipe(
+    EffectSchema.decodeTo(
+      EffectSchema.String,
+      SchemaTransformation.transform({
+        decode: (value) => {
+          const collapsed = value.replace(/\s+/gu, " ").trim();
+          return collapsed.length > max ? `${collapsed.slice(0, max - 1).trimEnd()}…` : collapsed;
+        },
+        encode: (value) => value,
+      }),
+    ),
+  ).check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(max));
 }
 
-/** The inner schema read forgivingly: what it refuses decodes to nothing, and its node stands. */
+/**
+ * The inner schema read forgivingly: what it refuses decodes to nothing, and
+ * its node stands. The inner read drops a key the declaration does not name,
+ * on the same terms as the read of the envelope around it.
+ */
 function droppedField<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
-): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
-  const read = readEither(schema);
+  schema: EffectSchema.Codec<Value, Encoded>,
+): EffectSchema.Codec<Value | undefined, UnparsedWireValue> {
+  const read = readEither(schema, { excess: EXCESS_KEYS.DROP });
   return declareReader<Value | undefined>(
     (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(schema),
   );
 }
 
+/** The open record a cleanup's two ends are stated in, since it keeps no key table of its own. */
+const anyRecord = EffectSchema.Record(EffectSchema.String, EffectSchema.Unknown);
+
 /**
  * A key a `droppedField` left holding `undefined` is dropped entirely, exactly
  * as an absent optional key is: a struct's decode still writes the key when it
  * arrived, even holding nothing.
  */
-function omittingUndefinedKeys<Fields extends object, Encoded>(
-  schema: EffectSchema.Schema<Fields, Encoded>,
-) {
-  return EffectSchema.transform(schema, EffectSchema.Unknown, {
-    strict: false,
-    decode: (value) =>
-      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
-    encode: (value) => value,
-  });
+function omittingUndefinedKeys(schema: EffectSchema.Top) {
+  return schemaAs<typeof anyRecord.Type>(schema).pipe(
+    EffectSchema.decodeTo(
+      anyRecord,
+      SchemaTransformation.transform({
+        decode: (value) =>
+          Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+        encode: (value) => value,
+      }),
+    ),
+  );
 }
 
 const identifier = boundedText(maximumIdentifierLength);
 const sentence = sentenceText(maximumActionOutputSentenceLength);
 
 /**
- * An envelope is an answer, so a key a later build added is ignored rather
- * than refused, and the fields a row would draw are dropped when malformed
- * rather than refusing the envelope: a title the roster reported is worth
- * having when it is well formed and worth nothing when it is not, and
- * refusing the whole answer over one of them would cost the reader what
- * became of the action. The identifiers stay required and exact, because an
- * effect hangs on them.
+ * An envelope is an answer, so the fields a row would draw are dropped when
+ * malformed rather than refusing the envelope: a title the roster reported is
+ * worth having when it is well formed and worth nothing when it is not, and
+ * refusing the whole answer over one of them would cost the reader what became
+ * of the action. The identifiers stay required and exact, because an effect
+ * hangs on them.
+ *
+ * A key a later build added is ignored rather than refused too, but that is
+ * the read's grain rather than the declaration's: every reader of
+ * {@link ACTION_OUTPUT} passes `{ excess: EXCESS_KEYS.DROP }` to `readEither`.
  */
-const answer = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+const optional = <Field extends EffectSchema.Top>(field: Field) => EffectSchema.optionalKey(field);
 
-const optional = <A, I>(field: EffectSchema.Schema<A, I>) =>
-  EffectSchema.optionalWith(field, { exact: true });
-
-const TARGET_SNAPSHOT_CORE = answer({
+const TARGET_SNAPSHOT_CORE = EffectSchema.Struct({
   providerId: identifier,
   providerSessionId: optional(identifier),
   title: optional(droppedField(boundedText(maximumSessionTitleLength))),
   agentId: optional(droppedField(identifier)),
-  controlKind: optional(droppedField(EffectSchema.Literal(...Object.values(SESSION_CONTROL_KIND)))),
+  controlKind: optional(droppedField(EffectSchema.Literals(Object.values(SESSION_CONTROL_KIND)))),
   controlLabel: optional(droppedField(boundedText(maximumSessionTitleLength))),
   applicationId: optional(
-    droppedField(EffectSchema.Literal(...Object.values(SESSION_APPLICATION_ID))),
+    droppedField(EffectSchema.Literals(Object.values(SESSION_APPLICATION_ID))),
   ),
 });
 
 const TARGET_SNAPSHOT = schemaAs<ActionTargetSnapshot>(omittingUndefinedKeys(TARGET_SNAPSHOT_CORE));
 
 const CREATED_SESSION = schemaAs<SessionIdentity>(
-  answer({
+  EffectSchema.Struct({
     providerId: identifier,
     providerSessionId: identifier,
   }),
 );
 
-const ACTION_OUTPUT_CORE = EffectSchema.Union(
+const ACTION_OUTPUT_CORE = EffectSchema.Union([
   omittingUndefinedKeys(
-    answer({
+    EffectSchema.Struct({
       status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.ACCEPTED),
       target: optional(TARGET_SNAPSHOT),
       createdSession: optional(CREATED_SESSION),
@@ -208,20 +203,20 @@ const ACTION_OUTPUT_CORE = EffectSchema.Union(
     }),
   ),
   omittingUndefinedKeys(
-    answer({
+    EffectSchema.Struct({
       status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.UNKNOWN),
       reason: sentence,
       target: optional(TARGET_SNAPSHOT),
     }),
   ),
   omittingUndefinedKeys(
-    answer({
+    EffectSchema.Struct({
       status: EffectSchema.Literal(ACTION_OUTPUT_STATUS.REFUSED),
       reason: sentence,
       target: optional(TARGET_SNAPSHOT),
     }),
   ),
-).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
  * The envelope as it is validated on write and read back: every action tool's

@@ -43,6 +43,7 @@ import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import {
   ACTION_RESULT_STATUS,
   type ActionResult,
+  EXCESS_KEYS,
   isRecord,
   isWireBoolean,
   isWireString,
@@ -434,7 +435,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     createLiveSession: (sdp) =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }), (answer) =>
         answer.ok
-          ? Result.getOrUndefined(readEither(voiceCreateLiveSessionResultSchema)(answer.result))
+          ? Result.getOrUndefined(
+              readEither(voiceCreateLiveSessionResultSchema, { excess: EXCESS_KEYS.DROP })(
+                answer.result,
+              ),
+            )
           : undefined,
       ),
     endLiveSession: () => fire(client.call(GATEWAY_METHOD.VOICE_END_LIVE_SESSION)),
@@ -445,8 +450,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     stopSpeaking: () =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING), (answer) =>
         answer.ok
-          ? (Result.getOrUndefined(readEither(voiceStopSpeakingResultSchema)(answer.result))
-              ?.stopped ?? false)
+          ? (Result.getOrUndefined(
+              readEither(voiceStopSpeakingResultSchema, { excess: EXCESS_KEYS.DROP })(
+                answer.result,
+              ),
+            )?.stopped ?? false)
           : false,
       ),
     recordAgentTrace: (trace) =>
@@ -480,7 +488,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),
         (answer) =>
           (answer.ok
-            ? Result.getOrUndefined(readEither(conversationRateMessageResultSchema)(answer.result))
+            ? Result.getOrUndefined(
+                readEither(conversationRateMessageResultSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
             : undefined) ?? { status: CONVERSATION_RATE_STATUS.UNAVAILABLE },
       ),
     onboardingState: () =>
@@ -582,7 +594,10 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onVoiceLiveSessionChanged: (listener) =>
       on(
         GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED,
-        (payload) => Result.getOrUndefined(readEither(voiceLiveSessionChangedSchema)(payload)),
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(voiceLiveSessionChangedSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
         listener,
       ),
     onSessionReplayChanged: (listener) =>

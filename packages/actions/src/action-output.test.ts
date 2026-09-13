@@ -9,6 +9,7 @@ import {
 } from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type WireRecord,
@@ -28,8 +29,11 @@ import {
   unknownActionOutput,
 } from "./action-output.js";
 
+/** An envelope is an answer, so a key a later build added is dropped by the read. */
+const readAction = readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP });
+
 function parse(value: UnparsedWireValue) {
-  return Result.getOrUndefined(readEither(ACTION_OUTPUT)(value));
+  return Result.getOrUndefined(readAction(value));
 }
 
 const NOW = 1_800_000_000_000;
@@ -123,7 +127,7 @@ test("every envelope the builders make validates, and validation reads it back u
     unknownActionOutput("the node went away", target),
   ];
   for (const envelope of envelopes) {
-    assert.deepEqual(readEither(ACTION_OUTPUT)(envelope), Result.succeed(envelope));
+    assert.deepEqual(readAction(envelope), Result.succeed(envelope));
   }
 });
 
@@ -137,7 +141,7 @@ test("a refusal or an unknown without a reason, a status outside the set, and a 
     { status: ACTION_OUTPUT_STATUS.ACCEPTED, createdSession: { providerId: "conductor" } },
   ];
   for (const record of malformed) {
-    assert.equal(Result.isFailure(readEither(ACTION_OUTPUT)(record)), true);
+    assert.equal(Result.isFailure(readAction(record)), true);
   }
   assert.deepEqual(parse({ status: ACTION_OUTPUT_STATUS.ACCEPTED, later: true }), {
     status: ACTION_OUTPUT_STATUS.ACCEPTED,

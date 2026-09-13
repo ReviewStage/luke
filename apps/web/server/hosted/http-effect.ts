@@ -33,8 +33,8 @@ const HOSTED_REFUSAL_STATUS = {
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
 function refusalSchema<Slug extends HostedRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).annotations(
-    HttpApiSchema.annotations({ status: HOSTED_REFUSAL_STATUS[slug] }),
+  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
+    HttpApiSchema.status(HOSTED_REFUSAL_STATUS[slug]),
   );
 }
 

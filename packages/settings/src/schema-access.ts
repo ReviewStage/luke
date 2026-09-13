@@ -209,7 +209,7 @@ export function settingEntryGuard(
   return settingGuardFromEither(kept === undefined ? Result.fail(undefined) : Result.succeed(kept));
 }
 
-export const SettingsResetScopeSchema = Schema.Literal(...Object.values(SETTINGS_RESET_SCOPE));
+export const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);
 

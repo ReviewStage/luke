@@ -182,7 +182,7 @@ const RpcRequestMessageSchema = Schema.Struct({
   id: Schema.String,
   tag: GatewayMethodSchema,
   payload: GatewayParamsSchema,
-  headers: Schema.Array(Schema.Tuple(Schema.String, Schema.String)),
+  headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
 });
 
 export type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
@@ -190,11 +190,7 @@ export type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
 /** Reads one decoded frame as a request message of the group, or nothing for any other message the parser answered. */
 export const readRpcRequestMessage = Schema.decodeUnknownOption(RpcRequestMessageSchema);
 
-const GatewayExitSchema = Schema.Exit({
-  success: GatewayResultSchema,
-  failure: GatewayErrorSchema,
-  defect: Schema.Defect,
-});
+const GatewayExitSchema = Schema.Exit(GatewayResultSchema, GatewayErrorSchema, Schema.Defect());
 
 const RpcExitMessageSchema = Schema.Struct({
   _tag: Schema.Literal(RPC_MESSAGE_TAG.EXIT),
@@ -209,7 +205,7 @@ const RpcChunkMessageSchema = Schema.Struct({
 });
 
 const readRpcMessage = Schema.decodeUnknownOption(
-  Schema.Union(RpcRequestMessageSchema, RpcExitMessageSchema, RpcChunkMessageSchema),
+  Schema.Union([RpcRequestMessageSchema, RpcExitMessageSchema, RpcChunkMessageSchema]),
 );
 
 /** What an answer that never formed says: the first typed refusal in the cause, or an internal error naming the defect. */

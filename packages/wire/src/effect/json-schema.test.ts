@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ParseResult, Result, Schema } from "effect";
+import { Effect, Result, Schema, SchemaGetter, SchemaIssue, SchemaTransformation } from "effect";
 import { test } from "vitest";
 import type { WireRecord } from "../json.js";
 import { type JsonSchemaNode, SCHEMA_REFUSAL } from "../schema-vocabulary.js";
@@ -12,7 +12,7 @@ import {
   readEither,
   type SchemaRefusalError,
   verbatimJsonSchema,
-  WireDescriptionAnnotationId,
+  WIRE_DESCRIPTION_ANNOTATION,
   wireRefusal,
 } from "./json-schema.js";
 
@@ -44,38 +44,38 @@ const HOSTED_BRAIN_EMBED_BOUNDS = { MAXIMUM_TEXTS: 64, MAXIMUM_TEXT_CHARS: 8_000
 /** A non-empty string, bounded where a `max` is declared, as a wire declaration reads one. */
 const text = (max?: number) =>
   max === undefined
-    ? Schema.String.pipe(Schema.minLength(1))
-    : Schema.String.pipe(Schema.minLength(1), Schema.maxLength(max));
+    ? Schema.String.check(Schema.isNonEmpty())
+    : Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(max));
 
 /** An integer at or above its minimum, as a wire declaration reads one. */
-const wholeNumber = (minimum: number) => Schema.Int.pipe(Schema.greaterThanOrEqualTo(minimum));
+const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
 const contract = Schema.Literal(HOSTED_BRAIN_CONTRACT_VERSION);
 
 const hostedBrainCapabilities = Schema.Struct({
   contract,
   model: text(),
-  operations: Schema.Array(Schema.Literal(...HOSTED_BRAIN_OPERATION)).pipe(
-    Schema.maxItems(HOSTED_BRAIN_OPERATION.length),
+  operations: Schema.Array(Schema.Literals(HOSTED_BRAIN_OPERATION)).check(
+    Schema.isMaxLength(HOSTED_BRAIN_OPERATION.length),
   ),
-  tools: Schema.Array(text()).pipe(Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS)),
+  tools: Schema.Array(text()).check(Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS)),
   bounds: Schema.Struct({
     promptChars: wholeNumber(1),
     inputItems: wholeNumber(1),
     requestBytes: wholeNumber(1),
     maximumOutputTokens: wholeNumber(1),
   }),
-  reasoningEfforts: Schema.Array(Schema.Literal(...REASONING_EFFORT)).pipe(
-    Schema.maxItems(REASONING_EFFORT.length),
+  reasoningEfforts: Schema.Array(Schema.Literals(REASONING_EFFORT)).check(
+    Schema.isMaxLength(REASONING_EFFORT.length),
   ),
-  prefetch: Schema.optionalWith(Schema.Struct({ model: text() }), { exact: true }),
+  prefetch: Schema.optionalKey(Schema.Struct({ model: text() })),
 });
 
 const hostedBrainEmbedRequest = Schema.Struct({
   contract,
-  texts: Schema.Array(text(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).pipe(
-    Schema.minItems(1),
-    Schema.maxItems(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
+  texts: Schema.Array(text(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
   ),
 });
 
@@ -83,43 +83,42 @@ const hostedBrainEmbedRequest = Schema.Struct({
 const hostedBrainEmbedAnswer = Schema.Struct({
   model: text(),
   dimensions: wholeNumber(1),
-  vectors: Schema.Array(Schema.Array(Schema.Number).pipe(Schema.minItems(1))),
-}).pipe(
-  Schema.filter((answer) => answer.vectors.every((vector) => vector.length === answer.dimensions)),
+  vectors: Schema.Array(Schema.Array(Schema.Number).check(Schema.isMinLength(1))),
+}).check(
+  Schema.makeFilter((answer) =>
+    answer.vectors.every((vector) => vector.length === answer.dimensions),
+  ),
 );
 
 const hostedBrainCountTokensAnswer = Schema.Struct({ inputTokens: wholeNumber(0) });
 
 /** A text admitting an empty value and kept as written: no `minLength`. */
-const prompt = Schema.String.pipe(Schema.maxLength(HOSTED_BRAIN_PROMPT_CHARS));
+const prompt = Schema.String.check(Schema.isMaxLength(HOSTED_BRAIN_PROMPT_CHARS));
 
 const FIXTURE_TOOL_CATALOG: ReadonlySet<string> = new Set(["fixture_tool"]);
 
 /** A value admitted only by a registry, over a bounded text, and a uniqueness rule over the array. */
 const tools = Schema.Array(
-  text(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).pipe(
-    Schema.filter(
+  text(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).check(
+    Schema.makeFilter(
       (name) => FIXTURE_TOOL_CATALOG.has(name),
       wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED),
     ),
   ),
-).pipe(
-  Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
-  Schema.filter((names) => new Set(names).size === names.length),
+).check(
+  Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
+  Schema.makeFilter((names) => new Set(names).size === names.length),
 );
 
 const options = Schema.Struct({
-  maximumOutputTokens: Schema.optionalWith(
-    Schema.Int.pipe(
-      Schema.greaterThanOrEqualTo(1),
-      Schema.lessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
+  maximumOutputTokens: Schema.optionalKey(
+    Schema.Int.check(
+      Schema.isGreaterThanOrEqualTo(1),
+      Schema.isLessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
     ),
-    { exact: true },
   ),
-  reasoningEffort: Schema.optionalWith(Schema.Literal(...REASONING_EFFORT), { exact: true }),
-  promptCacheKey: Schema.optionalWith(text(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS), {
-    exact: true,
-  }),
+  reasoningEffort: Schema.optionalKey(Schema.Literals(REASONING_EFFORT)),
+  promptCacheKey: Schema.optionalKey(text(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS)),
 });
 
 /** A declared reader: the node is declared beside the reader, in the reader's own key order. */
@@ -140,12 +139,12 @@ const hostedBrainRespondRequest = Schema.Struct({ contract, prompt, tools, optio
 const hostedBrainCountTokensRequest = Schema.Struct({ contract, prompt, tools, input });
 
 /** A union of a bounded whole number and a null literal, under `optional`. */
-const presenceInstant = Schema.Union(wholeNumber(0), Schema.Null);
+const presenceInstant = Schema.Union([wholeNumber(0), Schema.Null]);
 
 const changesRequest = Schema.Struct({
   deviceId: text(36),
-  activeUntil: Schema.optionalWith(presenceInstant, { exact: true }),
-  quietUntil: Schema.optionalWith(presenceInstant, { exact: true }),
+  activeUntil: Schema.optionalKey(presenceInstant),
+  quietUntil: Schema.optionalKey(presenceInstant),
 });
 
 const HOSTED_GOLDENS = [
@@ -156,7 +155,7 @@ const HOSTED_GOLDENS = [
   ["brain-contract-hostedBrainRespondRequestSchema", hostedBrainRespondRequest],
   ["brain-contract-hostedBrainCountTokensRequestSchema", hostedBrainCountTokensRequest],
   ["reads-wire-changesRequestSchema", changesRequest],
-] as const satisfies readonly (readonly [string, Schema.Schema.All])[];
+] as const satisfies readonly (readonly [string, Schema.Top])[];
 
 test.for(HOSTED_GOLDENS)(
   "%s is emitted byte for byte from its Effect declaration",
@@ -178,7 +177,7 @@ const SESSION_IDENTITY_FIELDS = {
 } as const;
 
 const optionalText = (description: string, max?: number) =>
-  Schema.optionalWith(describeWire(text(max), description), { exact: true });
+  Schema.optionalKey(describeWire(text(max), description));
 
 const sendSessionMessage = Schema.Struct({
   ...SESSION_IDENTITY_FIELDS,
@@ -218,7 +217,7 @@ const ACTION_GOLDENS = [
     "Create a workspace for a new agent.",
     createWorkspace,
   ],
-] as const satisfies readonly (readonly [string, string, string, Schema.Schema.All])[];
+] as const satisfies readonly (readonly [string, string, string, Schema.Top])[];
 
 test.for(ACTION_GOLDENS)(
   "%s is emitted byte for byte from its Effect declaration",
@@ -234,9 +233,7 @@ test.for(ACTION_GOLDENS)(
 
 test("a description on a property signature is carried when the type has none", () => {
   const described = Schema.Struct({
-    field: Schema.propertySignature(Schema.Boolean).annotations({
-      [WireDescriptionAnnotationId]: "Whether.",
-    }),
+    field: Schema.Boolean.annotateKey({ [WIRE_DESCRIPTION_ANNOTATION]: "Whether." }),
   });
 
   assert.deepEqual(emitJsonSchema(described), {
@@ -248,8 +245,8 @@ test("a description on a property signature is carried when the type has none", 
 });
 
 test("the outermost description wins and Effect's own descriptions are never read", () => {
-  const inner = describeWire(Schema.String.pipe(Schema.minLength(1)), "Inner.");
-  const outer = describeWire(inner.pipe(Schema.maxLength(3)), "Outer.");
+  const inner = describeWire(Schema.String.check(Schema.isNonEmpty()), "Inner.");
+  const outer = describeWire(inner.check(Schema.isMaxLength(3)), "Outer.");
 
   assert.deepEqual(emitJsonSchema(outer), {
     type: "string",
@@ -261,7 +258,7 @@ test("the outermost description wins and Effect's own descriptions are never rea
 });
 
 test("bounds are emitted in a fixed key order whatever order they were piped in", () => {
-  const piped = Schema.String.pipe(Schema.maxLength(9), Schema.minLength(2));
+  const piped = Schema.String.check(Schema.isMaxLength(9), Schema.isMinLength(2));
 
   assert.deepEqual(Object.keys(emitJsonSchema(piped)), ["type", "minLength", "maxLength"]);
 });
@@ -278,33 +275,38 @@ test("an inexact optional drops the undefined its union carries", () => {
 });
 
 test("a transformation emits the wire side it decodes from", () => {
-  const length = Schema.transform(Schema.String.pipe(Schema.minLength(1)), Schema.Number, {
-    decode: (value) => value.length,
-    encode: (length) => "x".repeat(length),
-  });
+  const length = Schema.String.check(Schema.isNonEmpty()).pipe(
+    Schema.decodeTo(
+      Schema.Number,
+      SchemaTransformation.transform({
+        decode: (value) => value.length,
+        encode: (length) => "x".repeat(length),
+      }),
+    ),
+  );
 
   assert.deepEqual(emitJsonSchema(length), { type: "string", minLength: 1 });
 });
 
+/**
+ * A check's own identity is what says which bound it stands for, so the
+ * contradiction below borrows a real length check's rather than spelling one.
+ */
+const MIN_LENGTH_REPRESENTATION = Schema.isMinLength(1).annotations?.representation;
+
 const UNSHOWABLE = [
   ["a declaration with no verbatim node", Schema.instanceOf(Date)],
-  ["a tuple with positions", Schema.Tuple(Schema.String, Schema.Number)],
-  [
-    "an object with an index signature",
-    Schema.Record({ key: Schema.String, value: Schema.Number }),
-  ],
+  ["a tuple with positions", Schema.Tuple([Schema.String, Schema.Number])],
+  ["an object with an index signature", Schema.Record(Schema.String, Schema.Number)],
   [
     "a length bound on a boolean",
-    Schema.Boolean.pipe(
-      Schema.filter(() => true, {
-        schemaId: Schema.MinLengthSchemaId,
-        jsonSchema: { minLength: 1 },
-      }),
+    Schema.Boolean.check(
+      Schema.makeFilter(() => true, { representation: MIN_LENGTH_REPRESENTATION }),
     ),
   ],
-  ["a bound declared twice", Schema.String.pipe(Schema.maxLength(1), Schema.maxLength(2))],
+  ["a bound declared twice", Schema.String.check(Schema.isMaxLength(1), Schema.isMaxLength(2))],
   ["a bigint literal", Schema.Literal(1n)],
-] as const satisfies readonly (readonly [string, Schema.Schema.All])[];
+] as const satisfies readonly (readonly [string, Schema.Top])[];
 
 test.for(UNSHOWABLE)("%s throws at emission rather than emitting a node", ([, schema]) => {
   assert.throws(() => emitJsonSchema(schema), Error);
@@ -313,9 +315,9 @@ test.for(UNSHOWABLE)("%s throws at emission rather than emitting a node", ([, sc
 const bounded = Schema.Struct({
   name: text(3),
   count: wholeNumber(1),
-  tags: Schema.Array(Schema.String).pipe(Schema.maxItems(2)),
-  registered: Schema.String.pipe(
-    Schema.filter((value) => value === "known", wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED)),
+  tags: Schema.Array(Schema.String).check(Schema.isMaxLength(2)),
+  registered: Schema.String.check(
+    Schema.makeFilter((value) => value === "known", wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED)),
   ),
 });
 
@@ -386,12 +388,14 @@ test("a wrong type at the root is malformed with an empty path", () => {
 });
 
 test("a failed transformation answers its own refusal annotation", () => {
-  const parsed = Schema.transformOrFail(Schema.String, Schema.Number, {
-    strict: true,
-    decode: (value, _options, ast) =>
-      value === "one" ? ParseResult.succeed(1) : ParseResult.fail(new ParseResult.Type(ast, value)),
-    encode: () => ParseResult.succeed("one"),
-  }).annotations(wireRefusal(SCHEMA_REFUSAL.TOO_LARGE));
+  const parsed = Schema.String.pipe(
+    Schema.decodeTo(Schema.Number, {
+      decode: SchemaGetter.transformEffect((value: string) =>
+        value === "one" ? Effect.succeed(1) : Effect.fail(new SchemaIssue.InvalidValue()),
+      ),
+      encode: SchemaGetter.transform(() => "one"),
+    }),
+  ).annotate(wireRefusal(SCHEMA_REFUSAL.TOO_LARGE));
 
   const refused = refusalOf(readEither(Schema.Struct({ value: parsed }))({ value: "two" }));
 

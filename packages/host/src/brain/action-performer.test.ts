@@ -26,7 +26,12 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Effect, Fiber, Option, Result } from "effect";
 import { test } from "vitest";
@@ -269,7 +274,10 @@ test("every answer is the envelope: a session action's target as the roster held
   });
 
   for (const envelope of [sent, stopped, created]) {
-    assert.deepEqual(Result.getOrUndefined(readEither(ACTION_OUTPUT)(envelope)), envelope);
+    assert.deepEqual(
+      Result.getOrUndefined(readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(envelope)),
+      envelope,
+    );
   }
 });
 
