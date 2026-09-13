@@ -1,5 +1,5 @@
 import type { SqlClient } from "@effect/sql";
-import { Duration, Effect, Option } from "effect";
+import { Duration, Effect, Fiber } from "effect";
 import { NOTHING_OPENED, type TurnOpeningOutcome } from "./brain-host/opener.js";
 import {
   bearerMatchesSecret,
@@ -142,15 +142,41 @@ interface AccountOutcome {
 
 const TIMED_OUT_ACCOUNT: AccountOutcome = { pass: FAILED_PASS, turns: FAILED_OPENING };
 
-/** An account's turn cut short at its own deadline, on the ambient clock so a test may move it without a real wait. */
+/**
+ * A read that failed or defected stands as the fallback; a caller ending the
+ * fiber is neither, so only `catchAll` (the read's own typed failure) and
+ * `catchAllDefect` (an unexpected throw) are handled here — an interruption
+ * passes through untouched.
+ */
+function withFallback<A, E>(
+  effect: Effect.Effect<A, E, SqlClient.SqlClient>,
+  fallback: A,
+): Effect.Effect<A, never, SqlClient.SqlClient> {
+  return Effect.catchAllDefect(
+    Effect.catchAll(effect, () => Effect.succeed(fallback)),
+    () => Effect.succeed(fallback),
+  );
+}
+
+/**
+ * An account's turn cut short at its own deadline, on the ambient clock so a
+ * test may move it without a real wait — but only the tick's own wait ends:
+ * the turn is forked as a daemon and only the join is raced, so a pass still
+ * reading a roster whole past the deadline is left running to write it down,
+ * exactly as the promise race this replaces never cancelled the pass it
+ * raced either.
+ */
 function accountWithin(
   account: Effect.Effect<AccountOutcome, never, SqlClient.SqlClient>,
   deadlineMs: number,
 ): Effect.Effect<AccountOutcome, never, SqlClient.SqlClient> {
-  return Effect.map(
-    Effect.timeoutOption(account, Duration.millis(deadlineMs)),
-    Option.getOrElse(() => TIMED_OUT_ACCOUNT),
-  );
+  return Effect.gen(function* () {
+    const fiber = yield* Effect.forkDaemon(account);
+    return yield* Effect.race(
+      Fiber.join(fiber),
+      Effect.as(Effect.sleep(Duration.millis(deadlineMs)), TIMED_OUT_ACCOUNT),
+    );
+  });
 }
 
 /** The pass, then the opening over what it and earlier passes left pending; a pass that throws is failed and still followed by the opening. */
@@ -159,12 +185,8 @@ function accountTurn(
   userId: string,
 ): Effect.Effect<AccountOutcome, never, SqlClient.SqlClient> {
   return Effect.gen(function* () {
-    const pass = yield* Effect.catchAllCause(options.observe(userId), () =>
-      Effect.succeed(FAILED_PASS),
-    );
-    const turns = yield* Effect.catchAllCause(options.openTurns(userId), () =>
-      Effect.succeed(FAILED_OPENING),
-    );
+    const pass = yield* withFallback(options.observe(userId), FAILED_PASS);
+    const turns = yield* withFallback(options.openTurns(userId), FAILED_OPENING);
     return { pass, turns };
   });
 }
