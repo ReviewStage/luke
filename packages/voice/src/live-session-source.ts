@@ -17,6 +17,7 @@ import {
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionCreateFrame,
+  type SessionStopFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
@@ -132,6 +133,14 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * has no one to tell and offers no door.
    */
   reportActivity?(idle: boolean): void;
+  /**
+   * Asks the service standing between this peer and the session to tell the
+   * model to stop and wait, in the service's own vocabulary: the instruction
+   * that says so is the service's to append, so nothing on this side names
+   * it or appends it. A session with no service between has no one to ask
+   * and offers no door.
+   */
+  stopSpeaking?(): void;
 }
 
 /**
@@ -1012,6 +1021,14 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         reportActivity: (idle) => {
           activity = { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle };
           socket.send(JSON.stringify(activity));
+        },
+        // The stop rides the same socket, held through a gap and sent on the
+        // next connection like any send: the model keeps speaking across the
+        // service's own recycle, so a stop pressed in the gap is still meant
+        // when the connection comes back.
+        stopSpeaking: () => {
+          const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+          socket.send(JSON.stringify(frame));
         },
       };
     });

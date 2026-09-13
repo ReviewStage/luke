@@ -61,19 +61,20 @@ const INTRODUCTION_SERVER_EVENTS: readonly string[] = RENDERER_SERVER_EVENTS.map
 const INTRODUCTION_CLIENT_EVENTS: readonly string[] = RENDERER_CLIENT_EVENTS;
 
 /**
- * The Live events a signed-in desktop still sends once the exchange is the
- * service's: the stop key's one instruction append, and the graceful
- * hang-up. Every other append is the exchange's, and the exchange stands
- * here, so a desktop sending one is an older build or a re-wired local
- * exchange, either of which would have every answer heard twice.
+ * The one Live event a signed-in desktop still sends once the exchange is
+ * the service's: the graceful hang-up. Every append is the exchange's, the
+ * stop key's included, and the exchange stands here, so a desktop sending
+ * any append is an older build or a re-wired local exchange, either of which
+ * would have every answer heard twice; and no instruction text of the
+ * desktop's choosing reaches the session through this route.
  */
-export const SESSIONS_CLIENT_EVENTS: readonly string[] = [
-  LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
-  LIVE_CLIENT_EVENT.CLOSE,
-];
+export const SESSIONS_CLIENT_EVENTS: readonly string[] = [LIVE_CLIENT_EVENT.CLOSE];
 
-/** The service-vocabulary frames a signed-in desktop sends after the handshake, read here and never forwarded. */
-export const SESSIONS_REPORT_FRAMES: readonly string[] = [VOICE_SERVICE_FRAME.SESSION_ACTIVITY];
+/** The service-vocabulary frames a signed-in desktop sends after the handshake, read here and never forwarded: its idle, and the stop key. */
+export const SESSIONS_REPORT_FRAMES: readonly string[] = [
+  VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
+  VOICE_SERVICE_FRAME.SESSION_STOP,
+];
 
 /** The `type` of one frame, or nothing when the frame is not a JSON record naming one. */
 export function frameType(text: UnparsedWireValue): string | undefined {
@@ -99,8 +100,8 @@ export function upstreamFrameDecision(type: string | undefined, route: VoiceRout
 
 /**
  * What to do with a frame the desktop sent toward OpenAI. A signed-in
- * desktop may send the stop and the hang-up, which pass untouched, and its
- * idle report, which the service reads for the exchange it holds; anything
+ * desktop may send the hang-up, which passes untouched, and its idle report
+ * and its stop, which the service reads for the exchange it holds; anything
  * else, an unreadable frame included, closes the socket rather than being
  * dropped, so an older desktop build after the cutover is refused where it
  * can be seen and never doubles the exchange standing here. An introduction

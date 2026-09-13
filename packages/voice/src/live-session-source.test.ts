@@ -764,7 +764,50 @@ it.scopedLive(
 );
 
 it.scopedLive(
-  "a keyed session opens no door for the idle report: nothing stands between it and OpenAI to tell",
+  "the hosted session's stop is the service's own frame on the same socket, held through a gap and sent on the connection that comes after it",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.stopSpeaking);
+      yield* opened.attach();
+      opened.stopSpeaking();
+      const [first] = script.sockets;
+      assert.ok(first);
+      assert.deepEqual(
+        first.sent.map((data) => JSON.parse(data)),
+        [
+          {
+            type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+            sdp: SDP_OFFER,
+            voice: LIVE_DEFAULTS.VOICE,
+            input: [],
+          },
+          { type: VOICE_SERVICE_FRAME.SESSION_STOP },
+        ],
+      );
+      first.closeFromServer({ code: 1001 });
+      // The gap begins where the socket's own reader takes that close, which is the turn after it.
+      yield* pause;
+      // Pressed in the gap: the model is still speaking across the service's recycle, so the stop is still meant.
+      opened.stopSpeaking();
+      yield* openedSockets(script, 2);
+      yield* pause;
+      const second = script.sockets[1];
+      assert.ok(second);
+      assert.deepEqual(
+        second.sent.map((data) => JSON.parse(data)),
+        [
+          { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: SESSION_ID },
+          { type: VOICE_SERVICE_FRAME.SESSION_STOP },
+        ],
+      );
+    }),
+);
+
+it.scopedLive(
+  "a keyed session opens no door for the idle report or the stop: nothing stands between it and OpenAI to tell",
   () =>
     Effect.gen(function* () {
       const { fetchLike } = openAi([created()]);
@@ -772,6 +815,7 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
       assert.equal(opened.reportActivity, undefined);
+      assert.equal(opened.stopSpeaking, undefined);
     }),
 );
 

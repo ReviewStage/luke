@@ -765,10 +765,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   stopSpeaking(): boolean {
     const session = this.#speakable();
     if (!session) return false;
+    // The stop is not something the session is worth keeping open for: the
+    // idle decision is made against what this exchange said, and a developer
+    // cutting Luke off is the opposite of that.
     session.channel.enqueue(
       Effect.suspend(() =>
         Effect.asVoid(
-          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION))),
+          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)), {
+            countsForIdle: false,
+          }),
         ),
       ),
     );

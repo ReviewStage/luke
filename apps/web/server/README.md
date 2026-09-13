@@ -704,11 +704,14 @@ answer, and the quota. From then on the relay is a pipe: OpenAI frames to the
 desktop untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so the developer's voice and
 Luke's never transit the service; and from the desktop exactly three frames
-(`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the stop
-key's `session.instructions.append`, the graceful hang-up's `session.close`,
-both forwarded untouched, and `session.activity`, the peer's idle report in
-the service's own vocabulary, read here and handed to the exchange rather than
-forwarded. Any other desktop frame — an older build's own append, the
+(`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
+graceful hang-up's `session.close`, forwarded untouched, and two in the
+service's own vocabulary, read here and handed to the exchange rather than
+forwarded: `session.activity`, the peer's idle report, and `session.stop`, the
+stop key, which the exchange answers with the one instruction it appends
+itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone). So
+the desktop appends nothing to a session, and no instruction text of the
+desktop's choosing reaches one through this route. Any other desktop frame — an older build's own append, the
 microphone switch that never crosses this socket, an unreadable frame —
 closes the desktop's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
 rather than dropping it, so a desktop still running an exchange of its own is
@@ -780,7 +783,7 @@ the deployment secret, or eve's origin composes none and refuses every
 session as `unavailable`, since a session with no exchange behind it has no
 one to answer its asks. The desktop composes no exchange of its own since
 E5-3; what it holds is `LiveSessionHolder`, which seeds the session at
-creation, ends it, sends the stop, and reports its idle. What stops the
+creation, ends it, and reports its idle and its stop. What stops the
 model's output from becoming an action is not the attachment and not the
 sideband but the brain's own gauntlet: `acceptAsk` on every spoken ask, eve's
 tool policy on every tool a turn reaches for, and `admit()` on every action,

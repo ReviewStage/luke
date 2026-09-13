@@ -16,6 +16,8 @@ import {
   sessionCreateFrameFromWire,
   sessionCreateFrameRead,
   sessionOpeningFrameFromWire,
+  sessionReportFrameFromWire,
+  sessionStopFrameFromWire,
   VOICE_SERVICE_FRAME,
   webSocketOrigin,
 } from "./live-contract.js";
@@ -193,8 +195,20 @@ test("a session.activity frame is the type and one boolean, and nothing else", (
   assert.equal(sessionOpeningFrameFromWire(idle), undefined);
 });
 
-test("the frame types are five distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 5);
+test("a session.stop frame is the type alone, and a report frame is either it or the activity", () => {
+  const stop = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+  const idle = { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true };
+  assert.deepEqual(sessionStopFrameFromWire(stop), stop);
+  assert.equal(sessionStopFrameFromWire({ ...stop, content: "Stop." }), undefined);
+  assert.equal(sessionStopFrameFromWire(idle), undefined);
+  assert.deepEqual(sessionReportFrameFromWire(stop), stop);
+  assert.deepEqual(sessionReportFrameFromWire(idle), idle);
+  assert.equal(sessionReportFrameFromWire({ type: "session.instructions.append" }), undefined);
+  assert.equal(sessionOpeningFrameFromWire(stop), undefined);
+});
+
+test("the frame types are six distinct members", () => {
+  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 6);
 });
 
 test("the voice service origin is the service's own origin in socket form", () => {

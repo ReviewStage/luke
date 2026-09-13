@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
-import { type SessionActivityFrame, sessionActivityFrameFromWire } from "../core.js";
+import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import {
   closeEvent,
   decodeLivePayload,
@@ -33,10 +33,10 @@ import {
  * each frame's `type` and nothing else of it, drops reflected audio by that
  * type on every route, on the introduction route admits only what a renderer's
  * own data channel would carry, and on the sessions route admits from the
- * desktop only the stop, the hang-up, and its idle report, closing the socket
- * on anything else. The idle report is the one frame read past its type: it
- * is the service's own vocabulary, handed to the exchange that holds the idle
- * decision and never to OpenAI. An opening command the service
+ * desktop only the hang-up, its idle report, and its stop, closing the socket
+ * on anything else. The two reports are the frames read past their type: they
+ * are the service's own vocabulary, handed to the exchange that holds the
+ * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by the id it was
  * sent with under a bounded wait, then whatever the service answers
@@ -105,7 +105,7 @@ export interface RelayOptions<R = never> {
   /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
   onOpeningSettled?: ((settled: OpeningSettled) => LiveClientEvent | undefined) | undefined;
   /** Runs on every report the desktop sent in the service's vocabulary, which is read here and forwarded nowhere. */
-  onDesktopReport?: ((report: SessionActivityFrame) => void) | undefined;
+  onDesktopReport?: ((report: SessionReportFrame) => void) | undefined;
   /** Runs once, when a desktop frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
   onFrameRefused?: ((type: string | undefined) => void) | undefined;
   closeTimeoutMs?: number;
@@ -314,7 +314,7 @@ export function relaySession<R = never>(
         if (decision === FRAME_DECISION.REPORT) {
           // The one frame read past its type: a report in the service's own
           // vocabulary that is not one is a frame the route does not admit.
-          const report = sessionActivityFrameFromWire(decodeLivePayload(text));
+          const report = sessionReportFrameFromWire(decodeLivePayload(text));
           if (report === undefined) {
             yield* refuse(type);
             return;
