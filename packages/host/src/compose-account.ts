@@ -25,7 +25,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option, type Scope, Stream } from "effect";
+import { Config, Effect, MutableRef, Option, type Scope, Stream } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -84,9 +84,10 @@ export interface AccountDependencies {
  * The account concern, over the kernel it takes as a tag rather than as a
  * constructor argument. What the merge links late is a set-once `Deferred`
  * (`lateService`) rather than a holder of its own, so the link a concern
- * holds cannot depend on the order the merge folded it in; the sync read
- * beside it is what the callbacks the session manager and the Gateway
- * handlers answer still hold.
+ * holds cannot depend on the order the merge folded it in. Every link but one
+ * is read by awaiting it, so a caller that asks before the merge has linked
+ * suspends rather than throwing; the one synchronous reader takes a value the
+ * link mirrors.
  */
 export const composeAccount = (
   dependencies: AccountDependencies,
@@ -107,13 +108,15 @@ export const composeAccount = (
     // rather than on an ambient default one.
     const runtime = yield* Effect.runtime<never>();
     const late = yield* lateService<AccountLinks>();
-    const links = (): AccountLinks => {
-      const standing = late.unsafePeek();
-      if (Option.isNone(standing)) {
-        throw new Error("the account composer's links are read before link() has run");
-      }
-      return standing.value;
-    };
+    /**
+     * The device row's id, mirrored for the one link a caller reads from a
+     * synchronous statement: the voice capability assembler asks for it while
+     * building a handshake and holds no fiber to await the links on. The link
+     * writes the reader the devices composer owns, so a read before the merge
+     * answers the no device an unregistered installation answers anyway rather
+     * than throwing.
+     */
+    const deviceIdReader = MutableRef.make<() => string | undefined>(() => undefined);
 
     const client = new AccountClient({
       baseUrl: kernel.accountBaseUrl,
@@ -123,9 +126,9 @@ export const composeAccount = (
     const session = yield* AccountSessionManager.make({
       client,
       // The store's own effects, with an I/O failure read as the defect the
-      // rejected promise behind each of these already was. The lateness of
-      // the links below is an `Effect.suspend` because a link read at
-      // construction would be read before `link()` has run.
+      // rejected promise behind each of these already was. Each link below is
+      // awaited rather than read, because a link read at construction would be
+      // read before `link()` has run.
       store: {
         readAccount: () => Effect.orDie(settings.store.readAccount()),
         setAccount: (stored) => Effect.orDie(settings.store.setAccount(stored)),
@@ -134,9 +137,9 @@ export const composeAccount = (
       hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
       requiresAccount: runMode.requiresAccount,
       openExternal: (url) => kernel.openExternalThroughNode(url),
-      startCapabilities: Effect.suspend(() => links().startCapabilities),
-      stopCapabilities: Effect.suspend(() => links().stopCapabilities),
-      onSignOut: (stored) => links().releaseDevice(stored),
+      startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
+      stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
+      onSignOut: (stored) => Effect.flatMap(late.value, (links) => links.releaseDevice(stored)),
     });
 
     /**
@@ -160,6 +163,7 @@ export const composeAccount = (
      */
     const onAccountChange = (next: AccountSnapshot): Effect.Effect<void> =>
       Effect.gen(function* () {
+        const links = yield* late.value;
         const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
         const wasSignedIn = previousAccount.status === ACCOUNT_STATUS.SIGNED_IN;
         const previousAccountKey =
@@ -171,13 +175,13 @@ export const composeAccount = (
         // the departure's own emit, so the very snapshot that reports the
         // sign-out reads every cloud provider as not connected.
         if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
-        if (signedIn && !wasSignedIn) links().onFirstSignIn();
+        if (signedIn && !wasSignedIn) links.onFirstSignIn();
         kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
         yield* settings.emitSettings();
         yield* emitSessionReplay;
         if (signedIn && !wasSignedIn) {
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-          links().onFirstSignInArrival();
+          links.onFirstSignInArrival();
         }
       });
 
@@ -238,7 +242,7 @@ export const composeAccount = (
       }),
       openSocket: openSocketOverWs,
       refreshAccount: session.refreshOnce,
-      deviceId: () => links().deviceId(),
+      deviceId: () => MutableRef.get(deviceIdReader)(),
       execution: runtime,
       ...(agentTrace
         ? {
@@ -282,12 +286,13 @@ export const composeAccount = (
     const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
       Effect.asVoid(
         transitionVoiceSource({
-          retire: () => links().retireBrain(),
+          retire: () => Effect.flatMap(late.value, (links) => links.retireBrain()),
           apply: () => voiceCapabilities.apply(),
           rebuild: () =>
             Effect.gen(function* () {
-              yield* links().rebuildBrain();
-              yield* links().syncMemory;
+              const links = yield* late.value;
+              yield* links.rebuildBrain();
+              yield* links.syncMemory;
             }),
         }),
       ),
@@ -356,7 +361,12 @@ export const composeAccount = (
       token,
       applyVoiceCredential,
       sessionReplayState,
-      link: (next) => Effect.asVoid(late.set(next)),
+      link: (next) =>
+        Effect.flatMap(late.set(next), (supplied) =>
+          Effect.sync(() => {
+            if (supplied) MutableRef.set(deviceIdReader, next.deviceId);
+          }),
+        ),
       // The session manager holds no timer this host started beyond its own
       // subscription: what a sign-in began is stopped by the capabilities it
       // started, and the subscription is forked into this same scope, so

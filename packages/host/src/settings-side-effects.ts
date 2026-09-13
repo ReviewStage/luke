@@ -25,9 +25,9 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => Effect.void;
 
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
-  setVoice: (voice: StoredAppSettings["voice"]) => void;
+  setVoice: (voice: StoredAppSettings["voice"]) => Effect.Effect<void>;
   applyVoiceCredential: Effect.Effect<void>;
-  reconcileSpeech: () => void;
+  readonly reconcileSpeech: Effect.Effect<void>;
   emitSettings: () => Effect.Effect<void>;
 }
 
@@ -46,15 +46,9 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) =>
-      Effect.sync(() => {
-        dependencies.setVoice(settings.voice);
-      }),
+    [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
     [SETTING_SIDE_EFFECT.VOICE_SOURCE]: () =>
       Effect.zipRight(dependencies.applyVoiceCredential, dependencies.emitSettings()),
-    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
-      Effect.sync(() => {
-        dependencies.reconcileSpeech();
-      }),
+    [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () => dependencies.reconcileSpeech,
   } satisfies HostSettingSideEffects;
 }

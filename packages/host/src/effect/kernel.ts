@@ -8,7 +8,7 @@
  * always for. The write is a set-once — a second write answers `false` and the
  * first service stands — so which service a concern holds cannot depend on the
  * order the merge folded it in. The one sync read beside it answers the same
- * `Deferred`'s value, for the event door and for the three composers whose own
+ * `Deferred`'s value, for the event door and for the one composer whose own
  * links are still read from a synchronous statement.
  */
 import { Config, Context, Deferred, Effect, Layer, Option } from "effect";
@@ -40,8 +40,8 @@ export interface LateService<A> {
   readonly peek: Effect.Effect<Option.Option<A>>;
   /**
    * The sync read, for a caller that publishes from a synchronous statement:
-   * the host's event door, and the account, settings, and calendars composers
-   * until each reads its own links by awaiting them.
+   * the host's event door, and the calendars composer until it reads its own
+   * links by awaiting them.
    */
   readonly unsafePeek: () => Option.Option<A>;
 }
