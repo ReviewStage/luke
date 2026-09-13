@@ -8,8 +8,16 @@ import {
   HOSTED_SERVICE_PATH,
 } from "@sidecar/hosted";
 import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
-import { HTTP_METHOD, isRecord, isWireNumber, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect, type Layer } from "effect";
+import {
+  HTTP_METHOD,
+  isRecord,
+  isWireNumber,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireValue,
+  WireValueSchema,
+} from "@sidecar/wire";
+import { Effect, Schema as EffectSchema, type Layer, ParseResult } from "effect";
 
 export interface AccountPreferencesAnswer {
   preferences: AccountPreferences;
@@ -37,6 +45,30 @@ function accountPreferencesAnswerFromWire(
   };
 }
 
+/** A value admitted by its declaration alone, never re-validated once decoded. */
+const carried = <A>(): EffectSchema.Schema<A> =>
+  EffectSchema.declare((_value): _value is A => true);
+
+/**
+ * The account preferences answer, decoded through `AccountCallEffects.ask`.
+ * The settings vocabulary's own reader stays the one parser for the
+ * snapshot's shape; this schema is the boundary that reader now decodes
+ * through, in place of the caller's hand-written reader `AccountCallEffects.read`
+ * used to take.
+ */
+const accountPreferencesAnswerSchema: EffectSchema.Schema<AccountPreferencesAnswer, WireValue> =
+  EffectSchema.transformOrFail(WireValueSchema, carried<AccountPreferencesAnswer>(), {
+    strict: true,
+    decode: (value, _options, ast) => {
+      const answer = accountPreferencesAnswerFromWire(unparsedWire(value));
+      return answer === undefined
+        ? ParseResult.fail(new ParseResult.Type(ast, value))
+        : ParseResult.succeed(answer);
+    },
+    encode: (answer, _options, ast) =>
+      ParseResult.fail(new ParseResult.Forbidden(ast, answer, "encoding is not supported")),
+  });
+
 /**
  * Reads and writes the account preference snapshot. The local store decides
  * which settings are eligible to travel; this client validates the service's
@@ -58,9 +90,9 @@ export class AccountPreferencesClient {
 
   readPreferences(): Effect.Effect<AccountPreferencesAnswer | undefined> {
     return this.#over(
-      this.#call.read(
+      this.#call.ask(
         { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES },
-        accountPreferencesAnswerFromWire,
+        accountPreferencesAnswerSchema,
       ),
     );
   }
@@ -72,13 +104,13 @@ export class AccountPreferencesClient {
     const parsed = accountPreferencesFromWire(preferences as UnparsedWireValue);
     if (parsed === undefined) return Effect.succeed(undefined);
     return this.#over(
-      this.#call.read(
+      this.#call.ask(
         {
           method: HTTP_METHOD.PUT,
           path: HOSTED_SERVICE_PATH.ACCOUNT_PREFERENCES,
           body: JSON.stringify({ preferences: parsed }),
         },
-        accountPreferencesAnswerFromWire,
+        accountPreferencesAnswerSchema,
       ),
     );
   }

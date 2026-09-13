@@ -7,9 +7,6 @@ import {
   type HttpMethod,
   positiveInteger,
   text,
-  type UnparsedWireValue,
-  unparsedWire,
-  WireValueSchema,
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
@@ -133,19 +130,6 @@ export interface AccountCallEffects {
   ask<Answer, Encoded>(
     request: CallRequest,
     answer: EffectSchema.Schema<Answer, Encoded>,
-  ): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient>;
-  /**
-   * The same reading, through a caller's own reader rather than the schema
-   * beneath it.
-   *
-   * @deprecated Kept for `packages/host/src/account-preferences-client.ts`,
-   * the one caller left that still hands over a hand-written reader rather
-   * than the Effect schema {@link AccountCallEffects.ask} decodes with;
-   * deleted once that client reads with a schema instead.
-   */
-  read<Answer>(
-    request: CallRequest,
-    read: (payload: UnparsedWireValue) => Answer | undefined,
   ): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient>;
 }
 
@@ -383,15 +367,6 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
       reading(request, (response) =>
         Effect.catchAll(HttpClientResponse.schemaBodyJson(answer)(response), () =>
           Effect.succeed(undefined),
-        ),
-      ),
-    read: (request, read) =>
-      reading(request, (response) =>
-        Effect.catchAll(
-          Effect.map(HttpClientResponse.schemaBodyJson(WireValueSchema)(response), (payload) =>
-            read(unparsedWire(payload)),
-          ),
-          () => Effect.succeed(undefined),
         ),
       ),
   };
