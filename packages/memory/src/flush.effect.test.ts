@@ -89,7 +89,12 @@ describe("markerWriteSchedule", () => {
         MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS + 2,
       );
 
-      assert.equal(taken.length, MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS);
+      // One step per recurrence, which is one fewer than the attempts the port
+      // states: `Effect.retry` makes the opening attempt before it consults a
+      // schedule at all. v3's `Schedule.run` collected the initial output
+      // beside each recurrence's and so counted the attempts themselves; the
+      // v4 walk above counts what the schedule actually yields.
+      assert.equal(taken.length, MEMORY_FLUSH_DEFAULTS.MARKER_WRITE_ATTEMPTS - 1);
     }),
   );
 });

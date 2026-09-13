@@ -28,7 +28,7 @@ export {
   type StoreOperationName,
   StoreRpcs,
 } from "./store-operations.js";
-export { inProcessStoreTransport, storeWorkerLayer } from "./worker-host.js";
+export { inProcessStoreTransport, storeWorkerLayer, storeWorkerTeardown } from "./worker-host.js";
 export {
   readWorkspaceFileEffect,
   WorkspaceFileIOError,

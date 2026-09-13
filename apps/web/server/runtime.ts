@@ -1,9 +1,19 @@
-import type { Effect } from "effect";
-import { Layer, ManagedRuntime } from "effect";
+import { ConfigProvider, Effect, Layer, ManagedRuntime } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./hosted/environment.js";
+
+/**
+ * The deployment's own environment, read as these services are built rather
+ * than once for the process. The default `ConfigProvider` is a
+ * `Context.Reference` whose default value is computed once and then kept on
+ * the reference itself, so the record `ConfigProvider.fromEnv()` copies out of
+ * `process.env` would be the record every later instance still read. An
+ * instance builds its services from the environment it was started with, and
+ * a test that sets one and disposes the runtime gets the environment it set.
+ */
+const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv()));
 
 /**
  * The services every web function's effects run against. A function reaches
@@ -22,7 +32,9 @@ import { hostedEnvironment } from "./hosted/environment.js";
  * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
-const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment);
+const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment).pipe(
+  Layer.provide(webConfigProvider),
+);
 
 /** What an effect run at this edge may require. */
 export type WebServices = Layer.Success<typeof webServices>;

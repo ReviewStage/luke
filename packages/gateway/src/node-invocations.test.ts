@@ -222,7 +222,7 @@ const heldMemory = (performances: {
     return { memory, started, release };
   });
 
-it.scoped(
+it.effect(
   "the node's memory performs a distinct invocation once and answers a duplicate from the first performance",
   () =>
     Effect.gen(function* () {
@@ -245,7 +245,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a duplicate is answered from the performance the first frame opened even where that frame's own caller gave up",
   () =>
     Effect.gen(function* () {
@@ -265,7 +265,7 @@ it.scoped(
 );
 
 for (const kind of ["in-process", "loopback"] as const) {
-  it.scopedLive(
+  it.live(
     `[${kind}] a node registered over a connection is invoked through it, and a repeated frame performs once`,
     () =>
       Effect.gen(function* () {
@@ -470,7 +470,7 @@ it.live(
     ),
 );
 
-it.scopedLive(
+it.live(
   "a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events",
   () =>
     Effect.gen(function* () {
@@ -582,7 +582,7 @@ it.live(
     ),
 );
 
-it.scopedLive(
+it.live(
   "a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived",
   () =>
     Effect.gen(function* () {
@@ -623,7 +623,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out",
   () =>
     Effect.gen(function* () {

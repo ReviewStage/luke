@@ -30,7 +30,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   });
 }
 
-it.scoped(
+it.effect(
   "removing the capability under five outstanding runs leaves every run interrupted and marked, with no line written",
   () =>
     Effect.gen(function* () {
@@ -85,7 +85,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a successor replacing the agent under outstanding runs inherits every end marked, and owns the store alone",
   () =>
     Effect.gen(function* () {
@@ -169,7 +169,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a reset under outstanding runs discards them without publishing, and the successor starts clean",
   () =>
     Effect.gen(function* () {

@@ -358,7 +358,7 @@ const signal = () => new AbortController().signal;
 const platform = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Scope.Scope>) =>
   Effect.provide(effect, NodeFileSystem.layer);
 
-it.scoped(
+it.effect(
   "a sync indexes the notebook with vectors, a search runs hybrid, and a hand edit is picked up by the next sync",
   () =>
     platform(
@@ -392,7 +392,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "an embedding outage degrades an automatic provider to keyword-only for that call, and the standing mode follows the sync alone",
   () =>
     platform(
@@ -422,7 +422,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "a later batch's failure keeps every vector the earlier batches answered, and the report says the rest are missing",
   () =>
     platform(
@@ -462,7 +462,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "conversation hits are keyword-only fallback: they fill spare slots from eligible conversations' Conversation and never displace notebook chunks",
   () =>
     platform(
@@ -540,7 +540,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors; one adapter read serves the whole pass",
   () =>
     platform(
@@ -576,7 +576,7 @@ it.scoped(
     ),
 );
 
-it.scoped(
+it.effect(
   "a sync asked for during a pass runs one follow-on pass under the adapter that stands then, and every request during the pass shares it",
   () =>
     platform(

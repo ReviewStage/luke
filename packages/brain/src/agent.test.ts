@@ -1013,7 +1013,9 @@ it.effect(
 
       // A capture whose delta read is held blocks no ask: the capture is not the
       // run's, so the ask opens on the inbox as it stands and answers.
-      const capture = yield* Effect.forkChild(h.agent.wake([edge(DEF)]));
+      const capture = yield* Effect.forkChild(h.agent.wake([edge(DEF)]), {
+        startImmediately: true,
+      });
       h.client.answers.push(answered([message("proceeding")]));
       const second = acceptedRunId(yield* submit(h, "and this?"));
       assert.equal(deltas.length, 1);
@@ -1128,7 +1130,7 @@ it.effect(
       const releasing = h.repository.hold();
       yield* advanceHarness(NOW + 3_000);
       assert.ok(h.repository.holding, "the turn is in its final write");
-      const stopping = yield* Effect.forkChild(h.agent.stop());
+      const stopping = yield* Effect.forkChild(h.agent.stop(), { startImmediately: true });
       releasing(true);
       yield* Fiber.join(stopping);
       yield* Effect.promise(() => settle());
@@ -1157,7 +1159,7 @@ it.effect(
     }),
 );
 
-it.scoped(
+it.effect(
   "a generation dies exactly one lifetime after its birth, on the host's clock, revoking the turn it dies under",
   () =>
     Effect.gen(function* () {
@@ -1250,7 +1252,7 @@ it.effect(
     }),
 );
 
-it.scoped("a fortnight of writes never extends a generation's life", () =>
+it.effect("a fortnight of writes never extends a generation's life", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
     const generationClock = yield* generationClockOn(h.store);
@@ -1272,7 +1274,7 @@ it.scoped("a fortnight of writes never extends a generation's life", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a Clear or expiry asked for while a write is out on disk revokes a held action's preparation before the disk answers, and no effect dispatches",
   () =>
     Effect.gen(function* () {
@@ -1540,7 +1542,7 @@ it.effect(
       assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       yield* Effect.promise(() => settle());
       assert.ok(releaseReopen, "the failed turn is reopening its context");
-      const stopping = yield* Effect.forkChild(h.agent.stop());
+      const stopping = yield* Effect.forkChild(h.agent.stop(), { startImmediately: true });
       releaseReopen?.();
       yield* Fiber.join(stopping);
       yield* Effect.promise(() => settle());

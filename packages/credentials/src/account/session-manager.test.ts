@@ -89,7 +89,7 @@ function manager(options: {
   });
 }
 
-it.scoped("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
+it.effect("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
   Effect.gen(function* () {
     const calls: string[] = [];
     const subject = yield* manager({
@@ -111,7 +111,7 @@ it.scoped("sign out closes capabilities, clears storage, broadcasts, then revoke
   }),
 );
 
-it.scoped(
+it.effect(
   "sign out releases the departing account while its token still stands, and a failed release never holds it up",
   () =>
     Effect.gen(function* () {
@@ -140,7 +140,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
+it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
   Effect.gen(function* () {
     const holding = yield* Deferred.make<void>();
     const subject = yield* manager({ stored: STORED, beforeClear: Deferred.await(holding) });
@@ -163,7 +163,7 @@ it.scoped("a sign-out interrupted mid-way runs to the cleared account rather tha
   }),
 );
 
-it.scoped("refresh keeps a valid stored account signed in without rewriting it", () =>
+it.effect("refresh keeps a valid stored account signed in without rewriting it", () =>
   Effect.gen(function* () {
     const subject = yield* manager({ stored: STORED });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
@@ -195,7 +195,7 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   });
 }
 
-it.scoped(
+it.effect(
   "a renewal a network cannot carry keeps the stored account standing, never a sign-out",
   () =>
     Effect.gen(function* () {
@@ -214,7 +214,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a renewal the service refuses with invalid_grant is the one path that signs the account out",
   () =>
     Effect.gen(function* () {
@@ -243,7 +243,7 @@ async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-it.scoped("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
+it.effect("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
   Effect.gen(function* () {
     const subject = yield* manager({});
     const pending = yield* Effect.forkChild(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
@@ -254,7 +254,7 @@ it.scoped("a withdrawn sign-in settles signed out rather than reporting a failur
   }),
 );
 
-it.scoped("an exchange the account refuses is a failure the panel can report", () =>
+it.effect("an exchange the account refuses is a failure the panel can report", () =>
   Effect.gen(function* () {
     const subject = yield* manager({
       exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),

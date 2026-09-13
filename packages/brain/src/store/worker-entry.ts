@@ -1,6 +1,6 @@
 import { NodeRuntime, NodeWorkerRunner } from "@effect/platform-node";
 import { Layer } from "effect";
-import { storeWorkerLayer } from "./worker-host.js";
+import { storeWorkerLayer, storeWorkerTeardown } from "./worker-host.js";
 
 /**
  * The store's own worker-thread launch, spawned directly by
@@ -10,4 +10,6 @@ import { storeWorkerLayer } from "./worker-host.js";
  * `storeWorkerLayer`; this file is not reached from there and carries no
  * production export.
  */
-NodeRuntime.runMain(Layer.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))));
+NodeRuntime.runMain(Layer.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))), {
+  teardown: storeWorkerTeardown,
+});

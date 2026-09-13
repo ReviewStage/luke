@@ -33,7 +33,7 @@ it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
   }),
 );
 
-it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
+it.effect("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;
     const pending = yield* Deferred.make<void>();
@@ -57,7 +57,7 @@ it.scoped("a disarm invalidates work already in flight and prevents gated work",
   }),
 );
 
-it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
+it.effect("the supervisor arms and disarms every loop as one lifecycle", () =>
   Effect.gen(function* () {
     const events: string[] = [];
     const loops = ["sessions", "calendars"].map(
@@ -87,7 +87,7 @@ it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
   }),
 );
 
-it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same", () =>
+it.effect("a loop behind a closed gate arms nothing and is disarmed all the same", () =>
   Effect.gen(function* () {
     const events: string[] = [];
     const loop = new ObservationLoop({
@@ -107,7 +107,7 @@ it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same
   }),
 );
 
-it.scoped("a pass that outlives its disarm does not run the after-run hook", () =>
+it.effect("a pass that outlives its disarm does not run the after-run hook", () =>
   Effect.gen(function* () {
     let enabled = true;
     const pending = yield* Deferred.make<void>();
@@ -138,7 +138,7 @@ it.scoped("a pass that outlives its disarm does not run the after-run hook", () 
 );
 
 describe("the cadence", () => {
-  it.scoped("runs a pass at every spaced instant until the loop is disarmed", () =>
+  it.effect("runs a pass at every spaced instant until the loop is disarmed", () =>
     Effect.gen(function* () {
       const clock = yield* Clock.Clock;
       const passes: number[] = [];
@@ -166,7 +166,7 @@ describe("the cadence", () => {
     }),
   );
 
-  it.scoped("keeps its cadence over a pass that failed and reports it", () =>
+  it.effect("keeps its cadence over a pass that failed and reports it", () =>
     Effect.gen(function* () {
       const reports: string[] = [];
       const passes: number[] = [];

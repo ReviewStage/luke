@@ -76,7 +76,7 @@ function markingBrain(
   };
 }
 
-it.scoped("an ask with no brain is refused in fixed words", () =>
+it.effect("an ask with no brain is refused in fixed words", () =>
   Effect.gen(function* () {
     const operator = yield* operatorOverBrain({ current: () => undefined });
     const result = yield* operator.submit({
@@ -88,7 +88,7 @@ it.scoped("an ask with no brain is refused in fixed words", () =>
   }),
 );
 
-it.scoped("an ask is bounded and handed to the brain whole under its own submission id", () =>
+it.effect("an ask is bounded and handed to the brain whole under its own submission id", () =>
   Effect.gen(function* () {
     const asked: BrainSubmission[] = [];
     const long = `  ${"a".repeat(maximumAskLength + 50)}`;

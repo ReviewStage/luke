@@ -123,7 +123,7 @@ function storedState(directory: string): DeviceState | undefined {
   return isRecord(parsed) ? deviceStateFrom(parsed) : undefined;
 }
 
-it.scoped(
+it.effect(
   "a first start mints the installation id once, registers as a Mac, polls at once with the presence read, and keeps the row's id",
   (t) =>
     Effect.gen(function* () {
@@ -161,7 +161,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row",
   (t) =>
     Effect.gen(function* () {
@@ -199,7 +199,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a stop without a departing account ends the cadence and forgets nothing", (t) =>
+it.effect("a stop without a departing account ends the cadence and forgets nothing", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
     const { client, calls } = fakeClient({});
@@ -220,7 +220,7 @@ it.scoped("a stop without a departing account ends the cadence and forgets nothi
   }),
 );
 
-it.scoped(
+it.effect(
   "each poll moves last seen and carries the presence read at that poll, and a row the service no longer holds is registered again",
   (t) =>
     Effect.gen(function* () {
@@ -264,7 +264,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a registration that did not land is tried again by the next beat, and a late answer installs nothing",
   (t) =>
     Effect.gen(function* () {
@@ -319,7 +319,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t) =>
+it.effect("a beat that fails is reported and the cadence keeps its own beat", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
     const reported: string[] = [];
@@ -354,7 +354,7 @@ it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t
   }),
 );
 
-it.scoped(
+it.effect(
   "a registration still on the wire at sign-out lands before the next account registers",
   (t) =>
     Effect.gen(function* () {
@@ -402,7 +402,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a sign-out that interrupts a beat's own wait hands the slot on rather than opening it",
   (t) =>
     Effect.gen(function* () {

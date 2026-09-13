@@ -29,7 +29,7 @@ function fixedClock(): () => Date {
 /** A directory of this run's own, and the `FileSystem` the host's layer hands the writer. */
 const traceDirectory = Effect.promise(() => mkdtemp(path.join(tmpdir(), "devtrace-")));
 
-it.scopedLive("lines land in the named file, stamped, in the order they were recorded", () =>
+it.live("lines land in the named file, stamped, in the order they were recorded", () =>
   Effect.gen(function* () {
     const directory = yield* traceDirectory;
     const writer = yield* AgentTraceWriter.make({ directory, now: fixedClock() });
@@ -101,7 +101,7 @@ it.scopedLive("lines land in the named file, stamped, in the order they were rec
   }).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-it.scopedLive("raw audio handed straight to the writer still never reaches the file", () =>
+it.live("raw audio handed straight to the writer still never reaches the file", () =>
   Effect.gen(function* () {
     const directory = yield* traceDirectory;
     const writer = yield* AgentTraceWriter.make({ directory });
@@ -118,7 +118,7 @@ it.scopedLive("raw audio handed straight to the writer still never reaches the f
   }).pipe(Effect.provide(NodeFileSystem.layer)),
 );
 
-it.scopedLive("a writer that cannot write reports once and stays quiet after", () =>
+it.live("a writer that cannot write reports once and stays quiet after", () =>
   Effect.gen(function* () {
     const directory = yield* traceDirectory;
     // A file where the trace directory should be makes every mkdir fail.

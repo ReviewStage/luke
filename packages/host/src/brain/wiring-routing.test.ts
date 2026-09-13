@@ -279,7 +279,7 @@ async function composed(t: TestContext, scope: Scope.Scope, gate?: Gate): Promis
     dropBriefings: () => undefined,
   });
   // The wiring's generation clocks read the clock and arm their waits in the
-  // scope it is built in, which is the one `it.scoped` gives this test and
+  // scope it is built in, which is the one `it.effect` gives this test and
   // closes when it ends. No store here enables automatic reset, so what those
   // clocks arm is nothing and the default runtime this is built on is the only
   // clock they would have asked.
@@ -297,7 +297,7 @@ async function composed(t: TestContext, scope: Scope.Scope, gate?: Gate): Promis
   };
 }
 
-it.scopedLive("each conversation's standing context is built for its own key", (t) =>
+it.live("each conversation's standing context is built for its own key", (t) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope;
     const c = yield* Effect.promise(() => composed(t, scope));
@@ -311,7 +311,7 @@ it.scopedLive("each conversation's standing context is built for its own key", (
   }),
 );
 
-it.scoped(
+it.effect(
   "a roster look opens one conversation per observed session, each reading only its own transcript, and main reads notices instead",
   (t) =>
     Effect.gen(function* () {
@@ -374,7 +374,7 @@ it.scoped(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves",
   (t) =>
     Effect.gen(function* () {
@@ -420,7 +420,7 @@ it.scopedLive(
     }),
 );
 
-it.scoped(
+it.effect(
   "wakes route to the session's own conversation, main is never woken by one, and a held briefing returns to its source",
   (t) =>
     Effect.gen(function* () {
@@ -462,7 +462,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a held briefing whose source conversation has stood down goes back to that conversation, reopened for it, never to main",
   (t) =>
     Effect.gen(function* () {
@@ -499,7 +499,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a session that leaves the roster while its analysis is held keeps its conversation until the analysis ends",
   (t) =>
     Effect.gen(function* () {
@@ -543,7 +543,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a hook for a session whose conversation is standing down waits for the close and builds one store, never a second on the same envelope",
   (t) =>
     Effect.gen(function* () {
@@ -581,7 +581,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a rebuild landing while a conversation stands down leaves the closing host to its close, and the reopen owns the sole store",
   (t) =>
     Effect.gen(function* () {
@@ -625,7 +625,7 @@ it.scoped(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a conversation reopened while it stands down waits for the close and stands on its own new store",
   (t) =>
     Effect.gen(function* () {
@@ -650,7 +650,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "two opens of one key landing in the same tick, a wake and a held briefing, build one store and list the conversation once",
   (t) =>
     Effect.gen(function* () {
@@ -684,53 +684,51 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
-  "one observed conversation waiting on its model neither blocks another nor main",
-  (t) =>
-    Effect.gen(function* () {
-      const gate: Gate = {
-        holds: (texts) => texts.includes(SECRET("def")),
-        release: () => undefined,
-      };
-      const scope = yield* Effect.scope;
-      const c = yield* Effect.promise(() => composed(t, scope, gate));
-      yield* c.wiring.rebuild();
-      yield* c.wiring.rosterLook();
-      yield* Effect.promise(() =>
-        until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1),
-      );
-      // def's inference is held; abc's has finished and left its notice.
-      assert.equal(c.inputs.length, 2);
-      assert.equal(c.wiring.pendingNotices().length, 1);
-      assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: abc");
-      const main = c.wiring.current();
-      assert.ok(main);
-      const accepted = yield* main.submitAsk({
-        submissionId: "s-2",
-        question: "are you there?",
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      });
-      assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-      const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-      // Main answered while def's analysis was still held.
-      const record = yield* main.waitAsk(runId, 10_000);
-      yield* Effect.promise(() =>
-        until(() => c.inputs.length >= 3 && c.wiring.lanes.snapshot("agent").active === 1),
-      );
-      assert.equal(record?.status, "succeeded");
-      assert.equal(c.inputs.length, 3);
-      assert.equal(c.wiring.lanes.snapshot("agent").active, 1);
-      gate.release();
-      yield* Effect.promise(() =>
-        until(
-          () =>
-            c.wiring.lanes.snapshot("agent").active === 0 && c.wiring.pendingNotices().length === 1,
-        ),
-      );
-      assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
-      assert.equal(c.wiring.pendingNotices().length, 1);
-      assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
-      yield* c.wiring.retire();
-      yield* c.wiring.rebuild();
-    }),
+it.live("one observed conversation waiting on its model neither blocks another nor main", (t) =>
+  Effect.gen(function* () {
+    const gate: Gate = {
+      holds: (texts) => texts.includes(SECRET("def")),
+      release: () => undefined,
+    };
+    const scope = yield* Effect.scope;
+    const c = yield* Effect.promise(() => composed(t, scope, gate));
+    yield* c.wiring.rebuild();
+    yield* c.wiring.rosterLook();
+    yield* Effect.promise(() =>
+      until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1),
+    );
+    // def's inference is held; abc's has finished and left its notice.
+    assert.equal(c.inputs.length, 2);
+    assert.equal(c.wiring.pendingNotices().length, 1);
+    assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: abc");
+    const main = c.wiring.current();
+    assert.ok(main);
+    const accepted = yield* main.submitAsk({
+      submissionId: "s-2",
+      question: "are you there?",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    });
+    assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+    const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+    // Main answered while def's analysis was still held.
+    const record = yield* main.waitAsk(runId, 10_000);
+    yield* Effect.promise(() =>
+      until(() => c.inputs.length >= 3 && c.wiring.lanes.snapshot("agent").active === 1),
+    );
+    assert.equal(record?.status, "succeeded");
+    assert.equal(c.inputs.length, 3);
+    assert.equal(c.wiring.lanes.snapshot("agent").active, 1);
+    gate.release();
+    yield* Effect.promise(() =>
+      until(
+        () =>
+          c.wiring.lanes.snapshot("agent").active === 0 && c.wiring.pendingNotices().length === 1,
+      ),
+    );
+    assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
+    assert.equal(c.wiring.pendingNotices().length, 1);
+    assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
+    yield* c.wiring.retire();
+    yield* c.wiring.rebuild();
+  }),
 );

@@ -73,8 +73,12 @@ function apnsRecord(
 /**
  * The values as this deployment's own environment holds them. The provider is
  * named rather than inherited so the read is the process environment wherever
- * the layer is built, and a key travels as a `Redacted` so a log line or an
- * error that folded a service into it still says nothing.
+ * the layer is built, and read inside an `Effect.sync` rather than beside the
+ * pipe so that "wherever" stays the build: `fromEnv` copies `process.env` out
+ * into a record of its own, so a provider constructed as this module loads
+ * would be this process's first environment forever. A key travels as a
+ * `Redacted` so a log line or an error that folded a service into it still
+ * says nothing.
  */
 export const hostedEnvironment = Layer.effect(
   HostedEnvironment,
@@ -112,5 +116,10 @@ export const hostedEnvironment = Layer.effect(
       cronSecret: presentRedacted(read.cronSecret),
       apnsCredentials: apnsCredentialsFromEnvironment(apnsRecord(read)),
     }),
-  ).pipe(Effect.provideService(ConfigProvider.ConfigProvider, ConfigProvider.fromEnv())),
+  ).pipe(
+    Effect.provideServiceEffect(
+      ConfigProvider.ConfigProvider,
+      Effect.sync(() => ConfigProvider.fromEnv()),
+    ),
+  ),
 );

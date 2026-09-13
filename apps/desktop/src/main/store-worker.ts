@@ -1,5 +1,5 @@
 import { NodeRuntime, NodeWorkerRunner } from "@effect/platform-node";
-import { storeWorkerLayer } from "@sidecar/brain/store";
+import { storeWorkerLayer, storeWorkerTeardown } from "@sidecar/brain/store";
 import { Layer } from "effect";
 
 /**
@@ -10,4 +10,6 @@ import { Layer } from "effect";
  * held open for as long as the thread lives — over the worker-runner
  * protocol `NodeWorkerRunner.layer` speaks on this thread's own message port.
  */
-NodeRuntime.runMain(Layer.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))));
+NodeRuntime.runMain(Layer.launch(storeWorkerLayer.pipe(Layer.provide(NodeWorkerRunner.layer))), {
+  teardown: storeWorkerTeardown,
+});

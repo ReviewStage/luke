@@ -99,7 +99,7 @@ function keyed(fetchLike: (url: string, init: RequestInit) => Promise<Response>)
   return { source, ...script };
 }
 
-it.scopedLive("the keyed source posts the live session document with the key as its bearer", () =>
+it.live("the keyed source posts the live session document with the key as its bearer", () =>
   Effect.gen(function* () {
     const { requests, fetchLike } = openAi([created()]);
     const { source } = keyed(fetchLike);
@@ -141,7 +141,7 @@ it.scopedLive("the keyed source posts the live session document with the key as 
   }),
 );
 
-it.scopedLive(
+it.live(
   "the keyed source attaches its sideband at the session's attach path under the same key",
   () =>
     Effect.gen(function* () {
@@ -176,30 +176,26 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
-  "the keyed source records a sideband that would not open and rejects the attach",
-  () =>
-    Effect.gen(function* () {
-      const { fetchLike } = openAi([created()]);
-      const script = scriptedOpenSocket([
-        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 }),
-      ]);
-      const source = new KeyedLiveSessionSource({
-        apiKey: "sk-test",
-        httpClient: fakeHttpClientLayer(fetchLike),
-        openSocket: script.openSocket,
-      });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
+it.live("the keyed source records a sideband that would not open and rejects the attach", () =>
+  Effect.gen(function* () {
+    const { fetchLike } = openAi([created()]);
+    const script = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 })]);
+    const source = new KeyedLiveSessionSource({
+      apiKey: "sk-test",
+      httpClient: fakeHttpClientLayer(fetchLike),
+      openSocket: script.openSocket,
+    });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
 
-      const attached = yield* Effect.exit(opened.attach());
-      assert.equal(Exit.isFailure(attached), true);
-      assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.SIDEBAND_FAILED);
-      assert.equal(source.diagnostics().sidebandAttached, false);
-    }),
+    const attached = yield* Effect.exit(opened.attach());
+    assert.equal(Exit.isFailure(attached), true);
+    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.SIDEBAND_FAILED);
+    assert.equal(source.diagnostics().sidebandAttached, false);
+  }),
 );
 
-it.scopedLive("the keyed source names each failure class and answers nothing", () =>
+it.live("the keyed source names each failure class and answers nothing", () =>
   Effect.gen(function* () {
     const cases: Array<{ answer: () => Response; outcome: string }> = [
       { answer: status(401), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
@@ -296,7 +292,7 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
   });
 }
 
-it.scopedLive(
+it.live(
   "the hosted source opens one socket with the bearer on its handshake and sends the create frame first",
   () =>
     Effect.gen(function* () {
@@ -326,7 +322,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "the hosted source's attach is the socket that answered, and the answer frame is not an event",
   () =>
     Effect.gen(function* () {
@@ -370,7 +366,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive("the hosted source refuses to open without an access token and opens no socket", () =>
+it.live("the hosted source refuses to open without an access token and opens no socket", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame())]);
     const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
@@ -381,7 +377,7 @@ it.scopedLive("the hosted source refuses to open without an access token and ope
   }),
 );
 
-it.scopedLive("the hosted source names a refused handshake by its status", () =>
+it.live("the hosted source names a refused handshake by its status", () =>
   Effect.gen(function* () {
     const cases: Array<{ status: number; outcome: string }> = [
       { status: 401, outcome: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN },
@@ -406,34 +402,32 @@ it.scopedLive("the hosted source names a refused handshake by its status", () =>
   }),
 );
 
-it.scopedLive(
-  "the hosted source renews a refused bearer once and retries with the renewed one",
-  () =>
-    Effect.gen(function* () {
-      let token = "token-old";
-      const script = scriptedOpenSocket([
-        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
-        answering(createdFrame()),
-      ]);
-      const source = hosted(script, {
-        readAccessToken: () => Effect.succeed(token),
-        refreshAccount: () =>
-          Effect.sync(() => {
-            token = "token-new";
-          }),
-      });
+it.live("the hosted source renews a refused bearer once and retries with the renewed one", () =>
+  Effect.gen(function* () {
+    let token = "token-old";
+    const script = scriptedOpenSocket([
+      () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
+      answering(createdFrame()),
+    ]);
+    const source = hosted(script, {
+      readAccessToken: () => Effect.succeed(token),
+      refreshAccount: () =>
+        Effect.sync(() => {
+          token = "token-new";
+        }),
+    });
 
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
 
-      assert.equal(opened?.sessionId, SESSION_ID);
-      assert.deepEqual(
-        script.opens.map((open) => open.headers.authorization),
-        ["Bearer token-old", "Bearer token-new"],
-      );
-    }),
+    assert.equal(opened?.sessionId, SESSION_ID);
+    assert.deepEqual(
+      script.opens.map((open) => open.headers.authorization),
+      ["Bearer token-old", "Bearer token-new"],
+    );
+  }),
 );
 
-it.scopedLive("the hosted source does not carry a renewed bearer for another account", () =>
+it.live("the hosted source does not carry a renewed bearer for another account", () =>
   Effect.gen(function* () {
     let token = "token-old";
     let holder = "one@example.test";
@@ -457,7 +451,7 @@ it.scopedLive("the hosted source does not carry a renewed bearer for another acc
   }),
 );
 
-it.scopedLive(
+it.live(
   "the hosted source reads a hosted error frame as the refusal it names and closes the socket",
   () =>
     Effect.gen(function* () {
@@ -495,26 +489,24 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
-  "the hosted source treats a frame that is neither answer nor error as malformed",
-  () =>
-    Effect.gen(function* () {
-      const answers = [
-        answeringText("not json"),
-        answering({ type: "session.started" }),
-        answering(createdFrame({ sdpAnswer: "" })),
-      ];
-      for (const answer of answers) {
-        const script = scriptedOpenSocket([answer]);
-        const source = hosted(script);
-        assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-        assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE);
-        assert.equal(script.sockets[0]?.closedByClient, true);
-      }
-    }),
+it.live("the hosted source treats a frame that is neither answer nor error as malformed", () =>
+  Effect.gen(function* () {
+    const answers = [
+      answeringText("not json"),
+      answering({ type: "session.started" }),
+      answering(createdFrame({ sdpAnswer: "" })),
+    ];
+    for (const answer of answers) {
+      const script = scriptedOpenSocket([answer]);
+      const source = hosted(script);
+      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE);
+      assert.equal(script.sockets[0]?.closedByClient, true);
+    }
+  }),
 );
 
-it.scopedLive(
+it.live(
   "the hosted source records a socket closed or silent before it answered as the service unavailable",
   () =>
     Effect.gen(function* () {
@@ -571,7 +563,7 @@ function reattaching(script: ScriptedSocketSeam, options: Partial<HostedLiveSess
   return hosted(script, { reattachDelaysMs: [0, 0, 0], ...options });
 }
 
-it.scopedLive(
+it.live(
   "a hosted connection lost mid-session re-attaches with session.attach and the pipe resumes",
   () =>
     Effect.gen(function* () {
@@ -617,36 +609,34 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
-  "sends made during the gap are held and sent on the re-attached connection, in order",
-  () =>
-    Effect.gen(function* () {
-      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-      const source = reattaching(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-      const sideband = yield* opened.attach();
-      script.sockets[0]?.closeFromServer({ code: 1001 });
-      // The gap begins where the socket's own reader takes that close, which is the turn after it.
-      yield* pause;
-      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
-      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
-      yield* openedSockets(script, 2);
-      yield* pause;
-      const second = script.sockets[1];
-      assert.ok(second);
-      assert.deepEqual(
-        second.sent.map((data) => JSON.parse(data).type),
-        [
-          VOICE_SERVICE_FRAME.SESSION_ATTACH,
-          LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
-          LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
-        ],
-      );
-    }),
+it.live("sends made during the gap are held and sent on the re-attached connection, in order", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+    const source = reattaching(script);
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
+    const sideband = yield* opened.attach();
+    script.sockets[0]?.closeFromServer({ code: 1001 });
+    // The gap begins where the socket's own reader takes that close, which is the turn after it.
+    yield* pause;
+    yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
+    yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
+    yield* openedSockets(script, 2);
+    yield* pause;
+    const second = script.sockets[1];
+    assert.ok(second);
+    assert.deepEqual(
+      second.sent.map((data) => JSON.parse(data).type),
+      [
+        VOICE_SERVICE_FRAME.SESSION_ATTACH,
+        LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+        LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+      ],
+    );
+  }),
 );
 
-it.scopedLive("re-attaching tries as many times as it has delays and then reports the loss", () =>
+it.live("re-attaching tries as many times as it has delays and then reports the loss", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script);
@@ -664,7 +654,7 @@ it.scopedLive("re-attaching tries as many times as it has delays and then report
   }),
 );
 
-it.scoped("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up", () =>
+it.effect("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
@@ -688,7 +678,7 @@ it.scoped("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up"
   }),
 );
 
-it.scoped("closing while an attach attempt waits for its answer closes the socket it opened", () =>
+it.effect("closing while an attach attempt waits for its answer closes the socket it opened", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), () => undefined]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
@@ -706,7 +696,7 @@ it.scoped("closing while an attach attempt waits for its answer closes the socke
   }),
 );
 
-it.scoped("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
+it.effect("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
     const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
@@ -723,7 +713,7 @@ it.scoped("closing while a reattach wait stands interrupts it, opening no furthe
   }),
 );
 
-it.scopedLive("a service that refuses the attachment ends the tries at once", () =>
+it.live("a service that refuses the attachment ends the tries at once", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([
       answering(createdFrame()),
@@ -742,7 +732,7 @@ it.scopedLive("a service that refuses the attachment ends the tries at once", ()
   }),
 );
 
-it.scopedLive(
+it.live(
   "a connection closed normally, or by the host itself, is the session's end and is not re-attached",
   () =>
     Effect.gen(function* () {
@@ -771,7 +761,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive("the introduction source carries no authorization and opens no sideband", () =>
+it.live("the introduction source carries no authorization and opens no sideband", () =>
   Effect.gen(function* () {
     const { quota: _quota, ...unmetered } = createdFrame();
     const script = scriptedOpenSocket([answering(unmetered)]);
@@ -806,7 +796,7 @@ it.scopedLive("the introduction source carries no authorization and opens no sid
   }),
 );
 
-it.scopedLive("the introduction source never reads a refusal as signed out", () =>
+it.live("the introduction source never reads a refusal as signed out", () =>
   Effect.gen(function* () {
     const refused = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 })]);
     const source = new IntroductionLiveSessionSource({
@@ -837,7 +827,7 @@ test("unavailable diagnostics name the fixture run apart from the missing key", 
   assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
 });
 
-it.scopedLive(
+it.live(
   "the hosted source names this installation's device on the create handshake alone, and none while no device is registered",
   () =>
     Effect.gen(function* () {
@@ -888,7 +878,7 @@ function answeringThenSpeaking(
   };
 }
 
-it.scopedLive(
+it.live(
   "a frame the service sends right behind session.created, before the sideband subscribes, reaches the sideband in order",
   () =>
     Effect.gen(function* () {
@@ -918,7 +908,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a frame the service sends right behind session.attached, before the recovering socket adopts the connection, reaches the sideband",
   () =>
     Effect.gen(function* () {
@@ -944,7 +934,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false",
   () =>
     Effect.gen(function* () {
@@ -978,7 +968,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told",
   () =>
     Effect.gen(function* () {
