@@ -198,8 +198,8 @@ const settledOn = (
  * fibers of the one runtime the host holds rather than of a second one built
  * where the work lives.
  *
- * @deprecated A strangler shim on the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`: `StoreClient` answers the promises
+ * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
+ * section: `StoreClient` answers the promises
  * `BrainStateRepository`, `NotebookMemoryStore`, and `ChildStore` declare, so
  * the face lives as long as those three interfaces do.
  */

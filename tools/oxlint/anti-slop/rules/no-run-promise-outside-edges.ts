@@ -41,17 +41,17 @@ function runningMemberName(callee: ESTree.Expression | ESTree.Super): string | n
   return members?.has(property.name) === true ? `${object.name}.${property.name}` : null;
 }
 
-/** Keep the running of an Effect at the process edges the ADR names. */
+/** Keep the running of an Effect at the process edges root AGENTS.md names. */
 export const noRunPromiseOutsideEdgesRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow Effect.run*, Runtime.run*, ManagedRuntime.make, NodeRuntime.runMain, and the brain's runtimeExit dispatch outside the runtime edges and strangler shims docs/adr/0001-effect.md names.",
+        "Disallow Effect.run*, Runtime.run*, ManagedRuntime.make, NodeRuntime.runMain, and the brain's runtimeExit dispatch outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
     },
     messages: {
       runOutsideEdge:
-        "`{{name}}` runs an Effect where the work lives. Return the Effect and let one of the runtime edges in docs/adr/0001-effect.md run it; a shim that has to answer a promise is recorded on that ADR's allowlist and in effect-edges.json.",
+        '`{{name}}` runs an Effect where the work lives. Return the Effect and let one of the runtime edges in root AGENTS.md\'s "Effect idioms" section run it; a permanent adaptor that has to answer a promise is named there and in effect-edges.json.',
     },
   },
   createOnce(context) {

@@ -6,12 +6,11 @@ const PLUGIN_DIRECTORY = path.resolve(path.dirname(fileURLToPath(import.meta.url
 const REPOSITORY_ROOT = path.resolve(PLUGIN_DIRECTORY, "..", "..", "..");
 
 /**
- * The machine-readable twin of the "Where an Effect may run" section of
- * `docs/adr/0001-effect.md`. The ADR states each entry's reason in prose and
- * names the PR that deletes it; this holds the same set as data, so the rules
- * below read one list rather than each re-deriving one, and
- * `scripts/repository-checks.sh` fails a deletion PR that shrinks one side of
- * the pair and not the other.
+ * The machine-readable twin of root AGENTS.md's "Effect idioms" section.
+ * AGENTS.md states each permanent adaptor's reason in prose; this holds the
+ * same set as data, so the rules below read one list rather than each
+ * re-deriving one, and `scripts/repository-checks.sh` fails a PR that shrinks
+ * one side of the pair and not the other.
  */
 const ALLOWLIST_FILE = path.join(PLUGIN_DIRECTORY, "effect-edges.json");
 

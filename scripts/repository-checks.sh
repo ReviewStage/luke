@@ -30,7 +30,6 @@ required_files=(
     scripts/release-macos.sh
     scripts/verify.sh
     docs/DESIGN.md
-    docs/adr/0001-effect.md
     apps/desktop/src/renderer/AGENTS.md
     apps/desktop/src/renderer/CLAUDE.md
     packages/AGENTS.md
@@ -616,23 +615,24 @@ if [[ -n "$openclaw_effect_imports" ]]; then
     exit 1
 fi
 
-# `tools/oxlint/anti-slop/effect-edges.json` is the machine-readable twin of the
-# ADR's "Where an Effect may run" section: `no-run-promise-outside-edges` and
+# `tools/oxlint/anti-slop/effect-edges.json` is the machine-readable twin of
+# root AGENTS.md's "Effect idioms" section: `no-run-promise-outside-edges` and
 # `no-raw-async-primitives` read it, so the lint itself is what catches a file
 # that starts running an Effect without being written down. This is the other
 # direction — an entry that outlived the code it was written for. A deletion PR
-# that takes the run out and leaves the row, or takes the ADR paragraph out and
-# leaves the row, fails here rather than shrinking the allowlist by half.
+# that takes the run out and leaves the row, or takes the AGENTS.md paragraph
+# out and leaves the row, fails here rather than shrinking the allowlist by
+# half.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const root = process.argv[1];
   const allowlistPath = "tools/oxlint/anti-slop/effect-edges.json";
   const allowlist = JSON.parse(await readFile(path.join(root, allowlistPath), "utf8"));
-  const adr = await readFile(path.join(root, "docs/adr/0001-effect.md"), "utf8");
-  const section = adr.slice(
-    adr.indexOf("## Where an Effect may run"),
-    adr.indexOf("## Strangler shims and their deletions"),
+  const agents = await readFile(path.join(root, "AGENTS.md"), "utf8");
+  const section = agents.slice(
+    agents.indexOf("## Effect idioms"),
+    agents.indexOf("## TypeScript"),
   );
   const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(/;
   const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
@@ -665,7 +665,7 @@ node --input-type=module -e '
       const named = new RegExp(`(?<![\\w.\\-/])${entry.replaceAll(".", "\\.")}(?![\\w\\-/])`, "u");
       if (group.named && !named.test(section)) {
         offenders.push(
-          `${group.name}: ${entry} is on the allowlist and the ADR never names it by its whole path`,
+          `${group.name}: ${entry} is on the allowlist and AGENTS.md never names it by its whole path`,
         );
       }
       if (group.pattern !== null && !group.pattern.test(text)) {
@@ -675,7 +675,7 @@ node --input-type=module -e '
   }
   if (offenders.length > 0) {
     process.stderr.write(
-      `error: ${allowlistPath} and docs/adr/0001-effect.md have drifted apart:\n${offenders.join("\n")}\n`,
+      `error: ${allowlistPath} and AGENTS.md have drifted apart:\n${offenders.join("\n")}\n`,
     );
     process.exit(1);
   }

@@ -562,9 +562,9 @@ function jsonColumn(json: string | null): WireValue {
  * hold a handle rather than a client: the recoverable deletion, the store's
  * own tests, and the brain's repository through the store's operations.
  *
- * @deprecated A strangler shim over `StoreDatabase#run`, on the allowlist in
- * `docs/adr/0001-effect.md`. P5-11 runs every store operation's effect on the
- * worker's own runtime edge, and these doors go with it.
+ * @deprecated A strangler shim over `StoreDatabase#run`, named in root
+ * AGENTS.md's "Effect idioms" section. P5-11 runs every store operation's
+ * effect on the worker's own runtime edge, and these doors go with it.
  */
 export function standingGeneration(
   database: StoreDatabase,
