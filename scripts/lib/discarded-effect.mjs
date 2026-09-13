@@ -20,35 +20,37 @@ import ts from "typescript";
  */
 
 /**
- * Effect brands each of its three descriptions with a variance property keyed
- * by a `unique symbol`, which the checker names `__@EffectTypeId@<id>`. A
- * value carrying one is a description of work and nothing else.
+ * Effect brands each of its three descriptions with a property whose name is a
+ * plain string literal — v4 retired the `unique symbol` variance keys the
+ * checker used to name `__@EffectTypeId@<id>`. A value carrying one is a
+ * description of work and nothing else.
  */
-const DESCRIPTION_TYPE_ID = {
-  EFFECT: "EffectTypeId",
-  STREAM: "StreamTypeId",
-  LAYER: "LayerTypeId",
+const DESCRIPTION_BRAND = {
+  EFFECT: "~effect/Effect",
+  STREAM: "~effect/Stream",
+  LAYER: "~effect/Layer",
 };
 
 /**
- * A `Fiber` is already running: awaiting it is what running it as an effect
- * means, so it carries `EffectTypeId` without being a description of work
- * nobody began.
+ * An `Exit` has already run, and it carries `~effect/Effect` too, since
+ * `Exit.Success` and `Exit.Failure` each extend `Effect`. What tells it apart
+ * is the brand of its own that v4 gives it. This is what keeps
+ * `await Effect.runPromise(Fiber.interrupt(fiber))` — an awaited `Exit` — from
+ * reading as a dropped description, and `valid.ts` pins it.
+ *
+ * A `Fiber` needs no such exclusion: v4's `Fiber` extends `Pipeable` alone, so
+ * a fiber somebody detached and walked past carries no description brand at
+ * all. `valid.ts` pins that too, so the day it stops being true the canary
+ * says so rather than the repository quietly gaining a false positive.
  */
-const RUNNING_TYPE_ID = "FiberTypeId";
+const SETTLED_BRAND = "~effect/Exit";
 
 /**
- * An `Exit` has already run, and it carries `EffectTypeId` too, since
- * `Exit.Success` and `Exit.Failure` each extend `Effect`. It has no TypeId of
- * its own, so what tells it apart is the pair of discriminants those two
- * declare and an ordinary `Effect` does not: `_tag` beside `_op`. This is what
- * keeps `await Effect.runPromise(Fiber.interrupt(fiber))` — an awaited `Exit`
- * — from reading as a dropped description.
+ * Whole names, never a prefix: `~effect/Layer/MemoMap` is a brand of its own,
+ * and a prefix test would read a memo map as the layer it memoizes.
  */
-const SETTLED_DISCRIMINANT = ["_tag", "_op"];
-
-function hasTypeIdNamed(propertyNames, typeId) {
-  return propertyNames.some((name) => name.startsWith(`__@${typeId}@`));
+function hasBrand(propertyNames, brand) {
+  return propertyNames.includes(brand);
 }
 
 /** The description a type is, or `null` where it is not one. */
@@ -56,10 +58,9 @@ function describedBy(checker, type) {
   const parts = type.isUnion() || type.isIntersection() ? type.types : [type];
   for (const part of parts) {
     const names = checker.getPropertiesOfType(part).map((property) => property.getName());
-    if (hasTypeIdNamed(names, RUNNING_TYPE_ID)) continue;
-    if (SETTLED_DISCRIMINANT.every((discriminant) => names.includes(discriminant))) continue;
-    for (const [described, typeId] of Object.entries(DESCRIPTION_TYPE_ID)) {
-      if (hasTypeIdNamed(names, typeId)) return described;
+    if (hasBrand(names, SETTLED_BRAND)) continue;
+    for (const [described, brand] of Object.entries(DESCRIPTION_BRAND)) {
+      if (hasBrand(names, brand)) return described;
     }
   }
   return null;

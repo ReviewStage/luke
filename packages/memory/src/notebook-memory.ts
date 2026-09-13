@@ -515,11 +515,13 @@ export function makeNotebookMemory(
     }
 
     /**
-     * Every fiber this index owns is forked `Effect.interruptible`, because a
-     * fork inherits the interrupt status of whoever made it and both doors
+     * Every fiber this index owns is forked `Effect.interruptible`. Under v3
+     * a fork inherited the interrupt status of whoever made it, and both doors
      * here are reached from uninterruptible regions — the follow-on from a
-     * finished pass's own finalizer, the start from the composer's start —
-     * and a fiber forked uninterruptible is one no scope close could end.
+     * finished pass's own finalizer, the start from the composer's start — so
+     * without the wrapper the fiber would have been one no scope close could
+     * end. v4 forks interruptible by default and inherits only on
+     * `uninterruptible: "inherit"`, which leaves the wrapper redundant.
      */
     function forkPass(
       deferred: Deferred.Deferred<MemorySyncReport | undefined>,
