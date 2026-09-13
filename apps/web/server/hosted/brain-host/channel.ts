@@ -1,7 +1,6 @@
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
-import type { UserInfoEndpoint } from "../bearer.js";
-import { type DeploymentActor, deploymentActor, lukeAccount } from "./auth.js";
+import { type BearerAccount, type DeploymentActor, deploymentActor, lukeAccount } from "./auth.js";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "./bounds.js";
 import { messageAuth, ownedAuth, type SessionOwnership } from "./door.js";
 
@@ -23,12 +22,15 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "./door.js";
  * kind of turn is refused before it dispatches.
  */
 export function brainHostChannelInput(
-  userInfo: UserInfoEndpoint,
+  resolveUserId: BearerAccount,
   ownership: SessionOwnership,
   deployment: DeploymentActor,
 ): EveChannelInput {
   return {
-    auth: ownedAuth([deploymentActor(deployment), lukeAccount(userInfo), localDev()], ownership),
+    auth: ownedAuth(
+      [deploymentActor(deployment), lukeAccount(resolveUserId), localDev()],
+      ownership,
+    ),
     turnPolicy: "queue",
     onMessage: (ctx) => ({ auth: messageAuth(ctx) }),
   };

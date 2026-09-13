@@ -53,7 +53,7 @@ import {
 
 /** What the group is handed that the deployment alone can answer for. */
 export interface VoiceMintSeams extends MintSeams, Omit<RemoteObserveSeams, "encryptionSecret"> {
-  resolveUserId: (authorization: string | undefined) => Promise<string | undefined>;
+  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>;
   spend: (userId: string) => Promise<HostedSpend>;
 }
 
@@ -73,7 +73,7 @@ function revealed(secret: Redacted.Redacted | undefined): string | undefined {
 function signedIn(seams: VoiceMintSeams) {
   return Effect.gen(function* () {
     const request = yield* HttpServerRequest.HttpServerRequest;
-    const userId = yield* Effect.promise(() => seams.resolveUserId(request.headers.authorization));
+    const userId = yield* seams.resolveUserId(request.headers.authorization);
     return userId ? userId : yield* refuseMint(HOSTED_REFUSAL.INVALID_TOKEN);
   });
 }

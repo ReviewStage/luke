@@ -101,7 +101,7 @@ function hostOverTestDatabase(): TestHost {
       return database.store;
     },
     writer: () => Effect.succeed(writer),
-    userInfo: async () => undefined,
+    userInfo: () => Effect.succeed(undefined),
     ownership,
     eveOrigin: () => undefined,
     deploymentSecret: () => undefined,
@@ -301,7 +301,7 @@ function channelAuth(accounts: readonly string[]) {
   const channel = brainHostChannelInput(
     async ({ headers }) => {
       const sub = headers.get("authorization")?.replace("Bearer ", "");
-      return sub !== undefined && accounts.includes(sub) ? { sub } : undefined;
+      return sub !== undefined && accounts.includes(sub) ? sub : undefined;
     },
     ownership,
     { secret: undefined, admits: DEPLOYMENT_TURNS },

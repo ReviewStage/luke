@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { HOSTED_WS_BASE_URL } from "@sidecar/hosted";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { RealtimeVoice, RealtimeVoiceSpeed } from "../server/core";
 import { REALTIME_DEFAULTS, REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core";
@@ -58,7 +59,7 @@ function options(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(),
     apiKey: API_KEY,
-    resolveUserId: async () => "user-1",
+    resolveUserId: () => Effect.succeed("user-1"),
     spend: async () => OPEN_SPEND,
     now: () => NOW,
     ...overrides,
@@ -167,7 +168,7 @@ test("the gate order is method, kill switch, token, body, quota", async () => {
   assert.equal(blankKey.status, 503);
   assert.equal((await blankKey.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
 
-  const anonymous = await mintAnswer(options({ resolveUserId: async () => undefined }));
+  const anonymous = await mintAnswer(options({ resolveUserId: () => Effect.succeed(undefined) }));
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
 

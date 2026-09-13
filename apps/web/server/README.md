@@ -290,6 +290,35 @@ container. The Postgres half is the production layer's own client; the PGlite
 half is a small `SqlClient` over `@electric-sql/pglite`, because no
 `@effect/sql-pglite` ships against the 3.x Effect line.
 
+## The bearer's resolution
+
+`server/hosted/bearer.ts` answers effects. `hostedUserId(request, userInfo)`
+and `userIdForAuthorization(authorization, userInfo)` each answer
+`Effect<string | undefined>`, and a `UserInfoEndpoint` answers
+`Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
+`oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
+`Effect.tryPromise` once where an endpoint is constructed —
+`hostedVaultUserInfo` in `server/hosted/vault-route.ts`, the brain group's in
+`server/hosted/brain-route.ts`, the voice function's own, the brain host's
+seam, and the observation group's inline one — and nowhere else. What that
+call throws is still one indistinguishable nothing: the resolution recovers
+it, so a missing header, an expired token, and a refusing auth service are
+the same 401 they always were, and no route repeats the recovery.
+
+Every caller yields it. `HostedStoreRoute.resolveUserId`
+(`server/hosted/store-route.ts`) and the seams of the devices-and-vault, brain,
+and voice-mint groups are Effect-shaped fields, so `brain-ask.ts`,
+`turn-event-stream.ts`, `conversation-clear.ts`, `change-signal.ts`,
+`resource-reads.ts`, and the three groups' gates read the bearer on their own
+fiber instead of wrapping a promise in `Effect.promise`. Two callers are
+promises of somebody else's: `server/voice/function.ts`, whose `VoiceService`
+is a class of `ws` callbacks, and eve's `AuthFn`, which
+`apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
+that authored file — eve's own edge — rather than keeping a promise-shaped
+door beside the effect under `server/hosted/`. `lukeAccount` takes the
+resolved account as a `BearerAccount` promise and reaches no userinfo
+endpoint of its own.
+
 ## A route built from an HttpApp
 
 `server/route-effect.ts` holds `routeFromHttpApp(app)`, which turns the

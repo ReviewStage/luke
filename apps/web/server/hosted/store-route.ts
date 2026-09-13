@@ -18,7 +18,7 @@ import { hostedEncryptionSecret, hostedVaultUserInfo } from "./vault-route.js";
  */
 export interface HostedStoreRoute {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: HostedStore;
 }
 

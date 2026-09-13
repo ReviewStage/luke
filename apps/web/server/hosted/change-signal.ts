@@ -58,7 +58,7 @@ const MAXIMUM_CHANGES_BODY_BYTES = 4_096;
 
 export interface ChangeSignalOptions {
   request: Request;
-  resolveUserId: (request: Request) => Promise<string | undefined>;
+  resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;
   touchDevice: DeviceSeams["touchDevice"];
   now?: () => number;
@@ -83,7 +83,7 @@ export function handleChanges(
         HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
       );
     }
-    const userId = yield* Effect.promise(() => resolveUserId(request));
+    const userId = yield* resolveUserId(request);
     if (!userId) {
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }

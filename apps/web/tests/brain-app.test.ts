@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ACTION_TOOL,
@@ -133,7 +134,7 @@ function answering(call: Partial<BrainCall> & { request: Request }): () => Promi
   return () =>
     brainAnswer({
       apiKey: "sk-hosted-secret",
-      resolveUserId: async () => "user-1",
+      resolveUserId: () => Effect.succeed("user-1"),
       spend: async () => OPEN_SPEND,
       ...call,
     });
@@ -156,7 +157,7 @@ const CASES: readonly (readonly [string, () => Promise<Response>])[] = [
     "capabilities-invalid-token",
     answering({
       request: get(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES),
-      resolveUserId: async () => undefined,
+      resolveUserId: () => Effect.succeed(undefined),
     }),
   ],
   [

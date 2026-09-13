@@ -195,7 +195,7 @@ function options(
 ): TurnEventStreamOptions {
   return {
     request: req,
-    resolveUserId: async () => userId,
+    resolveUserId: () => Effect.succeed(userId),
     store: database.store,
     bounds,
   };

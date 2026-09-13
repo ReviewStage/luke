@@ -76,7 +76,8 @@ function seamsFor(overrides: Partial<DevicesVaultSeams> = {}) {
     deletes: [],
   };
   const seams: DevicesVaultSeams = {
-    resolveUserId: async (authorization) => authorization?.replace("Bearer ", "") || undefined,
+    resolveUserId: (authorization) =>
+      Effect.succeed(authorization?.replace("Bearer ", "") || undefined),
     now: () => NOON,
     mintId: () => DEVICE_ID,
     registerDevice: (userId, registration, mintId, now) =>
@@ -128,7 +129,7 @@ test("the devices gate order is method, bearer, brake, and every refusal is one 
   assert.equal((await wrongMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: async () => undefined }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
     devicesRequest("POST"),
   );
   assert.equal(anonymous.status, 401);
@@ -311,7 +312,7 @@ test("a forget is scoped to the bearer's account and answers whether a row went"
 test("a hammering account is braked to a trickle without reaching a seam", async () => {
   let brakedAt: number | undefined;
   for (let call = 0; call < 200; call += 1) {
-    const { seams, recorded } = seamsFor({ resolveUserId: async () => "user-braked" });
+    const { seams, recorded } = seamsFor({ resolveUserId: () => Effect.succeed("user-braked") });
     const response = await answer(seams, devicesRequest("PUT", { deviceId: DEVICE_ID }));
     if (response.status === 429) {
       assert.equal((await response.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
@@ -346,7 +347,7 @@ test("the vault store gate order is method, secret, token, body", async () => {
   assert.equal(blankSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: async () => undefined }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
     vaultKeyRequest("POST", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR, key: "sk-abc1234" }),
   );
   assert.equal(anonymous.status, 401);
@@ -451,7 +452,7 @@ test("the delete gate order is method, secret, token, body", async () => {
   assert.equal(noSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: async () => undefined }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
     vaultKeyRequest("DELETE", { providerId: CLOUD_AGENT_PROVIDER_ID.CONDUCTOR }),
   );
   assert.equal(anonymous.status, 401);
@@ -502,7 +503,7 @@ test("the list gate order is method, secret, token", async () => {
   assert.equal(noSecret.status, 503);
 
   const anonymous = await answer(
-    seamsFor({ resolveUserId: async () => undefined }).seams,
+    seamsFor({ resolveUserId: () => Effect.succeed(undefined) }).seams,
     vaultKeysRequest(),
   );
   assert.equal(anonymous.status, 401);
@@ -540,7 +541,7 @@ test("the list omits rows stored for a provider the vault no longer accepts", as
 test("the list calls the seam with the resolved user id", async () => {
   let calledWithUserId: string | undefined;
   const { seams } = seamsFor({
-    resolveUserId: async () => "user-xyz",
+    resolveUserId: () => Effect.succeed("user-xyz"),
     listKeys: async (userId) => {
       calledWithUserId = userId;
       return [];
@@ -587,7 +588,7 @@ const EXCHANGES: readonly Exchange[] = [
   },
   {
     name: "devices-invalid-token",
-    seams: { resolveUserId: async () => undefined },
+    seams: { resolveUserId: () => Effect.succeed(undefined) },
     request: () => devicesRequest("POST", { deviceId: DEVICE_ID }, "user-golden"),
   },
   {
