@@ -202,7 +202,7 @@ answers `Clock` and `Scope` directly instead.
 release and P12-16g deleted the file: `anticipateAsk` answers an
 `Effect<void>` now, so the slot's fiber is an `Effect.forkDaemon` inside the
 effect the caller runs rather than a run of the prefetch's own, and what runs
-it is the live brain adapter on the runtime it already carries the spoken ask
+it is the live brain adapter on the runtime it already answers the spoken ask
 on. Nothing is awaited either way — the effect ends when the fiber is open,
 and the value the turn later takes travels through the slot's own `Deferred`.
 The `ScheduledTimer` type alias itself — the opaque handle a
@@ -294,6 +294,22 @@ fresh pass just drew, so it waits on `observation.loop.refresh` — and the
 link that asks for a beat is a synchronous callback the calendars composer
 holds, so the pass is run to a promise on this composition's own runtime. It
 goes when that link answers an effect.
+
+`brainAgentLiveBrain` in `packages/host/src/voice/live-brain-adapter.ts` is on
+the same list, and P12-16l is what put it there in place of the `carryOn` it
+held: the adapter is built as an effect on the composition's own runtime
+(`compose-host.ts` yields it where the brain composer stands), so what it runs
+is that runtime rather than one of its own. `LiveBrain` is the contract the
+voice service and the hosted side both speak, and two of its faces are not
+effects and cannot become ones here: `submitAsk` answers a `Promise`, so the
+whole of an ask — following the agent, then `submitAsk` on it — is one
+`Effect` run to that promise, and `anticipate` answers nothing at all, so
+following the agent and asking it to read ahead is one `Effect` forked with
+`Runtime.runFork`. What the change bought beside the shim is ordering: the
+subscription is a `yield*` before the ask rather than a promise started beside
+it, so no run's first events can arrive before the adapter is listening. It
+goes when `LiveBrain` itself answers effects, which P12-18g decides for both
+of its implementations at once.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
@@ -1097,7 +1113,7 @@ left it with the queue beneath it, so an ask, a wait, a cancel, a mark, a
 context snapshot, a stop, the four child verbs, and a run-event subscription
 are each an `Effect` its caller runs. What holds a promise is the host above
 the agent — `BrainHost`'s transition chain, the publication chain's marks,
-the live brain adapter's spoken ask and its subscription — and the two edges
+and nothing else — and the two edges
 inside the agent that a timer calls with nowhere to answer, which
 `AgentSeam#detach` carries in one place rather than in each. The child
 service's executor seams left this door in P12-16k.
@@ -1112,6 +1128,10 @@ so one place carries every seam to it rather than each seam carrying its own,
 and a defect is squashed back to the error that caused it so the port's own
 error handling reads what was thrown. A `start` answers its end as an effect,
 and running that effect is what the port's `done` promise is.
+The live brain adapter's spoken ask and its subscription left this door in
+P12-16l, named above: the adapter is built as an effect on the composition's
+own runtime, so following an agent and asking it are `yield*`s inside one
+effect it runs there itself.
 The wake face left that surface in P12-16c, named below. The
 `MemoryProvider` seam left that list in P12-16a:
 `recall`, `capture`, and a memory tool's `execute` are each an `Effect` the
@@ -1159,9 +1179,11 @@ release — because a run begins the work on the calling stack while
 conversation's queue, counted busy, in the step that asked for it rather than
 a scheduler task later, or a stop arriving between the two would drain a queue
 the turn had not yet joined; and, in the host,
-`BrainHost`'s build and stop, `followBrainRequests`' marks, `wireChildren`'s
-four executor seams, and `brainAgentLiveBrain`'s ask and subscription. The
-turn runner's `runAsk` and `turn` and
+`BrainHost`'s build and stop and `followBrainRequests`' marks.
+`brainAgentLiveBrain`'s ask and subscription left it in P12-16l, named above:
+the adapter runs the agent's own effects on the composition's runtime it was
+built on rather than carrying them; `wireChildren`'s four executor seams left
+it in P12-16k, named above as well. The turn runner's `runAsk` and `turn` and
 `Maintenance`'s housekeeping turn came off it in P12-16g with the queue they
 rode: `BrainAgent#enqueue`, `#queueTurn`, and the host's `BrainLane` each take
 an `Effect` now — the lane is `@sidecar/runtime/effect`'s `withLane` over the
