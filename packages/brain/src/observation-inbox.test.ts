@@ -163,16 +163,17 @@ it.effect(
           identities: [ABC, CLOUD],
           sessions: [session("abc", { status: SESSION_STATUS.WORKING }), cloudSession()],
         }),
-        readTranscriptSince: async (identity): Promise<ProviderTranscriptSinceResult> => {
-          read.push(identity.providerSessionId);
-          if (identity.providerId === CONDUCTOR.id) return NO_TRANSCRIPT;
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            text: "assistant: still going",
-            cursor: `${identity.providerSessionId}-cursor`,
-            truncated: false,
-          };
-        },
+        readTranscriptSince: (identity): Effect.Effect<ProviderTranscriptSinceResult> =>
+          Effect.sync(() => {
+            read.push(identity.providerSessionId);
+            if (identity.providerId === CONDUCTOR.id) return NO_TRANSCRIPT;
+            return {
+              status: ACTION_RESULT_STATUS.ACCEPTED,
+              text: "assistant: still going",
+              cursor: `${identity.providerSessionId}-cursor`,
+              truncated: false,
+            };
+          }),
       });
       yield* h.agent.rosterLook();
       yield* Effect.promise(() => settle());
@@ -211,7 +212,7 @@ it.effect("a cloud session seen working and then reported failed opens a look fo
     const h = yield* effectHarness({
       observes: { kind: LOOK_SUBJECT.SESSION, identity: CLOUD },
       roster: () => ({ text: "roster", identities: [CLOUD], sessions: [current] }),
-      readTranscriptSince: async () => NO_TRANSCRIPT,
+      readTranscriptSince: () => Effect.succeed(NO_TRANSCRIPT),
     });
     h.client.answers.push(answered([message("")]), answered([message("")]));
     yield* h.agent.rosterLook();
@@ -239,7 +240,7 @@ it.effect("two identical cloud looks capture once", () =>
     const h = yield* effectHarness({
       observes: { kind: LOOK_SUBJECT.SESSION, identity: CLOUD },
       roster: () => ({ text: "roster", identities: [CLOUD], sessions: [cloudSession()] }),
-      readTranscriptSince: async () => NO_TRANSCRIPT,
+      readTranscriptSince: () => Effect.succeed(NO_TRANSCRIPT),
     });
     h.client.answers.push(answered([message("")]));
     yield* h.agent.rosterLook();
@@ -346,12 +347,13 @@ it.effect(
       // nothing consumes what is captured.
       let piece = 0;
       const reading = (): Partial<BrainAgentOptions> => ({
-        readTranscriptSince: async (identity) => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: `PIECE_${++piece}`,
-          cursor: `${identity.providerSessionId}-${piece}`,
-          truncated: false,
-        }),
+        readTranscriptSince: (identity) =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: `PIECE_${++piece}`,
+            cursor: `${identity.providerSessionId}-${piece}`,
+            truncated: false,
+          }),
       });
       const quiet = yield* effectHarness({
         ...reading(),
@@ -413,12 +415,13 @@ it.effect(
             session("def", { status: SESSION_STATUS.WORKING }),
           ],
         }),
-        readTranscriptSince: async (identity) => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: identity.providerSessionId === "abc" ? text : "never read",
-          cursor: `${identity.providerSessionId}-${text.length}`,
-          truncated: false,
-        }),
+        readTranscriptSince: (identity) =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: identity.providerSessionId === "abc" ? text : "never read",
+            cursor: `${identity.providerSessionId}-${text.length}`,
+            truncated: false,
+          }),
       });
       h.client.answers.push(answered([message("")]));
       yield* h.agent.rosterLook();
@@ -464,12 +467,13 @@ it.effect(
         }),
         // The cursor is a position in the transcript, so each read starts where the
         // last one stopped, the way a provider's own reader does.
-        readTranscriptSince: async (_identity, cursor) => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: transcript.slice(Number(cursor ?? 0)),
-          cursor: String(transcript.length),
-          truncated: false,
-        }),
+        readTranscriptSince: (_identity, cursor) =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: transcript.slice(Number(cursor ?? 0)),
+            cursor: String(transcript.length),
+            truncated: false,
+          }),
       });
       // Neither the look nor a wake opens an inference over an
       // exchange being heard first-hand, and nothing is written down to open one

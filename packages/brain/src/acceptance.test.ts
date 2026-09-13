@@ -312,13 +312,15 @@ function host(
       }).actions,
       roster: () => ({ text: "- abc", identities: [ABC], sessions: session ? [session] : [] }),
       standingContext: () => "Durable facts: none.",
-      readTranscriptSince: async () => ({
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: "transcript delta",
-        cursor: "c1",
-        truncated: false,
-      }),
-      readTranscript: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
+      readTranscriptSince: () =>
+        Effect.succeed({
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text: "transcript delta",
+          cursor: "c1",
+          truncated: false,
+        }),
+      readTranscript: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole" }),
       deliver: () => undefined,
       store,
       createRunId: () => `run-${++ids}`,

@@ -414,12 +414,13 @@ it.effect(
     Effect.gen(function* () {
       const h = yield* effectHarness({
         standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
-        readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: INSTRUCTION_IN_DATA,
-          cursor: "c1",
-          truncated: false,
-        }),
+        readTranscriptSince: (): Effect.Effect<ProviderTranscriptSinceResult> =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: INSTRUCTION_IN_DATA,
+            cursor: "c1",
+            truncated: false,
+          }),
       });
       yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(
@@ -486,16 +487,18 @@ it.effect(
       const h = yield* effectHarness({
         prepareTurn: NO_ACTS_POLICY,
         standingContext: () => `Durable facts:\n- ${INSTRUCTION_IN_DATA}`,
-        readTranscriptSince: async (): Promise<ProviderTranscriptSinceResult> => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          text: INSTRUCTION_IN_DATA,
-          cursor: "c1",
-          truncated: false,
-        }),
-        readTranscript: async (): Promise<ProviderTranscriptResult> => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          transcript: INSTRUCTION_IN_DATA,
-        }),
+        readTranscriptSince: (): Effect.Effect<ProviderTranscriptSinceResult> =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            text: INSTRUCTION_IN_DATA,
+            cursor: "c1",
+            truncated: false,
+          }),
+        readTranscript: (): Effect.Effect<ProviderTranscriptResult> =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            transcript: INSTRUCTION_IN_DATA,
+          }),
       });
       yield* h.agent.wake([edge(ABC)]);
       h.client.answers.push(
@@ -939,8 +942,10 @@ it.effect(
       let releaseRead: ((result: ProviderTranscriptSinceResult) => void) | undefined;
       const h = yield* effectHarness({
         readTranscriptSince: () =>
-          new Promise((resolve) => {
-            releaseRead = resolve;
+          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+            releaseRead = (result) => {
+              resume(Effect.succeed(result));
+            };
           }),
       });
       h.client.answers.push(answered([message("seen")]));
@@ -990,12 +995,16 @@ it.effect(
       const h = yield* effectHarness({
         executionDeadlineMs: 60_000,
         readTranscript: () =>
-          new Promise((resolve) => {
-            reads.push(resolve);
+          Effect.async<ProviderTranscriptResult>((resume) => {
+            reads.push((result) => {
+              resume(Effect.succeed(result));
+            });
           }),
         readTranscriptSince: () =>
-          new Promise((resolve) => {
-            deltas.push(resolve);
+          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+            deltas.push((result) => {
+              resume(Effect.succeed(result));
+            });
           }),
       });
       // Cancel while a full read is out: the run settles without waiting on it.

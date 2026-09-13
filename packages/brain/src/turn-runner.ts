@@ -147,8 +147,8 @@ export interface TurnRunnerOptions {
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ) => Promise<ProviderTranscriptSinceResult>;
-  readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
+  ) => Effect.Effect<ProviderTranscriptSinceResult>;
+  readTranscript: (identity: SessionIdentity) => Effect.Effect<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   notice?: (report: BrainTurnReport) => void;
   /** Hears every event a turn tells, stamped by the turn's own teller; the ledger tells a record's end through the same seam. */

@@ -281,14 +281,16 @@ async function composed(
     roster: () => ({ text: "", identities: [], sessions: [] }),
     standingContext: () => "",
     transcripts: {
-      readTranscript: async () => ({
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "not in test",
-      }),
-      readTranscriptSince: async () => ({
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "not in test",
-      }),
+      readTranscript: () =>
+        Effect.succeed({
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "not in test",
+        }),
+      readTranscriptSince: () =>
+        Effect.succeed({
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: "not in test",
+        }),
     },
     session: () => undefined,
     deliver: async () => undefined,

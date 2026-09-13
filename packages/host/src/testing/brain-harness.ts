@@ -110,11 +110,13 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
         actions: fakeActionPerformer().actions,
         roster: () => ({ text: "", identities: [] }),
         standingContext: () => "",
-        readTranscriptSince: async () => ({
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "no",
-        }),
-        readTranscript: async () => ({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
+        readTranscriptSince: () =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: "no",
+          }),
+        readTranscript: () =>
+          Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "no" }),
         deliver: () => undefined,
         store,
         createRunId: () => `run-${++ids}`,

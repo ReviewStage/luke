@@ -155,8 +155,8 @@ export interface BrainAgentOptions {
   readTranscriptSince: (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ) => Promise<ProviderTranscriptSinceResult>;
-  readTranscript: (identity: SessionIdentity) => Promise<ProviderTranscriptResult>;
+  ) => Effect.Effect<ProviderTranscriptSinceResult>;
+  readTranscript: (identity: SessionIdentity) => Effect.Effect<ProviderTranscriptResult>;
   deliver: (delivery: BrainDelivery) => void | Promise<void>;
   /** Hears what each observation or hold-release turn amounted to, in the host's own counts. */
   notice?: (report: BrainTurnReport) => void;

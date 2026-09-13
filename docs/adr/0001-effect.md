@@ -1573,15 +1573,19 @@ the same shape and is gone too: P12-20b took
 the launch's own edge — the `run` `compose-desktop.ts` reads out of the fiber
 building it — rather than on a runtime the package built for itself.
 
-`readPage` in `packages/host/src/brain/hosted-transcripts.ts` is the one run
-P12-20a added, and it is the price of the requirement above being gone rather
-than a second door onto the network: `hostedTranscriptReads` answers the
-brain's `SessionTranscriptReads`, whose `readTranscript` and
-`readTranscriptSince` are promises the agent's own options declare, so the
-messages client's effect is run to one there. It holds nothing else — a page
-is read, and every refusal, every cursor, and the whole rendering of the lines
-is the same code it always was. It goes once those two seams answer effects,
-which is a `packages/brain` change no PR in this plan schedules.
+`readPage` in `packages/host/src/brain/hosted-transcripts.ts` was the price of
+that requirement being gone rather than a second door onto the network, and
+P12-20m paid it off: the brain's `readTranscript` and `readTranscriptSince`
+answer `Effect<A, never, never>` where the agent's own options declared
+promises, so `hostedTranscriptReads` yields the messages client's effect on
+the turn's fiber rather than running it beside one, and the page's rendering,
+its refusals, and its cursors are the same code they always were. The seams
+declare no error because no implementer has one — the messages client's read
+answers `undefined` where the service refused, and the providers' own
+conversation reads already answered effects — so `transcript-reads.ts` catches
+the reads' defects instead of their failures: a read that dies is the rejected,
+empty delta and the `READ_FAILED` refusal a read that failed always was, the
+same shape `read-prefetch.ts` and `apps/web`'s `since` already hold.
 
 `runTest` in `packages/wire/src/testing/effect.ts` is the test harness's own
 door on the same terms: a suite still written on `node:assert` outside
@@ -1656,7 +1660,6 @@ design decision stated as such:
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-20a — deleted; it answers `Effect<Response, Error>` and `AccountClient`'s verbs and `deleteHostedAccount` answer effects with it |
 | `HostedActionClient`/`HostedDeviceClient`/`HostedSessionMessagesClient`/`HostedVaultClient`'s `#run`/`#ask` | P3-06c | P12-20a — deleted; each provides its own `httpClient` layer and answers the effect |
-| `readPage`, the brain transcript reads' promise door over `HostedSessionMessagesClient#read` (`packages/host/src/brain/hosted-transcripts.ts`) | P12-20a | once the brain's `readTranscript`/`readTranscriptSince` seams answer effects |
 | `AccountSessionManager`'s `Effect.runSync(PubSub.unbounded())` field construction | P12-16d | once the class is itself built by an effect its owner runs |
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |

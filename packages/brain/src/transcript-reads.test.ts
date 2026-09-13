@@ -28,10 +28,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const h = yield* effectHarness({
-        readTranscript: async () => ({
-          status: ACTION_RESULT_STATUS.ACCEPTED,
-          transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
-        }),
+        readTranscript: () =>
+          Effect.succeed({
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            transcript: `${"x".repeat(FULL_TRANSCRIPT_CHARS * 2)}END`,
+          }),
       });
       h.client.answers.push(
         answered([
@@ -66,11 +67,12 @@ it.effect(
 it.effect("a delta longer than its bound is cut from the front and marked truncated", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness({
-      readTranscriptSince: async () => ({
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
-        truncated: false,
-      }),
+      readTranscriptSince: () =>
+        Effect.succeed({
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          text: `${"y".repeat(DELTA_PER_SESSION_CHARS * 2)}TAIL`,
+          truncated: false,
+        }),
     });
     yield* h.agent.wake([edge(ABC)]);
     yield* advanceHarness(NOW + 3_000);

@@ -630,7 +630,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         dependencies.transcripts.readTranscriptSince(identity, cursor),
       readTranscript: (identity) => {
         if (!dependencies.session(identity)) {
-          return Promise.resolve({
+          return Effect.succeed({
             status: ACTION_RESULT_STATUS.REJECTED,
             reason: "No observed session matches that identity.",
           });
