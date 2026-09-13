@@ -165,7 +165,7 @@ describe("the standing host", () => {
     () =>
       Effect.gen(function* () {
         const log: Recorded[] = [];
-        const refused = new Error("no store worker");
+        const refused = new Error("a seam the concern needs is missing");
         const assembly = recordingAssembly(log, [
           recordingComposer(log, "first"),
           recordingComposer(log, "second"),
