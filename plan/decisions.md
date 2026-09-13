@@ -3491,3 +3491,18 @@ heading and was verified on both dialects.
 revision column, the head as `{seq, revision}`, clients unchanged"; the second column is what makes
 that ruling true at the finish. Production confirmed after deploy: `journal_revision` present on
 `conversations`; `messages_conversation_revision` partial index present. **Told to Dean plainly.**
+
+
+## 2026-09-13 ~18:25Z — Dean: GO on #1327 (LUKE-200, the exchange flip); the CI probe door is open
+
+**"Let's go on #1327."** The exchange flips to the service with LUKE-202's four consequences accepted as
+named: the two onboarding beats unspoken until re-homed on the service; the keyed voice source answered
+by nobody until keyed mode is removed (the plan already calls for that); no Mac-opened session for a
+briefing; the announcement pause and introduction hold as no-ops on the host. LUKE-185's 2a (type
+allowlist, **close** on anything else) lands in the same commit; the idle report becomes a
+`session.activity` service frame. **Behind it, in order:** #1294/#1298 (LUKE-143, one rebase then a pure
+deletion), LUKE-201 (2c), LUKE-202 (re-homing), LUKE-107's three ADR sentences.
+
+**"And I just set the Vercel and GitHub settings."** The LUKE-164 door: OPTIONS Allowlist over `/api`
+and `/eve`, `PREVIEW_PROBE_DOOR=options-allowlist`. **Verification is the next PR push** — `Preview
+shape` should run rather than skip; #1327's rebase is the first candidate.
