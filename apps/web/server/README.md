@@ -373,10 +373,10 @@ vocabulary's `not-found`. Each handler's own logic is carried unchanged —
 `server/hosted/observation-tick.ts` — behind a passthrough shaped like the
 auth group's: the `HttpServerRequest` becomes the `Request` the handler always
 took, and its `Response` is carried back with `HttpServerResponse.raw`.
-`server/hosted/vault-route.ts` exports its seams as `hostedVaultSeams` beside
-`hostedVaultRoute`, so the three routes behind it (sessions/messages,
-projects, observe) read the same resolved bearer and the same provider-key
-queries without a second copy of them. `fixtures/observation-route/` records
+`server/hosted/vault-route.ts` exports its seams as `hostedVaultSeams`, read
+directly by every `HttpApi` group, so the three routes behind it
+(sessions/messages, projects, observe) read the same resolved bearer and the
+same provider-key queries without a second copy of them. `fixtures/observation-route/` records
 one answer per route, a wrong method on a declared path, and a path outside
 the group, and `tests/observation-app.test.ts` answers each twice — through
 the group and by calling the handler directly — and compares the two.
@@ -438,8 +438,8 @@ down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
 `DeviceHeartbeat`, and the `pushAddress`/`heartbeatFrom` helpers
 `change-signal.ts`'s poll still reaches for), and `server/hosted/vault.ts` is
 gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
-is the deployment's real wiring — the same account store the `hostedVaultRoute`
-seams other hosted routes read — so each of the three route files is one line
+is the deployment's real wiring — the same account store `hostedVaultSeams`
+carries for the other hosted routes — so each of the three route files is one line
 handing it to `routeFromHttpApp(devicesVaultApp(...))`.
 `HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
 (429), for the device brake's own refusal. Reading a body through
@@ -451,6 +451,23 @@ path — a register, a heartbeat, a forget, a store, a delete, a list, and one
 refusal of each shape — and `tests/devices-vault-app.test.ts` carries every
 gate-order and validation case the promise-shaped handlers were tested
 against, run against the group instead.
+
+## The rating route
+
+`server/rating-app.ts` is the one-endpoint group behind
+`server/routes/conversation/messages/rating.ts`: `PUT
+/api/conversation/messages/{id}/rating`, the path's id rewritten into the
+query the way `server/function-rewrites.ts` moves every segment-captured id.
+`server/hosted/message-rating.ts`'s `handleMessageRating` answers an effect
+now, reading `hostedVaultSeams.resolveUserId` directly instead of through a
+`Route`'s own `Effect.promise` wrap, and its `rate` seam is `rateMessage` over
+a `storeWriter` built with no tool registry, since the route records events
+alone and names no tool; the id parsing, the body's byte bound, and the two
+refusals the store answers (`not_found`, `not_lukes`) are unchanged.
+`tests/hosted-message-rating.test.ts` runs the handler through
+`tests/support/no-database.ts`'s refusing `SqlClient` layer, the same runner
+the events and conversation-read tests use, since every case here mocks its
+`rate` seam and never reaches a real connection.
 
 ## The admin group
 

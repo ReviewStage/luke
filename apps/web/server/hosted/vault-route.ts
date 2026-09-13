@@ -4,7 +4,6 @@ import { Effect, type ParseResult, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
-import type { Route } from "../route.js";
 import { runWeb } from "../runtime.js";
 import type { UserInfoEndpoint } from "./bearer.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "./bearer.js";
@@ -84,9 +83,20 @@ export const hostedVaultUserInfo: UserInfoEndpoint = async (input) => {
   return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
 };
 
-/** The bearer resolved against the deployment's own account store, the same for every hosted route. */
-export function resolveHostedUserId(request: Request): Promise<string | undefined> {
-  return hostedUserId(request, hostedVaultUserInfo);
+/**
+ * The bearer resolved against the deployment's own account store, the same
+ * for every hosted route that reads its seams on its own fiber. `hostedUserId`
+ * still answers a promise, since the auth service's userinfo call and the
+ * request its `HostedStoreRoute`-shaped callers wrap it in both stay
+ * promise-shaped; here, where the one Effect-native seam this deployment
+ * carries needs the same bearer, that promise is the effect's own
+ * construction, wrapped once with `Effect.tryPromise` rather than rewrapped
+ * with `Effect.promise` at every route that reads it.
+ */
+export function resolveHostedUserId(request: Request): Effect.Effect<string | undefined> {
+  return Effect.tryPromise(() => hostedUserId(request, hostedVaultUserInfo)).pipe(
+    Effect.orElseSucceed(() => undefined),
+  );
 }
 
 /** The provider key vault's own secret, read once with the deployment's services rather than at each invocation. */
@@ -110,16 +120,15 @@ export const hostedEncryptionSecretEffect: Effect.Effect<
 );
 
 /**
- * The same seams, exported for a route built as an `HttpApi` group instead of
- * through `hostedVaultRoute` below: the group reads them directly rather than
- * rebuilding the queries they close over. `encryptionSecret` is not among
- * them: it is read fresh from `HostedEnvironment` per request, by
- * {@link hostedVaultRoute}, by the promise-shaped handlers that still spread
- * this object directly, and by `server/actions-app.ts`, whose handlers are
- * effects and so read it on the group's own fiber.
+ * The same seams, read directly by every route built as an `HttpApi` group
+ * rather than rebuilding the queries they close over. `encryptionSecret` is
+ * not among them: it is read fresh from `HostedEnvironment` per request, by
+ * the handlers that still spread this object as a promise-shaped route's
+ * options, and by `server/actions-app.ts` and `server/rating-app.ts`, whose
+ * handlers are effects and so read it on the group's own fiber.
  */
 export const hostedVaultSeams = {
-  resolveUserId: (request: Request) => Effect.promise(() => resolveHostedUserId(request)),
+  resolveUserId: resolveHostedUserId,
   readKey: readVaultKey,
   readVaultKeys: (userId: string) => runWeb(readStoredVaultKeys(userId)),
   listKeys: (userId: string) => runWeb(listVaultKeys(userId)),
@@ -129,18 +138,7 @@ export const hostedVaultSeams = {
   store: storeFor,
 } satisfies Omit<HostedVaultRoute, "request" | "encryptionSecret">;
 
-/**
- * One hosted route over the deployment's seams. The handler is what the
- * endpoint is; everything above it is the same for all of them.
- */
-export function hostedVaultRoute(handler: (route: HostedVaultRoute) => Promise<Response>): Route {
-  return {
-    fetch: async (request) =>
-      handler({ ...hostedVaultSeams, encryptionSecret: await hostedEncryptionSecret(), request }),
-  };
-}
-
-/** The devices-and-vault group's real seams: the same account store the `hostedVaultRoute` seams other, still-promise-shaped hosted routes read. */
+/** The devices-and-vault group's real seams: the same account store `hostedVaultSeams` reads for the other, Effect-native hosted routes. */
 export function productionDevicesVaultSeams(): DevicesVaultSeams {
   return {
     resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedVaultUserInfo),
