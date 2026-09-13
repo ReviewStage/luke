@@ -53,7 +53,6 @@
     "packages/host/src/compose-live.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
-    "packages/voice/src/live-session/live-session-service.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [

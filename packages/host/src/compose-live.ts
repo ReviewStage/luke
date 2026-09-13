@@ -25,7 +25,7 @@ import { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService, type TimerHandle } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import type { Fiber } from "effect";
-import { Clock, Duration, Effect, Either, FiberId, Option, Runtime } from "effect";
+import { Clock, Duration, Effect, Either, FiberId, Option, Runtime, type Scope } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -114,7 +114,7 @@ export interface LiveDependencies {
  */
 export const composeLive = (
   dependencies: LiveDependencies,
-): Effect.Effect<LiveComposer, never, HostKernelTag | LiveBrainTag | LiveRecordTag> =>
+): Effect.Effect<LiveComposer, never, HostKernelTag | LiveBrainTag | LiveRecordTag | Scope.Scope> =>
   Effect.gen(function* () {
     const { settings, account, calendars, observation, brain } = dependencies;
     const kernel = yield* HostKernelTag;
@@ -149,26 +149,18 @@ export const composeLive = (
       calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
     }
 
-    const service = new LiveSessionService<BrainDelivery>({
+    // The service stands for this composition's own scope, which is the
+    // host's: the fiber it runs what a socket event began on is that scope's,
+    // and the graceful close stays a drain step of `compose-host.ts` rather
+    // than a finalizer, so a quit ends the session inside its own deadline.
+    const service = yield* LiveSessionService.make<BrainDelivery>({
       source: () => account.voiceCapabilities.liveSessions,
       brain: liveBrain,
       record: liveRecord,
-      // The two doors answer effects, and the service is a promise-shaped
-      // class, so it runs each of them on this composition's own runtime —
-      // the one the adapter above used to hold for itself.
-      runtime,
       conversationEntries: () => brain.store.thread().entries(),
       roster: () => voiceRoster(observation.rosterForClients()),
-      // `LiveSessionService` asks for the hold as a promise, so the calendars
-      // composer's effect is run on the host's own runtime here until that
-      // service answers effects itself.
-      quietNow: () => Runtime.runPromise(runtime)(calendars.announcementsQuietNow(now())),
-      // `LiveSessionService` hands its held briefings back through a
-      // synchronous callback, so the brain's own effect is forked onto this
-      // composition's runtime here until that service answers effects itself.
-      releaseHeldBriefings: (held) => {
-        Runtime.runFork(runtime)(links().releaseHeld(held));
-      },
+      quietNow: () => calendars.announcementsQuietNow(now()),
+      releaseHeldBriefings: (held) => links().releaseHeld(held),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       now: timers.now,
       schedule: timers.schedule,
@@ -256,18 +248,14 @@ export const composeLive = (
             readEither(voiceCreateLiveSessionParamsSchema)(params),
           );
           if (!request) return yield* invalid("sdp must be the peer's offer");
-          const created = yield* Effect.promise(() => service.createSession(request.sdp));
+          const created = yield* service.createSession(request.sdp);
           if (!created)
             return yield* Effect.fail(
               new RefusedRefusal({ message: "no live session could be created" }),
             );
           return carried(created);
         }),
-      [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () =>
-        Effect.as(
-          Effect.promise(() => service.endSession()),
-          {},
-        ),
+      [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
       [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
         const report = Either.getOrUndefined(
           readEither(voiceReportLiveTransportParamsSchema)(params),

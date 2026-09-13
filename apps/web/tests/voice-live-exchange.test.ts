@@ -246,7 +246,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
     ),
   );
   const exchange = { ...standing, stop: () => database.run(Scope.close(scope, Exit.void)) };
-  const created = await exchange.service.createSession("offer");
+  const created = await database.run(exchange.service.createSession("offer"));
   assert.ok(created);
   socket.receive(sessionStarted(liveSessionId));
   const commentary = (): LiveAppendEvent[] =>

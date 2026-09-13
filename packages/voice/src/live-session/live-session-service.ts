@@ -41,7 +41,7 @@ import {
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import { Effect, Runtime } from "effect";
+import { Deferred, Effect, FiberSet, Queue, type Scope } from "effect";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel, type TimerHandle } from "./append-channel.js";
@@ -88,11 +88,15 @@ import {
  * composes it: the desktop's host today, the hosted voice service where it
  * owns the exchange — so the brain is reached only through `LiveBrain`, the
  * record only through `LiveRecord`, and the session only through the
- * `LiveSessionSource` and `LiveSideband` seams. Those two doors answer
- * effects, and the service is still a promise-shaped class, so each is run on
- * the runtime its composition hands over: an ask and a write are awaited
- * where the promise was, a read made ahead and a drop of one are forked,
- * since nothing waits on either.
+ * `LiveSessionSource` and `LiveSideband` seams. It is built by `make` in the
+ * `Scope` its composition opened and runs for that scope: the verbs a caller
+ * waits on are effects it yields, the brain's and the record's own effects
+ * are yielded where a promise was awaited, and what a socket event, a timer,
+ * or a run listener begins and nobody waits for is offered to the service's
+ * own queue and run as a fiber of that scope. So the service runs nothing on
+ * a runtime of its own, and closing the scope interrupts whatever it had
+ * begun. The graceful close is not the scope's: `stop` is the composition's
+ * to run, since how long a quit waits on the peer is its decision.
  */
 
 /** A run's end may precede its last sentence by a tick; the exchange is finalized once both have had their say. */
@@ -172,12 +176,6 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   source: () => LiveSessionSource | undefined;
   brain: LiveBrain;
   record: LiveRecord;
-  /**
-   * The runtime the brain's and the record's own effects are run on: the
-   * composition's own, so an ask, a read made ahead, and a write share the
-   * clock and the services the composer built them under.
-   */
-  runtime: Runtime.Runtime<never>;
   /** The retained conversation the next session is seeded from. */
   conversationEntries: () => readonly ConversationEntry[];
   /**
@@ -186,10 +184,10 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * what a composition with no roster of its own wants.
    */
   roster?: () => readonly RosterSeedSession[];
-  /** Whether a meeting or the developer's pause holds announcements now. */
-  quietNow: () => Promise<boolean>;
+  /** Whether a meeting or the developer's pause holds announcements now, read when the hold is followed. */
+  quietNow: () => Effect.Effect<boolean>;
   /** Hands held briefings back for re-decision once the quiet ends. */
-  releaseHeldBriefings: (held: readonly Delivery[]) => void;
+  releaseHeldBriefings: (held: readonly Delivery[]) => Effect.Effect<void>;
   emit: (change: VoiceLiveSessionChanged) => void;
   now: () => number;
   schedule: (callback: () => void, delayMs: number) => TimerHandle;
@@ -224,7 +222,7 @@ interface StandingSession {
   started: boolean;
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
-  closing: Promise<void> | undefined;
+  closing: Deferred.Deferred<void> | undefined;
   micLive: boolean;
   usageSeconds: number | undefined;
   lastDelegationOffsetMs: number;
@@ -332,22 +330,57 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #rosterPending: readonly RosterSeedSession[] | undefined;
   #rosterTimer: TimerHandle | undefined;
   readonly #stopFacts: () => void;
-  /** The composition's runtime as the two doors' effects are run on it: awaited where the service awaited a promise, forked where it waits for nothing. */
-  readonly #answer: <A>(effect: Effect.Effect<A>) => Promise<A>;
-  readonly #begin: <A>(effect: Effect.Effect<A>) => void;
+  /**
+   * What a socket event, a timer, or a listener began that nobody waits for,
+   * offered from wherever it was decided and run as a fiber of the service's
+   * own scope: the queue is how a synchronous callback starts an effect
+   * without a runtime of its own.
+   */
+  readonly #tasks: Queue.Queue<Effect.Effect<void>>;
+  #stopped = false;
 
-  constructor(options: LiveSessionServiceOptions<Delivery>) {
+  private constructor(
+    options: LiveSessionServiceOptions<Delivery>,
+    tasks: Queue.Queue<Effect.Effect<void>>,
+  ) {
     this.#options = options;
-    this.#answer = Runtime.runPromise(options.runtime);
-    const fork = Runtime.runFork(options.runtime);
-    this.#begin = (effect) => {
-      fork(effect);
-    };
+    this.#tasks = tasks;
     this.#queue = new ProactiveQueue({ now: options.now, trace: this.#trace });
     this.#stopRunEvents = options.brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
       options.brain.onAnticipationFacts?.((facts) => this.#anticipationFacts(facts)) ??
       (() => undefined);
+  }
+
+  /**
+   * The service for one composition, standing for the scope it is built in.
+   * The fiber below runs what the service began and waits for nothing: each
+   * task is its own fiber of the set, as each was its own promise before, so
+   * a write held by the record delays neither the next write nor the ask
+   * behind it, and closing the scope interrupts every one of them. `stop` is
+   * not that close: how long a session may hold a quit open while the peer
+   * answers its graceful close is the composition's own decision — the
+   * desktop runs it as a drain step inside the quit's deadline, the hosted
+   * exchange as the socket scope's own finalizer — so this scope owns what
+   * the service runs and never the close itself.
+   */
+  static make<Delivery extends BriefingDelivery>(
+    options: LiveSessionServiceOptions<Delivery>,
+  ): Effect.Effect<LiveSessionService<Delivery>, never, Scope.Scope> {
+    return Effect.gen(function* () {
+      const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
+      const fibers = yield* FiberSet.make();
+      const service = new LiveSessionService(options, tasks);
+      yield* Effect.forkScoped(
+        Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
+      );
+      return service;
+    });
+  }
+
+  /** Begins what nothing waits for, on the service's own fiber. */
+  #start(effect: Effect.Effect<void>): void {
+    Queue.unsafeOffer(this.#tasks, effect);
   }
 
   status(): LiveSessionStatus {
@@ -375,25 +408,29 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * before the answer is returned, so no transcript precedes attachment. A
    * session already standing is closed gracefully first: there is one.
    */
-  async createSession(
+  createSession(
     sdpOffer: string,
-  ): Promise<{ sessionId: string; sdpAnswer: string } | undefined> {
-    if (this.#standing) await this.endSession();
-    const source = this.#options.source();
-    if (!source) return undefined;
-    const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#options.now());
-    this.#dropPendingRoster();
-    const opened = await source.create({ sdpOffer, input: this.#seedInput(seeded) });
-    if (!opened) return undefined;
-    this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-    const sideband = await this.#attach(opened);
-    if (!sideband) return undefined;
-    this.#standing = this.#stand(opened.sessionId, sideband);
-    this.#standing.rosterTold = seeded?.told;
-    this.#usageConfirmed = false;
-    this.#options.onSessionCreated?.();
-    this.#trace(LIVE_TRACE_DECISION.CREATED);
-    return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+  ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
+    return Effect.gen(this, function* () {
+      if (this.#standing) yield* this.endSession();
+      const source = this.#options.source();
+      if (!source) return undefined;
+      const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#options.now());
+      this.#dropPendingRoster();
+      const opened = yield* Effect.promise(() =>
+        source.create({ sdpOffer, input: this.#seedInput(seeded) }),
+      );
+      if (!opened) return undefined;
+      this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
+      const sideband = yield* this.#attach(opened);
+      if (!sideband) return undefined;
+      this.#standing = this.#stand(opened.sessionId, sideband);
+      this.#standing.rosterTold = seeded?.told;
+      this.#usageConfirmed = false;
+      this.#options.onSessionCreated?.();
+      this.#trace(LIVE_TRACE_DECISION.CREATED);
+      return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+    });
   }
 
   /**
@@ -402,19 +439,21 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * would put the recent lines into the conversation twice. From the attach
    * on, the session is this service's exactly as one it created.
    */
-  async adoptSession(opened: AdoptableSession): Promise<boolean> {
-    if (this.#standing) await this.endSession();
-    this.#dropPendingRoster();
-    this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-    const sideband = await this.#attach(opened);
-    if (!sideband) return false;
-    const session = this.#stand(opened.sessionId, sideband);
-    this.#standing = session;
-    this.#usageConfirmed = false;
-    this.#options.onSessionCreated?.();
-    this.#trace(LIVE_TRACE_DECISION.CREATED);
-    if (opened.started) this.#started(session);
-    return true;
+  adoptSession(opened: AdoptableSession): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      if (this.#standing) yield* this.endSession();
+      this.#dropPendingRoster();
+      this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
+      const sideband = yield* this.#attach(opened);
+      if (!sideband) return false;
+      const session = this.#stand(opened.sessionId, sideband);
+      this.#standing = session;
+      this.#usageConfirmed = false;
+      this.#options.onSessionCreated?.();
+      this.#trace(LIVE_TRACE_DECISION.CREATED);
+      if (opened.started) this.#started(session);
+      return true;
+    });
   }
 
   /** The session is running: what waited for its start is spoken, and the idle clock reads from here. */
@@ -428,31 +467,52 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#considerIdle(session);
   }
 
-  /** The renderer's hang-up, the idle decision, and the drain all end the session the same way. */
-  async endSession(): Promise<void> {
-    const session = this.#standing;
-    if (!session || session.ended) return;
-    session.closing ??= this.#close(session);
-    await session.closing;
+  /** The renderer's hang-up, the idle decision, and the drain all end the session the same way: whichever stands when the ask is run. */
+  endSession(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const session = this.#standing;
+      return session === undefined ? Effect.void : this.#end(session);
+    });
   }
 
-  async #close(session: StandingSession): Promise<void> {
-    this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
-    const result = await closeGracefully(session.sideband, {
-      eventId: this.#options.createId(),
-      schedule: this.#options.schedule,
-      cancel: this.#options.cancel,
+  /**
+   * Ends the one session named, which is the session the caller decided
+   * about: an end a timer or a transport report began is run on the service's
+   * own fiber a turn later, and by then the session standing may be another.
+   * A second ask waits on the first and is answered as the first was, so a
+   * close that failed is failed for every waiter rather than read as an end.
+   */
+  #end(session: StandingSession): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (session.ended) return;
+      const standing = session.closing;
+      if (standing !== undefined) return yield* Deferred.await(standing);
+      const closing = yield* Deferred.make<void>();
+      session.closing = closing;
+      yield* Effect.onExit(this.#close(session), (exit) => Deferred.done(closing, exit));
     });
-    if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
-      this.#onClosed(session, result.closed);
-      return;
-    }
-    this.#connectionLost(
-      session,
-      result.outcome === SIDEBAND_CLOSE_OUTCOME.TIMED_OUT
-        ? "close timed out"
-        : LIVE_CLOSE_REASON.CONNECTION_LOST,
-    );
+  }
+
+  #close(session: StandingSession): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
+      const result = yield* Effect.promise(() =>
+        closeGracefully(session.sideband, {
+          eventId: this.#options.createId(),
+          schedule: this.#options.schedule,
+          cancel: this.#options.cancel,
+        }),
+      );
+      if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
+        return yield* this.#onClosed(session, result.closed);
+      }
+      yield* this.#connectionLost(
+        session,
+        result.outcome === SIDEBAND_CLOSE_OUTCOME.TIMED_OUT
+          ? "close timed out"
+          : LIVE_CLOSE_REASON.CONNECTION_LOST,
+      );
+    });
   }
 
   /**
@@ -464,10 +524,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const session = this.#standing;
     if (!session || session.ended) return;
     if (state === LIVE_TRANSPORT_STATE.FAILED) {
-      this.#connectionLost(session, "peer transport failed");
+      this.#start(this.#connectionLost(session, "peer transport failed"));
       return;
     }
-    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) void this.endSession();
+    if (state === LIVE_TRANSPORT_STATE.CLOSED && !session.closing) this.#start(this.#end(session));
   }
 
   /**
@@ -509,15 +569,20 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * Follows the announcement hold. Quiet beginning holds every request not yet
+   * Follows the announcement hold, on the service's own fiber since no
+   * caller of this waits for it. Quiet beginning holds every request not yet
    * appended; quiet ending releases the beats with a fresh clock and hands the
    * held briefings back to the brain for one re-decision against the roster
    * as it then is, so nothing is spoken stale.
    */
-  async reconcile(): Promise<void> {
-    const briefings = this.#queue.setQuiet(await this.#options.quietNow());
-    if (briefings.length > 0) this.#options.releaseHeldBriefings(briefings);
-    this.#drain();
+  reconcile(): void {
+    this.#start(
+      Effect.gen(this, function* () {
+        const briefings = this.#queue.setQuiet(yield* this.#options.quietNow());
+        if (briefings.length > 0) yield* this.#options.releaseHeldBriefings(briefings);
+        this.#drain();
+      }),
+    );
   }
 
   /**
@@ -534,14 +599,22 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return true;
   }
 
-  /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
-  async stop(): Promise<void> {
-    this.#stopRunEvents();
-    this.#stopFacts();
-    this.#queue.clear();
-    this.#dropPendingRoster();
-    await this.endSession();
-    await this.#answer(this.#drop());
+  /**
+   * The drain: the session is closed gracefully inside the quit's own
+   * deadline, and nothing is opened after. Run once, whether the composition
+   * runs it as a drain step or as its own scope's finalizer.
+   */
+  stop(): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      if (this.#stopped) return;
+      this.#stopped = true;
+      this.#stopRunEvents();
+      this.#stopFacts();
+      this.#queue.clear();
+      this.#dropPendingRoster();
+      yield* this.endSession();
+      yield* this.#drop();
+    });
   }
 
   /** Everything waiting to be told about the desk, discarded: a fresher roster has superseded it, or nothing will read it again. */
@@ -629,7 +702,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const quietSince =
       lastSentAt === undefined ? LIVE_IDLE_WINDOW_MS : this.#options.now() - lastSentAt;
     if (quietSince >= LIVE_IDLE_WINDOW_MS && !this.#exchangeInFlight(session)) {
-      void this.endSession();
+      this.#start(this.#end(session));
       return;
     }
     session.idleTimer = this.#options.schedule(
@@ -650,22 +723,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return false;
   }
 
-  async #attach(
+  #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
-  ): Promise<LiveSideband | undefined> {
-    try {
-      return await opened.attach();
-    } catch (error) {
-      this.#options.report(
-        `Live sideband could not attach: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      this.#setPhase({
-        sessionId: opened.sessionId,
-        phase: LIVE_SESSION_PHASE.CLOSED,
-        reason: "sideband-failed",
-      });
-      return undefined;
-    }
+  ): Effect.Effect<LiveSideband | undefined> {
+    return Effect.tryPromise(() => opened.attach()).pipe(
+      Effect.catchAll((failure) =>
+        Effect.sync(() => {
+          const error = failure.error;
+          this.#options.report(
+            `Live sideband could not attach: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          this.#setPhase({
+            sessionId: opened.sessionId,
+            phase: LIVE_SESSION_PHASE.CLOSED,
+            reason: "sideband-failed",
+          });
+          return undefined;
+        }),
+      ),
+    );
   }
 
   #stand(sessionId: string, sideband: LiveSideband): StandingSession {
@@ -705,7 +781,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.stopEvents = sideband.onEvent((event) => this.#onEvent(session, event));
     session.stopClose = sideband.onClose(() => {
       if (!session.ended && !session.closing) {
-        this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST);
+        this.#start(this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST));
       }
     });
     return session;
@@ -718,7 +794,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         this.#started(session);
         return;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
-        this.#onClosed(session, event);
+        this.#start(this.#onClosed(session, event));
         return;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED:
         session.micLive = false;
@@ -786,7 +862,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       speaker,
       this.#options.schedule(() => {
         session.settleTimers.delete(speaker);
-        void this.#writeSettled(session, speaker);
+        this.#start(this.#writeSettled(session, speaker));
       }, UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS),
     );
     if (speaker === TRANSCRIPT_SPEAKER.USER && !session.askedRows.has(utterance.rowId)) {
@@ -832,8 +908,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.anticipated = { rowId: anticipation.rowId, text: anticipation.text };
     this.#trace(LIVE_TRACE_DECISION.ANTICIPATED);
     // Nothing waits for the read: the ask that follows takes what it read or
-    // does not, so the anticipation is a fiber of the composition's runtime.
-    this.#begin(
+    // does not, so the anticipation is a fiber of the service's own scope.
+    this.#start(
       brain.anticipate({
         rowId: anticipation.rowId,
         partialAsk,
@@ -882,21 +958,23 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /** Writes every utterance of one speaker not yet on record: no fragment has joined it inside the gap plus the margin. */
-  async #writeSettled(session: StandingSession, speaker: TranscriptSpeaker): Promise<void> {
-    for (const utterance of session.ledger.utterances(speaker)) {
-      if (session.writtenRows.has(utterance.rowId)) continue;
-      session.writtenRows.add(utterance.rowId);
-      await this.#write({ session, utterance, delegationId: null });
-    }
+  #writeSettled(session: StandingSession, speaker: TranscriptSpeaker): Effect.Effect<void> {
+    return Effect.gen(this, function* () {
+      for (const utterance of session.ledger.utterances(speaker)) {
+        if (session.writtenRows.has(utterance.rowId)) continue;
+        session.writtenRows.add(utterance.rowId);
+        yield* this.#write({ session, utterance, delegationId: null });
+      }
+    });
   }
 
-  async #write(write: UtteranceWrite): Promise<boolean> {
-    const { session, utterance } = write;
-    const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
-    const written =
-      utterance.speaker === TRANSCRIPT_SPEAKER.USER
-        ? await this.#answer(
-            this.#options.record.writeDeveloperUtterance({
+  #write(write: UtteranceWrite): Effect.Effect<boolean> {
+    return Effect.gen(this, function* () {
+      const { session, utterance } = write;
+      const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
+      const written =
+        utterance.speaker === TRANSCRIPT_SPEAKER.USER
+          ? yield* this.#options.record.writeDeveloperUtterance({
               rowId: utterance.rowId,
               text: utterance.text,
               voiceSessionId: session.sessionId,
@@ -906,20 +984,18 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
               endMs: utterance.endMs,
               ...(write.runId !== undefined ? { runId: write.runId } : undefined),
               recordedAt,
-            }),
-          )
-        : await this.#answer(
-            this.#options.record.writeLukeUtterance({
+            })
+          : yield* this.#options.record.writeLukeUtterance({
               role: CONVERSATION_ENTRY_KIND.REPLY,
               text: utterance.text,
               voiceSessionId: session.sessionId,
               startMs: utterance.startMs,
               endMs: utterance.endMs,
               recordedAt,
-            }),
-          );
-    if (!written) this.#options.report("A live utterance could not be written to the record");
-    return written;
+            });
+      if (!written) this.#options.report("A live utterance could not be written to the record");
+      return written;
+    });
   }
 
   /**
@@ -935,7 +1011,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#trace(LIVE_TRACE_DECISION.RETAINED);
       return;
     }
-    void this.#compose(session, id, offsetMs);
+    this.#start(this.#compose(session, id, offsetMs));
   }
 
   #composeRetained(session: StandingSession): void {
@@ -945,14 +1021,21 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // older ones asked about the same span and are answered by the same ask.
     const newest = session.retained[session.retained.length - 1];
     session.retained = [];
-    if (newest) void this.#compose(session, newest.id, newest.offsetMs);
+    if (newest) this.#start(this.#compose(session, newest.id, newest.offsetMs));
   }
 
-  async #compose(session: StandingSession, delegationId: string, offsetMs: number): Promise<void> {
+  /**
+   * The ask the delegation is about, claimed here and answered on the fiber
+   * that begins what this hands back: what the ask claims — the row, the span
+   * it moves the session past, the read it cancels — is decided the instant
+   * the delegation arrives, because a second delegation or a late fragment in
+   * the same tick must find the claim already made.
+   */
+  #compose(session: StandingSession, delegationId: string, offsetMs: number): Effect.Effect<void> {
     const sinceMs = session.lastDelegationOffsetMs;
     const context = session.ledger.askContext(sinceMs);
     const ask = context.ask;
-    if (!ask) return;
+    if (!ask) return Effect.void;
     // The ask is here: a pause still pending would anticipate what the turn
     // is about to read for itself, and a late fragment on this row must not
     // supersede the slot that turn is taking. A read already under way is
@@ -965,57 +1048,60 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       renderAskContext(context),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
-    // The delegation's id is the submission's: the record writes the developer's
-    // utterance under it, so an ask and the line it leaves share one id and a
-    // record that learns the ask's turn can attach the line to it.
-    const submission = await this.#answer(
-      this.#options.brain.submitAsk({ submissionId: delegationId, question }),
-    );
-    // The delegated write runs whether or not the settle timer wrote the
-    // utterance undelegated already: an ask is on record only under its
-    // delegation, and a record that took the utterance before tells the two
-    // writes apart by the row. The settle timer, for its part, writes the row
-    // no more.
-    session.writtenRows.add(ask.rowId);
-    if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
-      await this.#write({
+    return Effect.gen(this, function* () {
+      // The delegation's id is the submission's: the record writes the developer's
+      // utterance under it, so an ask and the line it leaves share one id and a
+      // record that learns the ask's turn can attach the line to it.
+      const submission = yield* this.#options.brain.submitAsk({
+        submissionId: delegationId,
+        question,
+      });
+      // The delegated write runs whether or not the settle timer wrote the
+      // utterance undelegated already: an ask is on record only under its
+      // delegation, and a record that took the utterance before tells the two
+      // writes apart by the row. The settle timer, for its part, writes the row
+      // no more.
+      session.writtenRows.add(ask.rowId);
+      if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+        yield* this.#write({
+          session,
+          utterance: ask,
+          delegationId,
+          askContext: { sinceMs, untilMs: offsetMs },
+        });
+        this.#speakInto(session, delegationId, submission.refusal);
+        return;
+      }
+      // The exchange stands before the ask's record write is awaited, so a run
+      // that ends at once or speaks its first sentence during the write is
+      // deferred into it rather than dropped; the record still precedes the
+      // speech, because nothing deferred is spoken until the write lands. The
+      // acceptance itself is told nothing of: a note saying the ask is with
+      // Luke is what the model reads as license to narrate waiting, and the
+      // only thinking appends this exchange earns are the factual ones a slow
+      // step actually begun writes.
+      const exchange = this.#registerExchange(session, submission.runId, delegationId);
+      exchange.pendingRecords += 1;
+      const recorded = yield* this.#write({
         session,
         utterance: ask,
         delegationId,
         askContext: { sinceMs, untilMs: offsetMs },
+        runId: submission.runId,
       });
-      this.#speakInto(session, delegationId, submission.refusal);
-      return;
-    }
-    // The exchange stands before the ask's record write is awaited, so a run
-    // that ends at once or speaks its first sentence during the write is
-    // deferred into it rather than dropped; the record still precedes the
-    // speech, because nothing deferred is spoken until the write lands. The
-    // acceptance itself is told nothing of: a note saying the ask is with
-    // Luke is what the model reads as license to narrate waiting, and the
-    // only thinking appends this exchange earns are the factual ones a slow
-    // step actually begun writes.
-    const exchange = this.#registerExchange(session, submission.runId, delegationId);
-    exchange.pendingRecords += 1;
-    const recorded = await this.#write({
-      session,
-      utterance: ask,
-      delegationId,
-      askContext: { sinceMs, untilMs: offsetMs },
-      runId: submission.runId,
+      exchange.pendingRecords -= 1;
+      if (!recorded) exchange.unrecorded ??= delegationId;
+      // A sibling ask steered into this exchange may still have its own write
+      // out; the exchange is settled once, when the last of them is in.
+      if (exchange.pendingRecords > 0) return;
+      if (exchange.unrecorded !== undefined) {
+        const refusedDelegation = exchange.unrecorded;
+        this.#dropExchange(exchange);
+        this.#speakInto(session, refusedDelegation, ASK_UNRECORDED_NOTE);
+        return;
+      }
+      for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
     });
-    exchange.pendingRecords -= 1;
-    if (!recorded) exchange.unrecorded ??= delegationId;
-    // A sibling ask steered into this exchange may still have its own write
-    // out; the exchange is settled once, when the last of them is in.
-    if (exchange.pendingRecords > 0) return;
-    if (exchange.unrecorded !== undefined) {
-      const refusedDelegation = exchange.unrecorded;
-      this.#dropExchange(exchange);
-      this.#speakInto(session, refusedDelegation, ASK_UNRECORDED_NOTE);
-      return;
-    }
-    for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
   }
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
@@ -1223,28 +1309,32 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#setPhase({ phase: LIVE_SESSION_PHASE.WANTED });
   }
 
-  #onClosed(session: StandingSession, closed: LiveSessionClosed): void {
-    if (session.ended) return;
+  /** The session's own end, settled here and handing back what the tear-down began. */
+  #onClosed(session: StandingSession, closed: LiveSessionClosed): Effect.Effect<void> {
+    if (session.ended) return Effect.void;
     session.usageSeconds = closed.usage.seconds;
     this.#lastSessionSeconds = closed.usage.seconds;
     this.#usageConfirmed = true;
     this.#trace(LIVE_TRACE_DECISION.CLOSED);
-    this.#tearDown(session, closed.reason);
+    const torn = this.#tearDown(session, closed.reason);
     if (closed.reason === LIVE_CLOSE_REASON.EXPIRED || this.#owedSpeech()) this.#wantSession();
+    return torn;
   }
 
   /**
    * The session ended without `session.closed`: the latest usage stands
    * unconfirmed, every delivery aimed at the dead session is discarded, and
-   * a conversation the developer was holding is reopened.
+   * a conversation the developer was holding is reopened. Settled here, like
+   * the close above, and handing back what the tear-down began.
    */
-  #connectionLost(session: StandingSession, reason: string): void {
-    if (session.ended) return;
+  #connectionLost(session: StandingSession, reason: string): Effect.Effect<void> {
+    if (session.ended) return Effect.void;
     this.#usageConfirmed = false;
     this.#trace(LIVE_TRACE_DECISION.CONNECTION_LOST);
     const micWasLive = session.micLive;
-    this.#tearDown(session, reason);
+    const torn = this.#tearDown(session, reason);
     if (micWasLive || this.#owedSpeech()) this.#wantSession();
+    return torn;
   }
 
   /** Whether something waits to be said that only a new session can carry. */
@@ -1257,7 +1347,16 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return this.#options.brain.dropAnticipation?.() ?? Effect.void;
   }
 
-  #tearDown(session: StandingSession, reason: string): void {
+  /**
+   * The session is over, and it is over the instant this is called: the
+   * listeners, the timers, the channel, and the phase are all settled here,
+   * so a caller that reads the service back sees no session standing. What it
+   * hands back is what the end began and nothing waits on inside it — the
+   * read made ahead forgotten, and whatever either speaker said last written
+   * down — so the drain, which is the one caller that waits, closes with
+   * those writes in rather than racing them.
+   */
+  #tearDown(session: StandingSession, reason: string): Effect.Effect<void> {
     session.ended = true;
     session.stopEvents();
     session.stopClose();
@@ -1265,17 +1364,19 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.settleTimers.clear();
     if (session.idleTimer !== undefined) this.#options.cancel(session.idleTimer);
     this.#cancelAnticipation(session);
-    this.#begin(this.#drop());
     session.channel.close();
     session.retained = [];
     for (const exchange of this.#exchanges.values()) {
       if (exchange.sessionId === session.sessionId) exchange.sessionId = undefined;
     }
-    for (const speaker of Object.values(TRANSCRIPT_SPEAKER))
-      void this.#writeSettled(session, speaker);
+    const ended = [
+      this.#drop(),
+      ...Object.values(TRANSCRIPT_SPEAKER).map((speaker) => this.#writeSettled(session, speaker)),
+    ];
     session.sideband.close();
     if (this.#standing === session) this.#standing = undefined;
     this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
+    return Effect.all(ended, { concurrency: "unbounded", discard: true });
   }
 
   #setPhase(change: VoiceLiveSessionChanged): void {

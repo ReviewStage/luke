@@ -296,23 +296,30 @@ holds, so the pass is run to a promise on this composition's own runtime. It
 goes when that link answers an effect.
 
 `LiveSessionService` in `packages/voice/src/live-session/live-session-service.ts`
-is on the same list as of P12-18h, and it is the one run left on the live
-path. `LiveBrain` and `LiveRecord` are the two contracts the desktop's
-composition and the hosted one both speak, and both answer effects now:
-`submitAsk`, `anticipate`, `dropAnticipation`, and the record's two utterance
-writes. Their one caller is this service, 1,258 lines of promise-shaped class
-that neither of those two changes made an effect, so it takes the
-composition's runtime as a seam of its own and is where the edge sits: an ask
-and a write are awaited with `Runtime.runPromise` exactly where a promise was
-awaited before, and a read made ahead and a drop of one are forked with
-`Runtime.runFork`, since nothing waits on either. What the move bought is the
-two implementations: `brainAgentLiveBrain` in
-`packages/host/src/voice/live-brain-adapter.ts` came off this list with it —
-P12-16l had put it there to run an ask on the composer's runtime, and it now
-yields the agent's own effects and runs nothing — and `hostedLiveBrain` and
-`hostedLiveRecord` came off `runOverClient`, which is deleted with
-`apps/web/server/hosted/fiber-runner.ts`. The row goes when the service itself
-is an effect, which no PR in this plan schedules.
+was on the same list as of P12-18h, as the one run left on the live path: it
+took the composition's runtime as a seam of its own and ran `LiveBrain`'s and
+`LiveRecord`'s effects on it, an ask and a write awaited with
+`Runtime.runPromise` where a promise was awaited before, a read made ahead and
+a drop of one forked with `Runtime.runFork`. P12-18h2 takes it off. The
+service is built by `LiveSessionService.make` in the `Scope` its composition
+opened, and the verbs a caller waits on — `createSession`, `adoptSession`,
+`endSession`, and `stop` — are effects it yields rather than promises it
+awaits, so `compose-live.ts` and `hostedLiveExchange` yield what they used to
+wrap in `Effect.promise`. What a socket event, a timer, or a brain listener
+begins and nobody waits for — a delegation composed into an ask, an utterance
+written when it settles, a read made ahead, the drop a session's end owes —
+is offered to the service's own unbounded queue from wherever it was decided
+and run as a fiber of a `FiberSet` the scope holds, which is how a
+synchronous callback starts an effect with no runtime to start it on; it is
+the same shape `apps/web/server/voice/live-exchange.ts` already reports each
+record write through. The close is not that scope's: how long a quit may wait
+on the peer is the composition's own decision, so `stop` stays a drain step of
+`compose-host.ts` on the desktop and the socket scope's own finalizer in the
+hosted exchange. What the service still takes as seams is the
+`now`/`schedule`/`cancel` timer trio and the promise-shaped append channel
+beneath it, which is why `packages/host/src/compose-live.ts` keeps its own
+entry for the bridge that answers them; P12-18h3 is where those become the
+`Clock`'s and the session's socket an `acquireRelease` of its own.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
