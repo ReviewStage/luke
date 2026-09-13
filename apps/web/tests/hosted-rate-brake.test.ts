@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { Effect, TestClock } from "effect";
-import { test } from "vitest";
-import { createRateBrake, makeRateBrake } from "../server/hosted/rate-brake.js";
+import { makeRateBrake } from "../server/hosted/rate-brake.js";
 
 /**
  * `RateBrake.check` itself, over `Clock`, so the window turning over is
@@ -70,10 +69,3 @@ it.effect("past maxTrackedUsers every tracked user is forgotten, not grown", () 
     assert.equal(yield* brake.check("user-1"), true);
   }),
 );
-
-test("the promise door answers the older brake's own polarity: true is over the window", async () => {
-  const rateLimited = createRateBrake(CONFIG);
-  assert.equal(await rateLimited("user-1"), false);
-  assert.equal(await rateLimited("user-1"), false);
-  assert.equal(await rateLimited("user-1"), true);
-});

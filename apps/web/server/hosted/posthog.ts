@@ -13,7 +13,6 @@
  * retry, which this pipeline does not want — the desktop never retries either.
  */
 
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
 import { HTTP_METHOD, withoutTrailingSlash } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
@@ -93,7 +92,7 @@ function resolvePosthogApiHost(host: string | undefined): string {
  * a network fault so the caller answers 502 without ever holding an error that
  * could name the key.
  */
-function postBatchEffect(
+export function postBatchEffect(
   body: PosthogBatch,
   options: PosthogUpstreamOptions = {},
 ): Effect.Effect<Response | undefined, never, HttpClient.HttpClient> {
@@ -111,23 +110,6 @@ function postBatchEffect(
       body: JSON.stringify(body),
     }),
     (answer) => (callAnswered(answer) ? answer.response : undefined),
-  );
-}
-
-/**
- * The same post as the promise `handleEvents` still awaits, over the caller's
- * own `HttpClient` or the ambient fetch one.
- *
- * @deprecated Runs the effect where the batch is posted rather than at a
- * runtime edge; deleted with the promise-shaped `events.ts` route, whose
- * handler is what would yield the batch effect beneath it instead.
- */
-export function postPosthogBatch(
-  body: PosthogBatch,
-  options: PosthogUpstreamOptions = {},
-): Promise<Response | undefined> {
-  return Effect.runPromise(
-    Effect.provide(postBatchEffect(body, options), options.httpClient ?? FetchHttpClient.layer),
   );
 }
 

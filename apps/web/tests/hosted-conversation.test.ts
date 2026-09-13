@@ -48,20 +48,22 @@ function conversationOptions(
 // --- Gate checks ---
 
 test("the conversation gate order is method, secret, token", async () => {
-  const wrongMethod = await handleConversationRead(
-    conversationOptions({
-      request: new Request("https://luke.test/api/sessions/messages", { method: "POST" }),
-    }),
+  const wrongMethod = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: new Request("https://luke.test/api/sessions/messages", { method: "POST" }),
+      }),
+    ),
   );
   assert.equal(wrongMethod.status, 405);
 
-  const noSecret = await handleConversationRead(
-    conversationOptions({ encryptionSecret: undefined }),
+  const noSecret = await runTest(
+    handleConversationRead(conversationOptions({ encryptionSecret: undefined })),
   );
   assert.equal(noSecret.status, 503);
 
-  const anonymous = await handleConversationRead(
-    conversationOptions({ resolveUserId: async () => undefined }),
+  const anonymous = await runTest(
+    handleConversationRead(conversationOptions({ resolveUserId: async () => undefined })),
   );
   assert.equal(anonymous.status, 401);
   assert.equal((await anonymous.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -71,13 +73,15 @@ test("the conversation gate order is method, secret, token", async () => {
 
 test("a provider without the documented read is an invalid request", async () => {
   for (const providerId of ["devin", "copilot", "not-a-provider"]) {
-    const response = await handleConversationRead(
-      conversationOptions({
-        request: conversationRequest({ providerId, providerSessionId: SESSION_UUID }),
-        execute: async () => {
-          throw new Error("execute must not run for a provider without the read");
-        },
-      }),
+    const response = await runTest(
+      handleConversationRead(
+        conversationOptions({
+          request: conversationRequest({ providerId, providerSessionId: SESSION_UUID }),
+          execute: async () => {
+            throw new Error("execute must not run for a provider without the read");
+          },
+        }),
+      ),
     );
     assert.equal(response.status, 400, providerId);
     assert.equal((await response.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
@@ -85,75 +89,87 @@ test("a provider without the documented read is an invalid request", async () =>
 });
 
 test("a session id or cursor outside its bound is an invalid request", async () => {
-  const missingSession = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({ providerId: "conductor" }),
-    }),
+  const missingSession = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: conversationRequest({ providerId: "conductor" }),
+      }),
+    ),
   );
   assert.equal(missingSession.status, 400);
 
-  const slashedSession = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({
-        providerId: "conductor",
-        providerSessionId: "sessions/../../admin",
+  const slashedSession = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: conversationRequest({
+          providerId: "conductor",
+          providerSessionId: "sessions/../../admin",
+        }),
       }),
-    }),
+    ),
   );
   assert.equal(slashedSession.status, 400);
 
-  const slashedCursor = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({
-        providerId: "conductor",
-        providerSessionId: SESSION_UUID,
-        after: "ids/never/hold/paths",
-      }),
-    }),
-  );
-  assert.equal(slashedCursor.status, 400);
-
-  for (const beforeOffset of ["-1", "1.5", "not-a-number", "9999999999"]) {
-    const badOffset = await handleConversationRead(
+  const slashedCursor = await runTest(
+    handleConversationRead(
       conversationOptions({
         request: conversationRequest({
           providerId: "conductor",
           providerSessionId: SESSION_UUID,
-          beforeOffset,
+          after: "ids/never/hold/paths",
         }),
       }),
+    ),
+  );
+  assert.equal(slashedCursor.status, 400);
+
+  for (const beforeOffset of ["-1", "1.5", "not-a-number", "9999999999"]) {
+    const badOffset = await runTest(
+      handleConversationRead(
+        conversationOptions({
+          request: conversationRequest({
+            providerId: "conductor",
+            providerSessionId: SESSION_UUID,
+            beforeOffset,
+          }),
+        }),
+      ),
     );
     assert.equal(badOffset.status, 400, beforeOffset);
   }
 
   // A poll and a history read are different asks, never combined.
-  const bothPositions = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({
-        providerId: "conductor",
-        providerSessionId: SESSION_UUID,
-        after: MESSAGE_UUIDS[0],
-        beforeOffset: "100",
+  const bothPositions = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: conversationRequest({
+          providerId: "conductor",
+          providerSessionId: SESSION_UUID,
+          after: MESSAGE_UUIDS[0],
+          beforeOffset: "100",
+        }),
       }),
-    }),
+    ),
   );
   assert.equal(bothPositions.status, 400);
 });
 
 test("a history position rides the query to the executor", async () => {
   let executed: Parameters<ConversationReadOptions["execute"]>[0] | undefined;
-  const response = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({
-        providerId: "conductor",
-        providerSessionId: SESSION_UUID,
-        beforeOffset: "240",
+  const response = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: conversationRequest({
+          providerId: "conductor",
+          providerSessionId: SESSION_UUID,
+          beforeOffset: "240",
+        }),
+        execute: async (options) => {
+          executed = options;
+          return { messages: [], hasMore: false, firstOffset: 140, hasOlder: true };
+        },
       }),
-      execute: async (options) => {
-        executed = options;
-        return { messages: [], hasMore: false, firstOffset: 140, hasOlder: true };
-      },
-    }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -168,13 +184,15 @@ test("a history position rides the query to the executor", async () => {
 });
 
 test("a request with no key stored is invalid rather than attempted", async () => {
-  const response = await handleConversationRead(
-    conversationOptions({
-      readKey: async () => undefined,
-      execute: async () => {
-        throw new Error("execute must not run without a key");
-      },
-    }),
+  const response = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        readKey: async () => undefined,
+        execute: async () => {
+          throw new Error("execute must not run without a key");
+        },
+      }),
+    ),
   );
   assert.equal(response.status, 400);
 });
@@ -182,10 +200,12 @@ test("a request with no key stored is invalid rather than attempted", async () =
 // --- The executor's outcome decides the response ---
 
 test("a refused read answers upstream-error and never echoes the provider", async () => {
-  const response = await handleConversationRead(
-    conversationOptions({
-      execute: async () => ({ refused: "Conductor rejected the stored API key." }),
-    }),
+  const response = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        execute: async () => ({ refused: "Conductor rejected the stored API key." }),
+      }),
+    ),
   );
   assert.equal(response.status, 502);
   const body = await response.json();
@@ -195,22 +215,24 @@ test("a refused read answers upstream-error and never echoes the provider", asyn
 
 test("an answered read carries the page to the wire with the parsed fields", async () => {
   let executed: Parameters<ConversationReadOptions["execute"]>[0] | undefined;
-  const response = await handleConversationRead(
-    conversationOptions({
-      request: conversationRequest({
-        providerId: "conductor",
-        providerSessionId: SESSION_UUID,
-        after: MESSAGE_UUIDS[0],
+  const response = await runTest(
+    handleConversationRead(
+      conversationOptions({
+        request: conversationRequest({
+          providerId: "conductor",
+          providerSessionId: SESSION_UUID,
+          after: MESSAGE_UUIDS[0],
+        }),
+        execute: async (options) => {
+          executed = options;
+          return {
+            messages: [{ id: MESSAGE_UUIDS[1], author: "agent", text: "Done.", receivedAt: 1_000 }],
+            lastMessageId: MESSAGE_UUIDS[2],
+            hasMore: true,
+          };
+        },
       }),
-      execute: async (options) => {
-        executed = options;
-        return {
-          messages: [{ id: MESSAGE_UUIDS[1], author: "agent", text: "Done.", receivedAt: 1_000 }],
-          lastMessageId: MESSAGE_UUIDS[2],
-          hasMore: true,
-        };
-      },
-    }),
+    ),
   );
 
   assert.equal(response.status, 200);
@@ -229,14 +251,14 @@ test("the conversation endpoint returns 429 after too many requests in the same 
   const userId = `ratelimit-${Date.now()}-${process.pid}`;
 
   for (let i = 0; i < 30; i++) {
-    const response = await handleConversationRead(
-      conversationOptions({ resolveUserId: async () => userId }),
+    const response = await runTest(
+      handleConversationRead(conversationOptions({ resolveUserId: async () => userId })),
     );
     assert.equal(response.status, 200, `request ${i + 1} should succeed`);
   }
 
-  const limited = await handleConversationRead(
-    conversationOptions({ resolveUserId: async () => userId }),
+  const limited = await runTest(
+    handleConversationRead(conversationOptions({ resolveUserId: async () => userId })),
   );
   assert.equal(limited.status, 429);
   assert.equal((await limited.json()).error, HOSTED_API_ERROR.QUOTA_EXHAUSTED);

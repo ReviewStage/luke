@@ -11,12 +11,13 @@ import {
 } from "./support/response-golden.js";
 
 /**
- * The observation group carries each route's own promise-shaped handler
- * unchanged, so what this holds is that carrying: the group's `HttpRouter`
- * dispatches the right path to the right handler, on any method (a wrong one
- * is the handler's own 405, never the group's 404), and the response —
- * status, headers, and bytes — crosses the `HttpServerRequest`/
- * `HttpServerResponse` adaptor exactly as the handler answered it.
+ * The observation group carries each route's own handler unchanged, whether
+ * it answers a promise or yields an effect run at the edge, so what this
+ * holds is that carrying: the group's `HttpRouter` dispatches the right path
+ * to the right handler, on any method (a wrong one is the handler's own 405,
+ * never the group's 404), and the response — status, headers, and bytes —
+ * crosses the `HttpServerRequest`/`HttpServerResponse` adaptor exactly as the
+ * handler answered it.
  *
  * `server/observation-app.ts` imports `../auth.js`, which builds Better
  * Auth's instance at module load, so `DATABASE_URL` has to stand before that
@@ -49,12 +50,14 @@ const EXCHANGES: readonly Exchange[] = [
       const { handleConversationRead } = await import("../server/hosted/conversation-read.js");
       const { executeConversationRead } = await import("../server/hosted/action-execute.js");
       const { hostedVaultSeams } = await import("../server/hosted/vault-route.js");
-      return handleConversationRead({
-        ...hostedVaultSeams,
-        encryptionSecret: undefined,
-        request: new Request(`${ORIGIN}/api/sessions/messages`),
-        execute: (ask) => runTest(executeConversationRead(ask)),
-      });
+      return runTest(
+        handleConversationRead({
+          ...hostedVaultSeams,
+          encryptionSecret: undefined,
+          request: new Request(`${ORIGIN}/api/sessions/messages`),
+          execute: (ask) => runTest(executeConversationRead(ask)),
+        }),
+      );
     },
   },
   {
@@ -99,15 +102,17 @@ const EXCHANGES: readonly Exchange[] = [
       }),
     handle: async () => {
       const { handleEvents } = await import("../server/hosted/events.js");
-      return handleEvents({
-        request: new Request(`${ORIGIN}/api/events`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: "[]",
+      return runTest(
+        handleEvents({
+          request: new Request(`${ORIGIN}/api/events`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "[]",
+          }),
+          projectApiKey: undefined,
+          resolveUserId: async () => "user-1",
         }),
-        projectApiKey: undefined,
-        resolveUserId: async () => "user-1",
-      });
+      );
     },
   },
   {

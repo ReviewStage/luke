@@ -31,7 +31,7 @@ import {
   hostedRefusalResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
-import { createRateBrake } from "./hosted/rate-brake.js";
+import { makeRateBrake } from "./hosted/rate-brake.js";
 
 /**
  * The device record's three writes and the provider key vault's three, on
@@ -57,7 +57,7 @@ const DEVICE_RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const deviceRateLimited = createRateBrake({
+const deviceBrake = makeRateBrake({
   windowMs: DEVICE_RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: DEVICE_RATE_LIMIT.MAX_REQUESTS_PER_WINDOW,
   maxTrackedUsers: DEVICE_RATE_LIMIT.MAX_TRACKED_USERS,
@@ -115,7 +115,7 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default<never, SqlClie
     }
     const userId = yield* bearerUserId(seams);
     const now = seams.now ?? Date.now;
-    if (yield* Effect.promise(() => deviceRateLimited(userId))) {
+    if (!(yield* deviceBrake.check(userId))) {
       return yield* Effect.fail(HOSTED_REFUSAL.QUOTA_EXHAUSTED);
     }
     const mintId = seams.mintId ?? randomUUID;

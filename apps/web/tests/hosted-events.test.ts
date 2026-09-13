@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import {
   PRODUCT_EVENT,
@@ -93,11 +93,13 @@ function freshUser(): () => Promise<string | undefined> {
 
 test("only POST is answered, and nothing is forwarded without a key or a token", async () => {
   const wrongMethod = upstream();
-  const rejectedMethod = await handleEvents(
-    options({
-      request: new Request("https://luke.test/api/events"),
-      httpClient: wrongMethod.layer,
-    }),
+  const rejectedMethod = await runTest(
+    handleEvents(
+      options({
+        request: new Request("https://luke.test/api/events"),
+        httpClient: wrongMethod.layer,
+      }),
+    ),
   );
   assert.equal(rejectedMethod.status, 405);
   assert.equal((await rejectedMethod.json()).error, HOSTED_API_ERROR.METHOD_NOT_ALLOWED);
@@ -105,15 +107,17 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
   const keyless = upstream();
   let resolved = 0;
-  const unconfigured = await handleEvents(
-    options({
-      projectApiKey: "   ",
-      httpClient: keyless.layer,
-      resolveUserId: async () => {
-        resolved += 1;
-        return "user-1";
-      },
-    }),
+  const unconfigured = await runTest(
+    handleEvents(
+      options({
+        projectApiKey: "   ",
+        httpClient: keyless.layer,
+        resolveUserId: async () => {
+          resolved += 1;
+          return "user-1";
+        },
+      }),
+    ),
   );
   assert.equal(unconfigured.status, 503);
   assert.equal((await unconfigured.json()).error, HOSTED_API_ERROR.UNAVAILABLE);
@@ -123,8 +127,8 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
   assert.equal(resolved, 0);
 
   const anonymous = upstream();
-  const refused = await handleEvents(
-    options({ resolveUserId: async () => undefined, httpClient: anonymous.layer }),
+  const refused = await runTest(
+    handleEvents(options({ resolveUserId: async () => undefined, httpClient: anonymous.layer })),
   );
   assert.equal(refused.status, 401);
   assert.equal((await refused.json()).error, HOSTED_API_ERROR.INVALID_TOKEN);
@@ -133,43 +137,51 @@ test("only POST is answered, and nothing is forwarded without a key or a token",
 
 test("a malformed or oversized body is refused, the oversized one before parsing", async () => {
   const malformed = upstream();
-  const unreadable = await handleEvents(
-    options({
-      request: rawEventsRequest("{not json"),
-      httpClient: malformed.layer,
-      resolveUserId: freshUser(),
-    }),
+  const unreadable = await runTest(
+    handleEvents(
+      options({
+        request: rawEventsRequest("{not json"),
+        httpClient: malformed.layer,
+        resolveUserId: freshUser(),
+      }),
+    ),
   );
   assert.equal(unreadable.status, 400);
   assert.equal((await unreadable.json()).error, HOSTED_API_ERROR.INVALID_REQUEST);
 
-  const strange = await handleEvents(
-    options({
-      request: eventsRequest({ events: [{ name: "app:sneak", at: NOW, properties: {} }] }),
-      httpClient: malformed.layer,
-      resolveUserId: freshUser(),
-    }),
+  const strange = await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({ events: [{ name: "app:sneak", at: NOW, properties: {} }] }),
+        httpClient: malformed.layer,
+        resolveUserId: freshUser(),
+      }),
+    ),
   );
   assert.equal(strange.status, 400);
 
-  const overLimit = await handleEvents(
-    options({
-      request: eventsRequest({
-        events: Array.from({ length: PRODUCT_EVENT_BATCH_LIMIT + 1 }, () => LAUNCH),
+  const overLimit = await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({
+          events: Array.from({ length: PRODUCT_EVENT_BATCH_LIMIT + 1 }, () => LAUNCH),
+        }),
+        httpClient: malformed.layer,
+        resolveUserId: freshUser(),
       }),
-      httpClient: malformed.layer,
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
   assert.equal(overLimit.status, 400);
 
   // Valid JSON, but past the byte ceiling: refused without being parsed at all.
-  const huge = await handleEvents(
-    options({
-      request: rawEventsRequest(`{"events":[],"pad":"${"x".repeat(20_000)}"}`),
-      httpClient: malformed.layer,
-      resolveUserId: freshUser(),
-    }),
+  const huge = await runTest(
+    handleEvents(
+      options({
+        request: rawEventsRequest(`{"events":[],"pad":"${"x".repeat(20_000)}"}`),
+        httpClient: malformed.layer,
+        resolveUserId: freshUser(),
+      }),
+    ),
   );
   assert.equal(huge.status, 400);
   assert.equal(malformed.forwarded.length, 0);
@@ -177,27 +189,29 @@ test("a malformed or oversized body is refused, the oversized one before parsing
 
 test("the resolved account is the distinct id, whatever the body tried to say", async () => {
   const posthog = upstream();
-  const response = await handleEvents(
-    options({
-      request: eventsRequest({
-        distinct_id: "someone-else",
-        events: [
-          { ...LAUNCH, distinct_id: "someone-else" },
-          {
-            name: PRODUCT_EVENT.SESSION_OBSERVE,
-            at: NOW,
-            properties: {
-              provider_id: "codex",
-              session_count: 2,
-              $ip: "203.0.113.7",
-              distinct_id: "someone-else",
+  const response = await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({
+          distinct_id: "someone-else",
+          events: [
+            { ...LAUNCH, distinct_id: "someone-else" },
+            {
+              name: PRODUCT_EVENT.SESSION_OBSERVE,
+              at: NOW,
+              properties: {
+                provider_id: "codex",
+                session_count: 2,
+                $ip: "203.0.113.7",
+                distinct_id: "someone-else",
+              },
             },
-          },
-        ],
+          ],
+        }),
+        httpClient: posthog.layer,
+        resolveUserId: freshUser(),
       }),
-      httpClient: posthog.layer,
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
 
   assert.equal(response.status, 202);
@@ -225,7 +239,7 @@ test("the resolved account is the distinct id, whatever the body tried to say", 
  */
 test("the forwarded document matches the processor's documented batch shape", async () => {
   const posthog = upstream();
-  await handleEvents(options({ httpClient: posthog.layer, resolveUserId: freshUser() }));
+  await runTest(handleEvents(options({ httpClient: posthog.layer, resolveUserId: freshUser() })));
 
   const { request: forwarded, items } = onlyBatch(posthog.forwarded);
   assert.equal(forwarded.body.api_key, PROJECT_KEY);
@@ -243,19 +257,21 @@ test("the forwarded document matches the processor's documented batch shape", as
 test("the client header selects the $lib tag, and anything else is the desktop", async () => {
   for (const client of [PRODUCT_EVENT_CLIENT.IOS, PRODUCT_EVENT_CLIENT.WATCHOS]) {
     const posted = upstream();
-    await handleEvents(
-      options({
-        request: new Request("https://luke.test/api/events", {
-          method: "POST",
-          headers: {
-            authorization: "Bearer token-1",
-            [PRODUCT_EVENT_CLIENT_HEADER]: client,
-          },
-          body: JSON.stringify({ events: [LAUNCH] }),
+    await runTest(
+      handleEvents(
+        options({
+          request: new Request("https://luke.test/api/events", {
+            method: "POST",
+            headers: {
+              authorization: "Bearer token-1",
+              [PRODUCT_EVENT_CLIENT_HEADER]: client,
+            },
+            body: JSON.stringify({ events: [LAUNCH] }),
+          }),
+          httpClient: posted.layer,
+          resolveUserId: freshUser(),
         }),
-        httpClient: posted.layer,
-        resolveUserId: freshUser(),
-      }),
+      ),
     );
     assert.equal(
       itemAt(onlyBatch(posted.forwarded).items, 0).properties.$lib,
@@ -265,19 +281,21 @@ test("the client header selects the $lib tag, and anything else is the desktop",
 
   // A header outside the set cannot put its own words in the tag.
   const forged = upstream();
-  await handleEvents(
-    options({
-      request: new Request("https://luke.test/api/events", {
-        method: "POST",
-        headers: {
-          authorization: "Bearer token-1",
-          [PRODUCT_EVENT_CLIENT_HEADER]: "my-own-fork /Users/me",
-        },
-        body: JSON.stringify({ events: [LAUNCH] }),
+  await runTest(
+    handleEvents(
+      options({
+        request: new Request("https://luke.test/api/events", {
+          method: "POST",
+          headers: {
+            authorization: "Bearer token-1",
+            [PRODUCT_EVENT_CLIENT_HEADER]: "my-own-fork /Users/me",
+          },
+          body: JSON.stringify({ events: [LAUNCH] }),
+        }),
+        httpClient: forged.layer,
+        resolveUserId: freshUser(),
       }),
-      httpClient: forged.layer,
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
   assert.equal(
     itemAt(onlyBatch(forged.forwarded).items, 0).properties.$lib,
@@ -287,13 +305,15 @@ test("the client header selects the $lib tag, and anything else is the desktop",
 
 test("the account's name and address ride as person properties, once per batch", async () => {
   const posthog = upstream();
-  await handleEvents(
-    options({
-      request: eventsRequest({ events: [LAUNCH, LAUNCH] }),
-      readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
-      httpClient: posthog.layer,
-      resolveUserId: freshUser(),
-    }),
+  await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({ events: [LAUNCH, LAUNCH] }),
+        readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+        httpClient: posthog.layer,
+        resolveUserId: freshUser(),
+      }),
+    ),
   );
 
   const { items } = onlyBatch(posthog.forwarded);
@@ -311,21 +331,23 @@ test("the account's name and address ride as person properties, once per batch",
 
 test("a deployment that reads no person, or fails to, still records the counts", async () => {
   const withoutSeam = upstream();
-  const anonymous = await handleEvents(
-    options({ httpClient: withoutSeam.layer, resolveUserId: freshUser() }),
+  const anonymous = await runTest(
+    handleEvents(options({ httpClient: withoutSeam.layer, resolveUserId: freshUser() })),
   );
   assert.equal(anonymous.status, 202);
   assert.equal(itemAt(onlyBatch(withoutSeam.forwarded).items, 0).properties.$set, undefined);
 
   const failing = upstream();
-  const survived = await handleEvents(
-    options({
-      readPerson: async () => {
-        throw new Error("database unreachable");
-      },
-      httpClient: failing.layer,
-      resolveUserId: freshUser(),
-    }),
+  const survived = await runTest(
+    handleEvents(
+      options({
+        readPerson: async () => {
+          throw new Error("database unreachable");
+        },
+        httpClient: failing.layer,
+        resolveUserId: freshUser(),
+      }),
+    ),
   );
   assert.equal(survived.status, 202);
   assert.equal(itemAt(onlyBatch(failing.forwarded).items, 0).properties.$set, undefined);
@@ -333,15 +355,19 @@ test("a deployment that reads no person, or fails to, still records the counts",
 
 test("nothing the request body says can name the person", async () => {
   const posthog = upstream();
-  await handleEvents(
-    options({
-      request: eventsRequest({
-        events: [{ ...LAUNCH, properties: { app_version: "0.2.0", $set: { email: "them@evil" } } }],
+  await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({
+          events: [
+            { ...LAUNCH, properties: { app_version: "0.2.0", $set: { email: "them@evil" } } },
+          ],
+        }),
+        readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
+        httpClient: posthog.layer,
+        resolveUserId: freshUser(),
       }),
-      readPerson: async () => ({ name: "Ada", email: "ada@example.test" }),
-      httpClient: posthog.layer,
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
 
   const item = itemAt(onlyBatch(posthog.forwarded).items, 0);
@@ -350,17 +376,19 @@ test("nothing the request body says can name the person", async () => {
 
 test("a wrong desktop clock is clamped to the reader's own window", async () => {
   const posthog = upstream();
-  await handleEvents(
-    options({
-      request: eventsRequest({
-        events: [
-          { ...LAUNCH, at: NOW + 400 * 24 * 60 * 60 * 1000 },
-          { ...LAUNCH, at: NOW - 400 * 24 * 60 * 60 * 1000 },
-        ],
+  await runTest(
+    handleEvents(
+      options({
+        request: eventsRequest({
+          events: [
+            { ...LAUNCH, at: NOW + 400 * 24 * 60 * 60 * 1000 },
+            { ...LAUNCH, at: NOW - 400 * 24 * 60 * 60 * 1000 },
+          ],
+        }),
+        httpClient: posthog.layer,
+        resolveUserId: freshUser(),
       }),
-      httpClient: posthog.layer,
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
 
   const { items } = onlyBatch(posthog.forwarded);
@@ -372,12 +400,14 @@ test("past the per-account brake the batch is refused rather than forwarded", as
   const posthog = upstream();
   const resolveUserId = freshUser();
   const send = () =>
-    handleEvents(
-      options({
-        request: eventsRequest({ events: Array.from({ length: 50 }, () => LAUNCH) }),
-        httpClient: posthog.layer,
-        resolveUserId,
-      }),
+    runTest(
+      handleEvents(
+        options({
+          request: eventsRequest({ events: Array.from({ length: 50 }, () => LAUNCH) }),
+          httpClient: posthog.layer,
+          resolveUserId,
+        }),
+      ),
     );
 
   assert.equal((await send()).status, 202);
@@ -393,8 +423,8 @@ test("past the per-account brake the batch is refused rather than forwarded", as
 
 test("an upstream refusal answers 502 carrying its status and nothing else", async () => {
   const refusing = upstream(400);
-  const response = await handleEvents(
-    options({ httpClient: refusing.layer, resolveUserId: freshUser() }),
+  const response = await runTest(
+    handleEvents(options({ httpClient: refusing.layer, resolveUserId: freshUser() })),
   );
   assert.equal(response.status, 502);
   assert.deepEqual(await response.json(), {
@@ -402,13 +432,15 @@ test("an upstream refusal answers 502 carrying its status and nothing else", asy
     upstreamStatus: 400,
   });
 
-  const unreachable = await handleEvents(
-    options({
-      httpClient: fakeHttpClientLayer(async () => {
-        throw new Error("network down");
+  const unreachable = await runTest(
+    handleEvents(
+      options({
+        httpClient: fakeHttpClientLayer(async () => {
+          throw new Error("network down");
+        }),
+        resolveUserId: freshUser(),
       }),
-      resolveUserId: freshUser(),
-    }),
+    ),
   );
   assert.equal(unreachable.status, 502);
   assert.deepEqual(await unreachable.json(), { error: HOSTED_API_ERROR.UPSTREAM_ERROR });

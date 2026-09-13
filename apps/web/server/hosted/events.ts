@@ -1,5 +1,6 @@
+import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import type * as HttpClient from "@effect/platform/HttpClient";
-import type { Layer } from "effect";
+import { Effect, type Layer } from "effect";
 import {
   PRODUCT_EVENT_CLIENT_HEADER,
   PRODUCT_EVENT_CLIENT_LIB,
@@ -16,9 +17,9 @@ import {
   type PosthogBatchItem,
   type PosthogPerson,
   type PosthogUpstreamOptions,
-  postPosthogBatch,
+  postBatchEffect,
 } from "./posthog.js";
-import { createRateBrake } from "./rate-brake.js";
+import { makeRateBrake } from "./rate-brake.js";
 
 /**
  * Records what the signed-in desktop counted about its own use. The desktop
@@ -45,7 +46,7 @@ const RATE_LIMIT = {
   MAX_TRACKED_USERS: 10_000,
 } as const;
 
-const rateLimited = createRateBrake({
+const eventsBrake = makeRateBrake({
   windowMs: RATE_LIMIT.WINDOW_MS,
   maxRequestsPerWindow: RATE_LIMIT.MAX_EVENTS_PER_WINDOW,
   maxTrackedUsers: RATE_LIMIT.MAX_TRACKED_USERS,
@@ -115,77 +116,85 @@ function batchDocument(
   };
 }
 
-export async function handleEvents(options: EventsOptions): Promise<Response> {
+export function handleEvents(options: EventsOptions): Effect.Effect<Response> {
   const { request } = options;
-  if (request.method !== "POST") {
-    return errorResponse(
-      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+  return Effect.gen(function* () {
+    if (request.method !== "POST") {
+      return errorResponse(
+        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+      );
+    }
+    // Trimmed like every other deployment key read: a whitespace token is the
+    // kill switch, not a key, and an unconfigured deployment is simply not
+    // measured — nothing else depends on this endpoint answering.
+    const projectApiKey = trimmedText(options.projectApiKey);
+    if (!projectApiKey) {
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    }
+
+    const userId = yield* Effect.promise(() => options.resolveUserId(request));
+    if (!userId) {
+      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+    }
+
+    const raw = yield* Effect.promise(() => request.text().catch(() => undefined));
+    // Measured before parsing: an oversized body is refused rather than read.
+    if (raw === undefined || new TextEncoder().encode(raw).byteLength > MAXIMUM_BODY_BYTES) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+    // SAFETY: JSON.parse returns a runtime value; the batch reader is the parser.
+    const wire = payload as UnparsedWireValue;
+    // The reader owns the batch limit as well as the vocabulary, and refuses an
+    // oversized batch whole rather than trimming it.
+    const events = productEventBatchFromWire(wire);
+    if (!events) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+    }
+
+    const now = (options.now ?? Date.now)();
+    if (!(yield* eventsBrake.check(userId, events.length))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+    }
+
+    const upstream: PosthogUpstreamOptions = {};
+    if (options.host !== undefined) upstream.host = options.host;
+    if (options.httpClient) upstream.httpClient = options.httpClient;
+    if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
+    // A failed read costs the person's name, never the counts.
+    const readPerson = options.readPerson;
+    const person = readPerson
+      ? yield* Effect.promise(() => readPerson(userId).catch(() => undefined))
+      : undefined;
+    // The header only selects between the fixed tags; anything else, including
+    // no header at all, is a desktop build.
+    const client = productEventClientFromWire(
+      request.headers.get(PRODUCT_EVENT_CLIENT_HEADER) ?? undefined,
     );
-  }
-  // Trimmed like every other deployment key read: a whitespace token is the
-  // kill switch, not a key, and an unconfigured deployment is simply not
-  // measured — nothing else depends on this endpoint answering.
-  const projectApiKey = trimmedText(options.projectApiKey);
-  if (!projectApiKey) {
-    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-  }
-
-  const userId = await options.resolveUserId(request);
-  if (!userId) {
-    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-  }
-
-  const raw = await request.text().catch(() => undefined);
-  // Measured before parsing: an oversized body is refused rather than read.
-  if (raw === undefined || new TextEncoder().encode(raw).byteLength > MAXIMUM_BODY_BYTES) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  let payload: unknown;
-  try {
-    payload = JSON.parse(raw);
-  } catch {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-  // SAFETY: JSON.parse returns a runtime value; the batch reader is the parser.
-  const wire = payload as UnparsedWireValue;
-  // The reader owns the batch limit as well as the vocabulary, and refuses an
-  // oversized batch whole rather than trimming it.
-  const events = productEventBatchFromWire(wire);
-  if (!events) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-  }
-
-  const now = (options.now ?? Date.now)();
-  if (await rateLimited(userId, events.length)) {
-    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  }
-
-  const upstream: PosthogUpstreamOptions = {};
-  if (options.host !== undefined) upstream.host = options.host;
-  if (options.httpClient) upstream.httpClient = options.httpClient;
-  if (options.timeoutMs !== undefined) upstream.timeoutMs = options.timeoutMs;
-  // A failed read costs the person's name, never the counts.
-  const person = await options.readPerson?.(userId).catch(() => undefined);
-  // The header only selects between the fixed tags; anything else, including
-  // no header at all, is a desktop build.
-  const client = productEventClientFromWire(
-    request.headers.get(PRODUCT_EVENT_CLIENT_HEADER) ?? undefined,
-  );
-  const response = await postPosthogBatch(
-    batchDocument(events, projectApiKey, userId, now, person, PRODUCT_EVENT_CLIENT_LIB[client]),
-    upstream,
-  );
-  if (!response) {
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
-  }
-  if (!response.ok) {
-    // Status alone diagnoses the upstream without carrying its body onward.
-    return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
-      upstreamStatus: response.status,
-    });
-  }
-  // The desktop drops the batch whichever way this lands; the distinction is
-  // for the tests and alerts that watch this endpoint.
-  return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: events.length });
+    const response = yield* Effect.provide(
+      postBatchEffect(
+        batchDocument(events, projectApiKey, userId, now, person, PRODUCT_EVENT_CLIENT_LIB[client]),
+        upstream,
+      ),
+      upstream.httpClient ?? FetchHttpClient.layer,
+    );
+    if (!response) {
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR);
+    }
+    if (!response.ok) {
+      // Status alone diagnoses the upstream without carrying its body onward.
+      return errorResponse(HOSTED_HTTP_STATUS.BAD_GATEWAY, HOSTED_API_ERROR.UPSTREAM_ERROR, {
+        upstreamStatus: response.status,
+      });
+    }
+    // The desktop drops the batch whichever way this lands; the distinction is
+    // for the tests and alerts that watch this endpoint.
+    return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, { accepted: events.length });
+  });
 }
