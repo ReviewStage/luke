@@ -405,8 +405,8 @@ which no PR in this plan schedules.
 same allowlist, and it is what is left of the `GatewayServer` class P6-02
 introduced and P6-13 deleted. The server is its layers and there is no object
 of it any more: `gatewayInProcessHost` builds the whole in-process host end
-in the caller's own `Scope` — the assembly's, in `@sidecar/host`, and a test
-harness's in the two suites that hold one — and answers the protocol's door,
+in the caller's own `Scope` — the assembly's, in `@sidecar/host`, and each
+test's own in the suites that build one — and answers the protocol's door,
 the event log, the admissions door, and the runtime those layers were built
 on. What still runs an effect is the boundary itself: `GatewayTransport`
 answers its client a `Promise` and hands it events through a callback, so
@@ -417,9 +417,13 @@ could not. P6-04 had found that routing the request half through
 `@effect/rpc`'s own `RpcClient` shifted the microtask timing enough to break
 the transports' reconnection-race tests; carrying the same envelopes to the
 protocol's door on the host's own runtime does not, and every one of those
-tests passes with its exact in-flight assertions unchanged. P12-09 decides
-the door: either `GatewayTransport` answers effects by then and its caller
-runs them, or the edge rule records this boundary as one.
+tests passes with its exact in-flight assertions unchanged. P12-09 shipped
+the lint rules without deciding the door, and P12-20e settled only the
+harness half beside it; P12-20e3 is the one that decides it, and deciding it
+means `GatewayClient`, `packages/host/src/operator.ts`, and the desktop's
+`wiring.ts`, `host-operator.ts`, and `operator-client.ts` answer effects with
+the transport, because a client that holds the promise this door answers is
+where the run would land instead.
 The two faces beside it that used to run on the same runtime for the same
 reason — `createGatewayService`'s own `emit` and `closeAdmissions` in
 `packages/host/src/service.ts` — are off the allowlist, and P12-15b took
@@ -441,11 +445,17 @@ the gateway's coordinator pipes, and `shutdownStepsFlushingEvents` and
 the step that begins it and joining it at the step that waits, so the
 `AbortSignal` the settling step used to be handed is the deadline's own
 interruption instead and `packages/gateway/src/shutdown.ts` is off the
-raw-primitive allowlist with it. Beside them are
-`gatewayTestHost` (`packages/gateway/src/testing.ts`) with
+raw-primitive allowlist with it. Beside it is
 `scopedGatewayService` (`packages/host/src/testing/gateway-service.ts`),
-which are the test's own edge while those suites are plain `test` bodies
-rather than `it.effect`. The socket binding
+the test's own edge while the host's own suites are plain `test` bodies
+rather than `it.effect`. `gatewayTestHost` stood beside it and P12-20e
+deleted it: the three gateway suites that held one build
+`gatewayInProcessHost` in the scope `it.scopedLive` gives each test,
+append an event with the synchronous `publish` the log answers beside
+`emit`, and close the admissions door by yielding `admissions.close`, so
+nothing in `packages/gateway/src/testing.ts` runs an effect any more and
+the file is off the run allowlist; what is left in it is the text
+transport alone. The socket binding
 (`packages/gateway/src/websocket.ts`) never needed any of it: it provides
 the `Protocol` a server is built over rather than attaching to one already
 built, and composes `layerGatewayServer` over it itself, so what it needs of
@@ -711,22 +721,16 @@ for it rather than on a default runtime the door built, which is what the
 drain's own suite now measures on the live clock, since what those two tests
 state is the deadline itself.
 
-`retryAttachWhileDetached` in `packages/gateway/src/attachment.ts` is on the
-allowlist too, and for its own reason rather than a caller's: nothing in this
-build composes it yet — the client this policy is for is one that can
-actually detach and reattach, which the desktop's own in-process operator
-never does (it is composed and attached exactly once, for the process's whole
-life; P8-04 confirmed this rather than assuming it) — so the door forks
-`retryAttachWhileDetachedEffect`'s backoff loop on its own scope and answers a
-release closure over `Fiber.interrupt` rather than one built by an edge that
-holds it. `retryAttachWhileDetachedEffect` is itself the whole policy: the
-pause doubles from `ATTACH_RETRY_DEFAULTS.INITIAL_DELAY_MS` to its cap on
-every announced detachment, and the attempt is forked into the ambient
-`Scope`, so interrupting it — closing the scope the door made, or the one an
-edge builds instead — cancels a pause still being waited out rather than
-merely gating the call it would have made. Both go once a caller that can
-genuinely detach exists to hold that scope directly; no PR in this plan is
-that caller yet.
+`retryAttachWhileDetached` was on the allowlist for a reason of its own
+rather than a caller's: nothing in this build ever composed it, or the
+`retryAttachWhileDetachedEffect` beneath it, because the client that policy
+is for is one that can genuinely detach and reattach, which the desktop's own
+in-process operator never does (it is composed and attached exactly once, for
+the process's whole life; P8-04 confirmed this rather than assuming it).
+P12-20e deleted that module and its suite rather than keep a backoff policy
+no caller holds against a caller no PR in this plan writes; the socket client
+that can detach is what would state the policy again, against the
+reconnection the protocol already names.
 
 `StoreDatabase#run` in `packages/brain/src/store/database.ts` is on the
 allowlist as the two OpenClaw ports' reach into the store. The store's worker
@@ -1570,11 +1574,11 @@ design decision stated as such:
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
 | `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
-| `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-09 |
+| `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
-| `gatewayTestHost`/`scopedGatewayService`, the suites' own scoped builds | P6-13 | P12-09 |
+| `scopedGatewayService`, the host suites' own scoped build (`gatewayTestHost` was on this row and P12-20e deleted it, the gateway's three suites building the host in the scope `it.scopedLive` gives them) | P6-13 | P12-20e2 |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
-| `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | none yet — no caller can genuinely detach |
+| `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P12-20e — deleted with the effect beneath it and its suite, since no caller ever composed either |
 | `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-04b |

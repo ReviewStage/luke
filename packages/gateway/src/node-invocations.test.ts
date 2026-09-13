@@ -21,7 +21,8 @@ import {
   nodeInvocationFromWire,
   RefusedRefusal,
 } from "./protocol.js";
-import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
+import { type GatewayInProcessHost, gatewayInProcessHost } from "./server.js";
+import { TextLoopbackTransport } from "./testing.js";
 import { InProcessTransport } from "./transport.js";
 import {
   bearerAuthentication,
@@ -79,17 +80,23 @@ function nodeMethods() {
   return { methods, nodes, nextId: () => `event-${++ids}` };
 }
 
-async function hostWithNodes() {
+function hostWithNodes(): Effect.Effect<
+  { readonly host: GatewayInProcessHost; readonly nodes: NodeRegistry },
+  never,
+  Scope.Scope
+> {
   const { methods, nodes, nextId } = nodeMethods();
-  const host = await gatewayTestHost({
-    methods,
-    configurationRevision: () => 1,
-    sessionRevision: () => undefined,
-    snapshot: () => ({}),
-    now: () => 0,
-    createEventId: nextId,
-  });
-  return { host, nodes };
+  return Effect.map(
+    gatewayInProcessHost({
+      methods,
+      configurationRevision: () => 1,
+      sessionRevision: () => undefined,
+      snapshot: () => ({}),
+      now: () => 0,
+      createEventId: nextId,
+    }),
+    (host) => ({ host, nodes }),
+  );
 }
 
 /** The same host on an ephemeral socket, bound for as long as the test's scope stands. */
@@ -116,8 +123,8 @@ const socketHost = (): Effect.Effect<
 
 /** The one door each host admitted this client through; a host without one would be a second connection for the same client. */
 function doorOf(
-  doors: ReadonlyMap<GatewayTestHost, InProcessTransport>,
-  host: GatewayTestHost,
+  doors: ReadonlyMap<GatewayInProcessHost, InProcessTransport>,
+  host: GatewayInProcessHost,
 ): InProcessTransport {
   const door = doors.get(host);
   if (!door) throw new Error("the host was never given a door");
@@ -205,37 +212,42 @@ test("the node's memory performs a distinct invocation once and answers a duplic
 });
 
 for (const kind of ["in-process", "loopback"] as const) {
-  test(`[${kind}] a node registered over a connection is invoked through it, and a repeated frame performs once`, async () => {
-    const { host, nodes } = await hostWithNodes();
-    const transport =
-      kind === "in-process"
-        ? new InProcessTransport(host, OPERATOR)
-        : new TextLoopbackTransport(host, OPERATOR);
-    const opened: string[] = [];
-    transport.serveInvocations?.(async (invocation) => {
-      opened.push(String(invocation.params.url));
-      return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
-    });
-    const client = new GatewayClient({
-      transport,
-      createId: () => `r-${opened.length}-${Math.random()}`,
-    });
-    const registered = await client.call(GATEWAY_METHOD.NODE_REGISTER, {
-      nodeId: NODE_ID,
-      capabilities: [CAPABILITY],
-    });
-    assert.ok(registered.ok);
-    if (transport instanceof TextLoopbackTransport) transport.repeatNextInvocation(2);
-    const result = await nodes.invoke(CAPABILITY, { url: "https://one.test" });
-    assert.equal(result.status, NODE_CAPABILITY_STATUS.OK);
-    assert.deepEqual(opened, ["https://one.test"]);
-    // The connection closing disconnects the node: the next ask is never
-    // dispatched and says so, distinctly from an ask whose answer was lost.
-    transport.close();
-    const afterClose = await nodes.invoke(CAPABILITY, { url: "https://two.test" });
-    assert.equal(afterClose.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-    assert.deepEqual(opened, ["https://one.test"]);
-  });
+  it.scopedLive(
+    `[${kind}] a node registered over a connection is invoked through it, and a repeated frame performs once`,
+    () =>
+      Effect.flatMap(hostWithNodes(), ({ host, nodes }) =>
+        Effect.promise(async () => {
+          const transport =
+            kind === "in-process"
+              ? new InProcessTransport(host, OPERATOR)
+              : new TextLoopbackTransport(host, OPERATOR);
+          const opened: string[] = [];
+          transport.serveInvocations?.(async (invocation) => {
+            opened.push(String(invocation.params.url));
+            return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
+          });
+          const client = new GatewayClient({
+            transport,
+            createId: () => `r-${opened.length}-${Math.random()}`,
+          });
+          const registered = await client.call(GATEWAY_METHOD.NODE_REGISTER, {
+            nodeId: NODE_ID,
+            capabilities: [CAPABILITY],
+          });
+          assert.ok(registered.ok);
+          if (transport instanceof TextLoopbackTransport) transport.repeatNextInvocation(2);
+          const result = await nodes.invoke(CAPABILITY, { url: "https://one.test" });
+          assert.equal(result.status, NODE_CAPABILITY_STATUS.OK);
+          assert.deepEqual(opened, ["https://one.test"]);
+          // The connection closing disconnects the node: the next ask is never
+          // dispatched and says so, distinctly from an ask whose answer was lost.
+          transport.close();
+          const afterClose = await nodes.invoke(CAPABILITY, { url: "https://two.test" });
+          assert.equal(afterClose.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
+          assert.deepEqual(opened, ["https://one.test"]);
+        }),
+      ),
+  );
 }
 
 it.live(
@@ -396,70 +408,77 @@ it.live(
     ),
 );
 
-test("a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events", async () => {
-  let ids = 0;
-  const makeHost = (run: string) =>
-    gatewayTestHost({
-      methods: {},
-      configurationRevision: () => 1,
-      sessionRevision: () => undefined,
-      snapshot: () => ({ runs: [run] }),
-      now: () => 0,
-      createEventId: () => `event-${++ids}`,
-    });
-  // The client's one transport: requests go to the connection that now
-  // stands, and every sink hears the events of that connection alone.
-  const oldHost = await makeHost("old");
-  const newHost = await makeHost("new");
-  const doors = new Map<GatewayTestHost, InProcessTransport>([
-    [oldHost, new InProcessTransport(oldHost, OPERATOR)],
-    [newHost, new InProcessTransport(newHost, OPERATOR)],
-  ]);
-  let current = oldHost;
-  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
-  for (const host of [oldHost, newHost]) {
-    host.log.listen((event) => {
-      if (current !== host) return;
-      for (const sink of [...sinks]) sink(event);
-    });
-  }
-  const client = new GatewayClient({
-    transport: {
-      request: (request) => doorOf(doors, current).request(request),
-      events: (sink) => {
-        sinks.add(sink);
-        return () => sinks.delete(sink);
-      },
-      connected: () => true,
-    },
-    createId: () => `r-${++ids}`,
-    onSnapshot: (snapshot) => {
-      if (isRecord(snapshot) && Array.isArray(snapshot.runs))
-        snapshots.push(String(snapshot.runs[0]));
-    },
-  });
-  const heard: string[] = [];
-  const snapshots: string[] = [];
-  client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
-  for (let i = 0; i < 5; i += 1) oldHost.emit(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
-  assert.equal(client.lastSequence(), 5);
-  // The Gateway is replaced: a new host numbers from one again. Its first
-  // event reads as already seen against the old count, and is lost.
-  current = newHost;
-  newHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "new-1");
-  assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5"]);
-  // Adopting the host fences that: the cursor moves to the new host's
-  // sequence, its snapshot stands in for what was numbered before, and
-  // every event after is delivered.
-  await client.adoptHost();
-  assert.equal(client.lastSequence(), 1);
-  assert.deepEqual(snapshots, ["new"]);
-  newHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "new-2");
-  assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5", "new-2"]);
-  // A late event of the old host reaches no sink: the transport dropped it.
-  oldHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-6");
-  assert.equal(heard.length, 6);
-});
+it.scopedLive(
+  "a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events",
+  () =>
+    Effect.gen(function* () {
+      let ids = 0;
+      const makeHost = (run: string) =>
+        gatewayInProcessHost({
+          methods: {},
+          configurationRevision: () => 1,
+          sessionRevision: () => undefined,
+          snapshot: () => ({ runs: [run] }),
+          now: () => 0,
+          createEventId: () => `event-${++ids}`,
+        });
+      // The client's one transport: requests go to the connection that now
+      // stands, and every sink hears the events of that connection alone.
+      const oldHost = yield* makeHost("old");
+      const newHost = yield* makeHost("new");
+      return yield* Effect.promise(async () => {
+        const doors = new Map<GatewayInProcessHost, InProcessTransport>([
+          [oldHost, new InProcessTransport(oldHost, OPERATOR)],
+          [newHost, new InProcessTransport(newHost, OPERATOR)],
+        ]);
+        let current = oldHost;
+        const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
+        for (const host of [oldHost, newHost]) {
+          host.log.listen((event) => {
+            if (current !== host) return;
+            for (const sink of [...sinks]) sink(event);
+          });
+        }
+        const client = new GatewayClient({
+          transport: {
+            request: (request) => doorOf(doors, current).request(request),
+            events: (sink) => {
+              sinks.add(sink);
+              return () => sinks.delete(sink);
+            },
+            connected: () => true,
+          },
+          createId: () => `r-${++ids}`,
+          onSnapshot: (snapshot) => {
+            if (isRecord(snapshot) && Array.isArray(snapshot.runs))
+              snapshots.push(String(snapshot.runs[0]));
+          },
+        });
+        const heard: string[] = [];
+        const snapshots: string[] = [];
+        client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
+        for (let i = 0; i < 5; i += 1)
+          oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
+        assert.equal(client.lastSequence(), 5);
+        // The Gateway is replaced: a new host numbers from one again. Its first
+        // event reads as already seen against the old count, and is lost.
+        current = newHost;
+        newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-1");
+        assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5"]);
+        // Adopting the host fences that: the cursor moves to the new host's
+        // sequence, its snapshot stands in for what was numbered before, and
+        // every event after is delivered.
+        await client.adoptHost();
+        assert.equal(client.lastSequence(), 1);
+        assert.deepEqual(snapshots, ["new"]);
+        newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-2");
+        assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5", "new-2"]);
+        // A late event of the old host reaches no sink: the transport dropped it.
+        oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-6");
+        assert.equal(heard.length, 6);
+      });
+    }),
+);
 
 it.live(
   "the socket client serves invocations only while a handler is served, answering unavailable otherwise",
@@ -504,119 +523,133 @@ it.live(
     ),
 );
 
-test("a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived", async () => {
-  let ids = 0;
-  const host = await gatewayTestHost({
-    methods: {},
-    configurationRevision: () => 1,
-    sessionRevision: () => undefined,
-    snapshot: () => ({ runs: [] }),
-    now: () => 0,
-    createEventId: () => `event-${++ids}`,
-  });
-  // The host spoke before this client existed: a session change for a renderer that is gone.
-  host.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "closed" });
-  host.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-runs");
-  const transport = new InProcessTransport(host, OPERATOR);
-  const heard: string[] = [];
-  let snapshots = 0;
-  const client = new GatewayClient({
-    transport,
-    createId: () => `r-${++ids}`,
-    onSnapshot: () => {
-      snapshots += 1;
-    },
-  });
-  client.onEvery((event) => heard.push(event.kind));
-  // The first thing it hears is not the host's first event: no baseline, so
-  // the host is adopted, and the old change is never delivered.
-  host.emit(GATEWAY_EVENT.RUNS_CHANGED, "current");
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assert.equal(snapshots, 1);
-  assert.deepEqual(heard, []);
-  assert.equal(client.lastSequence(), 3);
-  // From here the stream is followed, and a later gap is replayed as before.
-  host.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "wanted" });
-  assert.deepEqual(heard, [GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED]);
-});
+it.scopedLive(
+  "a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived",
+  () =>
+    Effect.gen(function* () {
+      let ids = 0;
+      const host = yield* gatewayInProcessHost({
+        methods: {},
+        configurationRevision: () => 1,
+        sessionRevision: () => undefined,
+        snapshot: () => ({ runs: [] }),
+        now: () => 0,
+        createEventId: () => `event-${++ids}`,
+      });
+      return yield* Effect.promise(async () => {
+        // The host spoke before this client existed: a session change for a renderer that is gone.
+        host.log.publish(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "closed" });
+        host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-runs");
+        const transport = new InProcessTransport(host, OPERATOR);
+        const heard: string[] = [];
+        let snapshots = 0;
+        const client = new GatewayClient({
+          transport,
+          createId: () => `r-${++ids}`,
+          onSnapshot: () => {
+            snapshots += 1;
+          },
+        });
+        client.onEvery((event) => heard.push(event.kind));
+        // The first thing it hears is not the host's first event: no baseline, so
+        // the host is adopted, and the old change is never delivered.
+        host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "current");
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(snapshots, 1);
+        assert.deepEqual(heard, []);
+        assert.equal(client.lastSequence(), 3);
+        // From here the stream is followed, and a later gap is replayed as before.
+        host.log.publish(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "wanted" });
+        assert.deepEqual(heard, [GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED]);
+      });
+    }),
+);
 
-test("an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out", async () => {
-  let ids = 0;
-  const makeHost = () =>
-    gatewayTestHost({
-      methods: {},
-      configurationRevision: () => 1,
-      sessionRevision: () => undefined,
-      snapshot: () => ({}),
-      now: () => 0,
-      createEventId: () => `event-${++ids}`,
-    });
-  const oldHost = await makeHost();
-  const newHost = await makeHost();
-  const doors = new Map<GatewayTestHost, InProcessTransport>([
-    [oldHost, new InProcessTransport(oldHost, OPERATOR)],
-    [newHost, new InProcessTransport(newHost, OPERATOR)],
-  ]);
-  let current = oldHost;
-  let wireUp = true;
-  const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
-  for (const host of [oldHost, newHost]) {
-    host.log.listen((event) => {
-      if (current !== host || !wireUp) return;
-      for (const sink of [...sinks]) sink(event);
-    });
-  }
-  // Every request is handled at once but its answer travels back only when
-  // the test releases it, so an event can be emitted after the hello was
-  // captured and before its answer lands.
-  const pendingAnswers: Array<() => void> = [];
-  const client = new GatewayClient({
-    transport: {
-      request: async (request) => {
-        const answered = doorOf(doors, current).request(request);
-        await new Promise<void>((resolve) => pendingAnswers.push(resolve));
-        return answered;
-      },
-      events: (sink) => {
-        sinks.add(sink);
-        return () => sinks.delete(sink);
-      },
-      connected: () => true,
-    },
-    createId: () => `r-${++ids}`,
-  });
-  const heard: string[] = [];
-  client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
-  // The old host ran long: the cursor is high.
-  for (let i = 0; i < 100; i += 1) oldHost.emit(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
-  assert.equal(client.lastSequence(), 100);
-  // A dropped event on the old host puts a reconnection out; its answer is delayed.
-  wireUp = false;
-  oldHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-101-dropped");
-  wireUp = true;
-  oldHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "old-102");
-  assert.equal(pendingAnswers.length, 1);
-  // Before that answers, the host is replaced and adopted. The new host had
-  // emitted five events before this client arrived; its sixth lands while
-  // the hello's answer is out, numbered far below the old cursor.
-  current = newHost;
-  for (let i = 0; i < 5; i += 1) newHost.emit(GATEWAY_EVENT.RUNS_CHANGED, `new-${i + 1}`);
-  const adoption = client.adoptHost();
-  assert.equal(pendingAnswers.length, 2);
-  // The host handles the hello (capturing sequence 5) before the sixth event
-  // is emitted; only the answer is still on its way.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  newHost.emit(GATEWAY_EVENT.RUNS_CHANGED, "new-6");
-  // The old reconnection answers first and installs nothing; then the hello lands.
-  pendingAnswers[0]?.();
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  pendingAnswers[1]?.();
-  await adoption;
-  // The hello was captured at sequence 5; the sixth was held rather than
-  // dropped against the old cursor of 100, and is delivered after the
-  // adoption; nothing of the old host's replay landed.
-  assert.equal(client.lastSequence(), 6);
-  assert.equal(heard.includes("old-101-dropped"), false);
-  assert.equal(heard.includes("old-102"), false);
-});
+it.scopedLive(
+  "an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out",
+  () =>
+    Effect.gen(function* () {
+      let ids = 0;
+      const makeHost = () =>
+        gatewayInProcessHost({
+          methods: {},
+          configurationRevision: () => 1,
+          sessionRevision: () => undefined,
+          snapshot: () => ({}),
+          now: () => 0,
+          createEventId: () => `event-${++ids}`,
+        });
+      const oldHost = yield* makeHost();
+      const newHost = yield* makeHost();
+      return yield* Effect.promise(async () => {
+        const doors = new Map<GatewayInProcessHost, InProcessTransport>([
+          [oldHost, new InProcessTransport(oldHost, OPERATOR)],
+          [newHost, new InProcessTransport(newHost, OPERATOR)],
+        ]);
+        let current = oldHost;
+        let wireUp = true;
+        const sinks = new Set<(event: import("./protocol.js").GatewayEvent) => void>();
+        for (const host of [oldHost, newHost]) {
+          host.log.listen((event) => {
+            if (current !== host || !wireUp) return;
+            for (const sink of [...sinks]) sink(event);
+          });
+        }
+        // Every request is handled at once but its answer travels back only when
+        // the test releases it, so an event can be emitted after the hello was
+        // captured and before its answer lands.
+        const pendingAnswers: Array<() => void> = [];
+        const client = new GatewayClient({
+          transport: {
+            request: async (request) => {
+              const answered = doorOf(doors, current).request(request);
+              await new Promise<void>((resolve) => pendingAnswers.push(resolve));
+              return answered;
+            },
+            events: (sink) => {
+              sinks.add(sink);
+              return () => sinks.delete(sink);
+            },
+            connected: () => true,
+          },
+          createId: () => `r-${++ids}`,
+        });
+        const heard: string[] = [];
+        client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
+        // The old host ran long: the cursor is high.
+        for (let i = 0; i < 100; i += 1)
+          oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
+        assert.equal(client.lastSequence(), 100);
+        // A dropped event on the old host puts a reconnection out; its answer is delayed.
+        wireUp = false;
+        oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-101-dropped");
+        wireUp = true;
+        oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-102");
+        assert.equal(pendingAnswers.length, 1);
+        // Before that answers, the host is replaced and adopted. The new host had
+        // emitted five events before this client arrived; its sixth lands while
+        // the hello's answer is out, numbered far below the old cursor.
+        current = newHost;
+        for (let i = 0; i < 5; i += 1)
+          newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `new-${i + 1}`);
+        const adoption = client.adoptHost();
+        assert.equal(pendingAnswers.length, 2);
+        // The host handles the hello (capturing sequence 5) before the sixth event
+        // is emitted; only the answer is still on its way.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-6");
+        // The old reconnection answers first and installs nothing; then the hello lands.
+        pendingAnswers[0]?.();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        pendingAnswers[1]?.();
+        await adoption;
+        // The hello was captured at sequence 5; the sixth was held rather than
+        // dropped against the old cursor of 100, and is delivered after the
+        // adoption; nothing of the old host's replay landed.
+        assert.equal(client.lastSequence(), 6);
+        assert.equal(heard.includes("old-101-dropped"), false);
+        assert.equal(heard.includes("old-102"), false);
+      });
+    }),
+);

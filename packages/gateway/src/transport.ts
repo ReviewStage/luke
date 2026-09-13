@@ -183,10 +183,10 @@ export abstract class ServerBoundTransport implements GatewayTransport {
    * on. This is the boundary: what a transport answers its client with is a
    * promise, so the effects behind it are run here and nowhere deeper.
    *
-   * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-09,
-   * which decides the edge rule: either `GatewayTransport` answers effects
-   * by then and its caller runs them, or this door is recorded there as the
-   * boundary it is.
+   * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-20e3,
+   * which decides the edge rule: either `GatewayTransport` answers effects by
+   * then and `GatewayClient` and its own callers run them, or this door is
+   * recorded there as the boundary it is.
    */
   protected run<A>(effect: Effect.Effect<A>): Promise<A> {
     return Runtime.runPromise(this.host.runtime)(effect);

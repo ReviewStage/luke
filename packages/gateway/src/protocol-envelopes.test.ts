@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { it } from "@effect/vitest";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Either, type Scope } from "effect";
 import { test } from "vitest";
 import type { GatewayMethodTable } from "./methods.js";
 import {
@@ -31,7 +32,8 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "./protocol.js";
 
-import { type GatewayTestHost, gatewayTestHost, TextLoopbackTransport } from "./testing.js";
+import { type GatewayInProcessHost, gatewayInProcessHost } from "./server.js";
+import { TextLoopbackTransport } from "./testing.js";
 
 /**
  * The envelopes as they cross, recorded. Every case here is carried by the
@@ -148,9 +150,9 @@ async function settleExchange(
 function goldenHost(
   methods: GatewayMethodTable,
   options: { replayWindow?: number } = {},
-): Promise<GatewayTestHost> {
+): Effect.Effect<GatewayInProcessHost, never, Scope.Scope> {
   let events = 0;
-  return gatewayTestHost({
+  return gatewayInProcessHost({
     methods,
     configurationRevision: () => FIXTURE_CONFIGURATION_REVISION,
     sessionRevision: (key) => (key === FIXTURE_SESSION_KEY ? FIXTURE_SESSION_REVISION : undefined),
@@ -232,195 +234,225 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
   );
 });
 
-test("every method's request and answer cross as the recorded envelopes", async () => {
-  const transport = new TextLoopbackTransport(await goldenHost(answeringTable()), OPERATOR);
-  for (const method of METHODS) {
-    const response = await settleExchange(methodGoldenName(method), transport, requestFor(method));
-    assert.equal(response.ok, true);
-  }
-});
+it.scopedLive("every method's request and answer cross as the recorded envelopes", () =>
+  Effect.flatMap(goldenHost(answeringTable()), (host) =>
+    Effect.promise(async () => {
+      const transport = new TextLoopbackTransport(host, OPERATOR);
+      for (const method of METHODS) {
+        const response = await settleExchange(
+          methodGoldenName(method),
+          transport,
+          requestFor(method),
+        );
+        assert.equal(response.ok, true);
+      }
+    }),
+  ),
+);
 
-test("every error code crosses as the recorded envelope", async () => {
-  const throwing = new Error("the handler failed");
-  const unanswered = answeringTable();
-  delete unanswered[GATEWAY_METHOD.MEMORY_STATUS];
-  const host = await goldenHost({
-    ...unanswered,
-    [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
-      Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
-    [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
-      Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
-    [GATEWAY_METHOD.NODE_INVOKE]: () =>
-      Effect.fail(
-        new NodeUnavailableRefusal({ message: "no connected node offers that capability" }),
-      ),
-    [GATEWAY_METHOD.SESSION_OPEN]: () =>
-      Effect.fail(new UnknownCapabilityRefusal({ message: "that capability is not registered" })),
-    [GATEWAY_METHOD.RUN_SUBMIT]: () => {
-      throw throwing;
-    },
-  });
-  const transport = new TextLoopbackTransport(host, OPERATOR);
-  const nodeTransport = new TextLoopbackTransport(host, NODE);
-
-  const conflicting = requestFor(GATEWAY_METHOD.CONFIGURATION_UPDATE);
-  await transport.request(conflicting);
-
-  const shuttingDown = await goldenHost(answeringTable());
-  shuttingDown.closeAdmissions();
-  const shuttingDownTransport = new TextLoopbackTransport(shuttingDown, OPERATOR);
-
-  const disconnected = new TextLoopbackTransport(await goldenHost(answeringTable()), OPERATOR);
-  disconnected.setConnected(false);
-
-  const cases: readonly {
-    code: GatewayErrorCode;
-    transport: TextLoopbackTransport;
-    request: GatewayRequest;
-  }[] = [
-    {
-      code: GATEWAY_ERROR.UNSUPPORTED_VERSION,
-      transport,
-      request: { ...requestFor(GATEWAY_METHOD.HELLO), protocolVersion: 0 },
-    },
-    {
-      code: GATEWAY_ERROR.UNKNOWN_METHOD,
-      transport,
-      request: requestFor(GATEWAY_METHOD.MEMORY_STATUS),
-    },
-    {
-      code: GATEWAY_ERROR.INVALID_PARAMS,
-      transport,
-      request: { ...requestFor(GATEWAY_METHOD.RECONNECT), params: { lastSequence: -1 } },
-    },
-    {
-      code: GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY,
-      transport,
-      request: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "request-without-idempotency-key",
-        method: GATEWAY_METHOD.RUN_CANCEL,
-        params: paramsFor(GATEWAY_METHOD.RUN_CANCEL),
+it.scopedLive("every error code crosses as the recorded envelope", () =>
+  Effect.gen(function* () {
+    const throwing = new Error("the handler failed");
+    const unanswered = answeringTable();
+    delete unanswered[GATEWAY_METHOD.MEMORY_STATUS];
+    const host = yield* goldenHost({
+      ...unanswered,
+      [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
+        Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
+      [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
+        Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
+      [GATEWAY_METHOD.NODE_INVOKE]: () =>
+        Effect.fail(
+          new NodeUnavailableRefusal({ message: "no connected node offers that capability" }),
+        ),
+      [GATEWAY_METHOD.SESSION_OPEN]: () =>
+        Effect.fail(new UnknownCapabilityRefusal({ message: "that capability is not registered" })),
+      [GATEWAY_METHOD.RUN_SUBMIT]: () => {
+        throw throwing;
       },
-    },
-    {
-      code: GATEWAY_ERROR.IDEMPOTENCY_CONFLICT,
-      transport,
-      request: { ...conflicting, params: { case: "reused key, other parameters" } },
-    },
-    {
-      code: GATEWAY_ERROR.REVISION_MISMATCH,
-      transport,
-      request: {
-        ...requestFor(GATEWAY_METHOD.SETTINGS_UPDATE),
-        expectedRevision: { configurationRevision: FIXTURE_CONFIGURATION_REVISION + 1 },
+    });
+    const transport = new TextLoopbackTransport(host, OPERATOR);
+    const nodeTransport = new TextLoopbackTransport(host, NODE);
+
+    const conflicting = requestFor(GATEWAY_METHOD.CONFIGURATION_UPDATE);
+    yield* Effect.promise(() => transport.request(conflicting));
+
+    const shuttingDown = yield* goldenHost(answeringTable());
+    yield* shuttingDown.admissions.close;
+    const shuttingDownTransport = new TextLoopbackTransport(shuttingDown, OPERATOR);
+
+    const disconnected = new TextLoopbackTransport(yield* goldenHost(answeringTable()), OPERATOR);
+    disconnected.setConnected(false);
+
+    const cases: readonly {
+      code: GatewayErrorCode;
+      transport: TextLoopbackTransport;
+      request: GatewayRequest;
+    }[] = [
+      {
+        code: GATEWAY_ERROR.UNSUPPORTED_VERSION,
+        transport,
+        request: { ...requestFor(GATEWAY_METHOD.HELLO), protocolVersion: 0 },
       },
-    },
-    {
-      code: GATEWAY_ERROR.NOT_FOUND,
-      transport,
-      request: requestFor(GATEWAY_METHOD.CONVERSATION_LINES),
-    },
-    {
-      code: GATEWAY_ERROR.REFUSED,
-      transport,
-      request: requestFor(GATEWAY_METHOD.SESSION_SEND_MESSAGE),
-    },
-    {
-      code: GATEWAY_ERROR.UNAUTHORIZED,
-      transport: nodeTransport,
-      request: requestFor(GATEWAY_METHOD.SESSION_ROSTER),
-    },
-    {
-      code: GATEWAY_ERROR.NODE_UNAVAILABLE,
-      transport,
-      request: requestFor(GATEWAY_METHOD.NODE_INVOKE),
-    },
-    {
-      code: GATEWAY_ERROR.UNKNOWN_CAPABILITY,
-      transport,
-      request: requestFor(GATEWAY_METHOD.SESSION_OPEN),
-    },
-    {
-      code: GATEWAY_ERROR.DISCONNECTED,
-      transport: disconnected,
-      request: requestFor(GATEWAY_METHOD.SESSION_ROSTER),
-    },
-    {
-      code: GATEWAY_ERROR.SHUTTING_DOWN,
-      transport: shuttingDownTransport,
-      request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
-    },
-    {
-      code: GATEWAY_ERROR.INTERNAL,
-      transport,
-      request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
-    },
-  ];
+      {
+        code: GATEWAY_ERROR.UNKNOWN_METHOD,
+        transport,
+        request: requestFor(GATEWAY_METHOD.MEMORY_STATUS),
+      },
+      {
+        code: GATEWAY_ERROR.INVALID_PARAMS,
+        transport,
+        request: { ...requestFor(GATEWAY_METHOD.RECONNECT), params: { lastSequence: -1 } },
+      },
+      {
+        code: GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY,
+        transport,
+        request: {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: "request-without-idempotency-key",
+          method: GATEWAY_METHOD.RUN_CANCEL,
+          params: paramsFor(GATEWAY_METHOD.RUN_CANCEL),
+        },
+      },
+      {
+        code: GATEWAY_ERROR.IDEMPOTENCY_CONFLICT,
+        transport,
+        request: { ...conflicting, params: { case: "reused key, other parameters" } },
+      },
+      {
+        code: GATEWAY_ERROR.REVISION_MISMATCH,
+        transport,
+        request: {
+          ...requestFor(GATEWAY_METHOD.SETTINGS_UPDATE),
+          expectedRevision: { configurationRevision: FIXTURE_CONFIGURATION_REVISION + 1 },
+        },
+      },
+      {
+        code: GATEWAY_ERROR.NOT_FOUND,
+        transport,
+        request: requestFor(GATEWAY_METHOD.CONVERSATION_LINES),
+      },
+      {
+        code: GATEWAY_ERROR.REFUSED,
+        transport,
+        request: requestFor(GATEWAY_METHOD.SESSION_SEND_MESSAGE),
+      },
+      {
+        code: GATEWAY_ERROR.UNAUTHORIZED,
+        transport: nodeTransport,
+        request: requestFor(GATEWAY_METHOD.SESSION_ROSTER),
+      },
+      {
+        code: GATEWAY_ERROR.NODE_UNAVAILABLE,
+        transport,
+        request: requestFor(GATEWAY_METHOD.NODE_INVOKE),
+      },
+      {
+        code: GATEWAY_ERROR.UNKNOWN_CAPABILITY,
+        transport,
+        request: requestFor(GATEWAY_METHOD.SESSION_OPEN),
+      },
+      {
+        code: GATEWAY_ERROR.DISCONNECTED,
+        transport: disconnected,
+        request: requestFor(GATEWAY_METHOD.SESSION_ROSTER),
+      },
+      {
+        code: GATEWAY_ERROR.SHUTTING_DOWN,
+        transport: shuttingDownTransport,
+        request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+      },
+      {
+        code: GATEWAY_ERROR.INTERNAL,
+        transport,
+        request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+      },
+    ];
 
-  assert.deepEqual(cases.map((held) => held.code).toSorted(), [...ERROR_CODES].toSorted());
-  for (const held of cases) {
-    const response = await settleExchange(errorGoldenName(held.code), held.transport, held.request);
-    assert.equal(response.ok, false);
-    assert.equal(response.ok ? undefined : response.error.code, held.code);
-  }
-});
+    assert.deepEqual(cases.map((held) => held.code).toSorted(), [...ERROR_CODES].toSorted());
+    yield* Effect.promise(async () => {
+      for (const held of cases) {
+        const response = await settleExchange(
+          errorGoldenName(held.code),
+          held.transport,
+          held.request,
+        );
+        assert.equal(response.ok, false);
+        assert.equal(response.ok ? undefined : response.error.code, held.code);
+      }
+    });
+  }),
+);
 
-test("a reconnection inside the window replays, and one past it is handed a snapshot", async () => {
-  const host = await goldenHost(answeringTable(), { replayWindow: 3 });
-  const transport = new TextLoopbackTransport(host, OPERATOR);
-  host.emit(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
-  host.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
-  host.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
-  host.emit(GATEWAY_EVENT.CONVERSATION_CHANGED, { lines: 1 }, { sessionKey: FIXTURE_SESSION_KEY });
-  host.emit(
-    GATEWAY_EVENT.RUNS_CHANGED,
-    { runs: 1 },
-    { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
-  );
+it.scopedLive(
+  "a reconnection inside the window replays, and one past it is handed a snapshot",
+  () =>
+    Effect.flatMap(goldenHost(answeringTable(), { replayWindow: 3 }), (host) =>
+      Effect.promise(async () => {
+        const transport = new TextLoopbackTransport(host, OPERATOR);
+        host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
+        host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
+        host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+        host.log.publish(
+          GATEWAY_EVENT.CONVERSATION_CHANGED,
+          { lines: 1 },
+          { sessionKey: FIXTURE_SESSION_KEY },
+        );
+        host.log.publish(
+          GATEWAY_EVENT.RUNS_CHANGED,
+          { runs: 1 },
+          { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
+        );
 
-  const inside = await settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    id: "request-reconnect-inside-window",
-    method: GATEWAY_METHOD.RECONNECT,
-    params: { lastSequence: 2 },
-  });
-  assert.equal(inside.ok, true);
+        const inside = await settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: "request-reconnect-inside-window",
+          method: GATEWAY_METHOD.RECONNECT,
+          params: { lastSequence: 2 },
+        });
+        assert.equal(inside.ok, true);
 
-  const past = await settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
-    protocolVersion: GATEWAY_PROTOCOL_VERSION,
-    id: "request-reconnect-past-window",
-    method: GATEWAY_METHOD.RECONNECT,
-    params: { lastSequence: 1 },
-  });
-  assert.equal(past.ok, true);
-});
+        const past = await settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: "request-reconnect-past-window",
+          method: GATEWAY_METHOD.RECONNECT,
+          params: { lastSequence: 1 },
+        });
+        assert.equal(past.ok, true);
+      }),
+    ),
+);
 
-test("a named revision and an empty answer cross as the recorded envelopes", async () => {
-  const host = await goldenHost({
-    ...answeringTable(),
-    [GATEWAY_METHOD.GUIDE_REPORT]: () => Effect.succeed(undefined),
-  });
-  const transport = new TextLoopbackTransport(host, OPERATOR);
+it.scopedLive("a named revision and an empty answer cross as the recorded envelopes", () =>
+  Effect.flatMap(
+    goldenHost({
+      ...answeringTable(),
+      [GATEWAY_METHOD.GUIDE_REPORT]: () => Effect.succeed(undefined),
+    }),
+    (host) =>
+      Effect.promise(async () => {
+        const transport = new TextLoopbackTransport(host, OPERATOR);
 
-  const named = await settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
-    ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),
-    id: "request-with-expected-revision",
-    expectedRevision: {
-      sessionKey: FIXTURE_SESSION_KEY,
-      sessionRevision: FIXTURE_SESSION_REVISION,
-      configurationRevision: FIXTURE_CONFIGURATION_REVISION,
-    },
-  });
-  assert.equal(named.ok, true);
+        const named = await settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
+          ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+          id: "request-with-expected-revision",
+          expectedRevision: {
+            sessionKey: FIXTURE_SESSION_KEY,
+            sessionRevision: FIXTURE_SESSION_REVISION,
+            configurationRevision: FIXTURE_CONFIGURATION_REVISION,
+          },
+        });
+        assert.equal(named.ok, true);
 
-  const empty = await settleExchange(
-    ENVELOPE_GOLDEN_NAME.EMPTY_RESULT,
-    transport,
-    requestFor(GATEWAY_METHOD.GUIDE_REPORT),
-  );
-  assert.equal(empty.ok ? empty.result : "not answered", undefined);
-});
+        const empty = await settleExchange(
+          ENVELOPE_GOLDEN_NAME.EMPTY_RESULT,
+          transport,
+          requestFor(GATEWAY_METHOD.GUIDE_REPORT),
+        );
+        assert.equal(empty.ok ? empty.result : "not answered", undefined);
+      }),
+  ),
+);
 
 test("the recorded envelopes are exactly the cases the protocol names", async () => {
   const expected = [
