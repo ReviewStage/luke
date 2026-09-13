@@ -66,12 +66,7 @@
       "project": ["src/**"]
     },
     "packages/brain": {
-      "entry": [
-        "src/**/*.test.ts",
-        "src/**/worker-entry.ts",
-        "src/ui-messages/index.ts",
-        "src/store/index.ts"
-      ],
+      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts", "src/ui-messages/index.ts"],
       "project": ["src/**"]
     },
     "tools/*": {

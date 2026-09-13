@@ -149,8 +149,9 @@ a database under Luke's own application data, in a folder of its own per agent
 (`agents/main/agent.sqlite`, with recovery archives beside it under
 `archives/`), and versions before those kept them in three files beside your
 settings. This version reads and writes none of them, so that conversation,
-that memory, and those remembered things start over; the files stay where
-they are until you remove them.
+that memory, and those remembered things start over. Each launch removes the
+database and its recovery archives if it finds them; the three older files
+stay where they are until you remove them.
 
 Luke's runtime runs inside the app, and can run on a server you connect to
 instead; either way it holds your settings and the encrypted credentials

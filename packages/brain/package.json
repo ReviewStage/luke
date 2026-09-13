@@ -8,7 +8,6 @@
     "./envelope": "./src/envelope.js",
     "./requests": "./src/requests.js",
     "./requests-wire": "./src/requests-wire.js",
-    "./store": "./src/store/index.js",
     "./testing": "./src/testing.js",
     "./tool-set": "./src/tool-set.js",
     "./ui-message-context": "./src/ui-message-context.js"
@@ -19,11 +18,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/experimental": "catalog:",
     "@effect/platform": "catalog:",
-    "@effect/platform-node": "catalog:",
-    "@effect/rpc": "catalog:",
-    "@effect/sql": "catalog:",
     "@sidecar/actions": "workspace:*",
     "@sidecar/guide": "workspace:*",
     "@sidecar/hosted": "workspace:*",

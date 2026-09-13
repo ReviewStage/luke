@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
@@ -50,6 +51,7 @@ import { type HeldConversations, wireHeldConversations } from "./held-conversati
 import { wireMemoryDefinitions } from "./memory-definition.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
+import { removeRetiredStore } from "./retired-store.js";
 import type { GatewayService } from "./service.js";
 import { reporterOf } from "./wire-helpers.js";
 
@@ -326,13 +328,21 @@ export const composeBrain = (
       wiring,
       conversations,
       operations,
-      // The workspace's missing files are seeded at every live launch and
-      // never rewritten; a seed that fails leaves the files that already
-      // stand and stops nothing else. A fixture or capture run keeps nothing
-      // on disk and seeds nothing.
+      // A live launch first removes the SQLite store an earlier build left
+      // under the agent's directory, then seeds the workspace's missing files,
+      // never rewriting one; a removal or a seed that fails is reported and
+      // stops nothing else. A fixture or capture run keeps nothing on disk and
+      // touches neither.
       lifetime: startedAndStopped(
         Effect.gen(function* () {
           if (!runMode.observesProviders) return;
+          yield* Effect.promise(() =>
+            removeRetiredStore({
+              agentRoot: kernel.agentRootPath(),
+              remove: (target) => fs.rm(target, { recursive: true, force: true }),
+              report,
+            }),
+          );
           yield* Effect.catchAllCause(wiring.seedWorkspace(), (cause) => {
             const failure = Cause.squash(cause);
             return Effect.sync(() => {

@@ -85,6 +85,8 @@ export interface HostKernel {
    */
   openExternalThroughNode: (url: string, kind?: HostNodeOpenKind) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
+  /** The agent's own directory under the state root, which the workspace and skills sit under. */
+  agentRootPath: () => string;
   agentWorkspacePath: () => string;
   agentSkillsPath: () => string;
 }
@@ -160,6 +162,7 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     reportOpenFailure: (error) => {
       report(`An address could not be opened: ${error.message}`);
     },
+    agentRootPath: () => agentRootPath(stateRoot),
     agentWorkspacePath,
     agentSkillsPath: () => path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY),
   };
