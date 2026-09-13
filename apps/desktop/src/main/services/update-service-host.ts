@@ -1,7 +1,7 @@
 import { PRODUCT_EVENT, PRODUCT_UPDATE_ACTION, type RecordProductEvent } from "@sidecar/analytics";
 import { jsonStateFile } from "@sidecar/host";
 import { text } from "@sidecar/wire";
-import { Effect, type Runtime, type Scope } from "effect";
+import { Effect, type Scope } from "effect";
 import type { UpdateSnapshot } from "#shared/messages/update";
 import type { AppStateStore } from "../app-state";
 import { UPDATE_ENDPOINT, type UpdaterEngine, UpdateService } from "../update-service";
@@ -41,8 +41,6 @@ export interface UpdateServiceHostDependencies {
   beforeRestart: () => Promise<void>;
   /** Every state the row draws, written to the document the windows are told from. */
   state: AppStateStore;
-  /** The one runtime this launch has, the same one `DesktopServices.run` answers promises on. */
-  runtime: Runtime.Runtime<never>;
 }
 
 /**
@@ -60,8 +58,7 @@ export function createUpdateServiceHost(
   dependencies: UpdateServiceHostDependencies,
 ): Effect.Effect<UpdateServiceHost, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const scope = yield* Effect.scope;
-    const { config, recordProductEvent, runtime } = dependencies;
+    const { config, recordProductEvent } = dependencies;
 
     const lastRunVersionFile = jsonStateFile<{ version: string }>({
       directory: () => config.stateRoot,
@@ -75,7 +72,7 @@ export function createUpdateServiceHost(
     });
 
     const engine = dependencies.engine;
-    const service = new UpdateService({
+    const service = yield* UpdateService.make({
       currentVersion: config.appVersion,
       onChange: (update) => {
         dependencies.state.update({ update });
@@ -95,8 +92,6 @@ export function createUpdateServiceHost(
           lastRunVersionFile.update(() => ({ version }));
         },
       },
-      runtime,
-      scope,
     });
 
     // The timed check and the publishing-window retry are handles the quit

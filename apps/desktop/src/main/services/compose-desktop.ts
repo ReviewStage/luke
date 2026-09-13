@@ -180,7 +180,6 @@ export function composeDesktop(
         engine: updateEngine,
         beforeRestart: quit.teardown,
         state,
-        runtime,
       });
 
       // The two edges no service could take as a constructor argument, because

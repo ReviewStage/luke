@@ -2,7 +2,6 @@ import { scheduleOnce } from "@sidecar/runtime/effect";
 import {
   Duration,
   Effect,
-  Exit,
   type Fiber,
   FiberId,
   Runtime,
@@ -174,17 +173,6 @@ export interface UpdateServiceOptions {
   intervalMs?: number;
   justUpdatedFirstCheckDelayMs?: number;
   publishingRetryDelaysMs?: readonly [number, ...number[]];
-  /** The runtime the service's schedules are run on, for a test's own. */
-  runtime?: Runtime.Runtime<never>;
-  /**
-   * The scope every fiber the service forks — the timed check, the first
-   * check, and a publishing retry — is forked into. Handed in by
-   * `update-service-host.ts`'s own Layer in production, so the service's
-   * fibers are interrupted by the launch's own scope closing rather than one
-   * of this class's own; omitted, the service makes and owns one of its own
-   * for a test's convenience, and `stop()` closes it.
-   */
-  scope?: Scope.Scope;
   report?: (line: string) => void;
 }
 
@@ -203,6 +191,23 @@ export interface UpdateServiceOptions {
  * releases with it.
  */
 export class UpdateService {
+  /**
+   * The service as the effect that builds it, since nothing here may run on
+   * a runtime of its own: the launch's own scope is what the timed check,
+   * the first check, and a publishing retry fork into, and the launch's own
+   * runtime is what a synchronous caller's `start`/`check`/`install`
+   * steps or forks its effects on, captured once here rather than defaulted,
+   * so a bridge that ran on the ambient default runtime can never stand in
+   * for the one runtime the launch actually disposes.
+   */
+  static make(options: UpdateServiceOptions): Effect.Effect<UpdateService, never, Scope.Scope> {
+    return Effect.gen(function* () {
+      const scope = yield* Effect.scope;
+      const runtime = yield* Effect.runtime<never>();
+      return new UpdateService(options, scope, runtime);
+    });
+  }
+
   readonly #currentVersion: string;
   readonly #onChange: (update: UpdateSnapshot) => void;
   readonly #engine: UpdaterEngine | undefined;
@@ -214,8 +219,6 @@ export class UpdateService {
   readonly #runtime: Runtime.Runtime<never>;
   /** Every fiber the service forks — the timed check, the first check, and a publishing retry — lands here. */
   readonly #scope: Scope.Scope;
-  /** Set only when no scope was handed in, so `stop()` knows this is the one scope it owns and must close itself. */
-  readonly #ownedScope: Scope.CloseableScope | undefined;
   #snapshot: UpdateSnapshot;
   #latestVersion: string | undefined;
   #installing = false;
@@ -240,20 +243,17 @@ export class UpdateService {
    */
   #publishingWait: string | undefined;
 
-  constructor(options: UpdateServiceOptions) {
+  private constructor(
+    options: UpdateServiceOptions,
+    scope: Scope.Scope,
+    runtime: Runtime.Runtime<never>,
+  ) {
     this.#currentVersion = options.currentVersion;
     this.#onChange = options.onChange;
     this.#engine = options.engine;
     this.#lastRunVersion = options.lastRunVersion;
-    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
-    if (options.scope) {
-      this.#scope = options.scope;
-      this.#ownedScope = undefined;
-    } else {
-      const owned = Runtime.runSync(this.#runtime)(Scope.make());
-      this.#scope = owned;
-      this.#ownedScope = owned;
-    }
+    this.#runtime = runtime;
+    this.#scope = scope;
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#justUpdatedFirstCheckDelayMs =
       options.justUpdatedFirstCheckDelayMs ??
@@ -408,20 +408,16 @@ export class UpdateService {
   }
 
   /**
-   * Gives back every fiber `start()` forked: the owned scope closing does
-   * that at once when this service made its own, and the two tracked fibers
-   * are interrupted directly when the scope is the launch's own instead, so
-   * `stop()` still means the same thing on either side of that seam.
+   * Gives back every fiber `start()` forked: the timed check, the first
+   * check, and a pending publishing retry, each interrupted directly rather
+   * than by closing the scope they forked into, since that scope is the
+   * launch's own and not this class's to close.
    */
   stop(): void {
     if (this.#stopped) return;
     this.#stopped = true;
     const publishingRetry = this.#publishingRetry;
     this.#publishingRetry = undefined;
-    if (this.#ownedScope) {
-      Runtime.runFork(this.#runtime)(Scope.close(this.#ownedScope, Exit.void));
-      return;
-    }
     publishingRetry?.unsafeInterruptAsFork(FiberId.none);
     this.#repeatingCheck?.unsafeInterruptAsFork(FiberId.none);
     this.#firstCheck?.unsafeInterruptAsFork(FiberId.none);

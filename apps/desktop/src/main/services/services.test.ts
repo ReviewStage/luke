@@ -257,7 +257,6 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
         engine,
         beforeRestart: quit.teardown,
         state,
-        runtime: Runtime.defaultRuntime,
       }),
     ),
   );
