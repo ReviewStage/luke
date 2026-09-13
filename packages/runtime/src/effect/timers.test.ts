@@ -48,6 +48,30 @@ describe("scheduleOnce", () => {
       assert.deepEqual(fired, []);
     }),
   );
+
+  it.effect("is cancelled with its scope where the fork ran uninterruptibly", () =>
+    Effect.gen(function* () {
+      const fired: number[] = [];
+      const scope = yield* Scope.make();
+
+      const fiber = yield* Effect.uninterruptible(
+        Effect.provideService(
+          scheduleOnce(
+            5_000,
+            Effect.sync(() => fired.push(1)),
+          ),
+          Scope.Scope,
+          scope,
+        ),
+      );
+
+      yield* Scope.close(scope, Exit.void);
+      yield* TestClock.adjust("1 minute");
+
+      assert.equal(Exit.isInterrupted(yield* Fiber.await(fiber)), true);
+      assert.deepEqual(fired, []);
+    }),
+  );
 });
 
 describe("scheduleRepeat", () => {
@@ -70,6 +94,33 @@ describe("scheduleRepeat", () => {
 
       yield* Scope.close(scope, Exit.void);
       yield* Fiber.await(fiber);
+      yield* TestClock.adjust("1 minute");
+
+      assert.deepEqual(rounds, [0, 1, 2, 3]);
+    }),
+  );
+
+  it.effect("stops at its scope's close where the fork ran uninterruptibly", () =>
+    Effect.gen(function* () {
+      const rounds: number[] = [];
+      const scope = yield* Scope.make();
+
+      const fiber = yield* Effect.uninterruptible(
+        Effect.provideService(
+          scheduleRepeat(
+            Schedule.spaced("1 second"),
+            Effect.sync(() => rounds.push(rounds.length)),
+          ),
+          Scope.Scope,
+          scope,
+        ),
+      );
+
+      yield* TestClock.adjust("3 seconds");
+      assert.deepEqual(rounds, [0, 1, 2, 3]);
+
+      yield* Scope.close(scope, Exit.void);
+      assert.equal(Exit.isInterrupted(yield* Fiber.await(fiber)), true);
       yield* TestClock.adjust("1 minute");
 
       assert.deepEqual(rounds, [0, 1, 2, 3]);

@@ -725,6 +725,32 @@ either: `quietNow` and `releaseHeldBriefings` are `LiveSessionService` options
 that answer effects the service yields on its own fiber, and `gateOfferable`
 and `arrivalBeat` are yielded by the onboarding beat's own effect.
 
+P12-20p took P12-20d's finding as a shape rather than as one file's bug and
+swept every fork the repository reaches from inside an uninterruptible region.
+A fiber inherits the interrupt status of whoever forked it, so a fork made
+under `Effect.acquireRelease`'s acquire, under `Effect.uninterruptible`, or
+inside a finalizer is a fiber nothing can end: a `Fiber.interruptFork` finds
+nothing to land on, and a `Scope.close` that waits on `Fiber.interrupt`
+waits forever. Three fixes came out of it. `scheduleOnce` and `scheduleRepeat`
+in `packages/runtime/src/effect/timers.ts` fork an `Effect.interruptible` body,
+which makes true of every caller what their own contract already said — a
+fiber the scope interrupts — including the observation loop's cadence, the
+analytics sender, and the update service's repeating check. The calendars
+composer's three observation-driven fibers — the held-notice release, the
+Apple access poll, and the meeting-boundary wake — are forked the same way,
+so `disarmObservation` ends the fibers the arming stood up whatever status the
+gate was opened under. And `claimedUnlessAborted` in
+`packages/brain/src/effect/settled.ts`, which exists for waits held under an
+uninterruptible region, forked both its signal listener and its daemon with
+the caller's status: run under `Effect.uninterruptible` it never answered at
+all, because its own `Effect.scoped` close could not interrupt a listener
+waiting on a signal that never fires. Both forks are `Effect.interruptible`
+now, for the reason `joinedOnce` in `effect/once.ts` already gave. Nothing on
+the `runShims` allowlist moved: no run was added or deleted, and every
+remaining fork in `packages/` and `apps/` is either a `Runtime.runFork`, which
+begins a root fiber with the runtime's own flags rather than a caller's, or a
+fork the caller reaches interruptibly.
+
 `composeObservation`'s entry above was widened in P12-14f and narrowed again
 in P12-15e: every one of its nine `awaitedSettingsStore` reads moved onto
 `settings.store`, and `readWorkspaceDefaults`, `pruneWorkspaceProjectDefaults`,
