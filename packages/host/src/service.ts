@@ -346,8 +346,10 @@ export function createGatewayService(
     }),
     [GATEWAY_METHOD.CONVERSATION_DELETE]: reading((read) =>
       Effect.map(
-        Effect.promise(() => conversations.deleteConversation(read.sessionKeyOrMain("sessionKey"))),
-        (outcome) => ({ outcome }),
+        conversations.deleteConversation(read.sessionKeyOrMain("sessionKey")),
+        (outcome) => ({
+          outcome,
+        }),
       ),
     ),
     [GATEWAY_METHOD.RUN_SUBMIT]: reading((read) => submit(read)),

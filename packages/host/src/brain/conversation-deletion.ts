@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { ConversationErasure } from "../store-wiring.js";
 
 /** The durable cutoff as read, which may itself be absent when no deletion ever raised one. */
@@ -70,44 +71,53 @@ const CONVERSATION_DELETION_INCOMPLETE = {
  * and the successor lifetime stands. Nothing is retired or reopened: the same
  * brain works on from the empty successor, and a credential rebuild landing
  * meanwhile builds over the same store, whose standing generation is that
- * successor.
+ * successor. The fences are the effect's own first step, so they stand as
+ * soon as whoever runs it reaches that step and before it waits on anything,
+ * exactly as they did when this flow was a promise begun at its call.
  */
-export async function deleteConversationFlow(
+export const deleteConversationFlow = (
   dependencies: ConversationDeletionDependencies,
-): Promise<ConversationDeleteOutcome> {
-  const deletedAt = dependencies.now();
-  dependencies.fence(deletedAt);
-  const cutoffRead = dependencies.readCutoffBefore();
-  const marked = await dependencies.fenceBrain(deletedAt);
-  if (!marked) {
-    // No durable marker, so the rows are left for the next landed write to
-    // replace: the fences already keep them out of every view and context,
-    // and rows removed without their marker would be a deletion the next
-    // launch could not tell had happened.
-    dependencies.report(
-      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.MARKER}`,
-    );
-    return CONVERSATION_DELETE_OUTCOME.REFUSED;
-  }
-  const cutoffBefore = await cutoffRead;
-  if (!cutoffBefore) {
-    // An archive recording a guessed cutoff would make its restore hide
-    // lines it brings back; the rows stay, behind the fences and the marker.
-    dependencies.report(
-      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.CUTOFF}`,
-    );
-    return CONVERSATION_DELETE_OUTCOME.REFUSED;
-  }
-  const outcome = await dependencies.erase(deletedAt, cutoffBefore.value);
-  if (!outcome) {
-    dependencies.report(`Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ROWS}`);
-    return CONVERSATION_DELETE_OUTCOME.REFUSED;
-  }
-  if (!outcome.published) {
-    dependencies.report(
-      `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ARCHIVE}`,
-    );
-    return CONVERSATION_DELETE_OUTCOME.INCOMPLETE;
-  }
-  return CONVERSATION_DELETE_OUTCOME.COMPLETE;
-}
+): Effect.Effect<ConversationDeleteOutcome> =>
+  Effect.gen(function* () {
+    const deletedAt = dependencies.now();
+    dependencies.fence(deletedAt);
+    // The cutoff read is dispatched on this step rather than forked onto a
+    // fiber of its own: a fork is handed to the scheduler, where it would
+    // reach the store behind the marker below and answer the cutoff that
+    // marker raised rather than the one standing before the press.
+    const cutoffRead = dependencies.readCutoffBefore();
+    const marked = yield* Effect.promise(() => dependencies.fenceBrain(deletedAt));
+    if (!marked) {
+      // No durable marker, so the rows are left for the next landed write to
+      // replace: the fences already keep them out of every view and context,
+      // and rows removed without their marker would be a deletion the next
+      // launch could not tell had happened.
+      dependencies.report(
+        `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.MARKER}`,
+      );
+      return CONVERSATION_DELETE_OUTCOME.REFUSED;
+    }
+    const cutoffBefore = yield* Effect.promise(() => cutoffRead);
+    if (!cutoffBefore) {
+      // An archive recording a guessed cutoff would make its restore hide
+      // lines it brings back; the rows stay, behind the fences and the marker.
+      dependencies.report(
+        `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.CUTOFF}`,
+      );
+      return CONVERSATION_DELETE_OUTCOME.REFUSED;
+    }
+    const outcome = yield* Effect.promise(() => dependencies.erase(deletedAt, cutoffBefore.value));
+    if (!outcome) {
+      dependencies.report(
+        `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ROWS}`,
+      );
+      return CONVERSATION_DELETE_OUTCOME.REFUSED;
+    }
+    if (!outcome.published) {
+      dependencies.report(
+        `Delete conversation incomplete: ${CONVERSATION_DELETION_INCOMPLETE.ARCHIVE}`,
+      );
+      return CONVERSATION_DELETE_OUTCOME.INCOMPLETE;
+    }
+    return CONVERSATION_DELETE_OUTCOME.COMPLETE;
+  });

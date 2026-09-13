@@ -106,10 +106,11 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
       },
       // SAFETY: the tests reach the deletion alone; the fixture stands in for the other operations.
       conversations: {
-        deleteConversation: async (sessionKey: SessionKey) => {
-          deleted.push(sessionKey);
-          return CONVERSATION_DELETE_OUTCOME.COMPLETE;
-        },
+        deleteConversation: (sessionKey: SessionKey) =>
+          Effect.sync(() => {
+            deleted.push(sessionKey);
+            return CONVERSATION_DELETE_OUTCOME.COMPLETE;
+          }),
         holds: () => true,
         lines: () => [],
         directory: () => [],

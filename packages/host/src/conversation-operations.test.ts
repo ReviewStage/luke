@@ -9,7 +9,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { ConversationEntry } from "@sidecar/session";
 import { Duration, Effect, Exit, Scope, TestClock } from "effect";
-import { test } from "vitest";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
   CONVERSATION_MAINTENANCE_INTERVAL_MS,
@@ -90,31 +89,52 @@ function harness(erasePublished = true, { marks = true, readsCutoff = true } = {
   return { operations: conversationOperations(dependencies), calls };
 }
 
-test("Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened", async () => {
-  const { operations, calls } = harness();
-  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-  assert.deepEqual(calls, [
-    `fence:${THREAD}:${NOW}`,
-    `cutoff:${THREAD}`,
-    `clear:${THREAD}:${NOW}`,
-    `erase:${THREAD}:${NOW}:gen-2:${EARLIER_CUTOFF}`,
-  ]);
-  const unpublished = harness(false);
-  assert.equal(
-    await unpublished.operations.deleteConversation(THREAD),
-    CONVERSATION_DELETE_OUTCOME.INCOMPLETE,
-  );
-});
+it.effect(
+  "Delete conversation fences the thread and the brain's generation, then erases what stood at or before the press while the successor lifetime stands; nothing is retired or reopened",
+  () =>
+    Effect.gen(function* () {
+      const { operations, calls } = harness();
+      assert.equal(
+        yield* operations.deleteConversation(THREAD),
+        CONVERSATION_DELETE_OUTCOME.COMPLETE,
+      );
+      assert.deepEqual(calls, [
+        `fence:${THREAD}:${NOW}`,
+        `cutoff:${THREAD}`,
+        `clear:${THREAD}:${NOW}`,
+        `erase:${THREAD}:${NOW}:gen-2:${EARLIER_CUTOFF}`,
+      ]);
+      const unpublished = harness(false);
+      assert.equal(
+        yield* unpublished.operations.deleteConversation(THREAD),
+        CONVERSATION_DELETE_OUTCOME.INCOMPLETE,
+      );
+    }),
+);
 
-test("a marker the store will not write refuses the deletion with the fences standing and nothing erased", async () => {
-  const { operations } = harness(true, { marks: false });
-  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
-});
+it.effect(
+  "a marker the store will not write refuses the deletion with the fences standing and nothing erased",
+  () =>
+    Effect.gen(function* () {
+      const { operations } = harness(true, { marks: false });
+      assert.equal(
+        yield* operations.deleteConversation(THREAD),
+        CONVERSATION_DELETE_OUTCOME.REFUSED,
+      );
+    }),
+);
 
-test("a cutoff the store cannot read refuses the deletion after the marker, with nothing erased: an archive never records a guessed cutoff", async () => {
-  const { operations } = harness(true, { readsCutoff: false });
-  assert.equal(await operations.deleteConversation(THREAD), CONVERSATION_DELETE_OUTCOME.REFUSED);
-});
+it.effect(
+  "a cutoff the store cannot read refuses the deletion after the marker, with nothing erased: an archive never records a guessed cutoff",
+  () =>
+    Effect.gen(function* () {
+      const { operations } = harness(true, { readsCutoff: false });
+      assert.equal(
+        yield* operations.deleteConversation(THREAD),
+        CONVERSATION_DELETE_OUTCOME.REFUSED,
+      );
+    }),
+);
 
 it.effect(
   "maintenance runs at the launch, preserving the busy conversations, and again on its own hourly clock, stopping with its scope",
