@@ -292,9 +292,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   rather than one it builds; `packages/runtime/src/lanes.ts` and
   `packages/runtime/src/lanes.effect.ts` are the same port and sibling shape,
   on the raw-primitive allowlist rather than this one.
-- **`packages/brain/src/asks.ts`** — `PendingInputQueue`'s debounce takes two
-  closures (`queueTimersOn`) over one of the agent's own armed waits, because
-  the queue is the same kind of OpenClaw port and may not import `effect`.
 - **The test-support edges** — `apps/web/tests/support/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
