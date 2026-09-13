@@ -1,5 +1,5 @@
 import type { BrainAgent } from "@sidecar/brain";
-import { GATEWAY_CLIENT_ROLE, GatewayClient, InProcessTransport } from "@sidecar/gateway";
+import { GATEWAY_CLIENT_ROLE, gatewayClient, InProcessTransport } from "@sidecar/gateway";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { Effect, type Scope } from "effect";
 import type { ConversationOperations } from "../conversation-operations.js";
@@ -17,8 +17,8 @@ export function operatorOverBrain(options: {
   current: () => BrainAgent | undefined;
 }): Effect.Effect<GatewayOperator, never, Scope.Scope> {
   let ids = 0;
-  return Effect.map(
-    scopedGatewayService({
+  return Effect.gen(function* () {
+    const service = yield* scopedGatewayService({
       brain: {
         current: options.current,
         agentForRun: options.current,
@@ -36,16 +36,15 @@ export function operatorOverBrain(options: {
       observedSessionCount: () => 0,
       now: Date.now,
       createId: () => `id-${++ids}`,
-    }),
-    (service) =>
-      createGatewayOperator({
-        client: new GatewayClient({
-          transport: new InProcessTransport(service.gateway, {
-            clientId: "test-operator",
-            role: GATEWAY_CLIENT_ROLE.OPERATOR,
-          }),
-          createId: () => `request-${++ids}`,
+    });
+    return createGatewayOperator({
+      client: yield* gatewayClient({
+        transport: new InProcessTransport(service.gateway, {
+          clientId: "test-operator",
+          role: GATEWAY_CLIENT_ROLE.OPERATOR,
         }),
+        createId: () => `request-${++ids}`,
       }),
-  );
+    });
+  });
 }

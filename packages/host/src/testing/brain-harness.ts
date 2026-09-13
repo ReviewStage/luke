@@ -36,7 +36,7 @@ export interface BrainHarness {
     options?: Partial<BrainAgentOptions>,
   ) => Effect.Effect<BrainAgent>;
   readonly submit: GatewayOperator["submit"];
-  readonly submitMany: (count: number, from?: number) => Promise<string[]>;
+  readonly submitMany: (count: number, from?: number) => Effect.Effect<string[]>;
   readonly broadcasts: (readonly BrainRequestSnapshot[])[];
 }
 
@@ -83,19 +83,20 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
     });
     /** Submits as a client does, through the operator over the standing brain. */
     const { submit } = yield* operatorOverBrain({ current: () => host.current() });
-    const submitMany = async (count: number, from = 0) => {
-      const runIds: string[] = [];
-      for (let index = from; index < from + count; index += 1) {
-        const result = await submit({
-          submissionId: `sub-${index}`,
-          question: `ask ${index}`,
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        });
-        assert.equal(result.outcome, "accepted");
-        if (result.outcome === "accepted") runIds.push(result.runId);
-      }
-      return runIds;
-    };
+    const submitMany = (count: number, from = 0) =>
+      Effect.gen(function* () {
+        const runIds: string[] = [];
+        for (let index = from; index < from + count; index += 1) {
+          const result = yield* submit({
+            submissionId: `sub-${index}`,
+            question: `ask ${index}`,
+            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+          });
+          assert.equal(result.outcome, "accepted");
+          if (result.outcome === "accepted") runIds.push(result.runId);
+        }
+        return runIds;
+      });
     const build = (
       client: BareResponsesModel,
       options: Partial<BrainAgentOptions> = {},

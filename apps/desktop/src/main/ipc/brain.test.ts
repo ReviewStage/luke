@@ -28,12 +28,13 @@ test("a cancel crosses to the operator under the run it names, and the brain row
   const cancelled: string[] = [];
   // SAFETY: the rows reach only `cancel` on the operator; the fixture stands in for the rest.
   const operator = {
-    cancel: async (runId: string) => {
-      cancelled.push(runId);
-      return CANCELLED;
-    },
+    cancel: (runId: string) =>
+      Effect.sync(() => {
+        cancelled.push(runId);
+        return CANCELLED;
+      }),
   } as unknown as GatewayOperator;
-  const rows = brainActRows({ operator });
+  const rows = brainActRows({ operator, run: Effect.runPromise });
   assert.deepEqual(Object.keys(rows), [ACT_KIND.BRAIN_CANCEL_ASK]);
   // SAFETY: only the brain rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.

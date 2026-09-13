@@ -3,8 +3,8 @@ import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_METHOD,
-  GatewayClient,
   type GatewayTransport,
+  gatewayClient,
   NODE_CAPABILITY_STATUS,
   type NodeCapabilityResult,
   type NodeInvocation,
@@ -25,6 +25,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
+import { Effect, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
 
@@ -38,6 +39,8 @@ import { createHostOperator, type HostOperator } from "./host-operator";
 export interface GatewayWiringDependencies {
   transport: GatewayTransport;
   createId: () => string;
+  /** Runs one of the client's calls on the launch's own runtime, for the surfaces below that still answer promises. */
+  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   report: (message: string) => void;
   /** What the host says, written down once; the windows are told from it. */
   state: AppStateStore;
@@ -53,7 +56,6 @@ export interface GatewayWiringDependencies {
 }
 
 export interface GatewayWiring {
-  readonly client: GatewayClient;
   readonly operator: GatewayOperator;
   readonly host: HostOperator;
   /**
@@ -62,7 +64,7 @@ export interface GatewayWiring {
    * dropped against the old host's count), and this process's node
    * registered on the connection that now stands.
    */
-  attached: () => Promise<boolean>;
+  attached: () => Effect.Effect<boolean>;
 }
 
 /** The commands the EventKit helper answers; an invocation naming anything else is refused here. */
@@ -84,111 +86,124 @@ function isCarriedAppAction(
   );
 }
 
-export function wireGateway(dependencies: GatewayWiringDependencies): GatewayWiring {
-  const { transport, state, report } = dependencies;
-  const client = new GatewayClient({
-    transport,
-    createId: dependencies.createId,
-    report,
-    // A snapshot stands in for events the client will never see: the ones a
-    // replaced host never numbered, or a window that moved past. The runs it
-    // carries land in the document as the runs event would have.
-    onSnapshot: (snapshot) => {
-      if (!isRecord(snapshot) || !Array.isArray(snapshot.runs)) return;
-      state.update({
-        brain: { runs: snapshot.runs.flatMap((run) => brainRequestRecordFromWire(run) ?? []) },
-      });
-    },
-  });
-  const operator = createGatewayOperator({ client });
-  const host = createHostOperator({
-    client,
-    lastSettings: () => state.snapshot().settings,
-    report,
-  });
-
-  // What the host tells its clients: the runs and the Conversation as its
-  // reads of the service compose it, each written to the document every
-  // window is told from. The local store's own thread event still arrives
-  // for the voice window's relay and is written nowhere: the thread a panel
-  // draws is the account's.
-  operator.onRunsChanged((runs) => {
-    state.update({ brain: { runs } });
-  });
-  host.onConversationViewChanged((view) => {
-    state.update({ conversation: view });
-  });
-
-  /**
-   * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string and
-   * its kind one the build names, the act the shape the panel takes, the
-   * helper command one the build knows —
-   * and each answers the host's own result vocabulary, so a refusal is typed
-   * and never a throw that the wire would have to guess at.
-   */
-  const perform = async (invocation: NodeInvocation): Promise<NodeCapabilityResult> => {
-    const failed = (reason: string): NodeCapabilityResult => ({
-      status: NODE_CAPABILITY_STATUS.FAILED,
-      capability: invocation.capability,
-      reason,
+export function wireGateway(
+  dependencies: GatewayWiringDependencies,
+): Effect.Effect<GatewayWiring, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const { transport, state, report, run } = dependencies;
+    const client = yield* gatewayClient({
+      transport,
+      createId: dependencies.createId,
+      report,
+      // A snapshot stands in for events the client will never see: the ones a
+      // replaced host never numbered, or a window that moved past. The runs it
+      // carries land in the document as the runs event would have.
+      onSnapshot: (snapshot) => {
+        if (!isRecord(snapshot) || !Array.isArray(snapshot.runs)) return;
+        state.update({
+          brain: { runs: snapshot.runs.flatMap((held) => brainRequestRecordFromWire(held) ?? []) },
+        });
+      },
     });
-    switch (invocation.capability) {
-      case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
-        const { url, kind } = invocation.params;
-        if (!isWireString(url)) return failed("open needs a url");
-        if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
-          return failed("open needs a kind this build names");
-        }
-        await dependencies.node.openExternal(url, kind);
-        return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
-      }
-      case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
-        const action = invocation.params.action;
-        if (!isCarriedAppAction(action)) return failed("the action is not one a panel performs");
-        return {
-          status: NODE_CAPABILITY_STATUS.OK,
-          value: await dependencies.node.performAppAction(action),
-        };
-      }
-      case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
-        const helperArguments = invocation.params.arguments;
-        if (
-          !Array.isArray(helperArguments) ||
-          !helperArguments.every(isWireString) ||
-          !APPLE_CALENDAR_HELPER_COMMANDS.has(helperArguments[0] ?? "")
-        ) {
-          return failed("the helper invocation is not one this build runs");
-        }
-        if (!isWireNumber(invocation.params.timeoutMs)) return failed("timeoutMs must be a number");
-        const output = await dependencies.node.runAppleCalendarHelper(
-          helperArguments,
-          invocation.params.timeoutMs,
-        );
-        return { status: NODE_CAPABILITY_STATUS.OK, value: output };
-      }
-      default:
-        return {
-          status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
-          capability: invocation.capability,
-          reason: "this node offers no such capability",
-        };
-    }
-  };
-  transport.serveInvocations?.(perform);
+    const operator = createGatewayOperator({ client });
+    const host = createHostOperator({
+      client,
+      run,
+      lastSettings: () => state.snapshot().settings,
+      report,
+    });
 
-  return {
-    client,
-    operator,
-    host,
-    attached: async () => {
-      await client.adoptHost();
-      const result = await client.call(GATEWAY_METHOD.NODE_REGISTER, {
-        nodeId: HOST_NATIVE_NODE_ID,
-        capabilities: [...HOST_NODE_CAPABILITY_LIST],
+    // What the host tells its clients: the runs and the Conversation as its
+    // reads of the service compose it, each written to the document every
+    // window is told from. The local store's own thread event still arrives
+    // for the voice window's relay and is written nowhere: the thread a panel
+    // draws is the account's. Both are the scope's, as the client's own
+    // subscription is, so the close that ends one ends all three.
+    const heardRuns = operator.onRunsChanged((runs) => {
+      state.update({ brain: { runs } });
+    });
+    const heardConversation = host.onConversationViewChanged((view) => {
+      state.update({ conversation: view });
+    });
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        heardConversation();
+        heardRuns();
+      }),
+    );
+
+    /**
+     * The capabilities this process performs at the host's ask. Each is
+     * validated here before anything native runs — the address a string and
+     * its kind one the build names, the act the shape the panel takes, the
+     * helper command one the build knows —
+     * and each answers the host's own result vocabulary, so a refusal is typed
+     * and never a throw that the wire would have to guess at.
+     */
+    const perform = async (invocation: NodeInvocation): Promise<NodeCapabilityResult> => {
+      const failed = (reason: string): NodeCapabilityResult => ({
+        status: NODE_CAPABILITY_STATUS.FAILED,
+        capability: invocation.capability,
+        reason,
       });
-      if (!result.ok) report(`the native node could not register: ${result.error.message}`);
-      return result.ok;
-    },
-  };
+      switch (invocation.capability) {
+        case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
+          const { url, kind } = invocation.params;
+          if (!isWireString(url)) return failed("open needs a url");
+          if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
+            return failed("open needs a kind this build names");
+          }
+          await dependencies.node.openExternal(url, kind);
+          return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
+        }
+        case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
+          const action = invocation.params.action;
+          if (!isCarriedAppAction(action)) return failed("the action is not one a panel performs");
+          return {
+            status: NODE_CAPABILITY_STATUS.OK,
+            value: await dependencies.node.performAppAction(action),
+          };
+        }
+        case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
+          const helperArguments = invocation.params.arguments;
+          if (
+            !Array.isArray(helperArguments) ||
+            !helperArguments.every(isWireString) ||
+            !APPLE_CALENDAR_HELPER_COMMANDS.has(helperArguments[0] ?? "")
+          ) {
+            return failed("the helper invocation is not one this build runs");
+          }
+          if (!isWireNumber(invocation.params.timeoutMs))
+            return failed("timeoutMs must be a number");
+          const output = await dependencies.node.runAppleCalendarHelper(
+            helperArguments,
+            invocation.params.timeoutMs,
+          );
+          return { status: NODE_CAPABILITY_STATUS.OK, value: output };
+        }
+        default:
+          return {
+            status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+            capability: invocation.capability,
+            reason: "this node offers no such capability",
+          };
+      }
+    };
+    transport.serveInvocations?.(perform);
+
+    return {
+      operator,
+      host,
+      attached: () =>
+        Effect.gen(function* () {
+          yield* client.adoptHost();
+          const result = yield* client.call(GATEWAY_METHOD.NODE_REGISTER, {
+            nodeId: HOST_NATIVE_NODE_ID,
+            capabilities: [...HOST_NODE_CAPABILITY_LIST],
+          });
+          if (!result.ok) report(`the native node could not register: ${result.error.message}`);
+          return result.ok;
+        }),
+    };
+  });
 }

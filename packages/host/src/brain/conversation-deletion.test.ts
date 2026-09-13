@@ -214,16 +214,17 @@ function composed(t: TestContext) {
     // current brain would, so a rebuilt agent is submitted to like the first.
     let asking: BrainAgent | undefined;
     const operator = yield* operatorOverBrain({ current: () => asking });
-    const submit = async (agent: BrainAgent, question: string) => {
-      asking = agent;
-      const result = await operator.submit({
-        submissionId: `sub-${++ids}`,
-        question,
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    const submit = (agent: BrainAgent, question: string) =>
+      Effect.gen(function* () {
+        asking = agent;
+        const result = yield* operator.submit({
+          submissionId: `sub-${++ids}`,
+          question,
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        });
+        assert.equal(result.outcome, "accepted");
+        return result.outcome === "accepted" ? result.runId : "";
       });
-      assert.equal(result.outcome, "accepted");
-      return result.outcome === "accepted" ? result.runId : "";
-    };
     /** Every row the database holds for main, read on a second handle and flattened for a marker search. */
     const rows = () => {
       const raw = new DatabaseSync(path.join(root, "agent.sqlite"), { readOnly: true });
@@ -346,7 +347,7 @@ function seeded(
     yield* Effect.promise(() => c.open());
     const client = heldClient();
     const agent = c.build(client);
-    const first = yield* Effect.promise(() => c.submit(agent, OLD_ASK));
+    const first = yield* c.submit(agent, OLD_ASK);
     assert.equal(
       yield* Effect.promise(() =>
         c.record({ kind: CONVERSATION_ENTRY_KIND.ASK, words: OLD_ASK, requestId: first }, c.tick()),
@@ -423,7 +424,7 @@ it.scoped(
       // line already on the thread the way the live record writes an utterance.
       c.tick();
       const beforeSecondAsk = client.inputs.length;
-      const late = yield* Effect.promise(() => c.submit(agent, "second ask"));
+      const late = yield* c.submit(agent, "second ask");
       assert.equal(
         yield* Effect.promise(() =>
           c.record(
@@ -484,7 +485,7 @@ it.scoped(
       assert.equal(archive.conversationLines, 3);
       // The same agent works on from the successor: its next ask carries none of the old words.
       const beforeNext = client.inputs.length;
-      const next = yield* Effect.promise(() => c.submit(agent, "what now"));
+      const next = yield* c.submit(agent, "what now");
       yield* waitFor(() => client.inputs.length > beforeNext);
       client.release(reply("fresh"));
       yield* waitFor(() => agent.request(next)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
@@ -524,14 +525,14 @@ it.scoped(
       // The same agent's next ask, and a rebuilt agent's — a credential change
       // landing now — both see none of the old words.
       const beforeAgain = client.inputs.length;
-      const again = yield* Effect.promise(() => c.submit(agent, "again"));
+      const again = yield* c.submit(agent, "again");
       yield* waitFor(() => client.inputs.length > beforeAgain);
       client.release(reply("ok"));
       yield* waitFor(() => agent.request(again)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
       yield* Effect.promise(() => c.stop(agent));
       const rebuiltClient = heldClient();
       const rebuilt = c.build(rebuiltClient);
-      const afterRebuild = yield* Effect.promise(() => c.submit(rebuilt, "after a rebuild"));
+      const afterRebuild = yield* c.submit(rebuilt, "after a rebuild");
       yield* waitFor(() => rebuiltClient.inputs.length > 0);
       rebuiltClient.release(reply("ok"));
       yield* waitFor(
@@ -558,7 +559,7 @@ it.scoped(
       assert.deepEqual(c.thread.entries(), []);
       c.repo.refuse = false;
       const beforeAgain = client.inputs.length;
-      const next = yield* Effect.promise(() => c.submit(agent, "again"));
+      const next = yield* c.submit(agent, "again");
       yield* waitFor(() => client.inputs.length > beforeAgain);
       client.release(reply("ok"));
       yield* waitFor(() => agent.request(next)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);
@@ -584,7 +585,7 @@ it.scoped(
       const rebuiltClient = heldClient();
       const rebuilt = c.build(rebuiltClient);
       yield* rebuilt.ready();
-      const during = yield* Effect.promise(() => c.submit(rebuilt, "during the wait"));
+      const during = yield* c.submit(rebuilt, "during the wait");
       yield* waitFor(() => rebuiltClient.inputs.length > 0);
       rebuiltClient.release(reply("ok"));
       yield* waitFor(() => rebuilt.request(during)?.status === BRAIN_REQUEST_STATUS.SUCCEEDED);

@@ -39,7 +39,7 @@ it.scoped(
       yield* runHost(c.host.replace(() => c.build(client)));
       const agent = c.host.current();
       assert.ok(agent);
-      const runIds = yield* Effect.promise(() => c.submitMany(5));
+      const runIds = yield* c.submitMany(5);
       yield* waitFor(() => (c.repository.state?.requests.length ?? 0) === 5);
 
       yield* runHost(c.host.replace(() => Effect.succeed(undefined)));
@@ -94,7 +94,7 @@ it.scoped(
       yield* runHost(c.host.replace(() => c.build(first)));
       const agent = c.host.current();
       assert.ok(agent);
-      const runIds = yield* Effect.promise(() => c.submitMany(5));
+      const runIds = yield* c.submitMany(5);
       yield* waitFor(() => (c.repository.state?.requests.length ?? 0) === 5);
       const second = heldModel();
       yield* runHost(c.host.replace(() => c.build(second)));
@@ -117,13 +117,11 @@ it.scoped(
         );
       }
       // The successor's own run proceeds and is the only writer.
-      const result = yield* Effect.promise(() =>
-        c.submit({
-          submissionId: "fresh",
-          question: "new ask",
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        }),
-      );
+      const result = yield* c.submit({
+        submissionId: "fresh",
+        question: "new ask",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      });
       assert.equal(result.outcome, "accepted");
       // The host reaches its first inference only after the run's own
       // bookkeeping, some of which still runs after the record already reads
@@ -180,7 +178,7 @@ it.scoped(
       yield* runHost(c.host.replace(() => c.build(client)));
       const agent = c.host.current();
       assert.ok(agent);
-      yield* Effect.promise(() => c.submitMany(3));
+      yield* c.submitMany(3);
       yield* waitFor(() => (c.repository.state?.requests.length ?? 0) === 3);
       assert.equal(yield* Effect.promise(() => c.store.clear()), true);
       yield* waitFor(

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Context, Effect, ExecutionStrategy, Exit, Layer, Scope } from "effect";
+import { Context, Effect, ExecutionStrategy, Exit, Fiber, Layer, Scope } from "effect";
 import { WebSocket } from "ws";
-import { GatewayClient } from "./client.js";
+import { gatewayClient } from "./client.js";
 import type { GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -132,24 +132,22 @@ it.live("the host binds an ephemeral port and carries requests, answers, and eve
       const result = yield* connect(h);
       assert.equal(result.ok, true);
       if (!result.ok) return;
-      const client = new GatewayClient({
+      const client = yield* gatewayClient({
         transport: result.connection,
         createId: () => crypto.randomUUID(),
       });
       const seen: GatewayEvent[] = [];
       client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => seen.push(event));
-      const listed = yield* Effect.promise(() => client.call(GATEWAY_METHOD.RUN_LIST));
+      const listed = yield* client.call(GATEWAY_METHOD.RUN_LIST);
       assert.deepEqual(listed, { ok: true, result: { runs: [], client: "desktop" } });
-      const submitted = yield* Effect.promise(() =>
-        client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "hello" }),
-      );
+      const submitted = yield* client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "hello" });
       assert.equal(submitted.ok, true);
       assert.deepEqual(h.effects, ["hello"]);
       yield* h.log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
       yield* settle;
       assert.equal(seen.length, 1);
       assert.equal(seen[0]?.sequence, 1);
-      const refused = yield* Effect.promise(() => client.call(GATEWAY_METHOD.MEMORY_STATUS));
+      const refused = yield* client.call(GATEWAY_METHOD.MEMORY_STATUS);
       assert.equal(refused.ok, false);
       if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.REFUSED);
       result.connection.close();
@@ -224,18 +222,16 @@ it.live(
         yield* h.binding.closeAdmissions;
         const late = yield* connect(h);
         assert.deepEqual(late, { ok: false, failure: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN });
-        const client = new GatewayClient({
+        const client = yield* gatewayClient({
           transport: attached.connection,
           createId: () => crypto.randomUUID(),
         });
-        const submit = yield* Effect.promise(() =>
-          client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "late" }),
-        );
+        const submit = yield* client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "late" });
         assert.equal(submit.ok, false);
         if (!submit.ok) assert.equal(submit.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
         assert.deepEqual(h.effects, []);
-        assert.equal((yield* Effect.promise(() => client.call(GATEWAY_METHOD.RUN_LIST))).ok, true);
-        assert.equal((yield* Effect.promise(() => client.call(GATEWAY_METHOD.SHUTDOWN))).ok, true);
+        assert.equal((yield* client.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
+        assert.equal((yield* client.call(GATEWAY_METHOD.SHUTDOWN)).ok, true);
         assert.equal(h.shutdowns(), 1);
         attached.connection.close();
       }),
@@ -259,14 +255,12 @@ it.live(
         yield* settle;
         assert.equal(closed, 1);
         assert.equal(result.connection.connected(), false);
-        const answer = yield* Effect.promise(() =>
-          result.connection.request({
-            protocolVersion: GATEWAY_PROTOCOL_VERSION,
-            id: "r",
-            method: GATEWAY_METHOD.RUN_LIST,
-            params: {},
-          }),
-        );
+        const answer = yield* result.connection.request({
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: "r",
+          method: GATEWAY_METHOD.RUN_LIST,
+          params: {},
+        });
         assert.equal(answer.ok, false);
         if (!answer.ok) assert.equal(answer.error.code, GATEWAY_ERROR.DISCONNECTED);
         const unreachable = yield* connect(h);
@@ -286,12 +280,12 @@ it.live(
         const result = yield* connect(minted);
         assert.equal(result.ok, true);
         if (!result.ok) return;
-        const client = new GatewayClient({
+        const client = yield* gatewayClient({
           transport: result.connection,
           createId: () => crypto.randomUUID(),
         });
         // What the client declared about itself is not what the host admitted it as.
-        assert.deepEqual(yield* Effect.promise(() => client.call(GATEWAY_METHOD.RUN_LIST)), {
+        assert.deepEqual(yield* client.call(GATEWAY_METHOD.RUN_LIST), {
           ok: true,
           result: { runs: [], client: "the-account" },
         });
@@ -395,11 +389,11 @@ it.live("a client that dies with a request still out leaves the host answering t
       const first = yield* connect(h);
       assert.equal(first.ok, true);
       if (!first.ok) return;
-      const client = new GatewayClient({
+      const client = yield* gatewayClient({
         transport: first.connection,
         createId: () => crypto.randomUUID(),
       });
-      const waiting = client.call(GATEWAY_METHOD.RUN_WAIT, { runId: "run-1" });
+      const waiting = yield* Effect.fork(client.call(GATEWAY_METHOD.RUN_WAIT, { runId: "run-1" }));
       yield* settle;
       assert.equal(yield* h.binding.connections, 1);
       // The socket dies with the read still out: its answer lands nowhere and
@@ -407,15 +401,15 @@ it.live("a client that dies with a request still out leaves the host answering t
       first.connection.close();
       yield* settle;
       assert.equal(yield* h.binding.connections, 0);
-      assert.equal((yield* Effect.promise(() => waiting)).ok, false);
+      assert.equal((yield* Fiber.join(waiting)).ok, false);
       const second = yield* connect(h);
       assert.equal(second.ok, true);
       if (!second.ok) return;
-      const after = new GatewayClient({
+      const after = yield* gatewayClient({
         transport: second.connection,
         createId: () => crypto.randomUUID(),
       });
-      assert.equal((yield* Effect.promise(() => after.call(GATEWAY_METHOD.RUN_LIST))).ok, true);
+      assert.equal((yield* after.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
       second.connection.close();
     }),
   ),

@@ -1,4 +1,5 @@
 import { isRecord, isWireNumber, type WireRecord, type WireValue } from "@sidecar/wire";
+import { Deferred, Effect, FiberId, Runtime, type Scope } from "effect";
 import {
   GATEWAY_ERROR,
   GATEWAY_METHOD,
@@ -46,87 +47,21 @@ export type GatewayClientEventListener = (event: GatewayEvent) => void;
  * for a reconnection from the last sequence seen, which replays what was
  * missed or hands back a snapshot to adopt whole. Nothing is skipped
  * silently. The same reconnection runs when the transport comes back.
+ *
+ * Every verb is an effect its caller runs; what the client itself runs is
+ * only the reconnection a gap opens, which is forked from the transport's
+ * own synchronous event callback.
  */
-export class GatewayClient {
-  readonly #options: GatewayClientOptions;
-  readonly #listeners = new Map<GatewayEventKind, Set<GatewayClientEventListener>>();
-  readonly #everyListener = new Set<GatewayClientEventListener>();
-  #lastSequence = 0;
-  /**
-   * Whether this client has a baseline in the host's numbering: adopted from
-   * a hello, or established by hearing the host's very first event. Without
-   * one, a gap is not something to replay — the window before it is the
-   * host's past, offers and all, and a client that was not there for it must
-   * take the host as it stands now rather than hear it again.
-   */
-  #baselined = false;
-  #reconnecting: Promise<void> | undefined;
-  /**
-   * Which adoption or reconnection stands. Each begins a new generation and
-   * every answer is checked against it when it lands, so a reply from a host
-   * since replaced, or a reconnection the adoption superseded, installs
-   * nothing.
-   */
-  #generation = 0;
-  /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
-  #arrivedDuringReconnect: GatewayEvent[] = [];
-  #unsubscribe: (() => void) | undefined;
-
-  constructor(options: GatewayClientOptions) {
-    this.#options = options;
-    this.#unsubscribe = options.transport.events((event) => this.#take(event));
-  }
-
-  lastSequence(): number {
-    return this.#lastSequence;
-  }
-
-  /** Ends the subscription; a client not listening reconnects nothing. */
-  close(): void {
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-  }
-
-  async call(
+export interface GatewayClient {
+  lastSequence(): number;
+  call(
     method: GatewayMethod,
-    params: WireRecord = {},
-    options: GatewayCallOptions = {},
-  ): Promise<GatewayCallResult> {
-    const request: GatewayRequest = {
-      protocolVersion: GATEWAY_PROTOCOL_VERSION,
-      id: this.#options.createId(),
-      method,
-      params,
-      ...(isMutatingGatewayMethod(method)
-        ? { idempotencyKey: options.idempotencyKey ?? this.#options.createId() }
-        : options.idempotencyKey !== undefined
-          ? { idempotencyKey: options.idempotencyKey }
-          : undefined),
-      ...(options.expectedRevision ? { expectedRevision: options.expectedRevision } : undefined),
-    };
-    const response = await this.#options.transport.request(request);
-    return response.ok
-      ? { ok: true, result: response.result }
-      : { ok: false, error: response.error };
-  }
-
+    params?: WireRecord,
+    options?: GatewayCallOptions,
+  ): Effect.Effect<GatewayCallResult>;
   /** Hears every event of one kind, in sequence, after any gap has been filled. */
-  on(kind: GatewayEventKind, listener: GatewayClientEventListener): () => void {
-    const held = this.#listeners.get(kind) ?? new Set<GatewayClientEventListener>();
-    held.add(listener);
-    this.#listeners.set(kind, held);
-    return () => {
-      held.delete(listener);
-    };
-  }
-
-  onEvery(listener: GatewayClientEventListener): () => void {
-    this.#everyListener.add(listener);
-    return () => {
-      this.#everyListener.delete(listener);
-    };
-  }
-
+  on(kind: GatewayEventKind, listener: GatewayClientEventListener): () => void;
+  onEvery(listener: GatewayClientEventListener): () => void;
   /**
    * Adopts the host now on the other side of the transport as a new stream:
    * a hello reads its sequence and its whole snapshot, the snapshot is handed
@@ -137,128 +72,216 @@ export class GatewayClient {
    * is out are taken after it, and any at or below the adopted sequence are
    * already in the snapshot. Concurrent callers share one adoption.
    */
-  adoptHost(): Promise<void> {
-    // An adoption supersedes a reconnection still out: that one was asked of
-    // the host this client is leaving, and its answer, whenever it lands,
-    // installs nothing.
-    this.#generation += 1;
-    const generation = this.#generation;
-    const adoption: Promise<void> = this.#adoptHostOnce(generation).finally(() => {
-      if (this.#reconnecting === adoption) this.#settleReconnect();
-    });
-    this.#reconnecting = adoption;
-    return adoption;
-  }
-
-  async #adoptHostOnce(generation: number): Promise<void> {
-    const response = await this.#options.transport.request({
-      protocolVersion: GATEWAY_PROTOCOL_VERSION,
-      id: this.#options.createId(),
-      method: GATEWAY_METHOD.HELLO,
-      params: {},
-    });
-    if (generation !== this.#generation) return;
-    if (!response.ok) {
-      if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
-        this.#options.report?.(`Gateway hello refused: ${response.error.message}`);
-      }
-      return;
-    }
-    const sequence = helloSequence(response.result);
-    if (sequence === undefined || !isRecord(response.result)) {
-      this.#options.report?.("Gateway hello answered in a shape this client cannot read");
-      return;
-    }
-    this.#lastSequence = sequence;
-    this.#baselined = true;
-    this.#options.onSnapshot?.(response.result.snapshot ?? {}, sequence);
-  }
-
+  adoptHost(): Effect.Effect<void>;
   /**
    * Asks the host for everything since the last sequence seen. Replayed
    * events are delivered in order as though they had never been missed; a
    * snapshot is adopted through the snapshot hook and the sequence moves to
    * where the host stands. Concurrent callers share one reconnection.
    */
-  reconnect(): Promise<void> {
-    if (this.#reconnecting) return this.#reconnecting;
-    this.#generation += 1;
-    const reconnection: Promise<void> = this.#reconnectOnce(this.#generation).finally(() => {
-      if (this.#reconnecting === reconnection) this.#settleReconnect();
-    });
-    this.#reconnecting = reconnection;
-    return reconnection;
-  }
+  reconnect(): Effect.Effect<void>;
+}
 
-  /** The adoption or reconnection that stood is over: what arrived meanwhile is taken now, in order. */
-  #settleReconnect(): void {
-    this.#reconnecting = undefined;
-    const arrived = this.#arrivedDuringReconnect.splice(0).sort((a, b) => a.sequence - b.sequence);
-    for (const event of arrived) this.#take(event);
-  }
+/**
+ * Builds one client in the caller's own `Scope`: the subscription to the
+ * transport's events is this scope's, and so is every reconnection the client
+ * forks for itself, so closing the scope ends both and a client not listening
+ * reconnects nothing.
+ */
+export function gatewayClient(
+  options: GatewayClientOptions,
+): Effect.Effect<GatewayClient, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const scope = yield* Effect.scope;
+    // The gap a synchronous event callback finds has to open its reconnection
+    // on the stack that found it — the host is asked before the callback
+    // returns — so the client forks on the runtime its own scope was built on
+    // rather than handing the work to the scheduler.
+    const runtime = yield* Effect.runtime<never>();
+    const listeners = new Map<GatewayEventKind, Set<GatewayClientEventListener>>();
+    const everyListener = new Set<GatewayClientEventListener>();
+    let lastSequence = 0;
+    /**
+     * Whether this client has a baseline in the host's numbering: adopted
+     * from a hello, or established by hearing the host's very first event.
+     * Without one, a gap is not something to replay — the window before it is
+     * the host's past, offers and all, and a client that was not there for it
+     * must take the host as it stands now rather than hear it again.
+     */
+    let baselined = false;
+    /** The adoption or reconnection in flight, which concurrent callers wait on and whose settling drains what arrived meanwhile. */
+    let standing: Deferred.Deferred<void> | undefined;
+    /**
+     * Which adoption or reconnection stands. Each begins a new generation and
+     * every answer is checked against it when it lands, so a reply from a host
+     * since replaced, or a reconnection the adoption superseded, installs
+     * nothing.
+     */
+    let generation = 0;
+    /** Events that arrived while a reconnection was in flight, taken again once it has settled. */
+    const arrivedDuringReconnect: GatewayEvent[] = [];
 
-  async #reconnectOnce(generation: number): Promise<void> {
-    const response = await this.#options.transport.request({
-      protocolVersion: GATEWAY_PROTOCOL_VERSION,
-      id: this.#options.createId(),
-      method: GATEWAY_METHOD.RECONNECT,
-      params: { lastSequence: this.#lastSequence },
-    });
-    if (generation !== this.#generation) return;
-    if (!response.ok) {
-      if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
-        this.#options.report?.(`Gateway reconnection refused: ${response.error.message}`);
+    const deliver = (event: GatewayEvent): void => {
+      lastSequence = event.sequence;
+      for (const listener of [...(listeners.get(event.kind) ?? [])]) listener(event);
+      for (const listener of [...everyListener]) listener(event);
+    };
+
+    const take = (event: GatewayEvent): void => {
+      if (standing) {
+        // Held until the adoption or reconnection settles, whatever its
+        // number: during an adoption the cursor is the old host's, and an
+        // event of the new host numbered below it is not stale, it is the
+        // first of the new stream. Whether it is already in the answer is
+        // decided after, against the adopted cursor.
+        arrivedDuringReconnect.push(event);
+        return;
       }
-      return;
-    }
-    const answer = gatewayReconnectAnswerFromWire(response.result);
-    if (!answer) {
-      this.#options.report?.("Gateway reconnection answered in a shape this client cannot read");
-      return;
-    }
-    this.#adopt(answer);
-  }
+      if (event.sequence <= lastSequence) return;
+      if (event.sequence !== lastSequence + 1) {
+        // With a baseline, the gap is filled from the host's own log and the
+        // event that showed it arrives inside the replay, in its place.
+        // Without one, the host is adopted as it stands: nothing before this
+        // client's arrival is replayed to it.
+        Runtime.runFork(runtime)(baselined ? reconnect() : adoptHost(), { scope });
+        return;
+      }
+      baselined = true;
+      deliver(event);
+    };
 
-  #adopt(answer: GatewayReconnectAnswer): void {
-    if (answer.kind === GATEWAY_RECONNECT_KIND.SNAPSHOT) {
-      this.#lastSequence = answer.sequence;
-      this.#options.onSnapshot?.(answer.snapshot, answer.sequence);
-      return;
-    }
-    for (const event of answer.events) {
-      if (event.sequence <= this.#lastSequence) continue;
-      this.#deliver(event);
-    }
-  }
+    /** The adoption or reconnection that stood is over: what arrived meanwhile is taken now, in order. */
+    const settle = (which: Deferred.Deferred<void>): Effect.Effect<void> =>
+      Effect.sync(() => {
+        if (standing === which) {
+          standing = undefined;
+          const arrived = arrivedDuringReconnect.splice(0).sort((a, b) => a.sequence - b.sequence);
+          for (const event of arrived) take(event);
+        }
+        Deferred.unsafeDone(which, Effect.void);
+      });
 
-  #take(event: GatewayEvent): void {
-    if (this.#reconnecting) {
-      // Held until the adoption or reconnection settles, whatever its number:
-      // during an adoption the cursor is the old host's, and an event of the
-      // new host numbered below it is not stale, it is the first of the new
-      // stream. Whether it is already in the answer is decided after, against
-      // the adopted cursor.
-      this.#arrivedDuringReconnect.push(event);
-      return;
-    }
-    if (event.sequence <= this.#lastSequence) return;
-    if (event.sequence !== this.#lastSequence + 1) {
-      // With a baseline, the gap is filled from the host's own log and the
-      // event that showed it arrives inside the replay, in its place. Without
-      // one, the host is adopted as it stands: nothing before this client's
-      // arrival is replayed to it.
-      void (this.#baselined ? this.reconnect() : this.adoptHost());
-      return;
-    }
-    this.#baselined = true;
-    this.#deliver(event);
-  }
+    const adopt = (answer: GatewayReconnectAnswer): void => {
+      if (answer.kind === GATEWAY_RECONNECT_KIND.SNAPSHOT) {
+        lastSequence = answer.sequence;
+        options.onSnapshot?.(answer.snapshot, answer.sequence);
+        return;
+      }
+      for (const event of answer.events) {
+        if (event.sequence <= lastSequence) continue;
+        deliver(event);
+      }
+    };
 
-  #deliver(event: GatewayEvent): void {
-    this.#lastSequence = event.sequence;
-    for (const listener of [...(this.#listeners.get(event.kind) ?? [])]) listener(event);
-    for (const listener of [...this.#everyListener]) listener(event);
-  }
+    const adoptHostOnce = (asked: number): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const response = yield* options.transport.request({
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: options.createId(),
+          method: GATEWAY_METHOD.HELLO,
+          params: {},
+        });
+        if (asked !== generation) return;
+        if (!response.ok) {
+          if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
+            options.report?.(`Gateway hello refused: ${response.error.message}`);
+          }
+          return;
+        }
+        const sequence = helloSequence(response.result);
+        if (sequence === undefined || !isRecord(response.result)) {
+          options.report?.("Gateway hello answered in a shape this client cannot read");
+          return;
+        }
+        lastSequence = sequence;
+        baselined = true;
+        options.onSnapshot?.(response.result.snapshot ?? {}, sequence);
+      });
+
+    const reconnectOnce = (asked: number): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        const response = yield* options.transport.request({
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: options.createId(),
+          method: GATEWAY_METHOD.RECONNECT,
+          params: { lastSequence },
+        });
+        if (asked !== generation) return;
+        if (!response.ok) {
+          if (response.error.code !== GATEWAY_ERROR.DISCONNECTED) {
+            options.report?.(`Gateway reconnection refused: ${response.error.message}`);
+          }
+          return;
+        }
+        const answer = gatewayReconnectAnswerFromWire(response.result);
+        if (!answer) {
+          options.report?.("Gateway reconnection answered in a shape this client cannot read");
+          return;
+        }
+        adopt(answer);
+      });
+
+    const begin = (once: (asked: number) => Effect.Effect<void>): Effect.Effect<void> => {
+      generation += 1;
+      const asked = generation;
+      const deferred = Deferred.unsafeMake<void>(FiberId.none);
+      standing = deferred;
+      return Effect.ensuring(once(asked), settle(deferred));
+    };
+
+    const adoptHost = (): Effect.Effect<void> =>
+      // An adoption supersedes a reconnection still out: that one was asked of
+      // the host this client is leaving, and its answer, whenever it lands,
+      // installs nothing.
+      Effect.suspend(() => begin(adoptHostOnce));
+
+    const reconnect = (): Effect.Effect<void> =>
+      Effect.suspend(() => (standing ? Deferred.await(standing) : begin(reconnectOnce)));
+
+    const unsubscribe = options.transport.events(take);
+    yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+
+    return {
+      lastSequence: () => lastSequence,
+      call: (method, params = {}, callOptions = {}) =>
+        Effect.map(
+          Effect.suspend(() => {
+            const request: GatewayRequest = {
+              protocolVersion: GATEWAY_PROTOCOL_VERSION,
+              id: options.createId(),
+              method,
+              params,
+              ...(isMutatingGatewayMethod(method)
+                ? { idempotencyKey: callOptions.idempotencyKey ?? options.createId() }
+                : callOptions.idempotencyKey !== undefined
+                  ? { idempotencyKey: callOptions.idempotencyKey }
+                  : undefined),
+              ...(callOptions.expectedRevision
+                ? { expectedRevision: callOptions.expectedRevision }
+                : undefined),
+            };
+            return options.transport.request(request);
+          }),
+          unwrapResponse,
+        ),
+      on: (kind, listener) => {
+        const held = listeners.get(kind) ?? new Set<GatewayClientEventListener>();
+        held.add(listener);
+        listeners.set(kind, held);
+        return () => {
+          held.delete(listener);
+        };
+      },
+      onEvery: (listener) => {
+        everyListener.add(listener);
+        return () => {
+          everyListener.delete(listener);
+        };
+      },
+      adoptHost,
+      reconnect,
+    };
+  });
 }
 
 /** The answer of a `gateway.hello`, read for the sequence the client should start following from. */

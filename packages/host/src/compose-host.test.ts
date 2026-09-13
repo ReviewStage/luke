@@ -66,14 +66,12 @@ it.effect(
           const host = yield* HostTag;
           // The one method no composer owns: it reads six of them, so an answer
           // proves the merge stood every concern up and linked their back-edges.
-          const response = yield* Effect.promise(() =>
-            operatorTransport(host.gateway).request({
-              protocolVersion: GATEWAY_PROTOCOL_VERSION,
-              id: "bootstrap-1",
-              method: GATEWAY_METHOD.CLIENT_BOOTSTRAP,
-              params: {},
-            }),
-          );
+          const response = yield* operatorTransport(host.gateway).request({
+            protocolVersion: GATEWAY_PROTOCOL_VERSION,
+            id: "bootstrap-1",
+            method: GATEWAY_METHOD.CLIENT_BOOTSTRAP,
+            params: {},
+          });
           assert.ok(response.ok);
           assert.ok(isRecord(response.result));
           assert.equal(response.result.calendarOnboardingOwed, false);
@@ -97,15 +95,13 @@ it.effect("a cloud provider's key is refused signed out, and the store never hel
       Effect.gen(function* () {
         const host = yield* HostTag;
         const transport = operatorTransport(host.gateway);
-        const response = yield* Effect.promise(() =>
-          transport.request({
-            protocolVersion: GATEWAY_PROTOCOL_VERSION,
-            id: "key-1",
-            method: GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
-            params: { providerId: "conductor", apiKey: "cnd_test_key_1234567890" },
-            idempotencyKey: "key-1",
-          }),
-        );
+        const response = yield* transport.request({
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          id: "key-1",
+          method: GATEWAY_METHOD.CREDENTIAL_SET_API_KEY,
+          params: { providerId: "conductor", apiKey: "cnd_test_key_1234567890" },
+          idempotencyKey: "key-1",
+        });
         assert.ok(response.ok);
         assert.ok(isRecord(response.result));
         assert.equal(response.result.status, ACTION_RESULT_STATUS.REJECTED);
@@ -130,8 +126,8 @@ it.effect(
           const host = yield* HostTag;
           const identity = { providerId: "conductor", providerSessionId: "chat-nobody-observed" };
           const transport = operatorTransport(host.gateway);
-          const [sent, pressed] = yield* Effect.promise(() =>
-            Promise.all([
+          const [sent, pressed] = yield* Effect.all(
+            [
               transport.request({
                 protocolVersion: GATEWAY_PROTOCOL_VERSION,
                 id: "send-1",
@@ -146,7 +142,8 @@ it.effect(
                 params: { identity, controlId: "cancel-run" },
                 idempotencyKey: "press-1",
               }),
-            ]),
+            ],
+            { concurrency: "unbounded" },
           );
           // A fixture host observes nothing, so admission's own roster refusal is the
           // answer for both writes: the method is wired, and nothing past admission ran.

@@ -79,13 +79,11 @@ function markingBrain(
 it.scoped("an ask with no brain is refused in fixed words", () =>
   Effect.gen(function* () {
     const operator = yield* operatorOverBrain({ current: () => undefined });
-    const result = yield* Effect.promise(() =>
-      operator.submit({
-        submissionId: "sub-1",
-        question: "what needs me?",
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      }),
-    );
+    const result = yield* operator.submit({
+      submissionId: "sub-1",
+      question: "what needs me?",
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    });
     assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
   }),
 );
@@ -95,13 +93,11 @@ it.scoped("an ask is bounded and handed to the brain whole under its own submiss
     const asked: BrainSubmission[] = [];
     const long = `  ${"a".repeat(maximumAskLength + 50)}`;
     const operator = yield* operatorOverBrain({ current: () => acceptingBrain(asked) });
-    const result = yield* Effect.promise(() =>
-      operator.submit({
-        submissionId: "sub-1",
-        question: long,
-        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-      }),
-    );
+    const result = yield* operator.submit({
+      submissionId: "sub-1",
+      question: long,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    });
     assert.deepEqual(result, { outcome: "accepted", runId: "run-1", acceptedAt: NOW });
     assert.equal(asked[0]?.question.length, maximumAskLength);
     assert.equal(asked[0]?.submissionId, "sub-1");

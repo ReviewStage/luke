@@ -100,7 +100,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
-    ...brainActRows({ operator: operator.operator }),
+    ...brainActRows({ operator: operator.operator, run }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

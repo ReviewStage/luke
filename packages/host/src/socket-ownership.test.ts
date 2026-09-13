@@ -8,7 +8,7 @@ import {
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
   GATEWAY_SHUTDOWN_DEFAULTS,
-  GatewayClient,
+  gatewayClient,
   NODE_CAPABILITY_STATUS,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
@@ -153,19 +153,23 @@ const listen = (
     };
   });
 
-async function client(port: number, clientId: string) {
-  const connected = await connectWebSocketGateway({
-    url: `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`,
-    headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
-    client: { clientId, role: GATEWAY_CLIENT_ROLE.OPERATOR },
+function client(port: number, clientId: string) {
+  return Effect.gen(function* () {
+    const connected = yield* Effect.promise(() =>
+      connectWebSocketGateway({
+        url: `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`,
+        headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
+        client: { clientId, role: GATEWAY_CLIENT_ROLE.OPERATOR },
+      }),
+    );
+    assert.ok(connected.ok);
+    let ids = 0;
+    const gateway = yield* gatewayClient({
+      transport: connected.connection,
+      createId: () => `${clientId}-${++ids}`,
+    });
+    return { connection: connected.connection, gateway };
   });
-  assert.ok(connected.ok);
-  let ids = 0;
-  const gateway = new GatewayClient({
-    transport: connected.connection,
-    createId: () => `${clientId}-${++ids}`,
-  });
-  return { connection: connected.connection, gateway };
 }
 
 function recordOf(value: WireValue | undefined) {
@@ -180,36 +184,34 @@ it.live(
       Effect.gen(function* () {
         const f = yield* fakeHost();
         const { port } = yield* listen(f.service);
-        yield* Effect.promise(async () => {
-          const first = await client(port, "desktop-1");
-          const submitted = await first.gateway.call(
-            GATEWAY_METHOD.RUN_SUBMIT,
-            {
-              submissionId: "sub-1",
-              question: "what needs me?",
-              origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-            },
-            { idempotencyKey: "sub-1" },
-          );
-          assert.ok(submitted.ok);
-          assert.equal(recordOf(submitted.result).runId, "run-1");
-          // The client is gone; the host is not.
-          first.connection.close();
-          await new Promise((resolve) => setTimeout(resolve, 20));
-          assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-          // The next client's hello snapshot and reads find the run and the host's lines.
-          f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
-          const second = await client(port, "desktop-2");
-          const hello = await second.gateway.call(GATEWAY_METHOD.HELLO);
-          assert.ok(hello.ok);
-          const snapshot = recordOf(recordOf(hello.result).snapshot);
-          assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
-          const listed = await second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
-          assert.ok(listed.ok);
-          const entries = recordOf(listed.result).entries;
-          assert.ok(Array.isArray(entries) && entries.length === 1);
-          second.connection.close();
-        });
+        const first = yield* client(port, "desktop-1");
+        const submitted = yield* first.gateway.call(
+          GATEWAY_METHOD.RUN_SUBMIT,
+          {
+            submissionId: "sub-1",
+            question: "what needs me?",
+            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+          },
+          { idempotencyKey: "sub-1" },
+        );
+        assert.ok(submitted.ok);
+        assert.equal(recordOf(submitted.result).runId, "run-1");
+        // The client is gone; the host is not.
+        first.connection.close();
+        yield* Effect.sleep("20 millis");
+        assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
+        // The next client's hello snapshot and reads find the run and the host's lines.
+        f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
+        const second = yield* client(port, "desktop-2");
+        const hello = yield* second.gateway.call(GATEWAY_METHOD.HELLO);
+        assert.ok(hello.ok);
+        const snapshot = recordOf(recordOf(hello.result).snapshot);
+        assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
+        const listed = yield* second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
+        assert.ok(listed.ok);
+        const entries = recordOf(listed.result).entries;
+        assert.ok(Array.isArray(entries) && entries.length === 1);
+        second.connection.close();
       }),
     ),
 );
@@ -219,31 +221,27 @@ it.live("while no client stands, a native capability the host needs answers unav
     Effect.gen(function* () {
       const f = yield* fakeHost();
       const { port } = yield* listen(f.service);
-      yield* Effect.promise(async () => {
-        const desktop = await client(port, "desktop");
-        desktop.connection.serveInvocations?.(async () => ({
-          status: NODE_CAPABILITY_STATUS.OK,
-          value: undefined,
-        }));
-        assert.ok(
-          (
-            await desktop.gateway.call(GATEWAY_METHOD.NODE_REGISTER, {
-              nodeId: HOST_NATIVE_NODE_ID,
-              capabilities: [HOST_NODE_CAPABILITY.OPEN_EXTERNAL],
-            })
-          ).ok,
-        );
-        const served = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
-          url: "https://a",
-        });
-        assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
-        desktop.connection.close();
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        const absent = await f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
-          url: "https://b",
-        });
-        assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-      });
+      const desktop = yield* client(port, "desktop");
+      desktop.connection.serveInvocations?.(async () => ({
+        status: NODE_CAPABILITY_STATUS.OK,
+        value: undefined,
+      }));
+      assert.ok(
+        (yield* desktop.gateway.call(GATEWAY_METHOD.NODE_REGISTER, {
+          nodeId: HOST_NATIVE_NODE_ID,
+          capabilities: [HOST_NODE_CAPABILITY.OPEN_EXTERNAL],
+        })).ok,
+      );
+      const served = yield* Effect.promise(() =>
+        f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url: "https://a" }),
+      );
+      assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
+      desktop.connection.close();
+      yield* Effect.sleep("20 millis");
+      const absent = yield* Effect.promise(() =>
+        f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url: "https://b" }),
+      );
+      assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     }),
   ),
 );
@@ -258,57 +256,53 @@ it.live(
           Effect.gen(function* () {
             const f = yield* fakeHost({ persistCancellations });
             const { port, closeAdmissions } = yield* listen(f.service);
-            yield* Effect.promise(async () => {
-              const desktop = await client(port, "desktop");
-              const submitted = await desktop.gateway.call(
-                GATEWAY_METHOD.RUN_SUBMIT,
-                { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-                { idempotencyKey: "sub-q" },
-              );
-              assert.ok(submitted.ok);
-              const report = await Effect.runPromise(
-                shutdownGatewayEffect(
-                  {
-                    closeAdmissions,
-                    cancelActive: Effect.promise(async () => {
-                      const cancelled: string[] = [];
-                      for (const held of f.live.values()) {
-                        if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
-                        cancelled.push(held.runId);
-                        await Effect.runPromise(f.agent.cancelAsk(held.runId));
-                      }
-                      return cancelled;
-                    }),
-                    awaitSettled: Effect.void,
-                    persistUnresolved: Effect.sync(
-                      () =>
-                        [...f.persisted.values()].filter(
-                          (held) =>
-                            held.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                            held.status === BRAIN_REQUEST_STATUS.RUNNING,
-                        ).length,
-                    ),
-                  },
-                  { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+            const desktop = yield* client(port, "desktop");
+            const submitted = yield* desktop.gateway.call(
+              GATEWAY_METHOD.RUN_SUBMIT,
+              { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
+              { idempotencyKey: "sub-q" },
+            );
+            assert.ok(submitted.ok);
+            const report = yield* shutdownGatewayEffect(
+              {
+                closeAdmissions,
+                cancelActive: Effect.gen(function* () {
+                  const cancelled: string[] = [];
+                  for (const held of f.live.values()) {
+                    if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
+                    cancelled.push(held.runId);
+                    yield* f.agent.cancelAsk(held.runId);
+                  }
+                  return cancelled;
+                }),
+                awaitSettled: Effect.void,
+                persistUnresolved: Effect.sync(
+                  () =>
+                    [...f.persisted.values()].filter(
+                      (held) =>
+                        held.status === BRAIN_REQUEST_STATUS.QUEUED ||
+                        held.status === BRAIN_REQUEST_STATUS.RUNNING,
+                    ).length,
                 ),
-              );
-              assert.deepEqual(report.cancelled, ["run-1"]);
-              assert.equal(report.settled, true);
-              // A cancellation the store took leaves nothing unresolved; one it did
-              // not leaves the run running on disk, which the next launch marks
-              // interrupted and never replays.
-              assert.equal(report.unresolved, persistCancellations ? 0 : 1);
-              // The door is closed: a new ask is refused as shutting down, a read still answers.
-              const refused = await desktop.gateway.call(
-                GATEWAY_METHOD.RUN_SUBMIT,
-                { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-                { idempotencyKey: "sub-late" },
-              );
-              assert.equal(refused.ok, false);
-              if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
-              assert.ok((await desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
-              desktop.connection.close();
-            });
+              },
+              { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
+            );
+            assert.deepEqual(report.cancelled, ["run-1"]);
+            assert.equal(report.settled, true);
+            // A cancellation the store took leaves nothing unresolved; one it did
+            // not leaves the run running on disk, which the next launch marks
+            // interrupted and never replays.
+            assert.equal(report.unresolved, persistCancellations ? 0 : 1);
+            // The door is closed: a new ask is refused as shutting down, a read still answers.
+            const refused = yield* desktop.gateway.call(
+              GATEWAY_METHOD.RUN_SUBMIT,
+              { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
+              { idempotencyKey: "sub-late" },
+            );
+            assert.equal(refused.ok, false);
+            if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
+            assert.ok((yield* desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
+            desktop.connection.close();
           }),
         ),
       { discard: true },

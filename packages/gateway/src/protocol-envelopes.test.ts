@@ -134,17 +134,21 @@ function responseGolden(response: GatewayResponse): WireRecord {
   return { ...wire, error: { ...written, message: REDACTED_MESSAGE } };
 }
 
-async function settleExchange(
+function settleExchange(
   name: string,
   transport: TextLoopbackTransport,
   request: GatewayRequest,
-): Promise<GatewayResponse> {
-  const response = await transport.request(request);
-  await settleGolden(name, {
-    request: gatewayRequestToWire(request),
-    response: responseGolden(response),
+): Effect.Effect<GatewayResponse> {
+  return Effect.gen(function* () {
+    const response = yield* transport.request(request);
+    yield* Effect.promise(() =>
+      settleGolden(name, {
+        request: gatewayRequestToWire(request),
+        response: responseGolden(response),
+      }),
+    );
+    return response;
   });
-  return response;
 }
 
 function goldenHost(
@@ -235,19 +239,18 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
 });
 
 it.scopedLive("every method's request and answer cross as the recorded envelopes", () =>
-  Effect.flatMap(goldenHost(answeringTable()), (host) =>
-    Effect.promise(async () => {
-      const transport = new TextLoopbackTransport(host, OPERATOR);
-      for (const method of METHODS) {
-        const response = await settleExchange(
-          methodGoldenName(method),
-          transport,
-          requestFor(method),
-        );
-        assert.equal(response.ok, true);
-      }
-    }),
-  ),
+  Effect.gen(function* () {
+    const host = yield* goldenHost(answeringTable());
+    const transport = new TextLoopbackTransport(host, OPERATOR);
+    for (const method of METHODS) {
+      const response = yield* settleExchange(
+        methodGoldenName(method),
+        transport,
+        requestFor(method),
+      );
+      assert.equal(response.ok, true);
+    }
+  }),
 );
 
 it.scopedLive("every error code crosses as the recorded envelope", () =>
@@ -275,7 +278,7 @@ it.scopedLive("every error code crosses as the recorded envelope", () =>
     const nodeTransport = new TextLoopbackTransport(host, NODE);
 
     const conflicting = requestFor(GATEWAY_METHOD.CONFIGURATION_UPDATE);
-    yield* Effect.promise(() => transport.request(conflicting));
+    yield* transport.request(conflicting);
 
     const shuttingDown = yield* goldenHost(answeringTable());
     yield* shuttingDown.admissions.close;
@@ -370,88 +373,82 @@ it.scopedLive("every error code crosses as the recorded envelope", () =>
     ];
 
     assert.deepEqual(cases.map((held) => held.code).toSorted(), [...ERROR_CODES].toSorted());
-    yield* Effect.promise(async () => {
-      for (const held of cases) {
-        const response = await settleExchange(
-          errorGoldenName(held.code),
-          held.transport,
-          held.request,
-        );
-        assert.equal(response.ok, false);
-        assert.equal(response.ok ? undefined : response.error.code, held.code);
-      }
-    });
+    for (const held of cases) {
+      const response = yield* settleExchange(
+        errorGoldenName(held.code),
+        held.transport,
+        held.request,
+      );
+      assert.equal(response.ok, false);
+      assert.equal(response.ok ? undefined : response.error.code, held.code);
+    }
   }),
 );
 
 it.scopedLive(
   "a reconnection inside the window replays, and one past it is handed a snapshot",
   () =>
-    Effect.flatMap(goldenHost(answeringTable(), { replayWindow: 3 }), (host) =>
-      Effect.promise(async () => {
-        const transport = new TextLoopbackTransport(host, OPERATOR);
-        host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
-        host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
-        host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
-        host.log.publish(
-          GATEWAY_EVENT.CONVERSATION_CHANGED,
-          { lines: 1 },
-          { sessionKey: FIXTURE_SESSION_KEY },
-        );
-        host.log.publish(
-          GATEWAY_EVENT.RUNS_CHANGED,
-          { runs: 1 },
-          { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
-        );
+    Effect.gen(function* () {
+      const host = yield* goldenHost(answeringTable(), { replayWindow: 3 });
+      const transport = new TextLoopbackTransport(host, OPERATOR);
+      host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
+      host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
+      host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+      host.log.publish(
+        GATEWAY_EVENT.CONVERSATION_CHANGED,
+        { lines: 1 },
+        { sessionKey: FIXTURE_SESSION_KEY },
+      );
+      host.log.publish(
+        GATEWAY_EVENT.RUNS_CHANGED,
+        { runs: 1 },
+        { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
+      );
 
-        const inside = await settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
-          protocolVersion: GATEWAY_PROTOCOL_VERSION,
-          id: "request-reconnect-inside-window",
-          method: GATEWAY_METHOD.RECONNECT,
-          params: { lastSequence: 2 },
-        });
-        assert.equal(inside.ok, true);
+      const inside = yield* settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "request-reconnect-inside-window",
+        method: GATEWAY_METHOD.RECONNECT,
+        params: { lastSequence: 2 },
+      });
+      assert.equal(inside.ok, true);
 
-        const past = await settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
-          protocolVersion: GATEWAY_PROTOCOL_VERSION,
-          id: "request-reconnect-past-window",
-          method: GATEWAY_METHOD.RECONNECT,
-          params: { lastSequence: 1 },
-        });
-        assert.equal(past.ok, true);
-      }),
-    ),
+      const past = yield* settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
+        protocolVersion: GATEWAY_PROTOCOL_VERSION,
+        id: "request-reconnect-past-window",
+        method: GATEWAY_METHOD.RECONNECT,
+        params: { lastSequence: 1 },
+      });
+      assert.equal(past.ok, true);
+    }),
 );
 
 it.scopedLive("a named revision and an empty answer cross as the recorded envelopes", () =>
-  Effect.flatMap(
-    goldenHost({
+  Effect.gen(function* () {
+    const host = yield* goldenHost({
       ...answeringTable(),
       [GATEWAY_METHOD.GUIDE_REPORT]: () => Effect.succeed(undefined),
-    }),
-    (host) =>
-      Effect.promise(async () => {
-        const transport = new TextLoopbackTransport(host, OPERATOR);
+    });
+    const transport = new TextLoopbackTransport(host, OPERATOR);
 
-        const named = await settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
-          ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),
-          id: "request-with-expected-revision",
-          expectedRevision: {
-            sessionKey: FIXTURE_SESSION_KEY,
-            sessionRevision: FIXTURE_SESSION_REVISION,
-            configurationRevision: FIXTURE_CONFIGURATION_REVISION,
-          },
-        });
-        assert.equal(named.ok, true);
+    const named = yield* settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
+      ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+      id: "request-with-expected-revision",
+      expectedRevision: {
+        sessionKey: FIXTURE_SESSION_KEY,
+        sessionRevision: FIXTURE_SESSION_REVISION,
+        configurationRevision: FIXTURE_CONFIGURATION_REVISION,
+      },
+    });
+    assert.equal(named.ok, true);
 
-        const empty = await settleExchange(
-          ENVELOPE_GOLDEN_NAME.EMPTY_RESULT,
-          transport,
-          requestFor(GATEWAY_METHOD.GUIDE_REPORT),
-        );
-        assert.equal(empty.ok ? empty.result : "not answered", undefined);
-      }),
-  ),
+    const empty = yield* settleExchange(
+      ENVELOPE_GOLDEN_NAME.EMPTY_RESULT,
+      transport,
+      requestFor(GATEWAY_METHOD.GUIDE_REPORT),
+    );
+    assert.equal(empty.ok ? empty.result : "not answered", undefined);
+  }),
 );
 
 test("the recorded envelopes are exactly the cases the protocol names", async () => {
