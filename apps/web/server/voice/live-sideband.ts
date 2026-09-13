@@ -1,5 +1,5 @@
 import { holdSocket, type LiveSideband, sidebandOverSocket } from "@sidecar/voice/live-session";
-import { Effect, type Scope } from "effect";
+import { Effect, type Scope, Stream } from "effect";
 import type { RawData, WebSocket } from "ws";
 import type { LiveServerEvent } from "../live.js";
 import { SOCKET_CLOSE_CODE } from "./socket.js";
@@ -14,8 +14,8 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
  * later adds behind the barrel can enter a function bundle from here. What
  * arrives is parsed with the Live grammar by the package's own
  * `sidebandOverSocket`, which drops the two reflected audio events by type
- * before any listener sees them and holds what the session says before anyone
- * reads it.
+ * before the session's reader sees them; the hold beneath it is what keeps
+ * what the session said before that reader came.
  *
  * The `ws` listeners are the acquire of the scope the sideband is yielded
  * in and are taken off at its close, so a session the exchange stopped
@@ -49,41 +49,25 @@ export function upstreamSideband(
           socket.off("close", onClose);
         }),
     );
-    return yield* sidebandOverSocket(hold.socket);
+    return sidebandOverSocket(hold.socket);
   });
 }
 
 /**
- * A sideband whose every event is observed once before any listener reads
- * it: the record's writer sees the stream in the one order the session
- * emitted it, however many listeners the service and its graceful close
- * register, and the replay of what the session said before anyone listened
- * is kept, because the inner sideband is subscribed only when the first
- * listener arrives. A listener that leaves stops hearing; the observation
- * stands for the session.
+ * A sideband whose every event is observed once on its way past: the record's
+ * writer sees the stream in the one order the session emitted it, because the
+ * observation rides on the arrivals the session's one reader runs rather than
+ * standing beside it, and the replay of what the session said before that
+ * reader came is observed with the rest of it.
  */
 export function observedSideband(
   sideband: LiveSideband,
   observe: (event: LiveServerEvent) => void,
 ): LiveSideband {
-  const listeners = new Set<(event: LiveServerEvent) => void>();
-  let subscribed = false;
   return {
-    onEvent: (listener) => {
-      listeners.add(listener);
-      if (!subscribed) {
-        subscribed = true;
-        sideband.onEvent((event) => {
-          observe(event);
-          for (const standing of [...listeners]) standing(event);
-        });
-      }
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    onClose: (listener) => sideband.onClose(listener),
-    send: (event) => sideband.send(event),
-    close: sideband.close,
+    ...sideband,
+    arrivals: Stream.tap(sideband.arrivals, (arrival) =>
+      "close" in arrival ? Effect.void : Effect.sync(() => observe(arrival.event)),
+    ),
   };
 }

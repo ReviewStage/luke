@@ -1,14 +1,58 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { LIVE_CLIENT_EVENT, LIVE_CLOSE_REASON, type LiveServerEvent } from "@sidecar/live";
-import { Duration, Effect, Fiber, TestClock } from "effect";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_CLOSE_REASON,
+  LIVE_SERVER_EVENT,
+  type LiveServerEvent,
+} from "@sidecar/live";
+import { Deferred, Duration, Effect, Exit, Fiber, type Scope, Stream, TestClock } from "effect";
+import type { LiveSideband } from "../live-socket.js";
 import { sidebandOverSocket } from "../live-socket.js";
 import { FakeLiveSocket } from "../testing.js";
 import {
   closeGracefully,
   SIDEBAND_CLOSE_OUTCOME,
   SIDEBAND_CLOSE_TIMEOUT_MS,
+  type SidebandCloseResult,
 } from "./graceful-close.js";
+
+/**
+ * The session's own reader, as the live session service runs one: the single
+ * consumer of the sideband, whose last word is what the close below waits on.
+ */
+function reading(
+  sideband: LiveSideband,
+  heard: LiveServerEvent[] = [],
+): Effect.Effect<Effect.Effect<SidebandCloseResult>, never, Scope.Scope> {
+  return Effect.gen(function* () {
+    const settled = yield* Deferred.make<SidebandCloseResult>();
+    yield* Effect.forkScoped(
+      Stream.runForEach(sideband.arrivals, (arrival) =>
+        Effect.sync(() => {
+          if ("close" in arrival) {
+            Deferred.unsafeDone(
+              settled,
+              Exit.succeed({
+                outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
+                close: arrival.close,
+              }),
+            );
+            return;
+          }
+          heard.push(arrival.event);
+          if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
+            Deferred.unsafeDone(
+              settled,
+              Exit.succeed({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: arrival.event }),
+            );
+          }
+        }),
+      ),
+    );
+    return Deferred.await(settled);
+  });
+}
 
 function closedEvent(reason: string, seconds: number) {
   return {
@@ -27,15 +71,17 @@ function settle() {
 }
 
 it.effect(
-  "a graceful close registers the closed listener, sends session.close, and holds the socket until the final event",
+  "a graceful close sends session.close and holds the socket until its reader's final event",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
         const socket = new FakeLiveSocket();
-        const sideband = yield* sidebandOverSocket(socket);
+        const sideband = sidebandOverSocket(socket);
         const heard: LiveServerEvent[] = [];
-        sideband.onEvent((event) => heard.push(event));
-        const closing = yield* Effect.fork(closeGracefully(sideband, { eventId: "close-1" }));
+        const settled = yield* reading(sideband, heard);
+        const closing = yield* Effect.fork(
+          closeGracefully(sideband, { eventId: "close-1", settled }),
+        );
         yield* settle();
         assert.deepEqual(
           socket.sent.map((frame) => JSON.parse(frame)),
@@ -65,8 +111,9 @@ it.effect(
     Effect.scoped(
       Effect.gen(function* () {
         const lost = new FakeLiveSocket();
+        const lostSideband = sidebandOverSocket(lost);
         const losing = yield* Effect.fork(
-          closeGracefully(yield* sidebandOverSocket(lost), { eventId: "c" }),
+          closeGracefully(lostSideband, { eventId: "c", settled: yield* reading(lostSideband) }),
         );
         yield* settle();
         lost.closeFromServer({ code: 1006 });
@@ -76,8 +123,13 @@ it.effect(
         });
 
         const silent = new FakeLiveSocket();
+        const silentSideband = sidebandOverSocket(silent);
         const timing = yield* Effect.fork(
-          closeGracefully(yield* sidebandOverSocket(silent), { eventId: "c", timeoutMs: 50 }),
+          closeGracefully(silentSideband, {
+            eventId: "c",
+            timeoutMs: 50,
+            settled: yield* reading(silentSideband),
+          }),
         );
         yield* settle();
         yield* TestClock.adjust(Duration.millis(49));

@@ -4,7 +4,7 @@ import {
   type LiveServerEvent,
   parseLiveServerEvent,
 } from "@sidecar/live";
-import { Effect, type Scope, Stream } from "effect";
+import { Effect, Option, Stream } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 
 /**
@@ -80,14 +80,26 @@ export type OpenSocket = (
 ) => Effect.Effect<SocketOpening>;
 
 /**
+ * What the trusted side of one session heard: an event it reads, or the close
+ * that ended the socket the session stood on.
+ */
+export type SidebandArrival = { readonly event: LiveServerEvent } | { readonly close: SocketClose };
+
+/**
  * The trusted side's view of one running session: every event the session
  * emits, parsed, and the client events the trusted side may send. The host's
  * live session service is the one consumer; the renderer's data channel is
  * never a sideband.
  */
 export interface LiveSideband {
-  onEvent(listener: (event: LiveServerEvent) => void): () => void;
-  onClose(listener: (close: SocketClose) => void): () => void;
+  /**
+   * Every event the session emitted and then the close that ended it, in
+   * arrival order, ending with that close. One consumer runs it — the
+   * session's own reader, on a fiber of the scope the session stands
+   * for — because what it carries is held by the socket beneath it only until
+   * the first consumer comes.
+   */
+  readonly arrivals: Stream.Stream<SidebandArrival>;
   send(event: LiveClientEvent): Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 }
@@ -98,71 +110,25 @@ const REFLECTED_AUDIO_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * A sideband over an open socket. The socket's arrivals are pumped by one
- * fiber of the scope this is yielded in — the scope the connection itself
- * stands for — so closing that scope ends the reading as it ends the session.
- * Frames that are not events this build reads are discarded, and the two
- * reflected audio events are dropped by type before any listener sees them:
- * the developer's voice is heard by the model over the media track and is
- * never kept or read here. Events and a close that arrive before anyone
- * listens are held and replayed to the first listener, so a session that
- * spoke between its creation and the host's attach loses nothing, and a
- * socket that died in that gap is seen dead.
+ * A sideband over an open socket: the socket's own arrivals read as the Live
+ * grammar. Frames that are not events this build reads are discarded, and the
+ * two reflected audio events are dropped by type before the consumer sees
+ * them: the developer's voice is heard by the model over the media track and
+ * is never kept or read here. Nothing is held or pumped at this layer,
+ * because the socket holds its own arrivals until the consumer that runs
+ * them comes (`holdSocket`): a session that spoke between its creation and
+ * the host's attach is read by the first consumer all the same, and a socket
+ * that died in that gap is seen dead.
  */
-export function sidebandOverSocket(
-  socket: LiveSocket,
-): Effect.Effect<LiveSideband, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const eventListeners = new Set<(event: LiveServerEvent) => void>();
-    const closeListeners = new Set<(close: SocketClose) => void>();
-    let heldEvents: LiveServerEvent[] = [];
-    let heldClose: SocketClose | undefined;
-
-    const heard = (arrival: SocketArrival): void => {
-      if ("close" in arrival) {
-        if (closeListeners.size === 0) {
-          heldClose = arrival.close;
-          return;
-        }
-        for (const listener of [...closeListeners]) listener(arrival.close);
-        return;
-      }
+export function sidebandOverSocket(socket: LiveSocket): LiveSideband {
+  return {
+    arrivals: Stream.filterMap(socket.arrivals, (arrival): Option.Option<SidebandArrival> => {
+      if ("close" in arrival) return Option.some({ close: arrival.close });
       const event = parseLiveServerEvent(arrival.frame);
-      if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) return;
-      if (eventListeners.size === 0) {
-        heldEvents.push(event);
-        return;
-      }
-      for (const listener of [...eventListeners]) listener(event);
-    };
-
-    yield* Effect.forkScoped(
-      Stream.runForEach(socket.arrivals, (arrival) => Effect.sync(() => heard(arrival))),
-    );
-
-    return {
-      onEvent: (listener) => {
-        eventListeners.add(listener);
-        const replay = heldEvents;
-        heldEvents = [];
-        for (const event of replay) listener(event);
-        return () => {
-          eventListeners.delete(listener);
-        };
-      },
-      onClose: (listener) => {
-        closeListeners.add(listener);
-        if (heldClose !== undefined) {
-          const close = heldClose;
-          heldClose = undefined;
-          listener(close);
-        }
-        return () => {
-          closeListeners.delete(listener);
-        };
-      },
-      send: (event) => Effect.sync(() => socket.send(JSON.stringify(event))),
-      close: Effect.sync(() => socket.close()),
-    };
-  });
+      if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) return Option.none();
+      return Option.some({ event });
+    }),
+    send: (event) => Effect.sync(() => socket.send(JSON.stringify(event))),
+    close: Effect.sync(() => socket.close()),
+  };
 }

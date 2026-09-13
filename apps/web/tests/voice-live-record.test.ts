@@ -167,8 +167,8 @@ async function stand(live: VoiceTarget) {
         sessionId: live.liveSessionId,
         sdpAnswer: `answer-for-${input.sdpOffer}`,
         attach: () =>
-          Effect.map(sidebandOverSocket(socket), (sideband) =>
-            observedSideband(sideband, (event) => {
+          Effect.succeed(
+            observedSideband(sidebandOverSocket(socket), (event) => {
               observed.push(database.run(record.observe(event)));
             }),
           ),

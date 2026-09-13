@@ -403,7 +403,7 @@ export class KeyedLiveSessionSource implements LiveSessionSource {
         return yield* new SidebandAttachFailed({ detail });
       }
       this.#sidebandAttached = true;
-      return yield* sidebandOverSocket(
+      return sidebandOverSocket(
         watchingClose(opening.socket, () => {
           this.#sidebandAttached = false;
         }),
@@ -583,15 +583,13 @@ class ServiceLiveSessionSource {
     );
   }
 
-  protected holdSideband(socket: LiveSocket): Effect.Effect<LiveSideband, never, Scope.Scope> {
-    return Effect.suspend(() => {
-      this.#sidebandAttached = true;
-      return sidebandOverSocket(
-        watchingClose(socket, () => {
-          this.#sidebandAttached = false;
-        }),
-      );
-    });
+  protected holdSideband(socket: LiveSocket): LiveSideband {
+    this.#sidebandAttached = true;
+    return sidebandOverSocket(
+      watchingClose(socket, () => {
+        this.#sidebandAttached = false;
+      }),
+    );
   }
 
   /**
@@ -962,7 +960,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       if (!opened) return undefined;
       // The socket that answered is already the session's: the sideband is held
       // now, so nothing the session says before the host attaches is lost.
-      const sideband = yield* this.holdSideband(
+      const sideband = this.holdSideband(
         yield* reattachingSocket({
           socket: opened.socket,
           sessionId: opened.created.sessionId,

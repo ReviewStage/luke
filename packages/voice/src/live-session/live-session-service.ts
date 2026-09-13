@@ -53,13 +53,18 @@ import {
   Option,
   Queue,
   Scope,
+  Stream,
 } from "effect";
 import { LiveBrainTag } from "../effect/live-brain.js";
 import { LiveRecordTag } from "../effect/live-record.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel } from "./append-channel.js";
-import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./graceful-close.js";
+import {
+  closeGracefully,
+  SIDEBAND_CLOSE_OUTCOME,
+  type SidebandCloseResult,
+} from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
@@ -105,11 +110,11 @@ import {
  * `LiveSessionSource` and `LiveSideband` seams. It is built by `make` in the
  * `Scope` its composition opened and runs for that scope: the verbs a caller
  * waits on are effects it yields, the brain's and the record's own effects
- * are yielded where a promise was awaited, and what a socket event, a timer,
- * or a run listener begins and nobody waits for is offered to the service's
- * own queue and run as a fiber of that scope. So the service runs nothing on
- * a runtime of its own, and closing the scope interrupts whatever it had
- * begun. It keeps time on that scope's `Clock` and on no seam of its own:
+ * are yielded where a promise was awaited, a standing session's sideband is
+ * read by one fiber of that scope, and what a timer or a run listener begins
+ * and nobody waits for is offered to the service's own queue and run as a
+ * fiber of the same scope. So the service runs nothing on a runtime of its
+ * own, and closing the scope interrupts whatever it had begun. It keeps time on that scope's `Clock` and on no seam of its own:
  * every instant it records is that clock's, and every delay it arms — the
  * idle window, an utterance's settle, the read made ahead, the desk's
  * refresh, an exchange's finalize — is a sleep on a fiber of the same scope,
@@ -266,8 +271,12 @@ interface StandingSession {
   factsAppendedFor: number | undefined;
   /** The rows already composed as a spoken ask: a late fragment on one anticipates nothing more, and a summary read ahead for one is not appended into the exchange it opened. */
   readonly askedRows: Set<number>;
-  stopEvents: () => void;
-  stopClose: () => void;
+  /**
+   * The session's last word, settled by its own reader: the `session.closed`
+   * it read, or the close that ended the arrivals before one came. The
+   * graceful close waits on this rather than listening beside the reader.
+   */
+  readonly settled: Deferred.Deferred<SidebandCloseResult>;
 }
 
 /**
@@ -584,6 +593,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
       const result = yield* closeGracefully(session.sideband, {
         eventId: this.#options.createId(),
+        settled: Deferred.await(session.settled),
       });
       if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
         return yield* this.#onClosed(session, result.closed);
@@ -832,9 +842,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * Stands one session: its channel, its ledger, and the listeners the
-   * sideband hands it. The channel serializes its sends on a fiber of the
-   * service's own scope, which its close ends.
+   * Stands one session: its channel, its ledger, and the one fiber that
+   * reads its sideband. The channel serializes its sends on a fiber of the
+   * service's own scope, which its close ends; the reading belongs to the
+   * session's scope, since a graceful close speaks to the session and reads
+   * the final event back through it.
    */
   #stand(sessionId: string, sideband: LiveSideband): Effect.Effect<StandingSession> {
     return Effect.gen(this, function* () {
@@ -866,46 +878,70 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         anticipated: undefined,
         factsAppendedFor: undefined,
         askedRows: new Set(),
-        stopEvents: () => undefined,
-        stopClose: () => undefined,
+        settled: yield* Deferred.make<SidebandCloseResult>(),
       };
-      session.stopEvents = sideband.onEvent((event) => this.#onEvent(session, event));
-      session.stopClose = sideband.onClose(() => {
-        if (!session.ended && !session.closing) {
-          this.#start(this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST));
-        }
-      });
+      yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#start(serve);
       return session;
     });
   }
 
-  #onEvent(session: StandingSession, event: LiveServerEvent): void {
-    if (session.ended) return;
+  /**
+   * The one consumer of the session's sideband, on a fiber of the scope the
+   * session stands in. What it reads it acts on where it reads it: an end —
+   * the session's own `session.closed`, or the socket's close before one
+   * came — is settled for whoever is closing gracefully and then torn down by
+   * this fiber, which can wait for the close it hands back rather than offer
+   * it to the service's queue and lose the instant the session is over.
+   */
+  #read(session: StandingSession): Effect.Effect<void> {
+    return Stream.runForEach(session.sideband.arrivals, (arrival) => {
+      if ("close" in arrival) {
+        this.#settle(session, {
+          outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
+          close: arrival.close,
+        });
+        return session.ended || session.closing
+          ? Effect.void
+          : this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST);
+      }
+      if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
+        this.#settle(session, { outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: arrival.event });
+      }
+      return this.#onEvent(session, arrival.event);
+    });
+  }
+
+  /** The session's last word, taken once: a socket closing after its own `session.closed` says nothing new. */
+  #settle(session: StandingSession, result: SidebandCloseResult): void {
+    Deferred.unsafeDone(session.settled, Exit.succeed(result));
+  }
+
+  #onEvent(session: StandingSession, event: LiveServerEvent): Effect.Effect<void> {
+    if (session.ended) return Effect.void;
     switch (event.type) {
       case LIVE_SERVER_EVENT.SESSION_STARTED:
         this.#started(session);
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
-        this.#start(this.#onClosed(session, event));
-        return;
+        return this.#onClosed(session, event);
       case LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED:
         session.micLive = false;
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED:
         session.micLive = true;
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED:
       case LIVE_SERVER_EVENT.THINKING_APPENDED:
       case LIVE_SERVER_EVENT.COMMENTARY_APPENDED:
         if (event.client_event_id !== undefined) {
           session.channel.acknowledge(event.client_event_id, event.end_ms);
         }
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
         this.#fragment(session, TRANSCRIPT_SPEAKER.USER, event.delta, event.start_ms, event.end_ms);
         this.#composeRetained(session);
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA:
         this.#fragment(
           session,
@@ -915,25 +951,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           event.end_ms,
         );
         session.channel.outputReached(event.end_ms);
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
         if (isClientDelegation(event))
           this.#delegation(session, event.delegation.id, event.offset_ms);
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.USAGE_UPDATED:
         session.usageSeconds = event.usage.seconds;
-        return;
+        return Effect.void;
       case LIVE_SERVER_EVENT.ERROR: {
         const about = event.client_event_id ?? event.error.client_event_id;
         if (about !== undefined) session.channel.refuse(about);
         else session.channel.interruptSpeech();
-        return;
+        return Effect.void;
       }
       case LIVE_SERVER_EVENT.INFO:
         this.#trace(LIVE_TRACE_DECISION.INFO);
-        return;
+        return Effect.void;
       default:
-        return;
+        return Effect.void;
     }
   }
 
@@ -1448,8 +1484,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /**
    * The session is over, and it is over the instant this is called: the
-   * listeners, the timers, the channel, and the phase are all settled here,
-   * so a caller that reads the service back sees no session standing. What it
+   * timers, the channel, and the phase are all settled here, so a caller that
+   * reads the service back sees no session standing, and the reader that is
+   * left drains what follows against an ended session, which is nothing. What it
    * hands back is the sideband's own close, which is an effect, and then what
    * the end began and nothing waits on inside it — the read made ahead
    * forgotten, and whatever either speaker said last written down — so the
@@ -1458,8 +1495,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #tearDown(session: StandingSession, reason: string): Effect.Effect<void> {
     session.ended = true;
-    session.stopEvents();
-    session.stopClose();
     for (const timer of session.settleTimers.values()) this.#cancelDelay(timer);
     session.settleTimers.clear();
     this.#cancelDelay(session.idleTimer);
