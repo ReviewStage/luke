@@ -63,7 +63,8 @@ export {
 } from "./notebook-markdown.js";
 export {
   type MemorySyncReport,
-  NotebookMemory,
+  makeNotebookMemory,
+  type NotebookMemory,
   type NotebookMemoryAccess,
   type NotebookMemoryOptions,
   type NotebookMemoryStore,

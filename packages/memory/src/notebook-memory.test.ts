@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import type { FileSystem } from "@effect/platform";
+import { NodeFileSystem } from "@effect/platform-node";
+import { it } from "@effect/vitest";
+import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import {
   type ConversationRecord,
   conversationKindOf,
@@ -14,7 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireRecord } from "@sidecar/wire";
-import { test } from "vitest";
+import { Effect, Fiber, type Scope } from "effect";
 import { chunkMarkdown, hashText } from "./chunking.js";
 import {
   type ConversationLineHit,
@@ -29,7 +32,7 @@ import {
 import { MEMORY_SEARCH_DEFAULTS, RETRIEVAL_MODE } from "./defaults.js";
 import {
   conversationResultPath,
-  NotebookMemory,
+  makeNotebookMemory,
   type NotebookMemoryOptions,
   type NotebookMemoryStore,
 } from "./notebook-memory.js";
@@ -269,265 +272,341 @@ function hit(chunk: StoredChunk) {
 }
 
 function workspace() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "luke-notebook-memory-"));
-  fs.mkdirSync(path.join(root, "memory"), { recursive: true });
-  fs.writeFileSync(
-    path.join(root, MEMORY_FILE),
-    "# MEMORY.md\n\nDeploys go out on Tuesday afternoons.\nThe staging cluster lives in Frankfurt.\n",
-  );
-  return root;
+  return Effect.map(temporaryDirectoryScoped("luke-notebook-memory-"), (root) => {
+    fs.mkdirSync(path.join(root, "memory"), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, MEMORY_FILE),
+      "# MEMORY.md\n\nDeploys go out on Tuesday afternoons.\nThe staging cluster lives in Frankfurt.\n",
+    );
+    return root;
+  });
 }
 
 function resultsOf(answer: WireRecord): WireRecord[] {
   return Array.isArray(answer.results) ? answer.results.filter(isRecord) : [];
 }
 
-function harness(overrides: Partial<NotebookMemoryOptions> = {}) {
-  const root = workspace();
-  const store = new FakeStore(root);
-  const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
-  const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
-  const records: ConversationRecord[] = [MAIN_SESSION_KEY, thread, temporary].map((sessionKey) => ({
-    sessionKey,
-    kind: conversationKindOf(sessionKey),
-    name: sessionKey,
-    createdAt: NOW,
-    lastActivityAt: NOW,
-  }));
-  const embedding = adapter();
-  const reports: string[] = [];
-  const memory = new NotebookMemory({
-    store: () => store,
-    embeddingAdapter: () => embedding,
-    embeddingBatchSize: 1,
-    workspaceDirectory: () => root,
-    conversationDirectory: () => records,
-    isTemporary: (sessionKey) => sessionKey === temporary,
-    now: () => NOW + 10,
-    report: (message) => reports.push(message),
-    ...overrides,
+/** Waits for a condition the fibers under test settle, by giving them turns rather than a fixed drain. */
+function until(condition: () => boolean): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let turn = 0; turn < 1_000; turn += 1) {
+      if (condition()) return;
+      yield* Effect.yieldNow();
+    }
+    assert.ok(condition(), "the condition did not hold in time");
   });
-  return { root, store, memory, thread, temporary, embedding, reports };
+}
+
+function harness(overrides: Partial<NotebookMemoryOptions> = {}) {
+  return Effect.gen(function* () {
+    const root = yield* workspace();
+    const store = new FakeStore(root);
+    const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
+    const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
+    const records: ConversationRecord[] = [MAIN_SESSION_KEY, thread, temporary].map(
+      (sessionKey) => ({
+        sessionKey,
+        kind: conversationKindOf(sessionKey),
+        name: sessionKey,
+        createdAt: NOW,
+        lastActivityAt: NOW,
+      }),
+    );
+    const embedding = adapter();
+    const reports: string[] = [];
+    const memory = yield* makeNotebookMemory({
+      store: () => store,
+      embeddingAdapter: () => embedding,
+      embeddingBatchSize: 1,
+      workspaceDirectory: () => root,
+      conversationDirectory: () => records,
+      isTemporary: (sessionKey) => sessionKey === temporary,
+      now: () => NOW + 10,
+      report: (message) => reports.push(message),
+      ...overrides,
+    });
+    return { root, store, memory, thread, temporary, embedding, reports };
+  });
 }
 
 const signal = () => new AbortController().signal;
 
-test("a sync indexes the notebook with vectors, a search runs hybrid, and a hand edit is picked up by the next sync", async () => {
-  const h = harness();
-  const first = await h.memory.sync();
-  assert.equal(first?.mode, RETRIEVAL_MODE.HYBRID);
-  assert.equal(h.memory.mode(), RETRIEVAL_MODE.HYBRID);
-  assert.ok(first && first.embeddedChunks > 0 && first.embeddedChunks === first.indexedChunks);
-  const access = h.memory.accessFor(MAIN_SESSION_KEY);
-  const searched = await access.search({ query: "frankfurt cluster", signal: signal() });
-  assert.equal(searched.mode, RETRIEVAL_MODE.HYBRID);
-  const hits = resultsOf(searched);
-  assert.equal(hits[0]?.path, MEMORY_FILE);
-  assert.equal(hits[0]?.source, MEMORY_SOURCE.MEMORY);
-  fs.writeFileSync(path.join(h.root, MEMORY_FILE), "# MEMORY.md\n\nThe team drinks espresso.\n");
-  const second = await h.memory.sync();
-  assert.equal(second?.indexedFiles, 1);
-  const again = resultsOf(await access.search({ query: "frankfurt", signal: signal() }));
-  assert.equal(again.filter((entry) => entry.source === MEMORY_SOURCE.MEMORY).length, 0);
-  const read = await access.get({ path: MEMORY_FILE, from: 3, lines: 1 });
-  assert.equal(read.text, "The team drinks espresso.");
-  const refused = await access.get({ path: "../settings.json" });
-  assert.equal(refused.status, "rejected");
-});
+const platform = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Scope.Scope>) =>
+  Effect.provide(effect, NodeFileSystem.layer);
 
-test("an embedding outage degrades an automatic provider to keyword-only for that call, and the standing mode follows the sync alone", async () => {
-  const h = harness();
-  assert.equal((await h.memory.sync())?.mode, RETRIEVAL_MODE.HYBRID);
-  h.embedding.fail = true;
-  const access = h.memory.accessFor(MAIN_SESSION_KEY);
-  const searched = await access.search({ query: "frankfurt", signal: signal() });
-  assert.equal(searched.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.equal(resultsOf(searched).length, 1);
-  assert.equal(
-    h.memory.mode(),
-    RETRIEVAL_MODE.HYBRID,
-    "a search moves the standing mode of nothing",
-  );
-  assert.equal(
-    (await h.memory.sync())?.mode,
-    RETRIEVAL_MODE.HYBRID,
-    "nothing to embed, nothing failed",
-  );
-  fs.writeFileSync(path.join(h.root, "memory", "note.md"), "# note\n\nEspresso thrice.\n");
-  const report = await h.memory.sync();
-  assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.equal(h.memory.mode(), RETRIEVAL_MODE.KEYWORD_ONLY);
-});
-
-test("a later batch's failure keeps every vector the earlier batches answered, and the report says the rest are missing", async () => {
-  const h = harness();
-  fs.writeFileSync(path.join(h.root, "memory", "note.md"), "# note\n\nEspresso thrice.\n");
-  const partial = adapter({ failAfterBatches: 1 });
-  const memory = new NotebookMemory({
-    store: () => h.store,
-    embeddingAdapter: () => partial,
-    embeddingBatchSize: 1,
-    workspaceDirectory: () => h.root,
-    conversationDirectory: () => [],
-    isTemporary: () => false,
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const report = await memory.sync();
-  assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.equal(report?.embeddedChunks, 1, "the batch that answered is kept");
-  assert.equal(h.store.status().embeddedChunks, 1);
-  partial.fail = false;
-  const retried = await new NotebookMemory({
-    store: () => h.store,
-    embeddingAdapter: () => adapter(),
-    embeddingBatchSize: 64,
-    workspaceDirectory: () => h.root,
-    conversationDirectory: () => [],
-    isTemporary: () => false,
-    now: () => NOW + 1,
-    report: () => undefined,
-  }).sync();
-  assert.equal(retried?.mode, RETRIEVAL_MODE.HYBRID);
-  assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
-});
-
-test("conversation hits are keyword-only fallback: they fill spare slots from eligible conversations' Conversation and never displace notebook chunks", async () => {
-  const h = harness();
-  await h.memory.sync();
-  h.store.linesByKey.set(MAIN_SESSION_KEY, [
-    {
-      kind: CONVERSATION_ENTRY_KIND.ASK,
-      words: "we chose Tuesday deploys in main",
-      recordedAt: NOW,
-      eventId: "a",
-    },
-  ]);
-  h.store.linesByKey.set(h.thread, [
-    {
-      kind: CONVERSATION_ENTRY_KIND.REPLY,
-      words: "Tuesday it is",
-      recordedAt: NOW + 1,
-      eventId: "b",
-    },
-    {
-      kind: CONVERSATION_ENTRY_KIND.REPLY,
-      words: "tuesday again",
-      recordedAt: NOW + 3,
-      eventId: "d",
-    },
-  ]);
-  h.store.linesByKey.set(h.temporary, [
-    {
-      kind: CONVERSATION_ENTRY_KIND.REPLY,
-      words: "tuesday secret",
-      recordedAt: NOW + 2,
-      eventId: "c",
-    },
-  ]);
-  const fromMain = h.memory.accessFor(MAIN_SESSION_KEY);
-  const all = resultsOf(await fromMain.search({ query: "tuesday", signal: signal() }));
-  const conversations = all.filter((entry) => entry.source === MEMORY_SOURCE.CONVERSATIONS);
-  assert.deepEqual(
-    conversations.map((entry) => entry.path),
-    [conversationResultPath(h.thread), conversationResultPath(h.thread)],
-    "two lines of one eligible conversation are two results; the asking one and a temporary thread give none",
-  );
-  assert.ok(
-    conversations.every(
-      (entry) => Number(entry.score) <= MEMORY_SEARCH_DEFAULTS.TEXT_WEIGHT + Number.EPSILON,
+it.scoped(
+  "a sync indexes the notebook with vectors, a search runs hybrid, and a hand edit is picked up by the next sync",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        const h = yield* harness();
+        const first = yield* h.memory.sync;
+        assert.equal(first?.mode, RETRIEVAL_MODE.HYBRID);
+        assert.equal(yield* h.memory.mode, RETRIEVAL_MODE.HYBRID);
+        assert.ok(
+          first && first.embeddedChunks > 0 && first.embeddedChunks === first.indexedChunks,
+        );
+        const access = h.memory.accessFor(MAIN_SESSION_KEY);
+        const searched = yield* access.search({ query: "frankfurt cluster", signal: signal() });
+        assert.equal(searched.mode, RETRIEVAL_MODE.HYBRID);
+        const hits = resultsOf(searched);
+        assert.equal(hits[0]?.path, MEMORY_FILE);
+        assert.equal(hits[0]?.source, MEMORY_SOURCE.MEMORY);
+        fs.writeFileSync(
+          path.join(h.root, MEMORY_FILE),
+          "# MEMORY.md\n\nThe team drinks espresso.\n",
+        );
+        const second = yield* h.memory.sync;
+        assert.equal(second?.indexedFiles, 1);
+        const again = resultsOf(yield* access.search({ query: "frankfurt", signal: signal() }));
+        assert.equal(again.filter((entry) => entry.source === MEMORY_SOURCE.MEMORY).length, 0);
+        const read = yield* access.get({ path: MEMORY_FILE, from: 3, lines: 1 });
+        assert.equal(read.text, "The team drinks espresso.");
+        const refused = yield* access.get({ path: "../settings.json" });
+        assert.equal(refused.status, "rejected");
+      }),
     ),
-    "a conversation hit has no vector, so it scores at most the text weight",
-  );
-  assert.ok(
-    conversations.every((entry) => Number(entry.score) < MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE),
-    "and never clears the strict window on its own",
-  );
-  assert.equal(all[0]?.source, MEMORY_SOURCE.MEMORY, "the notebook's chunk ranks first");
-  const one = resultsOf(
-    await fromMain.search({ query: "tuesday", maxResults: 1, signal: signal() }),
-  );
-  assert.deepEqual(
-    one.map((entry) => entry.source),
-    [MEMORY_SOURCE.MEMORY],
-    "a window the notebook fills on its own excludes every conversation hit",
-  );
-  const fromThread = h.memory.accessFor(h.thread);
-  const threadHits = resultsOf(
-    await fromThread.search({ query: "tuesday", signal: signal() }),
-  ).filter((entry) => entry.source === MEMORY_SOURCE.CONVERSATIONS);
-  assert.deepEqual(
-    threadHits.map((entry) => entry.path),
-    [conversationResultPath(MAIN_SESSION_KEY)],
-  );
-});
+);
 
-test("a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors; one adapter read serves the whole pass", async () => {
-  let credential: EmbeddingAdapter | undefined;
-  let reads = 0;
-  const h = harness({
-    embeddingAdapter: () => {
-      reads += 1;
-      return credential;
-    },
-  });
-  const first = await h.memory.sync();
-  assert.equal(first?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
-  assert.equal(first?.embeddedChunks, 0);
-  assert.equal(reads, 1);
-  credential = h.embedding;
-  const second = await h.memory.sync();
-  assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
-  assert.ok(
-    second && second.indexedFiles > 0,
-    "unchanged files are planned again for their vectors",
-  );
-  assert.equal(reads, 2, "the identity and the vectors come from one read of the adapter");
-  assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
-  const third = await h.memory.sync();
-  assert.equal(third?.indexedFiles, 0, "once every chunk has a vector the files are left alone");
-});
+it.scoped(
+  "an embedding outage degrades an automatic provider to keyword-only for that call, and the standing mode follows the sync alone",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        const h = yield* harness();
+        assert.equal((yield* h.memory.sync)?.mode, RETRIEVAL_MODE.HYBRID);
+        h.embedding.fail = true;
+        const access = h.memory.accessFor(MAIN_SESSION_KEY);
+        const searched = yield* access.search({ query: "frankfurt", signal: signal() });
+        assert.equal(searched.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+        assert.equal(resultsOf(searched).length, 1);
+        assert.equal(
+          yield* h.memory.mode,
+          RETRIEVAL_MODE.HYBRID,
+          "a search moves the standing mode of nothing",
+        );
+        assert.equal(
+          (yield* h.memory.sync)?.mode,
+          RETRIEVAL_MODE.HYBRID,
+          "nothing to embed, nothing failed",
+        );
+        fs.writeFileSync(path.join(h.root, "memory", "note.md"), "# note\n\nEspresso thrice.\n");
+        const report = yield* h.memory.sync;
+        assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+        assert.equal(yield* h.memory.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+      }),
+    ),
+);
 
-test("a sync asked for during a pass runs one follow-on pass under the adapter that stands then, and every request during the pass shares it", async () => {
-  let credential: EmbeddingAdapter | undefined;
-  let synced = 0;
-  const h = harness({
-    embeddingAdapter: () => credential,
-    onSynced: () => {
-      synced += 1;
-    },
-  });
-  const plan = h.store.planMemorySync.bind(h.store);
-  let release: (() => void) | undefined;
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  let plans = 0;
-  h.store.planMemorySync = async (identity: EmbeddingModelIdentity | undefined) => {
-    plans += 1;
-    if (plans === 1) await gate;
-    return plan(identity);
-  };
-  const launch = h.memory.sync();
-  credential = h.embedding;
-  const requested = h.memory.sync();
-  const again = h.memory.sync();
-  assert.equal(requested, again, "requests during one pass share the follow-on");
-  assert.notEqual(requested, launch);
-  release?.();
-  const first = await launch;
-  assert.equal(
-    first?.mode,
-    RETRIEVAL_MODE.KEYWORD_ONLY,
-    "the pass under way kept its adapter read",
-  );
-  const second = await requested;
-  assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
-  assert.ok(second && second.embeddedChunks > 0);
-  assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
-  assert.equal(plans, 2, "exactly one follow-on pass ran");
-  assert.equal(synced, 2);
-  const idle = await h.memory.sync();
-  assert.equal(idle?.indexedFiles, 0);
-  assert.equal(plans, 3, "no pass runs that was not asked for");
-});
+it.scoped(
+  "a later batch's failure keeps every vector the earlier batches answered, and the report says the rest are missing",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        const h = yield* harness();
+        fs.writeFileSync(path.join(h.root, "memory", "note.md"), "# note\n\nEspresso thrice.\n");
+        const partial = adapter({ failAfterBatches: 1 });
+        const memory = yield* makeNotebookMemory({
+          store: () => h.store,
+          embeddingAdapter: () => partial,
+          embeddingBatchSize: 1,
+          workspaceDirectory: () => h.root,
+          conversationDirectory: () => [],
+          isTemporary: () => false,
+          now: () => NOW,
+          report: () => undefined,
+        });
+        const report = yield* memory.sync;
+        assert.equal(report?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+        assert.equal(report?.embeddedChunks, 1, "the batch that answered is kept");
+        assert.equal(h.store.status().embeddedChunks, 1);
+        partial.fail = false;
+        const retrying = yield* makeNotebookMemory({
+          store: () => h.store,
+          embeddingAdapter: () => adapter(),
+          embeddingBatchSize: 64,
+          workspaceDirectory: () => h.root,
+          conversationDirectory: () => [],
+          isTemporary: () => false,
+          now: () => NOW + 1,
+          report: () => undefined,
+        });
+        const retried = yield* retrying.sync;
+        assert.equal(retried?.mode, RETRIEVAL_MODE.HYBRID);
+        assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
+      }),
+    ),
+);
+
+it.scoped(
+  "conversation hits are keyword-only fallback: they fill spare slots from eligible conversations' Conversation and never displace notebook chunks",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        const h = yield* harness();
+        yield* h.memory.sync;
+        h.store.linesByKey.set(MAIN_SESSION_KEY, [
+          {
+            kind: CONVERSATION_ENTRY_KIND.ASK,
+            words: "we chose Tuesday deploys in main",
+            recordedAt: NOW,
+            eventId: "a",
+          },
+        ]);
+        h.store.linesByKey.set(h.thread, [
+          {
+            kind: CONVERSATION_ENTRY_KIND.REPLY,
+            words: "Tuesday it is",
+            recordedAt: NOW + 1,
+            eventId: "b",
+          },
+          {
+            kind: CONVERSATION_ENTRY_KIND.REPLY,
+            words: "tuesday again",
+            recordedAt: NOW + 3,
+            eventId: "d",
+          },
+        ]);
+        h.store.linesByKey.set(h.temporary, [
+          {
+            kind: CONVERSATION_ENTRY_KIND.REPLY,
+            words: "tuesday secret",
+            recordedAt: NOW + 2,
+            eventId: "c",
+          },
+        ]);
+        const fromMain = h.memory.accessFor(MAIN_SESSION_KEY);
+        const all = resultsOf(yield* fromMain.search({ query: "tuesday", signal: signal() }));
+        const conversations = all.filter((entry) => entry.source === MEMORY_SOURCE.CONVERSATIONS);
+        assert.deepEqual(
+          conversations.map((entry) => entry.path),
+          [conversationResultPath(h.thread), conversationResultPath(h.thread)],
+          "two lines of one eligible conversation are two results; the asking one and a temporary thread give none",
+        );
+        assert.ok(
+          conversations.every(
+            (entry) => Number(entry.score) <= MEMORY_SEARCH_DEFAULTS.TEXT_WEIGHT + Number.EPSILON,
+          ),
+          "a conversation hit has no vector, so it scores at most the text weight",
+        );
+        assert.ok(
+          conversations.every(
+            (entry) => Number(entry.score) < MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE,
+          ),
+          "and never clears the strict window on its own",
+        );
+        assert.equal(all[0]?.source, MEMORY_SOURCE.MEMORY, "the notebook's chunk ranks first");
+        const one = resultsOf(
+          yield* fromMain.search({ query: "tuesday", maxResults: 1, signal: signal() }),
+        );
+        assert.deepEqual(
+          one.map((entry) => entry.source),
+          [MEMORY_SOURCE.MEMORY],
+          "a window the notebook fills on its own excludes every conversation hit",
+        );
+        const fromThread = h.memory.accessFor(h.thread);
+        const threadHits = resultsOf(
+          yield* fromThread.search({ query: "tuesday", signal: signal() }),
+        ).filter((entry) => entry.source === MEMORY_SOURCE.CONVERSATIONS);
+        assert.deepEqual(
+          threadHits.map((entry) => entry.path),
+          [conversationResultPath(MAIN_SESSION_KEY)],
+        );
+      }),
+    ),
+);
+
+it.scoped(
+  "a launch before any credential indexes keyword-only, and the first credentialed sync backfills the vectors; one adapter read serves the whole pass",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        let credential: EmbeddingAdapter | undefined;
+        let reads = 0;
+        const h = yield* harness({
+          embeddingAdapter: () => {
+            reads += 1;
+            return credential;
+          },
+        });
+        const first = yield* h.memory.sync;
+        assert.equal(first?.mode, RETRIEVAL_MODE.KEYWORD_ONLY);
+        assert.equal(first?.embeddedChunks, 0);
+        assert.equal(reads, 1);
+        credential = h.embedding;
+        const second = yield* h.memory.sync;
+        assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
+        assert.ok(
+          second && second.indexedFiles > 0,
+          "unchanged files are planned again for their vectors",
+        );
+        assert.equal(reads, 2, "the identity and the vectors come from one read of the adapter");
+        assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
+        const third = yield* h.memory.sync;
+        assert.equal(
+          third?.indexedFiles,
+          0,
+          "once every chunk has a vector the files are left alone",
+        );
+      }),
+    ),
+);
+
+it.scoped(
+  "a sync asked for during a pass runs one follow-on pass under the adapter that stands then, and every request during the pass shares it",
+  () =>
+    platform(
+      Effect.gen(function* () {
+        let credential: EmbeddingAdapter | undefined;
+        let synced = 0;
+        const h = yield* harness({
+          embeddingAdapter: () => credential,
+          onSynced: Effect.sync(() => {
+            synced += 1;
+          }),
+        });
+        const plan = h.store.planMemorySync.bind(h.store);
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        let plans = 0;
+        h.store.planMemorySync = async (identity: EmbeddingModelIdentity | undefined) => {
+          plans += 1;
+          if (plans === 1) await gate;
+          return plan(identity);
+        };
+        let asked = 0;
+        const askSync = Effect.zipRight(
+          Effect.sync(() => {
+            asked += 1;
+          }),
+          h.memory.sync,
+        );
+        const launch = yield* Effect.fork(h.memory.sync);
+        yield* until(() => plans === 1);
+        credential = h.embedding;
+        const requested = yield* Effect.fork(askSync);
+        const again = yield* Effect.fork(askSync);
+        yield* until(() => asked === 2);
+        release?.();
+        const first = yield* Fiber.join(launch);
+        assert.equal(
+          first?.mode,
+          RETRIEVAL_MODE.KEYWORD_ONLY,
+          "the pass under way kept its adapter read",
+        );
+        const second = yield* Fiber.join(requested);
+        const third = yield* Fiber.join(again);
+        assert.deepEqual(second, third, "requests during one pass share the follow-on");
+        assert.equal(second?.mode, RETRIEVAL_MODE.HYBRID);
+        assert.ok(second && second.embeddedChunks > 0);
+        assert.equal(h.store.status().embeddedChunks, h.store.status().chunks);
+        assert.equal(plans, 2, "exactly one follow-on pass ran");
+        assert.equal(synced, 2);
+        const idle = yield* h.memory.sync;
+        assert.equal(idle?.indexedFiles, 0);
+        assert.equal(plans, 3, "no pass runs that was not asked for");
+      }),
+    ),
+);

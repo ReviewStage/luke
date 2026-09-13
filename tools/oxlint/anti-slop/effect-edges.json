@@ -86,7 +86,6 @@
     "packages/host/src/brain/wiring.ts",
     "packages/host/src/memory-maintenance.ts",
     "packages/host/src/testing/brain-harness.ts",
-    "packages/memory/src/notebook-memory.ts",
     "packages/runtime/src/children.ts",
     "packages/runtime/src/lanes.effect.ts",
     "packages/runtime/src/lanes.ts",

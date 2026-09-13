@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import type { FileSystem } from "@effect/platform";
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { workerStoreTransport } from "@sidecar/brain/store";
@@ -40,7 +41,7 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, type Scope } from "effect";
+import { Effect, ExecutionStrategy, Exit, Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -68,8 +69,8 @@ export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
   readonly store: StoreWiring;
   readonly conversations: ReturnType<typeof conversationOperations>;
-  memoryMode: () => ReturnType<MemoryWiring["mode"]>;
-  syncMemory: () => void;
+  readonly memoryMode: MemoryWiring["mode"];
+  readonly syncMemory: MemoryWiring["requestSync"];
 }
 
 export interface BrainDependencies {
@@ -84,11 +85,21 @@ export interface BrainDependencies {
 
 export const composeBrain = (
   dependencies: BrainDependencies,
-): Effect.Effect<BrainComposer, never, HostKernelTag | StoreWorker | Scope.Scope> =>
+): Effect.Effect<
+  BrainComposer,
+  never,
+  HostKernelTag | StoreWorker | FileSystem.FileSystem | Scope.Scope
+> =>
   Effect.gen(function* () {
     const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
     const storeWorker = yield* StoreWorker;
+    // The index's watch, its start, and every pass of it are fibers of a
+    // scope of this composer's own, closed in its stop before the store is:
+    // the notebook's own scope closing is what used to be `memory.stop()`,
+    // and a file event arriving after it can no longer begin a reconcile
+    // against a store that has closed.
+    const indexScope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
     // The runtime the store's asks and every run of the tool loop are fibers
     // of: the host's own, so a turn and the host that cancels it stand on one
     // runtime rather than on a second one built where the work lives.
@@ -119,18 +130,19 @@ export const composeBrain = (
     let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
 
     const memory: MemoryWiring = runMode.observesProviders
-      ? composeNotebookMemory({
-          client: store.client,
-          embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
-          workspaceDirectory: kernel.agentWorkspacePath,
-          conversationDirectory: () => store.directory(),
-          isTemporary: store.isTemporary,
-          now,
-          report,
-          onSynced: () => {
-            void store.refreshNotebook();
-          },
-        })
+      ? yield* Scope.extend(
+          composeNotebookMemory({
+            client: store.client,
+            embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
+            workspaceDirectory: kernel.agentWorkspacePath,
+            conversationDirectory: () => store.directory(),
+            isTemporary: store.isTemporary,
+            now,
+            report,
+            onSynced: Effect.asVoid(Effect.promise(() => store.refreshNotebook())),
+          }),
+          indexScope,
+        )
       : INERT_MEMORY_WIRING;
     const memoryMaintenance = wireMemoryMaintenance({
       persistent: runMode.observesProviders,
@@ -141,9 +153,7 @@ export const composeBrain = (
       now,
       createId,
       report,
-      onNotebookChanged: () => {
-        void memory.sync();
-      },
+      onNotebookChanged: memory.requestSync,
     });
 
     /**
@@ -326,30 +336,29 @@ export const composeBrain = (
       wiring,
       store,
       conversations,
-      memoryMode: () => memory.mode(),
-      syncMemory: () => {
-        void memory.sync();
-      },
+      memoryMode: memory.mode,
+      syncMemory: memory.requestSync,
       // The hourly pass is armed after the start that opened the store and
       // ends with the scope this composer's lifetime is, before its stop.
       lifetime: Effect.zipRight(
         startedAndStopped(
-          Effect.promise(async () => {
+          Effect.gen(function* () {
             if (!runMode.observesProviders) return;
-            await store.open();
-            await seedWorkspaceThenStartMemory({
-              seedWorkspace: async () => {
-                await wiring.seedWorkspace();
-              },
-              startMemory: () => memory.start(),
-              report,
-            });
-            await wiring.store().load();
-            await store.restore();
+            yield* Effect.promise(() => store.open());
+            yield* Scope.extend(
+              seedWorkspaceThenStartMemory({
+                seedWorkspace: Effect.asVoid(Effect.promise(() => wiring.seedWorkspace())),
+                startMemory: memory.start,
+                report,
+              }),
+              indexScope,
+            );
+            yield* Effect.promise(() => wiring.store().load());
+            yield* Effect.promise(() => store.restore());
           }),
           Effect.gen(function* () {
             yield* wiring.retire();
-            memory.stop();
+            yield* Scope.close(indexScope, Exit.void);
             yield* Effect.promise(() => store.close());
           }),
         ),

@@ -1,5 +1,5 @@
 import type { GatewayShutdownSteps } from "@sidecar/gateway";
-import { Effect, type Fiber, Ref } from "effect";
+import { Cause, Effect, type Fiber, Ref, type Scope } from "effect";
 
 /**
  * Two moments of the runtime host's life where one concern must not decide
@@ -9,27 +9,34 @@ import { Effect, type Fiber, Ref } from "effect";
 
 export interface StartupStoreOptions {
   /** Seeds the workspace's missing files; a failure is reported and stops nothing else. */
-  seedWorkspace: () => Promise<void>;
+  readonly seedWorkspace: Effect.Effect<void>;
   /** Starts the notebook index; its own settling is nobody's to wait on. */
-  startMemory: () => Promise<void>;
-  report: (message: string) => void;
+  readonly startMemory: Effect.Effect<void>;
+  readonly report: (message: string) => void;
 }
 
 /**
  * The workspace's missing files are seeded at every live launch and never
  * rewritten. A seed that failed leaves the files that already stand, which
  * are still worth indexing, so the index starts whatever became of the seed
- * and the start does not wait on the index.
+ * and the start does not wait on the index: the index's own start is a fiber
+ * of the scope this runs in, which is the caller's lifetime, forked
+ * interruptible because the start this runs inside is not.
  */
-export async function seedWorkspaceThenStartMemory(options: StartupStoreOptions): Promise<void> {
-  try {
-    await options.seedWorkspace();
-  } catch (error) {
-    options.report(
-      `Brain workspace could not be seeded: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  void options.startMemory();
+export function seedWorkspaceThenStartMemory(
+  options: StartupStoreOptions,
+): Effect.Effect<void, never, Scope.Scope> {
+  return Effect.zipRight(
+    Effect.catchAllCause(options.seedWorkspace, (cause) => {
+      const failure = Cause.squash(cause);
+      return Effect.sync(() => {
+        options.report(
+          `Brain workspace could not be seeded: ${failure instanceof Error ? failure.message : String(failure)}`,
+        );
+      });
+    }),
+    Effect.asVoid(Effect.forkScoped(Effect.interruptible(options.startMemory))),
+  );
 }
 
 /**

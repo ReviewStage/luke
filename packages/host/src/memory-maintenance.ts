@@ -40,8 +40,8 @@ export interface MemoryMaintenanceDependencies {
   now: () => number;
   createId: () => string;
   report: (message: string) => void;
-  /** Hears every committed notebook change, so the index syncs. */
-  onNotebookChanged?: () => void;
+  /** Run at every committed notebook change, so the index syncs. */
+  onNotebookChanged?: Effect.Effect<void>;
 }
 
 type MemoryCapture = (turn: MemoryCaptureTurn) => Effect.Effect<MemoryCaptureResult>;
@@ -103,7 +103,9 @@ export function wireMemoryMaintenance(
         signal,
         runId: dependencies.createId(),
       });
-      if (result.writes > 0) dependencies.onNotebookChanged?.();
+      if (result.writes > 0 && dependencies.onNotebookChanged) {
+        yield* dependencies.onNotebookChanged;
+      }
       return result;
     });
 

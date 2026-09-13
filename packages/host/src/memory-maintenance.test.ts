@@ -124,9 +124,9 @@ async function harness(
     now: () => NOW,
     createId: () => "id",
     report: (message) => reports.push(message),
-    onNotebookChanged: () => {
+    onNotebookChanged: Effect.sync(() => {
       changed += 1;
-    },
+    }),
     ...overrides,
   });
   return {

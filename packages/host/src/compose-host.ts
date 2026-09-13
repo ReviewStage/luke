@@ -327,10 +327,11 @@ export const hostAssemblyLayer: Layer.Layer<
       },
       conversations: brain.conversations,
       memory: {
-        status: () => ({
-          mode: brain.memoryMode(),
-          entries: brain.store.rememberedFacts().length,
-        }),
+        status: () =>
+          Effect.map(brain.memoryMode, (mode) => ({
+            mode,
+            entries: brain.store.rememberedFacts().length,
+          })),
       },
       observedSessionCount: observation.observedSessionCount,
       nodes: kernel.nodes,

@@ -32,7 +32,7 @@ export function operatorOverBrain(options: {
       },
       // SAFETY: the submit path reaches no conversation operation; the stand-in is never read.
       conversations: {} as ConversationOperations,
-      memory: { status: () => ({}) },
+      memory: { status: () => Effect.succeed({}) },
       observedSessionCount: () => 0,
       now: Date.now,
       createId: () => `id-${++ids}`,

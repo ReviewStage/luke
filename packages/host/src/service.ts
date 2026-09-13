@@ -82,7 +82,7 @@ interface GatewayBrainAccess {
 }
 
 interface GatewayMemoryAccess {
-  status: () => WireRecord;
+  status: () => Effect.Effect<WireRecord>;
 }
 
 export interface GatewayServiceDependencies {
@@ -382,7 +382,7 @@ export function createGatewayService(
       const records = requester ? brain.children.childrenOf(requester) : brain.children.children();
       return Effect.succeed({ children: records.map(childRecordToWire) });
     }),
-    [GATEWAY_METHOD.MEMORY_STATUS]: () => Effect.succeed(dependencies.memory.status()),
+    [GATEWAY_METHOD.MEMORY_STATUS]: () => dependencies.memory.status(),
     [GATEWAY_METHOD.CONFIGURATION_UPDATE]: reading((read) => {
       const reasoningEffort = read.optionalString("reasoningEffort");
       const maximumOutputTokens = read.optionalNumber("maximumOutputTokens");
