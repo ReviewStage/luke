@@ -7,7 +7,7 @@ import {
   type ScheduledTimer,
 } from "@sidecar/runtime";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
-import { Effect, MutableRef } from "effect";
+import { Deferred, Effect, FiberId, MutableRef } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -545,16 +545,19 @@ export class AskLedger {
    * stop settles what it can and then notifies, which ends every wait
    * outstanding under it by this same reading.
    */
-  async wait(runId: string, timeoutMs: number): Promise<BrainRequestRecord | undefined> {
+  wait(runId: string, timeoutMs: number): Effect.Effect<BrainRequestRecord | undefined> {
     const record = this.record(runId);
-    if (!record) return undefined;
-    if (isTerminalBrainRequestStatus(record.status) || this.#seam.stopped()) return record;
-    return new Promise((resolve) => {
+    if (!record) return Effect.succeed(undefined);
+    if (isTerminalBrainRequestStatus(record.status) || this.#seam.stopped()) {
+      return Effect.succeed(record);
+    }
+    return Effect.suspend(() => {
+      const settled = Deferred.unsafeMake<BrainRequestRecord | undefined>(FiberId.none);
       let disarm: (() => void) | undefined;
       const finish = () => {
         unsubscribe();
         disarm?.();
-        resolve(this.record(runId));
+        Deferred.unsafeDone(settled, Effect.succeed(this.record(runId)));
       };
       const unsubscribe = this.subscribe(() => {
         const current = this.record(runId);
@@ -563,6 +566,12 @@ export class AskLedger {
         }
       });
       disarm = this.#seam.arm(timeoutMs, Effect.sync(finish));
+      return Effect.onInterrupt(Deferred.await(settled), () =>
+        Effect.sync(() => {
+          unsubscribe();
+          disarm?.();
+        }),
+      );
     });
   }
 

@@ -229,8 +229,8 @@ export class BrainRequestLedger {
         : undefined),
     };
     if (await this.commit(generation, runId, settled)) {
-      this.#notify();
       this.#ended(generation, runId);
+      this.#notify();
       return;
     }
     const fallback =
@@ -244,8 +244,8 @@ export class BrainRequestLedger {
     if (!(await this.commit(generation, runId, fallback))) {
       this.#update(generation, runId, fallback);
     }
-    this.#notify();
     this.#ended(generation, runId);
+    this.#notify();
   }
 
   #ended(generation: Generation, runId: string): void {

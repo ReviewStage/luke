@@ -611,7 +611,7 @@ export class BrainAgent {
   waitAsk(runId: string, timeoutMs: number): Effect.Effect<BrainRequestRecord | undefined> {
     return Effect.gen(this, function* () {
       yield* this.ready();
-      return yield* Effect.promise(() => this.#asks.wait(runId, timeoutMs));
+      return yield* this.#asks.wait(runId, timeoutMs);
     });
   }
 
