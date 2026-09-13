@@ -11,6 +11,7 @@ import {
   transcriptLine,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { hostedTranscriptReads } from "./hosted-transcripts.js";
 
@@ -52,10 +53,11 @@ function fixture(answers: readonly (HostedConversationAnswer | undefined)[], ses
   const remaining = [...answers];
   const reads = hostedTranscriptReads({
     client: {
-      read: async (query) => {
-        queries.push(query);
-        return remaining.shift();
-      },
+      read: (query) =>
+        Effect.sync(() => {
+          queries.push(query);
+          return remaining.shift();
+        }),
     },
     session: () => session,
   });

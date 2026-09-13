@@ -15,6 +15,7 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import {
+  carriedHostedCall,
   HOSTED_ACTION_ANSWER,
   hostedActionResult,
   settleHostedWrite,
@@ -62,7 +63,7 @@ export function createSessionRowActions(
   const carry = (
     identity: SessionIdentity,
     counted: ProductSessionAction,
-    call: (target: HostedActionTarget) => Promise<HostedActionOutcome>,
+    call: (target: HostedActionTarget) => Effect.Effect<HostedActionOutcome>,
   ): Effect.Effect<SessionWriteResult> =>
     Effect.gen(function* () {
       const session = sessionWithIdentity(identity, drawn());
@@ -81,7 +82,7 @@ export function createSessionRowActions(
       // request fiber ending under them.
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
-          const outcome = yield* Effect.promise(() =>
+          const outcome = yield* carriedHostedCall(
             call({ providerId, providerSessionId: session.providerSessionId }),
           );
           return yield* settleHostedWrite(

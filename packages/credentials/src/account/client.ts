@@ -11,7 +11,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
-import { Cause, Duration, Effect, Exit, type Layer } from "effect";
+import { Duration, Effect, Fiber, type Layer } from "effect";
 import type { AccountProvider } from "./snapshot.js";
 
 export interface AccountTokens {
@@ -90,60 +90,71 @@ function record(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-async function responseRecord(response: Response): Promise<WireRecord> {
-  const body = record(await response.json().catch(() => undefined));
-  if (!response.ok) {
-    throw new AccountClientError(
-      text(body?.error_description) ?? `Account service returned ${response.status}`,
-      {
-        status: response.status,
-        ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
-      },
-    );
-  }
-  if (!body) throw new AccountClientError("Account service returned an invalid response");
-  return body;
+function responseRecord(response: Response): Effect.Effect<WireRecord, AccountClientError> {
+  return Effect.gen(function* () {
+    const body = record(yield* Effect.promise(() => response.json().catch(() => undefined)));
+    if (!response.ok) {
+      return yield* Effect.fail(
+        new AccountClientError(
+          text(body?.error_description) ?? `Account service returned ${response.status}`,
+          {
+            status: response.status,
+            ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
+          },
+        ),
+      );
+    }
+    if (!body) {
+      return yield* Effect.fail(
+        new AccountClientError("Account service returned an invalid response"),
+      );
+    }
+    return body;
+  });
 }
 
-function tokensFrom(body: WireRecord): AccountTokens {
+function tokensFrom(body: WireRecord): Effect.Effect<AccountTokens, AccountClientError> {
   if (!isWireString(body.access_token) || !isWireString(body.refresh_token)) {
-    throw new AccountClientError("Account service did not return both tokens");
+    return Effect.fail(new AccountClientError("Account service did not return both tokens"));
   }
-  return { accessToken: body.access_token, refreshToken: body.refresh_token };
+  return Effect.succeed({ accessToken: body.access_token, refreshToken: body.refresh_token });
 }
 
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
 
 /**
- * One request over the ambient `HttpClient`, under its own deadline. A
- * client that could not carry it, or a body that outlived the deadline, ends
- * the request as the failure `Cause.squash` unwraps back to the caller — the
+ * One request over the client handed in, under its own deadline, which is
+ * provided here so a caller yields the request without carrying an
+ * `HttpClient` of its own. A client that could not carry it, or a body that
+ * outlived the deadline, fails with the error it always carried — the
  * platform's own transport error for the first, a timeout named the way
  * `AbortSignal.timeout` always named it for the second — so every caller here
- * keeps reading a thrown error exactly as it always did.
- *
- * @deprecated This is the promise-facing seam on the `Effect.runPromise`
- * allowlist in `docs/adr/0001-effect.md`: `AccountClient` and
- * `deleteHostedAccount` still answer a Promise, so the request built over the
- * ambient `HttpClient` is run to a promise here rather than left to a
- * caller's own fiber. Deleted once both take a fiber of their own instead.
+ * reads the same error it always did, on the failure channel rather than as a
+ * throw. A defect joins it there, exactly as the promise this replaces
+ * rejected with one. An interruption does not: a caller that cut this fiber
+ * is not a request that failed, and every reader of a failure here — the
+ * sign-out's report, the withdrawn sign-in — tells the two apart.
  */
 function timedRequest(
   client: Layer.Layer<HttpClient.HttpClient>,
   request: HttpClientRequest.HttpClientRequest,
   timeoutMs: number,
-): Promise<Response> {
-  const answer = HttpClient.execute(request).pipe(
+): Effect.Effect<Response, Error> {
+  return HttpClient.execute(request).pipe(
     Effect.flatMap(webResponseFromClientResponse),
     Effect.timeoutFail({
       duration: Duration.millis(timeoutMs),
       onTimeout: () => new DOMException("The request timed out", "TimeoutError"),
     }),
+    Effect.provide(client),
+    Effect.catchAll((error) => Effect.fail(asError(error))),
+    Effect.catchAllDefect((defect) => Effect.fail(asError(defect))),
   );
-  return Effect.runPromiseExit(Effect.provide(answer, client)).then((exit) => {
-    if (Exit.isSuccess(exit)) return exit.value;
-    throw Cause.squash(exit.cause);
-  });
+}
+
+/** What a failure or a defect carries, as the `Error` every caller here reads. */
+function asError(cause: unknown): Error {
+  return cause instanceof Error ? cause : new Error(String(cause));
 }
 
 export class AccountClient {
@@ -174,84 +185,94 @@ export class AccountClient {
     return url.toString();
   }
 
-  async exchangeCode(input: {
+  exchangeCode(input: {
     code: string;
     codeVerifier: string;
     redirectUri: string;
-  }): Promise<AccountTokens> {
-    return tokensFrom(
-      await this.#token({
+  }): Effect.Effect<AccountTokens, Error> {
+    return Effect.flatMap(
+      this.#token({
         grant_type: "authorization_code",
         code: input.code,
         code_verifier: input.codeVerifier,
         client_id: this.#clientId,
         redirect_uri: input.redirectUri,
       }),
+      tokensFrom,
     );
   }
 
-  async refresh(refreshToken: string): Promise<AccountTokens> {
-    const body = await this.#token({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: this.#clientId,
-    });
-    const refreshed = tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken });
-    return refreshed;
+  refresh(refreshToken: string): Effect.Effect<AccountTokens, Error> {
+    return Effect.flatMap(
+      this.#token({
+        grant_type: "refresh_token",
+        refresh_token: refreshToken,
+        client_id: this.#clientId,
+      }),
+      (body) => tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken }),
+    );
   }
 
   /** Revokes the long-lived credential; local sign-out never depends on this succeeding. */
-  async revoke(refreshToken: string): Promise<void> {
-    const response = await timedRequest(
-      this.#client,
-      HttpClientRequest.post(`${this.#baseUrl}/oauth2/revoke`, {
-        body: HttpBody.raw(
-          new URLSearchParams({
-            client_id: this.#clientId,
-            token: refreshToken,
-            token_type_hint: "refresh_token",
-          }).toString(),
-          { contentType: FORM_CONTENT_TYPE },
-        ),
-      }),
-      this.#timeoutMs,
-    );
-    if (!response.ok) await responseRecord(response);
-  }
-
-  async userInfo(accessToken: string, provider: AccountProvider): Promise<AccountIdentity> {
-    const response = await timedRequest(
-      this.#client,
-      HttpClientRequest.get(`${this.#baseUrl}/oauth2/userinfo`, {
-        headers: { authorization: `Bearer ${accessToken}` },
-      }),
-      this.#timeoutMs,
-    );
-    const body = await responseRecord(response);
-    if (!isWireString(body.email)) {
-      throw new AccountClientError("Account service returned an invalid identity");
-    }
-    const pictureUrl = accountPictureUrl(body.picture);
-    return {
-      ...(isWireString(body.sub) && body.sub ? { id: body.sub } : undefined),
-      email: body.email,
-      ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
-      ...(pictureUrl ? { pictureUrl } : undefined),
-      provider,
-    };
-  }
-
-  async #token(fields: Record<string, string>): Promise<WireRecord> {
-    const response = await timedRequest(
-      this.#client,
-      HttpClientRequest.post(`${this.#baseUrl}/oauth2/token`, {
-        body: HttpBody.raw(new URLSearchParams(fields).toString(), {
-          contentType: FORM_CONTENT_TYPE,
+  revoke(refreshToken: string): Effect.Effect<void, Error> {
+    return Effect.gen(this, function* () {
+      const response = yield* timedRequest(
+        this.#client,
+        HttpClientRequest.post(`${this.#baseUrl}/oauth2/revoke`, {
+          body: HttpBody.raw(
+            new URLSearchParams({
+              client_id: this.#clientId,
+              token: refreshToken,
+              token_type_hint: "refresh_token",
+            }).toString(),
+            { contentType: FORM_CONTENT_TYPE },
+          ),
         }),
-      }),
-      this.#timeoutMs,
+        this.#timeoutMs,
+      );
+      if (!response.ok) yield* responseRecord(response);
+    });
+  }
+
+  userInfo(accessToken: string, provider: AccountProvider): Effect.Effect<AccountIdentity, Error> {
+    return Effect.gen(this, function* () {
+      const response = yield* timedRequest(
+        this.#client,
+        HttpClientRequest.get(`${this.#baseUrl}/oauth2/userinfo`, {
+          headers: { authorization: `Bearer ${accessToken}` },
+        }),
+        this.#timeoutMs,
+      );
+      const body = yield* responseRecord(response);
+      if (!isWireString(body.email)) {
+        return yield* Effect.fail(
+          new AccountClientError("Account service returned an invalid identity"),
+        );
+      }
+      const pictureUrl = accountPictureUrl(body.picture);
+      return {
+        ...(isWireString(body.sub) && body.sub ? { id: body.sub } : undefined),
+        email: body.email,
+        ...(isWireString(body.name) && body.name ? { name: body.name } : undefined),
+        ...(pictureUrl ? { pictureUrl } : undefined),
+        provider,
+      };
+    });
+  }
+
+  #token(fields: Record<string, string>): Effect.Effect<WireRecord, Error> {
+    return Effect.flatMap(
+      timedRequest(
+        this.#client,
+        HttpClientRequest.post(`${this.#baseUrl}/oauth2/token`, {
+          body: HttpBody.raw(new URLSearchParams(fields).toString(), {
+            contentType: FORM_CONTENT_TYPE,
+          }),
+        }),
+        this.#timeoutMs,
+      ),
+      responseRecord,
     );
-    return responseRecord(response);
   }
 }
 
@@ -307,24 +328,44 @@ export interface AccountDeletionOptions {
 /**
  * Asks the hosted service to erase the signed-in account. The bearer token is
  * the whole request — the service resolves who to delete from it, so nothing
- * here can name a different account. A refusal throws an `AccountClientError`
- * carrying the status, which is what lets the caller tell an expired access
- * token (refresh and retry) from a service that actually said no.
+ * here can name a different account. A refusal fails with an
+ * `AccountClientError` carrying the status, which is what lets the caller tell
+ * an expired access token (refresh and retry) from a service that actually
+ * said no.
  */
-export async function deleteHostedAccount(options: AccountDeletionOptions): Promise<void> {
-  const response = await timedRequest(
-    options.httpClient ?? FetchHttpClient.layer,
-    HttpClientRequest.post(
-      `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
-      { headers: { authorization: `Bearer ${options.accessToken}` } },
-    ),
-    options.timeoutMs ?? DELETE_TIMEOUT_MS,
-  );
-  if (!response.ok) {
-    throw new AccountClientError(`Account service returned ${response.status}`, {
-      status: response.status,
-    });
-  }
+export function deleteHostedAccount(options: AccountDeletionOptions): Effect.Effect<void, Error> {
+  return Effect.gen(function* () {
+    const response = yield* timedRequest(
+      options.httpClient ?? FetchHttpClient.layer,
+      HttpClientRequest.post(
+        `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
+        { headers: { authorization: `Bearer ${options.accessToken}` } },
+      ),
+      options.timeoutMs ?? DELETE_TIMEOUT_MS,
+    );
+    if (!response.ok) {
+      return yield* Effect.fail(
+        new AccountClientError(`Account service returned ${response.status}`, {
+          status: response.status,
+        }),
+      );
+    }
+  });
+}
+
+/**
+ * One call made on a fiber of its own and waited for where it was asked for.
+ * The revocation below runs as a failed attempt unwinds, where
+ * `Effect.onError`'s cleanup is uninterruptible — and an uninterruptible
+ * region is one nothing inside it may interrupt either, including the
+ * deadline {@link timedRequest} races against its own request, which would
+ * then never win and never end a hung revocation. The call is forked as a
+ * daemon and made interruptible again, so its deadline ends it exactly as it
+ * did when the request ran on a fiber of its own, and the unwinding still
+ * waits for what it asked for.
+ */
+function onOwnFiber<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
+  return Effect.flatMap(Effect.forkDaemon(Effect.interruptible(effect)), Fiber.join);
 }
 
 /**
@@ -342,7 +383,7 @@ export function withIssuedAccountTokens<A>(options: {
   return Effect.gen(function* () {
     const tokens = yield* options.issue;
     return yield* Effect.onError(options.use(tokens), () =>
-      Effect.catchAll(options.revoke(tokens.refreshToken), (error) =>
+      Effect.catchAll(onOwnFiber(options.revoke(tokens.refreshToken)), (error) =>
         Effect.sync(() => options.onRevokeFailure?.(error)),
       ),
     );

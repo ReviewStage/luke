@@ -11,7 +11,22 @@ import {
 } from "@sidecar/hosted";
 import type { CloudAgentProviderId, SessionWriteResult } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+
+/**
+ * One service call, made on a fiber of its own and waited for where it was
+ * asked for. Every caller here waits inside an `Effect.uninterruptible`
+ * region, so a write the service already carried always settles — and an
+ * uninterruptible region is one nothing inside it may interrupt either,
+ * including the deadline `account-call` races against its own request, which
+ * would then never win and never end a hung write. The call is forked as a
+ * daemon and made interruptible again, so the deadline ends it exactly as it
+ * did when the client ran the request on a fiber of its own, and a caller
+ * that ended under the call still neither cuts it nor drops what it earns.
+ */
+export function carriedHostedCall<Answer>(call: Effect.Effect<Answer>): Effect.Effect<Answer> {
+  return Effect.flatMap(Effect.forkDaemon(Effect.interruptible(call)), Fiber.join);
+}
 
 /** What a caller hears of a service call that ended short of the provider's own answer. */
 export const HOSTED_ACTION_ANSWER = {

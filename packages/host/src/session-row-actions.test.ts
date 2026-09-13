@@ -20,7 +20,7 @@ import {
   type Session,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { Effect, Fiber } from "effect";
+import { Deferred, Duration, Effect, Fiber, TestClock } from "effect";
 import { createSessionRowActions } from "./session-row-actions.js";
 
 /*
@@ -64,14 +64,16 @@ function fixture(outcome: HostedActionOutcome, drawn: readonly Session[] = [CLOU
   const actions = createSessionRowActions({
     drawn: () => drawn,
     client: {
-      async sendMessage(target, text) {
-        recorded.calls.push({ target, ask: text });
-        return outcome;
-      },
-      async executeControl(target, controlId) {
-        recorded.calls.push({ target, ask: controlId });
-        return outcome;
-      },
+      sendMessage: (target, text) =>
+        Effect.sync(() => {
+          recorded.calls.push({ target, ask: text });
+          return outcome;
+        }),
+      executeControl: (target, controlId) =>
+        Effect.sync(() => {
+          recorded.calls.push({ target, ask: controlId });
+          return outcome;
+        }),
     },
     refresh: Effect.sync(() => {
       recorded.refreshes += 1;
@@ -194,18 +196,21 @@ it.effect("a call that never left is a refusal, and one that lost its answer is 
   }),
 );
 
-it.effect("a write the service already carried settles though its caller is interrupted", () =>
+it.effect("the call's own deadline still ends a write the service never answers", () =>
   Effect.gen(function* () {
     const recorded = { refreshes: 0, events: 0 };
-    let release: (() => void) | undefined;
     const actions = createSessionRowActions({
       drawn: () => [CLOUD, LOCAL],
       client: {
+        // The deadline `account-call` races against its own request, as a
+        // call whose answer never comes: it has to win inside the write's
+        // uninterruptible region, where nothing else may interrupt.
         sendMessage: () =>
-          new Promise<HostedActionOutcome>((resolve) => {
-            release = () => resolve({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
-          }),
-        executeControl: async () => ({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } }),
+          Effect.map(
+            Effect.timeoutOption(Effect.never, Duration.seconds(10)),
+            (): HostedActionOutcome => ({ failure: HOSTED_ACTION_FAILURE.LOST }),
+          ),
+        executeControl: () => Effect.succeed({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } }),
       },
       refresh: Effect.sync(() => {
         recorded.refreshes += 1;
@@ -216,12 +221,47 @@ it.effect("a write the service already carried settles though its caller is inte
     });
 
     const writing = yield* Effect.fork(actions.sendMessage(identityOf(CLOUD), "ship it"));
-    for (let tick = 0; tick < 100 && release === undefined; tick += 1) yield* Effect.yieldNow();
-    assert.ok(release, "the write reached the service");
+    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* TestClock.adjust(Duration.seconds(10));
+
+    assert.equal((yield* Fiber.join(writing)).status, UNKNOWN_ACTION_STATUS);
+    assert.equal(recorded.refreshes, 1);
+    assert.equal(recorded.events, 0);
+  }),
+);
+
+it.effect("a write the service already carried settles though its caller is interrupted", () =>
+  Effect.gen(function* () {
+    const recorded = { refreshes: 0, events: 0 };
+    const answering = yield* Deferred.make<HostedActionOutcome>();
+    let reached = false;
+    const actions = createSessionRowActions({
+      drawn: () => [CLOUD, LOCAL],
+      client: {
+        sendMessage: () =>
+          Effect.andThen(
+            Effect.sync(() => {
+              reached = true;
+            }),
+            Deferred.await(answering),
+          ),
+        executeControl: () => Effect.succeed({ answer: { result: ACTION_RESULT_STATUS.ACCEPTED } }),
+      },
+      refresh: Effect.sync(() => {
+        recorded.refreshes += 1;
+      }),
+      recordProductEvent: () => {
+        recorded.events += 1;
+      },
+    });
+
+    const writing = yield* Effect.fork(actions.sendMessage(identityOf(CLOUD), "ship it"));
+    for (let tick = 0; tick < 100 && !reached; tick += 1) yield* Effect.yieldNow();
+    assert.ok(reached, "the write reached the service");
     // The caller ends under the write; the answer the service is still
     // holding is read out all the same, and what it earns is not dropped.
     const interrupting = yield* Effect.fork(Fiber.interrupt(writing));
-    release();
+    yield* Deferred.succeed(answering, { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
     yield* Fiber.join(interrupting);
 
     assert.equal(recorded.refreshes, 1);

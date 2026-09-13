@@ -364,9 +364,7 @@ export const composeSettings = (): Effect.Effect<
       accountKey: string,
     ): Effect.Effect<ReadonlySet<CloudAgentProviderId> | undefined> =>
       Effect.gen(function* () {
-        const listed =
-          (yield* Effect.promise(() => hostedVault.listKeys())) ??
-          (yield* Effect.promise(() => hostedVault.listKeys()));
+        const listed = (yield* hostedVault.listKeys()) ?? (yield* hostedVault.listKeys());
         if (listed === undefined) return undefined;
         if (!(yield* vaultStillCurrent(generation, accountKey))) return undefined;
         vaultKeys.clear();
@@ -404,7 +402,7 @@ export const composeSettings = (): Effect.Effect<
           const local = yield* Effect.orDie(store.readStoredApiKey(providerId));
           if (local === undefined) continue;
           if (!held.has(providerId)) {
-            const stored = yield* Effect.promise(() => hostedVault.storeKey(providerId, local));
+            const stored = yield* hostedVault.storeKey(providerId, local);
             if (!stored?.stored) continue;
             moved = true;
           }
@@ -498,7 +496,7 @@ export const composeSettings = (): Effect.Effect<
           // one the vault stores, and each refusal names its own reason.
           const rejection = apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat);
           if (rejection) return yield* refusedSettings(rejection);
-          const stored = yield* Effect.promise(() => hostedVault.storeKey(providerId, normalized));
+          const stored = yield* hostedVault.storeKey(providerId, normalized);
           if (!stored?.stored) {
             return yield* refusedSettings("Could not store that key with Luke's service.");
           }
@@ -509,7 +507,7 @@ export const composeSettings = (): Effect.Effect<
           links().cloudKeyHeld();
           yield* Effect.orDie(store.setApiKey(providerId, undefined));
         } else {
-          const deleted = yield* Effect.promise(() => hostedVault.deleteKey(providerId));
+          const deleted = yield* hostedVault.deleteKey(providerId);
           if (deleted === undefined) {
             return yield* refusedSettings("Could not remove that key from Luke's service.");
           }

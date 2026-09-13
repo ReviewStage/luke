@@ -117,7 +117,7 @@ export class HostedActionClient {
     this.#client = options.httpClient ?? FetchHttpClient.layer;
   }
 
-  sendMessage(target: HostedActionTarget, text: string): Promise<HostedActionOutcome> {
+  sendMessage(target: HostedActionTarget, text: string): Effect.Effect<HostedActionOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_MESSAGE,
       { ...targetRecord(target), text },
@@ -125,7 +125,10 @@ export class HostedActionClient {
     );
   }
 
-  executeControl(target: HostedActionTarget, controlId: string): Promise<HostedActionOutcome> {
+  executeControl(
+    target: HostedActionTarget,
+    controlId: string,
+  ): Effect.Effect<HostedActionOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_CONTROL,
       { ...targetRecord(target), controlId },
@@ -136,7 +139,7 @@ export class HostedActionClient {
   createWorkspace(
     providerId: CloudAgentProviderId,
     creation: HostedWorkspaceCreation,
-  ): Promise<HostedActionWorkspaceOutcome> {
+  ): Effect.Effect<HostedActionWorkspaceOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_WORKSPACE,
       { providerId, ...present(creation) },
@@ -147,7 +150,7 @@ export class HostedActionClient {
   addAgent(
     target: HostedActionTarget,
     addition: HostedAgentAddition,
-  ): Promise<HostedActionOutcome> {
+  ): Effect.Effect<HostedActionOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_AGENT,
       { ...targetRecord(target), ...present(addition) },
@@ -155,7 +158,7 @@ export class HostedActionClient {
     );
   }
 
-  renameSession(target: HostedActionTarget, name: string): Promise<HostedActionOutcome> {
+  renameSession(target: HostedActionTarget, name: string): Effect.Effect<HostedActionOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_RENAME_SESSION,
       { ...targetRecord(target), name },
@@ -163,7 +166,7 @@ export class HostedActionClient {
     );
   }
 
-  renameWorkspace(target: HostedActionTarget, name: string): Promise<HostedActionOutcome> {
+  renameWorkspace(target: HostedActionTarget, name: string): Effect.Effect<HostedActionOutcome> {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_RENAME_WORKSPACE,
       { ...targetRecord(target), name },
@@ -171,40 +174,43 @@ export class HostedActionClient {
     );
   }
 
-  /** One action call, its answer read by the schema of the route it went to. */
-  async #post<Answer extends HostedActionAnswer, Encoded>(
+  /**
+   * One action call, its answer read by the schema of the route it went to.
+   * The client the request travels on is this client's own, provided here, so
+   * a caller yields the call without carrying an `HttpClient` of its own.
+   */
+  #post<Answer extends HostedActionAnswer, Encoded>(
     path: string,
     body: WireRecord,
     answerSchema: EffectSchema.Schema<Answer, Encoded>,
-  ): Promise<{ answer: Answer } | { failure: HostedActionFailure }> {
-    const sent = await this.#run(
-      this.#call.send({
-        method: HTTP_METHOD.POST,
-        path,
-        body: JSON.stringify(body),
+  ): Effect.Effect<{ answer: Answer } | { failure: HostedActionFailure }> {
+    return Effect.provide(
+      Effect.gen(this, function* () {
+        const sent = yield* this.#call.send({
+          method: HTTP_METHOD.POST,
+          path,
+          body: JSON.stringify(body),
+        });
+        if (!callAnswered(sent)) {
+          // A client that could not carry the request may have failed after it
+          // left, so a network fault is an answer lost rather than a call never made.
+          return {
+            failure:
+              sent.fault === CALL_FAULT.NETWORK
+                ? HOSTED_ACTION_FAILURE.LOST
+                : HOSTED_ACTION_FAILURE.NOT_SENT,
+          };
+        }
+        if (!sent.response.ok) return { failure: HOSTED_ACTION_FAILURE.REFUSED };
+        const payload = yield* Effect.promise(() => sent.response.json().catch(() => undefined));
+        const answer =
+          payload === undefined
+            ? undefined
+            : Either.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
+        return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
       }),
+      this.#client,
     );
-    if (!callAnswered(sent)) {
-      // A client that could not carry the request may have failed after it
-      // left, so a network fault is an answer lost rather than a call never made.
-      return {
-        failure:
-          sent.fault === CALL_FAULT.NETWORK
-            ? HOSTED_ACTION_FAILURE.LOST
-            : HOSTED_ACTION_FAILURE.NOT_SENT,
-      };
-    }
-    if (!sent.response.ok) return { failure: HOSTED_ACTION_FAILURE.REFUSED };
-    const payload = await sent.response.json().catch(() => undefined);
-    const answer =
-      payload === undefined
-        ? undefined
-        : Either.getOrUndefined(readEither(answerSchema)(unparsedWire(payload)));
-    return answer ? { answer } : { failure: HOSTED_ACTION_FAILURE.UNREADABLE };
-  }
-
-  #run<Answer>(effect: Effect.Effect<Answer, never, HttpClient.HttpClient>): Promise<Answer> {
-    return Effect.runPromise(Effect.provide(effect, this.#client));
   }
 }
 

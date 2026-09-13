@@ -42,8 +42,8 @@ it.effect("the newest page is a bearer GET naming the session, and a cursor ride
     });
     const reader = client(api.layer);
 
-    const tail = yield* Effect.promise(() => reader.read(SESSION));
-    const since = yield* Effect.promise(() => reader.read({ ...SESSION, afterMessageId: "m-2" }));
+    const tail = yield* reader.read(SESSION);
+    const since = yield* reader.read({ ...SESSION, afterMessageId: "m-2" });
 
     assert.deepEqual(tail, {
       messages: [
@@ -68,18 +68,18 @@ it.effect("a refusal, a fault, and a body outside the contract are each no answe
     const refused = fakeCloudApi({
       "GET /api/sessions/messages": { answer: () => ({}), status: HTTP_STATUS.SERVER_ERROR },
     });
-    assert.equal(yield* Effect.promise(() => client(refused.layer).read(SESSION)), undefined);
+    assert.equal(yield* client(refused.layer).read(SESSION), undefined);
 
     const lost = client(
       fakeHttpClientLayer(() => {
         throw new TypeError("fetch failed");
       }),
     );
-    assert.equal(yield* Effect.promise(() => lost.read(SESSION)), undefined);
+    assert.equal(yield* lost.read(SESSION), undefined);
 
     const unreadable = fakeCloudApi({
       "GET /api/sessions/messages": { answer: () => ({ messages: "none" }) },
     });
-    assert.equal(yield* Effect.promise(() => client(unreadable.layer).read(SESSION)), undefined);
+    assert.equal(yield* client(unreadable.layer).read(SESSION), undefined);
   }),
 );

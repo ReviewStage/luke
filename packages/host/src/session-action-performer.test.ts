@@ -141,28 +141,30 @@ function fixture(options: FixtureOptions = {}) {
   };
   const registry = new SessionRoster();
   registry.replaceProvider(CONDUCTOR, [WORKSPACE_OBSERVATION]);
-  const carry = (route: string, target: HostedActionTarget, ask: Carried["ask"]) => {
-    recorded.carried.push({ route, ...target, ask });
-    return outcome;
-  };
+  const carry = (route: string, target: HostedActionTarget, ask: Carried["ask"]) =>
+    Effect.sync(() => {
+      recorded.carried.push({ route, ...target, ask });
+      return outcome;
+    });
   const performer = createSessionActionPerformer({
     sessionRegistry: registry,
     openExternal: options.openExternal ?? (async () => {}),
     actions: {
-      sendMessage: async (target, text) => carry("message", target, text),
-      executeControl: async (target, controlId) => carry("control", target, controlId),
-      createWorkspace: async (providerId, creation) => {
-        recorded.carried.push({
-          route: "workspace",
-          providerId,
-          providerSessionId: undefined,
-          ask: creation,
-        });
-        return options.creation ?? { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } };
-      },
-      addAgent: async (target, addition) => carry("agent", target, addition),
-      renameSession: async (target, name) => carry("rename-session", target, name),
-      renameWorkspace: async (target, name) => carry("rename-workspace", target, name),
+      sendMessage: (target, text) => carry("message", target, text),
+      executeControl: (target, controlId) => carry("control", target, controlId),
+      createWorkspace: (providerId, creation) =>
+        Effect.sync(() => {
+          recorded.carried.push({
+            route: "workspace",
+            providerId,
+            providerSessionId: undefined,
+            ask: creation,
+          });
+          return options.creation ?? { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } };
+        }),
+      addAgent: (target, addition) => carry("agent", target, addition),
+      renameSession: (target, name) => carry("rename-session", target, name),
+      renameWorkspace: (target, name) => carry("rename-workspace", target, name),
     },
     refreshSessions: Effect.sync(() => {
       recorded.refreshes += 1;

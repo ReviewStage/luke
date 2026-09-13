@@ -33,12 +33,10 @@ it.effect("registers the installation as a bearer-authenticated POST and reads t
       "POST /api/devices": { answer: () => ({ deviceId: DEVICE_ID }) },
     });
 
-    const answer = yield* Effect.promise(() =>
-      client(api.layer).register({
-        platform: DEVICE_PLATFORM.MACOS,
-        installationId: INSTALLATION_ID,
-      }),
-    );
+    const answer = yield* client(api.layer).register({
+      platform: DEVICE_PLATFORM.MACOS,
+      installationId: INSTALLATION_ID,
+    });
 
     assert.deepEqual(answer, { deviceId: DEVICE_ID });
     assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/devices"]);
@@ -58,22 +56,18 @@ it.effect("a request the service would refuse by shape never travels", () =>
     const devices = client(api.layer);
 
     assert.equal(
-      yield* Effect.promise(() =>
-        devices.register({ platform: DEVICE_PLATFORM.MACOS, installationId: "mac-1" }),
-      ),
+      yield* devices.register({ platform: DEVICE_PLATFORM.MACOS, installationId: "mac-1" }),
       undefined,
     );
     assert.equal(
-      yield* Effect.promise(() =>
-        devices.register({
-          platform: DEVICE_PLATFORM.IOS,
-          installationId: INSTALLATION_ID,
-          pushToken: "ab".repeat(32),
-        }),
-      ),
+      yield* devices.register({
+        platform: DEVICE_PLATFORM.IOS,
+        installationId: INSTALLATION_ID,
+        pushToken: "ab".repeat(32),
+      }),
       undefined,
     );
-    assert.equal(yield* Effect.promise(() => devices.forget({ deviceId: "" })), undefined);
+    assert.equal(yield* devices.forget({ deviceId: "" }), undefined);
     assert.deepEqual(api.requests(), []);
   }),
 );
@@ -84,7 +78,7 @@ it.effect("a forget is a DELETE naming the device and reads whether a row went",
       "DELETE /api/devices": { answer: () => ({ deleted: false }) },
     });
 
-    const answer = yield* Effect.promise(() => client(api.layer).forget({ deviceId: DEVICE_ID }));
+    const answer = yield* client(api.layer).forget({ deviceId: DEVICE_ID });
 
     assert.deepEqual(answer, { deleted: false });
     assert.deepEqual(recordedRoutes(api.requests()), ["DELETE /api/devices"]);
@@ -102,15 +96,13 @@ it.effect("a forget at sign-out carries the departing token and never refreshes"
     });
     let refreshes = 0;
 
-    const answer = yield* Effect.promise(() =>
-      client(api.layer, {
-        readAccessToken: () => Effect.succeed("token-standing"),
-        refreshAccount: () =>
-          Effect.sync(() => {
-            refreshes += 1;
-          }),
-      }).forget({ deviceId: DEVICE_ID }, { accessToken: "token-departing" }),
-    );
+    const answer = yield* client(api.layer, {
+      readAccessToken: () => Effect.succeed("token-standing"),
+      refreshAccount: () =>
+        Effect.sync(() => {
+          refreshes += 1;
+        }),
+    }).forget({ deviceId: DEVICE_ID }, { accessToken: "token-departing" });
 
     assert.equal(answer, undefined);
     assert.equal(refreshes, 0);
@@ -130,15 +122,13 @@ it.effect("a 401 refreshes the account and retries once on the new token", () =>
         : jsonResponse({ error: "invalid-token" }, HTTP_STATUS.UNAUTHORIZED),
     );
 
-    const answer = yield* Effect.promise(() =>
-      client(layer, {
-        readAccessToken: () => Effect.succeed(tokens.shift()),
-        refreshAccount: () =>
-          Effect.sync(() => {
-            refreshes += 1;
-          }),
-      }).register({ platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID }),
-    );
+    const answer = yield* client(layer, {
+      readAccessToken: () => Effect.succeed(tokens.shift()),
+      refreshAccount: () =>
+        Effect.sync(() => {
+          refreshes += 1;
+        }),
+    }).register({ platform: DEVICE_PLATFORM.MACOS, installationId: INSTALLATION_ID });
 
     assert.deepEqual(answer, { deviceId: DEVICE_ID });
     assert.equal(refreshes, 1);
@@ -157,31 +147,24 @@ it.effect("a refusal, a malformed answer, or no token resolves to nothing", () =
         status: HTTP_STATUS.BAD_REQUEST,
       },
     });
-    assert.equal(
-      yield* Effect.promise(() => client(refused.layer).forget({ deviceId: DEVICE_ID })),
-      undefined,
-    );
+    assert.equal(yield* client(refused.layer).forget({ deviceId: DEVICE_ID }), undefined);
 
     const malformed = fakeCloudApi({
       "POST /api/devices": { answer: () => ({ deviceId: 7 }) },
     });
     assert.equal(
-      yield* Effect.promise(() =>
-        client(malformed.layer).register({
-          platform: DEVICE_PLATFORM.MACOS,
-          installationId: INSTALLATION_ID,
-        }),
-      ),
+      yield* client(malformed.layer).register({
+        platform: DEVICE_PLATFORM.MACOS,
+        installationId: INSTALLATION_ID,
+      }),
       undefined,
     );
 
     const signedOut = fakeCloudApi({});
     assert.equal(
-      yield* Effect.promise(() =>
-        client(signedOut.layer, { readAccessToken: () => Effect.succeed(undefined) }).forget({
-          deviceId: DEVICE_ID,
-        }),
-      ),
+      yield* client(signedOut.layer, { readAccessToken: () => Effect.succeed(undefined) }).forget({
+        deviceId: DEVICE_ID,
+      }),
       undefined,
     );
     assert.deepEqual(signedOut.requests(), []);
