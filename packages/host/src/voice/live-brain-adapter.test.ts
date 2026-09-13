@@ -136,6 +136,32 @@ test("the run seams are read by name and translated; a kind this build does not 
   ]);
 });
 
+test("an ask follows the agent before it submits, so the first event of the run it opens is heard", async () => {
+  const listeners = new Set<(event: BrainRunEvent) => void>();
+  const events = stamped(listeners);
+  const agent: LiveBrainAgent = {
+    // A subscription that takes a tick of its own, as the agent's does once a
+    // fiber stands between the caller and the teller's own set.
+    onRunEvent: (listener) =>
+      Effect.map(Effect.yieldNow(), () => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      }),
+    submitAsk: () =>
+      Effect.sync(() => {
+        events.fire({ kind: BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+        return { outcome: BRAIN_SUBMISSION_OUTCOME.ACCEPTED, runId: "run-1", acceptedAt: 1 };
+      }),
+  };
+  const brain = await Effect.runPromise(brainAgentLiveBrain({ agent: () => agent }));
+  const heard: string[] = [];
+  brain.onRunEvent((event) => heard.push(event.runId));
+  await brain.submitAsk({ submissionId: "s", question: "q" });
+  assert.deepEqual(heard, ["run-1"]);
+});
+
 test("an agent rebuilt between asks is followed once each, and a listener let go hears nothing more", async () => {
   const first = fakeAgent();
   const second = fakeAgent();

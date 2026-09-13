@@ -15,13 +15,15 @@
  *   its place in the conversation's queue in the same step that asked for it;
  * - and the host's side, where the promises are the seams above the agent:
  *   `BrainHost`'s transition chain (a build and a stop), the publication
- *   chain's marks, and the live brain adapter's spoken ask and its
- *   subscription. The child service's executor seams left this list in
+ *   chain's marks. The child service's executor seams left this list in
  *   P12-16k: `wiring-children.ts` writes each of them as an effect and
  *   `childSeamsOnRuntime` carries them to the OpenClaw port that awaits
  *   them.
  *
- * The wake face left that surface in P12-16c: `wake`, `rosterLook`, and
+ * The live brain adapter left this door in P12-16l: it is built as an effect
+ * on the composition's own runtime, so following an agent and asking it are
+ * `yield*`s inside one effect the adapter runs there itself. The wake face
+ * left that surface in P12-16c: `wake`, `rosterLook`, and
  * `releaseHeld` are effects the host's composers run, and the capture behind
  * them reads its transcript delta on the caller's own fiber. The read
  * prefetch left it in P12-16h: a slot is a fiber from the words that open it,
