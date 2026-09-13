@@ -20,7 +20,7 @@ import {
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
 import { fakeHttpClientLayer, type ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect, TestClock } from "effect";
+import { Effect, Exit, TestClock } from "effect";
 import { test } from "vitest";
 import {
   HOSTED_REATTACH_DELAYS_MS,
@@ -94,119 +94,135 @@ function keyed(fetchLike: (url: string, init: RequestInit) => Promise<Response>)
   return { source, ...script };
 }
 
-test("the keyed source posts the live session document with the key as its bearer", async () => {
-  const { requests, fetchLike } = openAi([created()]);
-  const { source } = keyed(fetchLike);
-  source.setVoice(LIVE_VOICE.CEDAR);
-
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: INPUT });
-
-  assert.equal(opened?.sessionId, SESSION_ID);
-  assert.equal(opened?.sdpAnswer, SDP_ANSWER);
-  const [request] = requests;
-  assert.equal(request?.url, `https://api.openai.com/v1${LIVE_SESSIONS_PATH}`);
-  assert.equal(request?.init.method, "POST");
-  assert.equal(new Headers(request?.init.headers).get("authorization"), "Bearer sk-test");
-  const body = requestBody(request);
-  assert.deepEqual(body.transport, { type: "webrtc", sdp: SDP_OFFER });
-  // SAFETY: the request body was composed by liveSessionConfig, whose session is a record.
-  const session = body.session as ParsedJsonObject;
-  assert.equal(session.model, LIVE_DEFAULTS.MODEL);
-  assert.deepEqual(session.audio, { output: { voice: LIVE_VOICE.CEDAR } });
-  assert.deepEqual(session.delegation, { type: "client" });
-  assert.equal(session.store, false);
-  assert.deepEqual(session.input, INPUT);
-  assert.deepEqual(session.client, {
-    data_channel: {
-      allowed_client_events: RENDERER_CLIENT_EVENTS,
-      allowed_server_events: RENDERER_SERVER_EVENTS,
-    },
-  });
-  assert.equal("tools" in session, false);
-  // SAFETY: the same document's audio field is the record asserted two lines above.
-  assert.equal("format" in (session.audio as ParsedJsonObject), false);
-  const report = source.diagnostics();
-  assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
-  assert.equal(report.apiKeyConfigured, true);
-  assert.equal(report.hosted, undefined);
-  assert.equal(report.voice, LIVE_VOICE.CEDAR);
-  assert.equal(report.sidebandAttached, false);
-  assert.equal(report.lastAttemptAt, NOW);
-});
-
-test("the keyed source attaches its sideband at the session's attach path under the same key", async () => {
-  const { fetchLike } = openAi([created()]);
-  const { source, opens, sockets } = keyed(fetchLike);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-
-  const sideband = await opened.attach();
-  const seen: LiveServerEvent[] = [];
-  sideband.onEvent((event) => seen.push(event));
-
-  const [open] = opens;
-  assert.equal(open?.url, `wss://api.openai.com/v1${liveAttachPath(SESSION_ID)}`);
-  assert.deepEqual(open?.headers, { authorization: "Bearer sk-test" });
-  assert.equal(source.diagnostics().sidebandAttached, true);
-
-  const [socket] = sockets;
-  socket?.receive({
-    type: LIVE_SERVER_EVENT.SESSION_STARTED,
-    event_id: "ev_1",
-    session: { id: SESSION_ID },
-  });
-  socket?.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
-  assert.deepEqual(
-    seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.SESSION_STARTED],
-  );
-
-  socket?.closeFromServer({ code: 1000 });
-  assert.equal(source.diagnostics().sidebandAttached, false);
-});
-
-test("the keyed source records a sideband that would not open and rejects the attach", async () => {
-  const { fetchLike } = openAi([created()]);
-  const script = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 })]);
-  const source = new KeyedLiveSessionSource({
-    apiKey: "sk-test",
-    httpClient: fakeHttpClientLayer(fetchLike),
-    openSocket: script.openSocket,
-  });
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-
-  await assert.rejects(opened.attach());
-  assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.SIDEBAND_FAILED);
-  assert.equal(source.diagnostics().sidebandAttached, false);
-});
-
-test("the keyed source names each failure class and answers nothing", async () => {
-  const cases: Array<{ answer: () => Response; outcome: string }> = [
-    { answer: status(401), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-    { answer: status(429), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-    {
-      answer: () => new Response("<html>", { status: 200 }),
-      outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-    },
-    {
-      answer: () => new Response(JSON.stringify({ session: { id: SESSION_ID } }), { status: 200 }),
-      outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-    },
-    {
-      answer: () => {
-        throw new TypeError("fetch failed");
-      },
-      outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR,
-    },
-  ];
-  for (const { answer, outcome } of cases) {
-    const { fetchLike } = openAi([answer]);
+it.scopedLive("the keyed source posts the live session document with the key as its bearer", () =>
+  Effect.gen(function* () {
+    const { requests, fetchLike } = openAi([created()]);
     const { source } = keyed(fetchLike);
-    assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(source.diagnostics().lastOutcome, outcome);
-  }
-});
+    source.setVoice(LIVE_VOICE.CEDAR);
+
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+
+    assert.equal(opened?.sessionId, SESSION_ID);
+    assert.equal(opened?.sdpAnswer, SDP_ANSWER);
+    const [request] = requests;
+    assert.equal(request?.url, `https://api.openai.com/v1${LIVE_SESSIONS_PATH}`);
+    assert.equal(request?.init.method, "POST");
+    assert.equal(new Headers(request?.init.headers).get("authorization"), "Bearer sk-test");
+    const body = requestBody(request);
+    assert.deepEqual(body.transport, { type: "webrtc", sdp: SDP_OFFER });
+    // SAFETY: the request body was composed by liveSessionConfig, whose session is a record.
+    const session = body.session as ParsedJsonObject;
+    assert.equal(session.model, LIVE_DEFAULTS.MODEL);
+    assert.deepEqual(session.audio, { output: { voice: LIVE_VOICE.CEDAR } });
+    assert.deepEqual(session.delegation, { type: "client" });
+    assert.equal(session.store, false);
+    assert.deepEqual(session.input, INPUT);
+    assert.deepEqual(session.client, {
+      data_channel: {
+        allowed_client_events: RENDERER_CLIENT_EVENTS,
+        allowed_server_events: RENDERER_SERVER_EVENTS,
+      },
+    });
+    assert.equal("tools" in session, false);
+    // SAFETY: the same document's audio field is the record asserted two lines above.
+    assert.equal("format" in (session.audio as ParsedJsonObject), false);
+    const report = source.diagnostics();
+    assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
+    assert.equal(report.apiKeyConfigured, true);
+    assert.equal(report.hosted, undefined);
+    assert.equal(report.voice, LIVE_VOICE.CEDAR);
+    assert.equal(report.sidebandAttached, false);
+    assert.equal(report.lastAttemptAt, NOW);
+  }),
+);
+
+it.scopedLive(
+  "the keyed source attaches its sideband at the session's attach path under the same key",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = openAi([created()]);
+      const { source, opens, sockets } = keyed(fetchLike);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+
+      const sideband = yield* opened.attach();
+      const seen: LiveServerEvent[] = [];
+      sideband.onEvent((event) => seen.push(event));
+
+      const [open] = opens;
+      assert.equal(open?.url, `wss://api.openai.com/v1${liveAttachPath(SESSION_ID)}`);
+      assert.deepEqual(open?.headers, { authorization: "Bearer sk-test" });
+      assert.equal(source.diagnostics().sidebandAttached, true);
+
+      const [socket] = sockets;
+      socket?.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "ev_1",
+        session: { id: SESSION_ID },
+      });
+      socket?.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
+      assert.deepEqual(
+        seen.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+
+      socket?.closeFromServer({ code: 1000 });
+      assert.equal(source.diagnostics().sidebandAttached, false);
+    }),
+);
+
+it.scopedLive(
+  "the keyed source records a sideband that would not open and rejects the attach",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = openAi([created()]);
+      const script = scriptedOpenSocket([
+        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 }),
+      ]);
+      const source = new KeyedLiveSessionSource({
+        apiKey: "sk-test",
+        httpClient: fakeHttpClientLayer(fetchLike),
+        openSocket: script.openSocket,
+      });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+
+      const attached = yield* Effect.exit(opened.attach());
+      assert.equal(Exit.isFailure(attached), true);
+      assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.SIDEBAND_FAILED);
+      assert.equal(source.diagnostics().sidebandAttached, false);
+    }),
+);
+
+it.scopedLive("the keyed source names each failure class and answers nothing", () =>
+  Effect.gen(function* () {
+    const cases: Array<{ answer: () => Response; outcome: string }> = [
+      { answer: status(401), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
+      { answer: status(429), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
+      {
+        answer: () => new Response("<html>", { status: 200 }),
+        outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
+      },
+      {
+        answer: () =>
+          new Response(JSON.stringify({ session: { id: SESSION_ID } }), { status: 200 }),
+        outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
+      },
+      {
+        answer: () => {
+          throw new TypeError("fetch failed");
+        },
+        outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR,
+      },
+    ];
+    for (const { answer, outcome } of cases) {
+      const { fetchLike } = openAi([answer]);
+      const { source } = keyed(fetchLike);
+      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(source.diagnostics().lastOutcome, outcome);
+    }
+  }),
+);
 
 test("the keyed source falls back to its configured voice when a setting is cleared or unknown", () => {
   const { fetchLike } = openAi([created()]);
@@ -275,476 +291,543 @@ function hosted(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOp
   });
 }
 
-test("the hosted source opens one socket with the bearer on its handshake and sends the create frame first", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame())]);
-  const source = hosted(script, { voice: LIVE_VOICE.MARIN });
+it.scopedLive(
+  "the hosted source opens one socket with the bearer on its handshake and sends the create frame first",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = hosted(script, { voice: LIVE_VOICE.MARIN });
 
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
 
-  assert.equal(opened?.sessionId, SESSION_ID);
-  assert.equal(opened?.sdpAnswer, SDP_ANSWER);
-  assert.equal(script.opens.length, 1);
-  assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`);
-  assert.deepEqual(script.opens[0]?.headers, { authorization: "Bearer token-1" });
-  const [socket] = script.sockets;
-  assert.equal(socket?.sent.length, 1);
-  assert.deepEqual(JSON.parse(socket?.sent[0] ?? ""), {
-    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-    sdp: SDP_OFFER,
-    voice: LIVE_VOICE.MARIN,
-    input: INPUT,
-  });
-  const report = source.diagnostics();
-  assert.equal(report.hosted, true);
-  assert.equal(report.apiKeyConfigured, false);
-  assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
-  assert.deepEqual(report.quota, QUOTA);
-});
+      assert.equal(opened?.sessionId, SESSION_ID);
+      assert.equal(opened?.sdpAnswer, SDP_ANSWER);
+      assert.equal(script.opens.length, 1);
+      assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`);
+      assert.deepEqual(script.opens[0]?.headers, { authorization: "Bearer token-1" });
+      const [socket] = script.sockets;
+      assert.equal(socket?.sent.length, 1);
+      assert.deepEqual(JSON.parse(socket?.sent[0] ?? ""), {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: INPUT,
+      });
+      const report = source.diagnostics();
+      assert.equal(report.hosted, true);
+      assert.equal(report.apiKeyConfigured, false);
+      assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
+      assert.deepEqual(report.quota, QUOTA);
+    }),
+);
 
-test("the hosted source's attach is the socket that answered, and the answer frame is not an event", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame())]);
-  const source = hosted(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const [socket] = script.sockets;
-  assert.ok(socket);
-  assert.equal(socket.closedByClient, false);
+it.scopedLive(
+  "the hosted source's attach is the socket that answered, and the answer frame is not an event",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = hosted(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const [socket] = script.sockets;
+      assert.ok(socket);
+      assert.equal(socket.closedByClient, false);
 
-  assert.equal(source.diagnostics().sidebandAttached, true);
-  socket.receive({
-    type: LIVE_SERVER_EVENT.SESSION_STARTED,
-    event_id: "ev_0",
-    session: { id: SESSION_ID },
-  });
+      assert.equal(source.diagnostics().sidebandAttached, true);
+      socket.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "ev_0",
+        session: { id: SESSION_ID },
+      });
 
-  const sideband = await opened.attach();
-  assert.equal(await opened.attach(), sideband);
-  assert.equal(script.opens.length, 1);
+      const sideband = yield* opened.attach();
+      assert.equal(yield* opened.attach(), sideband);
+      assert.equal(script.opens.length, 1);
 
-  const seen: LiveServerEvent[] = [];
-  sideband.onEvent((event) => seen.push(event));
-  socket.receive(createdFrame());
-  socket.receive({
-    type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
-    event_id: "ev_1",
-    client_event_id: "c_1",
-  });
-  assert.deepEqual(
-    seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
-  );
+      const seen: LiveServerEvent[] = [];
+      sideband.onEvent((event) => seen.push(event));
+      socket.receive(createdFrame());
+      socket.receive({
+        type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
+        event_id: "ev_1",
+        client_event_id: "c_1",
+      });
+      assert.deepEqual(
+        seen.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+      );
 
-  sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
-  assert.equal(socket.sent.length, 2);
-  socket.closeFromServer({ code: 1000 });
-  assert.equal(source.diagnostics().sidebandAttached, false);
-});
+      sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
+      assert.equal(socket.sent.length, 2);
+      socket.closeFromServer({ code: 1000 });
+      assert.equal(source.diagnostics().sidebandAttached, false);
+    }),
+);
 
-test("the hosted source refuses to open without an access token and opens no socket", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame())]);
-  const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
+it.scopedLive("the hosted source refuses to open without an access token and opens no socket", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame())]);
+    const source = hosted(script, { readAccessToken: () => Effect.succeed(undefined) });
 
-  assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(script.opens.length, 0);
-  assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
-});
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(script.opens.length, 0);
+    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
+  }),
+);
 
-test("the hosted source names a refused handshake by its status", async () => {
-  const cases: Array<{ status: number; outcome: string }> = [
-    { status: 401, outcome: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN },
-    { status: 429, outcome: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED },
-    { status: 503, outcome: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE },
-    { status: 500, outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-  ];
-  for (const { status: code, outcome } of cases) {
-    const script = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: code })]);
+it.scopedLive("the hosted source names a refused handshake by its status", () =>
+  Effect.gen(function* () {
+    const cases: Array<{ status: number; outcome: string }> = [
+      { status: 401, outcome: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN },
+      { status: 429, outcome: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED },
+      { status: 503, outcome: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE },
+      { status: 500, outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
+    ];
+    for (const { status: code, outcome } of cases) {
+      const script = scriptedOpenSocket([
+        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: code }),
+      ]);
+      const source = hosted(script);
+      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(source.diagnostics().lastOutcome, outcome);
+    }
+    const script = scriptedOpenSocket([
+      () => ({ fault: SOCKET_OPEN_FAULT.NETWORK, errorName: "ECONNREFUSED" }),
+    ]);
     const source = hosted(script);
-    assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(source.diagnostics().lastOutcome, outcome);
-  }
-  const script = scriptedOpenSocket([
-    () => ({ fault: SOCKET_OPEN_FAULT.NETWORK, errorName: "ECONNREFUSED" }),
-  ]);
-  const source = hosted(script);
-  assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NETWORK_ERROR);
-});
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NETWORK_ERROR);
+  }),
+);
 
-test("the hosted source renews a refused bearer once and retries with the renewed one", async () => {
-  let token = "token-old";
-  const script = scriptedOpenSocket([
-    () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
-    answering(createdFrame()),
-  ]);
-  const source = hosted(script, {
-    readAccessToken: () => Effect.succeed(token),
-    refreshAccount: () =>
-      Effect.sync(() => {
-        token = "token-new";
-      }),
-  });
+it.scopedLive(
+  "the hosted source renews a refused bearer once and retries with the renewed one",
+  () =>
+    Effect.gen(function* () {
+      let token = "token-old";
+      const script = scriptedOpenSocket([
+        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
+        answering(createdFrame()),
+      ]);
+      const source = hosted(script, {
+        readAccessToken: () => Effect.succeed(token),
+        refreshAccount: () =>
+          Effect.sync(() => {
+            token = "token-new";
+          }),
+      });
 
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
 
-  assert.equal(opened?.sessionId, SESSION_ID);
-  assert.deepEqual(
-    script.opens.map((open) => open.headers.authorization),
-    ["Bearer token-old", "Bearer token-new"],
-  );
-});
+      assert.equal(opened?.sessionId, SESSION_ID);
+      assert.deepEqual(
+        script.opens.map((open) => open.headers.authorization),
+        ["Bearer token-old", "Bearer token-new"],
+      );
+    }),
+);
 
-test("the hosted source does not carry a renewed bearer for another account", async () => {
-  let token = "token-old";
-  let holder = "one@example.test";
-  const script = scriptedOpenSocket([
-    () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
-    answering(createdFrame()),
-  ]);
-  const source = hosted(script, {
-    readAccessToken: () => Effect.succeed(token),
-    readAccountKey: () => Effect.succeed(holder),
-    refreshAccount: () =>
-      Effect.sync(() => {
-        token = "token-new";
-        holder = "two@example.test";
-      }),
-  });
+it.scopedLive("the hosted source does not carry a renewed bearer for another account", () =>
+  Effect.gen(function* () {
+    let token = "token-old";
+    let holder = "one@example.test";
+    const script = scriptedOpenSocket([
+      () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 }),
+      answering(createdFrame()),
+    ]);
+    const source = hosted(script, {
+      readAccessToken: () => Effect.succeed(token),
+      readAccountKey: () => Effect.succeed(holder),
+      refreshAccount: () =>
+        Effect.sync(() => {
+          token = "token-new";
+          holder = "two@example.test";
+        }),
+    });
 
-  assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(script.opens.length, 1);
-  assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
-});
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(script.opens.length, 1);
+    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_SIGNED_IN);
+  }),
+);
 
-test("the hosted source reads a hosted error frame as the refusal it names and closes the socket", async () => {
-  const cases: Array<{ frame: ParsedJsonObject; outcome: string }> = [
-    {
-      frame: { error: HOSTED_API_ERROR.INVALID_TOKEN },
-      outcome: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN,
-    },
-    {
-      frame: { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: QUOTA },
-      outcome: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED,
-    },
-    {
-      frame: { error: HOSTED_API_ERROR.UNAVAILABLE },
-      outcome: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
-    },
-    { frame: { error: HOSTED_API_ERROR.UPSTREAM_ERROR }, outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-  ];
-  for (const { frame, outcome } of cases) {
-    const script = scriptedOpenSocket([answering(frame)]);
-    const source = hosted(script);
-    assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(source.diagnostics().lastOutcome, outcome);
-    assert.equal(script.sockets[0]?.closedByClient, true);
-  }
-  const script = scriptedOpenSocket([
-    answering({ error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: QUOTA }),
-  ]);
-  const source = hosted(script);
-  await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.deepEqual(source.diagnostics().quota, QUOTA);
-});
+it.scopedLive(
+  "the hosted source reads a hosted error frame as the refusal it names and closes the socket",
+  () =>
+    Effect.gen(function* () {
+      const cases: Array<{ frame: ParsedJsonObject; outcome: string }> = [
+        {
+          frame: { error: HOSTED_API_ERROR.INVALID_TOKEN },
+          outcome: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN,
+        },
+        {
+          frame: { error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: QUOTA },
+          outcome: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED,
+        },
+        {
+          frame: { error: HOSTED_API_ERROR.UNAVAILABLE },
+          outcome: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
+        },
+        {
+          frame: { error: HOSTED_API_ERROR.UPSTREAM_ERROR },
+          outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR,
+        },
+      ];
+      for (const { frame, outcome } of cases) {
+        const script = scriptedOpenSocket([answering(frame)]);
+        const source = hosted(script);
+        assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+        assert.equal(source.diagnostics().lastOutcome, outcome);
+        assert.equal(script.sockets[0]?.closedByClient, true);
+      }
+      const script = scriptedOpenSocket([
+        answering({ error: HOSTED_API_ERROR.QUOTA_EXHAUSTED, quota: QUOTA }),
+      ]);
+      const source = hosted(script);
+      yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.deepEqual(source.diagnostics().quota, QUOTA);
+    }),
+);
 
-test("the hosted source treats a frame that is neither answer nor error as malformed", async () => {
-  const answers = [
-    answeringText("not json"),
-    answering({ type: "session.started" }),
-    answering(createdFrame({ sdpAnswer: "" })),
-  ];
-  for (const answer of answers) {
-    const script = scriptedOpenSocket([answer]);
-    const source = hosted(script);
-    assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE);
-    assert.equal(script.sockets[0]?.closedByClient, true);
-  }
-});
+it.scopedLive(
+  "the hosted source treats a frame that is neither answer nor error as malformed",
+  () =>
+    Effect.gen(function* () {
+      const answers = [
+        answeringText("not json"),
+        answering({ type: "session.started" }),
+        answering(createdFrame({ sdpAnswer: "" })),
+      ];
+      for (const answer of answers) {
+        const script = scriptedOpenSocket([answer]);
+        const source = hosted(script);
+        assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+        assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE);
+        assert.equal(script.sockets[0]?.closedByClient, true);
+      }
+    }),
+);
 
-test("the hosted source records a socket closed or silent before it answered as the service unavailable", async () => {
-  const closing = scriptedOpenSocket([closingOnSend(1011)]);
-  const closed = hosted(closing);
-  assert.equal(await closed.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(closed.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
+it.scopedLive(
+  "the hosted source records a socket closed or silent before it answered as the service unavailable",
+  () =>
+    Effect.gen(function* () {
+      const closing = scriptedOpenSocket([closingOnSend(1011)]);
+      const closed = hosted(closing);
+      assert.equal(yield* closed.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(closed.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
 
-  const silent = scriptedOpenSocket([() => undefined]);
-  const quiet = hosted(silent, { requestTimeoutMs: 10 });
-  assert.equal(await quiet.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
-  assert.equal(silent.sockets[0]?.closedByClient, true);
-  // The hold's one listener of each kind stands for the socket's life; the wait itself left none.
-  assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 1, closes: 1 });
-  // A frame or close arriving after the deadline settled the wait records nothing over its outcome.
-  silent.sockets[0]?.receiveText("not a document");
-  silent.sockets[0]?.closeFromServer({ code: 1000 });
-  await new Promise((resolve) => setTimeout(resolve, 1));
-  assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
-});
+      const silent = scriptedOpenSocket([() => undefined]);
+      const quiet = hosted(silent, { requestTimeoutMs: 10 });
+      assert.equal(yield* quiet.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+      assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
+      assert.equal(silent.sockets[0]?.closedByClient, true);
+      // The hold's one listener of each kind stands for the socket's life; the wait itself left none.
+      assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 1, closes: 1 });
+      // A frame or close arriving after the deadline settled the wait records nothing over its outcome.
+      silent.sockets[0]?.receiveText("not a document");
+      silent.sockets[0]?.closeFromServer({ code: 1000 });
+      yield* pause;
+      assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
+    }),
+);
 
 function attachedFrame(sessionId = SESSION_ID) {
   return { type: VOICE_SERVICE_FRAME.SESSION_ATTACHED, sessionId };
 }
 
+/**
+ * Wall time, whatever clock the test keeps: what the recovering socket does
+ * off the test's own fiber happens in real milliseconds, and a test driving
+ * the `TestClock` waits for it the same way.
+ */
+const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+
 /** Waits for the scripted seam to have opened the given number of sockets, or fails. */
-async function openedSockets(script: ScriptedSocketSeam, count: number): Promise<void> {
-  for (let waited = 0; script.sockets.length < count && waited < 200; waited += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-  assert.equal(script.sockets.length, count);
+function openedSockets(script: ScriptedSocketSeam, count: number): Effect.Effect<void> {
+  return Effect.promise(async () => {
+    for (let waited = 0; script.sockets.length < count && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.equal(script.sockets.length, count);
+  });
+}
+
+/** Waits for the socket's close to have reached its listeners, or fails. */
+function closesReported(closes: readonly unknown[]): Effect.Effect<void> {
+  return Effect.promise(async () => {
+    for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+    }
+    assert.equal(closes.length > 0, true);
+  });
 }
 
 function reattaching(script: ScriptedSocketSeam, options: Partial<HostedLiveSessionOptions> = {}) {
   return hosted(script, { reattachDelaysMs: [0, 0, 0], ...options });
 }
 
-test("a hosted connection lost mid-session re-attaches with session.attach and the pipe resumes", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-  const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const seen: LiveServerEvent[] = [];
-  const closes: unknown[] = [];
-  sideband.onEvent((event) => seen.push(event));
-  sideband.onClose((close) => closes.push(close));
-  const [first] = script.sockets;
-  assert.ok(first);
+it.scopedLive(
+  "a hosted connection lost mid-session re-attaches with session.attach and the pipe resumes",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      const seen: LiveServerEvent[] = [];
+      const closes: unknown[] = [];
+      sideband.onEvent((event) => seen.push(event));
+      sideband.onClose((close) => closes.push(close));
+      const [first] = script.sockets;
+      assert.ok(first);
 
-  first.closeFromServer({ code: 1006 });
-  await openedSockets(script, 2);
-  const [, second] = script.sockets;
-  assert.ok(second);
-  await new Promise((resolve) => setTimeout(resolve, 5));
+      first.closeFromServer({ code: 1006 });
+      yield* openedSockets(script, 2);
+      const [, second] = script.sockets;
+      assert.ok(second);
+      yield* pause;
 
-  assert.deepEqual(script.opens[1], {
-    url: `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`,
-    headers: { authorization: "Bearer token-2" },
-  });
-  assert.deepEqual(JSON.parse(second.sent[0] ?? ""), {
-    type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
-    sessionId: SESSION_ID,
-  });
-  assert.deepEqual(closes, []);
-  assert.equal(source.diagnostics().sidebandAttached, true);
+      assert.deepEqual(script.opens[1], {
+        url: `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`,
+        headers: { authorization: "Bearer token-2" },
+      });
+      assert.deepEqual(JSON.parse(second.sent[0] ?? ""), {
+        type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+        sessionId: SESSION_ID,
+      });
+      assert.deepEqual(closes, []);
+      assert.equal(source.diagnostics().sidebandAttached, true);
 
-  second.receive({
-    type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
-    event_id: "ev_2",
-    client_event_id: "c_2",
-  });
-  assert.deepEqual(
-    seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
-  );
-  sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
-  assert.equal(second.sent.length, 2);
-  assert.equal(first.sent.length, 1);
-});
+      second.receive({
+        type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED,
+        event_id: "ev_2",
+        client_event_id: "c_2",
+      });
+      assert.deepEqual(
+        seen.map((event) => event.type),
+        [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+      );
+      sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
+      assert.equal(second.sent.length, 2);
+      assert.equal(first.sent.length, 1);
+    }),
+);
 
-test("sends made during the gap are held and sent on the re-attached connection, in order", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-  const source = reattaching(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  script.sockets[0]?.closeFromServer({ code: 1001 });
-  sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
-  sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
-  await openedSockets(script, 2);
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  const second = script.sockets[1];
-  assert.ok(second);
-  assert.deepEqual(
-    second.sent.map((data) => JSON.parse(data).type),
-    [
-      VOICE_SERVICE_FRAME.SESSION_ATTACH,
-      LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
-      LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
-    ],
-  );
-});
+it.scopedLive(
+  "sends made during the gap are held and sent on the re-attached connection, in order",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      script.sockets[0]?.closeFromServer({ code: 1001 });
+      sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
+      sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
+      yield* openedSockets(script, 2);
+      yield* pause;
+      const second = script.sockets[1];
+      assert.ok(second);
+      assert.deepEqual(
+        second.sent.map((data) => JSON.parse(data).type),
+        [
+          VOICE_SERVICE_FRAME.SESSION_ATTACH,
+          LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+          LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+        ],
+      );
+    }),
+);
 
-test("re-attaching tries as many times as it has delays and then reports the loss", async () => {
-  const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
-  const source = reattaching(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const closes: Array<{ code?: number }> = [];
-  sideband.onClose((close) => closes.push(close));
-
-  script.sockets[0]?.closeFromServer({ code: 1006 });
-  await openedSockets(script, 4);
-  for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-  assert.deepEqual(closes, [{ code: 1006 }]);
-  assert.equal(script.sockets.length, 4);
-  assert.equal(source.diagnostics().sidebandAttached, false);
-  for (const socket of script.sockets.slice(1)) assert.equal(socket.closedByClient, true);
-});
-
-it.effect("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up", () =>
+it.scopedLive("re-attaching tries as many times as it has delays and then reports the loss", () =>
   Effect.gen(function* () {
-    const runtime = yield* Effect.runtime<never>();
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
-    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
-    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    const source = reattaching(script);
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* Effect.promise(() => opened.attach());
+    const sideband = yield* opened.attach();
     const closes: Array<{ code?: number }> = [];
     sideband.onClose((close) => closes.push(close));
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
-    yield* Effect.promise(() => openedSockets(script, 2));
+    yield* openedSockets(script, 4);
+    yield* closesReported(closes);
+    assert.deepEqual(closes, [{ code: 1006 }]);
+    assert.equal(script.sockets.length, 4);
+    assert.equal(source.diagnostics().sidebandAttached, false);
+    for (const socket of script.sockets.slice(1)) assert.equal(socket.closedByClient, true);
+  }),
+);
+
+it.scoped("reattaches on HOSTED_REATTACH_DELAYS_MS's own cadence, then gives up", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
+    const sideband = yield* opened.attach();
+    const closes: Array<{ code?: number }> = [];
+    sideband.onClose((close) => closes.push(close));
+
+    script.sockets[0]?.closeFromServer({ code: 1006 });
+    yield* openedSockets(script, 2);
     assert.deepEqual(closes, []);
 
     yield* TestClock.adjust("3 seconds");
-    yield* Effect.promise(() => openedSockets(script, 3));
+    yield* openedSockets(script, 3);
     assert.deepEqual(closes, []);
 
     yield* TestClock.adjust("7 seconds");
-    yield* Effect.promise(() => openedSockets(script, 4));
+    yield* openedSockets(script, 4);
     assert.deepEqual(closes, [{ code: 1006 }]);
     assert.equal(script.sockets.length, 4);
   }),
 );
 
-it.effect("closing while an attach attempt waits for its answer closes the socket it opened", () =>
+it.scoped("closing while an attach attempt waits for its answer closes the socket it opened", () =>
   Effect.gen(function* () {
-    const runtime = yield* Effect.runtime<never>();
     const script = scriptedOpenSocket([answering(createdFrame()), () => undefined]);
-    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
-    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* Effect.promise(() => opened.attach());
+    const sideband = yield* opened.attach();
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
-    yield* Effect.promise(() => openedSockets(script, 2));
+    yield* openedSockets(script, 2);
     sideband.close();
-    yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+    yield* pause;
 
     assert.equal(script.sockets.length, 2);
     assert.equal(script.sockets[1]?.closedByClient, true);
   }),
 );
 
-it.effect("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
+it.scoped("closing while a reattach wait stands interrupts it, opening no further attempt", () =>
   Effect.gen(function* () {
-    const runtime = yield* Effect.runtime<never>();
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
-    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS, runtime });
-    const opened = yield* Effect.promise(() => source.create({ sdpOffer: SDP_OFFER, input: [] }));
+    const source = reattaching(script, { reattachDelaysMs: HOSTED_REATTACH_DELAYS_MS });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
     assert.ok(opened);
-    const sideband = yield* Effect.promise(() => opened.attach());
+    const sideband = yield* opened.attach();
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
-    yield* Effect.promise(() => openedSockets(script, 2));
+    yield* openedSockets(script, 2);
     sideband.close();
     yield* TestClock.adjust("1 minute");
-    yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+    yield* pause;
     assert.equal(script.sockets.length, 2);
   }),
 );
 
-test("a service that refuses the attachment ends the tries at once", async () => {
-  const script = scriptedOpenSocket([
-    answering(createdFrame()),
-    answering({ error: HOSTED_API_ERROR.UPSTREAM_ERROR }),
-  ]);
-  const source = reattaching(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const closes: Array<{ code?: number }> = [];
-  sideband.onClose((close) => closes.push(close));
+it.scopedLive("a service that refuses the attachment ends the tries at once", () =>
+  Effect.gen(function* () {
+    const script = scriptedOpenSocket([
+      answering(createdFrame()),
+      answering({ error: HOSTED_API_ERROR.UPSTREAM_ERROR }),
+    ]);
+    const source = reattaching(script);
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+    assert.ok(opened);
+    const sideband = yield* opened.attach();
+    const closes: Array<{ code?: number }> = [];
+    sideband.onClose((close) => closes.push(close));
 
-  script.sockets[0]?.closeFromServer({ code: 1001 });
-  for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
-    await new Promise((resolve) => setTimeout(resolve, 1));
-  }
-  assert.deepEqual(closes, [{ code: 1001 }]);
-  assert.equal(script.sockets.length, 2);
-  assert.equal(script.sockets[1]?.closedByClient, true);
-});
+    script.sockets[0]?.closeFromServer({ code: 1001 });
+    yield* closesReported(closes);
+    assert.deepEqual(closes, [{ code: 1001 }]);
+    assert.equal(script.sockets.length, 2);
+    assert.equal(script.sockets[1]?.closedByClient, true);
+  }),
+);
 
-test("a connection closed normally, or by the host itself, is the session's end and is not re-attached", async () => {
-  const normal = scriptedOpenSocket([answering(createdFrame())]);
-  const ended = reattaching(normal);
-  const first = await ended.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(first);
-  const firstCloses: unknown[] = [];
-  (await first.attach()).onClose((close) => firstCloses.push(close));
-  normal.sockets[0]?.closeFromServer({ code: 1000 });
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.deepEqual(firstCloses, [{ code: 1000 }]);
-  assert.equal(normal.sockets.length, 1);
+it.scopedLive(
+  "a connection closed normally, or by the host itself, is the session's end and is not re-attached",
+  () =>
+    Effect.gen(function* () {
+      const normal = scriptedOpenSocket([answering(createdFrame())]);
+      const ended = reattaching(normal);
+      const first = yield* ended.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(first);
+      const firstCloses: unknown[] = [];
+      (yield* first.attach()).onClose((close) => firstCloses.push(close));
+      normal.sockets[0]?.closeFromServer({ code: 1000 });
+      yield* pause;
+      assert.deepEqual(firstCloses, [{ code: 1000 }]);
+      assert.equal(normal.sockets.length, 1);
 
-  const own = scriptedOpenSocket([answering(createdFrame())]);
-  const hungUp = reattaching(own);
-  const second = await hungUp.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(second);
-  const sideband = await second.attach();
-  const secondCloses: unknown[] = [];
-  sideband.onClose((close) => secondCloses.push(close));
-  sideband.close();
-  assert.equal(own.sockets[0]?.closedByClient, true);
-  own.sockets[0]?.closeFromServer({ code: 1005 });
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.deepEqual(secondCloses, [{ code: 1005 }]);
-  assert.equal(own.sockets.length, 1);
-});
+      const own = scriptedOpenSocket([answering(createdFrame())]);
+      const hungUp = reattaching(own);
+      const second = yield* hungUp.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(second);
+      const sideband = yield* second.attach();
+      const secondCloses: unknown[] = [];
+      sideband.onClose((close) => secondCloses.push(close));
+      sideband.close();
+      assert.equal(own.sockets[0]?.closedByClient, true);
+      own.sockets[0]?.closeFromServer({ code: 1005 });
+      yield* pause;
+      assert.deepEqual(secondCloses, [{ code: 1005 }]);
+      assert.equal(own.sockets.length, 1);
+    }),
+);
 
-test("the introduction source carries no authorization and opens no sideband", async () => {
-  const { quota: _quota, ...unmetered } = createdFrame();
-  const script = scriptedOpenSocket([answering(unmetered)]);
-  const source = new IntroductionLiveSessionSource({
-    serviceOrigin: SERVICE_ORIGIN,
-    openSocket: script.openSocket,
-    now: () => NOW,
-    requestTimeoutMs: 50,
-  });
+it.scopedLive("the introduction source carries no authorization and opens no sideband", () =>
+  Effect.gen(function* () {
+    const { quota: _quota, ...unmetered } = createdFrame();
+    const script = scriptedOpenSocket([answering(unmetered)]);
+    const source = new IntroductionLiveSessionSource({
+      serviceOrigin: SERVICE_ORIGIN,
+      openSocket: script.openSocket,
+      now: () => NOW,
+      requestTimeoutMs: 50,
+    });
 
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
 
-  assert.equal(opened?.sessionId, SESSION_ID);
-  assert.equal(opened?.sdpAnswer, SDP_ANSWER);
-  assert.equal("attach" in (opened ?? {}), false);
-  assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.INTRODUCTION}`);
-  assert.deepEqual(script.opens[0]?.headers, {});
-  // SAFETY: the source sent the frame it composed as JSON; the assertions read its shape.
-  const frame = JSON.parse(script.sockets[0]?.sent[0] ?? "") as ParsedJsonObject;
-  assert.equal(frame.type, VOICE_SERVICE_FRAME.SESSION_CREATE);
-  assert.equal(frame.voice, LIVE_DEFAULTS.VOICE);
-  assert.deepEqual(frame.input, INPUT);
-  // The service reads the connection's close as the hang-up, so the socket
-  // stands until the caller closes it.
-  assert.equal(script.sockets[0]?.closedByClient, false);
-  opened?.close();
-  assert.equal(script.sockets[0]?.closedByClient, true);
-  const report = source.diagnostics();
-  assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
-  assert.equal(report.sidebandAttached, false);
-  assert.equal(report.quota, undefined);
-});
+    assert.equal(opened?.sessionId, SESSION_ID);
+    assert.equal(opened?.sdpAnswer, SDP_ANSWER);
+    assert.equal("attach" in (opened ?? {}), false);
+    assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.INTRODUCTION}`);
+    assert.deepEqual(script.opens[0]?.headers, {});
+    // SAFETY: the source sent the frame it composed as JSON; the assertions read its shape.
+    const frame = JSON.parse(script.sockets[0]?.sent[0] ?? "") as ParsedJsonObject;
+    assert.equal(frame.type, VOICE_SERVICE_FRAME.SESSION_CREATE);
+    assert.equal(frame.voice, LIVE_DEFAULTS.VOICE);
+    assert.deepEqual(frame.input, INPUT);
+    // The service reads the connection's close as the hang-up, so the socket
+    // stands until the caller closes it.
+    assert.equal(script.sockets[0]?.closedByClient, false);
+    opened?.close();
+    assert.equal(script.sockets[0]?.closedByClient, true);
+    const report = source.diagnostics();
+    assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
+    assert.equal(report.sidebandAttached, false);
+    assert.equal(report.quota, undefined);
+  }),
+);
 
-test("the introduction source never reads a refusal as signed out", async () => {
-  const refused = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 })]);
-  const source = new IntroductionLiveSessionSource({
-    serviceOrigin: SERVICE_ORIGIN,
-    openSocket: refused.openSocket,
-  });
-  assert.equal(await source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HTTP_ERROR);
+it.scopedLive("the introduction source never reads a refusal as signed out", () =>
+  Effect.gen(function* () {
+    const refused = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 })]);
+    const source = new IntroductionLiveSessionSource({
+      serviceOrigin: SERVICE_ORIGIN,
+      openSocket: refused.openSocket,
+    });
+    assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HTTP_ERROR);
 
-  const metered = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 429 })]);
-  const capped = new IntroductionLiveSessionSource({
-    serviceOrigin: SERVICE_ORIGIN,
-    openSocket: metered.openSocket,
-  });
-  assert.equal(await capped.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-  assert.equal(capped.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED);
-});
+    const metered = scriptedOpenSocket([() => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 429 })]);
+    const capped = new IntroductionLiveSessionSource({
+      serviceOrigin: SERVICE_ORIGIN,
+      openSocket: metered.openSocket,
+    });
+    assert.equal(yield* capped.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
+    assert.equal(capped.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED);
+  }),
+);
 
 test("unavailable diagnostics name the fixture run apart from the missing key", () => {
   assert.equal(
@@ -757,36 +840,40 @@ test("unavailable diagnostics name the fixture run apart from the missing key", 
   assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
 });
 
-test("the hosted source names this installation's device on the create handshake alone, and none while no device is registered", async () => {
-  const deviceId = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
-  const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
-  let registered: string | undefined = deviceId;
-  const source = reattaching(script, { deviceId: () => registered });
+it.scopedLive(
+  "the hosted source names this installation's device on the create handshake alone, and none while no device is registered",
+  () =>
+    Effect.gen(function* () {
+      const deviceId = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
+      const script = scriptedOpenSocket([answering(createdFrame()), answering(attachedFrame())]);
+      let registered: string | undefined = deviceId;
+      const source = reattaching(script, { deviceId: () => registered });
 
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  await opened.attach();
-  const [first] = script.sockets;
-  assert.ok(first);
-  first.closeFromServer({ code: 1006 });
-  await openedSockets(script, 2);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      yield* opened.attach();
+      const [first] = script.sockets;
+      assert.ok(first);
+      first.closeFromServer({ code: 1006 });
+      yield* openedSockets(script, 2);
 
-  assert.deepEqual(script.opens[0]?.headers, {
-    authorization: "Bearer token-1",
-    [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
-  });
-  assert.deepEqual(script.opens[1]?.headers, { authorization: "Bearer token-1" });
+      assert.deepEqual(script.opens[0]?.headers, {
+        authorization: "Bearer token-1",
+        [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+      });
+      assert.deepEqual(script.opens[1]?.headers, { authorization: "Bearer token-1" });
 
-  registered = undefined;
-  const unregistered = scriptedOpenSocket([answering(createdFrame())]);
-  assert.ok(
-    await hosted(unregistered, { deviceId: () => registered }).create({
-      sdpOffer: SDP_OFFER,
-      input: [],
+      registered = undefined;
+      const unregistered = scriptedOpenSocket([answering(createdFrame())]);
+      assert.ok(
+        yield* hosted(unregistered, { deviceId: () => registered }).create({
+          sdpOffer: SDP_OFFER,
+          input: [],
+        }),
+      );
+      assert.deepEqual(unregistered.opens[0]?.headers, { authorization: "Bearer token-1" });
     }),
-  );
-  assert.deepEqual(unregistered.opens[0]?.headers, { authorization: "Bearer token-1" });
-});
+);
 
 /** An opening whose far side answers the first frame and speaks again in the same tick, before any continuation runs. */
 function answeringThenSpeaking(
@@ -804,90 +891,114 @@ function answeringThenSpeaking(
   };
 }
 
-test("a frame the service sends right behind session.created, before the sideband subscribes, reaches the sideband in order", async () => {
-  const script = scriptedOpenSocket([
-    answeringThenSpeaking(createdFrame(), [
-      { type: LIVE_SERVER_EVENT.SESSION_STARTED, event_id: "ev_1", session: { id: SESSION_ID } },
-      { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_1" },
-    ]),
-  ]);
-  const source = hosted(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const seen: LiveServerEvent[] = [];
-  sideband.onEvent((event) => seen.push(event));
-  assert.deepEqual(
-    seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
-  );
-});
-
-test("a frame the service sends right behind session.attached, before the recovering socket adopts the connection, reaches the sideband", async () => {
-  const script = scriptedOpenSocket([
-    answering(createdFrame()),
-    answeringThenSpeaking(attachedFrame(), [
-      { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_2" },
-    ]),
-  ]);
-  const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const seen: LiveServerEvent[] = [];
-  sideband.onEvent((event) => seen.push(event));
-  const [first] = script.sockets;
-  assert.ok(first);
-  first.closeFromServer({ code: 1006 });
-  await openedSockets(script, 2);
-  await new Promise((resolve) => setTimeout(resolve, 5));
-  assert.deepEqual(
-    seen.map((event) => event.type),
-    [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
-  );
-});
-
-test("a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false", async () => {
-  const { fetchLike } = openAi([created()]);
-  const script = scriptedOpenSocket([
-    (socket) => {
-      queueMicrotask(() => socket.closeFromServer({ code: 1006 }));
-      return undefined;
-    },
-  ]);
-  const source = new KeyedLiveSessionSource({
-    apiKey: "sk-test",
-    httpClient: fakeHttpClientLayer(fetchLike),
-    openSocket: script.openSocket,
-    now: () => NOW,
-  });
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const closes: (number | undefined)[] = [];
-  sideband.onClose((close) => closes.push(close.code));
-  assert.deepEqual(closes, [1006]);
-  assert.equal(source.diagnostics().sidebandAttached, false);
-});
-
-test("a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told", async () => {
-  const script = scriptedOpenSocket([
-    (socket) => {
-      socket.onSent(() =>
-        queueMicrotask(() => {
-          socket.receive(createdFrame());
-          socket.closeFromServer({ code: 1000 });
-        }),
+it.scopedLive(
+  "a frame the service sends right behind session.created, before the sideband subscribes, reaches the sideband in order",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answeringThenSpeaking(createdFrame(), [
+          {
+            type: LIVE_SERVER_EVENT.SESSION_STARTED,
+            event_id: "ev_1",
+            session: { id: SESSION_ID },
+          },
+          { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_1" },
+        ]),
+      ]);
+      const source = hosted(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      const seen: LiveServerEvent[] = [];
+      sideband.onEvent((event) => seen.push(event));
+      assert.deepEqual(
+        seen.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
-      return undefined;
-    },
-  ]);
-  const source = hosted(script);
-  const opened = await source.create({ sdpOffer: SDP_OFFER, input: [] });
-  assert.ok(opened);
-  const sideband = await opened.attach();
-  const closes: (number | undefined)[] = [];
-  sideband.onClose((close) => closes.push(close.code));
-  assert.deepEqual(closes, [1000]);
-  assert.equal(script.sockets.length, 1);
-});
+    }),
+);
+
+it.scopedLive(
+  "a frame the service sends right behind session.attached, before the recovering socket adopts the connection, reaches the sideband",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        answering(createdFrame()),
+        answeringThenSpeaking(attachedFrame(), [
+          { type: LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED, event_id: "ev_2", client_event_id: "c_2" },
+        ]),
+      ]);
+      const source = reattaching(script, { readAccessToken: () => Effect.succeed("token-2") });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      const seen: LiveServerEvent[] = [];
+      sideband.onEvent((event) => seen.push(event));
+      const [first] = script.sockets;
+      assert.ok(first);
+      first.closeFromServer({ code: 1006 });
+      yield* openedSockets(script, 2);
+      yield* pause;
+      assert.deepEqual(
+        seen.map((event) => event.type),
+        [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
+      );
+    }),
+);
+
+it.scopedLive(
+  "a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false",
+  () =>
+    Effect.gen(function* () {
+      const { fetchLike } = openAi([created()]);
+      const script = scriptedOpenSocket([
+        (socket) => {
+          queueMicrotask(() => socket.closeFromServer({ code: 1006 }));
+          return undefined;
+        },
+      ]);
+      const source = new KeyedLiveSessionSource({
+        apiKey: "sk-test",
+        httpClient: fakeHttpClientLayer(fetchLike),
+        openSocket: script.openSocket,
+        now: () => NOW,
+      });
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      // The close was queued behind the handshake, and the attach is an effect
+      // that answers without waiting for it; this pause is the gap it lands in,
+      // before any sideband listener stands.
+      yield* pause;
+      const closes: (number | undefined)[] = [];
+      sideband.onClose((close) => closes.push(close.code));
+      assert.deepEqual(closes, [1006]);
+      assert.equal(source.diagnostics().sidebandAttached, false);
+    }),
+);
+
+it.scopedLive(
+  "a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([
+        (socket) => {
+          socket.onSent(() =>
+            queueMicrotask(() => {
+              socket.receive(createdFrame());
+              socket.closeFromServer({ code: 1000 });
+            }),
+          );
+          return undefined;
+        },
+      ]);
+      const source = hosted(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened);
+      const sideband = yield* opened.attach();
+      const closes: (number | undefined)[] = [];
+      sideband.onClose((close) => closes.push(close.code));
+      assert.deepEqual(closes, [1000]);
+      assert.equal(script.sockets.length, 1);
+    }),
+);

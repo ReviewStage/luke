@@ -120,11 +120,15 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.INTRODUCTION_CREATE_SESSION]: ({ sdp, titles }, { introduction }) => {
       if (!introduction || !runMode.sendsNetwork) return Promise.resolve(undefined);
       const account = state.snapshot().account;
-      return introductionSession.open({
-        sdp,
-        titles,
-        name: account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined,
-      });
+      // The open is an effect, run on the desktop's own runtime like every
+      // other act rather than behind a promise door of the session's.
+      return run(
+        introductionSession.open({
+          sdp,
+          titles,
+          name: account.status === ACCOUNT_STATUS.SIGNED_IN ? account.name : undefined,
+        }),
+      );
     },
     [ACT_KIND.INTRODUCTION_END_SESSION]: (_payload, { introduction }) => {
       if (introduction) introductionSession.end();

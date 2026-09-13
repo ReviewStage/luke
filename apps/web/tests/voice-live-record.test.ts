@@ -165,14 +165,17 @@ async function stand(live: VoiceTarget) {
   });
   const observed: Promise<VoiceWriteResult>[] = [];
   const source: LiveSessionSource = {
-    create: async (input) => ({
-      sessionId: live.liveSessionId,
-      sdpAnswer: `answer-for-${input.sdpOffer}`,
-      attach: async () =>
-        observedSideband(sidebandOverSocket(socket), (event) => {
-          observed.push(database.run(record.observe(event)));
-        }),
-    }),
+    create: (input) =>
+      Effect.succeed({
+        sessionId: live.liveSessionId,
+        sdpAnswer: `answer-for-${input.sdpOffer}`,
+        attach: () =>
+          Effect.succeed(
+            observedSideband(sidebandOverSocket(socket), (event) => {
+              observed.push(database.run(record.observe(event)));
+            }),
+          ),
+      }),
     setVoice: () => undefined,
     diagnostics: () => {
       throw new Error("not read here");

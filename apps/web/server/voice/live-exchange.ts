@@ -235,10 +235,12 @@ export function hostedLiveExchange(
 
     /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
     const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
-      return async () =>
-        observedSideband(await attach(), (event) => {
-          Queue.unsafeOffer(written, writeReport(record.observe(event)));
-        });
+      return () =>
+        Effect.map(attach(), (sideband) =>
+          observedSideband(sideband, (event) => {
+            Queue.unsafeOffer(written, writeReport(record.observe(event)));
+          }),
+        );
     };
 
     const source = (): LiveSessionSource | undefined => {
@@ -246,15 +248,15 @@ export function hostedLiveExchange(
       if (!inner) return undefined;
       return {
         ...inner,
-        create: async (input) => {
-          const opened = await inner.create(input);
-          if (!opened) return undefined;
-          const observed: LiveSessionOpened = {
-            ...opened,
-            attach: observing(() => opened.attach()),
-          };
-          return observed;
-        },
+        create: (input) =>
+          Effect.map(inner.create(input), (opened) => {
+            if (!opened) return undefined;
+            const observed: LiveSessionOpened = {
+              ...opened,
+              attach: observing(() => opened.attach()),
+            };
+            return observed;
+          }),
       };
     };
 

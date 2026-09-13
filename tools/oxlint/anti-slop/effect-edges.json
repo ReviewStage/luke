@@ -27,7 +27,6 @@
     "packages/brain/src/store/testing.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/host/src/compose-calendars.ts",
-    "packages/voice/src/live-session-source.ts",
     "packages/wire/src/testing/effect.ts"
   ],
   "runOnHandedRuntime": [
