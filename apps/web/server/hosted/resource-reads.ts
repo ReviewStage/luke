@@ -26,6 +26,7 @@ import {
   READ_PAGE_BOUNDS,
   READ_QUERY,
   readLimitSchema,
+  type SequencePosition,
   type SequenceReadCursor,
   selectConversationView,
   sequenceReadCursorSchema,
@@ -40,13 +41,12 @@ import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { makeRateBrake } from "./rate-brake.js";
-import {
-  type HostedStore,
-  MAXIMUM_READ_PAGE,
-  type StandingConversation,
-  type StoredEventRecord,
-  type StoredMessageRecord,
-  type StoredTurnRecord,
+import type {
+  HostedStore,
+  StandingConversation,
+  StoredEventRecord,
+  StoredMessageRecord,
+  StoredTurnRecord,
 } from "./store/index.js";
 
 /**
@@ -201,106 +201,122 @@ interface SequenceWalk<Row> {
   readonly hasMore: boolean;
 }
 
-/** How a walk reads a row: its place in the sequence, and whether it is settled or still being written. */
+/**
+ * Where a resource's numbered rows stand for one conversation: the last
+ * sequence handed out and, for a resource whose rows can change in place
+ * after they are numbered, the revision those writes have reached. A
+ * resource whose rows never change carries no revision, and its cursor none.
+ */
+interface SequenceHead {
+  readonly seq: number;
+  readonly revision?: number;
+}
+
+/** Where a read of one conversation starts: after this sequence, and, where the head carries one, after this revision. */
+interface SequenceAfter {
+  readonly seq: number;
+  readonly revision?: number;
+}
+
+/** How a walk reads a row: its place in the sequence, and the revision it was last written in place under, where the resource keeps one. */
 interface SequenceRowReading<Row> {
   readonly seqOf: (row: Row) => number;
-  readonly settled: (row: Row) => boolean;
+  readonly revisionOf?: (row: Row) => number | undefined;
 }
 
 /**
  * Walks the standing conversations in the directory's order, taking each
  * one's rows past the cursor's position until the page is full. A
- * conversation the cursor positions past its head is left where it stands,
- * one the page has no room left for keeps its position and marks more, and
- * a position for a conversation no longer standing is dropped, which is how
- * a Clear leaves the cursor. The head is the counter's last handed-out
- * sequence, so `hasMore` says whether settled rows stood past a page the
- * bound cut rather than guessing from a full page.
+ * conversation the cursor stands level with is left where it stands, one the
+ * page has no room left for keeps its position and marks more, and a
+ * position for a conversation no longer standing is dropped, which is how a
+ * Clear leaves the cursor. The head is the counters' word, so `hasMore` says
+ * whether rows stood past a page the bound cut rather than guessing from a
+ * full page.
  *
- * A row still being written is answered but not passed: the cursor stops
- * just before the first unsettled row, so a device reads that row again on
- * every poll, its parts as they then stand, and passes it only once it is
- * settled and immutable. That is how a message in flight — the running
- * turn's journal — reaches a screen without a device ever holding a stale
- * copy of a row that has since changed. Only the rows the cursor passes
- * spend the page's bound; the rows from the first unsettled one on are a
- * preview the next poll answers again, bounded to the wire's few preview
- * rows per conversation, so a journal that stays open cannot hold every
- * later conversation's rows behind it and a page can never outgrow the bound
- * the wire declares for it. A read that answers nothing up to the head passes
- * the head: every row up to it exists, so a read that cut them all is one
- * whose window they fall outside of, for good.
+ * A row still being written is passed like any other: the cursor takes its
+ * sequence, and the conversation's journal revision beside it, which the
+ * store moves on every write to a numbered row in place. A read from an
+ * earlier revision answers the rows written since, whatever their sequence,
+ * first and in the order they were written, then the rows past the sequence;
+ * so a device is handed the running turn's journal again exactly when it
+ * changed, and once more when it finished, and holds a stale copy of no row
+ * for longer than one poll. A cursor minted before rows carried a revision,
+ * or for a resource whose rows never change, stands level with the head's
+ * revision: the sequence alone says what it has yet to read. A read that
+ * answers nothing up to the head passes the head: every row up to it exists,
+ * so a read that cut them all is one whose window they fall outside of, for
+ * good.
  */
-
-/**
- * The fetch reaches past the page's bound by the preview's own bound, so an
- * unsettled row at the front of a page does not hide the settled rows behind
- * it, and never asks the store for more than it answers, since a bound the
- * store clamped would read as a page that was not cut.
- */
-function fetchBound(remaining: number): number {
-  return Math.min(remaining + READ_PAGE_BOUNDS.PREVIEW_ROWS, MAXIMUM_READ_PAGE);
-}
 function walkSequences<Row, Failure>(
   standing: readonly StandingConversation[],
   page: ReadPage<SequenceReadCursor>,
-  headOf: (conversation: StandingConversation) => number,
+  headOf: (conversation: StandingConversation) => SequenceHead,
   read: (
     conversation: StandingConversation,
-    after: number,
+    after: SequenceAfter,
     limit: number,
   ) => Effect.Effect<readonly Row[], Failure, SqlClient.SqlClient>,
   reading: SequenceRowReading<Row>,
 ): Effect.Effect<SequenceWalk<Row>, Failure, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const positions = new Map(
-      (page.after?.positions ?? []).map((position) => [position.conversationId, position.seq]),
+      (page.after?.positions ?? []).map((position) => [position.conversationId, position]),
     );
-    const next = new Map<string, number>();
+    const next: SequencePosition[] = [];
     const taken: TakenRows<Row>[] = [];
     let remaining = page.limit;
     let hasMore = false;
+    const at = (conversationId: string, seq: number, revision: number | undefined) => {
+      next.push({ conversationId, seq, ...(revision === undefined ? undefined : { revision }) });
+    };
     for (const conversation of standing) {
-      const from = positions.get(conversation.id) ?? 0;
       const head = headOf(conversation);
-      if (from >= head) {
-        next.set(conversation.id, from);
+      const position = positions.get(conversation.id);
+      const from = position?.seq ?? 0;
+      const revision =
+        head.revision === undefined ? undefined : (position?.revision ?? head.revision);
+      const behindInPlace = head.revision !== undefined && (revision ?? 0) < head.revision;
+      if (from >= head.seq && !behindInPlace) {
+        at(conversation.id, from, head.revision);
         continue;
       }
       if (remaining === 0) {
-        next.set(conversation.id, from);
+        at(conversation.id, from, revision);
         hasMore = true;
         continue;
       }
-      const fetchLimit = fetchBound(remaining);
-      const fetched = yield* read(conversation, from, fetchLimit);
-      const unsettledAt = fetched.findIndex((row) => !reading.settled(row));
-      const previewing = unsettledAt !== -1 && unsettledAt < remaining;
-      const rows = previewing
-        ? fetched.slice(0, unsettledAt + READ_PAGE_BOUNDS.PREVIEW_ROWS)
-        : fetched.slice(0, remaining);
-      const passedRows = previewing ? unsettledAt : rows.length;
-      const lastPassed = rows[passedRows - 1];
-      const position =
-        lastPassed !== undefined ? reading.seqOf(lastPassed) : fetched.length === 0 ? head : from;
-      next.set(conversation.id, position);
-      remaining -= passedRows;
-      // Rows behind an unsettled one cannot be passed until it settles, so they never say more stands.
-      const lastFetched = fetched.at(-1);
-      taken.push({ conversation, rows });
-      if (previewing) continue;
-      if (rows.length < fetched.length) hasMore = true;
-      else if (fetched.length === fetchLimit && lastFetched && reading.seqOf(lastFetched) < head) {
-        hasMore = true;
+      const fetched = yield* read(
+        conversation,
+        { seq: from, ...(revision === undefined ? undefined : { revision }) },
+        remaining,
+      );
+      const last = fetched.at(-1);
+      remaining -= fetched.length;
+      taken.push({ conversation, rows: fetched });
+      if (last === undefined) {
+        at(conversation.id, head.seq, head.revision);
+        continue;
       }
+      const lastSeq = reading.seqOf(last);
+      const full = remaining === 0;
+      // The rows written in place stand at or before the position and come
+      // first, in the order they were written, so a full page ending among
+      // them may have more of them behind it whatever their sequence: it
+      // keeps the position, names the last revision it took, and says more
+      // stands. A page that reached the rows past the position took every
+      // row written in place with it and stands at the head's revision; it
+      // says more stands only while rows stand between it and the head.
+      const endedAmongWritten = lastSeq <= from;
+      if (full && endedAmongWritten) {
+        hasMore = true;
+        at(conversation.id, from, reading.revisionOf?.(last) ?? revision);
+        continue;
+      }
+      if (full && lastSeq < head.seq) hasMore = true;
+      at(conversation.id, Math.max(from, lastSeq), head.revision);
     }
-    return {
-      taken,
-      next: encodeSequenceReadCursor(
-        [...next].map(([conversationId, seq]) => ({ conversationId, seq })),
-      ),
-      hasMore,
-    };
+    return { taken, next: encodeSequenceReadCursor(next), hasMore };
   });
 }
 
@@ -379,13 +395,17 @@ export function handleConversationMessages(options: ResourceReadOptions): ReadEf
       walkSequences(
         standing,
         page,
-        (conversation) => conversation.nextMessageSeq - 1,
+        (conversation) => ({
+          seq: conversation.nextMessageSeq - 1,
+          revision: conversation.journalRevision,
+        }),
         (conversation, after, limit) => {
           const since = conversation.kind === CONVERSATION_KIND.OBSERVED ? windowStart : undefined;
           return Effect.flatMap(
             store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
-              after,
+              after: after.seq,
               limit,
+              ...(after.revision !== undefined ? { revisionAfter: after.revision } : undefined),
               ...(since !== undefined ? { since } : undefined),
             }),
             (read) =>
@@ -396,7 +416,7 @@ export function handleConversationMessages(options: ResourceReadOptions): ReadEf
                   ),
           );
         },
-        { seqOf: (record) => record.seq, settled: (record) => record.finishedAt !== undefined },
+        { seqOf: (record) => record.seq, revisionOf: (record) => record.revision },
       ),
       "UnreadableRow",
       (unreadable) => Effect.succeed(unreadable),
@@ -490,13 +510,14 @@ export function handleConversationEvents(options: ResourceReadOptions): ReadEffe
     const { store } = options;
 
     const standing = yield* store.directory.standing(userId);
-    // An event is written once and never changed, so every event row is settled.
+    // An event is written once and never changed, so its head is the sequence alone.
     const walk = yield* walkSequences(
       standing,
       page,
-      (conversation) => conversation.nextEventSeq - 1,
-      (conversation, after, limit) => store.events.list(userId, conversation.id, { after, limit }),
-      { seqOf: (event) => event.seq, settled: () => true },
+      (conversation) => ({ seq: conversation.nextEventSeq - 1 }),
+      (conversation, after, limit) =>
+        store.events.list(userId, conversation.id, { after: after.seq, limit }),
+      { seqOf: (event) => event.seq },
     );
 
     const answer: ConversationEventsAnswer = {

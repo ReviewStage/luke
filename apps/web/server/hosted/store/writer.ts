@@ -648,15 +648,37 @@ const insertMessageRow = SqlSchema.findOne({
     ),
 });
 
+/**
+ * A write to a numbered row in place moves the conversation's journal
+ * revision and stamps the row with where it moved to, in the one statement,
+ * so the change signal's head moves with the write and a messages read
+ * asked from an earlier revision answers exactly the rows written since.
+ * The three writes below are the only ones that change a row after it is
+ * numbered; a move gives a row a fresh sequence, which the sequence counter
+ * already announces.
+ */
+const bumpedRevision = (sql: SqlClient.SqlClient, conversationId: string) => sql`
+  with bumped as (
+    update conversations
+    set journal_revision = journal_revision + 1
+    where id = ${conversationId}
+    returning journal_revision
+  )
+`;
+
 const updateMessageParts = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
+    conversationId: Schema.String,
     parts: Schema.parseJson(StoredPartsColumnSchema),
   }),
   execute: (row) =>
     statement(
       (sql) => sql`
-        update messages set parts = ${row.parts}::jsonb where id = ${row.id}
+        ${bumpedRevision(sql, row.conversationId)}
+        update messages
+        set parts = ${row.parts}::jsonb, revision = (select journal_revision from bumped)
+        where id = ${row.id}
       `,
     ),
 });
@@ -664,14 +686,18 @@ const updateMessageParts = SqlSchema.void({
 const finishMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
+    conversationId: Schema.String,
     parts: Schema.parseJson(StoredPartsColumnSchema),
     finishedAt: Schema.DateFromSelf,
   }),
   execute: (row) =>
     statement(
       (sql) => sql`
+        ${bumpedRevision(sql, row.conversationId)}
         update messages
-        set parts = ${row.parts}::jsonb, finished_at = ${row.finishedAt}
+        set parts = ${row.parts}::jsonb,
+            finished_at = ${row.finishedAt},
+            revision = (select journal_revision from bumped)
         where id = ${row.id}
       `,
     ),
@@ -680,6 +706,7 @@ const finishMessage = SqlSchema.void({
 const completeMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
+    conversationId: Schema.String,
     parts: Schema.parseJson(StoredPartsColumnSchema),
     metadata: Schema.NullOr(Schema.parseJson(MessageMetadataColumnSchema)),
     finishedAt: Schema.DateFromSelf,
@@ -687,10 +714,12 @@ const completeMessage = SqlSchema.void({
   execute: (row) =>
     statement(
       (sql) => sql`
+        ${bumpedRevision(sql, row.conversationId)}
         update messages
         set parts = ${row.parts}::jsonb,
             metadata = ${row.metadata}::jsonb,
-            finished_at = ${row.finishedAt}
+            finished_at = ${row.finishedAt},
+            revision = (select journal_revision from bumped)
         where id = ${row.id}
       `,
     ),
@@ -1138,7 +1167,11 @@ function amendJournal(
       parts,
     });
     if (!read.ok) return read;
-    yield* updateMessageParts({ id: row.id, parts: read.message.parts });
+    yield* updateMessageParts({
+      id: row.id,
+      conversationId: context.target.conversationId,
+      parts: read.message.parts,
+    });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
   });
 }
@@ -1198,7 +1231,12 @@ function turnEnded(
           ? unansweredToolPart(part, event.status)
           : part,
       );
-      yield* finishMessage({ id: open.value.id, parts, finishedAt: settledAt });
+      yield* finishMessage({
+        id: open.value.id,
+        conversationId: context.target.conversationId,
+        parts,
+        finishedAt: settledAt,
+      });
     }
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
   });
@@ -1340,6 +1378,7 @@ function messageCompleted(
     }
     yield* completeMessage({
       id: row.id,
+      conversationId: context.target.conversationId,
       parts: message.parts,
       metadata: nullable(message.metadata),
       finishedAt: context.now(),

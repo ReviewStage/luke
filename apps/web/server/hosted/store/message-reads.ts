@@ -59,7 +59,7 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
   Effect.flatMap(SqlClient.SqlClient, build);
 
 /** The most rows one read answers; a device with more to take asks again from the last sequence it took. */
-export const MAXIMUM_READ_PAGE = 200;
+const MAXIMUM_READ_PAGE = 200;
 
 export interface SequenceCursor {
   /** Rows after this sequence; absent or zero for the conversation's beginning. */
@@ -76,6 +76,13 @@ export interface SequenceCursor {
  */
 export interface MessageCursor extends SequenceCursor {
   readonly since?: Date;
+  /**
+   * Also the rows at or before `after` written in place under a journal
+   * revision past this one: the running turn's journal as it streams, and
+   * once more as it finishes. Those rows are answered first, in the order
+   * they were written, so a page cut among them can name where it stopped.
+   */
+  readonly revisionAfter?: number;
 }
 
 export interface StoredMessageRecord {
@@ -87,6 +94,8 @@ export interface StoredMessageRecord {
   readonly createdAt: Date;
   /** Absent while the message is still in flight and mutable. */
   readonly finishedAt?: Date;
+  /** The conversation's journal revision at the row's last write in place; absent for a row never written in place. */
+  readonly revision?: number;
   readonly message: StoredUIMessage;
 }
 
@@ -112,6 +121,7 @@ type MessageRow = {
   readonly clientId: string;
   readonly createdAt: Date;
   readonly finishedAt: Date | null;
+  readonly revision: number | null;
   /** The row's message as it was written, held to the vocabulary by the read and by nothing before it. */
   readonly stored: WireBoundaryInput;
 };
@@ -153,6 +163,7 @@ const SelectedMessageRowSchema = Schema.Struct({
   finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
     Schema.fromKey("finished_at"),
   ),
+  revision: Schema.NullOr(EpochMillisColumnSchema),
 });
 
 type SelectedMessage = typeof SelectedMessageRowSchema.Type;
@@ -160,7 +171,7 @@ type SelectedMessage = typeof SelectedMessageRowSchema.Type;
 /** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
 const MESSAGE_COLUMNS =
   "messages.id, messages.seq, messages.turn_id, messages.client_id, messages.role, " +
-  "messages.parts, messages.metadata, messages.created_at, messages.finished_at";
+  "messages.parts, messages.metadata, messages.created_at, messages.finished_at, messages.revision";
 
 /** The join every read here makes to its conversation row: a Clear-stamped conversation is read by nothing. */
 const standingJoin = (sql: SqlClient.SqlClient, conversationColumn: string) =>
@@ -193,6 +204,7 @@ async function readSelected(
         clientId: row.clientId,
         createdAt: row.createdAt,
         ...optionalField("finishedAt", row.finishedAt),
+        ...optionalField("revision", row.revision),
         message,
       };
     }),
@@ -205,20 +217,31 @@ const selectMessages = (options: {
   readonly cursor: MessageCursor;
 }) =>
   statement((sql) => {
+    const after = options.cursor.after ?? 0;
+    const { revisionAfter } = options.cursor;
     const conditions = [
       sql`messages.conversation_id = ${options.conversationId}`,
       sql`messages.user_id = ${options.userId}`,
-      sql`messages.seq > ${options.cursor.after ?? 0}`,
+      revisionAfter === undefined
+        ? sql`messages.seq > ${after}`
+        : sql.or([sql`messages.seq > ${after}`, sql`messages.revision > ${revisionAfter}`]),
     ];
     if (options.cursor.since !== undefined) {
       conditions.push(sql`messages.created_at >= ${options.cursor.since}`);
     }
+    // The rows written in place stand at or before `after` and come first, in
+    // the order they were written; the rows past `after` follow in sequence.
+    // Either run is a prefix a cut page can name the end of.
+    const order =
+      revisionAfter === undefined
+        ? sql`messages.seq asc`
+        : sql`(messages.seq > ${after}) asc, case when messages.seq > ${after} then messages.seq else messages.revision end asc`;
     return sql`
       select ${sql.literal(MESSAGE_COLUMNS)}
       from messages
       ${standingJoin(sql, "messages.conversation_id")}
       where ${sql.and(conditions)}
-      order by messages.seq asc
+      order by ${order}
       limit ${pageLimit(options.cursor)}
     `;
   });

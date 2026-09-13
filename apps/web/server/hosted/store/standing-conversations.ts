@@ -24,6 +24,8 @@ export type StandingConversation =
       readonly openedAt: Date;
       readonly nextMessageSeq: number;
       readonly nextEventSeq: number;
+      /** Moved by every write to a numbered row in place; with the sequence, the whole of what a messages read can be behind on. */
+      readonly journalRevision: number;
     }
   | {
       readonly id: string;
@@ -32,6 +34,8 @@ export type StandingConversation =
       readonly providerSessionId: string;
       readonly nextMessageSeq: number;
       readonly nextEventSeq: number;
+      /** Moved by every write to a numbered row in place; with the sequence, the whole of what a messages read can be behind on. */
+      readonly journalRevision: number;
     };
 
 type StandingConversationFailure = SqlError | ParseResult.ParseError;
@@ -57,6 +61,9 @@ const StandingConversationRowSchema = Schema.Struct({
   nextEventSeq: Schema.propertySignature(EpochMillisColumnSchema).pipe(
     Schema.fromKey("next_event_seq"),
   ),
+  journalRevision: Schema.propertySignature(EpochMillisColumnSchema).pipe(
+    Schema.fromKey("journal_revision"),
+  ),
 });
 
 const findStandingConversations = SqlSchema.findAll({
@@ -65,7 +72,8 @@ const findStandingConversations = SqlSchema.findAll({
   execute: (userId) =>
     statement(
       (sql) => sql`
-        select id, kind, provider_id, provider_session_id, created_at, next_message_seq, next_event_seq
+        select id, kind, provider_id, provider_session_id, created_at,
+               next_message_seq, next_event_seq, journal_revision
         from conversations
         where user_id = ${userId}
           and kind in (${CONVERSATION_KIND.MAIN}, ${CONVERSATION_KIND.OBSERVED})
@@ -85,7 +93,11 @@ export function standingConversations(
   return Effect.map(findStandingConversations(userId), (rows) => {
     const standing: StandingConversation[] = [];
     for (const row of rows) {
-      const counters = { nextMessageSeq: row.nextMessageSeq, nextEventSeq: row.nextEventSeq };
+      const counters = {
+        nextMessageSeq: row.nextMessageSeq,
+        nextEventSeq: row.nextEventSeq,
+        journalRevision: row.journalRevision,
+      };
       if (row.kind === CONVERSATION_KIND.MAIN) {
         standing.push({ id: row.id, kind: row.kind, openedAt: row.createdAt, ...counters });
         continue;

@@ -212,7 +212,8 @@ thread later:
   fetches them, echoing each cursor back exactly as the service minted it.
 - `ConversationThread` merges pages under the wire's contract: groups by turn
   id, messages replaced by `seq` (a row still being written is answered again
-  on every read until it finishes), rows of a conversation no longer listed
+  on each read that follows a write to it, and once more when it finishes),
+  rows of a conversation no longer listed
   dropped, turns replaced by id, and the latest speech event deciding whether
   a briefing reads as unspoken. `ConversationStore` polls the change signal
   while the screen is in the foreground and reads only the resources whose

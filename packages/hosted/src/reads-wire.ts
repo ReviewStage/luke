@@ -46,17 +46,14 @@ import { countedNumber, HOSTED_API_ERROR, wireUuidSchema } from "./service-wire.
  */
 
 /**
- * The bounds of one read. `MAX_LIMIT` is the most rows the cursor passes in
- * one page; a device with more to take asks again from the cursor the answer
- * handed back. `PREVIEW_ROWS` is the most rows a conversation answers past
- * the cursor without passing them — the row still being written and what
- * follows it — which spend none of the page and are answered again next
- * poll, so a messages page holds at most `MAX_LIMIT` passed rows plus that
- * preview for each conversation the cursor stands on.
+ * The bound of one read: the most rows one page answers. A device with more
+ * to take asks again from the cursor the answer handed back. A row still
+ * being written is a row like any other here: the cursor passes it, and the
+ * conversation's revision in the cursor is what brings it back, so a page
+ * never holds more than this.
  */
 export const READ_PAGE_BOUNDS = {
   MAX_LIMIT: 200,
-  PREVIEW_ROWS: 2,
 } as const;
 
 /** The two query parameters every per-resource read takes: the cursor to read on from, and the page bound. */
@@ -182,10 +179,18 @@ function encodeCursor<Value, Encoded>(
   return base64UrlEncode(JSON.stringify(read.right));
 }
 
-/** Where a device's read of one conversation's numbered rows stands: the last sequence it took, zero for none. */
+/**
+ * Where a device's read of one conversation's numbered rows stands: the last
+ * sequence it took, zero for none, and, for a resource whose rows can change
+ * in place after they are numbered, the conversation's revision those rows
+ * were read under. The service moves the revision on every in-place write,
+ * so a head and a cursor read equal exactly when nothing was numbered or
+ * written since; a resource whose rows never change carries none.
+ */
 export interface SequencePosition {
   readonly conversationId: string;
   readonly seq: number;
+  readonly revision?: number;
 }
 
 /**
@@ -202,6 +207,7 @@ export interface SequenceReadCursor {
 const sequencePositionSchema = EffectSchema.Struct({
   conversationId: wireUuidSchema,
   seq: wholeNumber(0),
+  revision: EffectSchema.optionalWith(wholeNumber(0), { exact: true }),
 });
 
 function compareCodePoints(a: string, b: string): number {
@@ -243,7 +249,11 @@ export function encodeSequenceReadCursor(positions: Iterable<SequencePosition>):
     compareCodePoints(a.conversationId, b.conversationId),
   );
   return encodeCursor(sequenceReadCursorRecord, {
-    positions: sorted.map(({ conversationId, seq }) => ({ conversationId, seq })),
+    positions: sorted.map(({ conversationId, seq, revision }) => ({
+      conversationId,
+      seq,
+      ...(revision === undefined ? undefined : { revision }),
+    })),
   });
 }
 
@@ -468,9 +478,8 @@ export interface ConversationMessagesAnswer {
   readonly hasMore: boolean;
 }
 
-/** A group holds at least one row, so a page holds at most as many groups as rows: the passed rows and every conversation's preview. */
-const MAX_MESSAGE_GROUPS =
-  READ_PAGE_BOUNDS.MAX_LIMIT + READ_CURSOR_BOUNDS.MAX_CONVERSATIONS * READ_PAGE_BOUNDS.PREVIEW_ROWS;
+/** A group holds at least one row, so a page holds at most as many groups as rows. */
+const MAX_MESSAGE_GROUPS = READ_PAGE_BOUNDS.MAX_LIMIT;
 
 export const conversationMessagesAnswerSchema = tolerantRecord({
   conversations: EffectSchema.Array(conversationReadConversationSchema).pipe(

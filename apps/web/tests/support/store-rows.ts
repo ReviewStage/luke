@@ -261,6 +261,7 @@ const MessageRowFullSchema = Schema.Struct({
   finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
     Schema.fromKey("finished_at"),
   ),
+  revision: Schema.NullOr(EpochMillisColumnSchema),
 });
 export type MessageRowFull = Schema.Schema.Type<typeof MessageRowFullSchema>;
 const decodeMessageRow = Schema.decodeUnknownSync(MessageRowFullSchema);
@@ -276,6 +277,42 @@ export function readMessagesByConversationTyped(
         select * from messages where conversation_id = ${conversationId} order by seq
       `;
       return rows.map((row) => decodeMessageRow(row));
+    }),
+  );
+}
+
+/**
+ * Writes a numbered row in place the way `writer.ts` does: the conversation's
+ * journal revision moves and the row takes it, in one statement, so a test
+ * that streams or finishes a journal beneath the writer moves the head as the
+ * writer would.
+ */
+export function amendMessageInPlace(
+  run: HostedStoreTestRun,
+  row: {
+    readonly conversationId: string;
+    readonly id: string;
+    readonly parts: unknown;
+    readonly finishedAt?: Date;
+  },
+): Promise<void> {
+  const parts = JSON.stringify(row.parts);
+  return run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        with bumped as (
+          update conversations
+          set journal_revision = journal_revision + 1
+          where id = ${row.conversationId}
+          returning journal_revision
+        )
+        update messages
+        set parts = ${parts}::jsonb,
+            finished_at = coalesce(${row.finishedAt ?? null}, finished_at),
+            revision = (select journal_revision from bumped)
+        where id = ${row.id}
+      `;
     }),
   );
 }
