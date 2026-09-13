@@ -26,7 +26,11 @@ import type { HostedStore } from "./store/index.js";
  * hold, so a device compares each against its own and reads only what moved.
  * The heads come from the counters on the conversation rows and one ordered
  * look at the turns, never from the rows themselves, so a poll is one small
- * read however long the Conversation has grown.
+ * read however long the Conversation has grown. The messages head is two
+ * counters: the last sequence handed out and the journal revision, which
+ * every write to a numbered row in place moves, so a caught-up device's
+ * cursor reads equal to the head while nothing is numbered or written, an
+ * open journal standing idle included.
  *
  * The same call is the device's heartbeat: its row takes the last-seen
  * instant, and the presence and quiet instants it reported, exactly as the
@@ -115,10 +119,14 @@ export function handleChanges(
     ]);
     const answer: ChangesAnswer = {
       seen,
+      // A messages head carries the conversation's journal revision beside the
+      // last sequence handed out, so a journal written in place moves the head
+      // and a journal left open, unwritten, leaves it standing.
       messages: encodeSequenceReadCursor(
         standing.map((conversation) => ({
           conversationId: conversation.id,
           seq: conversation.nextMessageSeq - 1,
+          revision: conversation.journalRevision,
         })),
       ),
       events: encodeSequenceReadCursor(

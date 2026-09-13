@@ -287,7 +287,6 @@ export type { HostedStoreContext } from "./database.js";
 export {
   findMessageByClientId,
   listRecentMessages,
-  MAXIMUM_READ_PAGE,
   readMessageById,
   type StoredEventRecord,
   type StoredMessageRecord,

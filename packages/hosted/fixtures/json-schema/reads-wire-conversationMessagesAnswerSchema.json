@@ -385,7 +385,7 @@
         ],
         "additionalProperties": false
       },
-      "maxItems": 712
+      "maxItems": 200
     },
     "next": {
       "type": "string",

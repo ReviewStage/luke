@@ -10,6 +10,7 @@ import {
   changesAnswerSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
+  encodeSequenceReadCursor,
   HOSTED_API_ERROR,
   READ_PAGE_BOUNDS,
   sequenceReadCursorSchema,
@@ -53,6 +54,7 @@ import { storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
+  amendMessageInPlace,
   insertConversation as insertConversationRow,
   insertEvent as insertEventRow,
   insertMessage as insertMessageRow,
@@ -564,7 +566,7 @@ it.effect(
       await early.catchUp();
       assert.deepEqual(early.ordered(), [[line.id, line.id]]);
       const passed = parse(sequenceReadCursorSchema, early.cursor ?? "");
-      assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1 }] });
+      assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1, revision: 0 }] });
 
       // The turn starts and takes the ask's line, then writes its reply.
       const turn = await insertTurn(userId, main, {
@@ -797,8 +799,8 @@ it.effect(
       assert.equal(narrow.cursor, wide.cursor);
       assert.deepEqual(parse(sequenceReadCursorSchema, wide.cursor ?? ""), {
         positions: [
-          { conversationId: main, seq: 4 },
-          { conversationId: observed, seq: 3 },
+          { conversationId: main, seq: 4, revision: 0 },
+          { conversationId: observed, seq: 3, revision: 0 },
         ].sort((a, b) => (a.conversationId < b.conversationId ? -1 : 1)),
       });
 
@@ -845,11 +847,11 @@ it.effect(
 );
 
 it.effect(
-  "a message still in flight is answered on every read and passed only once it finishes",
+  "a message still in flight is passed like any other, handed back on the read after each write to it and once more as it finishes, and never between",
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
-      const { main, expected } = await populate(userId);
+      const { main, observed, expected } = await populate(userId);
       const running = await insertTurn(userId, main, {
         status: TURN_STATUS.RUNNING,
         queuedAt: new Date(NOW + 40_000),
@@ -876,58 +878,83 @@ it.effect(
       const mainPosition = (cursor: string | undefined) =>
         parse(sequenceReadCursorSchema, cursor ?? "")?.positions.find(
           (p) => p.conversationId === main,
-        )?.seq;
+        );
+      const states = () =>
+        device.groups
+          .get(running)
+          ?.messages.get(6)
+          ?.tools.map((tool) => tool.state);
 
       const device = new Device(userId, 200);
       await device.catchUp();
       assert.deepEqual(device.ordered(), [...expected, [running, ask], [running, journal]]);
-      assert.equal(mainPosition(device.cursor), 5);
-      const inFlight = device.groups.get(running)?.messages.get(6);
-      assert.deepEqual(
-        inFlight?.tools.map((tool) => tool.state),
-        ["input-available"],
-      );
+      // The cursor passes the row in flight and carries the conversation's revision, untouched so far.
+      assert.deepEqual(mainPosition(device.cursor), { conversationId: main, seq: 6, revision: 0 });
+      assert.deepEqual(states(), ["input-available"]);
 
-      const again = await device.poll();
+      // Nothing written: the read answers nothing and the cursor stands.
+      const quiet = await device.poll();
+      assert.deepEqual(quiet.groups, []);
+      assert.equal(quiet.hasMore, false);
+      assert.deepEqual(mainPosition(quiet.next), { conversationId: main, seq: 6, revision: 0 });
+
+      // A write to the journal: the read answers that row alone, and the cursor takes the revision.
+      await amendMessageInPlace(database.run, {
+        conversationId: main,
+        id: journal,
+        parts: [
+          toolPart("send_session_message", "call_7a0000000000000001", {
+            ...SESSION_FIELDS,
+            text: "Run the tests.",
+          }),
+        ],
+      });
+      const written = await device.poll();
       assert.deepEqual(
-        again.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        written.groups.flatMap((group) => group.messages.map((message) => message.seq)),
         [6],
       );
-      assert.equal(again.hasMore, false);
-      assert.equal(mainPosition(again.next), 5);
+      assert.equal(written.hasMore, false);
+      assert.deepEqual(mainPosition(written.next), { conversationId: main, seq: 6, revision: 1 });
+      assert.deepEqual(states(), ["output-available"]);
 
-      const finishedParts = JSON.stringify([
-        toolPart("send_session_message", "call_7a0000000000000001", {
-          ...SESSION_FIELDS,
-          text: "Run the tests.",
-        }),
-        { type: "text", text: "Sent." },
-      ]);
-      await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`
-        update messages set parts = ${finishedParts}::jsonb, finished_at = ${new Date(NOW + 45_000)}
-        where id = ${journal}
-      `;
-        }),
-      );
+      // The finish: the settled row once more, at its sequence, and quiet after.
+      await amendMessageInPlace(database.run, {
+        conversationId: main,
+        id: journal,
+        parts: [
+          toolPart("send_session_message", "call_7a0000000000000001", {
+            ...SESSION_FIELDS,
+            text: "Run the tests.",
+          }),
+          { type: "text", text: "Sent." },
+        ],
+        finishedAt: new Date(NOW + 45_000),
+      });
       const finished = await device.poll();
       assert.deepEqual(
         finished.groups.flatMap((group) => group.messages.map((message) => message.seq)),
         [6],
       );
-      assert.equal(mainPosition(finished.next), 6);
+      assert.deepEqual(mainPosition(finished.next), { conversationId: main, seq: 6, revision: 2 });
+      const settledParts = device.groups.get(running)?.messages.get(6)?.message.parts;
+      assert.equal(Array.isArray(settledParts) && settledParts.length, 2);
+      const settled = await device.poll();
+      assert.deepEqual(settled.groups, []);
+      assert.equal(settled.hasMore, false);
+
+      // A device from before rows carried a revision reads once as before and is re-minted in the new shape.
+      const legacy = new Device(userId, 200);
+      legacy.cursor = encodeSequenceReadCursor([
+        { conversationId: main, seq: 5 },
+        { conversationId: observed, seq: 3 },
+      ]);
+      const caught = await legacy.poll();
       assert.deepEqual(
-        device.groups
-          .get(running)
-          ?.messages.get(6)
-          ?.tools.map((tool) => tool.state),
-        ["output-available"],
+        caught.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [6],
       );
-      const quiet = await device.poll();
-      assert.deepEqual(quiet.groups, []);
-      assert.equal(quiet.hasMore, false);
+      assert.deepEqual(mainPosition(caught.next), { conversationId: main, seq: 6, revision: 2 });
     }),
 );
 
@@ -952,7 +979,7 @@ it.effect("a conversation longer than one page is read to its end on the default
 );
 
 it.effect(
-  "an open journal at the front of the page does not hold the other conversations' rows behind it",
+  "a journal written in place is answered ahead of the rows past the cursor, and a page cut among the rows written in place names the revision it reached",
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
@@ -971,23 +998,79 @@ it.effect(
           toolPart("read_transcript", "call_8a0000000000000001", SESSION_FIELDS, "input-available"),
         ],
       });
+      const positions = (cursor: string | undefined) =>
+        new Map(
+          (parse(sequenceReadCursorSchema, cursor ?? "")?.positions ?? []).map((position) => [
+            position.conversationId,
+            [position.seq, position.revision],
+          ]),
+        );
 
-      const narrowest = new Device(userId, 1);
-      const firstPage = await narrowest.poll();
-      assert.ok(
-        firstPage.groups.flatMap((group) => group.messages).length <=
-          1 + READ_PAGE_BOUNDS.PREVIEW_ROWS * firstPage.conversations.length,
-      );
-      await narrowest.catchUp();
-      assert.deepEqual(narrowest.ordered(), [...expected, [running, journal]]);
-      const positions = parse(sequenceReadCursorSchema, narrowest.cursor ?? "")?.positions ?? [];
+      const device = new Device(userId, 1);
+      await device.catchUp();
+      assert.deepEqual(device.ordered(), [...expected, [running, journal]]);
       assert.deepEqual(
-        new Map(positions.map((position) => [position.conversationId, position.seq])),
+        positions(device.cursor),
         new Map([
-          [main, 4],
-          [observed, 3],
+          [main, [5, 0]],
+          [observed, [3, 0]],
         ]),
       );
+
+      // Two rows of the main written in place, then a new row: a bound of one
+      // answers the written rows first, oldest write first, naming the revision
+      // each page reached, then the new row at its sequence.
+      const [first] = await readMessagesByConversationTyped(database.run, main);
+      assert.ok(first);
+      await amendMessageInPlace(database.run, {
+        conversationId: main,
+        id: journal,
+        parts: [toolPart("read_transcript", "call_8a0000000000000001", SESSION_FIELDS)],
+      });
+      await amendMessageInPlace(database.run, {
+        conversationId: main,
+        id: first.id,
+        parts: [{ type: "text", text: "Edited ask.", state: "done" }],
+      });
+      const late = await insertMessage(userId, main, 6, {
+        turnId: running,
+        createdAt: new Date(NOW + 43_000),
+      });
+      const pageOne = await device.poll();
+      assert.deepEqual(
+        pageOne.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [5],
+      );
+      assert.equal(pageOne.hasMore, true);
+      assert.deepEqual(positions(pageOne.next).get(main), [5, 1]);
+      const pageTwo = await device.poll();
+      assert.deepEqual(
+        pageTwo.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [1],
+      );
+      assert.equal(pageTwo.hasMore, true);
+      assert.deepEqual(positions(pageTwo.next).get(main), [5, 2]);
+      const pageThree = await device.poll();
+      assert.deepEqual(
+        pageThree.groups.flatMap((group) => group.messages.map((message) => message.seq)),
+        [6],
+      );
+      assert.equal(pageThree.hasMore, false);
+      assert.deepEqual(positions(pageThree.next).get(main), [6, 2]);
+      assert.deepEqual(device.ordered(), [...expected, [running, journal], [running, late]]);
+      assert.deepEqual(
+        device.groups
+          .get(running)
+          ?.messages.get(5)
+          ?.tools.map((tool) => tool.state),
+        ["output-available"],
+      );
+
+      // A device reading everything at once holds the same rows in the same order.
+      const wide = new Device(userId, 200);
+      await wide.catchUp();
+      assert.deepEqual(wide.ordered(), device.ordered());
+      assert.equal(wide.cursor, device.cursor);
     }),
 );
 

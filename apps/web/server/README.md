@@ -1195,13 +1195,23 @@ standing conversation, in conversation-id order so two cursors over the same
 positions are one string, and for turns the store's own `(changedAt, id)` to
 the microsecond; the shapes are `@sidecar/hosted`'s `reads-wire.ts`, pinned
 by the fixtures under `packages/hosted/fixtures/reads/` the Swift mirror
-reads against. A message still being written — the running turn's journal — is answered on
-every read until `finished_at` is set, its parts as they then stand, and the
-cursor stops just before it until then, so a device holds a stale copy of no
-row; only the rows the cursor passes spend the page's bound, and the preview past
-the cursor is a few rows per conversation, so an open journal cannot hold the
-other conversations' rows behind it and a page never outgrows the bound the
-wire declares. An empty turns
+reads against. A message still being written — the running turn's journal — is
+passed like any other row, and what brings it back is the conversation's
+`journal_revision`: every write to a numbered row in place (`writer.ts`'s
+three, the journal's parts as they stream, its finish at the turn's end, its
+completion by the turn's answer) moves that counter and stamps the row with
+it, in one statement, and the messages head and a messages cursor each carry
+the revision beside the last sequence. A read from an earlier revision
+answers the rows written since, whatever their sequence, first and in the
+order they were written, then the rows past the sequence (`message-reads.ts`,
+under the partial index on stamped rows); so a device is handed the journal
+again exactly when it changed and once more when it finished, holds a stale
+copy of no row for longer than one poll, and reads nothing at all while a
+journal stands open and unwritten, however long it stands (LUKE-199: before
+this, every Mac on the account re-read the resource on every 5-second poll
+for as long as any journal was open, twelve times a minute a device for
+nothing). A cursor from before rows carried a revision stands level with the
+head's, and is re-minted in the new shape on its next read. An empty turns
 page moves that cursor back to the last turn at or before it, since a Clear
 can take the turn a cursor named, and never forward past a turn unread. Every device that reads to the end holds the same rows in the
 same order, which the unique `(conversation_id, seq)` pairs make true rather

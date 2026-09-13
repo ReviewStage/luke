@@ -47,12 +47,14 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 /**
  * What one Mac's polling costs the service in a minute, counted through the
  * real change signal, the real reads, and the real fold, with the clock
- * stepped at the composer's own pace. LUKE-199: while any conversation has
- * an open journal, an observation turn's included, the signal's head stands
- * past the unsettled row and the device's cursor stands before it, so every
- * poll reads the messages resource again, answers nothing a screen would
- * draw, and moves nothing. The numbers here are today's, as values, so the
- * change that ends the re-read is measured against them.
+ * stepped at the composer's own pace. LUKE-199: while any conversation had
+ * an open journal, an observation turn's included, the signal's head stood
+ * past the unsettled row and the device's cursor before it, so every poll
+ * read the messages resource again, twelve times a minute a device, answering
+ * nothing a screen would draw and moving nothing. The head now carries the
+ * conversation's journal revision beside the sequence, so a journal standing
+ * open costs nothing until it is written, and each write to it costs one
+ * read, carrying the row.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -160,6 +162,11 @@ class Mac {
 
   constructor(private readonly userId: string) {}
 
+  /** Everything this Mac's polls have cost so far. */
+  cost(): PollCost {
+    return this.#cost;
+  }
+
   async poll(): Promise<void> {
     const revision = this.sync.revision;
     let messagesReads = 0;
@@ -240,15 +247,7 @@ class Mac {
       clock += POLL.INTERVAL_MS;
       await this.poll();
     }
-    const after = this.#cost;
-    return {
-      polls: after.polls - before.polls,
-      messagesReads: after.messagesReads - before.messagesReads,
-      rowsAnswered: after.rowsAnswered - before.rowsAnswered,
-      eventsReads: after.eventsReads - before.eventsReads,
-      turnsReads: after.turnsReads - before.turnsReads,
-      pictureMoved: after.pictureMoved - before.pictureMoved,
-    };
+    return since(before, this.#cost);
   }
 }
 
@@ -279,8 +278,9 @@ class Stream {
     });
   }
 
-  step(): BrainRunEvent {
-    return this.event({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step: 1 });
+  /** A later step: one more boundary written into the journal row in place. */
+  step(step = 1): BrainRunEvent {
+    return this.event({ kind: BRAIN_RUN_EVENT.STEP_STARTED, step });
   }
 
   answered(text: string): BrainRunEvent {
@@ -307,8 +307,21 @@ class Stream {
 }
 
 const QUIET_MINUTE: PollCost = { ...NOTHING, polls: POLL.PER_MINUTE };
+const ONE_POLL: PollCost = { ...NOTHING, polls: 1 };
 
-test("one open observation journal costs every Mac on the account one messages read per poll, answering nothing it draws, until the journal ends", async () => {
+/** What the polls between two readings of a Mac's cost cost. */
+function since(before: PollCost, after: PollCost): PollCost {
+  return {
+    polls: after.polls - before.polls,
+    messagesReads: after.messagesReads - before.messagesReads,
+    rowsAnswered: after.rowsAnswered - before.rowsAnswered,
+    eventsReads: after.eventsReads - before.eventsReads,
+    turnsReads: after.turnsReads - before.turnsReads,
+    pictureMoved: after.pictureMoved - before.pictureMoved,
+  };
+}
+
+test("an open observation journal costs no Mac on the account a read until it is written, and then one read per write, the finish included", async () => {
   const userId = await database.createUser();
   const conversationId = await database.run(standingMain(userId, new Date(now())));
   const target = { userId, conversationId };
@@ -347,17 +360,105 @@ test("one open observation journal costs every Mac on the account one messages r
     observation.started(BRAIN_TURN_ORIGIN.OBSERVATION),
   );
   await write({ userId, conversationId: observedId }, observation.step());
-  // The poll that first meets the journal reads it; that read is the preview and is not the cost.
+  // The poll that first meets the journal reads it once: a row was numbered.
   await everyMac((mac) => mac.poll());
 
-  // Today's cost: a messages read on every poll, answering no row a screen draws, moving nothing.
-  await everyMac(async (mac) =>
-    assert.deepEqual(await mac.minute(), { ...QUIET_MINUTE, messagesReads: POLL.PER_MINUTE }),
-  );
+  // The journal stands open and unwritten for a minute: the signal alone, and nothing read.
+  await everyMac(async (mac) => assert.deepEqual(await mac.minute(), QUIET_MINUTE));
 
-  // The journal ends, and the next minute is quiet again.
+  // One write to the journal: exactly one read on the next poll, then a quiet minute. An
+  // observed journal with neither announcement nor action draws nothing, so the read carries no row.
+  await write({ userId, conversationId: observedId }, observation.step(2));
+  await everyMac(async (mac) => {
+    const before = mac.cost();
+    clock += POLL.INTERVAL_MS;
+    await mac.poll();
+    assert.deepEqual(since(before, mac.cost()), { ...ONE_POLL, messagesReads: 1 });
+    assert.deepEqual(await mac.minute(), QUIET_MINUTE);
+  });
+
+  // The journal ends: one messages read for the finished row, one turns read for the settled
+  // turn, which is what moves the picture, and the minute after is quiet.
   await write({ userId, conversationId: observedId }, observation.answered("noted"));
   await write({ userId, conversationId: observedId }, observation.ended());
-  await everyMac((mac) => mac.poll());
-  await everyMac(async (mac) => assert.deepEqual(await mac.minute(), QUIET_MINUTE));
+  await everyMac(async (mac) => {
+    const before = mac.cost();
+    clock += POLL.INTERVAL_MS;
+    await mac.poll();
+    assert.deepEqual(since(before, mac.cost()), {
+      ...ONE_POLL,
+      messagesReads: 1,
+      turnsReads: 1,
+      pictureMoved: 1,
+    });
+    assert.deepEqual(await mac.minute(), QUIET_MINUTE);
+  });
+});
+
+test("a spoken turn's journal in the main is carried once per write to it, its parts as they then stand, and once more settled", async () => {
+  const userId = await database.createUser();
+  const conversationId = await database.run(standingMain(userId, new Date(now())));
+  const target = { userId, conversationId };
+  const mac = new Mac(userId);
+  await mac.poll();
+  const write = async (event: BrainRunEvent) => {
+    const result = await database.run(writer.consume(target, event));
+    assert.ok(result.ok, JSON.stringify(result));
+  };
+  /** The journal as this Mac holds it: the types of its parts. */
+  const journalParts = () =>
+    mac.sync
+      .snapshot()
+      .groups.find((group) => group.turnId === turn.turnId)
+      ?.messages.map((message) => message.message.parts.map((part) => part.type));
+  const turn = new Stream(randomUUID());
+  await write(turn.started(BRAIN_TURN_ORIGIN.SPOKEN));
+  await write(turn.step());
+  // The journal opens: one read carrying its one row, and the picture moves.
+  let before = mac.cost();
+  clock += POLL.INTERVAL_MS;
+  await mac.poll();
+  assert.deepEqual(since(before, mac.cost()), {
+    ...ONE_POLL,
+    messagesReads: 1,
+    rowsAnswered: 1,
+    turnsReads: 1,
+    pictureMoved: 1,
+  });
+  assert.deepEqual(journalParts(), [[UI_PART_TYPE.STEP_START]]);
+  assert.deepEqual(await mac.minute(), QUIET_MINUTE);
+
+  // A write to the journal: one read carrying the row as it now stands.
+  await write(turn.step(2));
+  before = mac.cost();
+  clock += POLL.INTERVAL_MS;
+  await mac.poll();
+  assert.deepEqual(since(before, mac.cost()), {
+    ...ONE_POLL,
+    messagesReads: 1,
+    rowsAnswered: 1,
+    pictureMoved: 1,
+  });
+  assert.deepEqual(journalParts(), [[UI_PART_TYPE.STEP_START, UI_PART_TYPE.STEP_START]]);
+  assert.deepEqual(await mac.minute(), QUIET_MINUTE);
+
+  // The answer completes the journal and the turn ends: one read carrying the row settled.
+  await write(turn.answered("fixture reply"));
+  await write(turn.ended());
+  before = mac.cost();
+  clock += POLL.INTERVAL_MS;
+  await mac.poll();
+  assert.deepEqual(since(before, mac.cost()), {
+    ...ONE_POLL,
+    messagesReads: 1,
+    rowsAnswered: 1,
+    turnsReads: 1,
+    pictureMoved: 1,
+  });
+  assert.deepEqual(journalParts(), [[UI_PART_TYPE.TEXT]]);
+  assert.equal(
+    mac.sync.snapshot().groups.find((group) => group.turnId === turn.turnId)?.turn?.status,
+    "settled",
+  );
+  assert.deepEqual(await mac.minute(), QUIET_MINUTE);
 });

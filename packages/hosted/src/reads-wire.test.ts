@@ -96,6 +96,32 @@ test("a sequence cursor round-trips in one canonical string whatever order its p
   });
 });
 
+test("a position carries the conversation's revision where the resource keeps one, and none where it does not", () => {
+  const withRevision = encodeSequenceReadCursor([
+    { conversationId: MAIN, seq: 2, revision: 7 },
+    { conversationId: OBSERVED, seq: 32 },
+  ]);
+  assert.deepEqual(parse(sequenceReadCursorSchema, withRevision), {
+    positions: [
+      { conversationId: MAIN, seq: 2, revision: 7 },
+      { conversationId: OBSERVED, seq: 32 },
+    ],
+  });
+  // The same positions at another revision are another string, which is what moves a device to read.
+  assert.notEqual(
+    withRevision,
+    encodeSequenceReadCursor([
+      { conversationId: MAIN, seq: 2, revision: 8 },
+      { conversationId: OBSERVED, seq: 32 },
+    ]),
+  );
+  // A revision below zero is a shape this build does not mint.
+  assert.throws(
+    () => encodeSequenceReadCursor([{ conversationId: MAIN, seq: 2, revision: -1 }]),
+    TypeError,
+  );
+});
+
 test("a sequence cursor this build did not mint the shape of is refused, naming why", () => {
   const encode = (value: WireValue) =>
     Buffer.from(JSON.stringify(value), "utf8").toString("base64url");

@@ -347,6 +347,82 @@ test("a writer refuses to be composed over a catalog whose declared output schem
   await database.run(storeWriter({ tools: undeclared }));
 });
 
+const RevisionRowSchema = Schema.Struct({ revision: EpochMillisColumnSchema });
+
+/** The conversation's journal revision as the row holds it. */
+async function journalRevision(target: ConversationTarget): Promise<number | undefined> {
+  const [row] = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select journal_revision as revision from conversations where id = ${target.conversationId}
+      `;
+    }),
+  );
+  return row === undefined ? undefined : Schema.decodeUnknownSync(RevisionRowSchema)(row).revision;
+}
+
+test("each write to the journal in place moves the conversation's journal revision and stamps the row with it, and a numbered row's insert moves neither", async () => {
+  const target = await conversation();
+  const stream = new Stream();
+  const askId = randomUUID();
+  await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.words(askId, "Read it.", TYPED_ASK),
+  ]);
+  // The ask is numbered and finished as it lands: no row was written in place.
+  assert.equal(await journalRevision(target), 0);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => [row.seq, row.revision]),
+    [[1, null]],
+  );
+
+  // The journal opens on the first tool call (a numbered insert) and is written in place by it.
+  await feed(target, [stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT)]);
+  assert.equal(await journalRevision(target), 1);
+  // The call's answer is a second write in place.
+  await feed(target, [stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT)]);
+  assert.equal(await journalRevision(target), 2);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => [row.seq, row.revision, row.finishedAt !== null]),
+    [
+      [1, null, true],
+      [2, 2, false],
+    ],
+  );
+
+  // The turn's answer completes the journal: the third write, and the row finishes under it.
+  await feed(target, [
+    stream.answered(stream.turnId, REPLY_PARTS),
+    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
+  ]);
+  assert.equal(await journalRevision(target), 3);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => [row.seq, row.revision, row.finishedAt !== null]),
+    [
+      [1, null, true],
+      [2, 3, true],
+    ],
+  );
+});
+
+test("a turn that ends with its journal open finishes it in place, which moves the revision once more", async () => {
+  const target = await conversation();
+  const stream = new Stream();
+  await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.TYPED, BRAIN_TURN_TRIGGER.ASK),
+    stream.words(randomUUID(), "Read it.", TYPED_ASK),
+    stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
+  ]);
+  assert.equal(await journalRevision(target), 1);
+  await feed(target, [stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED)]);
+  assert.equal(await journalRevision(target), 2);
+  const journal = (await storedMessages(target))[1];
+  assert.ok(journal);
+  assert.equal(journal.revision, 2);
+  assert.notEqual(journal.finishedAt, null);
+});
+
 test("a developer turn leaves its ask, its journal closed as the answer told, and a settled turn", async () => {
   const target = await conversation();
   const stream = new Stream();

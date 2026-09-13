@@ -25,6 +25,7 @@ import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change
 import { deviceSeams } from "../server/hosted/device-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
+  amendMessageInPlace,
   insertConversation,
   insertEvent,
   insertMessage,
@@ -58,7 +59,7 @@ function changesRequest(body: WireValue | undefined, method = "POST", authorized
 }
 
 /** Positions in the one order the test compares them in: by conversation id. */
-function sorted(positions: readonly [string, number][]): [string, number][] {
+function sorted<Value>(positions: readonly [string, Value][]): [string, Value][] {
   return [...positions].sort(([a], [b]) => (a < b ? -1 : 1));
 }
 
@@ -97,6 +98,13 @@ function positionsOf(cursor: string): [string, number][] {
   const decoded = parse(sequenceReadCursorSchema, cursor);
   assert.ok(decoded);
   return decoded.positions.map((position) => [position.conversationId, position.seq]);
+}
+
+/** Each position's revision, by conversation: the messages head carries one, the events head none. */
+function revisionsOf(cursor: string): [string, number | undefined][] {
+  const decoded = parse(sequenceReadCursorSchema, cursor);
+  assert.ok(decoded);
+  return decoded.positions.map((position) => [position.conversationId, position.revision]);
 }
 
 async function registerDevice(userId: string, installationId: string, deviceId: string) {
@@ -285,6 +293,21 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     id: turnId,
   });
   assert.equal(heads.rosterObservedAt, NOW - 30_000);
+  // The messages head carries each conversation's journal revision; the events head carries none.
+  assert.deepEqual(
+    sorted(revisionsOf(heads.messages)),
+    sorted([
+      [main, 0],
+      [observed, 0],
+    ]),
+  );
+  assert.deepEqual(
+    sorted(revisionsOf(heads.events)),
+    sorted([
+      [main, undefined],
+      [observed, undefined],
+    ]),
+  );
 
   const misnamed = await answered(
     await database.run(
@@ -294,6 +317,26 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.equal(misnamed.seen, false);
   assert.equal(misnamed.messages, heads.messages);
   assert.deepEqual((await deviceRow(STRANGER_DEVICE_ID)).lastSeenAt, new Date(NOW - 3_600_000));
+
+  // A write to a numbered row in place moves the messages head and nothing else.
+  await amendMessageInPlace(database.run, {
+    conversationId: main,
+    id: messageId,
+    parts: [{ type: "text", text: "ask, edited" }],
+  });
+  const written = await answered(
+    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+  );
+  assert.deepEqual(sorted(positionsOf(written.messages)), sorted(positionsOf(heads.messages)));
+  assert.deepEqual(
+    sorted(revisionsOf(written.messages)),
+    sorted([
+      [main, 1],
+      [observed, 0],
+    ]),
+  );
+  assert.equal(written.events, heads.events);
+  assert.equal(written.turns, heads.turns);
 
   const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 1000)));
   const cleared = await answered(
