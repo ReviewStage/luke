@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "../server/admin/admin-favorite";
 import { ADMIN_ERROR, ADMIN_USER_ID_PARAM } from "../server/admin/http";
+import { runWithoutDatabase } from "./support/no-database";
 
 const ADMIN_VIEWER: AdminViewer = { userId: "admin-1", role: "admin" };
 
@@ -11,21 +13,25 @@ function favoriteRequest(method: string, id?: string): Request {
   return new Request(`https://luke.test/api/admin/favorite${query}`, { method });
 }
 
+/** The write answered the way a function answers it, over a client that refuses every statement. */
 function respond(overrides: Partial<AdminFavoriteOptions> = {}): Promise<Response> {
-  return handleAdminFavorite({
-    request: favoriteRequest("PUT", "user-9"),
-    viewer: ADMIN_VIEWER,
-    writeFavorite: async () => true,
-    ...overrides,
-  });
+  return runWithoutDatabase(
+    handleAdminFavorite({
+      request: favoriteRequest("PUT", "user-9"),
+      viewer: ADMIN_VIEWER,
+      writeFavorite: () => Effect.succeed(true),
+      ...overrides,
+    }),
+  );
 }
 
 test("the write is the viewer's own star on the named account, PUT on and DELETE off", async () => {
   const writes: Array<{ adminId: string; userId: string; favorite: boolean }> = [];
-  const writeFavorite = async (adminId: string, userId: string, favorite: boolean) => {
-    writes.push({ adminId, userId, favorite });
-    return true;
-  };
+  const writeFavorite = (adminId: string, userId: string, favorite: boolean) =>
+    Effect.sync(() => {
+      writes.push({ adminId, userId, favorite });
+      return true;
+    });
 
   const starred = await respond({ writeFavorite });
   assert.equal(starred.status, 200);
@@ -43,26 +49,25 @@ test("the write is the viewer's own star on the named account, PUT on and DELETE
 
 test("a request naming no account is a 400 before the seam, and an unknown one a 404", async () => {
   let written = false;
-  const writeFavorite = async () => {
-    written = true;
-    return true;
-  };
+  const writeFavorite = () =>
+    Effect.sync(() => {
+      written = true;
+      return true;
+    });
 
   const unnamed = await respond({ request: favoriteRequest("PUT"), writeFavorite });
   assert.equal(unnamed.status, 400);
   assert.equal((await unnamed.json()).error, ADMIN_ERROR.MISSING_USER_ID);
   assert.equal(written, false);
 
-  const unknown = await respond({ writeFavorite: async () => false });
+  const unknown = await respond({ writeFavorite: () => Effect.succeed(false) });
   assert.equal(unknown.status, 404);
   assert.equal((await unknown.json()).error, ADMIN_ERROR.USER_NOT_FOUND);
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
   const writeThrew = await respond({
-    writeFavorite: async () => {
-      throw new Error("database is down");
-    },
+    writeFavorite: () => Effect.die(new Error("database is down")),
   });
   assert.equal(writeThrew.status, 503);
   assert.equal((await writeThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);

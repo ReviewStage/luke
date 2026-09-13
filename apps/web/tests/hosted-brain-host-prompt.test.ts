@@ -72,7 +72,7 @@ const seams: BrainHostSeams = {
   deploymentSecret: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),
-  vaultRows: async () => [],
+  vaultRows: () => Effect.succeed([]),
   vaultSecret: () => TEST_VAULT_SECRET,
   providerKey: unreached("providerKey"),
   executeAction: unreached("executeAction"),

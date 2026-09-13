@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -6,6 +8,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "./http.js";
+import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * The one thing an admin may write about an account: whether it is a favorite
@@ -25,7 +28,7 @@ export interface AdminFavoriteOptions {
    * row carries that id, so the page can word a stale roster rather than an
    * outage.
    */
-  writeFavorite: (adminId: string, userId: string, favorite: boolean) => Promise<boolean>;
+  writeFavorite: (adminId: string, userId: string, favorite: boolean) => AdminSeamEffect<boolean>;
 }
 
 /**
@@ -33,7 +36,9 @@ export interface AdminFavoriteOptions {
  * plus the detail read's two: a request that named no account is a 400 before
  * any seam is touched, and an id no user row carries is a 404.
  */
-export async function handleAdminFavorite(options: AdminFavoriteOptions): Promise<Response> {
+export function handleAdminFavorite(
+  options: AdminFavoriteOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
   // The gate admitted only PUT and DELETE, and which of the two it was is the
   // whole ask: PUT sets the star, DELETE takes it back.
@@ -41,17 +46,17 @@ export async function handleAdminFavorite(options: AdminFavoriteOptions): Promis
 
   const userId = adminUserId(request.url);
   if (userId === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID);
+    return Effect.succeed(
+      errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.MISSING_USER_ID),
+    );
   }
 
-  try {
-    const found = await options.writeFavorite(options.viewer.userId, userId, favorite);
-    if (!found) {
-      return errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND);
-    }
-    return jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite });
-  } catch (error) {
-    console.error("admin favorite write failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
+  return options.writeFavorite(options.viewer.userId, userId, favorite).pipe(
+    Effect.map((found) =>
+      found
+        ? jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite })
+        : errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND),
+    ),
+    Effect.catchAllCause((cause) => unavailableSeam("admin favorite write failed", cause)),
+  );
 }

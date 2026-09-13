@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ADMIN_DAY_ACCOUNTS_LIMIT,
@@ -16,6 +17,11 @@ import {
   adminDayKey,
   isUtcDayKey,
 } from "../server/admin/http";
+import { runWithoutDatabase } from "./support/no-database";
+
+/** One read answered the way a function answers it, over a client that refuses every statement. */
+const answer = (options: Parameters<typeof handleAdminDay>[0]) =>
+  runWithoutDatabase(handleAdminDay(options));
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 const DAY = "2026-08-14";
@@ -85,28 +91,25 @@ function dayRequest(day: string | null = DAY, method = "GET", scope?: string): R
   return new Request(`https://luke.test/api/admin/day${query ? `?${query}` : ""}`, { method });
 }
 
-const readDay = async (
-  day: string,
-  now: number,
-  _scope: AdminMetricsScope,
-): Promise<AdminDayDetail> => buildAdminDayDetail(daySource(), now, day);
+const readDay = (day: string, now: number, _scope: AdminMetricsScope) =>
+  Effect.succeed(buildAdminDayDetail(daySource(), now, day));
 
 test("the read answers 400 for no real day and 200 past it", async () => {
-  const unnamed = await handleAdminDay({
+  const unnamed = await answer({
     request: dayRequest(null),
     readDay,
   });
   assert.equal(unnamed.status, 400);
   assert.equal((await unnamed.json()).error, ADMIN_ERROR.INVALID_DAY);
 
-  const unreal = await handleAdminDay({
+  const unreal = await answer({
     request: dayRequest("2026-02-30"),
     readDay,
   });
   assert.equal(unreal.status, 400);
   assert.equal((await unreal.json()).error, ADMIN_ERROR.INVALID_DAY);
 
-  const ok = await handleAdminDay({
+  const ok = await answer({
     request: dayRequest(),
     readDay,
     now: () => NOON_UTC,
@@ -122,12 +125,13 @@ test("the read answers 400 for no real day and 200 past it", async () => {
 
 test("the day is read at the scope the request asked for, defaulting to non-admins", async () => {
   const scopes: AdminMetricsScope[] = [];
-  const countingRead = async (day: string, now: number, scope: AdminMetricsScope) => {
-    scopes.push(scope);
-    return readDay(day, now, scope);
-  };
+  const countingRead = (day: string, now: number, scope: AdminMetricsScope) =>
+    Effect.suspend(() => {
+      scopes.push(scope);
+      return readDay(day, now, scope);
+    });
   const respond = (scope?: string) =>
-    handleAdminDay({
+    answer({
       request: dayRequest(DAY, "GET", scope),
       readDay: countingRead,
     });
@@ -144,19 +148,20 @@ test("the day is read at the scope the request asked for, defaulting to non-admi
 
 test("no day is read for a request naming no real day", async () => {
   const reads: string[] = [];
-  const countingRead = async (day: string, now: number, scope: AdminMetricsScope) => {
-    reads.push(day);
-    return readDay(day, now, scope);
-  };
+  const countingRead = (day: string, now: number, scope: AdminMetricsScope) =>
+    Effect.suspend(() => {
+      reads.push(day);
+      return readDay(day, now, scope);
+    });
 
-  const unreal = await handleAdminDay({
+  const unreal = await answer({
     request: dayRequest("2026-13-01"),
     readDay: countingRead,
   });
   assert.equal(unreal.status, 400);
   assert.deepEqual(reads, []);
 
-  const ok = await handleAdminDay({
+  const ok = await answer({
     request: dayRequest(),
     readDay: countingRead,
   });
@@ -165,10 +170,12 @@ test("no day is read for a request naming no real day", async () => {
 });
 
 test("a quiet day is an ordinary answer with empty rows, never a 404", async () => {
-  const response = await handleAdminDay({
+  const response = await answer({
     request: dayRequest(),
-    readDay: async (day, now) =>
-      buildAdminDayDetail({ accounts: [], totals: { accounts: 0, calls: 0 } }, now, day),
+    readDay: (day, now) =>
+      Effect.succeed(
+        buildAdminDayDetail({ accounts: [], totals: { accounts: 0, calls: 0 } }, now, day),
+      ),
   });
   assert.equal(response.status, 200);
   // SAFETY: handleAdminDay answered 200, whose body is an AdminDayDetail document.
@@ -178,11 +185,9 @@ test("a quiet day is an ordinary answer with empty rows, never a 404", async () 
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const readThrew = await handleAdminDay({
+  const readThrew = await answer({
     request: dayRequest(),
-    readDay: async () => {
-      throw new Error("database is down");
-    },
+    readDay: () => Effect.die(new Error("database is down")),
   });
   assert.equal(readThrew.status, 503);
   assert.equal((await readThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);

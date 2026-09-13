@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -7,6 +9,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "./http.js";
+import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * One UTC day of the overview's usage chart opened into the accounts behind
@@ -79,7 +82,7 @@ export function buildAdminDayDetail(
 
 export interface AdminDayOptions {
   request: Request;
-  readDay: (day: string, now: number, scope: AdminMetricsScope) => Promise<AdminDayDetail>;
+  readDay: (day: string, now: number, scope: AdminMetricsScope) => AdminSeamEffect<AdminDayDetail>;
   now?: () => number;
 }
 
@@ -90,22 +93,19 @@ export interface AdminDayOptions {
  * day nobody spent anything on is an ordinary 200 with empty rows — unlike an
  * account, a day cannot be gone, so there is no 404 here.
  */
-export async function handleAdminDay(options: AdminDayOptions): Promise<Response> {
+export function handleAdminDay(
+  options: AdminDayOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
 
   const day = adminDayKey(request.url);
   if (day === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_DAY);
+    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_DAY));
   }
 
   const now = (options.now ?? Date.now)();
-  try {
-    return jsonResponse(
-      ADMIN_HTTP_STATUS.OK,
-      await options.readDay(day, now, adminMetricsScope(request.url)),
-    );
-  } catch (error) {
-    console.error("admin day read failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
+  return options.readDay(day, now, adminMetricsScope(request.url)).pipe(
+    Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
+    Effect.catchAllCause((cause) => unavailableSeam("admin day read failed", cause)),
+  );
 }

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { HttpApp } from "@effect/platform";
+import { Effect } from "effect";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { handleAdminFavorite } from "../server/admin/admin-favorite";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS, ADMIN_ROUTE_PATH } from "../server/admin/http";
 import { type AdminSeams, adminApp } from "../server/admin-app";
+import { noDatabase, runWithoutDatabase } from "./support/no-database";
 import { recordedAnswer } from "./support/response-golden";
 
 /**
@@ -31,12 +33,13 @@ type ReadName = (typeof READ)[keyof typeof READ];
  * the same for all five, so the recorder is what distinguishes them.
  */
 function recordingSeams(reached: ReadName[]): AdminSeams {
-  const reach = (name: ReadName) => {
-    reached.push(name);
-    return Promise.reject(new Error("the read itself is not under test here"));
-  };
+  const reach = (name: ReadName) =>
+    Effect.suspend(() => {
+      reached.push(name);
+      return Effect.die(new Error("the read itself is not under test here"));
+    });
   return {
-    resolveViewer: async () => ADMIN_VIEWER,
+    resolveViewer: () => Effect.succeed(ADMIN_VIEWER),
     readMetrics: () => reach(READ.METRICS),
     readUsers: () => reach(READ.USERS),
     readUser: () => reach(READ.USER),
@@ -46,7 +49,9 @@ function recordingSeams(reached: ReadName[]): AdminSeams {
 }
 
 function answer(seams: AdminSeams, url: string, method = "GET"): Promise<Response> {
-  return HttpApp.toWebHandler(adminApp(seams))(new Request(`https://luke.test${url}`, { method }));
+  return HttpApp.toWebHandler(Effect.provide(adminApp(seams), noDatabase))(
+    new Request(`https://luke.test${url}`, { method }),
+  );
 }
 
 const ADDRESSES = [
@@ -98,18 +103,20 @@ test("a path the group declares no route for is refused as not found", async () 
 });
 
 test("a read's own answer is carried to the caller as the read wrote it", async () => {
-  const seams: AdminSeams = { ...recordingSeams([]), writeFavorite: async () => true };
+  const seams: AdminSeams = { ...recordingSeams([]), writeFavorite: () => Effect.succeed(true) };
   const carried = await recordedAnswer(
     await answer(seams, `${ADMIN_ROUTE_PATH.FAVORITE}?id=user-1`, "PUT"),
   );
   const direct = await recordedAnswer(
-    await handleAdminFavorite({
-      request: new Request(`https://luke.test${ADMIN_ROUTE_PATH.FAVORITE}?id=user-1`, {
-        method: "PUT",
+    await runWithoutDatabase(
+      handleAdminFavorite({
+        request: new Request(`https://luke.test${ADMIN_ROUTE_PATH.FAVORITE}?id=user-1`, {
+          method: "PUT",
+        }),
+        viewer: ADMIN_VIEWER,
+        writeFavorite: () => Effect.succeed(true),
       }),
-      viewer: ADMIN_VIEWER,
-      writeFavorite: async () => true,
-    }),
+    ),
   );
   assert.deepEqual(carried, direct);
 });

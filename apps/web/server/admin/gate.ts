@@ -1,5 +1,6 @@
 import { type HttpApp, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { Effect } from "effect";
+import type { SqlClient } from "@effect/sql";
+import { Cause, Effect } from "effect";
 import type { AdminViewer } from "./admin-access.js";
 import { isAdminRole } from "./admin-access.js";
 import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-effect.js";
@@ -15,7 +16,10 @@ import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-e
  * It takes the resolver rather than reaching for it, and lives apart from the
  * group's own wiring for that reason: the real resolver is Better Auth, which
  * cannot be constructed without a database, and a gate this much depends on
- * has to be exercisable without one.
+ * has to be exercisable without one. The resolver answers an effect, so the
+ * one promise behind it is Better Auth's own, wrapped where the seam is built
+ * and nowhere here; a resolution that failed, however it failed, is the same
+ * 503.
  *
  * What the handler answers is carried as it came — status, headers, and bytes
  * — because what a read answers is the read's, and only these four refusals
@@ -23,24 +27,29 @@ import { ADMIN_REFUSAL, type AdminRefusal, adminRefusalResponse } from "./http-e
  */
 export function adminViewerGate(options: {
   methods: readonly string[];
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
-  handler: (viewer: AdminViewer, request: Request) => Promise<Response>;
-}): HttpApp.Default {
+  resolveViewer: (
+    request: Request,
+  ) => Effect.Effect<AdminViewer | undefined, Cause.UnknownException>;
+  handler: (
+    viewer: AdminViewer,
+    request: Request,
+  ) => Effect.Effect<Response, never, SqlClient.SqlClient>;
+}): HttpApp.Default<never, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (!options.methods.includes(incoming.method)) {
       return yield* refuse(ADMIN_REFUSAL.METHOD_NOT_ALLOWED);
     }
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const viewer = yield* Effect.tryPromise(() => options.resolveViewer(request)).pipe(
-      Effect.tapError((error) =>
-        Effect.sync(() => console.error("admin viewer resolution failed", error)),
+    const viewer = yield* options.resolveViewer(request).pipe(
+      Effect.tapErrorCause((cause) =>
+        Effect.sync(() => console.error("admin viewer resolution failed", Cause.squash(cause))),
       ),
-      Effect.mapError(() => adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE)),
+      Effect.catchAllCause(() => Effect.fail(adminRefusalResponse(ADMIN_REFUSAL.UNAVAILABLE))),
     );
     if (!viewer) return yield* refuse(ADMIN_REFUSAL.NOT_SIGNED_IN);
     if (!isAdminRole(viewer.role)) return yield* refuse(ADMIN_REFUSAL.NOT_AUTHORIZED);
-    return HttpServerResponse.raw(yield* Effect.promise(() => options.handler(viewer, request)));
+    return HttpServerResponse.raw(yield* options.handler(viewer, request));
   }).pipe(Effect.merge);
 }
 

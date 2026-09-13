@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ADMIN_INTEGRATION,
@@ -30,6 +31,7 @@ import {
 } from "../server/admin/http";
 import { posthogProjectConsoleUrl } from "../server/hosted/posthog";
 import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
+import { runWithoutDatabase } from "./support/no-database";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
 
@@ -438,6 +440,10 @@ test("integration health reads presence, in a fixed order, never a value", () =>
   }
 });
 
+/** One read answered the way a function answers it, over a client that refuses every statement. */
+const answer = (options: Parameters<typeof handleAdminMetrics>[0]) =>
+  runWithoutDatabase(handleAdminMetrics(options));
+
 function metricsRequest(method = "GET"): Request {
   return new Request("https://luke.test/api/admin/metrics", { method });
 }
@@ -450,9 +456,9 @@ function emptyMetrics(
 }
 
 test("the read answers a whole document past the gate", async () => {
-  const ok = await handleAdminMetrics({
+  const ok = await answer({
     request: metricsRequest(),
-    readMetrics: async (now) => emptyMetrics(now),
+    readMetrics: (now) => Effect.succeed(emptyMetrics(now)),
     now: () => NOON_UTC,
   });
   assert.equal(ok.status, 200);
@@ -482,11 +488,12 @@ test("the scope defaults to hiding admins; only the explicit `all` widens it", (
 
 test("the handler reads metrics at the scope the request asked for", async () => {
   const scopes: AdminMetricsScope[] = [];
-  const readMetrics = async (now: number, scope: AdminMetricsScope): Promise<AdminMetrics> => {
-    scopes.push(scope);
-    return emptyMetrics(now);
-  };
-  const respond = (request: Request) => handleAdminMetrics({ request, readMetrics });
+  const readMetrics = (now: number, scope: AdminMetricsScope) =>
+    Effect.sync(() => {
+      scopes.push(scope);
+      return emptyMetrics(now);
+    });
+  const respond = (request: Request) => answer({ request, readMetrics });
 
   assert.equal((await respond(metricsRequest())).status, 200);
   const widened = new Request(
@@ -516,15 +523,12 @@ test("the window defaults to 30 days; anything outside the set is nothing, never
 
 test("the handler reads metrics at the window the request asked for", async () => {
   const windows: AdminMetricsWindow[] = [];
-  const readMetrics = async (
-    now: number,
-    _scope: AdminMetricsScope,
-    windowDays: AdminMetricsWindow,
-  ): Promise<AdminMetrics> => {
-    windows.push(windowDays);
-    return emptyMetrics(now, windowDays);
-  };
-  const respond = (request: Request) => handleAdminMetrics({ request, readMetrics });
+  const readMetrics = (now: number, _scope: AdminMetricsScope, windowDays: AdminMetricsWindow) =>
+    Effect.sync(() => {
+      windows.push(windowDays);
+      return emptyMetrics(now, windowDays);
+    });
+  const respond = (request: Request) => answer({ request, readMetrics });
 
   assert.equal((await respond(metricsRequest())).status, 200);
   const week = new Request(
@@ -539,12 +543,13 @@ test("the handler reads metrics at the window the request asked for", async () =
 
 test("a window outside the set is a 400 that reads nothing", async () => {
   let reads = 0;
-  const response = await handleAdminMetrics({
+  const response = await answer({
     request: new Request(`https://luke.test/api/admin/metrics?${ADMIN_METRICS_WINDOW_PARAM}=13`),
-    readMetrics: async (now) => {
-      reads += 1;
-      return emptyMetrics(now);
-    },
+    readMetrics: (now) =>
+      Effect.sync(() => {
+        reads += 1;
+        return emptyMetrics(now);
+      }),
   });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, ADMIN_ERROR.INVALID_WINDOW);
@@ -552,11 +557,9 @@ test("a window outside the set is a 400 that reads nothing", async () => {
 });
 
 test("a seam that throws is a 503 refusal rather than a crash", async () => {
-  const readThrew = await handleAdminMetrics({
+  const readThrew = await answer({
     request: metricsRequest(),
-    readMetrics: async () => {
-      throw new Error("database is down");
-    },
+    readMetrics: () => Effect.die(new Error("database is down")),
   });
   assert.equal(readThrew.status, 503);
   assert.equal((await readThrew.json()).error, ADMIN_ERROR.UNAVAILABLE);

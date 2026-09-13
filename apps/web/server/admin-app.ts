@@ -1,5 +1,6 @@
 import { type HttpApp, HttpRouter } from "@effect/platform";
-import { Effect } from "effect";
+import type { SqlClient } from "@effect/sql";
+import { type Cause, Effect } from "effect";
 import type { AdminViewer } from "./admin/admin-access.js";
 import { type AdminDayOptions, handleAdminDay } from "./admin/admin-day.js";
 import { type AdminFavoriteOptions, handleAdminFavorite } from "./admin/admin-favorite.js";
@@ -28,8 +29,10 @@ import { ADMIN_REFUSAL, adminRefusalResponse } from "./admin/http-effect.js";
 
 /** What the group is handed that the deployment alone can answer for. */
 export interface AdminSeams {
-  /** The browser session the request rides in on; a throw is an outage, never a sign-out. */
-  resolveViewer: (request: Request) => Promise<AdminViewer | undefined>;
+  /** The browser session the request rides in on; a refusal is an outage, never a sign-out. */
+  resolveViewer: (
+    request: Request,
+  ) => Effect.Effect<AdminViewer | undefined, Cause.UnknownException>;
   readMetrics: AdminMetricsOptions["readMetrics"];
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];
@@ -44,13 +47,16 @@ const FAVORITE_METHODS = ["PUT", "DELETE"] as const;
 function gate(
   seams: AdminSeams,
   methods: readonly string[],
-  handler: (viewer: AdminViewer, request: Request) => Promise<Response>,
-): HttpApp.Default {
+  handler: (
+    viewer: AdminViewer,
+    request: Request,
+  ) => Effect.Effect<Response, never, SqlClient.SqlClient>,
+): HttpApp.Default<never, SqlClient.SqlClient> {
   return adminViewerGate({ methods, resolveViewer: seams.resolveViewer, handler });
 }
 
 /** The group, which is the dashboard's five addresses and the refusal anywhere else. */
-export function adminApp(seams: AdminSeams): HttpApp.Default {
+export function adminApp(seams: AdminSeams): HttpApp.Default<never, SqlClient.SqlClient> {
   return HttpRouter.empty.pipe(
     HttpRouter.all(
       ADMIN_ROUTE_PATH.METRICS,

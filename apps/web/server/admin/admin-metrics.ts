@@ -1,3 +1,5 @@
+import type { SqlClient } from "@effect/sql";
+import { Effect } from "effect";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,
@@ -9,6 +11,7 @@ import {
   errorResponse,
   jsonResponse,
 } from "./http.js";
+import { type AdminSeamEffect, unavailableSeam } from "./seam.js";
 
 /**
  * What the admin dashboard reads about the service, and only what the service's
@@ -443,7 +446,7 @@ export interface AdminMetricsOptions {
     now: number,
     scope: AdminMetricsScope,
     windowDays: AdminMetricsWindow,
-  ) => Promise<AdminMetrics>;
+  ) => AdminSeamEffect<AdminMetrics>;
   now?: () => number;
 }
 
@@ -456,22 +459,19 @@ export interface AdminMetricsOptions {
  * crash, so the page can say "try again" instead of failing to parse a platform
  * error page.
  */
-export async function handleAdminMetrics(options: AdminMetricsOptions): Promise<Response> {
+export function handleAdminMetrics(
+  options: AdminMetricsOptions,
+): Effect.Effect<Response, never, SqlClient.SqlClient> {
   const { request } = options;
 
   const windowDays = adminMetricsWindow(request.url);
   if (windowDays === undefined) {
-    return errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW);
+    return Effect.succeed(errorResponse(ADMIN_HTTP_STATUS.BAD_REQUEST, ADMIN_ERROR.INVALID_WINDOW));
   }
 
   const now = (options.now ?? Date.now)();
-  try {
-    return jsonResponse(
-      ADMIN_HTTP_STATUS.OK,
-      await options.readMetrics(now, adminMetricsScope(request.url), windowDays),
-    );
-  } catch (error) {
-    console.error("admin metrics read failed", error);
-    return errorResponse(ADMIN_HTTP_STATUS.SERVICE_UNAVAILABLE, ADMIN_ERROR.UNAVAILABLE);
-  }
+  return options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
+    Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
+    Effect.catchAllCause((cause) => unavailableSeam("admin metrics read failed", cause)),
+  );
 }

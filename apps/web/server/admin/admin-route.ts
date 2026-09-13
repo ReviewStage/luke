@@ -1,8 +1,8 @@
+import { type Cause, Effect } from "effect";
 import type { AdminSeams } from "../admin-app.js";
 import { auth } from "../auth.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../hosted/posthog.js";
-import { runWeb } from "../runtime.js";
 import type { AdminViewer } from "./admin-access.js";
 import { buildAdminDayDetail } from "./admin-day.js";
 import { adminIntegrations, buildAdminMetrics } from "./admin-metrics.js";
@@ -32,15 +32,22 @@ function configured(name: string): boolean {
 /**
  * The browser session an admin request rides in on — the maintainer's own
  * sign-in on this site, carrying that account's `role`, never the desktop's
- * bearer token. A getSession failure must propagate: the gate turns a thrown
- * viewer seam into a 503, where swallowing it here would misreport an auth
- * outage as a signed-out 401 and offer a sign-in that cannot succeed.
+ * bearer token. Better Auth's `getSession` is a promise of somebody else's,
+ * so it is wrapped once here, where the seam is built, and the gate yields
+ * the effect on the request's own fiber. A getSession failure must propagate:
+ * the gate turns a refused viewer seam into a 503, where swallowing it here
+ * would misreport an auth outage as a signed-out 401 and offer a sign-in that
+ * cannot succeed.
  */
-async function resolveSessionViewer(request: Request): Promise<AdminViewer | undefined> {
-  const authenticated = await auth.api.getSession({ headers: request.headers });
-  const account = authenticated?.user;
-  if (!account) return undefined;
-  return { userId: account.id, role: account.role };
+function resolveSessionViewer(
+  request: Request,
+): Effect.Effect<AdminViewer | undefined, Cause.UnknownException> {
+  return Effect.tryPromise(async () => {
+    const authenticated = await auth.api.getSession({ headers: request.headers });
+    const account = authenticated?.user;
+    if (!account) return undefined;
+    return { userId: account.id, role: account.role };
+  });
 }
 
 export function hostedAdminSeams(): AdminSeams {
@@ -63,34 +70,24 @@ export function hostedAdminSeams(): AdminSeams {
 
   return {
     resolveViewer: resolveSessionViewer,
-    readMetrics: async (now, scope, windowDays) =>
-      buildAdminMetrics(
-        await runWeb(
-          readAdminMetricsSource({
-            now,
-            integrations,
-            analyticsConsoleUrl,
-            scope,
-            windowDays,
-          }),
-        ),
-        now,
-        windowDays,
+    readMetrics: (now, scope, windowDays) =>
+      Effect.map(
+        readAdminMetricsSource({ now, integrations, analyticsConsoleUrl, scope, windowDays }),
+        (source) => buildAdminMetrics(source, now, windowDays),
       ),
-    readUsers: async (now, scope, viewerId, windowDays, search) =>
-      buildAdminUserList(
-        await runWeb(readAdminUsersSource({ now, scope, search, viewerId, windowDays })),
-        now,
-        windowDays,
-        search,
+    readUsers: (now, scope, viewerId, windowDays, search) =>
+      Effect.map(readAdminUsersSource({ now, scope, search, viewerId, windowDays }), (source) =>
+        buildAdminUserList(source, now, windowDays, search),
       ),
-    readUser: async (userId, now, windowDays) => {
-      const source = await runWeb(readAdminUserSource({ userId, now, windowDays }));
-      return source && buildAdminUserDetail(source, now, windowDays);
-    },
-    readDay: async (day, now, scope) =>
-      buildAdminDayDetail(await runWeb(readAdminDaySource({ day, scope })), now, day),
-    writeFavorite: (adminId, userId, favorite) =>
-      runWeb(writeAdminFavorite({ adminId, userId, favorite })),
+    readUser: (userId, now, windowDays) =>
+      Effect.map(
+        readAdminUserSource({ userId, now, windowDays }),
+        (source) => source && buildAdminUserDetail(source, now, windowDays),
+      ),
+    readDay: (day, now, scope) =>
+      Effect.map(readAdminDaySource({ day, scope }), (source) =>
+        buildAdminDayDetail(source, now, day),
+      ),
+    writeFavorite: (adminId, userId, favorite) => writeAdminFavorite({ adminId, userId, favorite }),
   };
 }

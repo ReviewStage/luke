@@ -1,5 +1,6 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
-import { Effect, Schema } from "effect";
+import type { SqlError } from "@effect/sql/SqlError";
+import { Effect, type ParseResult, Schema } from "effect";
 import { auth } from "../../auth.js";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { runWeb } from "../../runtime.js";
@@ -32,6 +33,13 @@ import type { CloudActionExecutor } from "./performer.js";
 /** The default model the hosted brain runs on when the deployment names none. */
 const DEFAULT_BRAIN_MODEL = "gpt-5.4";
 
+/**
+ * What a seam over the ambient client answers: an effect the caller composes
+ * into whatever it already runs, so the edge serving the request is the one
+ * place the client behind it is provided.
+ */
+type BrainHostEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+
 interface OpenAiAccess {
   readonly apiKey: string;
   readonly modelId: string;
@@ -54,14 +62,14 @@ export interface BrainHostSeams {
   readonly scriptedModel: () => boolean;
   readonly spend: (userId: string) => Promise<HostedSpend>;
   /** The account's stored provider keys, sealed, as the roster and the actions are admitted under them. */
-  readonly vaultRows: (userId: string) => Promise<readonly VaultKeyRow[]>;
+  readonly vaultRows: (userId: string) => BrainHostEffect<readonly VaultKeyRow[]>;
   /** The secret the vault's rows are sealed under. */
   readonly vaultSecret: () => string;
   /** The account's stored key for a cloud provider, decrypted; nothing where none is stored or it cannot be opened. */
   readonly providerKey: (
     userId: string,
     providerId: CloudAgentProviderId,
-  ) => Promise<string | undefined>;
+  ) => BrainHostEffect<string | undefined>;
   readonly executeAction: CloudActionExecutor;
   readonly now: () => number;
 }
@@ -128,8 +136,8 @@ function vaultSecret(): string {
 export function productionBrainHostSeams(): BrainHostSeams {
   const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()) }));
   const writer = onceComposed(storeWriter({ tools: CATALOG_TOOL_SET }));
-  const vaultRows = (userId: string): Promise<readonly VaultKeyRow[]> =>
-    runWeb(findVaultRows(userId));
+  const vaultRows = (userId: string): BrainHostEffect<readonly VaultKeyRow[]> =>
+    findVaultRows(userId);
   return {
     store,
     writer,
@@ -163,8 +171,8 @@ export function productionBrainHostSeams(): BrainHostSeams {
     spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
     vaultRows,
     vaultSecret,
-    providerKey: async (userId, providerId) =>
-      runWeb(readApiKeyFor(await vaultRows(userId), vaultSecret())(providerId)()),
+    providerKey: (userId, providerId) =>
+      Effect.flatMap(vaultRows(userId), (rows) => readApiKeyFor(rows, vaultSecret())(providerId)()),
     executeAction: (input) => executeSessionAction(input),
     now: () => Date.now(),
   };

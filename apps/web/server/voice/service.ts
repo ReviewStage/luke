@@ -712,7 +712,7 @@ export class VoiceService {
       const { route } = admission;
       if (route === VOICE_ROUTE.INTRODUCTION) {
         if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
-        const introduction = yield* Effect.promise(() => this.#accounts.spendIntroduction());
+        const introduction = yield* this.#accounts.spendIntroduction();
         if (!introduction.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
       } else if (!sessionsInputAdmitted(frame)) {
         return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
@@ -789,7 +789,7 @@ export class VoiceService {
       ) {
         return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
       }
-      const spend = yield* Effect.promise(() => this.#accounts.spend(accountId));
+      const spend = yield* this.#accounts.spend(accountId);
       if (!spend.allowed) return { refusal: HOSTED_API_ERROR.QUOTA_EXHAUSTED };
       return { accountId, deviceId: admission.deviceId, quota: spend.quota };
     });
@@ -850,18 +850,19 @@ export class VoiceService {
     return Effect.catchAll(upstream.attach(sessionId), () => Effect.succeed(undefined));
   }
 
-  #recordUsage(userId: string, sessionId: string, seconds: number): Effect.Effect<void> {
-    return Effect.map(
-      Effect.promise(() => this.#accounts.recordSeconds({ userId, sessionId, seconds })),
-      (outcome) => {
-        this.#log({
-          event: LOG_EVENT.USAGE_RECORDED,
-          route: VOICE_ROUTE.SESSIONS,
-          seconds,
-          outcome,
-        });
-      },
-    );
+  #recordUsage(
+    userId: string,
+    sessionId: string,
+    seconds: number,
+  ): Effect.Effect<void, SessionFailure, SqlClient.SqlClient> {
+    return Effect.map(this.#accounts.recordSeconds({ userId, sessionId, seconds }), (outcome) => {
+      this.#log({
+        event: LOG_EVENT.USAGE_RECORDED,
+        route: VOICE_ROUTE.SESSIONS,
+        seconds,
+        outcome,
+      });
+    });
   }
 
   /** The socket's first frame as a `session.create` or `session.attach`, or nothing when it was late, closed, or neither. */
