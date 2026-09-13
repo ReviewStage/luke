@@ -14,7 +14,7 @@ import { hostedVaultSeams } from "./hosted/vault-route.js";
  * group answers a path it does not own with.
  */
 
-const RATING_PATH = "/api/conversation/messages/:id/rating";
+const RATING_PATH = "/api/conversation/messages/rating";
 
 /** What this group answers against: the connection the rating write runs on. */
 type RatingServices = SqlClient.SqlClient;
