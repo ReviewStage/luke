@@ -112,8 +112,9 @@ export interface CalendarsDependencies {
 
 /**
  * The calendars concern, over the kernel it takes as a tag and the runtime
- * the layer it is built under is running on: the reader classes below carry
- * that runtime rather than the ambient default one, and the three
+ * the layer it is built under is running on: the two effects its own
+ * promise-shaped edges start are forked onto that runtime rather than the
+ * ambient default one, and the three
  * observation-driven timers fork their fibers into the `Scope` the account
  * gate's own arming runs in, exactly as the device registration does one
  * level down.
@@ -142,7 +143,6 @@ export const composeCalendars = (
     const googleCalendarConsent = googleCalendarSignIn({
       openExternal: (url) =>
         void kernel.openExternalThroughNode(url).catch(kernel.reportOpenFailure),
-      runtime,
     });
     /**
      * The EventKit helper runs on the desktop, where the device is: each

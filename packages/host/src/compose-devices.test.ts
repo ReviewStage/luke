@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { it } from "@effect/vitest";
-import { DEVICE_PLATFORM } from "@sidecar/hosted";
+import { type ChangesAnswer, DEVICE_PLATFORM, type DeviceRegisterAnswer } from "@sidecar/hosted";
 
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
@@ -39,23 +39,26 @@ function fakeClient(answers: {
 }) {
   const calls: Call[] = [];
   const client: DeviceCadenceClient = {
-    register: async (request) => {
-      calls.push({ kind: "register", body: request });
-      return answers.register ? answers.register() : { deviceId: DEVICE_ID };
-    },
-    poll: async (request) => {
-      calls.push({ kind: "poll", body: request });
-      const seen = answers.poll ? answers.poll() : { seen: true };
-      return seen === undefined ? undefined : { ...seen, ...HEADS };
-    },
-    forget: async (request, departing) => {
-      calls.push({
-        kind: "forget",
-        body: request,
-        ...(departing ? { departing: departing.accessToken } : undefined),
-      });
-      return { deleted: true };
-    },
+    register: (request) =>
+      Effect.sync(() => {
+        calls.push({ kind: "register", body: request });
+        return answers.register ? answers.register() : { deviceId: DEVICE_ID };
+      }),
+    poll: (request) =>
+      Effect.sync(() => {
+        calls.push({ kind: "poll", body: request });
+        const seen = answers.poll ? answers.poll() : { seen: true };
+        return seen === undefined ? undefined : { ...seen, ...HEADS };
+      }),
+    forget: (request, departing) =>
+      Effect.sync(() => {
+        calls.push({
+          kind: "forget",
+          body: request,
+          ...(departing ? { departing: departing.accessToken } : undefined),
+        });
+        return { deleted: true };
+      }),
   };
   return { client, calls };
 }
@@ -71,7 +74,7 @@ function cadence(
     client,
     state: deviceStateFile(() => directory),
     mintInstallationId: mint,
-    presence: async () => presence(),
+    presence: Effect.sync(() => presence()),
     report: (message) => {
       reported.push(message);
     },
@@ -288,13 +291,17 @@ it.scoped(
       let polls = 0;
       const slow: DeviceCadenceClient = {
         ...client,
-        poll: () => {
-          polls += 1;
-          if (polls === 1) return Promise.resolve({ seen: true, ...HEADS });
-          return new Promise((resolve) => {
-            release = () => resolve({ seen: false, ...HEADS });
-          });
-        },
+        poll: () =>
+          Effect.suspend(() => {
+            polls += 1;
+            if (polls === 1) return Effect.succeed({ seen: true, ...HEADS });
+            return Effect.promise(
+              () =>
+                new Promise<ChangesAnswer>((resolve) => {
+                  release = () => resolve({ seen: false, ...HEADS });
+                }),
+            );
+          }),
       };
       const racing = yield* cadence(directory, slow);
       yield* racing.start;
@@ -358,15 +365,18 @@ it.scoped(
       const gated: DeviceCadenceClient = {
         ...client,
         register: (request) =>
-          new Promise((resolve) => {
-            calls.push({ kind: "register", body: request });
-            const deviceId = ids.shift() ?? OTHER_DEVICE_ID;
-            if (release === undefined) {
-              release = () => resolve({ deviceId });
-              return;
-            }
-            resolve({ deviceId });
-          }),
+          Effect.promise(
+            () =>
+              new Promise<DeviceRegisterAnswer>((resolve) => {
+                calls.push({ kind: "register", body: request });
+                const deviceId = ids.shift() ?? OTHER_DEVICE_ID;
+                if (release === undefined) {
+                  release = () => resolve({ deviceId });
+                  return;
+                }
+                resolve({ deviceId });
+              }),
+          ),
       };
       const subject = yield* cadence(directory, gated);
       yield* subject.start;
@@ -388,6 +398,59 @@ it.scoped(
         OTHER_DEVICE_ID,
         "the row the new sign-in registered stands",
       );
+      yield* subject.stop({ forget: false });
+    }),
+);
+
+it.scoped(
+  "a sign-out that interrupts a beat's own wait hands the slot on rather than opening it",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      let release: (() => void) | undefined;
+      const { client, calls } = fakeClient({});
+      const gated: DeviceCadenceClient = {
+        ...client,
+        register: (request) =>
+          Effect.promise(
+            () =>
+              new Promise<DeviceRegisterAnswer>((resolve) => {
+                calls.push({ kind: "register", body: request });
+                if (release === undefined) {
+                  release = () => resolve({ deviceId: DEVICE_ID });
+                  return;
+                }
+                resolve({ deviceId: OTHER_DEVICE_ID });
+              }),
+          ),
+      };
+      const subject = yield* cadence(directory, gated);
+
+      yield* subject.start;
+      yield* firstBeat(() => calls.length === 1);
+      yield* subject.stop({ forget: false });
+
+      // The second sign-in's beat waits on the registration still on the wire,
+      // and the sign-out after it interrupts that wait rather than the call.
+      yield* subject.start;
+      yield* settle();
+      yield* subject.stop({ forget: false });
+
+      yield* subject.start;
+      yield* settle();
+      assert.equal(
+        calls.length,
+        1,
+        "the interrupted wait handed its slot on rather than opening it",
+      );
+
+      release?.();
+      yield* firstBeat(() => calls.length === 3);
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "register", "poll"],
+      );
+      assert.equal(subject.deviceId(), OTHER_DEVICE_ID);
       yield* subject.stop({ forget: false });
     }),
 );
