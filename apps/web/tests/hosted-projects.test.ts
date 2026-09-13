@@ -27,7 +27,7 @@ function projectsOptions(
     request: projectsRequest(),
     encryptionSecret: SECRET,
     resolveUserId: () => Effect.succeed("user-1"),
-    readVaultKeys: async (): Promise<VaultKeyRow[]> => [],
+    readVaultKeys: (): Effect.Effect<VaultKeyRow[]> => Effect.succeed([]),
     store: () => memoryObservationStore(),
     ...overrides,
   };
@@ -66,7 +66,7 @@ test("projects are listed from the stored snapshot, seeded once, and a project c
   const conductor = conductorProjects();
   const options = () =>
     projectsOptions({
-      readVaultKeys: async () => KEY_ROWS,
+      readVaultKeys: () => Effect.succeed(KEY_ROWS),
       store: () => store,
       httpClient: conductor.layer,
     });
@@ -144,9 +144,8 @@ test("a provider that fails its pass does not fail the whole answer", async () =
   const response = await runWithoutDatabase(
     handleProjects(
       projectsOptions({
-        readVaultKeys: async (): Promise<VaultKeyRow[]> => [
-          { providerId: "conductor", ciphertext },
-        ],
+        readVaultKeys: (): Effect.Effect<VaultKeyRow[]> =>
+          Effect.succeed([{ providerId: "conductor", ciphertext }]),
         httpClient: fakeHttpClientLayer(async () => {
           throw new Error("connection refused");
         }),
@@ -210,9 +209,8 @@ test("a provider that offered a project carries its agent table on the answer", 
   const response = await runWithoutDatabase(
     handleProjects(
       projectsOptions({
-        readVaultKeys: async (): Promise<VaultKeyRow[]> => [
-          { providerId: "conductor", ciphertext },
-        ],
+        readVaultKeys: (): Effect.Effect<VaultKeyRow[]> =>
+          Effect.succeed([{ providerId: "conductor", ciphertext }]),
         httpClient: fakeHttpClientLayer(async (url) => {
           if (url.endsWith("/me")) {
             return new Response(JSON.stringify({ userId: "u1" }), { status: 200 });

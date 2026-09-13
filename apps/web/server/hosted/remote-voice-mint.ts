@@ -1,4 +1,5 @@
 import type * as HttpClient from "@effect/platform/HttpClient";
+import type { SqlClient } from "@effect/sql";
 import { Effect, type Layer } from "effect";
 import { CONTEXT_ITEM_KIND, contextItemId, type ObservedSession } from "../core.js";
 import { observedSessionForResponse } from "./observe.js";
@@ -36,13 +37,13 @@ export interface RemoteObserveSeams
 export function observeCloudSessions(
   userId: string,
   options: RemoteObserveSeams,
-): Effect.Effect<ObservedSession[]> {
+): Effect.Effect<ObservedSession[], never, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const secret = (options.encryptionSecret ?? "").trim();
     if (!secret) return [];
 
     const rows = yield* Effect.orElseSucceed(
-      Effect.tryPromise(() => options.readVaultKeys(userId)),
+      options.readVaultKeys(userId),
       (): readonly VaultKeyRow[] => [],
     );
     const passes = yield* observeProviders({

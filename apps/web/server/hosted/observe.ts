@@ -82,7 +82,7 @@ export function handleObserve(
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const rows = yield* Effect.promise(() => readVaultKeys(userId));
+    const rows = yield* readVaultKeys(userId);
     if (keyedCloudProviderIds(rows).length === 0) {
       return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
     }

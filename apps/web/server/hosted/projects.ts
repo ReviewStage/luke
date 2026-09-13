@@ -80,7 +80,7 @@ export function handleProjects(
       return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
     }
 
-    const rows = yield* Effect.promise(() => readVaultKeys(userId));
+    const rows = yield* readVaultKeys(userId);
     const creating = keyedCloudProviderIds(rows).filter(
       (providerId) =>
         actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined,

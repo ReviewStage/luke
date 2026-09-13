@@ -19,6 +19,7 @@ import {
 } from "./observed-roster.js";
 import { rosterDiff, rosterDiffIsEmpty } from "./roster-diff.js";
 import type { HostedStore, RosterSnapshotRecord } from "./store/index.js";
+import type { VaultKeyEffect } from "./vault-key-store.js";
 import { readApiKeyFor } from "./vault-keys.js";
 import type { VaultKeyRow } from "./vault-route.js";
 
@@ -290,12 +291,12 @@ export function rosterForAction(input: {
   providerId: CloudAgentProviderId;
   secret: string;
   store: ObservationStore;
-  readVaultKeys: (userId: string) => Promise<VaultKeyRow[]>;
+  readVaultKeys: (userId: string) => VaultKeyEffect<VaultKeyRow[]>;
   seams: CloudObserveSeams;
   now: number;
 }): ObservationEffect<ActionRoster> {
   return Effect.gen(function* () {
-    const rows = yield* Effect.promise(() => input.readVaultKeys(input.userId));
+    const rows = yield* input.readVaultKeys(input.userId);
     const stored = yield* storedRoster(input.store, input.userId, rows, input.secret);
     if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
     const outcome = yield* observeAndSnapshot({

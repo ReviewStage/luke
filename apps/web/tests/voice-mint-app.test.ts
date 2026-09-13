@@ -76,7 +76,7 @@ function remote(overrides: Partial<MintCall> = {}) {
     apiKey: API_KEY,
     resolveUserId: () => Effect.succeed("user-1"),
     spend: () => Effect.succeed(OPEN_SPEND),
-    readVaultKeys: async () => [],
+    readVaultKeys: () => Effect.succeed([]),
     now: () => NOW,
     httpClient: upstream(minted),
     ...overrides,
