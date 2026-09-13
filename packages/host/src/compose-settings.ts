@@ -115,7 +115,7 @@ export interface SettingsComposer extends Composer {
   forgetAccountPreferenceHydration: () => void;
   /** The count the account actions flush before they end the account they are authenticated with. */
   flushProductEvents: Effect.Effect<void>;
-  link: (links: SettingsLinks) => void;
+  link: (links: SettingsLinks) => Effect.Effect<void>;
 }
 
 /**
@@ -888,9 +888,7 @@ export const composeSettings = (): Effect.Effect<
         accountPreferencesHydratedAccount = undefined;
       },
       flushProductEvents: productEvents.flush,
-      link: (next) => {
-        late.unsafeSet(next);
-      },
+      link: (next) => Effect.asVoid(late.set(next)),
       lifetime: Effect.gen(function* () {
         yield* startedAndStopped(
           Effect.sync(() => {

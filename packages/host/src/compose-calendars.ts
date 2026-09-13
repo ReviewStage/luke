@@ -102,7 +102,7 @@ export interface CalendarsComposer extends Composer {
   /** Arms the three observation-driven timers; the account gate's own edges are what run these two. */
   readonly armObservation: Effect.Effect<void>;
   readonly disarmObservation: Effect.Effect<void>;
-  link: (links: CalendarsLinks) => void;
+  link: (links: CalendarsLinks) => Effect.Effect<void>;
 }
 
 export interface CalendarsDependencies {
@@ -705,9 +705,7 @@ export const composeCalendars = (
       },
       armObservation: observation.arm,
       disarmObservation: observation.disarm,
-      link: (next) => {
-        late.unsafeSet(next);
-      },
+      link: (next) => Effect.asVoid(late.set(next)),
       // The gate's own disarm is what ends the observation; the scope this
       // composer was built in ends whatever a disarm missed, so this lifetime
       // is its start alone.

@@ -24,7 +24,7 @@ import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import type { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
 import { LiveSessionService } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Option, Queue, type Scope } from "effect";
+import { Effect, Either, Queue, type Scope } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -54,7 +54,7 @@ export interface LiveComposer extends Composer {
   requestOnboardingBeat: () => void;
   /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
   seedArrivalOnFirstSignIn: () => void;
-  link: (links: LiveLinks) => void;
+  link: (links: LiveLinks) => Effect.Effect<void>;
 }
 
 export interface LiveDependencies {
@@ -88,13 +88,6 @@ export const composeLive = (
     const kernel = yield* HostKernelTag;
     const { now, runMode } = kernel;
     const late = yield* lateService<LiveLinks>();
-    const links = (): LiveLinks => {
-      const standing = late.unsafePeek();
-      if (Option.isNone(standing)) {
-        throw new Error("the live composer's links are read before link() has run");
-      }
-      return standing.value;
-    };
     // What a caller asked for and nothing waits on: each beat is taken in
     // turn by a fiber of this composer's scope, and a beat that dies is
     // written down rather than left to end the fiber every later beat needs.
@@ -132,7 +125,8 @@ export const composeLive = (
       conversationEntries: () => brain.store.thread().entries(),
       roster: () => voiceRoster(observation.rosterForClients()),
       quietNow: () => calendars.announcementsQuietNow(now()),
-      releaseHeldBriefings: (held) => links().releaseHeld(held),
+      releaseHeldBriefings: (held) =>
+        Effect.flatMap(late.value, (links) => links.releaseHeld(held)),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
       createId: kernel.createId,
       report: kernel.report,
@@ -279,9 +273,7 @@ export const composeLive = (
         if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
         calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
       },
-      link: (next) => {
-        late.unsafeSet(next);
-      },
+      link: (next) => Effect.asVoid(late.set(next)),
       // The session itself is closed by the drain, inside the quit's deadline,
       // before any composer stops; nothing is left here to give back.
       lifetime: Effect.void,

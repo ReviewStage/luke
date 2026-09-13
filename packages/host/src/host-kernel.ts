@@ -64,9 +64,6 @@ export interface HostKernel {
   readonly nodes: NodeRegistry;
   /** One host event, numbered into the log every client follows. */
   emit: (kind: GatewayEventKind, payload: WireValue) => void;
-  /** The service the merge composed; reading it before the merge has is a named failure, never a silent undefined. */
-  service: () => GatewayService;
-  setService: (service: GatewayService) => void;
   /**
    * An address a host-owned flow needs opened: the native node's. No node
    * connected is a refusal the action reports as not done; a node that took the
@@ -89,16 +86,14 @@ export interface HostKernel {
 }
 
 /**
- * The one late service, as the two faces it is read through: the sync read
- * every unconverted composer holds, which is a named failure before the merge
- * composed the service, and the write the merge performs once.
+ * The one late service, as the event door reads it. Every other reader awaits
+ * the `Deferred` the merge writes; `emit` publishes from a synchronous
+ * statement and cannot, so the read it holds is synchronous and answers a
+ * named failure before the merge composed the service.
  */
-interface HostServiceHolder {
-  read: () => GatewayService;
-  set: (service: GatewayService) => void;
-}
+type HostServiceRead = () => GatewayService;
 
-/** What reading the service before the merge composed it says, on either face. */
+/** What reading the service before the merge composed it says. */
 export const SERVICE_READ_BEFORE_MERGE = "the host's service is read before the merge composed it";
 
 /**
@@ -135,7 +130,7 @@ export interface HostKernelParts {
   readonly now: () => number;
   readonly createId: () => string;
   readonly report: (message: string) => void;
-  readonly service: HostServiceHolder;
+  readonly service: HostServiceRead;
 }
 
 export function hostKernelOver(parts: HostKernelParts): HostKernel {
@@ -153,11 +148,7 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     hostedServiceBaseUrl: hostedServiceBaseUrlFor(accountBaseUrl),
     nodes,
     emit: (kind, payload) => {
-      service.read().emit(kind, payload);
-    },
-    service: () => service.read(),
-    setService: (next) => {
-      service.set(next);
+      service().emit(kind, payload);
     },
     openExternalThroughNode: async (url, kind = HOST_NODE_OPEN_KIND.ADDRESS) => {
       const result = await Effect.runPromise(

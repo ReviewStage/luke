@@ -41,14 +41,14 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, ExecutionStrategy, Exit, Scope } from "effect";
+import { Effect, ExecutionStrategy, Exit, Queue, Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
 import { conversationMaintenance, conversationOperations } from "./conversation-operations.js";
 import { startedAndStopped } from "./effect/composer.js";
-import { HostKernelTag } from "./effect/kernel.js";
+import { HostKernelTag, HostService } from "./effect/kernel.js";
 import { StoreWorker } from "./effect/seams.js";
 import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
 import { wireMemoryDefinitions } from "./memory-definition.js";
@@ -59,6 +59,7 @@ import {
   INERT_MEMORY_WIRING,
   type MemoryWiring,
 } from "./notebook-memory.js";
+import type { GatewayService } from "./service.js";
 import { agentRootPath } from "./store-path.js";
 import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
@@ -88,11 +89,12 @@ export const composeBrain = (
 ): Effect.Effect<
   BrainComposer,
   never,
-  HostKernelTag | StoreWorker | FileSystem.FileSystem | Scope.Scope
+  HostKernelTag | HostService | StoreWorker | FileSystem.FileSystem | Scope.Scope
 > =>
   Effect.gen(function* () {
     const { account, observation, announcements } = dependencies;
     const kernel = yield* HostKernelTag;
+    const hostService = yield* HostService;
     const storeWorker = yield* StoreWorker;
     // The index's watch, its start, and every pass of it are fibers of a
     // scope of this composer's own, closed in its stop before the store is:
@@ -105,6 +107,32 @@ export const composeBrain = (
     // runtime rather than on a second one built where the work lives.
     const execution = yield* Effect.runtime<never>();
     const { runMode, report, now, createId } = kernel;
+
+    /**
+     * What the store and the wiring tell the clients, as effects taken in turn
+     * by a fiber of this composer's scope. Both doors are synchronous
+     * callbacks of collaborators that hold no fiber, and the service they
+     * speak through is what the merge composes after this composer is built,
+     * so each offers its publication here and the take awaits the service:
+     * nothing is dropped for having been reported before the merge, and the
+     * order two publications were offered in is the order they are made.
+     */
+    const publications = yield* Queue.unbounded<Effect.Effect<void>>();
+    yield* Effect.forkScoped(
+      Effect.forever(
+        Effect.flatMap(Queue.take(publications), (publication) =>
+          Effect.catchAllDefect(publication, (defect) =>
+            Effect.logError("a host service publication failed", defect),
+          ),
+        ),
+      ),
+    );
+    const publish = (through: (service: GatewayService) => void): void => {
+      Queue.unsafeOffer(
+        publications,
+        Effect.flatMap(hostService.value, (service) => Effect.sync(() => through(service))),
+      );
+    };
 
     /**
      * The brain's store and the conversation it holds: one retained thread
@@ -122,8 +150,9 @@ export const composeBrain = (
       ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
       now,
       createEventId: createId,
-      onConversationChanged: (sessionKey, entries, except) =>
-        kernel.service().conversationChanged(sessionKey, entries, except),
+      onConversationChanged: (sessionKey, entries, except) => {
+        publish((service) => service.conversationChanged(sessionKey, entries, except));
+      },
       onDirectoryChanged: () => undefined,
       report,
     });
@@ -250,7 +279,9 @@ export const composeBrain = (
             tracePrefetch: (record) => account.agentTrace?.recordBrainPrefetch(record),
           }
         : undefined),
-      broadcastRequests: (snapshots) => kernel.service().runsReported(snapshots),
+      broadcastRequests: (snapshots) => {
+        publish((service) => service.runsReported(snapshots));
+      },
       onGenerationReplaced: (sessionKey) => {
         if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
       },
