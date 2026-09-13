@@ -33,7 +33,6 @@
     "packages/gateway/src/transport.ts",
     "packages/host/src/compose-calendars.ts",
     "packages/host/src/compose-devices.ts",
-    "packages/host/src/testing/gateway-service.ts",
     "packages/hosted/src/action-client.ts",
     "packages/hosted/src/device-client.ts",
     "packages/hosted/src/session-messages-client.ts",
