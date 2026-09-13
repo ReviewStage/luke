@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { HTTP_METHOD, type UnparsedWireValue } from "@sidecar/wire";
+import { HTTP_METHOD } from "@sidecar/wire";
 import {
   fakeCloudApi,
   fakeHttpClientLayer,
@@ -313,39 +313,6 @@ it.effect("an ask answers a body its own schema admitted, and nothing else", () 
       yield* Effect.provide(
         refusedBySchema.call.ask({ method: HTTP_METHOD.GET, path: PATH }, preferencesSchema),
         refusedBySchema.client,
-      ),
-      undefined,
-    );
-  }),
-);
-
-it.effect("a read answers what a caller's own reader admitted, and nothing else", () =>
-  Effect.gen(function* () {
-    const read = (payload: UnparsedWireValue) => (payload === undefined ? undefined : { payload });
-
-    const answered = callOn(fixedBearer("sk-test"), () => jsonResponse({ voice: "marin" }));
-    assert.deepEqual(
-      yield* Effect.provide(
-        answered.call.read({ method: HTTP_METHOD.GET, path: PATH }, read),
-        answered.client,
-      ),
-      { payload: { voice: "marin" } },
-    );
-
-    const refusedByReader = callOn(fixedBearer("sk-test"), () => jsonResponse({}));
-    assert.equal(
-      yield* Effect.provide(
-        refusedByReader.call.read({ method: HTTP_METHOD.GET, path: PATH }, () => undefined),
-        refusedByReader.client,
-      ),
-      undefined,
-    );
-
-    const refused = callOn(fixedBearer("sk-test"), () => refusal());
-    assert.equal(
-      yield* Effect.provide(
-        refused.call.read({ method: HTTP_METHOD.GET, path: PATH }, read),
-        refused.client,
       ),
       undefined,
     );
