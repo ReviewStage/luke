@@ -17,7 +17,7 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "@sidecar/voice/live-session";
-import { Effect, Runtime } from "effect";
+import { Effect } from "effect";
 
 /** What the adapter says when no brain stands to take the ask at all. */
 const NO_BRAIN_REFUSAL = BRAIN_ASK_REFUSAL[BRAIN_SUBMISSION_REJECTION.ABSENT];
@@ -81,23 +81,16 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  * following the agent at submission is following every run it will report.
  * Following the same agent twice is one subscription.
  *
- * Built as an effect on the composer's own runtime, because what the service
- * holds on this side is a promise and a callback: the ask it awaits, and the
- * anticipation it hands over with nowhere to answer. Everything the agent is
- * asked for in between — its `submitAsk`, its `onRunEvent` subscription, its
- * `anticipateAsk` — is an effect this adapter yields inside one of its own,
- * so an ask follows the agent before it submits to it rather than racing a
- * subscription started beside it, and the whole of an ask is one fiber on the
- * runtime the composer already runs the brain on.
+ * Built as an effect, and answering effects: `LiveBrain`'s own faces are
+ * effects since P12-18h, so everything the agent is asked for — its
+ * `submitAsk`, its `onRunEvent` subscription, its `anticipateAsk` — is
+ * yielded inside the effect the service runs, and the adapter runs nothing
+ * itself. An ask follows the agent before it submits to it rather than racing
+ * a subscription started beside it, and the whole of an ask is one fiber of
+ * the runtime the composition handed the service.
  */
 export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): Effect.Effect<LiveBrain> {
-  return Effect.gen(function* () {
-    // The composition's own runtime, which the two promise-shaped faces of
-    // `LiveBrain` are answered on: an ask is run to the promise the service
-    // awaits, and an anticipation is forked because nothing waits for it.
-    const runtime = yield* Effect.runtime<never>();
-    const answer = Runtime.runPromise(runtime);
-    const begin = Runtime.runFork(runtime);
+  return Effect.sync(() => {
     const listeners = new Set<(event: LiveBrainRunEvent) => void>();
     const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
     const subscribed = new WeakSet<LiveBrainAgent>();
@@ -141,33 +134,30 @@ export function brainAgentLiveBrain(options: BrainAgentLiveBrainOptions): Effect
       });
 
     return {
-      anticipate: (anticipation) => {
-        const agent = options.agent();
-        if (!agent?.anticipateAsk) return;
-        // Nothing waits for the slot: the fiber this opens only follows the
-        // agent and asks for the read, and the spoken ask that follows takes
-        // what it read or does not.
-        begin(
-          Effect.zipRight(
+      anticipate: (anticipation) =>
+        Effect.suspend(() => {
+          const agent = options.agent();
+          if (!agent?.anticipateAsk) return Effect.void;
+          return Effect.zipRight(
             follow(agent),
             agent.anticipateAsk({
               id: String(anticipation.rowId),
               partialAsk: anticipation.partialAsk,
               recentTurns: anticipation.recentTurns,
             }),
-          ),
-        );
-      },
-      dropAnticipation: () => {
-        options.agent()?.dropAnticipation?.();
-      },
+          );
+        }),
+      dropAnticipation: () =>
+        Effect.sync(() => {
+          options.agent()?.dropAnticipation?.();
+        }),
       onAnticipationFacts: (listener) => {
         factsListeners.add(listener);
         return () => {
           factsListeners.delete(listener);
         };
       },
-      submitAsk: (ask) => answer(spokenAsk(ask)),
+      submitAsk: spokenAsk,
       onRunEvent: (listener) => {
         listeners.add(listener);
         return () => {

@@ -801,11 +801,12 @@ accepted ask, and the briefing look on its schedule — so closing the scope
 interrupts each of them. The session's graceful close and the wait on every
 record write already started are finalizers of the same scope, added so their
 reverse order is the order the exchange's old `stop` ran them. No composition
-below the exchange holds a runner: what the promise-shaped doors above them
-answer from — `LiveRecord`'s two utterance writes and `LiveBrain`'s
-submission — is run over the client that scope was built on, through
-`runOverClient`. Nothing attaches this to the
-sessions route; that is the desktop cutover's, by build.
+below the exchange holds a runner, and none of them runs an effect at all:
+`LiveRecord`'s two utterance writes and `LiveBrain`'s submission answer
+effects themselves, the record's on the fiber that makes every write in
+arrival order and the brain's with the `SqlClient` the scope was built on
+provided to it, as `runTool` provides it to the brain's seams. Nothing
+attaches this to the sessions route; that is the desktop cutover's, by build.
 
 ### The exchange on the sessions route
 

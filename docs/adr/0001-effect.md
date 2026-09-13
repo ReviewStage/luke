@@ -295,21 +295,24 @@ link that asks for a beat is a synchronous callback the calendars composer
 holds, so the pass is run to a promise on this composition's own runtime. It
 goes when that link answers an effect.
 
-`brainAgentLiveBrain` in `packages/host/src/voice/live-brain-adapter.ts` is on
-the same list, and P12-16l is what put it there in place of the `carryOn` it
-held: the adapter is built as an effect on the composition's own runtime
-(`compose-host.ts` yields it where the brain composer stands), so what it runs
-is that runtime rather than one of its own. `LiveBrain` is the contract the
-voice service and the hosted side both speak, and two of its faces are not
-effects and cannot become ones here: `submitAsk` answers a `Promise`, so the
-whole of an ask — following the agent, then `submitAsk` on it — is one
-`Effect` run to that promise, and `anticipate` answers nothing at all, so
-following the agent and asking it to read ahead is one `Effect` forked with
-`Runtime.runFork`. What the change bought beside the shim is ordering: the
-subscription is a `yield*` before the ask rather than a promise started beside
-it, so no run's first events can arrive before the adapter is listening. It
-goes when `LiveBrain` itself answers effects, which P12-18g decides for both
-of its implementations at once.
+`LiveSessionService` in `packages/voice/src/live-session/live-session-service.ts`
+is on the same list as of P12-18h, and it is the one run left on the live
+path. `LiveBrain` and `LiveRecord` are the two contracts the desktop's
+composition and the hosted one both speak, and both answer effects now:
+`submitAsk`, `anticipate`, `dropAnticipation`, and the record's two utterance
+writes. Their one caller is this service, 1,258 lines of promise-shaped class
+that neither of those two changes made an effect, so it takes the
+composition's runtime as a seam of its own and is where the edge sits: an ask
+and a write are awaited with `Runtime.runPromise` exactly where a promise was
+awaited before, and a read made ahead and a drop of one are forked with
+`Runtime.runFork`, since nothing waits on either. What the move bought is the
+two implementations: `brainAgentLiveBrain` in
+`packages/host/src/voice/live-brain-adapter.ts` came off this list with it —
+P12-16l had put it there to run an ask on the composer's runtime, and it now
+yields the agent's own effects and runs nothing — and `hostedLiveBrain` and
+`hostedLiveRecord` came off `runOverClient`, which is deleted with
+`apps/web/server/hosted/fiber-runner.ts`. The row goes when the service itself
+is an effect, which no PR in this plan schedules.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
@@ -983,12 +986,12 @@ delegation land ahead of a delta that reached the socket before it. Where an
 event lands in the sequence has to be decided where it arrives, and a queue
 is what decides it there; the `observe` call itself stays synchronous at
 arrival for the same reason, and only its reporting rides the exchange's
-scoped fiber. What those two modules do still hold is a promise face for the
-doors above them: `LiveRecord`'s two utterance writes and `LiveBrain`'s
-submission are promises `@sidecar/voice` declares, so each reads `SqlClient`
-once where it is built and runs those two over `runOverClient`, rather than a
-runner threaded down from the edge. Since P12-18g they are the only callers
-of it left. `WebStoreRun` stays for `exchangeAttachment`, which opens the
+scoped fiber. What those two modules held for the doors above them
+was a promise face: `LiveRecord`'s two utterance writes and `LiveBrain`'s
+submission were promises `@sidecar/voice` declared, so each read `SqlClient`
+once where it was built and ran those two over `runOverClient`, rather than a
+runner threaded down from the edge. P12-18g left them its only callers and
+P12-18h took both, below. `WebStoreRun` stays for `exchangeAttachment`, which opens the
 socket's scope on it rather than running in one, and for
 `promisedVoiceSessionRecord`.
 
@@ -1040,12 +1043,15 @@ reads the list again before it writes, so two calls remembering at once cannot
 each replace the list from a stale reading — is now an `Effect.Semaphore` of
 one permit per account rather than a promise chained onto the last; a write
 that fails or is interrupted releases it, where the promise chain continued
-onto the next either way. What still calls `runOverClient` is the pair P12-18d2
-gave it, `hostedLiveRecord` and `hostedLiveBrain`, whose contracts are
-`@sidecar/voice`'s and answer promises because the live session service that
-calls them is a promise-shaped class; taking those two needs that service onto
-effects, which no PR in this plan schedules, so `fiber-runner.ts` and its
-`runShims` row stand.
+onto the next either way. P12-18h took the pair P12-18d2 gave
+`runOverClient`, `hostedLiveRecord` and `hostedLiveBrain`, by taking
+`@sidecar/voice`'s `LiveRecord` and `LiveBrain` onto effects: the record's
+faces are the wait on a write the scoped fiber makes under the socket's own
+client, so nothing there provides or runs anything, and the brain's
+submission is `Effect.provideService` of the request's `SqlClient` with
+`Effect.orDie`, the same move `runTool` makes. That left `runOverClient`
+without a caller, so `fiber-runner.ts`, its `runShims` row, and this lane's
+last shim are gone.
 
 `HostedStoreContext.db`/`HostedStoreDatabase` (the Drizzle handle `hosted/store/database.ts`
 carried), `BrainHostSeams.db`, and `HostedStoreTestDatabase.db` (the store
@@ -1533,7 +1539,6 @@ design decision stated as such:
 | The conversation, directory, transcript, envelope, and archive registry tables' synchronous doors the ports call | P5-10a..d | with `StoreDatabase#run` |
 | `storeClient`'s Promise face over the store's Rpc client, on the runtime the host hands it | P5-11 | never — the ports' reach: `BrainStateRepository` and `ChildStore` are read by OpenClaw ports that may not import `effect` |
 | `FiberStoreRunner`/`fiberStoreRunner`, the promise face `brainHost`'s `runTool` and `relay` hand their seams (it replaced `HostedStoreRun` and `BrainHostSeams.run`, which P10-16 deleted) | P10-16 | P12-18e — deleted; `runTool`'s seams now `Effect.provideService` the request's `SqlClient` over `WebStoreRun`, and P12-18c took `relay`'s onto effects; P12-18b took the turn event stream and the voice compositions off it |
-| `runOverClient` in `fiber-runner.ts`, the promise face `hostedLiveRecord` and `hostedLiveBrain` take over the `SqlClient` the socket's scope is built on | P12-18d2 | when `@sidecar/voice`'s `LiveRecord` and `LiveBrain` answer effects, which no PR in this plan schedules; P12-18e took `runTool`'s workspace access off it, P12-18g its last three seams, and P12-18c `relay`'s `StreamRelay` and stop carrier |
 | `Promised<Methods>`, the mapped type the promise-era suites' `promisedWriter`/`promisedAsks` answer in `apps/web/tests/support/promised-store.ts`; P12-18c took `StreamRelay` and `carryStop` onto effects and moved the type out of `server/hosted/fiber-runner.ts` | P10-16 | with each suite as it moves onto `it.effect` |
 | `promisedVoiceSessionRecord`, the live session row's five effects as `VoiceServiceOptions.record` takes them, run to promises over `runWeb` in `voice/function.ts` | P12-18d | when `VoiceService` itself answers effects, which no PR in this plan schedules — it is a class of `ws` callbacks, on the same terms as `createLiveUpstream` above it |
 | `createRateBrake`, the hosted rate brake's promise door over `RateBrake.check` | P10-12 | with the last promise-shaped hosted route (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`); P10-16 moved every route it converted onto `RateBrake.check` |

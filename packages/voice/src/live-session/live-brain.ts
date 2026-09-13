@@ -1,3 +1,5 @@
+import type { Effect } from "effect";
+
 /**
  * The one door the live session service reaches Luke's judgment through. It
  * is transport-neutral on purpose: ids and plain data cross it, never a brain
@@ -95,13 +97,13 @@ export interface LiveBrain {
    * either way the answer names the run the record was accepted into, and
    * the run seams below say which run's reply carries the words.
    */
-  submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission>;
+  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission>;
   /** Hears the run seams for every run the brain holds; the service reads the kinds it knows by name. */
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void;
   /** The developer's words so far, for the brain to read ahead of; a brain without this reads nothing before the ask. */
-  anticipate?(anticipation: LiveBrainAnticipation): void;
+  anticipate?(anticipation: LiveBrainAnticipation): Effect.Effect<void>;
   /** Whatever was read ahead is forgotten: the session that was speaking is gone. */
-  dropAnticipation?(): void;
+  dropAnticipation?(): Effect.Effect<void>;
   /** Hears the summary of each read made ahead; a brain without this hands the voice none. */
   onAnticipationFacts?(listener: (facts: LiveBrainAnticipationFacts) => void): () => void;
 }

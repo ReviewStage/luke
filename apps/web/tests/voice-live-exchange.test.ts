@@ -431,10 +431,12 @@ it.effect(
       const cleared = await database.run(database.store.main.clear(target.userId, new Date(NOW)));
       assert.deepEqual(cleared.cleared, [target.conversationId]);
 
-      const refused = await f.exchange.brain.submitAsk({
-        submissionId: randomUUID(),
-        question: "Developer: still there?",
-      });
+      const refused = await database.run(
+        f.exchange.brain.submitAsk({
+          submissionId: randomUUID(),
+          question: "Developer: still there?",
+        }),
+      );
       assert.equal(refused.outcome, LIVE_BRAIN_SUBMISSION.REFUSED);
       assert.deepEqual(f.eve.opened, []);
       await f.exchange.stop();

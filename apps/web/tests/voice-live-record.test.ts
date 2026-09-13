@@ -17,7 +17,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { Schema, Scope } from "effect";
+import { Effect, Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -145,10 +145,12 @@ class FakeBrain implements LiveBrain {
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
-  async submitAsk(ask: LiveBrainAsk): Promise<LiveBrainSubmission> {
-    this.asks.push(ask);
-    this.#runs += 1;
-    return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+    return Effect.sync(() => {
+      this.asks.push(ask);
+      this.#runs += 1;
+      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
+    });
   }
 
   onRunEvent(listener: (event: LiveBrainRunEvent) => void): () => void {
@@ -195,7 +197,7 @@ async function stand(live: VoiceTarget) {
       sdpAnswer: `answer-for-${input.sdpOffer}`,
       attach: async () =>
         observedSideband(sidebandOverSocket(socket), (event) => {
-          observed.push(record.observe(event));
+          observed.push(database.run(record.observe(event)));
         }),
     }),
     setVoice: () => undefined,
@@ -208,6 +210,7 @@ async function stand(live: VoiceTarget) {
     source: () => source,
     brain,
     record,
+    runtime: await database.run(Effect.runtime<never>()),
     conversationEntries: () => [],
     quietNow: async () => false,
     releaseHeldBriefings: () => undefined,
@@ -240,9 +243,9 @@ async function stand(live: VoiceTarget) {
 }
 
 /** Waits for a database-backed write to land; the assertion is the caller's. */
-async function until(predicate: () => boolean, what: string): Promise<void> {
+async function until(predicate: () => boolean | Promise<boolean>, what: string): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt += 1) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await sleep(5);
   }
   assert.fail(`timed out waiting for ${what}`);
@@ -310,6 +313,10 @@ test("a spoken ask is the one message, cut from the segments including a delta t
   // Spoken before the delegation, delivered after it: still the ask's.
   f.socket.receive(heard(" right now?", 1800, 2400));
   await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  // The ask on record is what says the service has the exchange the run's
+  // events belong to: it composes the ask, hears the run's id, and writes the
+  // line under the delegation, in that order.
+  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
   f.brain.reply("run-1", "Nothing yet.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
@@ -355,6 +362,10 @@ test("an utterance that settled before its delegation arrived is still the deleg
 
   f.socket.receive(delegated("dl_late", 5000));
   await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  // The ask on record is what says the service has the exchange the run's
+  // events belong to: it composes the ask, hears the run's id, and writes the
+  // line under the delegation, in that order.
+  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
   f.brain.reply("run-1", "Opening it.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
@@ -387,6 +398,7 @@ test("a delegation delivered ahead of the words it is about is held, and is the 
 
   f.socket.receive(heard("What needs me?", 1000, 2400));
   await until(() => f.brain.asks.length === 1, "the retained delegation to be composed");
+  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
   f.brain.reply("run-1", "Nothing yet.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
@@ -436,34 +448,43 @@ test("the record door answers from the stream: a delegation is held until its as
     recordedAt: NOW,
   };
 
-  assert.deepEqual(await record.observe(heard("Open the failing one.", 0, 900)), WRITTEN);
+  assert.deepEqual(
+    await database.run(record.observe(heard("Open the failing one.", 0, 900))),
+    WRITTEN,
+  );
   assert.equal(
-    await record.writeDeveloperUtterance({
-      ...utterance,
-      text: "Open the failing one.",
-      delegationId: null,
-    }),
+    await database.run(
+      record.writeDeveloperUtterance({
+        ...utterance,
+        text: "Open the failing one.",
+        delegationId: null,
+      }),
+    ),
     true,
   );
   assert.equal(
-    await record.writeLukeUtterance({
-      ...utterance,
-      role: CONVERSATION_ENTRY_KIND.REPLY,
-      text: "Opening it.",
-    }),
+    await database.run(
+      record.writeLukeUtterance({
+        ...utterance,
+        role: CONVERSATION_ENTRY_KIND.REPLY,
+        text: "Opening it.",
+      }),
+    ),
     true,
   );
   assert.equal(
-    await record.writeDeveloperUtterance({ ...utterance, text: "x", delegationId: "dl_unseen" }),
+    await database.run(
+      record.writeDeveloperUtterance({ ...utterance, text: "x", delegationId: "dl_unseen" }),
+    ),
     false,
   );
   assert.deepEqual(await messageRows(live.conversation), []);
 
-  assert.deepEqual(await record.observe(delegated("dl_3", 1000)), IGNORED);
+  assert.deepEqual(await database.run(record.observe(delegated("dl_3", 1000))), IGNORED);
   assert.deepEqual(await messageRows(live.conversation), []);
   const ask = { ...utterance, text: "Open the failing one.", delegationId: "dl_3" };
-  assert.equal(await record.writeDeveloperUtterance(ask), true);
-  assert.equal(await record.writeDeveloperUtterance(ask), true);
+  assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
+  assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
   assert.deepEqual(
     (await messageRows(live.conversation)).map((row) => [row.clientId, row.role]),
     [["dl_3", MESSAGE_ROLE.USER]],

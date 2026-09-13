@@ -1,4 +1,5 @@
 import type { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
+import type { Effect } from "effect";
 
 /**
  * Where what was said on a live session is written down, behind its own door
@@ -46,7 +47,7 @@ export interface LukeUtteranceRecord {
 
 export interface LiveRecord {
   /** Writes one developer utterance as a user line; answers whether the record took it. */
-  writeDeveloperUtterance(record: DeveloperUtteranceRecord): Promise<boolean>;
+  writeDeveloperUtterance(record: DeveloperUtteranceRecord): Effect.Effect<boolean>;
   /** Writes one of Luke's grouped utterances as his line; answers whether the record took it. */
-  writeLukeUtterance(record: LukeUtteranceRecord): Promise<boolean>;
+  writeLukeUtterance(record: LukeUtteranceRecord): Effect.Effect<boolean>;
 }

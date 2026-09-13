@@ -41,6 +41,7 @@ import {
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { Effect, Runtime } from "effect";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel, type TimerHandle } from "./append-channel.js";
@@ -87,7 +88,11 @@ import {
  * composes it: the desktop's host today, the hosted voice service where it
  * owns the exchange — so the brain is reached only through `LiveBrain`, the
  * record only through `LiveRecord`, and the session only through the
- * `LiveSessionSource` and `LiveSideband` seams.
+ * `LiveSessionSource` and `LiveSideband` seams. Those two doors answer
+ * effects, and the service is still a promise-shaped class, so each is run on
+ * the runtime its composition hands over: an ask and a write are awaited
+ * where the promise was, a read made ahead and a drop of one are forked,
+ * since nothing waits on either.
  */
 
 /** A run's end may precede its last sentence by a tick; the exchange is finalized once both have had their say. */
@@ -167,6 +172,12 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   source: () => LiveSessionSource | undefined;
   brain: LiveBrain;
   record: LiveRecord;
+  /**
+   * The runtime the brain's and the record's own effects are run on: the
+   * composition's own, so an ask, a read made ahead, and a write share the
+   * clock and the services the composer built them under.
+   */
+  runtime: Runtime.Runtime<never>;
   /** The retained conversation the next session is seeded from. */
   conversationEntries: () => readonly ConversationEntry[];
   /**
@@ -321,9 +332,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #rosterPending: readonly RosterSeedSession[] | undefined;
   #rosterTimer: TimerHandle | undefined;
   readonly #stopFacts: () => void;
+  /** The composition's runtime as the two doors' effects are run on it: awaited where the service awaited a promise, forked where it waits for nothing. */
+  readonly #answer: <A>(effect: Effect.Effect<A>) => Promise<A>;
+  readonly #begin: <A>(effect: Effect.Effect<A>) => void;
 
   constructor(options: LiveSessionServiceOptions<Delivery>) {
     this.#options = options;
+    this.#answer = Runtime.runPromise(options.runtime);
+    const fork = Runtime.runFork(options.runtime);
+    this.#begin = (effect) => {
+      fork(effect);
+    };
     this.#queue = new ProactiveQueue({ now: options.now, trace: this.#trace });
     this.#stopRunEvents = options.brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
@@ -522,7 +541,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#queue.clear();
     this.#dropPendingRoster();
     await this.endSession();
-    this.#options.brain.dropAnticipation?.();
+    await this.#answer(this.#drop());
   }
 
   /** Everything waiting to be told about the desk, discarded: a fresher roster has superseded it, or nothing will read it again. */
@@ -812,11 +831,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
     session.anticipated = { rowId: anticipation.rowId, text: anticipation.text };
     this.#trace(LIVE_TRACE_DECISION.ANTICIPATED);
-    brain.anticipate({
-      rowId: anticipation.rowId,
-      partialAsk,
-      recentTurns: renderAskContext(anticipation.context),
-    });
+    // Nothing waits for the read: the ask that follows takes what it read or
+    // does not, so the anticipation is a fiber of the composition's runtime.
+    this.#begin(
+      brain.anticipate({
+        rowId: anticipation.rowId,
+        partialAsk,
+        recentTurns: renderAskContext(anticipation.context),
+      }),
+    );
   }
 
   /**
@@ -872,25 +895,29 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
     const written =
       utterance.speaker === TRANSCRIPT_SPEAKER.USER
-        ? await this.#options.record.writeDeveloperUtterance({
-            rowId: utterance.rowId,
-            text: utterance.text,
-            voiceSessionId: session.sessionId,
-            delegationId: write.delegationId,
-            askContext: write.askContext,
-            startMs: utterance.startMs,
-            endMs: utterance.endMs,
-            ...(write.runId !== undefined ? { runId: write.runId } : undefined),
-            recordedAt,
-          })
-        : await this.#options.record.writeLukeUtterance({
-            role: CONVERSATION_ENTRY_KIND.REPLY,
-            text: utterance.text,
-            voiceSessionId: session.sessionId,
-            startMs: utterance.startMs,
-            endMs: utterance.endMs,
-            recordedAt,
-          });
+        ? await this.#answer(
+            this.#options.record.writeDeveloperUtterance({
+              rowId: utterance.rowId,
+              text: utterance.text,
+              voiceSessionId: session.sessionId,
+              delegationId: write.delegationId,
+              askContext: write.askContext,
+              startMs: utterance.startMs,
+              endMs: utterance.endMs,
+              ...(write.runId !== undefined ? { runId: write.runId } : undefined),
+              recordedAt,
+            }),
+          )
+        : await this.#answer(
+            this.#options.record.writeLukeUtterance({
+              role: CONVERSATION_ENTRY_KIND.REPLY,
+              text: utterance.text,
+              voiceSessionId: session.sessionId,
+              startMs: utterance.startMs,
+              endMs: utterance.endMs,
+              recordedAt,
+            }),
+          );
     if (!written) this.#options.report("A live utterance could not be written to the record");
     return written;
   }
@@ -941,10 +968,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // The delegation's id is the submission's: the record writes the developer's
     // utterance under it, so an ask and the line it leaves share one id and a
     // record that learns the ask's turn can attach the line to it.
-    const submission = await this.#options.brain.submitAsk({
-      submissionId: delegationId,
-      question,
-    });
+    const submission = await this.#answer(
+      this.#options.brain.submitAsk({ submissionId: delegationId, question }),
+    );
     // The delegated write runs whether or not the settle timer wrote the
     // utterance undelegated already: an ask is on record only under its
     // delegation, and a record that took the utterance before tells the two
@@ -1226,6 +1252,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return this.#queue.hasPending || this.#lateExchanges.size > 0;
   }
 
+  /** Whatever the brain read ahead is forgotten; a brain that reads nothing ahead is asked nothing. */
+  #drop(): Effect.Effect<void> {
+    return this.#options.brain.dropAnticipation?.() ?? Effect.void;
+  }
+
   #tearDown(session: StandingSession, reason: string): void {
     session.ended = true;
     session.stopEvents();
@@ -1234,7 +1265,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.settleTimers.clear();
     if (session.idleTimer !== undefined) this.#options.cancel(session.idleTimer);
     this.#cancelAnticipation(session);
-    this.#options.brain.dropAnticipation?.();
+    this.#begin(this.#drop());
     session.channel.close();
     session.retained = [];
     for (const exchange of this.#exchanges.values()) {

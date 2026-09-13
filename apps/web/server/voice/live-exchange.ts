@@ -1,4 +1,5 @@
 import { SqlClient, SqlSchema } from "@effect/sql";
+import type { SqlError } from "@effect/sql/SqlError";
 import {
   type AdoptableSession,
   type BriefingDelivery,
@@ -7,7 +8,7 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { Effect, Option, Queue, Schema, type Scope } from "effect";
+import { Effect, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
@@ -157,10 +158,21 @@ const findVoiceSessionDeviceId = SqlSchema.findOne({
  * refusal or the failure in the words the report carries, or nothing where
  * the write landed.
  */
-function writeReport(write: Promise<VoiceWriteResult>): Promise<string | undefined> {
-  return write.then(
-    (result) => (result.ok ? undefined : `The record refused a live event: ${result.refusal}`),
-    (error: Error) => `The record could not take a live event: ${error.message}`,
+function writeReport(
+  write: Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>,
+): Effect.Effect<string | undefined> {
+  return write.pipe(
+    Effect.map((result) =>
+      result.ok ? undefined : `The record refused a live event: ${result.refusal}`,
+    ),
+    Effect.catchAll((error) =>
+      Effect.succeed(`The record could not take a live event: ${error.message}`),
+    ),
+    Effect.catchAllDefect((defect) =>
+      Effect.succeed(
+        `The record could not take a live event: ${defect instanceof Error ? defect.message : String(defect)}`,
+      ),
+    ),
   );
 }
 
@@ -177,7 +189,7 @@ export function hostedLiveExchange(
     };
     const voice = voiceWriter({ store: writer });
     const record = yield* hostedLiveRecord({ writer: voice, target });
-    yield* Effect.addFinalizer(() => Effect.promise(() => record.drained()));
+    yield* Effect.addFinalizer(() => record.drained());
     /**
      * Every event the record was handed, in arrival order, as what it had to
      * report of it. The observation itself stays where the event arrives, so a
@@ -186,12 +198,11 @@ export function hostedLiveExchange(
      * what this fiber carries is the reporting, on the socket's own scope,
      * rather than a promise left to settle wherever the session has gone.
      */
-    const written = yield* Queue.unbounded<Promise<string | undefined>>();
+    const written = yield* Queue.unbounded<Effect.Effect<string | undefined>>();
     yield* Effect.forkScoped(
       Effect.forever(
-        Effect.flatMap(
-          Effect.flatMap(Queue.take(written), (pending) => Effect.promise(() => pending)),
-          (message) => (message === undefined ? Effect.void : Effect.sync(() => report(message))),
+        Effect.flatMap(Effect.flatten(Queue.take(written)), (message) =>
+          message === undefined ? Effect.void : Effect.sync(() => report(message)),
         ),
       ),
     );
@@ -252,6 +263,10 @@ export function hostedLiveExchange(
       source,
       brain,
       record,
+      // The two doors answer effects and the service is a promise-shaped
+      // class, so it runs each of them on this composition's own runtime,
+      // which is the socket scope's and carries its `SqlClient`.
+      runtime: yield* Effect.runtime<never>(),
       conversationEntries: options.conversationEntries,
       quietNow: async () => false,
       releaseHeldBriefings: () => undefined,
