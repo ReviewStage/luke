@@ -3473,3 +3473,21 @@ a run on that machine.** LUKE-159 was offered for cancellation an hour before it
 **Staffed on the rulings:** R-197 builds LUKE-197 (READY-and-report — PRIVACY moves); R-177 builds
 LUKE-199 (migration — tells me before enqueue); R-143 stands down; **W-200 launched** for the exchange
 flip with 2a in the same commit and the transport/activity-report question named as its own.
+
+
+## 2026-09-13 ~03:30Z — LUKE-199 landed with one column more than Dean approved, and rightly
+
+Dean approved `conversations.journal_revision`. **#1302 (`bb3e7ca7`) also adds `messages.revision bigint`**
+and indexes stamped rows (`messages (conversation_id, revision) where revision is not null`) instead of
+unsettled ones. The worker found the defect in the approved shape while building it: **a journal's
+finish is an in-place write to a row the cursor has already passed; once `finished_at` is set the row
+matches neither `seq > after` nor `finished_at is null`, so a device would never be handed the settled
+row.** Stamping the row with the revision that moved the conversation — in the same statement, inside
+the writer's existing transaction — and reading `seq > after or revision > cursor.revision` makes the
+finish exact. Same head, same cursor, same client rule; the correction is in the body under its own
+heading and was verified on both dialects.
+
+**Recorded as a schema decision made under the ruling rather than a new one**: the ruling was "the
+revision column, the head as `{seq, revision}`, clients unchanged"; the second column is what makes
+that ruling true at the finish. Production confirmed after deploy: `journal_revision` present on
+`conversations`; `messages_conversation_revision` partial index present. **Told to Dean plainly.**
