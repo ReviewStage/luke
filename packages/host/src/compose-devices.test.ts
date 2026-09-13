@@ -505,6 +505,53 @@ it.scoped(
     }),
 );
 
+it.scoped(
+  "a restate whose wait outlives a sign-out sends nothing, so no registration follows the account that left",
+  (t) =>
+    Effect.gen(function* () {
+      const directory = yield* Effect.promise(() => temporaryDirectory(t));
+      let release: (() => void) | undefined;
+      let polls = 0;
+      const { client, calls } = fakeClient({});
+      const gated: DeviceCadenceClient = {
+        ...client,
+        poll: (request) =>
+          Effect.suspend(() => {
+            polls += 1;
+            calls.push({ kind: "poll", body: request });
+            if (polls !== 2) return Effect.succeed({ seen: true, ...HEADS });
+            return Effect.promise(
+              () =>
+                new Promise<ChangesAnswer>((resolve) => {
+                  release = () => resolve({ seen: true, ...HEADS });
+                }),
+            );
+          }),
+      };
+      const subject = yield* cadence(directory, gated);
+      yield* subject.start;
+      yield* firstBeat(() => calls.length === 2);
+      yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
+      yield* waitFor(() => calls.length === 3);
+
+      // The restate waits on the poll out on the wire; the sign-out lands
+      // while it waits and forgets the row, so the state names no device.
+      yield* Effect.fork(subject.restate);
+      yield* settle();
+      yield* subject.stop({ forget: { accessToken: "leaving" } });
+      yield* waitFor(() => calls.some((call) => call.kind === "forget"));
+      assert.deepEqual(storedState(directory), { installationId: INSTALLATION_ID.toLowerCase() });
+
+      release?.();
+      yield* settle();
+      assert.deepEqual(
+        calls.map((call) => call.kind),
+        ["register", "poll", "poll", "forget"],
+        "the released wait registered nothing for the account that left",
+      );
+    }),
+);
+
 test("a stored record is read only with a well-formed installation id", () => {
   assert.deepEqual(deviceStateFrom({ installationId: INSTALLATION_ID, deviceId: DEVICE_ID }), {
     installationId: INSTALLATION_ID.toLowerCase(),

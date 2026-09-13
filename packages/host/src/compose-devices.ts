@@ -245,10 +245,19 @@ export const deviceCadence = (
         ),
       );
 
-    /** One beat of the generation named, or nothing once that generation has passed. */
+    /**
+     * One beat of the generation named, or nothing once that generation has
+     * passed. The generation is read after the wait for the call already out,
+     * not before it: a restate is forked as a daemon, so no disarm interrupts
+     * its wait the way it does the cadence fiber's, and a sign-out that lands
+     * while it waits would otherwise be followed by a registration for an
+     * account that has left.
+     */
     const passOf = (gen: number): Effect.Effect<void> =>
-      Effect.suspend(() =>
-        gen === generation ? settle(Effect.uninterruptible(beat(gen))) : Effect.void,
+      settle(
+        Effect.suspend(() =>
+          gen === generation ? Effect.uninterruptible(beat(gen)) : Effect.void,
+        ),
       );
 
     /**
