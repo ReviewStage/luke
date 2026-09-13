@@ -1,5 +1,4 @@
-import * as Atom from "@effect-atom/atom/Atom";
-import { useAtomValue } from "@effect-atom/atom-react/Hooks";
+import { useAtomValue } from "@effect/atom-react/Hooks";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
@@ -8,6 +7,7 @@ import {
   type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
 import { Duration, Effect, Schedule } from "effect";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";

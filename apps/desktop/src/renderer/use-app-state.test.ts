@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import * as Registry from "@effect-atom/atom/Registry";
-import * as Result from "@effect-atom/atom/Result";
 import { Effect, Fiber, Option } from "effect";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import { type AppStateSource, appStateAtom, appStateSourceAtom } from "./use-app-state";
@@ -54,13 +54,13 @@ function source(answer: () => Promise<AppStateSnapshot>) {
  */
 function reading(answer: () => Promise<AppStateSnapshot>) {
   const held = source(answer);
-  const registry = Registry.make();
+  const registry = AtomRegistry.make();
   registry.set(appStateSourceAtom, held.bridge);
   return {
     ...held,
     registry,
-    read: () => Registry.getResult(registry, appStateAtom),
-    held: () => Option.getOrUndefined(Result.value(registry.get(appStateAtom))),
+    read: () => AtomRegistry.getResult(registry, appStateAtom),
+    held: () => Option.getOrUndefined(AsyncResult.value(registry.get(appStateAtom))),
   };
 }
 
@@ -105,6 +105,11 @@ it.live("a delivery older than the one held changes nothing", () =>
   Effect.gen(function* () {
     const state = reading(async () => snapshot(5));
     yield* state.read();
+    // The read's own delivery is told to listeners on the registry's scheduled
+    // pass rather than in the set, so a listener installed before that pass
+    // still hears it. It settles first, so what is counted below is the
+    // dropped delivery alone.
+    yield* settled;
     let redraws = 0;
     state.registry.subscribe(appStateAtom, () => {
       redraws += 1;
@@ -144,6 +149,9 @@ it.live("every reader shares one subscription, and an unsubscribed one hears not
   Effect.gen(function* () {
     const state = reading(async () => snapshot(1));
     yield* state.read();
+    // As above: the read's own pass settles before either listener is
+    // installed, so every reading counted below is a delivery's.
+    yield* settled;
     const heard: string[] = [];
     const stop = state.registry.subscribe(appStateAtom, () => heard.push("first"));
     state.registry.subscribe(appStateAtom, () => heard.push("second"));

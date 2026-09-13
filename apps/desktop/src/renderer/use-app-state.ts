@@ -1,9 +1,9 @@
-import * as Atom from "@effect-atom/atom/Atom";
-import * as Registry from "@effect-atom/atom/Registry";
-import * as Result from "@effect-atom/atom/Result";
-import { useAtomValue } from "@effect-atom/atom-react/Hooks";
+import { useAtomValue } from "@effect/atom-react/Hooks";
 import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
-import { Data, Effect, Option, Queue, Stream } from "effect";
+import { type Cause, Data, Effect, Option, Queue, Stream } from "effect";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
@@ -17,6 +17,15 @@ export interface AppStateSource {
 export class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
   readonly cause: unknown;
 }> {}
+
+/**
+ * The two ways this window can be left without a document, which are one thing
+ * to every reader: the bridge refused the read, or the deliveries ended before
+ * one arrived — an atom over a stream that completes having emitted nothing
+ * fails with `Cause.NoSuchElementError`, which is the same emptiness by
+ * another name.
+ */
+export type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
 
 /**
  * Where the state is read from. The bridge is what a window holds; a test
@@ -98,8 +107,9 @@ const adopted = (
  * subscription is every reader's: a component unmounting is no reason to stop
  * listening, and the window going away is the whole of its life.
  */
-export const appStateAtom: Atom.Atom<Result.Result<AppStateSnapshot, AppStateUnread>> =
-  Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
+export const appStateAtom: Atom.Atom<
+  AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>
+> = Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
 
 /**
  * The document as main holds it, read before anything is drawn over it: the
@@ -107,8 +117,8 @@ export const appStateAtom: Atom.Atom<Result.Result<AppStateSnapshot, AppStateUnr
  * installed for. Every later reading arrives on that subscription. Run at a
  * renderer root and nowhere else.
  */
-export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnread> =
-  Registry.getResult(rendererRegistry, appStateAtom);
+export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnavailable> =
+  AtomRegistry.getResult(rendererRegistry, appStateAtom);
 
 /**
  * The snapshot as it stands, for a callback that cannot wait a render: two
@@ -116,12 +126,12 @@ export const appStateFirstRead: Effect.Effect<AppStateSnapshot, AppStateUnread> 
  * has to read what the first left. Not a hook, so nothing redraws for it.
  */
 export function appStateNow(): AppStateSnapshot | undefined {
-  return Option.getOrUndefined(Result.value(rendererRegistry.get(appStateAtom)));
+  return Option.getOrUndefined(AsyncResult.value(rendererRegistry.get(appStateAtom)));
 }
 
 /** This window's snapshot, absent only before the first read has answered. */
 export function useAppState(): AppStateSnapshot | undefined {
-  return Option.getOrUndefined(Result.value(useAtomValue(appStateAtom)));
+  return Option.getOrUndefined(AsyncResult.value(useAtomValue(appStateAtom)));
 }
 
 /**
