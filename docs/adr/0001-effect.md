@@ -387,34 +387,55 @@ fiber of the same scope rather than a promise chain, each acknowledgment a
 `Effect` whose timeout is the ambient `Clock`'s, which is why both are off
 `rawAsyncPrimitives`. A test drives all of it from a `TestClock` it already
 stands on, and `packages/host/src/compose-live.ts` builds no timer bridge.
-What is left for P12-18h4 is the standing session's socket, still stood up and
-torn down by hand rather than released by a child scope's `acquireRelease`,
-and P12-20i2 found what that waits on. `#tearDown` is a synchronous method
-whose side effects run where it is called and whose returned effect is what
-the caller runs afterwards, and the three callers that matter — a
+P12-18h4 takes the standing session's socket off the hand-written unwind, and
+P12-20i2 found what that had been waiting on. `#tearDown` is a synchronous
+method whose side effects run where it is called and whose returned effect is
+what the caller runs afterwards, and the three callers that mattered — a
 `session.closed` frame, a close on the sideband, and a failed peer
 transport — were socket callbacks, which can only offer that effect to the
-service's task queue. Releasing the sideband from a scope would put its close
-in the deferred half while `ended` and `#standing` are cleared in the eager
-one, so a `stop` arriving between the two would find no session standing and
-leave the socket open. P12-20i2b took the socket's own frames onto a `Stream`
-beneath the sideband; P12-20i2c took the sideband's own events and closes onto
-one too, and with that the first two of those three callers are fibers. A
-standing session is read by one fiber of `#sessions` (`#read`), and what it
-reads it acts on where it reads it: a `session.closed` and a close that ends
-the arrivals are settled for whoever is closing gracefully and then torn down
-by that same fiber, which waits for the close `#tearDown` hands back instead
-of offering it. `reportTransport` is the one caller left that offers, because
-the peer's transport is reported to the service from outside the session
-altogether.
+service's task queue. Releasing the sideband from a scope would have put its
+close in the deferred half while `ended` and `#standing` were cleared in the
+eager one, so a `stop` arriving between the two would find no session standing
+and leave the socket open, which is the hazard #1336 was reverted for.
+P12-20i2b took the socket's own frames onto a `Stream` beneath the sideband;
+P12-20i2c took the sideband's own events and closes onto one too, and with
+that the first two of those three callers became fibers. What a standing
+session's reader reads it acts on where it reads it: a `session.closed` and a
+close that ends the arrivals are settled for whoever is closing gracefully and
+then torn down by that same fiber, which waits for the close `#tearDown` hands
+back instead of offering it. `reportTransport` is the one caller left that
+offers, because the peer's transport is reported to the service from outside
+the session altogether.
 
-What P12-18h4 has still to settle is which fiber closes the session's scope.
-A reader forked into that scope cannot close it — the close's own finalizer
-interrupts the fiber running it — so the tear-down a reader begins has to end
-the reader's body rather than interrupt it, and a tear-down begun outside has
-to interrupt the reader and wait for that body's finalizer. Until that is
-written, the hand-written unwind is what keeps the session over at the instant
-it is declared over.
+Which fiber closes the session's scope is P12-18h4's answer, and it is never
+one inside that scope: a reader forked into it could not close it, because the
+close's own finalizer is the interruption of the fiber running the close. Each
+standing session is opened in a child scope of `#sessions` (`#opening`),
+forked before anything is created or attached into it and closed again where
+nothing came to stand there, so a create that answered nothing and an attach
+that failed leave neither a socket nor a re-attaching fiber behind. The
+session's reader is forked into `#sessions` rather than into that child, and
+it owns it: it reads the arrivals on a fiber of its own, waits on a `Deferred`
+(`torn`) that every tear-down settles where it is decided, interrupts the
+reading, and then closes the child. So a tear-down the reading itself began
+ends the reading and releases after it, and one begun outside — a graceful
+close, a failed peer transport, the drain — interrupts the reading where it
+stands and reaches the same close, because both settle the one `Deferred` and
+the release is the one fiber's. `#tearDown` stays a synchronous fence:
+`ended`, the timers, the channel, the phase, and `#standing` are all settled
+on the hand that decided the end, so nothing reads a session that is over as
+still standing; what it hands back is not the unwind but a wait for it
+(`released`), which is what lets the drain answer with the socket released and
+both speakers' last words written rather than racing them. The reverted
+hazard is closed rather than avoided: an end asked for when nothing stands
+waits on the release last decided, so a `stop` landing between the decision
+and the release answers after the transport has gone, and the sideband's own
+close is a finalizer of the session's scope rather than a line of an unwind,
+so a service whose scope closes with a session standing still releases that
+transport, by closing the parent the child hangs from. A reader interrupted
+before any tear-down was decided releases nothing itself, for the same reason:
+the scope it would have closed is a child of the one already closing, and the
+writes an end owes belong to an end that was decided.
 
 What P12-20i2b did settle is which scope a session stands in. A sideband now
 leaves a fiber reading its socket behind it, and the graceful close speaks to
@@ -425,7 +446,8 @@ what a session leaves standing — the reading, and the hosted source's
 re-attaching tries — as the service is built, which is before any composition
 registers whatever runs `stop`, so the reverse order that scope closes in puts
 the reading after the close that needs it. `create` and `attach` are extended
-over that child rather than over the service's own.
+over a scope of the session's own, forked from that child by P12-18h4, rather
+than over the service's.
 
 P12-20h took the service's two collaborators out of its options and into its
 context. `LiveSessionService.make` yields `LiveBrainTag` and `LiveRecordTag`,

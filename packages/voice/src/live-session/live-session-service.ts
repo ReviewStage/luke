@@ -48,6 +48,7 @@ import {
   Effect,
   ExecutionStrategy,
   Exit,
+  Fiber,
   FiberId,
   FiberSet,
   Option,
@@ -110,8 +111,9 @@ import {
  * `LiveSessionSource` and `LiveSideband` seams. It is built by `make` in the
  * `Scope` its composition opened and runs for that scope: the verbs a caller
  * waits on are effects it yields, the brain's and the record's own effects
- * are yielded where a promise was awaited, a standing session's sideband is
- * read by one fiber of that scope, and what a timer or a run listener begins
+ * are yielded where a promise was awaited, a standing session stands in a
+ * scope of its own that one fiber both reads the sideband on and releases,
+ * and what a timer or a run listener begins
  * and nobody waits for is offered to the service's own queue and run as a
  * fiber of the same scope. So the service runs nothing on a runtime of its
  * own, and closing the scope interrupts whatever it had begun. It keeps time on that scope's `Clock` and on no seam of its own:
@@ -243,6 +245,16 @@ interface RetainedDelegation {
 interface StandingSession {
   sessionId: string;
   sideband: LiveSideband;
+  /**
+   * The scope this one session stands in, a child of `#sessions` forked
+   * before anything was opened for it: the socket the sideband speaks over,
+   * whatever the source left standing behind it — the hosted source's
+   * re-attaching tries — and the sideband's own close are all this scope's,
+   * so one session's end releases exactly one session's transport. It is
+   * closed by the fiber that owns it, which is the reader below, and never
+   * from inside it.
+   */
+  readonly scope: Scope.CloseableScope;
   channel: AppendChannel;
   ledger: TranscriptLedger;
   started: boolean;
@@ -277,6 +289,22 @@ interface StandingSession {
    * graceful close waits on this rather than listening beside the reader.
    */
   readonly settled: Deferred.Deferred<SidebandCloseResult>;
+  /**
+   * Settled the instant a tear-down is decided, by whichever hand decided
+   * it. The reader waits on this rather than on its arrivals alone, so the
+   * one fiber that may close the session's scope learns of an end begun
+   * anywhere — its own body, a graceful close, a failed peer transport — in
+   * the same way.
+   */
+  readonly torn: Deferred.Deferred<void>;
+  /**
+   * Settled once the session's scope has closed and what its end owed has
+   * been written: what a tear-down decided outside the reader waits on, and
+   * what the reader's own end settles even where it was interrupted before
+   * it could release anything, so no caller waits on a release that will
+   * never come.
+   */
+  readonly released: Deferred.Deferred<void>;
 }
 
 /**
@@ -368,18 +396,31 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   #stopped = false;
+  /**
+   * The release still running for the session last declared over. A
+   * tear-down clears `#standing` where it is decided and releases a turn
+   * later on the reader's own fiber, so a stop that lands in between would
+   * otherwise find no session, answer, and leave the socket to be closed by
+   * whatever closed the service. Held here, an end asked for when nothing
+   * stands waits for it instead.
+   */
+  #releasing: Deferred.Deferred<void> | undefined;
 
   /** The clock the session keeps: the one the scope it was built in stands on, read where a callback cannot wait for an effect. */
   readonly #clock: Clock.Clock;
 
   /**
-   * The scope a session it creates or attaches stands in: a child of the one
+   * What the sessions it creates or attaches stand in: a child of the scope
    * the service was built in, forked as it is built and so before the
    * composition registers whatever runs `stop`, which is what puts this
    * scope's close after that stop. A graceful close speaks to the session it
    * is closing and reads the final event back, so the fiber reading the
    * socket and the tries standing a lost connection up again must outlive the
    * close rather than end with the scope the close itself is a finalizer of.
+   * Each session is opened in a scope of its own forked from this one, which
+   * is what one session's end releases, and the fiber that owns that scope is
+   * forked here rather than into it, since no fiber can close the scope it
+   * runs in.
    */
   readonly #sessions: Scope.Scope;
 
@@ -511,20 +552,24 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (!source) return undefined;
       const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#now());
       this.#dropPendingRoster();
-      const opened = yield* Scope.extend(
-        source.create({ sdpOffer, input: this.#seedInput(seeded) }),
-        this.#sessions,
+      return yield* this.#opening((scope) =>
+        Effect.gen(this, function* () {
+          const opened = yield* Scope.extend(
+            source.create({ sdpOffer, input: this.#seedInput(seeded) }),
+            scope,
+          );
+          if (!opened) return undefined;
+          this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
+          const sideband = yield* this.#attach(opened, scope);
+          if (!sideband) return undefined;
+          this.#standing = yield* this.#stand(opened.sessionId, sideband, scope);
+          this.#standing.rosterTold = seeded?.told;
+          this.#usageConfirmed = false;
+          this.#options.onSessionCreated?.();
+          this.#trace(LIVE_TRACE_DECISION.CREATED);
+          return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+        }),
       );
-      if (!opened) return undefined;
-      this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-      const sideband = yield* this.#attach(opened);
-      if (!sideband) return undefined;
-      this.#standing = yield* this.#stand(opened.sessionId, sideband);
-      this.#standing.rosterTold = seeded?.told;
-      this.#usageConfirmed = false;
-      this.#options.onSessionCreated?.();
-      this.#trace(LIVE_TRACE_DECISION.CREATED);
-      return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
     });
   }
 
@@ -539,15 +584,40 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (this.#standing) yield* this.endSession();
       this.#dropPendingRoster();
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-      const sideband = yield* this.#attach(opened);
-      if (!sideband) return false;
-      const session = yield* this.#stand(opened.sessionId, sideband);
-      this.#standing = session;
-      this.#usageConfirmed = false;
-      this.#options.onSessionCreated?.();
-      this.#trace(LIVE_TRACE_DECISION.CREATED);
-      if (opened.started) this.#started(session);
-      return true;
+      const stood = yield* this.#opening((scope) =>
+        Effect.gen(this, function* () {
+          const sideband = yield* this.#attach(opened, scope);
+          if (!sideband) return undefined;
+          const session = yield* this.#stand(opened.sessionId, sideband, scope);
+          this.#standing = session;
+          this.#usageConfirmed = false;
+          this.#options.onSessionCreated?.();
+          this.#trace(LIVE_TRACE_DECISION.CREATED);
+          if (opened.started) this.#started(session);
+          return true;
+        }),
+      );
+      return stood ?? false;
+    });
+  }
+
+  /**
+   * Opens the scope one session is to stand in — a child of `#sessions`,
+   * forked before anything is created or attached into it — and closes it
+   * again unless a session came to stand there. So a create that answered
+   * nothing and an attach that failed each leave no socket and no re-attaching
+   * fiber behind them, and what does stand has one scope to be released by.
+   */
+  #opening<A>(
+    stand: (scope: Scope.CloseableScope) => Effect.Effect<A | undefined>,
+  ): Effect.Effect<A | undefined> {
+    return Effect.gen(this, function* () {
+      const scope = yield* Scope.fork(this.#sessions, ExecutionStrategy.sequential);
+      return yield* Effect.onExit(stand(scope), (exit) =>
+        Exit.isSuccess(exit) && exit.value !== undefined
+          ? Effect.void
+          : Scope.close(scope, Exit.void),
+      );
     });
   }
 
@@ -562,11 +632,19 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#considerIdle(session);
   }
 
-  /** The renderer's hang-up, the idle decision, and the drain all end the session the same way: whichever stands when the ask is run. */
+  /**
+   * The renderer's hang-up, the idle decision, and the drain all end the
+   * session the same way: whichever stands when the ask is run. Where none
+   * stands because one was declared over a turn ago and is still being
+   * released, this waits for that release, so the drain answers with the
+   * socket closed however the end was decided.
+   */
   endSession(): Effect.Effect<void> {
     return Effect.suspend(() => {
       const session = this.#standing;
-      return session === undefined ? Effect.void : this.#end(session);
+      if (session !== undefined) return this.#end(session);
+      const releasing = this.#releasing;
+      return releasing === undefined ? Effect.void : Deferred.await(releasing);
     });
   }
 
@@ -579,7 +657,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #end(session: StandingSession): Effect.Effect<void> {
     return Effect.gen(this, function* () {
-      if (session.ended) return;
+      if (session.ended) return yield* Deferred.await(session.released);
       const standing = session.closing;
       if (standing !== undefined) return yield* Deferred.await(standing);
       const closing = yield* Deferred.make<void>();
@@ -818,15 +896,19 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * The attach runs in the service's own sideband scope rather than the
-   * caller's: what the sideband leaves standing — the fiber reading the
-   * socket, the hosted source's re-attaching tries — belongs to the session,
-   * and the session belongs to this service.
+   * The attach runs in the session's own scope rather than the caller's:
+   * what the sideband leaves standing — the fiber reading the socket, the
+   * hosted source's re-attaching tries — belongs to the session, and the
+   * session's scope is what releases it. The sideband's own close is added
+   * there too, last, so closing that scope closes the transport before it
+   * ends what was feeding it.
    */
   #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
+    scope: Scope.CloseableScope,
   ): Effect.Effect<LiveSideband | undefined> {
-    return Scope.extend(opened.attach(), this.#sessions).pipe(
+    return Scope.extend(opened.attach(), scope).pipe(
+      Effect.tap((sideband) => Scope.addFinalizer(scope, sideband.close)),
       Effect.catchAll((failure) =>
         Effect.sync(() => {
           this.#options.report(`Live sideband could not attach: ${failure.message}`);
@@ -843,12 +925,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /**
    * Stands one session: its channel, its ledger, and the one fiber that
-   * reads its sideband. The channel serializes its sends on a fiber of the
-   * service's own scope, which its close ends; the reading belongs to the
-   * session's scope, since a graceful close speaks to the session and reads
-   * the final event back through it.
+   * reads its sideband and owns the scope that sideband stands in. The
+   * channel serializes its sends on a fiber of the service's own scope,
+   * which its close ends; the reader is forked into `#sessions` rather than
+   * into the session's own scope, because closing a scope from a fiber
+   * inside it would be that fiber interrupting itself.
    */
-  #stand(sessionId: string, sideband: LiveSideband): Effect.Effect<StandingSession> {
+  #stand(
+    sessionId: string,
+    sideband: LiveSideband,
+    scope: Scope.CloseableScope,
+  ): Effect.Effect<StandingSession> {
     return Effect.gen(this, function* () {
       const { channel, serve } = yield* AppendChannel.make({
         sideband,
@@ -858,6 +945,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const session: StandingSession = {
         sessionId,
         sideband,
+        scope,
         channel,
         ledger: new TranscriptLedger(),
         started: false,
@@ -879,6 +967,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         factsAppendedFor: undefined,
         askedRows: new Set(),
         settled: yield* Deferred.make<SidebandCloseResult>(),
+        torn: yield* Deferred.make<void>(),
+        released: yield* Deferred.make<void>(),
       };
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#start(serve);
@@ -887,14 +977,41 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * The one consumer of the session's sideband, on a fiber of the scope the
-   * session stands in. What it reads it acts on where it reads it: an end —
-   * the session's own `session.closed`, or the socket's close before one
-   * came — is settled for whoever is closing gracefully and then torn down by
-   * this fiber, which can wait for the close it hands back rather than offer
-   * it to the service's queue and lose the instant the session is over.
+   * The fiber a standing session belongs to: it reads the sideband on a
+   * child of its own, waits for a tear-down to be decided by whatever hand
+   * decides it, and then closes the session's scope. Nothing else closes
+   * that scope, so the release runs once, on one fiber, and it runs after
+   * the reading rather than in the middle of it: a tear-down the reading
+   * itself began ends that child, and one begun outside interrupts it where
+   * it stands. A fiber interrupted before any tear-down was decided — the
+   * service's own scope closing — releases nothing here, because the scope
+   * it would have closed is a child of the one already closing, and the
+   * writes an end owes belong to an end that was decided.
    */
   #read(session: StandingSession): Effect.Effect<void> {
+    return Effect.ensuring(
+      Effect.gen(this, function* () {
+        const arrivals = yield* Effect.fork(this.#arrivals(session));
+        yield* Deferred.await(session.torn);
+        yield* Fiber.interrupt(arrivals);
+        yield* this.#release(session);
+      }),
+      Effect.sync(() => {
+        Deferred.unsafeDone(session.released, Exit.void);
+        if (this.#releasing === session.released) this.#releasing = undefined;
+      }),
+    );
+  }
+
+  /**
+   * The one consumer of the session's sideband. What it reads it acts on
+   * where it reads it: an end — the session's own `session.closed`, or the
+   * socket's close before one came — is settled for whoever is closing
+   * gracefully and then decided here, which is what lets the fiber above
+   * release the session in the same turn the session is over rather than
+   * offering that release to the service's queue.
+   */
+  #arrivals(session: StandingSession): Effect.Effect<void> {
     return Stream.runForEach(session.sideband.arrivals, (arrival) => {
       if ("close" in arrival) {
         this.#settle(session, {
@@ -1444,9 +1561,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     this.#setPhase({ phase: LIVE_SESSION_PHASE.WANTED });
   }
 
-  /** The session's own end, settled here and handing back what the tear-down began. */
+  /**
+   * The session's own end, settled here and handing back what the tear-down
+   * began. An end already decided — the reader read `session.closed` while a
+   * graceful close was waiting for it — is handed back the same release, so
+   * the close that asked for it still answers with the socket released.
+   */
   #onClosed(session: StandingSession, closed: LiveSessionClosed): Effect.Effect<void> {
-    if (session.ended) return Effect.void;
+    if (session.ended) return Deferred.await(session.released);
     session.usageSeconds = closed.usage.seconds;
     this.#lastSessionSeconds = closed.usage.seconds;
     this.#usageConfirmed = true;
@@ -1463,7 +1585,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * the close above, and handing back what the tear-down began.
    */
   #connectionLost(session: StandingSession, reason: string): Effect.Effect<void> {
-    if (session.ended) return Effect.void;
+    if (session.ended) return Deferred.await(session.released);
     this.#usageConfirmed = false;
     this.#trace(LIVE_TRACE_DECISION.CONNECTION_LOST);
     const micWasLive = session.micLive;
@@ -1484,14 +1606,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /**
    * The session is over, and it is over the instant this is called: the
-   * timers, the channel, and the phase are all settled here, so a caller that
-   * reads the service back sees no session standing, and the reader that is
-   * left drains what follows against an ended session, which is nothing. What it
-   * hands back is the sideband's own close, which is an effect, and then what
-   * the end began and nothing waits on inside it — the read made ahead
-   * forgotten, and whatever either speaker said last written down — so the
-   * drain, which is the one caller that waits, closes with those writes in
-   * rather than racing them.
+   * timers, the channel, `#standing`, and the phase are all settled here, on
+   * the hand that decided it, so a caller that reads the service back sees no
+   * session standing. The release is not settled here and cannot be — the
+   * scope's close is the reader's own to run, and a reader that decided this
+   * cannot wait for the fiber it is. What is handed back is that release as
+   * something to wait for, so the drain, which is the one caller that waits,
+   * closes with the socket released and those writes in rather than racing
+   * them, while the reader's own tear-down waits for nothing and simply ends.
    */
   #tearDown(session: StandingSession, reason: string): Effect.Effect<void> {
     session.ended = true;
@@ -1504,15 +1626,32 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const exchange of this.#exchanges.values()) {
       if (exchange.sessionId === session.sessionId) exchange.sessionId = undefined;
     }
-    const ended = [
-      this.#drop(),
-      ...Object.values(TRANSCRIPT_SPEAKER).map((speaker) => this.#writeSettled(session, speaker)),
-    ];
     if (this.#standing === session) this.#standing = undefined;
+    this.#releasing = session.released;
+    Deferred.unsafeDone(session.torn, Exit.void);
     this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
+    return Deferred.await(session.released);
+  }
+
+  /**
+   * The session's scope, closed once and by the fiber that owns it: the
+   * sideband's transport released, and with it whatever the source left
+   * standing under it. Then what the end owes and nothing inside it waits
+   * on — the read made ahead forgotten, and whatever either speaker said
+   * last written down.
+   */
+  #release(session: StandingSession): Effect.Effect<void> {
     return Effect.zipRight(
-      session.sideband.close,
-      Effect.all(ended, { concurrency: "unbounded", discard: true }),
+      Scope.close(session.scope, Exit.void),
+      Effect.all(
+        [
+          this.#drop(),
+          ...Object.values(TRANSCRIPT_SPEAKER).map((speaker) =>
+            this.#writeSettled(session, speaker),
+          ),
+        ],
+        { concurrency: "unbounded", discard: true },
+      ),
     );
   }
 
