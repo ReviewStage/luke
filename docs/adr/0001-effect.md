@@ -344,7 +344,19 @@ fiber of the same scope rather than a promise chain, each acknowledgment a
 stands on, and `packages/host/src/compose-live.ts` builds no timer bridge.
 What is left for P12-18h4 is the standing session's socket and its listeners,
 which are still stood up and torn down by hand rather than released by a child
-scope's `acquireRelease`.
+scope's `acquireRelease`, and P12-20i2 found what that waits on. `#tearDown`
+is a synchronous method whose side effects run where it is called and whose
+returned effect is what the caller runs afterwards, and the three callers that
+matter — a `session.closed` frame, a close on the sideband, and a failed peer
+transport — are socket callbacks, which can only offer that effect to the
+service's task queue. Releasing the sideband from a scope would put its close
+in the deferred half while `ended` and `#standing` are cleared in the eager
+one, so a `stop` arriving between the two would find no session standing and
+leave the socket open. The listeners and the close become a scope's to release
+when those callbacks can yield instead of offer, which is the same change that
+makes the socket's frames a `Stream` (P12-20i2b, over P12-20i3's `attach`
+door); until then the hand-written unwind is what keeps the session over at
+the instant it is declared over.
 
 `BrainTransport#send`'s internal `runCall` in `packages/brain/src/client.ts`
 is on the allowlist too: every caller of the brain's model transport still
@@ -985,16 +997,24 @@ so the bridge is a field it holds and cannot be a service it reads, and
 `liveVoiceBridgeLayer` was deleted rather than adopted. Beside it,
 `ReattachingSocket`'s recovery in `packages/voice/src/live-session-source.ts`
 is on the allowlist too, and for its own reason rather than a caller's: the
-socket it wraps is a plain, synchronous `LiveSocket`, so the tries themselves
-are a fiber this class forks and interrupts on its own, with no promise
-anywhere above it waiting to be freed of one. It goes when the socket it
-wraps answers effects itself; the orchestrator's conversion above did not
-reach it, since the two share only a package. `KeyedLiveSessionSource#create`
-in the same file joined it at P12-20b, when `createAccountCall` was deleted:
-the source answers its caller a promise and holds no runtime edge of its own,
-so the one session request it makes is run there over the client the source
-was built on, which is what the deleted door did for it. It goes when that
-`create` answers an effect its caller yields.
+frames and the close it reads are still the plain callbacks a `LiveSocket`
+hands out, so the tries themselves are a fiber this class forks and interrupts
+on its own, with no promise anywhere above it waiting to be freed of one.
+P12-20i2 took the seam's open and the hold's first arrival onto effects — an
+`OpenSocket` answers `Effect<SocketOpening>` and a `HeldSocket`'s `takeFirst`
+is an `Effect<HeldArrival>` withdrawn by its own interruption — but not the
+frames behind them, which are what this class reads: a frame `Stream` needs a
+scope to pump it into, and the nearest one is `LiveSessionSource#attach`,
+still a promise. So the fork stands until P12-20i3 makes `create` and `attach`
+answer effects, and it goes with the same change that makes the frames a
+`Stream`. `KeyedLiveSessionSource#create` in the same file joined it at
+P12-20b, when `createAccountCall` was deleted: the source answers its caller a
+promise and holds no runtime edge of its own, so the one session request it
+makes is run there over the client the source was built on, which is what the
+deleted door did for it. `KeyedLiveSessionSource#attach` joined it at
+P12-20i2 for exactly that reason — the socket seam it opens through answers an
+effect now and the attach it is called from answers a promise — and both go
+when that `create` and that `attach` answer an effect their caller yields.
 `ServiceLiveSessionSource#createSession` beside them is the third, and
 P12-20i left it as the only run the service side of that file makes: the
 authorization reads both service sources make — the access token, the account
@@ -1006,14 +1026,16 @@ answer is run once, at that door, on the runtime the source was handed.
 `attachOnce` answers an effect with them, which the recovery fiber above
 yields rather than bridging with `Effect.promise`. The same PR took the
 answering wait's `new Promise` and `setTimeout` onto `Effect.async` under
-`Effect.timeoutOption`, where the deadline's own interruption withdraws the
-hold's wait before the continuation writes the outcome — the order the
-hand-rolled timer kept by hand, so that a frame or a close arriving late is
-held for the consumer and records nothing over the deadline's — and
-`packages/voice/src/live-session-source.ts` is off the raw-primitive list
-with it. The door goes when `LiveSessionSource#create` answers an effect its
-caller yields, which `live-session-service.ts` already bridges with
-`Effect.promise` to reach.
+`Effect.timeoutOption`, and `packages/voice/src/live-session-source.ts` is off
+the raw-primitive list with it; P12-20i2 then moved that wait into the hold
+that owns it, where `takeFirst` is the effect and `Effect.timeoutOption` above
+it is the deadline, so exactly one of an arrival and the deadline is what the
+source writes down and the deadline's own interruption withdraws the wait
+before anything is written — the order the hand-rolled timer kept by hand, so
+that a frame or a close arriving late is held for the consumer and records
+nothing over the deadline's. The door goes when `LiveSessionSource#create`
+answers an effect its caller yields, which `live-session-service.ts` already
+bridges with `Effect.promise` to reach.
 
 `fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` was on this
 allowlist from P10-16, the PR that deleted `HostedStoreRun` and

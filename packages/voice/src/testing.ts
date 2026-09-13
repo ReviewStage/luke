@@ -1,4 +1,5 @@
 import type { WireRecord } from "@sidecar/wire";
+import { Effect } from "effect";
 import { holdSocket } from "./held-socket.js";
 import type { LiveSocket, OpenSocket, SocketClose, SocketOpening } from "./live-socket.js";
 
@@ -88,14 +89,15 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
   const opens: RecordedOpen[] = [];
   const sockets: FakeLiveSocket[] = [];
   let call = 0;
-  const openSocket: OpenSocket = async (url, headers) => {
-    opens.push({ url, headers });
-    const socket = new FakeLiveSocket();
-    sockets.push(socket);
-    const answer = answers[Math.min(call, answers.length - 1)];
-    call += 1;
-    if (!answer) throw new Error("no scripted opening");
-    return answer(socket) ?? { socket: holdSocket(socket) };
-  };
+  const openSocket: OpenSocket = (url, headers) =>
+    Effect.sync(() => {
+      opens.push({ url, headers });
+      const socket = new FakeLiveSocket();
+      sockets.push(socket);
+      const answer = answers[Math.min(call, answers.length - 1)];
+      call += 1;
+      if (!answer) throw new Error("no scripted opening");
+      return answer(socket) ?? { socket: holdSocket(socket) };
+    });
   return { openSocket, opens, sockets };
 }

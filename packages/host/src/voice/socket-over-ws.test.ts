@@ -6,8 +6,7 @@ import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
 import { it } from "@effect/vitest";
 import { SOCKET_OPEN_FAULT, socketOpened } from "@sidecar/voice";
-import { Effect } from "effect";
-import { test } from "vitest";
+import { Effect, Exit, Fiber } from "effect";
 import { WebSocketServer } from "ws";
 import { openSocketOverWs } from "./socket-over-ws.js";
 
@@ -58,48 +57,112 @@ async function server(options: { bearer: string; refuseWith: number }) {
   };
 }
 
-test("the ws seam opens with the handshake headers it is handed, carries text both ways, and reports the far side's close", async () => {
-  const remote = await server({ bearer: "key", refuseWith: 401 });
-  try {
-    const opening = await openSocketOverWs(remote.url, { authorization: "Bearer key" });
-    assert.equal(socketOpened(opening), true);
-    if (!socketOpened(opening)) return;
-    assert.deepEqual(remote.seen, [
-      { authorization: "Bearer key", url: "/v1/live/sessions/sess_1/attach" },
-    ]);
-    const messages: string[] = [];
-    const closes: number[] = [];
-    opening.socket.onMessage((data) => messages.push(data));
-    const closed = new Promise<void>((resolve) => {
-      opening.socket.onClose((close) => {
-        closes.push(close.code ?? -1);
-        resolve();
-      });
-    });
-    opening.socket.send("hello");
-    while (messages.length === 0) await new Promise((resolve) => setTimeout(resolve, 5));
-    assert.deepEqual(messages, [JSON.stringify({ echoed: "hello" })]);
-    opening.socket.close();
-    await closed;
-    assert.equal(closes.length, 1);
-  } finally {
-    await remote.close();
-  }
-});
+it.effect(
+  "the ws seam opens with the handshake headers it is handed, carries text both ways, and reports the far side's close",
+  () =>
+    Effect.gen(function* () {
+      const remote = yield* Effect.promise(() => server({ bearer: "key", refuseWith: 401 }));
+      try {
+        const opening = yield* openSocketOverWs(remote.url, { authorization: "Bearer key" });
+        assert.equal(socketOpened(opening), true);
+        if (!socketOpened(opening)) return;
+        assert.deepEqual(remote.seen, [
+          { authorization: "Bearer key", url: "/v1/live/sessions/sess_1/attach" },
+        ]);
+        const messages: string[] = [];
+        const closes: number[] = [];
+        opening.socket.onMessage((data) => messages.push(data));
+        let ended = false;
+        opening.socket.onClose((close) => {
+          closes.push(close.code ?? -1);
+          ended = true;
+        });
+        opening.socket.send("hello");
+        yield* waitFor(() => messages.length > 0);
+        assert.deepEqual(messages, [JSON.stringify({ echoed: "hello" })]);
+        opening.socket.close();
+        yield* waitFor(() => ended);
+        assert.equal(closes.length, 1);
+      } finally {
+        yield* Effect.promise(() => remote.close());
+      }
+    }),
+);
 
-test("a refused upgrade answers its status, and nothing listening answers a network fault by name", async () => {
-  const remote = await server({ bearer: "key", refuseWith: 401 });
-  try {
-    const refused = await openSocketOverWs(remote.url, { authorization: "Bearer wrong" });
-    assert.deepEqual(refused, { fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 });
-  } finally {
-    await remote.close();
-  }
-  const unreachable = await openSocketOverWs("ws://127.0.0.1:9/attach", {});
-  assert.equal(socketOpened(unreachable), false);
-  if (socketOpened(unreachable)) return;
-  assert.equal(unreachable.fault, SOCKET_OPEN_FAULT.NETWORK);
-});
+it.effect(
+  "a refused upgrade answers its status, and nothing listening answers a network fault by name",
+  () =>
+    Effect.gen(function* () {
+      const remote = yield* Effect.promise(() => server({ bearer: "key", refuseWith: 401 }));
+      try {
+        const refused = yield* openSocketOverWs(remote.url, { authorization: "Bearer wrong" });
+        assert.deepEqual(refused, { fault: SOCKET_OPEN_FAULT.REFUSED, status: 401 });
+      } finally {
+        yield* Effect.promise(() => remote.close());
+      }
+      const unreachable = yield* openSocketOverWs("ws://127.0.0.1:9/attach", {});
+      assert.equal(socketOpened(unreachable), false);
+      if (socketOpened(unreachable)) return;
+      assert.equal(unreachable.fault, SOCKET_OPEN_FAULT.NETWORK);
+    }),
+);
+
+/** Gives the event loop real turns until `condition` holds, for a condition only the network can settle. */
+function waitOnTheNetwork(condition: () => boolean, rounds = 400): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    for (let round = 0; round < rounds; round += 1) {
+      if (condition()) return;
+      yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
+    }
+    assert.ok(condition(), "the condition did not hold in time");
+  });
+}
+
+/** An endpoint that accepts the upgrade request and never answers it, so the handshake stands until the client gives it up. */
+async function serverThatNeverAnswers() {
+  const httpServer = http.createServer();
+  const held = new Set<Duplex>();
+  let ended = 0;
+  httpServer.on("upgrade", (_request, socket) => {
+    held.add(socket);
+    socket.on("end", () => {
+      ended += 1;
+    });
+    socket.resume();
+  });
+  httpServer.listen(0, "127.0.0.1");
+  await once(httpServer, "listening");
+  // SAFETY: a listening TCP server answers its bound address as AddressInfo, never a pipe path.
+  const { port } = httpServer.address() as AddressInfo;
+  return {
+    url: `ws://127.0.0.1:${port}/v1/live/sessions/sess_1/attach`,
+    connected: () => held.size,
+    ended: () => ended,
+    close: async () => {
+      for (const socket of held) socket.destroy();
+      httpServer.close();
+      await once(httpServer, "close");
+    },
+  };
+}
+
+it.effect(
+  "an open interrupted before the handshake answered leaves no socket connecting behind it",
+  () =>
+    Effect.gen(function* () {
+      const remote = yield* Effect.promise(() => serverThatNeverAnswers());
+      try {
+        const opening = yield* Effect.fork(openSocketOverWs(remote.url, {}));
+        yield* waitOnTheNetwork(() => remote.connected() === 1);
+        assert.equal(Exit.isInterrupted(yield* Fiber.interrupt(opening)), true);
+        // The handshake the interrupted attempt began is given up rather than left standing.
+        yield* waitOnTheNetwork(() => remote.ended() === 1);
+        assert.equal(remote.ended(), 1);
+      } finally {
+        yield* Effect.promise(() => remote.close());
+      }
+    }),
+);
 
 /** One unmasked server-to-client text frame, as the wire carries it (FIN set, opcode text, one-byte length). */
 function textFrame(text: string): Buffer {
@@ -161,7 +224,7 @@ it.effect(
       ];
       const endpoint = yield* Effect.promise(() => serverSpeakingWithTheHandshake(spoken));
       try {
-        const opening = yield* Effect.promise(() => openSocketOverWs(endpoint.url, {}));
+        const opening = yield* openSocketOverWs(endpoint.url, {});
         assert.ok(socketOpened(opening));
         // One more turn than the continuation already cost: the frames must still be waiting.
         let tickPassed = false;

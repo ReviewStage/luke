@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import type { LiveSocket, SocketClose } from "./live-socket.js";
 
 /**
@@ -25,16 +26,15 @@ export type HeldArrival = { readonly frame: string } | { readonly close: SocketC
  */
 export interface HeldSocket extends LiveSocket {
   /**
-   * Hands a handshake the first frame held, or the close that came before any
-   * frame, and answers the way `onMessage` does: with the function that
-   * withdraws the wait. The hold stands throughout: the frames behind the
-   * answer wait for the first `onMessage` listener, which is what closes the
-   * gap between a handshake that settled and a consumer that subscribes in
-   * the continuation. A wait withdrawn on its deadline hands nothing to
-   * anyone, and what arrives afterwards is held for the consumer like any
-   * other frame rather than delivered to a waiter nobody will read.
+   * The first frame held, or the close that came before any frame. The hold
+   * stands throughout: the frames behind the answer wait for the first
+   * `onMessage` listener, which is what closes the gap between a handshake
+   * that settled and a consumer that subscribes after it. Interrupting the
+   * wait — a deadline above it, or a hang-up — withdraws it, so it hands
+   * nothing to anyone and what arrives afterwards is held for the consumer
+   * like any other frame rather than delivered to a waiter nobody will read.
    */
-  takeFirst(listener: (arrival: HeldArrival) => void): () => void;
+  readonly takeFirst: Effect.Effect<HeldArrival>;
 }
 
 /**
@@ -68,6 +68,14 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
     const waiter = waiting;
     waiting = undefined;
     waiter?.(arrival);
+  };
+
+  /** The arrival a wait would settle with at once: the frame at the head of the hold, or the close that ended it. */
+  const held = (): HeldArrival | undefined => {
+    const first = heldFrames?.shift();
+    if (first !== undefined) return { frame: first };
+    if (closed !== undefined) return { close: closed };
+    return undefined;
   };
 
   socket.onMessage((data) => {
@@ -120,20 +128,17 @@ export function holdSocket(socket: LiveSocket): HeldSocket {
         closeListeners.delete(listener);
       };
     },
-    takeFirst: (listener) => {
-      const first = heldFrames?.shift();
-      if (first !== undefined) {
-        listener({ frame: first });
-        return () => undefined;
+    takeFirst: Effect.async<HeldArrival>((resume) => {
+      const arrival = held();
+      if (arrival !== undefined) {
+        resume(Effect.succeed(arrival));
+        return Effect.void;
       }
-      if (closed !== undefined) {
-        listener({ close: closed });
-        return () => undefined;
-      }
+      const listener = (waited: HeldArrival) => resume(Effect.succeed(waited));
       waiting = listener;
-      return () => {
+      return Effect.sync(() => {
         if (waiting === listener) waiting = undefined;
-      };
-    },
+      });
+    }),
   };
 }
