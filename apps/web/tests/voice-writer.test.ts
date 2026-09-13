@@ -4,10 +4,12 @@ import { Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
+  ASK_ORIGIN,
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  TURN_ORIGIN,
   type UserMessageMetadata,
 } from "../server/core";
 import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
@@ -25,6 +27,7 @@ import {
   type VoiceWriter,
   voiceWriter,
 } from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
 import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -471,8 +474,212 @@ test("a delegation cuts the developer's words before it into a spoken ask naming
       finishedAt: new Date(NOW),
     },
   ]);
-  // Nothing Luke said became a message; his words are segments alone.
+  // Nothing Luke said in answer to a delegated ask became a message; his words are segments alone.
   assert.equal((await segments(live.liveSessionId)).length, 4);
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(live, { startMs: 5000, endMs: 7000 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+  );
+  assert.equal((await spokenAsks(live.conversation)).length, 2);
+});
+
+test("an exchange the voice model answers itself leaves both settled utterances as finished rows cut from the segments, the developer's line first, once each", async () => {
+  const live = await target();
+  const voice = writer();
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  await database.run(voice.consume(live, heard("Which agent is", 1200, 2600)));
+  await database.run(voice.consume(live, heard(" waiting on me?", 2500, 4800)));
+  await database.run(voice.consume(live, said("The fixture agent is,", 5000, 6200)));
+  await database.run(voice.consume(live, said(" on a permission prompt.", 6100, 7400)));
+
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 1200, endMs: 4800 })),
+    WRITTEN,
+  );
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(live, { startMs: 5000, endMs: 7400 })),
+    WRITTEN,
+  );
+  // Told again, from this writer or a fresh one, each settle is the same row.
+  assert.deepEqual(
+    await database.run(writer().recordSpokenLine(live, { startMs: 1200, endMs: 4800 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.REPEATED },
+  );
+  assert.deepEqual(
+    await database.run(writer().recordSpokenReply(live, { startMs: 5000, endMs: 7400 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.REPEATED },
+  );
+
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.role, row.turnId, row.parts, row.metadata, row.finishedAt]),
+    [
+      [
+        MESSAGE_ROLE.USER,
+        null,
+        [{ type: "text", text: "Which agent is waiting on me?", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          from_ms: 1200,
+          to_ms: 4800,
+        },
+        new Date(NOW),
+      ],
+      [
+        MESSAGE_ROLE.ASSISTANT,
+        null,
+        [{ type: "text", text: "The fixture agent is, on a permission prompt.", state: "done" }],
+        { author: MESSAGE_AUTHOR.VOICE_MODEL },
+        new Date(NOW),
+      ],
+    ],
+  );
+  assert.ok((rows[0]?.seq ?? 0) < (rows[1]?.seq ?? 0));
+  // An utterance whose span holds no segment writes nothing: the words are not there to write.
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 9000, endMs: 9500 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+  );
+  assert.equal((await segments(live.liveSessionId)).length, 4);
+});
+
+test("Luke's utterance is not a row where nothing was said before it, where the line before it is a delegation's, or where it is the voice following a commentary append", async () => {
+  // Words before any developer line: a greeting, a beat, a briefing.
+  const first = await target();
+  const voice = writer();
+  await database.run(voice.consume(first, said("Good morning.", 100, 900)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(first, { startMs: 100, endMs: 900 })),
+    {
+      ok: true,
+      effect: STORE_WRITE_EFFECT.IGNORED,
+    },
+  );
+  assert.deepEqual(await spokenAsks(first.conversation), []);
+
+  // The voice following a commentary append this writer was told of: a briefing's words, marked spoken and not a row,
+  // even with an undelegated line standing before them.
+  const second = await target();
+  const messageId = await briefing(second.conversation);
+  await database.run(voice.consume(second, heard("Anything new?", 100, 900)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(second, { startMs: 100, endMs: 900 })),
+    WRITTEN,
+  );
+  voice.noteAppend(second, { clientEventId: "append-2", messageId });
+  await database.run(voice.consume(second, appended("append-2", 1000, 2000)));
+  await database.run(voice.consume(second, said("One agent finished.", 2000, 3200)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(second, { startMs: 2000, endMs: 3200 })),
+    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+  );
+  // The rows are the briefing the fixture announced and the developer's line: nothing of Luke's voice.
+  assert.deepEqual(
+    (await spokenAsks(second.conversation)).map((row) => [
+      row.role,
+      row.clientId.startsWith("briefing-"),
+    ]),
+    [
+      [MESSAGE_ROLE.ASSISTANT, true],
+      [MESSAGE_ROLE.USER, false],
+    ],
+  );
+  assert.equal(
+    (await speechEvents(second.conversation)).some(
+      (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
+    ),
+    true,
+  );
+});
+
+test("a delegation arriving after the developer's line settled adopts that line under its id and takes it into the ask's turn, rather than cutting a second row", async () => {
+  const live = await target();
+  const voice = writer();
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  await database.run(voice.consume(live, heard("Open the failing one.", 1000, 2200)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2200 })),
+    WRITTEN,
+  );
+  const before = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.equal(before.length, 1);
+  const line = before[0];
+  assert.ok(line);
+
+  // The ask the service submitted for the delegation has learned its turn by the time the delegation is told here.
+  const asks = askRecord();
+  const ask = await database.run(
+    asks.record({
+      userId: live.userId,
+      conversationId: live.conversation.conversationId,
+      clientId: "dl_late",
+      origin: ASK_ORIGIN.SPOKEN,
+      question: "Open the failing one.",
+      createdAt: new Date(NOW),
+    }),
+  );
+  const enqueued = await database.run(
+    store.enqueueTurn(live.conversation, { origin: TURN_ORIGIN.SPOKEN }),
+  );
+  assert.ok(enqueued.ok);
+  await database.run(
+    asks.dispatchOnce(live.conversation, ask.id, async () => ({
+      sessionId: "wrun_late",
+      turnId: enqueued.turnId,
+    })),
+  );
+
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_late", 5000))), WRITTEN);
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_late", 5000))), {
+    ok: true,
+    effect: STORE_WRITE_EFFECT.REPEATED,
+  });
+
+  const after = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    after.map((row) => [row.id, row.clientId, row.turnId, row.parts, row.metadata]),
+    [
+      [
+        line.id,
+        "dl_late",
+        enqueued.turnId,
+        [{ type: "text", text: "Open the failing one.", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          delegation_id: "dl_late",
+          from_ms: 1000,
+          to_ms: 2200,
+        },
+      ],
+    ],
+  );
+  // Taken into the turn, the row moved to a fresh position, so every device reads it again where it stands.
+  assert.ok((after[0]?.seq ?? 0) > (line.seq ?? 0));
+  // The next delegation, with words of its own before it, cuts those alone.
+  await database.run(voice.consume(live, heard("And the other one.", 6000, 7000)));
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_next", 7100))), WRITTEN);
+  assert.deepEqual(
+    (await readMessagesByConversationTyped(database.run, live.conversation.conversationId)).map(
+      (row) => [row.clientId, row.parts],
+    ),
+    [
+      ["dl_late", [{ type: "text", text: "Open the failing one.", state: "done" }]],
+      ["dl_next", [{ type: "text", text: "And the other one.", state: "done" }]],
+    ],
+  );
 });
 
 test("a delegation is one ask however many times it is told, and one with no words before it writes nothing", async () => {

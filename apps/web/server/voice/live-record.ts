@@ -2,6 +2,7 @@ import type { SqlClient } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import type { LiveRecord } from "@sidecar/voice/live-session";
 import { Deferred, Effect, FiberId, type ParseResult, Queue, type Scope } from "effect";
+import { CONVERSATION_ENTRY_KIND } from "../core.js";
 import {
   STORE_WRITE_EFFECT,
   type VoiceTarget,
@@ -13,12 +14,16 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
 /**
  * The hosted implementation of the live record: the voice writer over
  * Postgres, which keeps the plan's split — every transcript delta a segment,
- * the developer's spoken ask the one message a session leaves, cut where the
- * delegation places it, and nothing Luke spoke a message at all. The service
- * hands every server event here in arrival order and the writer takes what it
- * keeps of each; the two utterance writes the record door names are answered
- * from that stream rather than written again, so the service's grouped
- * utterances never reach a row of their own.
+ * the developer's spoken ask a message cut where the delegation places it,
+ * and an exchange the voice model answered itself two messages of its own:
+ * the developer's settled utterance as a user row and Luke's settled answer
+ * as an assistant row, each cut from the segments over the span the service
+ * settled, so the Conversation keeps what was said whether or not the brain
+ * was consulted. The service hands every server event here in arrival order
+ * and the writer takes what it keeps of each; the two utterance doors are
+ * answered on the same queue, after every delta that arrived ahead of the
+ * settle has taken its place, so a row is cut from segments already on
+ * record and never from a grouping the service kept beside them.
  *
  * A delegation is the one event not consumed as it arrives. The writer cuts
  * the ask from the developer's segments already on record before the
@@ -61,9 +66,15 @@ export interface HostedLiveRecord extends LiveRecord {
 /** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
 const HELD: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
 
-/** One event waiting its turn at the writer, and what the caller that handed it over is waiting on. */
+type Write = Effect.Effect<
+  VoiceWriteResult,
+  SqlError | ParseResult.ParseError,
+  SqlClient.SqlClient
+>;
+
+/** One write waiting its turn at the writer, and what the caller that handed it over is waiting on. */
 interface PendingWrite {
-  readonly event: LiveServerEvent;
+  readonly write: Write;
   readonly landed: Deferred.Deferred<VoiceWriteResult, SqlError | ParseResult.ParseError>;
 }
 
@@ -83,7 +94,7 @@ export function hostedLiveRecord({
     yield* Effect.forkScoped(
       Effect.forever(
         Effect.flatMap(Queue.take(waiting), (pending) =>
-          Effect.flatMap(Effect.exit(writer.consume(target, pending.event)), (written) =>
+          Effect.flatMap(Effect.exit(pending.write), (written) =>
             Deferred.done(pending.landed, written),
           ),
         ),
@@ -92,19 +103,29 @@ export function hostedLiveRecord({
 
     /**
      * Every write of one session takes its turn, so a segment's place in the
-     * sequence is its arrival: the event is put on the queue where `consume`
-     * is called, and the effect handed back is the wait on that write alone.
+     * sequence is its arrival: the write is put on the queue where it is
+     * called for, and the effect handed back is the wait on that write alone.
      */
-    function consume(
-      event: LiveServerEvent,
+    function enqueue(
+      write: Write,
     ): Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError> {
       const landed = Deferred.unsafeMake<VoiceWriteResult, SqlError | ParseResult.ParseError>(
         FiberId.none,
       );
       last = landed;
-      Queue.unsafeOffer(waiting, { event, landed });
+      Queue.unsafeOffer(waiting, { write, landed });
       return Deferred.await(landed);
     }
+
+    const consume = (event: LiveServerEvent) => enqueue(writer.consume(target, event));
+
+    /** Whether the record took an utterance: landed, found standing, or owed nothing; a refusal or a failure is not taken. */
+    const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>) =>
+      write.pipe(
+        Effect.map((written) => written.ok),
+        Effect.catchAll(() => Effect.succeed(false)),
+        Effect.catchAllDefect(() => Effect.succeed(false)),
+      );
 
     return {
       observe(event) {
@@ -116,7 +137,16 @@ export function hostedLiveRecord({
       },
       writeDeveloperUtterance: (record) =>
         Effect.suspend(() => {
-          if (record.delegationId === null) return Effect.succeed(true);
+          if (record.delegationId === null) {
+            return taken(
+              enqueue(
+                writer.recordSpokenLine(target, {
+                  startMs: record.startMs,
+                  endMs: record.endMs,
+                }),
+              ),
+            );
+          }
           const delegation = held.get(record.delegationId);
           if (delegation === undefined) return Effect.succeed(false);
           // A write the store refused and one it died on are both an ask not
@@ -128,7 +158,17 @@ export function hostedLiveRecord({
             Effect.catchAllDefect(() => Effect.succeed(false)),
           );
         }),
-      writeLukeUtterance: () => Effect.succeed(true),
+      writeLukeUtterance: (record) =>
+        record.role === CONVERSATION_ENTRY_KIND.REPLY
+          ? taken(
+              enqueue(
+                writer.recordSpokenReply(target, {
+                  startMs: record.startMs,
+                  endMs: record.endMs,
+                }),
+              ),
+            )
+          : Effect.succeed(true),
       drained: () =>
         Effect.suspend(() =>
           last === undefined ? Effect.void : Effect.ignore(Deferred.await(last)),

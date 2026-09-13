@@ -1,7 +1,13 @@
+import { createHash } from "node:crypto";
 import { SqlClient, SqlSchema } from "@effect/sql";
 import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, Option, type ParseResult, Schema } from "effect";
-import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, type SpokenAskMetadata } from "../../core.js";
+import {
+  type AssistantMessageMetadata,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  type SpokenAskMetadata,
+} from "../../core.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
@@ -36,10 +42,27 @@ import {
  * memory kept in the process is which message a commentary append carried,
  * which the same connection that sent the append learns the answer to.
  *
- * Nothing spoken becomes a message. The brain's reply is the assistant
- * message the model's context replays; what the voice spoke of it is a
- * paraphrase, and it lives as segments. Segments may overlap, because timed
- * deltas do, and no audio is ever stored.
+ * What is spoken becomes a message in one case: an exchange the voice model
+ * answers itself. The two utterance doors (`recordSpokenLine`,
+ * `recordSpokenReply`) are called by the live session service when an
+ * utterance has settled by the ledger's own rule — no fragment has joined it
+ * for the gap plus the margin — and each writes one finished row cut from
+ * the segments already on record over the utterance's span, or nothing: a row
+ * is never opened and amended, so a socket closing mid-sentence leaves the
+ * words actually said or no row, never a row still being written. The
+ * developer's settled utterance is a user row on the voice channel naming
+ * the session and its span, with no delegation; a delegation that arrives
+ * after the utterance settled adopts that row rather than cutting a second
+ * (`adoptSpokenLine`), so an ask and its line share one id however the two
+ * writes were ordered. Luke's settled utterance is an assistant row authored
+ * by the voice model only where it answered such a line: the developer's
+ * latest line before it stands undelegated. Where that line is a delegation's
+ * the words are the brain's reply spoken, already on record as the turn's
+ * journal; where no line precedes them they are a greeting, a beat, or a
+ * briefing spoken; and where the utterance is the voice following a
+ * commentary append this instance sent, they are a briefing's words. None of
+ * those becomes a second row. Segments may overlap, because timed deltas do,
+ * and no audio is ever stored.
  *
  * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
  * by a `Schema` rather than trusted, and answered as an effect to whoever
@@ -84,6 +107,12 @@ const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN
 const REPEATED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
 const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION };
 
+/** The span one settled utterance covers on the session's own clock, as the ledger grouped it. */
+interface SpokenUtteranceSpan {
+  readonly startMs: number;
+  readonly endMs: number;
+}
+
 export interface VoiceWriter {
   /** Consumes one server event of the live session's stream. */
   consume(
@@ -92,6 +121,16 @@ export interface VoiceWriter {
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
   /** Tells the writer which message a commentary append carries, before the stream acknowledges it. */
   noteAppend(target: VoiceTarget, append: CommentaryAppend): void;
+  /** The developer's settled utterance, undelegated: a finished user row cut from the session's segments over its span. */
+  recordSpokenLine(
+    target: VoiceTarget,
+    utterance: SpokenUtteranceSpan,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
+  /** One of Luke's settled utterances: a finished assistant row over its span where it answered an undelegated line, and nothing otherwise. */
+  recordSpokenReply(
+    target: VoiceTarget,
+    utterance: SpokenUtteranceSpan,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
 }
 
 interface VoiceWriterOptions {
@@ -216,6 +255,59 @@ const insertSegment = SqlSchema.void({
     ),
 });
 
+/**
+ * The client id of a spoken row the voice writer cuts itself: one per
+ * session, speaker, and utterance start, derived rather than minted so a
+ * settle told twice, or told again from a fresh function instance, writes the
+ * same row. A name-based UUID of the same construction as the brain host's,
+ * under a namespace of this writer's own.
+ */
+const SPOKEN_ROW_NAMESPACE = "8f2d6c1a-5b3e-4a7f-9c0d-1e2f3a4b5c6d";
+const UUID_VERSION_8 = 0x80;
+const UUID_VARIANT_RFC_4122 = 0x80;
+
+function spokenRowClientId(
+  voiceSessionId: string,
+  role: VoiceSegmentRole,
+  startMs: number,
+): string {
+  const digest = createHash("sha256")
+    .update(Buffer.from(SPOKEN_ROW_NAMESPACE.replaceAll("-", ""), "hex"))
+    .update(JSON.stringify([voiceSessionId, role, startMs]), "utf8")
+    .digest()
+    .subarray(0, 16);
+  digest[6] = ((digest[6] ?? 0) & 0x0f) | UUID_VERSION_8;
+  digest[8] = ((digest[8] ?? 0) & 0x3f) | UUID_VARIANT_RFC_4122;
+  const hex = digest.toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+/** One speaker's segments of one session over a settled utterance's span, both ends included, in the order the deltas came. */
+const findUtteranceSegments = SqlSchema.findAll({
+  Request: Schema.Struct({
+    voiceSessionId: Schema.String,
+    role: VoiceSegmentRoleSchema,
+    startMs: Schema.Int,
+    endMs: Schema.Int,
+  }),
+  Result: Schema.Struct({
+    text: Schema.String,
+    startMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("start_ms")),
+  }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select text, start_ms
+        from voice_transcript_segments
+        where voice_session_id = ${request.voiceSessionId}
+          and role = ${request.role}
+          and start_ms >= ${request.startMs}
+          and start_ms <= ${request.endMs}
+        order by seq asc
+      `,
+    ),
+});
+
 /** The developer's own segments of one session inside a span, in the order the deltas came. */
 const findSpokenSegments = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -244,6 +336,21 @@ const findSpokenSegments = SqlSchema.findAll({
 export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   /** Appends by live session and client event id: the one thing kept in memory, and only until the speech lands. */
   const pending = new Map<string, Map<string, PendingAppend>>();
+  /**
+   * Where, on each session's clock, the session's voice was found following a
+   * commentary append: the start of the output delta that marked it. Luke's
+   * utterance covering such an instant is a briefing's words, not his own
+   * answer. Kept beside the appends, for this instance's life like them.
+   */
+  const spokenAppendStarts = new Map<string, number[]>();
+
+  const appendStartsOf = (liveSessionId: string): number[] => {
+    const standing = spokenAppendStarts.get(liveSessionId);
+    if (standing !== undefined) return standing;
+    const created: number[] = [];
+    spokenAppendStarts.set(liveSessionId, created);
+    return created;
+  };
 
   const appendsOf = (liveSessionId: string): Map<string, PendingAppend> => {
     const standing = pending.get(liveSessionId);
@@ -303,6 +410,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       for (const [clientEventId, append] of appends) {
         if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
         appends.delete(clientEventId);
+        appendStartsOf(target.liveSessionId).push(delta.start_ms);
         if (voiceSession.deviceId === null) {
           outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
           continue;
@@ -370,7 +478,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
         toMs: created.offset_ms,
       });
       const text = spoken.map((segment) => segment.text).join("");
-      if (text.length === 0) return IGNORED;
+      if (text.length === 0) return yield* adoptSettledLine(target, voiceSessionId, created);
       const metadata: SpokenAskMetadata = {
         author: MESSAGE_AUTHOR.DEVELOPER,
         channel: MESSAGE_CHANNEL.VOICE,
@@ -390,7 +498,139 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
     });
   }
 
+  /**
+   * A delegation with no words before it since the last line was written is
+   * about the line that settled undelegated just before it, where one stands
+   * and no delegation owns it yet: that row is adopted under the delegation
+   * rather than a second cut of the same words. A delegation told twice finds
+   * its row standing. One with no such line writes nothing, as before.
+   */
+  function adoptSettledLine(
+    target: VoiceTarget,
+    voiceSessionId: string,
+    created: DelegationCreated,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.gen(function* () {
+      const latest = yield* store.latestSpokenLine(target.conversation, {
+        voiceSessionId,
+        endingAtOrBeforeMs: created.offset_ms,
+      });
+      if (!latest.ok) return { ok: false, refusal: latest.refusal };
+      const line = latest.line;
+      if (line === undefined) return IGNORED;
+      if (line.clientId === created.delegation.id) return REPEATED;
+      if (line.delegated) return IGNORED;
+      const adopted = yield* store.adoptSpokenLine(target.conversation, {
+        lineClientId: line.clientId,
+        delegationId: created.delegation.id,
+      });
+      if (adopted.ok) return adopted.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
+      return { ok: false, refusal: adopted.refusal };
+    });
+  }
+
+  /**
+   * The developer's settled utterance the voice model answered itself, as a
+   * finished user row: its own segments over the span, joined as the deltas
+   * came, on the voice channel naming the session and the span and no
+   * delegation. An utterance whose span holds no segment on record writes
+   * nothing, since the words are not there to write.
+   */
+  function recordSpokenLine(
+    target: VoiceTarget,
+    utterance: SpokenUtteranceSpan,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.gen(function* () {
+      const voiceSession = yield* findVoiceSession({
+        userId: target.userId,
+        liveSessionId: target.liveSessionId,
+      });
+      if (Option.isNone(voiceSession)) return NO_SESSION;
+      const voiceSessionId = voiceSession.value.id;
+      const spoken = yield* findUtteranceSegments({
+        voiceSessionId,
+        role: VOICE_SEGMENT_ROLE.USER,
+        startMs: utterance.startMs,
+        endMs: utterance.endMs,
+      });
+      const text = spoken.map((segment) => segment.text).join("");
+      if (text.length === 0) return IGNORED;
+      const metadata: SpokenAskMetadata = {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: voiceSessionId,
+        from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
+        to_ms: utterance.endMs,
+      };
+      const written = yield* store.recordUserMessage(target.conversation, {
+        clientId: spokenRowClientId(voiceSessionId, VOICE_SEGMENT_ROLE.USER, utterance.startMs),
+        text,
+        metadata,
+      });
+      if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
+      return { ok: false, refusal: written.refusal };
+    });
+  }
+
+  /**
+   * One of Luke's settled utterances, as a finished assistant row authored by
+   * the voice model, only where it is his own answer: the developer's latest
+   * line before it stands undelegated, and no commentary append this instance
+   * sent was found spoken inside its span. A delegated line's answer is the
+   * turn's journal; words before any line are a greeting, a beat, or a
+   * briefing; the voice following an append is a briefing's words. Each of
+   * those is on record already and writes nothing here.
+   */
+  function recordSpokenReply(
+    target: VoiceTarget,
+    utterance: SpokenUtteranceSpan,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
+    return Effect.gen(function* () {
+      if (
+        appendStartsOf(target.liveSessionId).some(
+          (startMs) => startMs >= utterance.startMs && startMs <= utterance.endMs,
+        )
+      ) {
+        return IGNORED;
+      }
+      const voiceSession = yield* findVoiceSession({
+        userId: target.userId,
+        liveSessionId: target.liveSessionId,
+      });
+      if (Option.isNone(voiceSession)) return NO_SESSION;
+      const voiceSessionId = voiceSession.value.id;
+      const latest = yield* store.latestSpokenLine(target.conversation, {
+        voiceSessionId,
+        endingAtOrBeforeMs: utterance.startMs,
+      });
+      if (!latest.ok) return { ok: false, refusal: latest.refusal };
+      if (latest.line === undefined || latest.line.delegated) return IGNORED;
+      const spoken = yield* findUtteranceSegments({
+        voiceSessionId,
+        role: VOICE_SEGMENT_ROLE.ASSISTANT,
+        startMs: utterance.startMs,
+        endMs: utterance.endMs,
+      });
+      const text = spoken.map((segment) => segment.text).join("");
+      if (text.length === 0) return IGNORED;
+      const metadata: AssistantMessageMetadata = { author: MESSAGE_AUTHOR.VOICE_MODEL };
+      const written = yield* store.recordSpokenReply(target.conversation, {
+        clientId: spokenRowClientId(
+          voiceSessionId,
+          VOICE_SEGMENT_ROLE.ASSISTANT,
+          utterance.startMs,
+        ),
+        text,
+        metadata,
+      });
+      if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
+      return { ok: false, refusal: written.refusal };
+    });
+  }
+
   return {
+    recordSpokenLine,
+    recordSpokenReply,
     noteAppend(target, append) {
       appendsOf(target.liveSessionId).set(append.clientEventId, {
         messageId: append.messageId,

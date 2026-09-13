@@ -43,10 +43,12 @@ import {
   handleConversationMessages,
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
-import { storeWriter } from "../server/hosted/store";
+import { STORE_WRITE_EFFECT, storeWriter, voiceWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
+import { promisedVoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { heard, said } from "./support/live-events";
 
 /**
  * A Mac's picture of the Conversation across whole spoken exchanges, over the
@@ -59,8 +61,11 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
  * the turn, the journal opened and streamed, the answer, the turn's end — can
  * empty or shrink what a device that polls between the writes holds, in
  * either order the line and the journal can land, and with another
- * conversation's journal standing open through it all. Synthetic words
- * throughout: no real spoken word is written.
+ * conversation's journal standing open through it all; and that an exchange
+ * the voice model answered itself — the two settled utterances the voice
+ * writer cuts into rows of their own, with no turn — reaches the picture as
+ * rows in the store's order, survives the settle, and is read the same on a
+ * relaunch. Synthetic words throughout: no real spoken word is written.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -456,6 +461,76 @@ it.effect(
         mac.log,
       );
       await holds("3: quiet", 3);
+
+      // An exchange the voice model answers itself: the developer's settled utterance and
+      // Luke's settled answer are cut into rows of their own by the voice writer, from the
+      // segments the deltas left, with no turn and no delegation. Both reach the picture,
+      // and nothing leaves it.
+      tick();
+      const liveSessionId = `sess_${randomUUID()}`;
+      await promisedVoiceSessionRecord(database.run, voiceSessionRecord(now)).register({
+        userId,
+        sessionId: liveSessionId,
+      });
+      const voice = voiceWriter({ store: writer });
+      const live = { userId, liveSessionId, conversation: target };
+      for (const event of [
+        heard("Which agent is", 1000, 2200),
+        heard(" waiting on me?", 2100, 3400),
+        said("The fixture agent,", 3600, 4800),
+        said(" on a permission prompt.", 4700, 6000),
+      ]) {
+        const result = await database.run(voice.consume(live, event));
+        assert.ok(result.ok, JSON.stringify(result));
+      }
+      // Segments alone move nothing the panel draws.
+      await holds("spoken: segments", 3);
+      tick();
+      const lineWritten = await database.run(
+        voice.recordSpokenLine(live, { startMs: 1000, endMs: 3400 }),
+      );
+      assert.deepEqual(lineWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+      const lineHeld = await holds("spoken: developer's line settled", 4);
+      assert.deepEqual(
+        lineHeld.groups
+          .at(-1)
+          ?.messages.map((message) => [message.message.role, message.message.parts]),
+        [
+          [
+            MESSAGE_ROLE.USER,
+            [
+              {
+                type: UI_PART_TYPE.TEXT,
+                text: "Which agent is waiting on me?",
+                state: UI_PART_STATE.DONE,
+              },
+            ],
+          ],
+        ],
+        mac.log,
+      );
+      tick();
+      const replyWritten = await database.run(
+        voice.recordSpokenReply(live, { startMs: 3600, endMs: 6000 }),
+      );
+      assert.deepEqual(replyWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
+      const replyHeld = await holds("spoken: Luke's answer settled", 5);
+      // Two groups of their own, the developer's line before the answer, each a settled row under no turn.
+      assert.deepEqual(
+        replyHeld.groups
+          .slice(-2)
+          .map((group) => [group.turn, group.messages.map((message) => message.message.role)]),
+        [
+          [undefined, [MESSAGE_ROLE.USER]],
+          [undefined, [MESSAGE_ROLE.ASSISTANT]],
+        ],
+        mac.log,
+      );
+      const [lineSeq, replySeq] = replyHeld.groups
+        .slice(-2)
+        .map((group) => group.messages[0]?.seq ?? 0);
+      assert.ok((lineSeq ?? 0) < (replySeq ?? 0), mac.log);
+      await holds("spoken: quiet", 5);
 
       // A relaunch reads from nothing and holds the same rows in the same places.
       const relaunched = new Mac(userId);

@@ -269,7 +269,12 @@ turn opened with, which for a Conductor session include the messages that
 chat gained since he last looked; the turn's model, token counts, and the
 ids of OpenAI's responses; and the events about each message — that a briefing was offered,
 claimed, spoken, pushed, held, or expired, and each rating you gave — naming
-the device that took part. Unlike his workspace files and the facts he
+the device that took part. When you speak with Luke through your account
+and he answers you himself, without running a turn, that exchange is kept
+too, the same way: what you said as your line and what he said as his,
+each written once it has settled, so the Conversation shows a spoken
+exchange he answered himself exactly as it shows one he thought about.
+Unlike his workspace files and the facts he
 remembers, described below, these rows are not sealed: they are stored as
 written, and our own operators can read them. They stand until you clear
 the conversation, which marks it deleted so that every device stops drawing
@@ -484,8 +489,9 @@ Send.
   Luke account, the Mac reaches OpenAI through our own voice service, which
   creates the session on our key, relays the control and transcript events
   between your Mac and OpenAI without reading them, drops the audio OpenAI
-  reflects back so your voice never transits our service, keeps no
-  conversation, logs only status codes and byte counts, and records the
+  reflects back so your voice never transits our service, keeps of the
+  exchange only the lines described under "Your account" above, logs only
+  status codes and byte counts, and records the
   billed seconds of each session once, beside which of your registered
   devices opened it (the Mac names its own device row on the handshake, and
   the service accepts that name only for a row your account holds), so a
