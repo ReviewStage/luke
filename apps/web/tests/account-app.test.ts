@@ -8,12 +8,9 @@ import { Effect, Redacted } from "effect";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core.js";
-import { handleAccountDelete } from "../server/hosted/account-delete.js";
-import {
-  type AccountPreferencesRow,
-  type HostedAccountPreferences,
-  handleAccountPreferencesRead,
-  handleAccountPreferencesWrite,
+import type {
+  AccountPreferencesRow,
+  HostedAccountPreferences,
 } from "../server/hosted/account-preferences.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
@@ -26,15 +23,13 @@ import {
 } from "./support/response-golden.js";
 
 /**
- * The account group carries the same answers `server/hosted/account-delete.ts`
- * and `server/hosted/account-preferences.ts` always gave, over the group
- * shape in `server/account-app.ts`. Each case answers twice, once through the
- * group — with the deployment's environment handed in rather than read, the
- * way `tests/support/brain-call.ts` hands it to the brain group — and once by
- * calling the promise-shaped handler the way the route called it before the
- * conversion, on a backing store built the same way for both, and the two
- * recordings are compared; the goldens beside them are the bytes themselves,
- * so a later change to the group cannot move them silently.
+ * The account group's two endpoints, over the shape in `server/account-app.ts`.
+ * Each case runs the group once — with the deployment's environment handed in
+ * rather than read, the way `tests/support/brain-call.ts` hands it to the
+ * brain group — against a fresh backing store, and asserts both the bytes the
+ * answer carries and what the backing store ends up holding; the goldens
+ * beside the bytes are the answer itself, so a later change to the group
+ * cannot move them silently.
  */
 
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/account-route");
@@ -76,13 +71,7 @@ function backing(overrides: Partial<Backing> = {}): Backing {
   };
 }
 
-function resolveUserId(request: Request): Promise<string | undefined> {
-  return Promise.resolve(
-    request.headers.get("authorization") === VALID_AUTHORIZATION ? USER_ID : undefined,
-  );
-}
-
-function resolveUserIdEffect(request: Request): Effect.Effect<string | undefined> {
+function resolveUserId(request: Request): Effect.Effect<string | undefined> {
   return Effect.succeed(
     request.headers.get("authorization") === VALID_AUTHORIZATION ? USER_ID : undefined,
   );
@@ -94,15 +83,7 @@ function deleteUser(state: Backing) {
   };
 }
 
-/** The promise-shaped handler's own analytics seam, unaffected by the group's move onto `HostedEnvironment`. */
-function forgetAnalytics(state: Backing) {
-  return async (userId: string) => {
-    if (state.forgetAnalyticsFails) throw new Error("processor unreachable");
-    state.forgotten.push(userId);
-  };
-}
-
-/** The group's analytics transport: the same success or failure, reached through the injected client instead. */
+/** The group's analytics transport: forwarded through the injected HTTP client. */
 function forgetAnalyticsResponder(state: Backing): FakeResponder {
   return async () => {
     if (state.forgetAnalyticsFails) throw new Error("processor unreachable");
@@ -123,15 +104,9 @@ function writePreferences(state: Backing) {
   };
 }
 
-/**
- * The group's seams are effects over the ambient client now, where the
- * promise-shaped handler beside them still takes promises; both sides of the
- * comparison drive the same backing, so what the oracle pins is the answer
- * rather than the shape the seam is stated in.
- */
 function groupSeams(state: Backing): AccountAppSeams {
   return {
-    resolveUserId: resolveUserIdEffect,
+    resolveUserId,
     deleteUser: (userId) => Effect.promise(() => deleteUser(state)(userId)),
     readPreferences: (userId) => Effect.promise(() => readPreferences(state)(userId)),
     writePreferences: (userId, preferences) =>
@@ -180,25 +155,23 @@ const STORED_PREFERENCES: HostedAccountPreferences = {
   voiceSpeed: REALTIME_VOICE_SPEED.QUICK,
 };
 
-const WRITE_BODY = {
-  preferences: {
-    voice: REALTIME_VOICE.MARIN,
-    voiceSpeed: REALTIME_VOICE_SPEED.FAST,
-    defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
-    workspaceProjectDefaults: { conductor: "project-1" },
-    workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" } },
-  },
-};
+const WRITTEN_PREFERENCES = {
+  voice: REALTIME_VOICE.MARIN,
+  voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+  defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
+  workspaceProjectDefaults: { conductor: "project-1" },
+  workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" } },
+} satisfies HostedAccountPreferences;
+
+const WRITE_BODY = { preferences: WRITTEN_PREFERENCES };
 
 const TRANSPORT_HEADER = { CONTENT_LENGTH: "content-length" } as const;
 
 /**
  * `HttpServerResponse.unsafeJson` states a body's length on the response the
- * platform hands back; `jsonResponse`'s plain `Response` leaves the wire
- * transport to state it instead, the way the promise-shaped handlers always
- * relied on Vercel's own runtime to. The value is checked against the body it
- * frames before it is dropped, so a byte the platform computed wrong would
- * still fail, and both sides reach the same bytes on the actual wire.
+ * platform hands back, which the wire transport would otherwise state for
+ * itself; the value is checked against the body it frames before it is
+ * dropped, so a byte the platform computed wrong would still fail.
  */
 async function answered(response: Response): Promise<RecordedResponse> {
   const recorded = await recordedResponse(response);
@@ -214,7 +187,8 @@ interface Exchange {
   name: string;
   state: () => Backing;
   request: () => Request;
-  direct: (state: Backing, request: Request) => Promise<Response>;
+  /** What the backing store holds once the group has answered. */
+  finalState: () => Backing;
 }
 
 const EXCHANGES: readonly Exchange[] = [
@@ -222,39 +196,25 @@ const EXCHANGES: readonly Exchange[] = [
     name: "delete-success",
     state: () => backing(),
     request: deleteRequest,
-    direct: (state, request) =>
-      handleAccountDelete({
-        request,
-        resolveUserId,
-        deleteUser: deleteUser(state),
-        forgetAnalytics: forgetAnalytics(state),
-      }),
+    finalState: () => backing({ deleted: [USER_ID], forgotten: [USER_ID] }),
   },
   {
     name: "delete-wrong-method",
     state: () => backing(),
     request: () => new Request(`${ORIGIN}/api/account/delete`, { method: "GET" }),
-    direct: (state, request) =>
-      handleAccountDelete({ request, resolveUserId, deleteUser: deleteUser(state) }),
+    finalState: () => backing(),
   },
   {
     name: "delete-invalid-token",
     state: () => backing(),
     request: () => deleteRequest({}),
-    direct: (state, request) =>
-      handleAccountDelete({ request, resolveUserId, deleteUser: deleteUser(state) }),
+    finalState: () => backing(),
   },
   {
     name: "delete-analytics-failure",
     state: () => backing({ forgetAnalyticsFails: true }),
     request: deleteRequest,
-    direct: (state, request) =>
-      handleAccountDelete({
-        request,
-        resolveUserId,
-        deleteUser: deleteUser(state),
-        forgetAnalytics: forgetAnalytics(state),
-      }),
+    finalState: () => backing({ deleted: [USER_ID], forgetAnalyticsFails: true }),
   },
   {
     name: "preferences-read",
@@ -263,91 +223,58 @@ const EXCHANGES: readonly Exchange[] = [
         stored: new Map([[USER_ID, { preferences: STORED_PREFERENCES, updatedAt: NOW }]]),
       }),
     request: preferencesReadRequest,
-    direct: (state, request) =>
-      handleAccountPreferencesRead({
-        request,
-        resolveUserId,
-        readPreferences: readPreferences(state),
+    finalState: () =>
+      backing({
+        stored: new Map([[USER_ID, { preferences: STORED_PREFERENCES, updatedAt: NOW }]]),
       }),
   },
   {
     name: "preferences-read-empty",
     state: () => backing(),
     request: preferencesReadRequest,
-    direct: (state, request) =>
-      handleAccountPreferencesRead({
-        request,
-        resolveUserId,
-        readPreferences: readPreferences(state),
-      }),
+    finalState: () => backing(),
   },
   {
     name: "preferences-read-wrong-method",
     state: () => backing(),
     request: () => new Request(`${ORIGIN}/api/account/preferences`, { method: "POST" }),
-    direct: (state, request) =>
-      handleAccountPreferencesRead({
-        request,
-        resolveUserId,
-        readPreferences: readPreferences(state),
-      }),
+    finalState: () => backing(),
   },
   {
     name: "preferences-read-invalid-token",
     state: () => backing(),
     request: () => preferencesReadRequest({}),
-    direct: (state, request) =>
-      handleAccountPreferencesRead({
-        request,
-        resolveUserId,
-        readPreferences: readPreferences(state),
-      }),
+    finalState: () => backing(),
   },
   {
     name: "preferences-write",
     state: () => backing(),
     request: () => preferencesWriteRequest(WRITE_BODY),
-    direct: (state, request) =>
-      handleAccountPreferencesWrite({
-        request,
-        resolveUserId,
-        writePreferences: writePreferences(state),
+    finalState: () =>
+      backing({
+        stored: new Map([[USER_ID, { preferences: WRITTEN_PREFERENCES, updatedAt: NOW }]]),
       }),
   },
   {
     name: "preferences-write-invalid-body",
     state: () => backing(),
     request: () => preferencesWriteRequest(undefined),
-    direct: (state, request) =>
-      handleAccountPreferencesWrite({
-        request,
-        resolveUserId,
-        writePreferences: writePreferences(state),
-      }),
+    finalState: () => backing(),
   },
   {
     name: "preferences-write-wrong-method",
     state: () => backing(),
     request: () => new Request(`${ORIGIN}/api/account/preferences`, { method: "DELETE" }),
-    direct: (state, request) =>
-      handleAccountPreferencesWrite({
-        request,
-        resolveUserId,
-        writePreferences: writePreferences(state),
-      }),
+    finalState: () => backing(),
   },
 ];
 
-test("the group answers what the promise-shaped handler answered, byte for byte", async () => {
+test("the group answers the recorded bytes and leaves the backing store as expected", async () => {
   for (const exchange of EXCHANGES) {
-    const directState = exchange.state();
-    const direct = await answered(await exchange.direct(directState, exchange.request()));
+    const state = exchange.state();
+    const carried = await answered(await groupAnswer(state, exchange.request()));
 
-    const groupState = exchange.state();
-    const carried = await answered(await groupAnswer(groupState, exchange.request()));
-
-    assert.deepEqual(carried, direct);
-    assert.deepEqual(groupState, directState);
+    assert.deepEqual(state, exchange.finalState());
     await settleResponseGolden(GOLDEN_ROOT, exchange.name, carried);
   }
 });

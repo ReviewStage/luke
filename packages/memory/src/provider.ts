@@ -170,7 +170,7 @@ export interface NotebookMemoryProviderSeams {
   /** The notebook's entries as they stand now, rendered whole into every turn. */
   readonly facts: () => readonly RememberedFact[];
   /** Today's and yesterday's notes, read only for a conversation opening fresh. */
-  readonly recentNotes: () => Promise<readonly DailyNote[]>;
+  readonly recentNotes: () => Effect.Effect<readonly DailyNote[]>;
   /** One housekeeping turn over a copy of the context; absent for a conversation whose memory is never captured. */
   readonly capture?: (turn: MemoryCaptureTurn) => Effect.Effect<MemoryCaptureResult>;
 }
@@ -247,7 +247,7 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
       const facts = rememberedFactsText(seams.facts());
       if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
       if (history.items.length === 0) {
-        const notes = yield* Effect.promise(() => seams.recentNotes());
+        const notes = yield* seams.recentNotes();
         if (notes.length > 0 && !history.signal.aborted) {
           messages.push({ content: primedNotesText(notes) });
         }

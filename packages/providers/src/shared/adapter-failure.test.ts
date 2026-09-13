@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { Cause, Effect, Exit, Option } from "effect";
 import { test } from "vitest";
 import {
   ADAPTER_FAILURE,
   AdapterFailure,
   clearsObservedState,
   endsPass,
-  tolerateItemFailure,
+  tolerateItemFailureEffect,
 } from "./adapter-failure.js";
 
 test("a rejected credential and nothing to observe with both clear observed state", () => {
@@ -22,21 +23,21 @@ test("a rate limit ends the pass without clearing it, and one resource's transie
   assert.equal(endsPass(ADAPTER_FAILURE.RATE_LIMITED), true);
   assert.equal(endsPass(ADAPTER_FAILURE.TRANSIENT), false);
   assert.equal(
-    await tolerateItemFailure(async () => {
-      throw new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, "one status read failed");
-    }),
+    await Effect.runPromise(
+      tolerateItemFailureEffect(
+        Effect.fail(new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, "one status read failed")),
+      ),
+    ),
     undefined,
   );
   const rateLimited = new AdapterFailure(
     ADAPTER_FAILURE.RATE_LIMITED,
     "the provider is rate limiting",
   );
-  await assert.rejects(
-    tolerateItemFailure(async () => {
-      throw rateLimited;
-    }),
-    rateLimited,
-  );
+  const exit = await Effect.runPromiseExit(tolerateItemFailureEffect(Effect.fail(rateLimited)));
+  assert.equal(Exit.isFailure(exit), true);
+  const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none();
+  assert.equal(Option.isSome(failure) && failure.value, rateLimited);
 });
 
 test("every failure kind has an answer, so a new one cannot arrive undecided", () => {

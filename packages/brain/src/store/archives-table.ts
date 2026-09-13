@@ -220,8 +220,8 @@ export const removeArchiveRowEffect = (
  * The synchronous doors onto the effects above, for `archives.ts`, which
  * stays a port in OpenClaw's shape and imports nothing from `effect`.
  *
- * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
- * section beside `StoreDatabase#run`: what would end this row is a decision
+ * @deprecated A permanent adaptor, one of the doors root AGENTS.md's
+ * `StoreDatabase#run` row in "Effect idioms" covers: what would end this row is a decision
  * about `archives.ts` itself, not an implementation detail of this migration.
  */
 export function listArchives(database: StoreDatabase): readonly ConversationArchiveRecord[] {

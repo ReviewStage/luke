@@ -62,9 +62,10 @@ function harness(overrides: Partial<NotebookMemoryProviderSeams> = {}) {
     scope: SCOPE,
     access,
     facts: () => [{ id: "f1", words: "prefers espresso" }],
-    recentNotes: async () => [
-      { name: "2026-09-10.md", path: "memory/2026-09-10.md", content: "- shipped" },
-    ],
+    recentNotes: () =>
+      Effect.succeed([
+        { name: "2026-09-10.md", path: "memory/2026-09-10.md", content: "- shipped" },
+      ]),
     capture: (turn) =>
       Effect.sync(() => {
         seen.captures.push(turn);
@@ -122,7 +123,7 @@ it.effect(
         [NOTEBOOK_RECALL_ID.FACTS],
       );
       assert.equal(ongoing.messages[0]?.content, fresh.messages[0]?.content);
-      const empty = harness({ facts: () => [], recentNotes: async () => [] });
+      const empty = harness({ facts: () => [], recentNotes: () => Effect.succeed([]) });
       const recalled = yield* empty.provider.recall(SCOPE, { items: [], signal: NEVER });
       assert.deepEqual(recalled.messages, []);
     }),
@@ -197,7 +198,7 @@ test("a provider built without a capture offers none, so a conversation whose me
     scope: SCOPE,
     access: undefined,
     facts: () => [],
-    recentNotes: async () => [],
+    recentNotes: () => Effect.succeed([]),
   });
   assert.equal(uncaptured.capture, undefined);
   assert.equal(Object.hasOwn(uncaptured, "capture"), false);

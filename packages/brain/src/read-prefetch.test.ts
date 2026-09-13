@@ -154,7 +154,7 @@ function emptyNotebook(): MemoryDefinition {
       scope,
       access: undefined,
       facts: () => [],
-      recentNotes: async () => [],
+      recentNotes: () => Effect.succeed([]),
     }),
   };
 }

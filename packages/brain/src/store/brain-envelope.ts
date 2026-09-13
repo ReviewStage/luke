@@ -562,10 +562,10 @@ function jsonColumn(json: string | null): WireValue {
  * hold a handle rather than a client: the recoverable deletion, the store's
  * own tests, and the brain's repository through the store's operations.
  *
- * @deprecated A permanent adaptor over `StoreDatabase#run`, named in root
- * AGENTS.md's "Effect idioms" section: what would end this row is a decision
- * about those callers themselves, not an implementation detail of this
- * migration.
+ * @deprecated A permanent adaptor, one of the doors root AGENTS.md's
+ * `StoreDatabase#run` row in "Effect idioms" covers: what would end this row
+ * is a decision about those callers themselves, not an implementation detail
+ * of this migration.
  */
 export function standingGeneration(
   database: StoreDatabase,

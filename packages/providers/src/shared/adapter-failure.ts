@@ -57,25 +57,11 @@ export function endsPass(failure: AdapterFailureKind): boolean {
 }
 
 /**
- * Keeps one failed resource from discarding an otherwise complete pass. A
- * failure that is the whole pass's still ends it.
- */
-export async function tolerateItemFailure<Result>(
-  operation: () => Promise<Result>,
-): Promise<Result | undefined> {
-  try {
-    return await operation();
-  } catch (error) {
-    if (error instanceof AdapterFailure && endsPass(error.failure)) throw error;
-    return undefined;
-  }
-}
-
-/**
- * The effect face of {@link tolerateItemFailure}: every failure the item's own
- * effect can raise, typed or a defect alike, is swallowed unless it is the
- * whole pass's, so a bug in one item's own parsing costs that item and never
- * the roster the way a rejected credential or a spent backoff budget does.
+ * Keeps one failed resource from discarding an otherwise complete pass. Every
+ * failure the item's own effect can raise, typed or a defect alike, is
+ * swallowed unless it is the whole pass's, so a bug in one item's own parsing
+ * costs that item and never the roster the way a rejected credential or a
+ * spent backoff budget does.
  */
 export function tolerateItemFailureEffect<Result>(
   item: Effect.Effect<Result, AdapterFailure>,

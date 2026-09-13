@@ -46,7 +46,9 @@
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
     "apps/desktop/src/main/update-service.ts",
+    "packages/brain/src/agent.ts",
     "packages/gateway/src/client.ts",
+    "packages/host/src/brain/wiring.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
