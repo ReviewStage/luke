@@ -449,11 +449,13 @@ three: `ObservationLoop`'s `run` is a fiber now, so `drawSnapshotRoster` and
 `runClientEffect` is gone with the poll, the pager, and `readPage` that
 awaited it — each provides `FetchHttpClient.layer` once, where the loop's
 pass is built, rather than running the client's effect where the work is
-needed. `compose-devices.ts` stays, and P12-20a widened what it runs rather
-than narrowing it: `HostedDeviceClient`'s `register` and `forget` answer
-effects too now, so all three of the cadence's calls are run to promises
-there. It is deleted when `deviceCadence`'s beat is a fiber rather than a
-plain async callback.
+needed. `compose-devices.ts` was the last of them, and P12-20a widened what
+it ran rather than narrowing it — `HostedDeviceClient`'s `register` and
+`forget` answer effects too now, so all three of the cadence's calls were run
+to promises there — until P12-20d made the beat itself an effect: the
+composer hands the cadence the three client effects as they stand, providing
+`FetchHttpClient.layer` to the change-signal poll alone because it is the one
+carrying no client of its own, and the beat yields each.
 
 `ProductEventSender` in `packages/analytics/src/sender.ts` was the eighth and
 is off the allowlist since P12-20c: `ProductEventSender.make` answers
@@ -649,15 +651,41 @@ them, once its one production caller turned out to be `compose-desktop.ts`'s
 own fork over `changes` and its every other caller turned out to be this
 file's own tests, which now watch `changes` itself instead.
 
-`deviceCadence`'s `start` and `stop` in `packages/host/src/compose-devices.ts`
-are not on this allowlist any more: each is an effect over a `cadenceGate` the
-cadence holds, so the registration's own beat and the poll after it are one
-fiber that gate's scope interrupts. The interruption is forked rather than
-awaited (`Fiber.interruptFork`), for the same reason cancelling a timer never
-was: what a disarm has to guarantee is that no further beat starts, never that
-a call already on the wire has answered, since it may be waiting on a token
-refresh that is itself signing out — and the beat reads the generation the
-disarm bumped, so one the interruption has not reached yet sends nothing. The
+`packages/host/src/compose-devices.ts` is off this allowlist entirely since
+P12-20d. `deviceCadence`'s `start` and `stop` left it first: each is an effect
+over a `cadenceGate` the cadence holds, so the registration's own beat and the
+poll after it are one fiber that gate's scope interrupts. The interruption is
+forked rather than awaited (`Fiber.interruptFork`), for the same reason
+cancelling a timer never was: what a disarm has to guarantee is that no
+further beat starts, never that a call already on the wire has answered, since
+it may be waiting on a token refresh that is itself signing out — and the beat
+reads the generation the disarm bumped, so one the interruption has not
+reached yet sends nothing. What P12-20d then took is the beat's own body,
+which was a plain async callback the fiber ran to a promise: the three client
+calls and the presence report are effects it yields, so the only runs left in
+the file were the composer's, and those are gone with them.
+
+Making the beat an effect made the fiber's interrupt status load-bearing for
+the first time, and P12-20d found it wrong. `Effect.acquireRelease` runs its
+acquire uninterruptibly and a forked fiber inherits the interrupt status of
+whoever forked it, so the cadence fiber the arming's acquire forked was
+uninterruptible: `Fiber.interruptFork` had nothing to land on, and a disarmed
+cadence went on sleeping and waking for the rest of the run, doing nothing
+only because each beat re-read the bumped generation. The fork is marked
+`Effect.interruptible` now, so the disarm ends the fiber it names, and the
+three guarantees the promise chain gave are stated rather than inherited. The
+beat is wrapped in `Effect.uninterruptible`, so a disarm still leaves a call
+already on the wire to land rather than aborting it, which is what makes a
+registration out at sign-out land before the next account's. The promise
+`inFlight` chain that ordered them is a `Ref<Effect<void>>` holding the wait
+for the call under way, each beat swapping in a fresh `Deferred`; a beat that
+reached its work completes that deferred from an `Effect.onExit` however the
+work ended, and a beat interrupted while still waiting for the call before it
+completes it *with* that wait instead (`Deferred.completeWith`), so the slot is
+handed on rather than opened and a hung registration keeps its place in the
+order however many sign-outs arrive while it is out. A sign-out's `forget` is a
+daemon fiber the stop joins and the ref waits on beside the standing call,
+because a stop must not wait for that call while the next start must. The
 calendars composer's `startObservation` and `stopObservation` in
 `packages/host/src/compose-calendars.ts` became `armObservation` and
 `disarmObservation` over a gate of the same shape, so the held-notice release
@@ -674,13 +702,15 @@ settle decided from a Gateway handler's synchronous body, each forked onto
 the runtime the layer was built on rather than an ambient default one.
 
 `compose-devices.ts` gained one such run in P12-14e, on the runtime it already
-holds: the calendars composer's `announcementsQuietNow`, `gateOfferable`, and
+held: the calendars composer's `announcementsQuietNow`, `gateOfferable`, and
 `meetingQuietUntil` are effects since that PR, and the device row's own
-presence report reads one until it answers effects itself. `compose-live.ts`
-read them too, and none of those readings is a run any more: `quietNow` and
-`releaseHeldBriefings` are `LiveSessionService` options that answer effects
-the service yields on its own fiber, and `gateOfferable` and `arrivalBeat` are
-yielded by the onboarding beat's own effect.
+presence report read one until it answered effects itself, which it did in
+P12-20d — the report is an `Effect<DevicePresenceReport>` the beat yields, and
+`meetingQuietUntil` is yielded inside it, so that file holds no run at all any
+more. `compose-live.ts` read them too, and none of those readings is a run
+either: `quietNow` and `releaseHeldBriefings` are `LiveSessionService` options
+that answer effects the service yields on its own fiber, and `gateOfferable`
+and `arrivalBeat` are yielded by the onboarding beat's own effect.
 
 `composeObservation`'s entry above was widened in P12-14f and narrowed again
 in P12-15e: every one of its nine `awaitedSettingsStore` reads moved onto
@@ -990,12 +1020,16 @@ rotation the others are waiting on with it. The refresh token rotates when
 spent, so two flights racing would have the loser spend an already-rotated
 token and read the endpoint's `invalid_grant` as a revocation.
 
-`exchangeGoogleCode` in `packages/calendar/src/oauth.ts` is on the allowlist:
-`googleCalendarSignIn`'s `exchange` callback still answers a promise, not a
-fiber, so the exchange effect is run to one on the runtime the caller handed
-in — the calendars composer's own kernel runtime in production,
-`Runtime.defaultRuntime` for a caller that gave none. `GoogleCalendarReader`'s
-own `#run`, once on this same row, is gone: `GoogleCalendarReader` and
+`packages/calendar/src/oauth.ts` is off the allowlist since P12-20d.
+`exchangeGoogleCode` answered a promise because `googleCalendarSignIn`'s
+`exchange` callback did, so the exchange effect was run to one on the runtime
+the caller handed in; that callback's own contract
+(`LoopbackConsent`'s `exchange`) had been an effect since P4-04, and the trip
+yields it inside the scope it already owns, so the exchange is that effect
+with its `HttpClient` layer provided and no door of its own — and the
+`runtime` option `googleCalendarSignIn` took for the run alone is gone with
+it, which is one argument fewer from `compose-calendars.ts`.
+`GoogleCalendarReader`'s own `#run`, once on this same row, is gone too: `GoogleCalendarReader` and
 `AppleCalendarReader` (`packages/host/src/apple-calendar.ts`) answer effects
 themselves now, a `@sidecar/calendar` change this document never scheduled, so
 neither reader takes a runtime at all any more — `compose-calendars.ts` yields
@@ -1716,7 +1750,7 @@ design decision stated as such:
 | `BrainTransport#send`'s internal `runCall`, over `runtimeExit(execution)` since P12-04d | P5-05 | never — permanent alongside `tracedModelAdapter`, `compaction.ts`'s `ModelAdapter` stays a promise |
 | `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | P12-20j — deleted with the promise-shaped `events.ts` route it belonged to; `handleEvents` now yields the batch effect beneath that door directly |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
-| `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above and, since P12-20a, over the device client's `register` and `forget` too (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
+| `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above and, since P12-20a, over the device client's `register` and `forget` too (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | P12-20d — deleted; `deviceCadence`'s beat is an effect, so the three client calls and the presence report are yielded |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
@@ -1728,7 +1762,7 @@ design decision stated as such:
 | `AccountSessionManager`'s `Effect.runSync(PubSub.unbounded())` field construction | P12-16d | once the class is itself built by an effect its owner runs |
 | `LinearIssueTracker#post` | P4-03 | gone with the Linear integration itself |
 | `timedRequest` (`credentials/linear/oauth.ts`) | P4-04 | gone with the Linear integration itself |
-| `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | pending — once `googleCalendarSignIn`'s `exchange` callback answers an effect its one caller yields instead of awaits |
+| `exchangeGoogleCode`'s internal run, over a handed-in `Runtime` (`GoogleCalendarReader#run` was on this row too, deleted once the reader answered effects itself, a `@sidecar/calendar` change unscheduled by this plan) | P4-05 | P12-20d — deleted; `exchangeGoogleCode` answers the effect and the consent trip yields it |
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `detachOn`, the brain's synchronous-start door onto the same runtime | P12-16j | never — P12-16m named it permanent as the detach door: only a run begins the effect on the calling stack, and `AgentSeam#detach`'s queue registration, `BrainHost`'s retirement revocation, and the brain wiring's close and open (P12-16n) must each stand in the step that asked for them |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |

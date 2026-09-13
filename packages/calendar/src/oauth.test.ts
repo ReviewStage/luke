@@ -93,56 +93,60 @@ it.effect("the consent page is Google's own, asking for availability alone, with
   }),
 );
 
-test("the exchange carries the desktop client's secret and the verifier", async () => {
-  const { layer, requests } = recordingHttpClient(() => tokenResponse());
-  const grant = await exchangeGoogleCode(
-    { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET },
-    { code: "auth-code", redirectUri: "http://127.0.0.1:4321/oauth/callback", codeVerifier: "v" },
-    layer,
-  );
-  assert.deepEqual(grant, { refreshToken: "1//refresh-token", accessToken: "at-1" });
+it.effect("the exchange carries the desktop client's secret and the verifier", () =>
+  Effect.gen(function* () {
+    const { layer, requests } = recordingHttpClient(() => tokenResponse());
+    const grant = yield* exchangeGoogleCode(
+      { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET },
+      { code: "auth-code", redirectUri: "http://127.0.0.1:4321/oauth/callback", codeVerifier: "v" },
+      layer,
+    );
+    assert.deepEqual(grant, { refreshToken: "1//refresh-token", accessToken: "at-1" });
 
-  // SAFETY: The exchange above recorded exactly one request.
-  const exchange = requests[0] as RecordedRequest;
-  assert.equal(exchange.url, GOOGLE_TOKEN_URL);
-  const body = new URLSearchParams(exchange.body ?? "");
-  assert.equal(body.get("grant_type"), "authorization_code");
-  assert.equal(body.get("code"), "auth-code");
-  assert.equal(body.get("redirect_uri"), "http://127.0.0.1:4321/oauth/callback");
-  // Google's desktop client type expects the secret it documents as
-  // non-confidential; PKCE is still what actually protects the flow.
-  assert.equal(body.get("client_secret"), CLIENT_SECRET);
-  assert.equal(body.get("code_verifier"), "v");
-});
+    // SAFETY: The exchange above recorded exactly one request.
+    const exchange = requests[0] as RecordedRequest;
+    assert.equal(exchange.url, GOOGLE_TOKEN_URL);
+    const body = new URLSearchParams(exchange.body ?? "");
+    assert.equal(body.get("grant_type"), "authorization_code");
+    assert.equal(body.get("code"), "auth-code");
+    assert.equal(body.get("redirect_uri"), "http://127.0.0.1:4321/oauth/callback");
+    // Google's desktop client type expects the secret it documents as
+    // non-confidential; PKCE is still what actually protects the flow.
+    assert.equal(body.get("client_secret"), CLIENT_SECRET);
+    assert.equal(body.get("code_verifier"), "v");
+  }),
+);
 
-test("every way the exchange can fail is a sentence, never a throw", async () => {
-  const config = { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET };
-  const input = {
-    code: "auth-code",
-    redirectUri: "http://127.0.0.1:4321/oauth/callback",
-    codeVerifier: "v",
-  };
+it.effect("every way the exchange can fail is a sentence, never a throw", () =>
+  Effect.gen(function* () {
+    const config = { clientId: CLIENT_ID, clientSecret: CLIENT_SECRET };
+    const input = {
+      code: "auth-code",
+      redirectUri: "http://127.0.0.1:4321/oauth/callback",
+      codeVerifier: "v",
+    };
 
-  const { layer: refusing } = recordingHttpClient(
-    () => new Response("no", { status: HTTP_STATUS.UNAUTHORIZED }),
-  );
-  assert.deepEqual(await exchangeGoogleCode(config, input, refusing), {
-    reason: "Google refused the sign-in exchange.",
-  });
+    const { layer: refusing } = recordingHttpClient(
+      () => new Response("no", { status: HTTP_STATUS.UNAUTHORIZED }),
+    );
+    assert.deepEqual(yield* exchangeGoogleCode(config, input, refusing), {
+      reason: "Google refused the sign-in exchange.",
+    });
 
-  const { layer: tokenless } = recordingHttpClient(
-    () =>
-      new Response(JSON.stringify({ access_token: "at-1" }), {
-        status: HTTP_STATUS.OK,
-        headers: { "content-type": "application/json" },
-      }),
-  );
-  assert.deepEqual(await exchangeGoogleCode(config, input, tokenless), {
-    reason: "Google answered the sign-in without a token.",
-  });
+    const { layer: tokenless } = recordingHttpClient(
+      () =>
+        new Response(JSON.stringify({ access_token: "at-1" }), {
+          status: HTTP_STATUS.OK,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    assert.deepEqual(yield* exchangeGoogleCode(config, input, tokenless), {
+      reason: "Google answered the sign-in without a token.",
+    });
 
-  const offline = () => Promise.reject(new Error("offline"));
-  assert.deepEqual(await exchangeGoogleCode(config, input, fakeHttpClientLayer(offline)), {
-    reason: "The sign-in exchange with Google did not complete.",
-  });
-});
+    const offline = () => Promise.reject(new Error("offline"));
+    assert.deepEqual(yield* exchangeGoogleCode(config, input, fakeHttpClientLayer(offline)), {
+      reason: "The sign-in exchange with Google did not complete.",
+    });
+  }),
+);

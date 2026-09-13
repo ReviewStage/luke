@@ -14,7 +14,7 @@ import {
   unofferedConsent,
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, WireValueSchema, wireRecord } from "@sidecar/wire";
-import { Data, Duration, Effect, type Layer, Runtime } from "effect";
+import { Data, Duration, Effect, type Layer } from "effect";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
@@ -167,8 +167,6 @@ export interface GoogleCalendarSignInOptions {
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   timeoutMs?: number;
-  /** The runtime the exchange effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
-  runtime?: Runtime.Runtime<never>;
 }
 
 /** Reads the tokens Google answered the exchange with, trusting no shape. */
@@ -229,33 +227,26 @@ function exchangeEffect(
 }
 
 /**
- * Trades the code for a grant at Google's token endpoint. Google's desktop
+ * Trades the code for a grant at Google's token endpoint, as the effect the
+ * consent trip yields inside the scope it already owns. Google's desktop
  * client type expects the secret it documents as non-confidential, which is
- * why a run holding no secret is offered no sign-in at all.
- *
- * @deprecated On the `Effect.runPromise` allowlist in
- * `docs/adr/0001-effect.md`: `googleCalendarSignIn`'s `exchange` callback
- * still answers a promise, not a fiber, so the exchange effect is run to one
- * on the runtime the caller handed in — the calendars composer's own kernel
- * runtime in production, `Runtime.defaultRuntime` for a caller that gave
- * none.
+ * why a run holding no secret is offered no sign-in at all. Every fault is a
+ * sentence rather than a failure, because what the trip's landing page shows
+ * is the outcome either way.
  */
 export function exchangeGoogleCode(
   config: GoogleCalendarSignInConfig,
   input: { code: string; redirectUri: string; codeVerifier: string },
   httpClient: Layer.Layer<HttpClient.HttpClient> = FetchHttpClient.layer,
-  runtime: Runtime.Runtime<never> = Runtime.defaultRuntime,
-): Promise<GoogleCalendarSignInOutcome> {
-  return Runtime.runPromise(runtime)(
-    Effect.provide(
-      Effect.match(exchangeEffect(config, input), {
-        onFailure: (error): GoogleCalendarSignInOutcome => ({
-          reason: EXCHANGE_FAULT_REASON[error.fault],
-        }),
-        onSuccess: (grant): GoogleCalendarSignInOutcome => grant,
+): Effect.Effect<GoogleCalendarSignInOutcome> {
+  return Effect.provide(
+    Effect.match(exchangeEffect(config, input), {
+      onFailure: (error): GoogleCalendarSignInOutcome => ({
+        reason: EXCHANGE_FAULT_REASON[error.fault],
       }),
-      httpClient,
-    ),
+      onSuccess: (grant): GoogleCalendarSignInOutcome => grant,
+    }),
+    httpClient,
   );
 }
 
@@ -304,14 +295,7 @@ export function googleCalendarSignIn(
       return authorization.toString();
     },
     exchange: (input) =>
-      Effect.promise(() =>
-        exchangeGoogleCode(
-          config,
-          input,
-          options.httpClient ?? FetchHttpClient.layer,
-          options.runtime,
-        ),
-      ),
+      exchangeGoogleCode(config, input, options.httpClient ?? FetchHttpClient.layer),
     openExternal: options.openExternal,
     timeoutMs: options.timeoutMs,
   });

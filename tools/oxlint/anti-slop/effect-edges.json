@@ -25,11 +25,9 @@
     "packages/brain/src/store/database.ts",
     "packages/brain/src/store/store-client.ts",
     "packages/brain/src/store/testing.ts",
-    "packages/calendar/src/oauth.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/gateway/src/transport.ts",
     "packages/host/src/compose-calendars.ts",
-    "packages/host/src/compose-devices.ts",
     "packages/voice/src/live-session-source.ts",
     "packages/wire/src/testing/effect.ts"
   ],
