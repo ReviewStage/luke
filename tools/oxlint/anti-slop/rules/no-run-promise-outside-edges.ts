@@ -24,21 +24,46 @@ const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 ]);
 
 /**
- * The brain's own dispatch between a `ManagedRuntime` and a plain `Runtime`
- * (`packages/brain/src/effect/carry.ts`). `runtimeExit(execution)(effect)`
- * runs the effect as surely as `Runtime.runPromiseExit` does; naming it here
- * is what keeps its two permanent callers on the allowlist rather than
- * invisible to it.
+ * Names whose call answers a runner rather than a result: the brain's own
+ * dispatch between a `ManagedRuntime` and a plain `Runtime`
+ * (`packages/brain/src/effect/carry.ts`), where `runtimeExit(execution)(effect)`
+ * runs the effect as surely as `Runtime.runPromiseExit` does, and the web
+ * edge's `webRuntime()` (`apps/web/server/runtime.ts`), whose
+ * `webRuntime().runPromise(effect)` is the same run one member deeper than
+ * `RUNNING_MEMBERS` reaches. Naming them here is what keeps their callers on
+ * the allowlist rather than invisible to it.
  */
-const RUNNER_FACTORY = "runtimeExit";
+const RUNNER_FACTORIES: ReadonlySet<string> = new Set(["runtimeExit", "webRuntime"]);
 
-function runningMemberName(callee: ESTree.Expression | ESTree.Super): string | null {
+/**
+ * Runners an edge exports for a collaborator to hold. `runWeb`
+ * (`apps/web/server/runtime.ts`) runs an effect on the one runtime `apps/web`
+ * builds, so `runWeb(effect)` in a module that is not itself an edge is the
+ * same escape `Effect.runPromise` would be.
+ */
+const HANDED_RUNNERS: ReadonlySet<string> = new Set(["runWeb"]);
+
+/** Every member name any of the namespaces above runs an Effect through. */
+const EVERY_RUNNING_MEMBER: ReadonlySet<string> = new Set(
+  [...RUNNING_MEMBERS.values()].flatMap((members) => [...members]),
+);
+
+function runningMemberName(
+  callee: ESTree.Expression | ESTree.Super,
+  runnerFactoryNames: ReadonlySet<string>,
+): string | null {
   if (callee.type !== "MemberExpression" || callee.computed) return null;
   const object = callee.object;
   const property = callee.property;
-  if (object.type !== "Identifier" || property.type !== "Identifier") return null;
-  const members = RUNNING_MEMBERS.get(object.name);
-  return members?.has(property.name) === true ? `${object.name}.${property.name}` : null;
+  if (property.type !== "Identifier") return null;
+  if (object.type === "Identifier") {
+    const members = RUNNING_MEMBERS.get(object.name);
+    return members?.has(property.name) === true ? `${object.name}.${property.name}` : null;
+  }
+  if (object.type !== "CallExpression") return null;
+  const factory = object.callee;
+  if (factory.type !== "Identifier" || !runnerFactoryNames.has(factory.name)) return null;
+  return EVERY_RUNNING_MEMBER.has(property.name) ? `${factory.name}().${property.name}` : null;
 }
 
 /** Keep the running of an Effect at the process edges root AGENTS.md names. */
@@ -47,7 +72,7 @@ export const noRunPromiseOutsideEdgesRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Effect.run*, Runtime.run*, ManagedRuntime.make, NodeRuntime.runMain, and the brain's runtimeExit dispatch outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
+        "Disallow Effect.run*, Runtime.run*, ManagedRuntime.make, NodeRuntime.runMain, the brain's runtimeExit dispatch, and the web edge's runWeb and webRuntime runners outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
     },
     messages: {
       runOutsideEdge:
@@ -56,29 +81,35 @@ export const noRunPromiseOutsideEdgesRule = defineRule({
   },
   createOnce(context) {
     let runnerFactoryNames = new Set<string>();
+    let handedRunnerNames = new Set<string>();
 
     return {
       before() {
         if (isAllowedFile(context.filename, RUN_ALLOWLIST)) return false;
         runnerFactoryNames = new Set();
+        handedRunnerNames = new Set();
         return true;
       },
       ImportDeclaration(node) {
         for (const specifier of node.specifiers) {
           if (specifier.type !== "ImportSpecifier") continue;
           const imported = specifier.imported;
-          if (imported.type === "Identifier" && imported.name === RUNNER_FACTORY) {
-            runnerFactoryNames.add(specifier.local.name);
-          }
+          if (imported.type !== "Identifier") continue;
+          if (RUNNER_FACTORIES.has(imported.name)) runnerFactoryNames.add(specifier.local.name);
+          if (HANDED_RUNNERS.has(imported.name)) handedRunnerNames.add(specifier.local.name);
         }
       },
       CallExpression(node) {
-        const name = runningMemberName(node.callee);
+        const name = runningMemberName(node.callee, runnerFactoryNames);
         if (name !== null) {
           context.report({ node, messageId: "runOutsideEdge", data: { name } });
           return;
         }
         const callee = node.callee;
+        if (callee.type === "Identifier" && handedRunnerNames.has(callee.name)) {
+          context.report({ node, messageId: "runOutsideEdge", data: { name: callee.name } });
+          return;
+        }
         if (callee.type !== "CallExpression") return;
         const factory = callee.callee;
         if (factory.type !== "Identifier" || !runnerFactoryNames.has(factory.name)) return;

@@ -6,7 +6,7 @@ import { hostedUserId } from "./bearer.js";
 import { payloadKeyRing } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 import { type HostedStore, hostedStore } from "./store/index.js";
-import { hostedEncryptionSecret, hostedVaultUserInfo } from "./vault-route.js";
+import { hostedEncryptionSecretEffect, hostedVaultUserInfo } from "./vault-route.js";
 
 /**
  * A hosted route over the conversation store: the same bearer resolution
@@ -26,16 +26,18 @@ let composed: HostedStore | undefined;
 
 async function deploymentStore(): Promise<HostedStore | undefined> {
   if (composed) return composed;
-  const secret = await hostedEncryptionSecret();
+  const secret = await runWeb(hostedEncryptionSecretEffect);
   if (!secret) return undefined;
   composed = hostedStore({ keys: payloadKeyRing(secret) });
   return composed;
 }
 
 /**
- * The one place a store route runs an effect: the handler is built over the
- * ambient client and `runWeb` answers it on the web's own runtime, so every
- * read and write of one request lands on one connection.
+ * The door every hosted store function's default export is built from, and so
+ * one of the edges `apps/web` runs an effect at: a `Route` answers Vercel a
+ * promise, and the handler is built over the ambient client and answered by
+ * `runWeb` on the web's own runtime, so every read and write of one request
+ * lands on one connection.
  */
 export function hostedStoreRoute(
   handler: (route: HostedStoreRoute) => Effect.Effect<Response, unknown, SqlClient.SqlClient>,

@@ -634,7 +634,7 @@ node --input-type=module -e '
     agents.indexOf("## Effect idioms"),
     agents.indexOf("## TypeScript"),
   );
-  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(/;
+  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(|\brunWeb\s*\(/;
   const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
   const groups = [
     { name: "runtimeEdges", named: true, pattern: null },

@@ -2,7 +2,6 @@ import { Effect, Redacted } from "effect";
 import { auth } from "../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../core.js";
 import type { DevicesVaultSeams } from "../devices-vault-app.js";
-import { runWeb } from "../runtime.js";
 import type { UserInfoEndpoint } from "./bearer.js";
 import { hostedUserId, oauthUserInfoFromAuthAnswer, userIdForAuthorization } from "./bearer.js";
 import { deviceSeams } from "./device-store.js";
@@ -90,15 +89,10 @@ export function resolveHostedUserId(request: Request): Effect.Effect<string | un
   return hostedUserId(request, hostedVaultUserInfo);
 }
 
-/** The provider key vault's own secret, read once with the deployment's services rather than at each invocation. */
-export async function hostedEncryptionSecret(): Promise<string | undefined> {
-  return runWeb(hostedEncryptionSecretEffect);
-}
-
 /**
- * The same secret, read on a handler's own fiber rather than through
- * `runWeb`: a handler that is already an effect on the edge's runtime reads
- * `HostedEnvironment` directly instead of running one to get at it.
+ * The provider key vault's own secret, read on the reader's own fiber: every
+ * route here is already an effect on the edge's runtime, so it reads
+ * `HostedEnvironment` directly rather than running one to get at it.
  */
 export const hostedEncryptionSecretEffect: Effect.Effect<
   string | undefined,

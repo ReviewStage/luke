@@ -3,7 +3,7 @@ import type { SqlError } from "@effect/sql/SqlError";
 import { Effect, type ParseResult, Schema } from "effect";
 import { auth } from "../../auth.js";
 import { type CloudAgentProviderId, unparsedWire, type WireBoundaryInput } from "../../core.js";
-import { runWeb } from "../../runtime.js";
+import type { WebStoreRun } from "../../runtime.js";
 import { executeSessionAction } from "../action-execute.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
@@ -133,7 +133,15 @@ function vaultSecret(): string {
   return secret;
 }
 
-export function productionBrainHostSeams(): BrainHostSeams {
+/**
+ * The deployment's seams, built over the runner the edge composing them hands
+ * in. `ownership` and `spend` answer promises because what reads them does:
+ * eve's own door takes a promise-shaped ownership, and the AI SDK's model
+ * middleware takes a promise-shaped meter. Neither has a request fiber to
+ * compose into, so the authored eve file that builds these seams hands its
+ * own `runWeb` down rather than this module keeping a runner of its own.
+ */
+export function productionBrainHostSeams(run: WebStoreRun): BrainHostSeams {
   const store = once(() => hostedStore({ keys: payloadKeyRing(vaultSecret()) }));
   const writer = onceComposed(storeWriter({ tools: CATALOG_TOOL_SET }));
   const vaultRows = (userId: string): BrainHostEffect<readonly VaultKeyRow[]> =>
@@ -142,9 +150,9 @@ export function productionBrainHostSeams(): BrainHostSeams {
     store,
     writer,
     ownership: {
-      sessionOwner: (sessionId) => runWeb(runtimeSessionOwner(sessionId)),
+      sessionOwner: (sessionId) => run(runtimeSessionOwner(sessionId)),
       ownsConversation: (userId, conversationId) =>
-        runWeb(conversationOwnedBy(userId, conversationId)),
+        run(conversationOwnedBy(userId, conversationId)),
     },
     deploymentSecret: () => process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET]?.trim() || undefined,
     eveOrigin: () => {
@@ -168,7 +176,7 @@ export function productionBrainHostSeams(): BrainHostSeams {
     },
     scriptedModel: () =>
       process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
-    spend: (userId) => runWeb(spendHostedMeter({ userId, now: Date.now() })),
+    spend: (userId) => run(spendHostedMeter({ userId, now: Date.now() })),
     vaultRows,
     vaultSecret,
     providerKey: (userId, providerId) =>
