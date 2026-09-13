@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { type LiveSideband, sidebandOverSocket } from "@sidecar/voice/live-session";
+import { it } from "@effect/vitest";
+import { sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
-import { onTestFinished, test } from "vitest";
+import { Effect } from "effect";
+import { onTestFinished } from "vitest";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import {
   closeEvent,
@@ -45,89 +47,104 @@ async function upstream() {
   };
 }
 
-test("the upstream socket reads as a sideband: Live events parsed, binary and reflected audio dropped, sends as JSON text, and the far close reported", async () => {
-  const remote = await upstream();
-  onTestFinished(() => remote.close());
-  const sideband = upstreamSideband(remote.client);
-  const heard: LiveServerEvent[] = [];
-  const closes: number[] = [];
-  sideband.onEvent((event) => heard.push(event));
-  const closed = new Promise<void>((resolve) => {
-    sideband.onClose((close) => {
-      closes.push(close.code ?? -1);
-      resolve();
-    });
-  });
+/** Gives the fiber reading the socket its turns, so what the far side said has been read. */
+const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
 
-  remote.far.send(Buffer.from([1, 2, 3]), { binary: true });
-  remote.far.send(JSON.stringify({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" }));
-  remote.far.send("not a document");
-  remote.far.send(
-    JSON.stringify({
-      type: LIVE_SERVER_EVENT.SESSION_STARTED,
-      event_id: "started",
-      session: { id: "sess_1" },
+it.scopedLive(
+  "the upstream socket reads as a sideband: Live events parsed, binary and reflected audio dropped, sends as JSON text, and the far close reported",
+  () =>
+    Effect.gen(function* () {
+      const remote = yield* Effect.promise(() => upstream());
+      onTestFinished(() => remote.close());
+      const sideband = yield* upstreamSideband(remote.client);
+      const heard: LiveServerEvent[] = [];
+      const closes: number[] = [];
+      sideband.onEvent((event) => heard.push(event));
+      sideband.onClose((close) => closes.push(close.code ?? -1));
+
+      remote.far.send(Buffer.from([1, 2, 3]), { binary: true });
+      remote.far.send(
+        JSON.stringify({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" }),
+      );
+      remote.far.send("not a document");
+      remote.far.send(
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_STARTED,
+          event_id: "started",
+          session: { id: "sess_1" },
+        }),
+      );
+      yield* sideband.send(closeEvent("close-1"));
+      while (remote.received.length === 0 || heard.length === 0) {
+        yield* pause;
+      }
+      assert.deepEqual(
+        heard.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+      assert.deepEqual(
+        remote.received.map((frame) => JSON.parse(frame)),
+        [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "close-1" }],
+      );
+
+      remote.far.close(1000);
+      while (closes.length === 0) {
+        yield* pause;
+      }
+      assert.deepEqual(closes, [1000]);
     }),
-  );
-  sideband.send(closeEvent("close-1"));
-  while (remote.received.length === 0 || heard.length === 0) {
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.deepEqual(
-    heard.map((event) => event.type),
-    [LIVE_SERVER_EVENT.SESSION_STARTED],
-  );
-  assert.deepEqual(
-    remote.received.map((frame) => JSON.parse(frame)),
-    [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "close-1" }],
-  );
-
-  remote.far.close(1000);
-  await closed;
-  assert.deepEqual(closes, [1000]);
-});
+);
 
 function started(id: string) {
   return { type: LIVE_SERVER_EVENT.SESSION_STARTED, event_id: `started-${id}`, session: { id } };
 }
 
-test("an observed sideband hands each event to the observer once, ahead of every listener, replay included, and the sends and close pass through", () => {
-  const socket = new FakeLiveSocket();
-  const observed: string[] = [];
-  const order: string[] = [];
-  const sideband: LiveSideband = observedSideband(sidebandOverSocket(socket), (event) => {
-    observed.push("event_id" in event ? event.event_id : "");
-    order.push("observer");
-  });
+it.scopedLive(
+  "an observed sideband hands each event to the observer once, ahead of every listener, replay included, and the sends and close pass through",
+  () =>
+    Effect.gen(function* () {
+      const socket = new FakeLiveSocket();
+      const observed: string[] = [];
+      const order: string[] = [];
+      const sideband = observedSideband(yield* sidebandOverSocket(socket), (event) => {
+        observed.push("event_id" in event ? event.event_id : "");
+        order.push("observer");
+      });
 
-  // Said before anyone listened: held by the inner sideband, replayed at the first listener.
-  socket.receive(started("early"));
-  const stopFirst = sideband.onEvent(() => order.push("first"));
-  sideband.onEvent(() => order.push("second"));
-  socket.receive(started("late"));
-  stopFirst();
-  socket.receive(started("later"));
+      // Said before anyone listened: held by the socket, read by the sideband, replayed at the
+      // first listener. The pause between each is the reading fiber's own turn.
+      socket.receive(started("early"));
+      yield* pause;
+      const stopFirst = sideband.onEvent(() => order.push("first"));
+      sideband.onEvent(() => order.push("second"));
+      socket.receive(started("late"));
+      yield* pause;
+      stopFirst();
+      socket.receive(started("later"));
+      yield* pause;
 
-  assert.deepEqual(observed, ["started-early", "started-late", "started-later"]);
-  assert.deepEqual(order, [
-    "observer",
-    "first",
-    "observer",
-    "first",
-    "second",
-    "observer",
-    "second",
-  ]);
+      assert.deepEqual(observed, ["started-early", "started-late", "started-later"]);
+      assert.deepEqual(order, [
+        "observer",
+        "first",
+        "observer",
+        "first",
+        "second",
+        "observer",
+        "second",
+      ]);
 
-  const closes: (number | undefined)[] = [];
-  sideband.onClose((close) => closes.push(close.code));
-  sideband.send(closeEvent("c"));
-  socket.closeFromServer({ code: 1006 });
-  sideband.close();
-  assert.deepEqual(
-    socket.sent.map((frame) => JSON.parse(frame)),
-    [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c" }],
-  );
-  assert.deepEqual(closes, [1006]);
-  assert.equal(socket.closedByClient, true);
-});
+      const closes: (number | undefined)[] = [];
+      sideband.onClose((close) => closes.push(close.code));
+      yield* sideband.send(closeEvent("c"));
+      socket.closeFromServer({ code: 1006 });
+      yield* pause;
+      yield* sideband.close;
+      assert.deepEqual(
+        socket.sent.map((frame) => JSON.parse(frame)),
+        [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c" }],
+      );
+      assert.deepEqual(closes, [1006]);
+      assert.equal(socket.closedByClient, true);
+    }),
+);

@@ -29,58 +29,62 @@ function settle() {
 it.effect(
   "a graceful close registers the closed listener, sends session.close, and holds the socket until the final event",
   () =>
-    Effect.gen(function* () {
-      const socket = new FakeLiveSocket();
-      const sideband = sidebandOverSocket(socket);
-      const heard: LiveServerEvent[] = [];
-      sideband.onEvent((event) => heard.push(event));
-      const closing = yield* Effect.fork(closeGracefully(sideband, { eventId: "close-1" }));
-      yield* settle();
-      assert.deepEqual(
-        socket.sent.map((frame) => JSON.parse(frame)),
-        [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "close-1" }],
-      );
-      assert.equal(socket.closedByClient, false);
-      socket.receive(closedEvent(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 61));
-      const result = yield* Fiber.join(closing);
-      assert.equal(result.outcome, SIDEBAND_CLOSE_OUTCOME.CLOSED);
-      if (result.outcome !== SIDEBAND_CLOSE_OUTCOME.CLOSED) return;
-      assert.deepEqual(
-        [result.closed.reason, result.closed.usage.seconds],
-        [LIVE_CLOSE_REASON.CLOSE_REQUESTED, 61],
-      );
-      assert.equal(socket.closedByClient, true);
-      // Nothing is left armed that the timeout's own instant could still act on.
-      yield* TestClock.adjust(Duration.millis(SIDEBAND_CLOSE_TIMEOUT_MS));
-      yield* settle();
-      assert.equal(socket.sent.length, 1);
-    }),
+    Effect.scoped(
+      Effect.gen(function* () {
+        const socket = new FakeLiveSocket();
+        const sideband = yield* sidebandOverSocket(socket);
+        const heard: LiveServerEvent[] = [];
+        sideband.onEvent((event) => heard.push(event));
+        const closing = yield* Effect.fork(closeGracefully(sideband, { eventId: "close-1" }));
+        yield* settle();
+        assert.deepEqual(
+          socket.sent.map((frame) => JSON.parse(frame)),
+          [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "close-1" }],
+        );
+        assert.equal(socket.closedByClient, false);
+        socket.receive(closedEvent(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 61));
+        const result = yield* Fiber.join(closing);
+        assert.equal(result.outcome, SIDEBAND_CLOSE_OUTCOME.CLOSED);
+        if (result.outcome !== SIDEBAND_CLOSE_OUTCOME.CLOSED) return;
+        assert.deepEqual(
+          [result.closed.reason, result.closed.usage.seconds],
+          [LIVE_CLOSE_REASON.CLOSE_REQUESTED, 61],
+        );
+        assert.equal(socket.closedByClient, true);
+        // Nothing is left armed that the timeout's own instant could still act on.
+        yield* TestClock.adjust(Duration.millis(SIDEBAND_CLOSE_TIMEOUT_MS));
+        yield* settle();
+        assert.equal(socket.sent.length, 1);
+      }),
+    ),
 );
 
 it.effect(
   "a socket that ends first leaves the close unconfirmed, and silence gives up at the timeout",
   () =>
-    Effect.gen(function* () {
-      const lost = new FakeLiveSocket();
-      const losing = yield* Effect.fork(
-        closeGracefully(sidebandOverSocket(lost), { eventId: "c" }),
-      );
-      yield* settle();
-      lost.closeFromServer({ code: 1006 });
-      assert.deepEqual(yield* Fiber.join(losing), {
-        outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
-        close: { code: 1006 },
-      });
+    Effect.scoped(
+      Effect.gen(function* () {
+        const lost = new FakeLiveSocket();
+        const losing = yield* Effect.fork(
+          closeGracefully(yield* sidebandOverSocket(lost), { eventId: "c" }),
+        );
+        yield* settle();
+        lost.closeFromServer({ code: 1006 });
+        assert.deepEqual(yield* Fiber.join(losing), {
+          outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
+          close: { code: 1006 },
+        });
 
-      const silent = new FakeLiveSocket();
-      const timing = yield* Effect.fork(
-        closeGracefully(sidebandOverSocket(silent), { eventId: "c", timeoutMs: 50 }),
-      );
-      yield* settle();
-      yield* TestClock.adjust(Duration.millis(49));
-      assert.equal(silent.closedByClient, false);
-      yield* TestClock.adjust(Duration.millis(1));
-      assert.deepEqual(yield* Fiber.join(timing), { outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT });
-      assert.equal(silent.closedByClient, true);
-    }),
+        const silent = new FakeLiveSocket();
+        const timing = yield* Effect.fork(
+          closeGracefully(yield* sidebandOverSocket(silent), { eventId: "c", timeoutMs: 50 }),
+        );
+        yield* settle();
+        yield* TestClock.adjust(Duration.millis(49));
+        assert.equal(silent.closedByClient, false);
+        yield* TestClock.adjust(Duration.millis(1));
+        assert.deepEqual(yield* Fiber.join(timing), { outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT });
+        assert.equal(silent.closedByClient, true);
+      }),
+    ),
 );

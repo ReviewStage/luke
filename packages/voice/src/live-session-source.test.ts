@@ -161,12 +161,14 @@ it.scopedLive(
         session: { id: SESSION_ID },
       });
       socket?.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
+      yield* pause;
       assert.deepEqual(
         seen.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],
       );
 
       socket?.closeFromServer({ code: 1000 });
+      yield* pause;
       assert.equal(source.diagnostics().sidebandAttached, false);
     }),
 );
@@ -352,14 +354,16 @@ it.scopedLive(
         event_id: "ev_1",
         client_event_id: "c_1",
       });
+      yield* pause;
       assert.deepEqual(
         seen.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
 
-      sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
       assert.equal(socket.sent.length, 2);
       socket.closeFromServer({ code: 1000 });
+      yield* pause;
       assert.equal(source.diagnostics().sidebandAttached, false);
     }),
 );
@@ -522,8 +526,6 @@ it.scopedLive(
       assert.equal(yield* quiet.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
       assert.equal(quiet.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE);
       assert.equal(silent.sockets[0]?.closedByClient, true);
-      // The hold's one listener of each kind stands for the socket's life; the wait itself left none.
-      assert.deepEqual(silent.sockets[0]?.listenerCounts, { messages: 1, closes: 1 });
       // A frame or close arriving after the deadline settled the wait records nothing over its outcome.
       silent.sockets[0]?.receiveText("not a document");
       silent.sockets[0]?.closeFromServer({ code: 1000 });
@@ -605,11 +607,12 @@ it.scopedLive(
         event_id: "ev_2",
         client_event_id: "c_2",
       });
+      yield* pause;
       assert.deepEqual(
         seen.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
-      sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_3" });
       assert.equal(second.sent.length, 2);
       assert.equal(first.sent.length, 1);
     }),
@@ -625,8 +628,10 @@ it.scopedLive(
       assert.ok(opened);
       const sideband = yield* opened.attach();
       script.sockets[0]?.closeFromServer({ code: 1001 });
-      sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
-      sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
+      // The gap begins where the socket's own reader takes that close, which is the turn after it.
+      yield* pause;
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
       yield* openedSockets(script, 2);
       yield* pause;
       const second = script.sockets[1];
@@ -697,7 +702,7 @@ it.scoped("closing while an attach attempt waits for its answer closes the socke
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
     yield* openedSockets(script, 2);
-    sideband.close();
+    yield* sideband.close;
     yield* pause;
 
     assert.equal(script.sockets.length, 2);
@@ -715,7 +720,7 @@ it.scoped("closing while a reattach wait stands interrupts it, opening no furthe
 
     script.sockets[0]?.closeFromServer({ code: 1006 });
     yield* openedSockets(script, 2);
-    sideband.close();
+    yield* sideband.close;
     yield* TestClock.adjust("1 minute");
     yield* pause;
     assert.equal(script.sockets.length, 2);
@@ -765,7 +770,7 @@ it.scopedLive(
       const sideband = yield* second.attach();
       const secondCloses: unknown[] = [];
       sideband.onClose((close) => secondCloses.push(close));
-      sideband.close();
+      yield* sideband.close;
       assert.equal(own.sockets[0]?.closedByClient, true);
       own.sockets[0]?.closeFromServer({ code: 1005 });
       yield* pause;
@@ -909,6 +914,9 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
       const sideband = yield* opened.attach();
+      // What the service spoke behind the answer is held by the socket until the sideband's own
+      // reader takes it; this pause is that reader's first turn, and no listener stands in it.
+      yield* pause;
       const seen: LiveServerEvent[] = [];
       sideband.onEvent((event) => seen.push(event));
       assert.deepEqual(
@@ -996,6 +1004,9 @@ it.scopedLive(
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened);
       const sideband = yield* opened.attach();
+      // The close was queued behind the answer; this pause is the reader's turn on it, before any
+      // sideband listener stands.
+      yield* pause;
       const closes: (number | undefined)[] = [];
       sideband.onClose((close) => closes.push(close.code));
       assert.deepEqual(closes, [1000]);

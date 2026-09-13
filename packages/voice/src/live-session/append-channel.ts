@@ -114,7 +114,7 @@ export class AppendChannel {
       const acknowledged = yield* Deferred.make<Acknowledgment>();
       this.#pending.set(event.event_id, { acknowledged, onSpoken: speech });
       if (countsForIdle) this.lastSentAt = yield* Clock.currentTimeMillis;
-      this.#options.sideband.send(event);
+      yield* this.#options.sideband.send(event);
       const settled = yield* Effect.timeoutOption(
         Deferred.await(acknowledged),
         Duration.millis(APPEND_ACK_TIMEOUT_MS),

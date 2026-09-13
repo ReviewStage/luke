@@ -185,7 +185,7 @@ async function stand(target: ConversationTarget, deviceId: string | undefined) {
       Effect.succeed({
         sessionId: liveSessionId,
         sdpAnswer: `answer-for-${input.sdpOffer}`,
-        attach: () => Effect.succeed(sidebandOverSocket(socket)),
+        attach: () => sidebandOverSocket(socket),
       }),
     setVoice: () => undefined,
     diagnostics: () => {
