@@ -48,7 +48,17 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, Either, Fiber, type Layer, Runtime, Schedule } from "effect";
+import {
+  Data,
+  Duration,
+  Effect,
+  Either,
+  Fiber,
+  type Layer,
+  Option,
+  Runtime,
+  Schedule,
+} from "effect";
 import type { HeldSocket } from "./held-socket.js";
 import {
   type LiveSideband,
@@ -381,7 +391,7 @@ interface ServiceSessionOptions {
    * refresh-and-retry exists.
    */
   authorization?: AccountToken;
-  /** The runtime the account's own renewal is run on, for a source handed one; the ambient default otherwise. */
+  /** The runtime a creation is run on, for a source handed one; the ambient default otherwise. */
   runtime?: Runtime.Runtime<never>;
   /**
    * This installation's `devices` row id, read at each creation so a row
@@ -457,59 +467,70 @@ class ServiceLiveSessionSource {
    * the first frame back; the socket that answered is the sideband, held for
    * the caller's `attach`. Anything else — a refusal, a frame that is not the
    * answer, a close, or silence past the deadline — closes the socket and
-   * resolves to nothing.
+   * resolves to nothing. The creation is one effect, of which this is the
+   * promise door the two sources' own `create` answers their caller through;
+   * it goes when `LiveSessionSource#create` answers an effect instead.
    */
-  protected async createSession(
+  protected createSession(
     input: LiveSessionCreateInput,
   ): Promise<{ created: LiveSessionCreated; socket: LiveSocket } | undefined> {
-    this.#outcome.attempt();
-    this.#sidebandAttached = false;
-    const bearer = await this.#bearer();
-    if (this.#authorization && bearer === undefined) {
-      this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "no access token");
-      return undefined;
-    }
-    const deviceId = this.#deviceId?.();
-    let opening = await this.#open(bearer, deviceId);
-    if (
-      !socketOpened(opening) &&
-      opening.fault === SOCKET_OPEN_FAULT.REFUSED &&
-      opening.status === HTTP_STATUS.UNAUTHORIZED &&
-      this.#authorization
-    ) {
-      // Routine expiry of an hour-lived token: renew once and retry once, only
-      // on a bearer that actually changed and still answers for the same account.
-      const holder = await this.#holder();
-      await Runtime.runPromise(this.#runtime)(Effect.ignore(this.#authorization.refreshAccount()));
-      const renewed = await this.#bearer();
-      if (renewed !== undefined && renewed !== bearer) {
-        if ((await this.#holder()) !== holder) {
-          this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "the account changed");
-          return undefined;
-        }
-        opening = await this.#open(renewed, deviceId);
+    return Runtime.runPromise(this.#runtime)(this.#createSession(input));
+  }
+
+  #createSession(
+    input: LiveSessionCreateInput,
+  ): Effect.Effect<{ created: LiveSessionCreated; socket: LiveSocket } | undefined> {
+    return Effect.gen(this, function* () {
+      this.#outcome.attempt();
+      this.#sidebandAttached = false;
+      const authorization = this.#authorization;
+      const bearer = yield* this.#bearer();
+      if (authorization && bearer === undefined) {
+        this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "no access token");
+        return undefined;
       }
-    }
-    if (!socketOpened(opening)) {
-      const { outcome, detail } = socketFaultOutcome(opening);
-      this.#refuse(outcome, detail);
-      return undefined;
-    }
-    const { socket } = opening;
-    const frame: SessionCreateFrame = {
-      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
-      sdp: input.sdpOffer,
-      voice: this.#voice,
-      input: [...input.input],
-    };
-    const answer = await this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
-    const created = answer === undefined ? undefined : this.#readCreated(answer);
-    if (!created) {
-      socket.close();
-      return undefined;
-    }
-    this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
-    return { created, socket };
+      const deviceId = this.#deviceId?.();
+      let opening = yield* this.#open(bearer, deviceId);
+      if (
+        !socketOpened(opening) &&
+        opening.fault === SOCKET_OPEN_FAULT.REFUSED &&
+        opening.status === HTTP_STATUS.UNAUTHORIZED &&
+        authorization
+      ) {
+        // Routine expiry of an hour-lived token: renew once and retry once, only
+        // on a bearer that actually changed and still answers for the same account.
+        const holder = yield* this.#holder();
+        yield* Effect.ignore(authorization.refreshAccount());
+        const renewed = yield* this.#bearer();
+        if (renewed !== undefined && renewed !== bearer) {
+          if ((yield* this.#holder()) !== holder) {
+            this.#outcome.record(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN, "the account changed");
+            return undefined;
+          }
+          opening = yield* this.#open(renewed, deviceId);
+        }
+      }
+      if (!socketOpened(opening)) {
+        const { outcome, detail } = socketFaultOutcome(opening);
+        this.#refuse(outcome, detail);
+        return undefined;
+      }
+      const { socket } = opening;
+      const frame: SessionCreateFrame = {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: input.sdpOffer,
+        voice: this.#voice,
+        input: [...input.input],
+      };
+      const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
+      const created = answer === undefined ? undefined : this.#readCreated(answer);
+      if (!created) {
+        socket.close();
+        return undefined;
+      }
+      this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
+      return { created, socket };
+    });
   }
 
   /**
@@ -542,48 +563,71 @@ class ServiceLiveSessionSource {
    * refusal, or another session's id — is the service's decision and ends
    * the attempts.
    */
-  protected async attachOnce(sessionId: string): Promise<ReattachAttempt> {
-    const bearer = await this.#bearer();
-    if (this.#authorization && bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
-    const opening = await this.#open(bearer);
-    if (!socketOpened(opening)) {
-      return {
-        outcome:
-          opening.fault === SOCKET_OPEN_FAULT.REFUSED && opening.status === HTTP_STATUS.UNAUTHORIZED
-            ? REATTACH_ATTEMPT.REFUSED
-            : REATTACH_ATTEMPT.FAILED,
-      };
-    }
-    const { socket } = opening;
-    const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
-    const answer = await this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
-    if (answer === undefined) {
+  protected attachOnce(sessionId: string): Effect.Effect<ReattachAttempt> {
+    return Effect.gen(this, function* () {
+      const bearer = yield* this.#bearer();
+      if (this.#authorization && bearer === undefined) return { outcome: REATTACH_ATTEMPT.REFUSED };
+      // The open and the guard over what it answered are one uninterruptible step, so a hang-up
+      // that interrupts this fiber can never land between them and leave a socket nobody holds;
+      // only the wait for the answer is interruptible, and interrupting it closes that socket.
+      return yield* Effect.uninterruptibleMask((restore) =>
+        Effect.gen(this, function* () {
+          const opening = yield* this.#open(bearer);
+          if (!socketOpened(opening)) {
+            return {
+              outcome:
+                opening.fault === SOCKET_OPEN_FAULT.REFUSED &&
+                opening.status === HTTP_STATUS.UNAUTHORIZED
+                  ? REATTACH_ATTEMPT.REFUSED
+                  : REATTACH_ATTEMPT.FAILED,
+            };
+          }
+          const { socket } = opening;
+          return yield* restore(this.#attachAnswer(socket, sessionId)).pipe(
+            Effect.onInterrupt(() => Effect.sync(() => socket.close())),
+          );
+        }),
+      );
+    });
+  }
+
+  /** The attach frame's own exchange on a socket that stands: the answer decides, and every answer but the attachment closes it. */
+  #attachAnswer(socket: HeldSocket, sessionId: string): Effect.Effect<ReattachAttempt> {
+    return Effect.gen(this, function* () {
+      const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
+      const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
+      if (answer === undefined) {
+        socket.close();
+        return { outcome: REATTACH_ATTEMPT.FAILED };
+      }
+      const attached = sessionAttachedFrameFromWire(answer);
+      if (attached?.sessionId === sessionId) return { outcome: REATTACH_ATTEMPT.ATTACHED, socket };
       socket.close();
-      return { outcome: REATTACH_ATTEMPT.FAILED };
-    }
-    const attached = sessionAttachedFrameFromWire(answer);
-    if (attached?.sessionId === sessionId) return { outcome: REATTACH_ATTEMPT.ATTACHED, socket };
-    socket.close();
-    return { outcome: REATTACH_ATTEMPT.REFUSED };
+      return { outcome: REATTACH_ATTEMPT.REFUSED };
+    });
   }
 
-  async #bearer(): Promise<string | undefined> {
-    if (!this.#authorization) return undefined;
-    const token = await Runtime.runPromise(this.#runtime)(this.#authorization.readAccessToken());
-    return token ? `Bearer ${token}` : undefined;
+  #bearer(): Effect.Effect<string | undefined> {
+    const authorization = this.#authorization;
+    if (!authorization) return Effect.succeed(undefined);
+    return Effect.map(authorization.readAccessToken(), (token) =>
+      token ? `Bearer ${token}` : undefined,
+    );
   }
 
-  async #holder(): Promise<string | undefined> {
-    if (!this.#authorization?.readAccountKey) return undefined;
-    return Runtime.runPromise(this.#runtime)(this.#authorization.readAccountKey());
+  #holder(): Effect.Effect<string | undefined> {
+    const readAccountKey = this.#authorization?.readAccountKey;
+    return readAccountKey ? readAccountKey() : Effect.succeed(undefined);
   }
 
   /** The handshake's headers: the bearer where one stands, and on a creation the device the session is opened for. */
-  #open(bearer: string | undefined, deviceId?: string): Promise<SocketOpening> {
-    return this.#openSocket(this.#address, {
-      ...(bearer === undefined ? undefined : { authorization: bearer }),
-      ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
-    });
+  #open(bearer: string | undefined, deviceId?: string): Effect.Effect<SocketOpening> {
+    return Effect.promise(() =>
+      this.#openSocket(this.#address, {
+        ...(bearer === undefined ? undefined : { authorization: bearer }),
+        ...(deviceId === undefined ? undefined : { [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId }),
+      }),
+    );
   }
 
   /**
@@ -594,28 +638,9 @@ class ServiceLiveSessionSource {
    * here; a socket closed before it answered, or one silent past the request
    * deadline, is recorded as the service unavailable.
    */
-  #firstFrame(socket: HeldSocket, send: () => void): Promise<WireRecord | undefined> {
-    return new Promise((resolve) => {
-      let settled = false;
-      const settle = (value: WireRecord | undefined) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(value);
-      };
-      const timer = setTimeout(() => {
-        // The wait is withdrawn before the outcome is written, so the close the caller answers a
-        // deadline with, or a frame arriving late, is held for the consumer and records nothing
-        // over the deadline's own outcome.
-        withdraw();
-        this.#outcome.record(
-          LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
-          "no answer before the deadline",
-        );
-        settle(undefined);
-      }, this.#requestTimeoutMs);
+  #firstFrame(socket: HeldSocket, send: () => void): Effect.Effect<WireRecord | undefined> {
+    const answered = Effect.async<WireRecord | undefined>((resume) => {
       const withdraw = socket.takeFirst((arrival) => {
-        if (settled) return;
         if ("close" in arrival) {
           this.#outcome.record(
             LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
@@ -623,7 +648,7 @@ class ServiceLiveSessionSource {
               ? "closed before answering"
               : `closed with code ${arrival.close.code}`,
           );
-          settle(undefined);
+          resume(Effect.succeed(undefined));
           return;
         }
         const payload = decodeLivePayload(arrival.frame);
@@ -633,10 +658,28 @@ class ServiceLiveSessionSource {
             "answer was not a document",
           );
         }
-        settle(payload);
+        resume(Effect.succeed(payload));
       });
       send();
+      return Effect.sync(withdraw);
     });
+    return Effect.flatMap(
+      Effect.timeoutOption(answered, Duration.millis(this.#requestTimeoutMs)),
+      // The deadline interrupts the wait, and the interruption withdraws it before this
+      // continuation writes the outcome, so the close the caller answers a deadline with, or a
+      // frame arriving late, is held for the consumer and records nothing over the deadline's own.
+      Option.match({
+        onNone: () =>
+          Effect.sync(() => {
+            this.#outcome.record(
+              LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE,
+              "no answer before the deadline",
+            );
+            return undefined;
+          }),
+        onSome: (payload) => Effect.succeed(payload),
+      }),
+    );
   }
 
   #readCreated(payload: WireRecord): LiveSessionCreated | undefined {
@@ -729,7 +772,7 @@ function reattachRetrySchedule(
  */
 class ReattachingSocket implements LiveSocket {
   #inner: LiveSocket;
-  readonly #attach: (sessionId: string) => Promise<ReattachAttempt>;
+  readonly #attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
   readonly #sessionId: string;
   readonly #delaysMs: readonly number[];
   readonly #runtime: Runtime.Runtime<never>;
@@ -747,7 +790,7 @@ class ReattachingSocket implements LiveSocket {
   constructor(options: {
     socket: LiveSocket;
     sessionId: string;
-    attach: (sessionId: string) => Promise<ReattachAttempt>;
+    attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
     delaysMs: readonly number[];
     runtime: Runtime.Runtime<never>;
   }) {
@@ -834,8 +877,12 @@ class ReattachingSocket implements LiveSocket {
   }
 
   #attemptEffect(): Effect.Effect<LiveSocket, ReattachFailed | ReattachRefused> {
-    return Effect.promise(() => this.#attach(this.#sessionId)).pipe(
-      Effect.flatMap((attempt) => this.#outcomeEffect(attempt)),
+    // An attempt that landed the instant a hang-up interrupted this fiber is read to its end all
+    // the same, because reading it is what closes the socket it stood up.
+    return Effect.uninterruptibleMask((restore) =>
+      Effect.flatMap(restore(this.#attach(this.#sessionId)), (attempt) =>
+        this.#outcomeEffect(attempt),
+      ),
     );
   }
 
@@ -886,7 +933,7 @@ export type HostedLiveSessionOptions = ServiceSourceOptions &
   AccountToken & {
     /** The waits between tries at re-attaching a lost connection; `HOSTED_REATTACH_DELAYS_MS` by default. */
     reattachDelaysMs?: readonly number[];
-    /** The runtime the reattach tries are forked on, for a caller (a test today) that holds its own. */
+    /** The runtime a creation runs on and the reattach tries are forked on, for a caller (a test today) that holds its own. */
     runtime?: Runtime.Runtime<never>;
   };
 

@@ -951,6 +951,25 @@ the source answers its caller a promise and holds no runtime edge of its own,
 so the one session request it makes is run there over the client the source
 was built on, which is what the deleted door did for it. It goes when that
 `create` answers an effect its caller yields.
+`ServiceLiveSessionSource#createSession` beside them is the third, and
+P12-20i left it as the only run the service side of that file makes: the
+authorization reads both service sources make — the access token, the account
+key, and the refresh a routine 401 retries under — and the wait for the
+service's one answering frame are steps of one effect now, so the three runs
+that stood where an `await` needed a credential are gone and the promise
+`HostedLiveSessionSource#create` and `IntroductionLiveSessionSource#create`
+answer is run once, at that door, on the runtime the source was handed.
+`attachOnce` answers an effect with them, which the recovery fiber above
+yields rather than bridging with `Effect.promise`. The same PR took the
+answering wait's `new Promise` and `setTimeout` onto `Effect.async` under
+`Effect.timeoutOption`, where the deadline's own interruption withdraws the
+hold's wait before the continuation writes the outcome — the order the
+hand-rolled timer kept by hand, so that a frame or a close arriving late is
+held for the consumer and records nothing over the deadline's — and
+`packages/voice/src/live-session-source.ts` is off the raw-primitive list
+with it. The door goes when `LiveSessionSource#create` answers an effect its
+caller yields, which `live-session-service.ts` already bridges with
+`Effect.promise` to reach.
 
 `fiberStoreRunner` in `apps/web/server/hosted/fiber-runner.ts` was on this
 allowlist from P10-16, the PR that deleted `HostedStoreRun` and

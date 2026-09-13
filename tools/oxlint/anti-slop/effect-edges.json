@@ -108,7 +108,6 @@
     "packages/runtime/src/lanes.effect.ts",
     "packages/runtime/src/lanes.ts",
     "packages/runtime/src/queue.ts",
-    "packages/voice/src/live-session-source.ts",
     "packages/voice/src/live-session/append-channel.ts",
     "packages/voice/src/live-session/graceful-close.ts"
   ]
