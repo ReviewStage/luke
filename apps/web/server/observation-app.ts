@@ -313,9 +313,9 @@ async function observationTickHandler(request: Request): Promise<Response> {
               }),
               roster,
               transcripts: hostedTranscriptReads({
-                run: runWeb,
+                client: yield* SqlClient.SqlClient,
                 userId,
-                roster: async () => roster,
+                roster: () => Effect.succeed(roster),
                 pluginFor: (providerId) =>
                   cloudSessionPluginFor(providerId, {
                     readApiKey: readApiKey(providerId),

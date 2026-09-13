@@ -99,12 +99,13 @@ function eveContext(aborted = false): EveToolContext {
 
 function factsWriter(remembered: string[]): HostedFactsWriter {
   return {
-    list: async () => remembered.map((words, index) => ({ id: `f-${index}`, words })),
-    remember: async (ask) => {
-      remembered.push(ask.words);
-      return true;
-    },
-    forget: async () => false,
+    list: () => Effect.sync(() => remembered.map((words, index) => ({ id: `f-${index}`, words }))),
+    remember: (ask) =>
+      Effect.sync(() => {
+        remembered.push(ask.words);
+        return true;
+      }),
+    forget: () => Effect.succeed(false),
   };
 }
 
@@ -118,12 +119,12 @@ interface Fakes {
 function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key" }): Fakes {
   const remembered: string[] = [];
   const executed: WireRecord[] = [];
-  const roster = async () => hostedRosterFrom(ROSTER, NOW);
+  const roster = () => Effect.succeed(hostedRosterFrom(ROSTER, NOW));
   const carrier = hostedActionCarrier({
     roster,
-    defaults: async () => ({}),
+    defaults: () => Effect.succeed({}),
     facts: factsWriter(remembered),
-    apiKey: async () => options.apiKey,
+    apiKey: () => Effect.succeed(options.apiKey),
     execute: (input) =>
       Effect.sync(() => {
         executed.push({ kind: input.kind, provider_id: input.providerId, ...input.fields });
@@ -135,7 +136,8 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
     roster,
     carrier,
     transcripts: {
-      whole: async () => ({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
+      whole: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),

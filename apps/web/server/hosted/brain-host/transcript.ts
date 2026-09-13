@@ -11,7 +11,6 @@ import {
   type SessionProviderPlugin,
   type WireRecord,
 } from "../../core.js";
-import type { WebStoreRun } from "../../runtime.js";
 import { BRAIN_HOST } from "./bounds.js";
 import { type HostedRoster, observedSession } from "./roster.js";
 
@@ -27,11 +26,11 @@ import { type HostedRoster, observedSession } from "./roster.js";
  */
 
 export interface TranscriptReadSeams {
-  /** The promise face of the connection the read runs on, which is what answers the cursor's own reads. */
-  readonly run: WebStoreRun;
+  /** The request's own connection, which is what answers the cursor's own reads. */
+  readonly client: SqlClient.SqlClient;
   readonly userId: string;
   /** The roster as the snapshot holds it now, read again for every read. */
-  readonly roster: () => Promise<HostedRoster>;
+  readonly roster: () => Effect.Effect<HostedRoster>;
   /** The provider's plugin over the account's own key, built once per provider per host. */
   readonly pluginFor: (providerId: CloudAgentProviderId) => SessionProviderPlugin;
   readonly now: () => number;
@@ -47,10 +46,12 @@ interface TranscriptDeltaReading {
 }
 
 export interface HostedTranscriptReads {
-  /** The whole tail, as the tool answers it: the provider's result, whatever its status. */
-  whole(identity: SessionIdentity): Promise<WireRecord>;
+  /** The whole tail, as the tool answers it: the provider's result, whatever its status; the tool has nowhere to say a failure, so a row it cannot read dies. */
+  whole(identity: SessionIdentity): Effect.Effect<WireRecord>;
   /** What the session gained since the cursor kept for it; nothing for a session no observation turn reads. Keeps no bookmark. */
-  since(identity: SessionIdentity): Promise<TranscriptDeltaReading | undefined>;
+  since(
+    identity: SessionIdentity,
+  ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | ParseResult.ParseError>;
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -150,8 +151,13 @@ export function keepTranscriptCursor(
 }
 
 export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscriptReads {
-  const cursorFor = (identity: SessionIdentity): Promise<string | undefined> =>
-    seams.run(
+  const onClient = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>): Effect.Effect<A, E> =>
+    Effect.provideService(effect, SqlClient.SqlClient, seams.client);
+
+  const cursorFor = (
+    identity: SessionIdentity,
+  ): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError> =>
+    onClient(
       Effect.map(
         findCursor({
           userId: seams.userId,
@@ -163,50 +169,48 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
     );
 
   return {
-    async whole(identity) {
-      if (!observedSession(await seams.roster(), identity)) return NOT_OBSERVED;
-      if (!isCloudAgentProviderId(identity.providerId)) return NOT_CLOUD;
-      const read = await seams.run(
-        dispatchRead(
+    whole: (identity) =>
+      Effect.gen(function* () {
+        if (!observedSession(yield* seams.roster(), identity)) return NOT_OBSERVED;
+        if (!isCloudAgentProviderId(identity.providerId)) return NOT_CLOUD;
+        const read = yield* dispatchRead(
           seams.pluginFor(identity.providerId),
           "transcript",
           identity.providerSessionId,
-        ),
-      );
-      const answer: WireRecord =
-        read.status === ACTION_RESULT_STATUS.ACCEPTED
-          ? { status: read.status, transcript: read.transcript }
-          : { status: read.status, reason: read.reason };
-      return answer;
-    },
-    async since(identity) {
-      // Any observed chat is read, whatever its status now: the wake that
-      // names a chat is most often the one that just finished or failed,
-      // and its last words are the ones the turn is opened for.
-      if (!observedSession(await seams.roster(), identity)) return undefined;
-      if (!isCloudAgentProviderId(identity.providerId)) return undefined;
-      const from = await cursorFor(identity);
-      const read = await seams.run(
-        dispatchRead(
+        );
+        const answer: WireRecord =
+          read.status === ACTION_RESULT_STATUS.ACCEPTED
+            ? { status: read.status, transcript: read.transcript }
+            : { status: read.status, reason: read.reason };
+        return answer;
+      }),
+    since: (identity) =>
+      Effect.gen(function* () {
+        // Any observed chat is read, whatever its status now: the wake that
+        // names a chat is most often the one that just finished or failed,
+        // and its last words are the ones the turn is opened for.
+        if (!observedSession(yield* seams.roster(), identity)) return undefined;
+        if (!isCloudAgentProviderId(identity.providerId)) return undefined;
+        const from = yield* cursorFor(identity);
+        const read = yield* dispatchRead(
           seams.pluginFor(identity.providerId),
           "transcriptSince",
           identity.providerSessionId,
           from,
-        ),
-      );
-      if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-        return { delta: { text: "", truncated: false, status: read.status } };
-      }
-      const overflow = Math.max(0, read.text.length - BRAIN_HOST.TRANSCRIPT_DELTA_CHARS);
-      return {
-        delta: {
-          text: read.text.slice(overflow),
-          truncated: read.truncated || overflow > 0,
-          status: read.status,
-        },
-        ...(read.cursor !== undefined ? { cursor: read.cursor } : undefined),
-        ...(from !== undefined ? { from } : undefined),
-      };
-    },
+        );
+        if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
+          return { delta: { text: "", truncated: false, status: read.status } };
+        }
+        const overflow = Math.max(0, read.text.length - BRAIN_HOST.TRANSCRIPT_DELTA_CHARS);
+        return {
+          delta: {
+            text: read.text.slice(overflow),
+            truncated: read.truncated || overflow > 0,
+            status: read.status,
+          },
+          ...(read.cursor !== undefined ? { cursor: read.cursor } : undefined),
+          ...(from !== undefined ? { from } : undefined),
+        };
+      }),
   };
 }

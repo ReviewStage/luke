@@ -16,7 +16,6 @@ import {
 } from "../../core.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
-import { runOverClient } from "../fiber-runner.js";
 import { askRecord } from "../store/asks.js";
 import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
 import { offerBriefing } from "./announce.js";
@@ -332,11 +331,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
         }
         const client = yield* SqlClient.SqlClient;
-        const run = runOverClient(client);
         const { userId } = binding.target;
-        const roster = () => run(rosterOf(userId));
+        // Every seam below answers `Effect<A, never, never>`, so the request's
+        // own client is provided into each read here and a row the service
+        // cannot read dies rather than becoming a reason the model is offered.
+        const roster = () =>
+          Effect.orDie(Effect.provideService(rosterOf(userId), SqlClient.SqlClient, client));
         const transcripts = hostedTranscriptReads({
-          run,
+          client,
           userId,
           roster,
           pluginFor: pluginFor(userId),
@@ -344,9 +346,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         });
         const carrier = hostedActionCarrier({
           roster,
-          defaults: () => run(readWorkspaceDefaults(userId)),
-          facts: hostedFactsWriter(run, seams.store(), userId, seams.now),
-          apiKey: (providerId) => seams.providerKey(userId, providerId),
+          defaults: () =>
+            Effect.orDie(
+              Effect.provideService(readWorkspaceDefaults(userId), SqlClient.SqlClient, client),
+            ),
+          facts: hostedFactsWriter(client, seams.store(), userId, seams.now),
+          apiKey: (providerId) => Effect.promise(() => seams.providerKey(userId, providerId)),
           execute: seams.executeAction,
         });
         return yield* runHostedTool(

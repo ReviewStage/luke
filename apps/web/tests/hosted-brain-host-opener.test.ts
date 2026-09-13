@@ -192,15 +192,17 @@ function fakeTranscripts(fixture: TranscriptFixture = {}): Pick<HostedTranscript
   const asked: string[] = [];
   return {
     asked,
-    async since(who) {
-      asked.push(who.providerSessionId);
-      const delta = fixture.deltas?.[who.providerSessionId];
-      if (!delta) return undefined;
-      return {
-        delta: { text: delta.text, truncated: false, status: ACTION_RESULT_STATUS.ACCEPTED },
-        ...(delta.cursor !== undefined ? { cursor: delta.cursor } : undefined),
-        ...(delta.from !== undefined ? { from: delta.from } : undefined),
-      };
+    since(who) {
+      return Effect.sync(() => {
+        asked.push(who.providerSessionId);
+        const delta = fixture.deltas?.[who.providerSessionId];
+        if (!delta) return undefined;
+        return {
+          delta: { text: delta.text, truncated: false, status: ACTION_RESULT_STATUS.ACCEPTED },
+          ...(delta.cursor !== undefined ? { cursor: delta.cursor } : undefined),
+          ...(delta.from !== undefined ? { from: delta.from } : undefined),
+        };
+      });
     },
   };
 }
@@ -549,9 +551,10 @@ test("a transcript read that throws costs the turn its delta and nothing else; t
   const opener = seams({
     eve,
     transcripts: {
-      since: async () => {
-        throw new Error("Conductor did not answer");
-      },
+      since: () =>
+        Effect.sync(() => {
+          throw new Error("Conductor did not answer");
+        }),
     },
     roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
   });
