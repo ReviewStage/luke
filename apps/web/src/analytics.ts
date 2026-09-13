@@ -69,24 +69,29 @@ function authUrlToPath(value: string): string {
 }
 
 /**
- * Rewrites every address an event carries — the current one, the referrer, and
- * the first-seen pair PostHog keeps once on the person under `$set`/`$set_once`
- * — so an auth page's address never leaves whole. An address only ever sits as
- * a string value in an object, so the walk descends into objects alone: it
- * leaves an array untouched, which keeps it out of a recording's own snapshot
- * (`$snapshot_data`) and out of an autocaptured element's list. Anything that
- * is not an auth page's address stays as it was.
+ * Rewrites every address a capture result carries — an event property, the
+ * referrer, and the first-seen pair PostHog keeps once on the person, which
+ * rides in the top-level `$set`/`$set_once` beside the properties, not within
+ * them — so an auth page's address never leaves whole. An address only ever
+ * sits as a string value in a plain record, so the walk descends into those
+ * alone: an array (a recording's `$snapshot_data`, an autocaptured element
+ * list) and a class instance (the capture result's `Date` timestamp) are each
+ * a leaf, left whole. Anything that is not an auth page's address stays as it
+ * was.
  */
 /* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion --
-   PostHog's properties bag is the untyped JSON this boundary parses, so the
+   PostHog's capture result is the untyped JSON this boundary parses, so the
    walk branches on each node's runtime shape and the assertions restate the
-   branch the `typeof` guard just proved. */
+   branch the `typeof`/prototype guard just proved. */
 export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   if (typeof value === "string") return authUrlToPath(value) as Value;
-  if (value && typeof value === "object" && !Array.isArray(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, inner]) => [key, sanitizeAnalyticsUrls(inner)]),
-    ) as Value;
+  if (value !== null && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === null) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, inner]) => [key, sanitizeAnalyticsUrls(inner)]),
+      ) as Value;
+    }
   }
   return value;
 }
@@ -134,8 +139,7 @@ export function startSiteAnalytics(): void {
       // The sign-in flow's address is a live authorization request, so the
       // recorder never runs on its pages and no event keeps that address whole.
       disable_session_recording: onAuthPage(),
-      before_send: (event) =>
-        event && { ...event, properties: sanitizeAnalyticsUrls(event.properties) },
+      before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
         // The sign-in address is the only thing anybody types on this site,
         // and it is the one thing here worth masking.
