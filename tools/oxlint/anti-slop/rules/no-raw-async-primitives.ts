@@ -110,14 +110,19 @@ function isBareReference(node: ESTree.Identifier): boolean {
  * The raw primitives Effect replaces: a delay is `Effect.sleep`, a cadence a
  * `Schedule`, a value another fiber completes a `Deferred`, a cancellation a
  * fiber's interruption, and a watched directory a `Stream`. The allowlist this
- * reads is the ADR's, and every entry on it is a file some later PR converts.
+ * reads is root AGENTS.md's twin, and no row on it is pending: each is an
+ * OpenClaw port that imports nothing from `effect`, a foreign boundary this
+ * repository does not own (an Electron main/renderer API, a browser API in a
+ * React component, `ws`, `node:http2`), or a permanent adaptor named there —
+ * never a file some later PR still converts. A shim on its way out is deleted
+ * in the PR that finishes its callers, not left as a row here.
  */
 export const noRawAsyncPrimitivesRule = defineRule({
   meta: {
     type: "problem",
     docs: {
       description:
-        "Disallow setTimeout, setInterval, new Promise, new AbortController, and fs.watch outside the ADR's runtime edges and the files still awaiting conversion.",
+        "Disallow setTimeout, setInterval, new Promise, new AbortController, and fs.watch outside the files on that allowlist.",
     },
     messages: {
       timer:

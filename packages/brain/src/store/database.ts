@@ -100,10 +100,11 @@ export class StoreDatabase {
    * synchronous call into `node:sqlite`, so the run waits on nothing.
    *
    * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect
-   * idioms" section: the synchronous reach of the two OpenClaw
-   * ports, `archives.ts` and `maintenance-run.ts`, into the tables, which
-   * import nothing from `effect` and so call the tables' synchronous doors.
-   * It goes when those ports are handed a synchronous accessor of their own.
+   * idioms" section: the synchronous reach of the two OpenClaw ports,
+   * `archives.ts` and `maintenance-run.ts`, into the tables, which import
+   * nothing from `effect` and so call the tables' synchronous doors. What
+   * would end this row is a decision about those ports themselves, not an
+   * implementation detail of this migration.
    */
   run<A, E>(effect: Effect.Effect<A, E, SqlClient>): A {
     const exit = Effect.runSyncExit(Effect.provide(effect, this.#client));

@@ -292,16 +292,15 @@ export class BrainAgent {
    * its end, each event stamped with the conversation, the turn, and its
    * place in the turn's sequence.
    *
-   * The stream itself, since P12-20h: a subscriber yields this in a scope of
-   * its own, which takes the subscription on that subscriber's own fiber, and
-   * then reads it however it likes — `Stream.runForEach` on a fiber of the
-   * same scope is what the live brain adapter does. Closing that scope is the
-   * whole of the unsubscribe, so no subscription outlives its reader and
-   * nothing here needs a scope of the agent's own; stopping the agent shuts
-   * the pubsub down instead, which ends every reader whether or not it
-   * unsubscribed. What a reader does with a listener that throws is the
-   * reader's own decision now — the adapter logs the defect and carries on,
-   * which is the guarantee `Emitter#fire` gave — because a fan-out the agent
+   * The stream itself: a subscriber yields this in a scope of its own, which
+   * takes the subscription on that subscriber's own fiber, and then reads it
+   * however it likes — `Stream.runForEach` on a fiber of the same scope is
+   * what the live brain adapter does. Closing that scope is the whole of the
+   * unsubscribe, so no subscription outlives its reader and nothing here
+   * needs a scope of the agent's own; stopping the agent shuts the pubsub
+   * down instead, which ends every reader whether or not it unsubscribed.
+   * What a reader does with a listener that throws is its own decision — the
+   * adapter logs the defect and carries on, because a fan-out the agent
    * cannot see is not a failure the agent can rule on.
    */
   readonly runEvents: Effect.Effect<Stream.Stream<BrainRunEvent>, never, Scope.Scope>;

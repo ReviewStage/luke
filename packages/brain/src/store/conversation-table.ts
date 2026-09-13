@@ -404,8 +404,10 @@ function conversationEntryFromPayload(payload: string): ConversationEntry | unde
  * hold a handle rather than a client: the store's own tests today, and
  * whatever the operations table has not moved yet.
  *
- * @deprecated Each goes with the caller that holds it; P5-11 runs every
- * remaining one on the worker's own runtime edge.
+ * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
+ * section beside `StoreDatabase#run`: what would end this row is a decision
+ * about those callers themselves, not an implementation detail of this
+ * migration.
  */
 export function conversationClearedAt(
   database: StoreDatabase,

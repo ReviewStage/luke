@@ -38,11 +38,14 @@ export interface JsonStateFile<T> {
  * because the introduction's completion is read before `whenReady` resolves,
  * and no writer here waits on anything a promise could carry.
  *
- * @deprecated The synchronous face over `node:fs`, kept for the composers
- * that still call it directly (`onboarding-state.ts`, `compose-devices.ts`,
- * and the desktop's own last-run-version file) rather than a `Layer`.
- * `jsonStateFileEffect` in `@sidecar/host/effect` is the replacement, over
- * `FileSystem` and a `Schema.Struct`; each composer converts in its own PR.
+ * The synchronous `node:fs` face beside `jsonStateFileEffect` in
+ * `@sidecar/host/effect`, for the callers that still read and write
+ * synchronously: `compose-calendars.ts`'s `writeOnboardingState`, called from
+ * synchronous gateway handlers themselves forked from `Effect.sync`, and from
+ * `compose-live.ts`'s synchronous callbacks; `compose-devices.ts`'s
+ * `DeviceCadence#deviceId()`, read synchronously by `compose-conversation.ts`
+ * and `compose-host.ts`; and the desktop's own last-run-version file
+ * (`apps/desktop/src/main/services/update-service-host.ts`).
  */
 export function jsonStateFile<T>(options: JsonStateFileOptions<T>): JsonStateFile<T> {
   const filePath = () => path.join(options.directory(), options.fileName);

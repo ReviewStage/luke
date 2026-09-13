@@ -1,61 +1,59 @@
 /**
  * The brain's door onto the host's `ExecutionRuntime`. A turn, the
  * maintenance behind it, the tool loop, and the housekeeping run are each a
- * fiber end to end, and since P12-16g so is everything `BrainAgent` answers:
- * an ask, a wait, a cancel, a mark, a child's task, a context snapshot, a
- * stop, and a run-event subscription are all effects a caller runs. What is
- * left here is the one shape no effect of the brain's can state for itself:
+ * fiber end to end, and so is everything `BrainAgent` answers: an ask, a
+ * wait, a cancel, a mark, a child's task, a context snapshot, a stop, and a
+ * run-event subscription are all effects a caller runs. What is left here is
+ * the one shape no effect of the brain's can state for itself:
  *
  * - `detachOn`, the detach door, which is permanent. Every turn nobody waits
  *   for is begun through it — `AgentSeam#detach` for the ask queue's drain,
  *   the wake window's flush and its roster look, the housekeeping a settled
- *   turn leaves behind, and a hold's release; `BrainHost`'s retirement drain,
- *   whose fiber the next transition awaits; and, since P12-16n, the brain
- *   wiring's close and open of a conversation, each shared under its key as
- *   the settling of the fiber it was begun on. What only a run gives is
- *   the start: `Runtime.runFork` evaluates the effect on the calling stack up
- *   to its first suspension, so `BrainAgent#enqueue`'s own acquisition — the
- *   step that puts the turn in the conversation's queue and counts it busy —
- *   and a retirement's revocation of every standing run each stand in the
- *   step that asked for them. P12-20f put the conversation's own armed waits
- *   — the wake window and the ask ledger's wait — through the same door, for
- *   the opposite half of the same reason: a wait's first step is a sleep on
- *   the agent's `Clock`, so nothing of it has to stand in the step that armed
- *   it, and what a run gives there is a fiber a synchronous collaborator can
- *   arm and disarm at all. `Effect.fork`, `Effect.forkIn`, and
- *   `Effect.forkDaemon` all only tell the child fiber to resume, which the
- *   scheduler runs as a task later, so a stop arriving between the fork and
- *   that task would drain a queue the turn had not yet joined. P12-16m
- *   weighed the alternative — splitting a registration step out of the turn
- *   so a `forkIn` could run it uninterruptibly first — and kept the door
- *   instead: the registration is the queue's own `acquireUseRelease`, and
- *   prising it apart would give the conversation two places that count a turn
- *   rather than one.
+ *   turn leaves behind, a hold's release, and the brain wiring's close and
+ *   open of a conversation; `BrainHost`'s retirement drain, whose fiber the
+ *   next transition awaits; each shared under its key as the settling of the
+ *   fiber it was begun on. What only a run gives is the start: `Runtime.runFork`
+ *   evaluates the effect on the calling stack up to its first suspension, so
+ *   `BrainAgent#enqueue`'s own acquisition — the step that puts the turn in
+ *   the conversation's queue and counts it busy — and a retirement's
+ *   revocation of every standing run each stand in the step that asked for
+ *   them. The conversation's own armed waits — the wake window and the ask
+ *   ledger's wait — go through the same door, for the opposite half of the
+ *   same reason: a wait's first step is a sleep on the agent's `Clock`, so
+ *   nothing of it has to stand in the step that armed it, and what a run
+ *   gives there is a fiber a synchronous collaborator can arm and disarm at
+ *   all. `Effect.fork`, `Effect.forkIn`, and `Effect.forkDaemon` all only
+ *   tell the child fiber to resume, which the scheduler runs as a task
+ *   later, so a stop arriving between the fork and that task would drain a
+ *   queue the turn had not yet joined. The alternative — splitting a
+ *   registration step out of the turn so a `forkIn` could run it
+ *   uninterruptibly first — loses to keeping the door instead: the
+ *   registration is the queue's own `acquireUseRelease`, and prising it
+ *   apart would give the conversation two places that count a turn rather
+ *   than one.
  *
  * Nothing asks the brain for a promise. The host's own face over it —
  * `wireBrain`'s `rebuild`, `retire`, `openConversation`, and
  * `closeConversation` — is effects its composers run too, each conversation's
  * close and open begun through the door above.
  *
- * The child service's executor seams went in
- * P12-16k: `wiring-children.ts` writes each of them as an effect and
- * `childSeamsOnRuntime` carries them to the OpenClaw port that awaits them.
- * `BrainHost`'s transition chain and the publication chain's marks went in
- * P12-16j: a transition is an effect its caller runs and a follower is a
- * queue one fiber marks from. The live brain adapter went in P12-16l: it is
- * built as an effect on the composition's own runtime, so following an agent
- * and asking it are `yield*`s inside one effect the adapter runs there
- * itself. The wake face went in P12-16c: `wake`, `rosterLook`, and
- * `releaseHeld` are effects the host's composers run, and the capture behind
- * them reads its transcript delta on the caller's own fiber. The read
- * prefetch went in P12-16h: a slot is a fiber from the words that open it,
- * forked inside `anticipateAsk`'s own effect since P12-16g, so its plan, its
- * reads, and its summary carry nothing. The generation's context open and
- * the host's reset went in P12-16i: the open is the effect the generation
- * holds, begun on the first fiber that asks it for a context and joined by
- * every fiber after (`once.ts`), and `resetConversation` answers the effect
- * its capture already was. `AgentSeam#detach` went in P12-16m, onto the
- * detach door above.
+ * The child service's executor seams are effects: `wiring-children.ts`
+ * writes each of them as one and `childSeamsOnRuntime` carries them to the
+ * OpenClaw port that awaits them. `BrainHost`'s transition chain and the
+ * publication chain's marks are effects too: a transition is an effect its
+ * caller runs and a follower is a queue one fiber marks from. The live brain
+ * adapter is built as an effect on the composition's own runtime, so
+ * following an agent and asking it are `yield*`s inside one effect the
+ * adapter runs there itself. The wake face — `wake`, `rosterLook`, and
+ * `releaseHeld` — is effects the host's composers run, and the capture
+ * behind them reads its transcript delta on the caller's own fiber. The read
+ * prefetch is a fiber from the words that open it, forked inside
+ * `anticipateAsk`'s own effect, so its plan, its reads, and its summary
+ * carry nothing. The generation's context open and the host's reset are
+ * effects: the open is the effect the generation holds, begun on the first
+ * fiber that asks it for a context and joined by every fiber after
+ * (`once.ts`), and `resetConversation` answers the effect its capture
+ * already was.
  *
  * What keeps this file on the run allowlist, permanent in root AGENTS.md's
  * "Effect idioms" section, is `runtimeExit`, whose two callers are permanent

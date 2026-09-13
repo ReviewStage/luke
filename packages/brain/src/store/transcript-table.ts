@@ -248,8 +248,10 @@ function transcriptEventFromRow(
  * hold a handle rather than a client: the recoverable deletion and the
  * store's own tests.
  *
- * @deprecated Each goes with the caller that holds it; P5-11 runs every
- * remaining one on the worker's own runtime edge.
+ * @deprecated A permanent adaptor, named in root AGENTS.md's "Effect idioms"
+ * section beside `StoreDatabase#run`: what would end this row is a decision
+ * about those callers themselves, not an implementation detail of this
+ * migration.
  */
 export function listTranscript(
   database: StoreDatabase,

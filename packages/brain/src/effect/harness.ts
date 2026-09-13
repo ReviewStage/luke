@@ -1,20 +1,19 @@
 /**
  * `../harness.ts`'s `harness()` over the ambient runtime's own `Clock`
- * instead of a hand-advanced `FakeClock`, so a test written with
- * `@effect/vitest`'s `it.effect` drives the agent's timers with the
- * `TestClock` the way every other Effect test in this package already does.
- * Every test in this package that drives time or the seam is on this harness
- * now; `../harness.ts`'s own `harness()` and `FakeClock` still stand only as
- * the object this one builds on top of, and `agentOn`/`heldOpenRuntime` stay
- * there for the one test that builds a second `BrainAgent` or runtime by hand
- * without needing either to advance.
+ * instead of a hand-advanced clock, so a test written with `@effect/vitest`'s
+ * `it.effect` drives the agent's timers with the `TestClock` the way every
+ * other Effect test in this package already does. Every test in this package
+ * that drives time or the seam is on this harness now; `../harness.ts`'s own
+ * `harness()` still stands as the object this one builds on top of, and
+ * `agentOn`/`heldOpenRuntime` stay there for the one test that builds a
+ * second `BrainAgent` or runtime by hand without needing either to advance.
  *
- * Since P12-20f nothing here bridges a clock seam: `BrainAgent.make` takes
- * the `Clock` and the scope of the fiber that builds it, so an agent built
- * inside an `it.effect` stamps and sleeps on that test's own `TestClock`
- * without being handed a `now`/`schedule`/`cancel` triple. What `../harness.ts`
- * still takes a `now` for is the `BrainStateStore` beside the agent, which
- * reads a closure rather than a clock.
+ * Nothing here bridges a clock seam: `BrainAgent.make` takes the `Clock` and
+ * the scope of the fiber that builds it, so an agent built inside an
+ * `it.effect` stamps and sleeps on that test's own `TestClock` without being
+ * handed a `now`/`schedule`/`cancel` triple. What `../harness.ts` still takes
+ * a `now` for is the `BrainStateStore` beside the agent, which reads a
+ * closure rather than a clock.
  */
 
 import { Chunk, Effect, TestClock } from "effect";

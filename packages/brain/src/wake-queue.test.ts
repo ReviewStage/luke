@@ -77,8 +77,8 @@ test("clear drops every pending wake", () => {
 /**
  * The coalescing window against a quiet model: wakes postponed by a throttle
  * open once the quiet ends rather than being dropped. Written over the
- * `TestClock` harness (`./effect/harness.js`), the pattern P5-17 moves the
- * rest of this package's clock-driven tests onto.
+ * `TestClock` harness (`./effect/harness.js`), the harness every clock-driven
+ * test in this package now drives time through.
  */
 
 describe("wake queue", () => {

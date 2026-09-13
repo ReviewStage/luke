@@ -84,8 +84,7 @@ import {
  * shapes one: the subscription is taken on the calling fiber, so everything
  * published after this effect is heard in order, and what pumps it is a fiber
  * of its own that the pubsub's shutdown ends. A body that throws is logged
- * and the pump carries on, which is the reader's guarantee since P12-20h and
- * no longer the agent's.
+ * and the pump carries on, which is the reader's guarantee, not the agent's.
  */
 function reading(agent: BrainAgent, body: (event: BrainRunEvent) => void): Effect.Effect<void> {
   return Effect.gen(function* () {
@@ -118,7 +117,7 @@ const RELAY_KINDS: ReadonlySet<BrainRunEventKind> = new Set([
   BRAIN_RUN_EVENT.ENDED,
 ]);
 
-/** An event as the relay of #910 reads it: its own fields, without the turn stamp every event now carries. */
+/** An event as a live relay reads it: its own fields, without the turn stamp every event now carries. */
 function bare(event: BrainRunEvent | undefined) {
   if (!event) return undefined;
   const { conversationId: _conversation, turnId: _turn, sequence: _sequence, ...own } = event;
