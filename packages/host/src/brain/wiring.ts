@@ -56,12 +56,11 @@ import {
   type ResolvedConfiguration,
   readWorkspaceFile,
   type SkillDescriptor,
-  seedWorkspace,
   TOOL_LOOP_RUNTIME,
   type WorkspaceSeeding,
   writeWorkspaceFile,
 } from "@sidecar/runtime";
-import { withLane } from "@sidecar/runtime/effect";
+import { seedWorkspaceEffect, type WorkspaceIOError, withLane } from "@sidecar/runtime/effect";
 import {
   type AgentRuntimeEffect,
   CONVERSATION_KIND,
@@ -239,16 +238,8 @@ export interface BrainWiring {
    * until the credential policy next republishes, which reads it again.
    */
   updateConfiguration: (patch: SettableConfigurationPatch) => readonly string[];
-  /**
-   * The prompt a turn of this kind would run under right now, built by the
-   * same three stages a live turn uses — the standing configuration, the
-   * facts gathered from the workspace, the pure builder — so what the
-   * diagnostics view shows is what the model is sent; nothing while no model
-   * stands.
-   */
-  inspectPrompt: (turn: BrainTurnDescription) => Promise<BuiltPrompt | undefined>;
   /** Seeds the workspace's missing files; safe to run at every launch. */
-  seedWorkspace: () => Promise<WorkspaceSeeding>;
+  seedWorkspace: () => Effect.Effect<WorkspaceSeeding, WorkspaceIOError>;
   /**
    * A fresh runtime over the standing configuration and the live model, for
    * a run outside any conversation — a housekeeping turn — or nothing when
@@ -1069,13 +1060,8 @@ function buildBrainWiring(
     publicationSettled,
     configuration: () => configurationStore.snapshot(),
     updateConfiguration,
-    inspectPrompt: async (turn) => {
-      const model = liveModel();
-      if (!model) return undefined;
-      const prepared = await prepare(configurationStore.snapshot(), model, turn, { skills: [] });
-      return prepared.built;
-    },
-    seedWorkspace: () => seedWorkspace(dependencies.workspaceDirectory(), BRAIN_WORKSPACE_SEEDS),
+    seedWorkspace: () =>
+      seedWorkspaceEffect(dependencies.workspaceDirectory(), BRAIN_WORKSPACE_SEEDS),
     createRuntime: () => {
       const model = liveModel();
       if (!model) return undefined;

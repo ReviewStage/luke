@@ -347,7 +347,9 @@ export const composeBrain = (
             yield* Effect.promise(() => store.open());
             yield* Scope.extend(
               seedWorkspaceThenStartMemory({
-                seedWorkspace: Effect.asVoid(Effect.promise(() => wiring.seedWorkspace())),
+                seedWorkspace: Effect.asVoid(
+                  Effect.mapError(wiring.seedWorkspace(), (error) => error.cause),
+                ),
                 startMemory: memory.start,
                 report,
               }),
