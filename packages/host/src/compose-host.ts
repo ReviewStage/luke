@@ -396,7 +396,7 @@ export const hostAssemblyLayer: Layer.Layer<
           return unresolved;
         }),
       },
-      Effect.promise(() => settings.flushProductEvents()),
+      settings.flushProductEvents,
     );
     // The live session's graceful close rides inside the same drain, so a quit
     // mid-call ends the session within the deadline and never after it.

@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@effect/platform": "catalog:",
-    "@effect/platform-node": "catalog:",
     "@sidecar/brain": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",
@@ -22,6 +21,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",

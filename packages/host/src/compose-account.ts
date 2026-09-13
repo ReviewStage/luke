@@ -1,3 +1,4 @@
+import type * as FileSystem from "@effect/platform/FileSystem";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
 import {
   AccountClient,
@@ -24,7 +25,7 @@ import {
   VOICE_SERVICE_ORIGIN_VARIABLE,
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
-import { Config, Effect, Option, Stream } from "effect";
+import { Config, Effect, Option, type Scope, Stream } from "effect";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -89,7 +90,11 @@ export interface AccountDependencies {
  */
 export const composeAccount = (
   dependencies: AccountDependencies,
-): Effect.Effect<AccountComposer, never, HostKernelTag | Environment | AppIdentity> =>
+): Effect.Effect<
+  AccountComposer,
+  never,
+  HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Scope.Scope
+> =>
   Effect.gen(function* () {
     const { settings } = dependencies;
     const kernel = yield* HostKernelTag;
@@ -186,7 +191,7 @@ export const composeAccount = (
         ? Option.none<string>()
         : yield* Effect.orDie(environment.load(agentTraceDirectory));
     const agentTrace = Option.isSome(traceDirectory)
-      ? new AgentTraceWriter({ directory: traceDirectory.value })
+      ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
       : undefined;
     if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
@@ -318,7 +323,7 @@ export const composeAccount = (
           // The count of the action leaves before the action ends the account it is
           // authenticated with; queued behind the sign-out it would wait for the
           // next sign-in.
-          yield* Effect.promise(() => settings.flushProductEvents());
+          yield* settings.flushProductEvents;
           const snapshot = yield* session.signOut({ revokeRemote: true });
           return { account: carried(snapshot) };
         }),
@@ -327,7 +332,7 @@ export const composeAccount = (
           settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
             account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
           });
-          yield* Effect.promise(() => settings.flushProductEvents());
+          yield* settings.flushProductEvents;
           const snapshot = yield* Effect.orDie(session.deleteEverywhere());
           // Only a deletion that landed stands recording down for the run.
           sessionReplayEndedByDeletion = true;

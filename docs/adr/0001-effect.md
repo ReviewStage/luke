@@ -403,16 +403,13 @@ effects too now, so all three of the cadence's calls are run to promises
 there. It is deleted when `deviceCadence`'s beat is a fiber rather than a
 plain async callback.
 
-`ProductEventSender`'s `start`, `stop`, and `flush` in
-`packages/analytics/src/sender.ts` are the eighth, on the same terms as
-`ObservationLoop`: the flush cadence is a `Schedule` forked into a `Scope` the
-sender owns, and the batch itself an effect over `accountCall`, but the
-settings composer that constructs and arms this sender
-(`packages/host/src/compose-settings.ts`) is still a promise calling
-synchronous methods, so the runtime the sender was handed or built is what
-runs them rather than the host's own. P7-03 deletes the runtime this class
-holds once that composer is a `Layer` and can hand the sender an edge to fork
-on instead.
+`ProductEventSender` in `packages/analytics/src/sender.ts` was the eighth and
+is off the allowlist since P12-20c: `ProductEventSender.make` answers
+`Effect<ProductEventSender, never, Scope>`, forks the flush cadence into the
+scope the settings composer is already built in, and the class holds no
+runtime at all. `flush` and `drop` are effects the composer and the quit's
+drain yield, and the hold's one read is memoized where an effect is already
+running rather than by an `Effect.runSync` of `Effect.cached`.
 
 `createLiveUpstream` in `apps/web/server/voice/openai.ts` is on the
 same allowlist: the hosted voice function's OpenAI upstream is plain callback code over `ws`'s
@@ -828,13 +825,16 @@ retires them — and that is a product decision about how faithfully this
 repository tracks `b7528507`, not an implementation detail of this
 migration.
 
-`AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` is on the same
-terms: its callers are the host's composers, which still hold a plain object
-with `record*` methods rather than a fiber, so each tapped line — the entry an
-Effect `Logger` formats and the `FileSystem` write that carries it to disk —
-is run on the writer's own `ManagedRuntime` here. It is deleted once the host
-composer that holds it is a `Layer` able to hold that runtime itself, in
-Phase 7's devtrace composer conversion.
+`AgentTraceWriter` in `packages/devtrace/src/trace-writer.ts` was on this
+allowlist because each tapped line was run on a `ManagedRuntime` the class
+made itself, and is off it since P12-20c. Its `record*` methods are still
+the plain synchronous taps their callers hold, but they offer onto an
+unbounded `Queue` rather than running anything: `AgentTraceWriter.make` answers
+`Effect<AgentTraceWriter, never, Scope | FileSystem>` and forks one fiber into
+the account composer's own scope to take the lines and write them, so the
+class holds no `ManagedRuntime` and `@effect/platform-node` is no longer a
+dependency of `@sidecar/devtrace` at all — the `FileSystem` it writes through
+is the one the host's layer already provides.
 
 `SettingsStore` in `packages/host/src/settings-store.ts` is off the allowlist
 since P12-14c: its own methods are effects, `#readPersisted` and `#write`
@@ -1650,13 +1650,11 @@ design decision stated as such:
 | `postPosthogBatch`, the promise door over the hosted PostHog batch effect (it replaced `createAccountCall`'s, which P12-20b deleted with `AccountCall` and the `AbortSignal` only that door read) | P12-20b | P12-20j — deleted with the promise-shaped `events.ts` route it belonged to; `handleEvents` now yields the batch effect beneath that door directly |
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above and, since P12-20a, over the device client's `register` and `forget` too (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
-| `ProductEventSender`'s `start`/`stop`/`flush` over its own runtime | P4-08 | P7-03 |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
 | `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P12-20e — deleted with the effect beneath it and its suite, since no caller ever composed either |
-| `AgentTraceWriter`'s own `ManagedRuntime` | P6-05 | Phase 7 devtrace composer |
 | `tracedModelAdapter`'s traced `respond`, over the same `runtimeExit(execution)` since P12-04d | P6-05 | never — permanent alongside `BrainTransport#send`'s `runCall`, for the same reason |
 | `timedRequest` (`credentials/account/client.ts`) | P4-03 | P12-20a — deleted; it answers `Effect<Response, Error>` and `AccountClient`'s verbs and `deleteHostedAccount` answer effects with it |
 | `HostedActionClient`/`HostedDeviceClient`/`HostedSessionMessagesClient`/`HostedVaultClient`'s `#run`/`#ask` | P3-06c | P12-20a — deleted; each provides its own `httpClient` layer and answers the effect |

@@ -11,7 +11,7 @@ import {
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Duration, Effect, Exit, type Layer, Runtime, Schedule, Scope } from "effect";
+import { Duration, Effect, type Layer, Schedule, type Scope } from "effect";
 import {
   adoptableHeldProductEvents,
   HELD_PRODUCT_EVENTS_VERSION,
@@ -70,8 +70,6 @@ export interface ProductEventSenderOptions extends AccountToken {
   requestTimeoutMs?: number;
   flushIntervalMs?: number;
   queueLimit?: number;
-  /** The runtime the flush cadence forks on, for a test that drives its own clock. */
-  runtime?: Runtime.Runtime<never>;
 }
 
 /**
@@ -84,9 +82,10 @@ export interface ProductEventSenderOptions extends AccountToken {
  * The pipeline is lossy on purpose. Any outcome — accepted, refused,
  * unreachable — drops the batch, and nothing is ever retried: counts undercount
  * on a flaky network in exchange for never retry-storming Luke's own service
- * and never double-counting a day. `stop()` drops the queue rather than
- * flushing, because a request in `will-quit` either delays the quit or is
- * killed mid-flight, and an instant quit is worth a minute of counts.
+ * and never double-counting a day. {@link ProductEventSender.drop} clears the
+ * queue rather than flushing it, because a request in `will-quit` either
+ * delays the quit or is killed mid-flight, and an instant quit is worth a
+ * minute of counts.
  *
  * The one batch that outlives a run is the one no credential could carry.
  * A flush that found no account leaves its events queued, and writes them to
@@ -100,11 +99,15 @@ export interface ProductEventSenderOptions extends AccountToken {
  * No identity travels with an event. The service resolves the account from the
  * bearer token this sender already holds for the voice and review endpoints,
  * so there is nothing here to name a person with.
+ *
+ * It runs nothing itself. {@link ProductEventSender.make} builds one in the
+ * scope its caller is already composing in, forks the flush cadence into that
+ * scope, and answers a sender whose flush is an effect the caller yields, so
+ * the fibers the counts ride are the host's own.
  */
 export class ProductEventSender {
   readonly #call: AccountCallEffects;
   readonly #client: Layer.Layer<HttpClient.HttpClient>;
-  readonly #runtime: Runtime.Runtime<never>;
   readonly #appVersion: string;
   readonly #sends: boolean;
   readonly #now: () => number;
@@ -117,22 +120,45 @@ export class ProductEventSender {
   #armed = false;
   /** Whether the hold on disk names any event, so an emptied queue clears it exactly once. */
   #holdStanding = false;
-  /** The one adoption of the hold, run ahead of whichever flush comes first. */
-  #adoption: Effect.Effect<void> | undefined;
-  #scope: Scope.CloseableScope | undefined;
-  #inFlight: Promise<void> | undefined;
+  /** The one adoption of the hold, memoized by {@link ProductEventSender.make}. */
+  #adoption: Effect.Effect<void> = Effect.void;
+  /**
+   * One request at a time, as the queue's splice and the hold's write around
+   * it assume: a second flush asked for while one is under way waits for it
+   * and then carries whatever is queued by then.
+   */
+  readonly #gate = Effect.unsafeMakeSemaphore(1);
 
   /**
    * One flush, delayed by the cadence and then repeated on it — never an
-   * immediate one, so the events a caller queues right after `start()` ride
-   * the first tick rather than an empty flush ahead of it.
+   * immediate one, so the events a caller queues right after the sender is
+   * built ride the first tick rather than an empty flush ahead of it.
    */
   readonly #tick: Effect.Effect<void> = Effect.suspend(() => {
     this.markDayActive();
-    return Effect.promise(() => this.flush());
+    return this.flush;
   });
 
-  constructor(options: ProductEventSenderOptions) {
+  /**
+   * Sends what is queued, at most one request at a time. Never fails: a
+   * request `accountCall` could not carry is a count nobody has, which is the
+   * trade this whole pipeline makes.
+   */
+  readonly flush: Effect.Effect<void> = Effect.suspend(() =>
+    this.#gate.withPermits(1)(Effect.provide(this.#flushEffect(), this.#client)),
+  );
+
+  /**
+   * The queue dropped, which is the whole of a quit's stop: what it has to
+   * guarantee is that nothing further is sent, never that a request already
+   * under way has ended. The cadence ends with the scope the sender was built
+   * in, for the same reason cancelling a timer never awaited one.
+   */
+  readonly drop: Effect.Effect<void> = Effect.sync(() => {
+    this.#queue.length = 0;
+  });
+
+  private constructor(options: ProductEventSenderOptions) {
     this.#call = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential: accountBearer(options),
@@ -140,7 +166,6 @@ export class ProductEventSender {
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
     this.#held = options.held;
-    this.#runtime = options.runtime ?? Runtime.defaultRuntime;
     this.#appVersion = options.appVersion;
     this.#sends = options.sends;
     this.#now = options.now ?? Date.now;
@@ -149,6 +174,32 @@ export class ProductEventSender {
       PRODUCT_EVENT_DEFAULTS.FLUSH_INTERVAL_MS,
     );
     this.#queueLimit = positiveInteger(options.queueLimit, PRODUCT_EVENT_DEFAULTS.QUEUE_LIMIT);
+  }
+
+  /**
+   * One sender, with its flush cadence forked into the scope this is built
+   * in: a run that sends no network forks none, since every tick of it would
+   * be a no-op. The hold's one read is memoized here rather than at the first
+   * flush, so the memo is made where an effect is already running; running it
+   * still waits for a flush of a run that counts.
+   */
+  static make(
+    options: ProductEventSenderOptions,
+  ): Effect.Effect<ProductEventSender, never, Scope.Scope> {
+    return Effect.gen(function* () {
+      const sender = new ProductEventSender(options);
+      const held = options.held;
+      if (held) sender.#adoption = yield* Effect.cached(sender.#readHold(held));
+      // The day is marked on the tick rather than at launch alone, because a
+      // Luke left running crosses midnight without relaunching — which is the
+      // whole case this event exists for, and marking it only at launch would
+      // make it a second, worse copy of `app:launch`.
+      if (options.sends) {
+        const interval = Duration.millis(sender.#flushIntervalMs);
+        yield* scheduleRepeat(Schedule.spaced(interval), Effect.delay(sender.#tick, interval));
+      }
+      return sender;
+    });
   }
 
   /** The build's version, so an emitter never has to hold it to report it. */
@@ -212,69 +263,6 @@ export class ProductEventSender {
     this.#armed = true;
   }
 
-  /**
-   * Starts the timed flush, in a fiber the sender's own scope interrupts.
-   *
-   * @deprecated Runs its own runtime rather than being handed one at an edge,
-   * because the settings composer that owns this sender is still a promise
-   * calling two synchronous methods rather than a `Layer`; P7-03 deletes the
-   * runtime this class holds once that composer forks the cadence on the
-   * host's own.
-   */
-  start(): void {
-    if (this.#scope) return;
-    const runSync = Runtime.runSync(this.#runtime);
-    const scope = runSync(Scope.make());
-    this.#scope = scope;
-    // The day is marked on the tick rather than at launch alone, because a
-    // Luke left running crosses midnight without relaunching — which is the
-    // whole case this event exists for, and marking it only at launch would
-    // make it a second, worse copy of `app:launch`.
-    const delayed = Effect.delay(this.#tick, Duration.millis(this.#flushIntervalMs));
-    runSync(
-      Effect.provideService(
-        scheduleRepeat(Schedule.spaced(Duration.millis(this.#flushIntervalMs)), delayed),
-        Scope.Scope,
-        scope,
-      ),
-    );
-  }
-
-  /**
-   * The scope is dropped and the queue cleared synchronously; closing the
-   * scope is not awaited, for the same reason cancelling a timer never was:
-   * what it has to guarantee is that no further tick starts, never that a
-   * request already under way has ended.
-   *
-   * @deprecated On the same allowlisted runtime as {@link start}; P7-03
-   * deletes it with the runtime this class holds.
-   */
-  stop(): void {
-    const scope = this.#scope;
-    this.#scope = undefined;
-    this.#queue.length = 0;
-    if (scope) Runtime.runFork(this.#runtime)(Scope.close(scope, Exit.void));
-  }
-
-  /**
-   * Sends what is queued, at most one request at a time. Never fails: a
-   * request `accountCall` could not carry is a count nobody has, which is the
-   * trade this whole pipeline makes.
-   *
-   * @deprecated The promise face over `#flushEffect`, kept because every
-   * caller — the composer, the gateway's `analytics.record`, this file's own
-   * tests — still holds a `ProductEventSender` rather than an `Effect`; on the
-   * same allowlisted runtime as {@link start}, and gone with it in P7-03.
-   */
-  flush(): Promise<void> {
-    this.#inFlight ??= Runtime.runPromise(this.#runtime)(
-      Effect.provide(this.#flushEffect(), this.#client),
-    ).finally(() => {
-      this.#inFlight = undefined;
-    });
-    return this.#inFlight;
-  }
-
   #allowed(): boolean {
     return this.#sends && this.#armed;
   }
@@ -312,22 +300,21 @@ export class ProductEventSender {
    * is dropped, since a relaunch on the same day is one day used, not two.
    */
   #adoptHold(): Effect.Effect<void> {
-    const held = this.#held;
-    if (!held || !this.#allowed()) return Effect.void;
-    this.#adoption ??= Runtime.runSync(this.#runtime)(
-      Effect.cached(
-        Effect.map(held.read, (record) => {
-          if (!record) return;
-          this.#holdStanding = record.events.length > 0;
-          const adopted = adoptableHeldProductEvents(record, this.#now(), this.#queueLimit).filter(
-            (event) => !(event.name === PRODUCT_EVENT.APP_DAY_ACTIVE && this.#dayMarked(event.at)),
-          );
-          this.#queue.unshift(...adopted);
-          this.#trimQueue();
-        }),
-      ),
-    );
+    if (!this.#held || !this.#allowed()) return Effect.void;
     return this.#adoption;
+  }
+
+  /** The hold read and taken onto the queue, memoized by `make` so it happens once. */
+  #readHold(held: HeldProductEvents): Effect.Effect<void> {
+    return Effect.map(held.read, (record) => {
+      if (!record) return;
+      this.#holdStanding = record.events.length > 0;
+      const adopted = adoptableHeldProductEvents(record, this.#now(), this.#queueLimit).filter(
+        (event) => !(event.name === PRODUCT_EVENT.APP_DAY_ACTIVE && this.#dayMarked(event.at)),
+      );
+      this.#queue.unshift(...adopted);
+      this.#trimQueue();
+    });
   }
 
   #dayMarked(at: number): boolean {
