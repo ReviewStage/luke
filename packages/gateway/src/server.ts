@@ -25,7 +25,6 @@ import {
   Option,
   PubSub,
   Ref,
-  type Runtime,
   type Scope,
   Stream,
 } from "effect";
@@ -881,16 +880,14 @@ function layerGatewayInProcess(
 /**
  * What an in-process transport is bound to. The server is its layers, so
  * there is no object of it to hold: a transport holds the door its client
- * enters through, the log it delivers events from, the admissions door the
- * quit closes, and the runtime those layers were built on, and runs each
- * effect there itself, because what it answers its own client with is a
- * promise and a callback.
+ * enters through, the log it delivers events from, and the admissions door
+ * the quit closes. Nothing here is a runtime, because a transport answers
+ * its client effects and the caller that composed them is what runs them.
  */
 export interface GatewayInProcessHost {
   readonly protocol: GatewayInProcessProtocol["Type"];
   readonly log: GatewayEventLog["Type"];
   readonly admissions: GatewayAdmissions["Type"];
-  readonly runtime: Runtime.Runtime<never>;
 }
 
 /**
@@ -901,13 +898,9 @@ export interface GatewayInProcessHost {
 export function gatewayInProcessHost(
   options: GatewayServerLayerOptions,
 ): Effect.Effect<GatewayInProcessHost, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const context = yield* Layer.build(layerGatewayInProcess(options));
-    return {
-      protocol: Context.get(context, GatewayInProcessProtocol),
-      log: Context.get(context, GatewayEventLog),
-      admissions: Context.get(context, GatewayAdmissions),
-      runtime: yield* Effect.runtime<never>(),
-    };
-  });
+  return Effect.map(Layer.build(layerGatewayInProcess(options)), (context) => ({
+    protocol: Context.get(context, GatewayInProcessProtocol),
+    log: Context.get(context, GatewayEventLog),
+    admissions: Context.get(context, GatewayAdmissions),
+  }));
 }

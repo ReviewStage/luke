@@ -156,8 +156,9 @@ export function composeDesktop(
           : undefined;
       const state = new AppStateStore(initialAppState(config, updateEngine !== undefined), runtime);
       const native = createNativeNode({ config, state });
-      const operator = createOperatorClient({
+      const operator = yield* createOperatorClient({
         config,
+        run,
         gateway: host.gateway,
         node: native.capabilities,
         state,

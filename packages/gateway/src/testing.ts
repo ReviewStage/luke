@@ -1,4 +1,5 @@
 import type { WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import { unavailableInvocation } from "./invocations.js";
 import {
   GATEWAY_ERROR,
@@ -66,31 +67,35 @@ export class TextLoopbackTransport extends ServerBoundTransport {
     this.#options = options;
   }
 
-  protected async carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
-    const carried = gatewayRequestFromWire(throughText(gatewayRequestToWire(request)));
-    if (!carried) {
-      return gatewayRefusal(
-        request.id,
-        GATEWAY_ERROR.INVALID_PARAMS,
-        "the request did not survive the wire",
+  protected carryRequest(request: GatewayRequest): Effect.Effect<GatewayResponse> {
+    return Effect.gen(this, function* () {
+      const carried = gatewayRequestFromWire(throughText(gatewayRequestToWire(request)));
+      if (!carried) {
+        return gatewayRefusal(
+          request.id,
+          GATEWAY_ERROR.INVALID_PARAMS,
+          "the request did not survive the wire",
+        );
+      }
+      const response = yield* this.handle(carried);
+      const delay = this.#options.responseDelayMs ?? 0;
+      if (delay > 0) {
+        const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
+        yield* Effect.async<void>((resume) => {
+          schedule(() => resume(Effect.void), delay);
+        });
+      }
+      const parsed = gatewayResponseFromWire(throughText(gatewayResponseToWire(response)));
+      return (
+        parsed ??
+        gatewayRefusal(
+          request.id,
+          GATEWAY_ERROR.INTERNAL,
+          "the answer did not survive the wire",
+          response.revision,
+        )
       );
-    }
-    const response = await this.handle(carried);
-    const delay = this.#options.responseDelayMs ?? 0;
-    if (delay > 0) {
-      const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
-      await new Promise<void>((resolve) => schedule(resolve, delay));
-    }
-    const parsed = gatewayResponseFromWire(throughText(gatewayResponseToWire(response)));
-    return (
-      parsed ??
-      gatewayRefusal(
-        request.id,
-        GATEWAY_ERROR.INTERNAL,
-        "the answer did not survive the wire",
-        response.revision,
-      )
-    );
+    });
   }
 
   protected carryEvent(event: GatewayEvent): void {

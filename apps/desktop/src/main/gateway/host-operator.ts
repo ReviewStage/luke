@@ -51,7 +51,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { type Effect, Either } from "effect";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -205,6 +205,14 @@ export interface HostOperator {
 
 export interface HostOperatorOptions {
   client: GatewayClient;
+  /**
+   * Runs one of the client's calls on the launch's own runtime, handed down
+   * from the runtime edge that built it. Every method here still answers the
+   * windows a promise, so this is where the effects the client composes are
+   * run; P12-20e4 takes it out by making these methods effects the act rows
+   * yield.
+   */
+  run: <A>(effect: Effect.Effect<A>) => Promise<A>;
   /** The settings a refused write is answered with when the host cannot say; the last snapshot the client saw. */
   lastSettings: () => AppSettings | undefined;
   report: (message: string) => void;
@@ -235,12 +243,12 @@ function answeredList<Value>(value: UnparsedWireValue): readonly Value[] {
 }
 
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
-  const { client } = options;
+  const { client, run } = options;
 
   const settingsResult = async (
-    result: Promise<GatewayCallResult>,
+    result: Effect.Effect<GatewayCallResult>,
   ): Promise<SettingsUpdateResult> => {
-    const answer = record(await result);
+    const answer = record(await run(result));
     const parsed = answered<SettingsUpdateResult>(answer);
     if (parsed?.settings !== undefined) return parsed;
     const settings = options.lastSettings();
@@ -248,30 +256,34 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     return { status: ACTION_RESULT_STATUS.REJECTED, settings, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
-  const accountResult = async (result: Promise<GatewayCallResult>): Promise<AccountSnapshot> => {
-    const answer = record(await result);
+  const accountResult = async (
+    result: Effect.Effect<GatewayCallResult>,
+  ): Promise<AccountSnapshot> => {
+    const answer = record(await run(result));
     const account = answered<AccountSnapshot>(answer?.account);
     if (account) return account;
     throw new Error(HOST_UNREACHABLE_REFUSAL);
   };
 
-  const actionResult = async (result: Promise<GatewayCallResult>): Promise<ActionResult> => {
-    const answer = answered<ActionResult>(record(await result));
+  const actionResult = async (result: Effect.Effect<GatewayCallResult>): Promise<ActionResult> => {
+    const answer = answered<ActionResult>(record(await run(result)));
     return answer ?? { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
   // A write's answer is read against its own shape rather than restored by
   // assertion: the host may answer unknown where a write's answer was lost,
   // and a row must draw that as neither a failure nor a success.
-  const writeResult = async (result: Promise<GatewayCallResult>): Promise<SessionWriteResult> => {
-    const answer = record(await result);
+  const writeResult = async (
+    result: Effect.Effect<GatewayCallResult>,
+  ): Promise<SessionWriteResult> => {
+    const answer = record(await run(result));
     return isSessionWriteResult(answer)
       ? answer
       : { status: ACTION_RESULT_STATUS.REJECTED, reason: HOST_UNREACHABLE_REFUSAL };
   };
 
-  const fire = async (result: Promise<GatewayCallResult>): Promise<void> => {
-    await result;
+  const fire = async (result: Effect.Effect<GatewayCallResult>): Promise<void> => {
+    await run(result);
   };
 
   const on = gatewayEventReader(client);
@@ -289,9 +301,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
 
   return {
     bootstrap: async () =>
-      answered<HostBootstrap>(record(await client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP))),
+      answered<HostBootstrap>(record(await run(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP)))),
     settingsSnapshot: async () =>
-      answered<AppSettings>(record(await client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT))?.settings),
+      answered<AppSettings>(
+        record(await run(client.call(GATEWAY_METHOD.SETTINGS_SNAPSHOT)))?.settings,
+      ),
     updateSetting: (field, value, reporter) =>
       settingsResult(
         client.call(GATEWAY_METHOD.SETTINGS_UPDATE, {
@@ -323,7 +337,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     accountSnapshot: async () =>
       answered<AccountSnapshot>(
-        record(await client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT))?.account,
+        record(await run(client.call(GATEWAY_METHOD.ACCOUNT_SNAPSHOT)))?.account,
       ),
     beginSignIn: (provider) =>
       accountResult(client.call(GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN, { provider })),
@@ -349,7 +363,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       settingsResult(client.call(GATEWAY_METHOD.CALENDAR_DISCONNECT_APPLE, wireReporter(reporter))),
     appleCalendarAccessStatus: async () =>
       answered<AppleCalendarAccess>(
-        record(await client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS))?.access,
+        record(await run(client.call(GATEWAY_METHOD.CALENDAR_APPLE_ACCESS_STATUS)))?.access,
       ),
     cancelAppleCalendarConnect: () =>
       fire(client.call(GATEWAY_METHOD.CALENDAR_CANCEL_APPLE_CONNECT)),
@@ -364,7 +378,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         }),
       ),
     sessionRoster: async () => {
-      const answer = record(await client.call(GATEWAY_METHOD.SESSION_ROSTER));
+      const answer = record(await run(client.call(GATEWAY_METHOD.SESSION_ROSTER)));
       return {
         sessions: answeredList<Session>(answer?.sessions),
         settled: answer?.settled === true,
@@ -394,14 +408,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     workspaceProjects: async () =>
       answeredList<ObservedWorkspaceProject>(
-        record(await client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS))?.projects,
+        record(await run(client.call(GATEWAY_METHOD.WORKSPACE_PROJECTS)))?.projects,
       ),
     liveDiagnostics: async () =>
       answered<LiveDiagnostics>(
-        record(await client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS))?.diagnostics,
+        record(await run(client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS)))?.diagnostics,
       ),
     createLiveSession: async (sdp) => {
-      const answer = await client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp });
+      const answer = await run(client.call(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION, { sdp }));
       return answer.ok
         ? Either.getOrUndefined(readEither(voiceCreateLiveSessionResultSchema)(answer.result))
         : undefined;
@@ -412,41 +426,47 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
     stopSpeaking: async () => {
-      const answer = await client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING);
+      const answer = await run(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING));
       return answer.ok
         ? (Either.getOrUndefined(readEither(voiceStopSpeakingResultSchema)(answer.result))
             ?.stopped ?? false)
         : false;
     },
     recordAgentTrace: (trace) => {
-      void client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) });
+      void run(client.call(GATEWAY_METHOD.VOICE_RECORD_TRACE, { trace: carried(trace) }));
     },
     reportGuide: (guide) =>
       fire(client.call(GATEWAY_METHOD.GUIDE_REPORT, { guide: carried(guide) })),
     recordEvent: (name, properties) => {
-      void client.call(GATEWAY_METHOD.ANALYTICS_RECORD, {
-        // The host reads the event against the allowlist again before it is queued.
-        event: { name, at: Date.now(), properties: carried(properties) },
-      });
+      void run(
+        client.call(GATEWAY_METHOD.ANALYTICS_RECORD, {
+          // The host reads the event against the allowlist again before it is queued.
+          event: { name, at: Date.now(), properties: carried(properties) },
+        }),
+      );
     },
     appendConversation: async (entries, reporter) => {
       const answer = record(
-        await client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
-          entries: carried(entries),
-          ...wireReporter(reporter),
-        }),
+        await run(
+          client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
+            entries: carried(entries),
+            ...wireReporter(reporter),
+          }),
+        ),
       );
       return answer?.accepted === true;
     },
     clearConversation: async () => {
-      const answer = record(await client.call(GATEWAY_METHOD.CONVERSATION_CLEAR));
+      const answer = record(await run(client.call(GATEWAY_METHOD.CONVERSATION_CLEAR)));
       return answer?.cleared === true;
     },
     rateConversationMessage: async (messageId, rating) => {
-      const answer = await client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, {
-        messageId,
-        rating,
-      });
+      const answer = await run(
+        client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, {
+          messageId,
+          rating,
+        }),
+      );
       return (
         (answer.ok
           ? Either.getOrUndefined(readEither(conversationRateMessageResultSchema)(answer.result))
@@ -456,7 +476,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       );
     },
     onboardingState: async () => {
-      const answer = record(await client.call(GATEWAY_METHOD.ONBOARDING_STATE));
+      const answer = record(await run(client.call(GATEWAY_METHOD.ONBOARDING_STATE)));
       return answer
         ? {
             calendarOnboardingOwed: answer.calendarOnboardingOwed === true,

@@ -478,29 +478,35 @@ awaited before ran exactly that, one file further down. Both go if this
 file's WebSocket plumbing is ever rebuilt over `@effect/platform`'s `Socket`,
 which no PR in this plan schedules.
 
-`ServerBoundTransport#run` in `packages/gateway/src/transport.ts` is on the
-same allowlist, and it is what is left of the `GatewayServer` class P6-02
-introduced and P6-13 deleted. The server is its layers and there is no object
-of it any more: `gatewayInProcessHost` builds the whole in-process host end
-in the caller's own `Scope` — the assembly's, in `@sidecar/host`, and each
-test's own in the suites that build one — and answers the protocol's door,
-the event log, the admissions door, and the runtime those layers were built
-on. What still runs an effect is the boundary itself: `GatewayTransport`
-answers its client a `Promise` and hands it events through a callback, so
-`ServerBoundTransport` runs the door's `connect` and `carry` with
-`Runtime.runPromise` on that runtime, and the log's `listen` delivers each
-event on the tick it was emitted, which a stream read by a fiber of its own
-could not. P6-04 had found that routing the request half through
-`@effect/rpc`'s own `RpcClient` shifted the microtask timing enough to break
-the transports' reconnection-race tests; carrying the same envelopes to the
-protocol's door on the host's own runtime does not, and every one of those
-tests passes with its exact in-flight assertions unchanged. P12-09 shipped
-the lint rules without deciding the door, and P12-20e settled only the
-harness half beside it; P12-20e3 is the one that decides it, and deciding it
-means `GatewayClient`, `packages/host/src/operator.ts`, and the desktop's
-`wiring.ts`, `host-operator.ts`, and `operator-client.ts` answer effects with
-the transport, because a client that holds the promise this door answers is
-where the run would land instead.
+`Runtime.runFork` in `packages/gateway/src/client.ts` is on the handed-runtime
+list, and it is all that is left of the door P6-13 named
+`ServerBoundTransport#run`. P12-20e3 decided that door the way this ADR said
+it had to be decided: `GatewayTransport#request` answers an
+`Effect.Effect<GatewayResponse>`, so `ServerBoundTransport` composes the
+protocol door's `connect` and `carry` rather than running them —
+`gatewayInProcessHost` no longer answers a runtime at all, because nothing
+bound to it runs anything — and the callers compose with it.
+`gatewayClient(options)` builds the client in the caller's own `Scope`, its
+`call`, `adoptHost`, and `reconnect` are effects, and the transport
+subscription is that scope's finalizer, so a closed scope is a client that
+reconnects nothing and `close()` is gone. `createGatewayOperator` in
+`packages/host/src/operator.ts` answers effects with it, and the desktop's
+`wiring.ts` and `operator-client.ts` are scoped effects `compose-desktop.ts`
+yields inside the layer it already builds. What cannot be composed is the
+gap: the transport finds one in its own synchronous event callback, and the
+host has to be asked for the replay before that callback returns, which is
+what `node-invocations.test.ts` asserts by counting in-flight answers on the
+statement after a `publish`. `Effect.fork*` hands the work to the scheduler
+and would move that; `Runtime.runFork` starts on the calling stack, the same
+lesson `detachOn` recorded in P6-04's paragraph, so the client reads the
+runtime of the fiber that built it and forks the reconnection there, in its
+own scope, and every reconnection-race assertion reads exactly as before.
+The two surfaces still answering the windows promises — `HostOperator` in
+`apps/desktop/src/main/gateway/host-operator.ts` and the act row in
+`ipc/brain.ts` — run nothing of their own: they are handed
+`compose-desktop.ts`'s `run`, the same closure over the launch's one runtime
+that every act already crosses, and P12-20e4 takes that hand-off out by
+making those methods effects the act rows yield.
 The two faces beside it that used to run on the same runtime for the same
 reason — `createGatewayService`'s own `emit` and `closeAdmissions` in
 `packages/host/src/service.ts` — are off the allowlist, and P12-15b took
@@ -1718,7 +1724,7 @@ design decision stated as such:
 | `HostedChangesClient`/`HostedRosterClient`/`HostedConversationClient`'s `#run` | P3-06c | P12-04b |
 | `@sidecar/host`'s `compose-devices.ts`, over the change-signal client above and, since P12-20a, over the device client's `register` and `forget` too (`snapshot-roster.ts` and `compose-conversation.ts`'s `runClientEffect` were on this row and P12-15a deleted both) | P12-04b | pending — once `deviceCadence`'s beat is a fiber |
 | `providerRegistrations` record door over `providersLayer` | P6-09 | P7-05 |
-| `ServerBoundTransport#run`, the in-process transports' runs on the host's runtime | P6-13 | P12-20e3 |
+| `GatewayClient`'s `Runtime.runFork` of the reconnection a gap opens, on the runtime its scoped `make` was built on | P12-20e3 | pending — once a transport hands its events as a stream without moving the tick a gap is found on |
 | `createGatewayService`'s `emit`/`closeAdmissions` on the host's runtime | P6-13 | pending — P7-14 established that the blocker is the synchronous collaborator callbacks that report a change and the promise steps of `GatewayShutdownSteps`, not the `Composer` face it deleted |
 | `shutdownGateway`, the promise door over `shutdownGatewayEffect` | P6-04 | P7-10 |
 | `retryAttachWhileDetached`, the promise door over `retryAttachWhileDetachedEffect` | P6-04 | P12-20e — deleted with the effect beneath it and its suite, since no caller ever composed either |

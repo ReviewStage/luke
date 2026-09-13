@@ -751,23 +751,25 @@ class WebSocketGatewayConnection implements GatewayTransport {
     socket.on("error", () => this.#closed());
   }
 
-  request(request: GatewayRequest): Promise<GatewayResponse> {
-    if (!this.#open || this.#socket.readyState !== WebSocket.OPEN) {
-      return Promise.resolve(disconnected(request.id));
-    }
-    return new Promise((resolve) => {
-      this.#pending.set(request.id, resolve);
-      this.#socket.send(
-        JSON.stringify({
-          kind: GATEWAY_FRAME.REQUEST,
-          envelope: gatewayRequestToWire(request),
-        }),
-        (error) => {
-          if (!error) return;
-          this.#pending.delete(request.id);
-          resolve(disconnected(request.id));
-        },
-      );
+  request(request: GatewayRequest): Effect.Effect<GatewayResponse> {
+    return Effect.suspend(() => {
+      if (!this.#open || this.#socket.readyState !== WebSocket.OPEN) {
+        return Effect.succeed(disconnected(request.id));
+      }
+      return Effect.async<GatewayResponse>((resume) => {
+        this.#pending.set(request.id, (response) => resume(Effect.succeed(response)));
+        this.#socket.send(
+          JSON.stringify({
+            kind: GATEWAY_FRAME.REQUEST,
+            envelope: gatewayRequestToWire(request),
+          }),
+          (error) => {
+            if (!error) return;
+            this.#pending.delete(request.id);
+            resume(Effect.succeed(disconnected(request.id)));
+          },
+        );
+      });
     });
   }
 

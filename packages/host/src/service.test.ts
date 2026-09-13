@@ -5,7 +5,7 @@ import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/reque
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_METHOD,
-  GatewayClient,
+  gatewayClient,
   InProcessTransport,
   NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
@@ -125,7 +125,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
         ? new InProcessTransport(service.gateway, identity)
         : new TextLoopbackTransport(service.gateway, identity);
     const operator = createGatewayOperator({
-      client: new GatewayClient({ transport, createId: () => `request-${++ids}` }),
+      client: yield* gatewayClient({ transport, createId: () => `request-${++ids}` }),
     });
     const events: { kind: string; payload: WireValue }[] = [];
     service.gateway.log.listen((event) =>
@@ -158,14 +158,12 @@ for (const kind of ["in-process", "loopback"] as const) {
         question: "what needs me?",
         origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
       } as const;
-      const first = yield* Effect.promise(() => f.operator.submit(submission));
-      const retry = yield* Effect.promise(() => f.operator.submit(submission));
+      const first = yield* f.operator.submit(submission);
+      const retry = yield* f.operator.submit(submission);
       assert.deepEqual(first, retry);
       assert.equal(f.asked.length, 1);
       // A submission of other words under the same id is a conflict the client reads as a refusal.
-      const conflict = yield* Effect.promise(() =>
-        f.operator.submit({ ...submission, question: "other words" }),
-      );
+      const conflict = yield* f.operator.submit({ ...submission, question: "other words" });
       assert.equal(conflict.outcome, "rejected");
       assert.equal(f.asked.length, 1);
     }),
@@ -176,10 +174,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     () =>
       Effect.gen(function* () {
         const f = yield* fixture(kind);
-        assert.equal(
-          yield* Effect.promise(() => f.operator.deleteConversation(MAIN_SESSION_KEY)),
-          true,
-        );
+        assert.equal(yield* f.operator.deleteConversation(MAIN_SESSION_KEY), true);
         assert.deepEqual(f.deleted, [MAIN_SESSION_KEY]);
       }),
   );
@@ -195,13 +190,11 @@ for (const kind of ["in-process", "loopback"] as const) {
         f.operator.onConversationChanged((change) =>
           changes.push(`${change.sessionKey}:${change.entries.length}:${change.cleared}`),
         );
-        yield* Effect.promise(() =>
-          f.operator.submit({
-            submissionId: "s",
-            question: "q",
-            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-          }),
-        );
+        yield* f.operator.submit({
+          submissionId: "s",
+          question: "q",
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        });
         f.report();
         f.service.conversationChanged(
           MAIN_SESSION_KEY,
@@ -211,7 +204,7 @@ for (const kind of ["in-process", "loopback"] as const) {
         f.service.conversationChanged(MAIN_SESSION_KEY, []);
         assert.deepEqual(runs, [1]);
         assert.deepEqual(changes, ["agent:main:main:1:false", "agent:main:main:0:true"]);
-        const listed = yield* Effect.promise(() => f.operator.runs());
+        const listed = yield* f.operator.runs();
         assert.equal(listed.length, 1);
         assert.equal(f.operator.client.lastSequence(), 3);
       }),
@@ -222,12 +215,10 @@ for (const kind of ["in-process", "loopback"] as const) {
     () =>
       Effect.gen(function* () {
         const f = yield* fixture(kind);
-        const missing = yield* Effect.promise(() =>
-          f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-            capability: "os.openExternal",
-            params: { url: "https://example.test" },
-          }),
-        );
+        const missing = yield* f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
+          capability: "os.openExternal",
+          params: { url: "https://example.test" },
+        });
         assert.ok(missing.ok);
         assert.equal(recordOf(missing.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
         const opened: string[] = [];
@@ -240,30 +231,24 @@ for (const kind of ["in-process", "loopback"] as const) {
             },
           },
         });
-        const ok = yield* Effect.promise(() =>
-          f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-            capability: "os.openExternal",
-            params: { url: "https://example.test" },
-          }),
-        );
+        const ok = yield* f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
+          capability: "os.openExternal",
+          params: { url: "https://example.test" },
+        });
         assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
         assert.deepEqual(opened, ["https://example.test"]);
         // A registration over the wire binds the node to the connection it came
         // on: an ask of it is dispatched there and nowhere else, and a connection
         // that serves no handler answers unavailable, the ask never dispatched.
-        const remote = yield* Effect.promise(() =>
-          f.operator.client.call(GATEWAY_METHOD.NODE_REGISTER, {
-            nodeId: "phone",
-            capabilities: ["mic"],
-          }),
-        );
+        const remote = yield* f.operator.client.call(GATEWAY_METHOD.NODE_REGISTER, {
+          nodeId: "phone",
+          capabilities: ["mic"],
+        });
         assert.ok(remote.ok);
-        const unserved = yield* Effect.promise(() =>
-          f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-            capability: "mic",
-            params: {},
-          }),
-        );
+        const unserved = yield* f.operator.client.call(GATEWAY_METHOD.NODE_INVOKE, {
+          capability: "mic",
+          params: {},
+        });
         assert.ok(unserved.ok);
         assert.equal(recordOf(unserved.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
         assert.ok(f.service.nodes.list().some((node) => node.nodeId === "phone" && node.connected));

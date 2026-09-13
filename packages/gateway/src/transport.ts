@@ -1,6 +1,5 @@
 import { valueFromJsonText } from "@sidecar/wire";
-import type { Effect } from "effect";
-import { Runtime } from "effect";
+import { Deferred, Effect, FiberId } from "effect";
 import {
   InvocationMemory,
   NODE_INVOCATION_REFUSAL,
@@ -25,7 +24,9 @@ export type GatewayEventSink = (event: GatewayEvent) => void;
 
 /**
  * What a client holds to reach the host: a request that answers, and a
- * subscription to the events the host emits while the transport is up. A
+ * subscription to the events the host emits while the transport is up. The
+ * request is an effect the client's own caller runs, so nothing between the
+ * envelope and the door decides when it runs or on whose runtime. A
  * transport that is down answers every request with a disconnected error
  * rather than hanging, and drops events, so the client's sequence shows the
  * gap on reconnection. A transport may also carry the host's asks the other
@@ -33,7 +34,7 @@ export type GatewayEventSink = (event: GatewayEvent) => void;
  * on this same connection and no other; one that cannot serves none.
  */
 export interface GatewayTransport {
-  request(request: GatewayRequest): Promise<GatewayResponse>;
+  request(request: GatewayRequest): Effect.Effect<GatewayResponse>;
   events(sink: GatewayEventSink): () => void;
   connected(): boolean;
   /** Serves the host's invocations of this client's node capabilities, deduped by id before anything native runs. */
@@ -69,7 +70,9 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   protected readonly hostConnection: GatewayHostConnection;
   readonly #sinks = new Set<GatewayEventSink>();
   readonly #closedListeners = new Set<() => void>();
-  #door: Promise<GatewayInProcessConnection> | undefined;
+  /** The door, once opened: the first request to arrive completes it and every later one reads it back. */
+  #door = Deferred.unsafeMake<GatewayInProcessConnection>(FiberId.none);
+  #opening = false;
   #memory: InvocationMemory | undefined;
   #unsubscribe: (() => void) | undefined;
   #connected = true;
@@ -108,13 +111,18 @@ export abstract class ServerBoundTransport implements GatewayTransport {
     return this.carryInvocation(invocation, (carried) => memory.take(carried));
   }
 
-  request(request: GatewayRequest): Promise<GatewayResponse> {
-    if (!this.#connected) {
-      return Promise.resolve(
-        gatewayRefusal(request.id, GATEWAY_ERROR.DISCONNECTED, "the transport is not connected"),
-      );
-    }
-    return this.carryRequest(request);
+  request(request: GatewayRequest): Effect.Effect<GatewayResponse> {
+    return Effect.suspend(() =>
+      this.#connected
+        ? this.carryRequest(request)
+        : Effect.succeed(
+            gatewayRefusal(
+              request.id,
+              GATEWAY_ERROR.DISCONNECTED,
+              "the transport is not connected",
+            ),
+          ),
+    );
   }
 
   events(sink: GatewayEventSink): () => void {
@@ -135,16 +143,20 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   }
 
   /** Ends the transport for good: no request answers, no event is delivered, and the host hears the connection close. */
-  close(): void {
-    this.#connected = false;
-    this.#unsubscribe?.();
-    this.#unsubscribe = undefined;
-    this.#sinks.clear();
-    for (const listener of [...this.#closedListeners]) listener();
-    this.#closedListeners.clear();
-    const door = this.#door;
-    this.#door = undefined;
-    if (door) void door.then((admitted) => this.run(admitted.close));
+  close(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      this.#connected = false;
+      this.#unsubscribe?.();
+      this.#unsubscribe = undefined;
+      this.#sinks.clear();
+      for (const listener of [...this.#closedListeners]) listener();
+      this.#closedListeners.clear();
+      if (!this.#opening) return Effect.void;
+      const opened = this.#door;
+      this.#door = Deferred.unsafeMake<GatewayInProcessConnection>(FiberId.none);
+      this.#opening = false;
+      return Effect.flatMap(Deferred.await(opened), (admitted) => admitted.close);
+    });
   }
 
   /**
@@ -152,44 +164,38 @@ export abstract class ServerBoundTransport implements GatewayTransport {
    * through, as the text a socket would carry, and reads the answer back
    * with the protocol's own reader.
    */
-  protected async handle(request: GatewayRequest): Promise<GatewayResponse> {
-    const door = await this.open();
-    const frame = await this.run(door.carry(JSON.stringify(gatewayRequestToWire(request))));
-    return (
-      gatewayResponseFromWire(valueFromJsonText(frame)) ??
-      gatewayRefusal(
-        request.id,
-        GATEWAY_ERROR.INTERNAL,
-        "the answer did not survive the wire",
-        this.host.log.revision(),
-      )
-    );
+  protected handle(request: GatewayRequest): Effect.Effect<GatewayResponse> {
+    return Effect.gen(this, function* () {
+      const door = yield* this.open();
+      const frame = yield* door.carry(JSON.stringify(gatewayRequestToWire(request)));
+      return (
+        gatewayResponseFromWire(valueFromJsonText(frame)) ??
+        gatewayRefusal(
+          request.id,
+          GATEWAY_ERROR.INTERNAL,
+          "the answer did not survive the wire",
+          this.host.log.revision(),
+        )
+      );
+    });
   }
 
   /**
    * The one door this transport's client is admitted through, opened at the
    * first request and held for the transport's life, so every request of
-   * this client arrives on the connection its node was registered on.
+   * this client arrives on the connection its node was registered on. The
+   * first request to arrive opens it and completes the deferred; anything
+   * asking while that is under way waits on the same one.
    */
-  protected open(): Promise<GatewayInProcessConnection> {
-    this.#door ??= this.run(
-      this.host.protocol.connect({ identity: this.identity, connection: this.hostConnection }),
-    );
-    return this.#door;
-  }
-
-  /**
-   * Runs one of the host's own effects on the runtime its layers were built
-   * on. This is the boundary: what a transport answers its client with is a
-   * promise, so the effects behind it are run here and nowhere deeper.
-   *
-   * @deprecated A strangler shim on the ADR's allowlist, deleted by P12-20e3,
-   * which decides the edge rule: either `GatewayTransport` answers effects by
-   * then and `GatewayClient` and its own callers run them, or this door is
-   * recorded there as the boundary it is.
-   */
-  protected run<A>(effect: Effect.Effect<A>): Promise<A> {
-    return Runtime.runPromise(this.host.runtime)(effect);
+  protected open(): Effect.Effect<GatewayInProcessConnection> {
+    return Effect.suspend(() => {
+      if (this.#opening) return Deferred.await(this.#door);
+      this.#opening = true;
+      return Effect.tap(
+        this.host.protocol.connect({ identity: this.identity, connection: this.hostConnection }),
+        (admitted) => Deferred.succeed(this.#door, admitted),
+      );
+    });
   }
 
   /** Hands one event, already carried across, to every sink. */
@@ -198,7 +204,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
   }
 
   /** Carries a request the connected transport admitted to the server and answers what came back. */
-  protected abstract carryRequest(request: GatewayRequest): Promise<GatewayResponse>;
+  protected abstract carryRequest(request: GatewayRequest): Effect.Effect<GatewayResponse>;
 
   /** Carries one event the server emitted toward the sinks, or drops it as the wire would. */
   protected abstract carryEvent(event: GatewayEvent): void;
@@ -218,7 +224,7 @@ export abstract class ServerBoundTransport implements GatewayTransport {
  * is what proves the two answer alike.
  */
 export class InProcessTransport extends ServerBoundTransport {
-  protected carryRequest(request: GatewayRequest): Promise<GatewayResponse> {
+  protected carryRequest(request: GatewayRequest): Effect.Effect<GatewayResponse> {
     return this.handle(request);
   }
 

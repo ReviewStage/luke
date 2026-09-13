@@ -10,27 +10,28 @@ import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { isRecord, isWireBoolean, isWireString, type WireValue } from "@sidecar/wire";
+import { Effect } from "effect";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";
 
 /**
  * The host's operator client: what a client's own surfaces — the windows'
- * IPC, and the main process itself — reach the host through. Each method is one protocol
- * call, its parameters composed here and its answer parsed with the same
- * readers the bridge trusts, so a shape the host answered that this build
- * cannot read is a refusal rather than a guess. Nothing here holds brain
- * state; the host does.
+ * IPC, and the main process itself — reach the host through. Each method is one
+ * protocol call as an effect its caller runs, its parameters composed here and
+ * its answer parsed with the same readers the bridge trusts, so a shape the
+ * host answered that this build cannot read is a refusal rather than a guess.
+ * Nothing here holds brain state; the host does.
  */
 export interface GatewayOperator {
   submit: (
     submission: BrainAskSubmission,
     sessionKey?: SessionKey,
-  ) => Promise<BrainAskSubmissionResult>;
-  wait: (runId: string) => Promise<BrainAskWait>;
-  cancel: (runId: string) => Promise<BrainRequestSnapshot | undefined>;
-  runs: () => Promise<readonly BrainRequestSnapshot[]>;
+  ) => Effect.Effect<BrainAskSubmissionResult>;
+  wait: (runId: string) => Effect.Effect<BrainAskWait>;
+  cancel: (runId: string) => Effect.Effect<BrainRequestSnapshot | undefined>;
+  runs: () => Effect.Effect<readonly BrainRequestSnapshot[]>;
   /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
-  deleteConversation: (sessionKey?: SessionKey) => Promise<boolean>;
+  deleteConversation: (sessionKey?: SessionKey) => Effect.Effect<boolean>;
   onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
   onConversationChanged: (listener: (change: GatewayConversationChange) => void) => () => void;
   /** The underlying client, for the calls the typed surface above does not name. */
@@ -66,9 +67,9 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
   const on = gatewayEventReader(client);
   return {
     client,
-    submit: async (submission, sessionKey = MAIN_SESSION_KEY) =>
-      submissionResultFromWire(
-        await client.call(
+    submit: (submission, sessionKey = MAIN_SESSION_KEY) =>
+      Effect.map(
+        client.call(
           GATEWAY_METHOD.RUN_SUBMIT,
           {
             sessionKey,
@@ -80,30 +81,33 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
           // transport retry and a renderer retry meet the same answer.
           { idempotencyKey: submission.submissionId },
         ),
+        submissionResultFromWire,
       ),
-    wait: async (runId) => {
-      const result = await client.call(GATEWAY_METHOD.RUN_WAIT, { runId });
-      if (!result.ok || !isRecord(result.result)) return { record: undefined, speak: false };
-      const record = brainRequestRecordFromWire(result.result.record);
-      return { record, speak: record !== undefined && result.result.speak === true };
-    },
-    cancel: async (runId) => {
-      const result = await client.call(GATEWAY_METHOD.RUN_CANCEL, { runId });
-      if (!result.ok || !isRecord(result.result)) return undefined;
-      return brainRequestRecordFromWire(result.result.record);
-    },
-    runs: async () => {
-      const result = await client.call(GATEWAY_METHOD.RUN_LIST);
-      return result.ok ? runsFromWire(result.result) : [];
-    },
-    deleteConversation: async (sessionKey = MAIN_SESSION_KEY) => {
-      const result = await client.call(GATEWAY_METHOD.CONVERSATION_DELETE, { sessionKey });
-      if (!result.ok || !isRecord(result.result)) return false;
-      return (
-        result.result.outcome === CONVERSATION_DELETE_OUTCOME.COMPLETE ||
-        result.result.outcome === CONVERSATION_DELETE_OUTCOME.INCOMPLETE
-      );
-    },
+    wait: (runId) =>
+      Effect.map(client.call(GATEWAY_METHOD.RUN_WAIT, { runId }), (result) => {
+        if (!result.ok || !isRecord(result.result)) return { record: undefined, speak: false };
+        const record = brainRequestRecordFromWire(result.result.record);
+        return { record, speak: record !== undefined && result.result.speak === true };
+      }),
+    cancel: (runId) =>
+      Effect.map(client.call(GATEWAY_METHOD.RUN_CANCEL, { runId }), (result) =>
+        result.ok && isRecord(result.result)
+          ? brainRequestRecordFromWire(result.result.record)
+          : undefined,
+      ),
+    runs: () =>
+      Effect.map(client.call(GATEWAY_METHOD.RUN_LIST), (result) =>
+        result.ok ? runsFromWire(result.result) : [],
+      ),
+    deleteConversation: (sessionKey = MAIN_SESSION_KEY) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_DELETE, { sessionKey }),
+        (result) =>
+          result.ok &&
+          isRecord(result.result) &&
+          (result.result.outcome === CONVERSATION_DELETE_OUTCOME.COMPLETE ||
+            result.result.outcome === CONVERSATION_DELETE_OUTCOME.INCOMPLETE),
+      ),
     onRunsChanged: (listener) =>
       on(GATEWAY_EVENT.RUNS_CHANGED, (payload) => runsFromWire(payload), listener),
     onConversationChanged: (listener) =>

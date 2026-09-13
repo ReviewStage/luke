@@ -27,7 +27,6 @@
     "packages/brain/src/store/testing.ts",
     "packages/calendar/src/oauth.ts",
     "packages/credentials/src/single-flight.ts",
-    "packages/gateway/src/transport.ts",
     "packages/host/src/compose-calendars.ts",
     "packages/host/src/compose-devices.ts",
     "packages/voice/src/live-session-source.ts",
@@ -36,6 +35,7 @@
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
     "apps/desktop/src/main/update-service.ts",
+    "packages/gateway/src/client.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
