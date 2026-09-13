@@ -78,7 +78,6 @@
     "packages/brain/src/maintenance.ts",
     "packages/brain/src/read-prefetch.ts",
     "packages/brain/src/runtime.ts",
-    "packages/brain/src/steered-deliveries.ts",
     "packages/brain/src/testing.ts",
     "packages/brain/src/turn.ts",
     "packages/gateway/src/testing.ts",

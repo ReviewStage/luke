@@ -214,7 +214,7 @@ export class ChildRuns {
         // Steered words are delivered when a checkpoint carries them, not when
         // the run took them: a run that ends before that has rolled them back,
         // and the asker retries against a context that never held them.
-        const delivered = yield* Effect.promise(() => active.plan.deliveries.steered());
+        const delivered = yield* active.plan.deliveries.steered();
         if (delivered) this.#delivered.add(completion.completionId);
         return delivered
           ? { delivered: true }

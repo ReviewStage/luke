@@ -1,3 +1,5 @@
+import { Deferred, Effect, FiberId } from "effect";
+
 /**
  * The one owner of what a turn owes about words entering its context: the
  * opening words it was planned with, and the words steered into its run
@@ -10,7 +12,7 @@
  */
 export class SteeredDeliveries {
   #openingPersisted = false;
-  #waiting: { ingested: boolean; settle: (delivered: boolean) => void }[] = [];
+  #waiting: { ingested: boolean; deferred: Deferred.Deferred<boolean> }[] = [];
 
   /** Whether a checkpoint carrying the turn's opening words has landed. */
   get openingPersisted(): boolean {
@@ -18,10 +20,10 @@ export class SteeredDeliveries {
   }
 
   /** Words steered into the run; settles once a checkpoint carries them, or not at all when the run ends first. */
-  steered(): Promise<boolean> {
-    return new Promise((settle) => {
-      this.#waiting.push({ ingested: false, settle });
-    });
+  steered(): Effect.Effect<boolean> {
+    const deferred = Deferred.unsafeMake<boolean>(FiberId.none);
+    this.#waiting.push({ ingested: false, deferred });
+    return Deferred.await(deferred);
   }
 
   /** The runtime read every steered word at a model boundary; they are in the context from here on. */
@@ -34,14 +36,14 @@ export class SteeredDeliveries {
     this.#openingPersisted = true;
     const carried = this.#waiting.filter((waiting) => waiting.ingested);
     this.#waiting = this.#waiting.filter((waiting) => !waiting.ingested);
-    for (const waiting of carried) waiting.settle(true);
+    for (const waiting of carried) Deferred.unsafeDone(waiting.deferred, Effect.succeed(true));
   }
 
   /** The run ended: words it never ingested were never in the context; ingested ones wait for the turn's final checkpoint. */
   runEnded(): void {
     const kept = this.#waiting.filter((waiting) => waiting.ingested);
     for (const waiting of this.#waiting.filter((waiting) => !waiting.ingested)) {
-      waiting.settle(false);
+      Deferred.unsafeDone(waiting.deferred, Effect.succeed(false));
     }
     this.#waiting = kept;
   }
@@ -49,6 +51,6 @@ export class SteeredDeliveries {
   /** The turn ended: whatever no checkpoint carried is owed still. */
   turnEnded(): void {
     const owed = this.#waiting.splice(0);
-    for (const waiting of owed) waiting.settle(false);
+    for (const waiting of owed) Deferred.unsafeDone(waiting.deferred, Effect.succeed(false));
   }
 }
