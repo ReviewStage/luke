@@ -105,16 +105,14 @@ function socketUrl(port: number): string {
 }
 
 function connect(h: Hosted, overrides: { token?: string } = {}) {
-  return Effect.promise(() =>
-    connectWebSocketGateway({
-      url: socketUrl(h.binding.port),
-      headers: {
-        [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${overrides.token ?? TOKEN}`,
-      },
-      client: OPERATOR,
-      timeoutMs: 2_000,
-    }),
-  );
+  return connectWebSocketGateway({
+    url: socketUrl(h.binding.port),
+    headers: {
+      [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${overrides.token ?? TOKEN}`,
+    },
+    client: OPERATOR,
+    timeoutMs: 2_000,
+  });
 }
 
 const settle = Effect.sleep("50 millis");
@@ -150,7 +148,7 @@ it.live("the host binds an ephemeral port and carries requests, answers, and eve
       const refused = yield* client.call(GATEWAY_METHOD.MEMORY_STATUS);
       assert.equal(refused.ok, false);
       if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.REFUSED);
-      result.connection.close();
+      yield* result.connection.close();
     }),
   ),
 );
@@ -233,7 +231,7 @@ it.live(
         assert.equal((yield* client.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
         assert.equal((yield* client.call(GATEWAY_METHOD.SHUTDOWN)).ok, true);
         assert.equal(h.shutdowns(), 1);
-        attached.connection.close();
+        yield* attached.connection.close();
       }),
     ),
 );
@@ -289,7 +287,7 @@ it.live(
           ok: true,
           result: { runs: [], client: "the-account" },
         });
-        result.connection.close();
+        yield* result.connection.close();
         yield* minted.close;
 
         const throwing = yield* hosted(() => {
@@ -354,7 +352,7 @@ it.live(
         // The host is still answering: the dropped socket took nothing with it.
         const after = yield* connect(dropping);
         assert.equal(after.ok, true);
-        if (after.ok) after.connection.close();
+        if (after.ok) yield* after.connection.close();
       }),
     ),
 );
@@ -398,7 +396,7 @@ it.live("a client that dies with a request still out leaves the host answering t
       assert.equal(yield* h.binding.connections, 1);
       // The socket dies with the read still out: its answer lands nowhere and
       // the connection is gone.
-      first.connection.close();
+      yield* first.connection.close();
       yield* settle;
       assert.equal(yield* h.binding.connections, 0);
       assert.equal((yield* Fiber.join(waiting)).ok, false);
@@ -410,7 +408,7 @@ it.live("a client that dies with a request still out leaves the host answering t
         createId: () => crypto.randomUUID(),
       });
       assert.equal((yield* after.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
-      second.connection.close();
+      yield* second.connection.close();
     }),
   ),
 );

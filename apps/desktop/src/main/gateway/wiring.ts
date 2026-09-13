@@ -137,56 +137,62 @@ export function wireGateway(
      * and each answers the host's own result vocabulary, so a refusal is typed
      * and never a throw that the wire would have to guess at.
      */
-    const perform = async (invocation: NodeInvocation): Promise<NodeCapabilityResult> => {
-      const failed = (reason: string): NodeCapabilityResult => ({
-        status: NODE_CAPABILITY_STATUS.FAILED,
-        capability: invocation.capability,
-        reason,
-      });
-      switch (invocation.capability) {
-        case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
-          const { url, kind } = invocation.params;
-          if (!isWireString(url)) return failed("open needs a url");
-          if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
-            return failed("open needs a kind this build names");
-          }
-          await dependencies.node.openExternal(url, kind);
-          return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
-        }
-        case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
-          const action = invocation.params.action;
-          if (!isCarriedAppAction(action)) return failed("the action is not one a panel performs");
-          return {
-            status: NODE_CAPABILITY_STATUS.OK,
-            value: await dependencies.node.performAppAction(action),
-          };
-        }
-        case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
-          const helperArguments = invocation.params.arguments;
-          if (
-            !Array.isArray(helperArguments) ||
-            !helperArguments.every(isWireString) ||
-            !APPLE_CALENDAR_HELPER_COMMANDS.has(helperArguments[0] ?? "")
-          ) {
-            return failed("the helper invocation is not one this build runs");
-          }
-          if (!isWireNumber(invocation.params.timeoutMs))
-            return failed("timeoutMs must be a number");
-          const output = await dependencies.node.runAppleCalendarHelper(
-            helperArguments,
-            invocation.params.timeoutMs,
-          );
-          return { status: NODE_CAPABILITY_STATUS.OK, value: output };
-        }
-        default:
-          return {
-            status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+    const perform = (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
+      Effect.suspend(() => {
+        const failed = (reason: string): Effect.Effect<NodeCapabilityResult> =>
+          Effect.succeed({
+            status: NODE_CAPABILITY_STATUS.FAILED,
             capability: invocation.capability,
-            reason: "this node offers no such capability",
-          };
-      }
-    };
-    transport.serveInvocations?.(perform);
+            reason,
+          });
+        switch (invocation.capability) {
+          case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
+            const { url, kind } = invocation.params;
+            if (!isWireString(url)) return failed("open needs a url");
+            if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
+              return failed("open needs a kind this build names");
+            }
+            return Effect.as(
+              Effect.promise(() => dependencies.node.openExternal(url, kind)),
+              { status: NODE_CAPABILITY_STATUS.OK, value: undefined },
+            );
+          }
+          case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
+            const action = invocation.params.action;
+            if (!isCarriedAppAction(action))
+              return failed("the action is not one a panel performs");
+            return Effect.map(
+              Effect.promise(() => dependencies.node.performAppAction(action)),
+              (value) => ({ status: NODE_CAPABILITY_STATUS.OK, value }),
+            );
+          }
+          case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {
+            const helperArguments = invocation.params.arguments;
+            if (
+              !Array.isArray(helperArguments) ||
+              !helperArguments.every(isWireString) ||
+              !APPLE_CALENDAR_HELPER_COMMANDS.has(helperArguments[0] ?? "")
+            ) {
+              return failed("the helper invocation is not one this build runs");
+            }
+            const timeoutMs = invocation.params.timeoutMs;
+            if (!isWireNumber(timeoutMs)) return failed("timeoutMs must be a number");
+            return Effect.map(
+              Effect.promise(() =>
+                dependencies.node.runAppleCalendarHelper(helperArguments, timeoutMs),
+              ),
+              (value) => ({ status: NODE_CAPABILITY_STATUS.OK, value }),
+            );
+          }
+          default:
+            return Effect.succeed({
+              status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+              capability: invocation.capability,
+              reason: "this node offers no such capability",
+            });
+        }
+      });
+    yield* transport.serveInvocations?.(perform) ?? Effect.void;
 
     return {
       operator,

@@ -57,6 +57,25 @@ A host that starts to leave mid-check takes the socket with it rather than holdi
 its close open behind an authority that may never answer, and a client that drops
 mid-handshake is admitted as nobody.
 
+## The node's ledger is one scope
+
+`serveInvocations` opens one `InvocationMemory` for the scope it is served in,
+holding a `Deferred` per invocation id: a frame the wire repeated joins the
+performance the first frame opened rather than opening a second, and that
+performance is a fiber of the memory's own set rather than of whoever the frame
+arrived on, so a frame whose reader gave up never takes the answer the
+duplicates are joined to. **The native effect runs at most once per id**,
+whatever the wire did.
+
+The client end of the socket is one scope too. `connectWebSocketGateway` holds
+the socket, the mailbox its frames arrive in, and the one fiber that reads
+them, so the frames a connection carries are read in order and the socket, the
+requests still out, and the fibers answering the host's invocations all end
+with that scope. The mailbox is filled from `ws`'s own callback in the same
+synchronous step the socket is opened in, so a frame that lands between the 101
+and the reader's first step waits in it rather than arriving before anything
+was listening.
+
 ## Unavailable and unknown are different answers
 
 A capability no connected node offers answers unavailable: never dispatched. An

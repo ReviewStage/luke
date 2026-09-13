@@ -155,13 +155,11 @@ const listen = (
 
 function client(port: number, clientId: string) {
   return Effect.gen(function* () {
-    const connected = yield* Effect.promise(() =>
-      connectWebSocketGateway({
-        url: `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`,
-        headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
-        client: { clientId, role: GATEWAY_CLIENT_ROLE.OPERATOR },
-      }),
-    );
+    const connected = yield* connectWebSocketGateway({
+      url: `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`,
+      headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
+      client: { clientId, role: GATEWAY_CLIENT_ROLE.OPERATOR },
+    });
     assert.ok(connected.ok);
     let ids = 0;
     const gateway = yield* gatewayClient({
@@ -197,7 +195,7 @@ it.live(
         assert.ok(submitted.ok);
         assert.equal(recordOf(submitted.result).runId, "run-1");
         // The client is gone; the host is not.
-        first.connection.close();
+        yield* first.connection.close();
         yield* Effect.sleep("20 millis");
         assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
         // The next client's hello snapshot and reads find the run and the host's lines.
@@ -211,7 +209,7 @@ it.live(
         assert.ok(listed.ok);
         const entries = recordOf(listed.result).entries;
         assert.ok(Array.isArray(entries) && entries.length === 1);
-        second.connection.close();
+        yield* second.connection.close();
       }),
     ),
 );
@@ -222,10 +220,9 @@ it.live("while no client stands, a native capability the host needs answers unav
       const f = yield* fakeHost();
       const { port } = yield* listen(f.service);
       const desktop = yield* client(port, "desktop");
-      desktop.connection.serveInvocations?.(async () => ({
-        status: NODE_CAPABILITY_STATUS.OK,
-        value: undefined,
-      }));
+      yield* desktop.connection.serveInvocations?.(() =>
+        Effect.succeed({ status: NODE_CAPABILITY_STATUS.OK, value: undefined }),
+      ) ?? Effect.void;
       assert.ok(
         (yield* desktop.gateway.call(GATEWAY_METHOD.NODE_REGISTER, {
           nodeId: HOST_NATIVE_NODE_ID,
@@ -236,7 +233,7 @@ it.live("while no client stands, a native capability the host needs answers unav
         url: "https://a",
       });
       assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
-      desktop.connection.close();
+      yield* desktop.connection.close();
       yield* Effect.sleep("20 millis");
       const absent = yield* f.service.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, {
         url: "https://b",
@@ -302,7 +299,7 @@ it.live(
             assert.equal(refused.ok, false);
             if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
             assert.ok((yield* desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
-            desktop.connection.close();
+            yield* desktop.connection.close();
           }),
         ),
       { discard: true },

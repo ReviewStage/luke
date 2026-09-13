@@ -16,6 +16,7 @@ import {
   gatewayResponseToWire,
   type NodeCapabilityResult,
   type NodeInvocation,
+  type NodeInvocationAnswer,
   nodeCapabilityResultFromWire,
   nodeCapabilityResultToWire,
   nodeInvocationFromWire,
@@ -110,7 +111,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
 
   protected carryInvocation(
     invocation: NodeInvocation,
-    take: (invocation: NodeInvocation) => Promise<{ result: NodeCapabilityResult }>,
+    take: (invocation: NodeInvocation) => Effect.Effect<NodeInvocationAnswer>,
   ): Effect.Effect<NodeCapabilityResult> {
     return Effect.suspend(() => {
       const carried = nodeInvocationFromWire(throughText(nodeInvocationToWire(invocation)));
@@ -123,17 +124,14 @@ export class TextLoopbackTransport extends ServerBoundTransport {
       // on a frame the wire repeated while the first was still performing.
       const takes = Array.from({ length: 1 + this.#repeatNextInvocation }, () => take(carried));
       this.#repeatNextInvocation = 0;
-      return Effect.map(
-        Effect.promise(() => Promise.all(takes)),
-        (answers) => {
-          const answered = answers[0];
-          if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
-          const parsed = nodeCapabilityResultFromWire(
-            throughText(nodeCapabilityResultToWire(answered.result)),
-          );
-          return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
-        },
-      );
+      return Effect.map(Effect.all(takes, { concurrency: "unbounded" }), (answers) => {
+        const answered = answers[0];
+        if (!answered) return unavailableInvocation(invocation, "the node answered nothing");
+        const parsed = nodeCapabilityResultFromWire(
+          throughText(nodeCapabilityResultToWire(answered.result)),
+        );
+        return parsed ?? unavailableInvocation(invocation, "the answer did not survive the wire");
+      });
     });
   }
 
