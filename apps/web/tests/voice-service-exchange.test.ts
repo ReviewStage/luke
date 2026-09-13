@@ -233,11 +233,6 @@ async function stand(offer: Offer): Promise<Stand> {
             eve: () => eve,
             emit: () => undefined,
             now: () => NOW,
-            schedule: (callback, delayMs) => setTimeout(callback, delayMs),
-            cancel: (timer) => {
-              // SAFETY: a timer this composition cancels is one the scheduler above made, a Node timeout.
-              clearTimeout(timer as NodeJS.Timeout);
-            },
             createId: () => randomUUID(),
             report: (message) => reports.push(message),
           });

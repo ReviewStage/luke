@@ -4,8 +4,8 @@ import {
   type LiveServerEvent,
   type LiveSessionClosed,
 } from "@sidecar/live";
+import { Duration, Effect } from "effect";
 import type { LiveSideband, SocketClose } from "../live-socket.js";
-import type { TimerHandle } from "./append-channel.js";
 
 /**
  * The graceful close the conversations guide prescribes, over the sideband
@@ -33,8 +33,6 @@ export type SidebandCloseResult =
 
 export interface GracefulCloseOptions {
   eventId: string;
-  schedule: (callback: () => void, delayMs: number) => TimerHandle;
-  cancel: (timer: TimerHandle) => void;
   timeoutMs?: number;
 }
 
@@ -43,22 +41,27 @@ export interface GracefulCloseOptions {
  * is registered first, then `session.close` is sent, and the sideband is held
  * open until the final event, the socket's own end, or the timeout. The
  * transport is released only after one of those; a socket closed first would
- * leave the final usage unconfirmed by the caller's own hand.
+ * leave the final usage unconfirmed by the caller's own hand. The wait is the
+ * ambient `Clock`'s, so whoever runs this close runs its timeout too: a test
+ * on a `TestClock` gives up when it says so, and the fiber that gave up
+ * releases the transport on its way out exactly as the timeout does.
  */
 export function closeGracefully(
   sideband: LiveSideband,
   options: GracefulCloseOptions,
-): Promise<SidebandCloseResult> {
-  return new Promise((resolve) => {
+): Effect.Effect<SidebandCloseResult> {
+  return Effect.async<SidebandCloseResult>((resume) => {
     let settled = false;
-    const finish = (result: SidebandCloseResult) => {
-      if (settled) return;
+    const release = (): boolean => {
+      if (settled) return false;
       settled = true;
-      options.cancel(timer);
       stopEvents();
       stopClose();
       sideband.close();
-      resolve(result);
+      return true;
+    };
+    const finish = (result: SidebandCloseResult) => {
+      if (release()) resume(Effect.succeed(result));
     };
     const stopEvents = sideband.onEvent((event: LiveServerEvent) => {
       if (event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
@@ -68,10 +71,15 @@ export function closeGracefully(
     const stopClose = sideband.onClose((close) =>
       finish({ outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST, close }),
     );
-    const timer = options.schedule(
-      () => finish({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
-      options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS,
-    );
     sideband.send(closeEvent(options.eventId));
-  });
+    return Effect.sync(() => {
+      release();
+    });
+  }).pipe(
+    Effect.timeoutTo({
+      duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
+      onSuccess: (result: SidebandCloseResult) => result,
+      onTimeout: (): SidebandCloseResult => ({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
+    }),
+  );
 }

@@ -13,7 +13,6 @@ import {
   LiveSessionService,
   type LiveSessionSource,
   sidebandOverSocket,
-  type TimerHandle,
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
@@ -102,42 +101,16 @@ async function target(registered = true): Promise<VoiceTarget> {
 }
 
 /**
- * A clock this suite drives by hand, kept beside it rather than in the
- * shared `@sidecar/voice/testing` door: nothing is due until the test
- * advances it, and firing a due timer awaits real macrotask turns (through
- * the same `node:timers/promises` `setTimeout` the store's own `until`
- * polls with) so the real database write a settled timer starts has
- * settled by the time `advance` returns.
+ * Waits a delay of the service's own out. The service keeps time on the
+ * ambient `Clock`, which is the real one here — this suite runs on the store
+ * runtime the rest of the function does, over a real database — so the wait is
+ * real, with a margin for the turns the settled delay's own write takes.
  */
-class ManualClock {
-  now = 1_800_000_000_000;
-  readonly delays: number[] = [];
-  readonly #timers = new Map<TimerHandle, { callback: () => void; at: number }>();
+const ELAPSE_MARGIN_MS = 200;
 
-  schedule = (callback: () => void, delayMs: number): TimerHandle => {
-    const handle: TimerHandle = {};
-    this.delays.push(delayMs);
-    this.#timers.set(handle, { callback, at: this.now + delayMs });
-    return handle;
-  };
-
-  cancel = (timer: TimerHandle): void => {
-    this.#timers.delete(timer);
-  };
-
-  async advance(untilMs: number): Promise<void> {
-    for (;;) {
-      const due = [...this.#timers.entries()]
-        .filter(([, timer]) => timer.at <= untilMs)
-        .sort((a, b) => a[1].at - b[1].at)[0];
-      if (!due) break;
-      this.#timers.delete(due[0]);
-      this.now = Math.max(this.now, due[1].at);
-      due[1].callback();
-      for (let turn = 0; turn < 20; turn += 1) await sleep(0);
-    }
-    this.now = Math.max(this.now, untilMs);
-  }
+async function elapse(delayMs: number): Promise<void> {
+  await sleep(delayMs + ELAPSE_MARGIN_MS);
+  for (let turn = 0; turn < 20; turn += 1) await sleep(0);
 }
 
 class FakeBrain implements LiveBrain {
@@ -173,7 +146,6 @@ class FakeBrain implements LiveBrain {
 
 /** The service composed as the voice service composes it: the record observing the sideband ahead of the service. */
 async function stand(live: VoiceTarget) {
-  const clock = new ManualClock();
   const brain = new FakeBrain();
   // The socket's own scope, as the attachment opens one: the fiber that makes every write is forked into it.
   const scope = await database.run(Scope.make());
@@ -216,9 +188,6 @@ async function stand(live: VoiceTarget) {
         quietNow: () => Effect.succeed(false),
         releaseHeldBriefings: () => Effect.void,
         emit: () => undefined,
-        now: () => clock.now,
-        schedule: clock.schedule,
-        cancel: clock.cancel,
         createId: () => `id-${++ids}`,
         report: () => undefined,
       }),
@@ -226,7 +195,6 @@ async function stand(live: VoiceTarget) {
     ),
   );
   return {
-    clock,
     brain,
     socket,
     service,
@@ -361,7 +329,7 @@ test("an utterance that settled before its delegation arrived is still the deleg
   f.socket.receive(heard("Open the failing one.", 1000, 2200));
   await Promise.all(f.observed);
   // The settle timer writes the utterance with no delegation, and the service counts it written.
-  await f.clock.advance(f.clock.now + UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  await elapse(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
   assert.deepEqual(await messageRows(live.conversation), []);
 
   f.socket.receive(delegated("dl_late", 5000));

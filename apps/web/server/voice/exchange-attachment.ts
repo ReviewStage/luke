@@ -44,8 +44,6 @@ export interface ExchangeAttachmentDeps {
   readonly conversationEntries?: HostedLiveExchangeOptions["conversationEntries"];
   readonly emit: HostedLiveExchangeOptions["emit"];
   readonly now: () => number;
-  readonly schedule: HostedLiveExchangeOptions["schedule"];
-  readonly cancel: HostedLiveExchangeOptions["cancel"];
   readonly createId: () => string;
   readonly report: (message: string) => void;
   readonly trace?: HostedLiveExchangeOptions["trace"];
@@ -80,8 +78,6 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         conversationEntries: deps.conversationEntries ?? NO_ENTRIES,
         emit: deps.emit,
         now: deps.now,
-        schedule: deps.schedule,
-        cancel: deps.cancel,
         createId: deps.createId,
         report: deps.report,
         ...(deps.trace ? { trace: deps.trace } : undefined),

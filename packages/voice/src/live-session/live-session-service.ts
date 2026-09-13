@@ -41,10 +41,21 @@ import {
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import { Deferred, Effect, FiberSet, Queue, type Scope } from "effect";
+import {
+  type Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  FiberId,
+  FiberSet,
+  Option,
+  Queue,
+  type Scope,
+} from "effect";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
-import { AppendChannel, type TimerHandle } from "./append-channel.js";
+import { AppendChannel } from "./append-channel.js";
 import { closeGracefully, SIDEBAND_CLOSE_OUTCOME } from "./graceful-close.js";
 import {
   LIVE_BRAIN_RUN_END,
@@ -95,7 +106,11 @@ import {
  * or a run listener begins and nobody waits for is offered to the service's
  * own queue and run as a fiber of that scope. So the service runs nothing on
  * a runtime of its own, and closing the scope interrupts whatever it had
- * begun. The graceful close is not the scope's: `stop` is the composition's
+ * begun. It keeps time on that scope's `Clock` and on no seam of its own:
+ * every instant it records is that clock's, and every delay it arms — the
+ * idle window, an utterance's settle, the read made ahead, the desk's
+ * refresh, an exchange's finalize — is a sleep on a fiber of the same scope,
+ * given up by settling what the arming handed back. The graceful close is not the scope's: `stop` is the composition's
  * to run, since how long a quit waits on the peer is its decision.
  */
 
@@ -189,9 +204,6 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   /** Hands held briefings back for re-decision once the quiet ends. */
   releaseHeldBriefings: (held: readonly Delivery[]) => Effect.Effect<void>;
   emit: (change: VoiceLiveSessionChanged) => void;
-  now: () => number;
-  schedule: (callback: () => void, delayMs: number) => TimerHandle;
-  cancel: (timer: TimerHandle) => void;
   createId: () => string;
   report: (message: string) => void;
   trace?: (record: LiveTraceRecord) => void;
@@ -208,6 +220,14 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
 }
+
+/**
+ * A delay the session armed on its own scope, cancelled by settling it: the
+ * fiber that waits it out ends the instant the hand that armed it gives up,
+ * whether or not that fiber had reached its sleep yet, so a cancelled delay
+ * never fires and never outlives the cancel.
+ */
+type SessionDelay = Deferred.Deferred<void>;
 
 interface RetainedDelegation {
   id: string;
@@ -232,13 +252,13 @@ interface StandingSession {
   readonly writtenRows: Set<number>;
   /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
   readonly rowBeganAt: Map<number, number>;
-  readonly settleTimers: Map<TranscriptSpeaker, TimerHandle>;
+  readonly settleTimers: Map<TranscriptSpeaker, SessionDelay>;
   idleReported: boolean;
-  idleTimer: TimerHandle | undefined;
+  idleTimer: SessionDelay | undefined;
   /** The lines about the desk this session was actually given, so the next refresh says only what it does not already hold. */
   rosterTold: RosterTold | undefined;
   /** The debounce behind the developer's latest fragment, after which the words so far are anticipated. */
-  anticipateTimer: TimerHandle | undefined;
+  anticipateTimer: SessionDelay | undefined;
   /** The utterance last handed to the brain to read ahead of, by row and by its words then, so the same words are not handed twice and a summary is matched to the words it was read for. */
   anticipated: { rowId: number; text: string } | undefined;
   /** The row whose read-ahead summary was already appended; one per utterance. */
@@ -272,7 +292,7 @@ interface Exchange {
   late: string[];
   spokenChunks: number;
   slowStepTold: boolean;
-  finalize: TimerHandle | undefined;
+  finalize: SessionDelay | undefined;
   end: LiveBrainRunEnd | undefined;
 }
 
@@ -328,7 +348,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #stopRunEvents: () => void;
   /** The latest roster seen, held until the debounce settles; one append answers however many changes arrived. */
   #rosterPending: readonly RosterSeedSession[] | undefined;
-  #rosterTimer: TimerHandle | undefined;
+  #rosterTimer: SessionDelay | undefined;
   readonly #stopFacts: () => void;
   /**
    * What a socket event, a timer, or a listener began that nobody waits for,
@@ -339,13 +359,18 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   #stopped = false;
 
+  /** The clock the session keeps: the one the scope it was built in stands on, read where a callback cannot wait for an effect. */
+  readonly #clock: Clock.Clock;
+
   private constructor(
     options: LiveSessionServiceOptions<Delivery>,
     tasks: Queue.Queue<Effect.Effect<void>>,
+    clock: Clock.Clock,
   ) {
     this.#options = options;
     this.#tasks = tasks;
-    this.#queue = new ProactiveQueue({ now: options.now, trace: this.#trace });
+    this.#clock = clock;
+    this.#queue = new ProactiveQueue({ now: () => this.#now(), trace: this.#trace });
     this.#stopRunEvents = options.brain.onRunEvent((event) => this.#onRunEvent(event));
     this.#stopFacts =
       options.brain.onAnticipationFacts?.((facts) => this.#anticipationFacts(facts)) ??
@@ -370,7 +395,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return Effect.gen(function* () {
       const tasks = yield* Queue.unbounded<Effect.Effect<void>>();
       const fibers = yield* FiberSet.make();
-      const service = new LiveSessionService(options, tasks);
+      const service = new LiveSessionService(options, tasks, yield* Effect.clock);
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
       );
@@ -381,6 +406,33 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** Begins what nothing waits for, on the service's own fiber. */
   #start(effect: Effect.Effect<void>): void {
     Queue.unsafeOffer(this.#tasks, effect);
+  }
+
+  /** The instant this session reads everything by: its scope's own clock, which a test drives. */
+  #now(): number {
+    return this.#clock.unsafeCurrentTimeMillis();
+  }
+
+  /**
+   * Arms a delay on the service's own fiber: the body runs once the clock has
+   * moved by `delayMs` and nothing cancelled it first. What is handed back is
+   * the cancel itself, so a hand that gives up before the fiber has even
+   * reached its sleep still stops the body from ever running.
+   */
+  #after(delayMs: number, body: () => void): SessionDelay {
+    const delay = Deferred.unsafeMake<void>(FiberId.none);
+    this.#start(
+      Effect.flatMap(
+        Effect.timeoutOption(Deferred.await(delay), Duration.millis(delayMs)),
+        (cancelled) => (Option.isSome(cancelled) ? Effect.void : Effect.sync(body)),
+      ),
+    );
+    return delay;
+  }
+
+  /** Gives up a delay, whether or not it was ever armed. */
+  #cancelDelay(delay: SessionDelay | undefined): void {
+    if (delay !== undefined) Deferred.unsafeDone(delay, Exit.void);
   }
 
   status(): LiveSessionStatus {
@@ -415,7 +467,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (this.#standing) yield* this.endSession();
       const source = this.#options.source();
       if (!source) return undefined;
-      const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#options.now());
+      const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#now());
       this.#dropPendingRoster();
       const opened = yield* Effect.promise(() =>
         source.create({ sdpOffer, input: this.#seedInput(seeded) }),
@@ -424,7 +476,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* this.#attach(opened);
       if (!sideband) return undefined;
-      this.#standing = this.#stand(opened.sessionId, sideband);
+      this.#standing = yield* this.#stand(opened.sessionId, sideband);
       this.#standing.rosterTold = seeded?.told;
       this.#usageConfirmed = false;
       this.#options.onSessionCreated?.();
@@ -446,7 +498,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const sideband = yield* this.#attach(opened);
       if (!sideband) return false;
-      const session = this.#stand(opened.sessionId, sideband);
+      const session = yield* this.#stand(opened.sessionId, sideband);
       this.#standing = session;
       this.#usageConfirmed = false;
       this.#options.onSessionCreated?.();
@@ -496,13 +548,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #close(session: StandingSession): Effect.Effect<void> {
     return Effect.gen(this, function* () {
       this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
-      const result = yield* Effect.promise(() =>
-        closeGracefully(session.sideband, {
-          eventId: this.#options.createId(),
-          schedule: this.#options.schedule,
-          cancel: this.#options.cancel,
-        }),
-      );
+      const result = yield* closeGracefully(session.sideband, {
+        eventId: this.#options.createId(),
+      });
       if (result.outcome === SIDEBAND_CLOSE_OUTCOME.CLOSED) {
         return yield* this.#onClosed(session, result.closed);
       }
@@ -540,7 +588,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (!session || session.ended) return;
     session.idleReported = idle;
     if (session.idleTimer !== undefined) {
-      this.#options.cancel(session.idleTimer);
+      this.#cancelDelay(session.idleTimer);
       session.idleTimer = undefined;
     }
     if (idle) this.#considerIdle(session);
@@ -593,9 +641,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   stopSpeaking(): boolean {
     const session = this.#speakable();
     if (!session) return false;
-    session.channel.enqueue(async () => {
-      await session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)));
-    });
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION))),
+        ),
+      ),
+    );
     return true;
   }
 
@@ -620,7 +672,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   /** Everything waiting to be told about the desk, discarded: a fresher roster has superseded it, or nothing will read it again. */
   #dropPendingRoster(): void {
     if (this.#rosterTimer !== undefined) {
-      this.#options.cancel(this.#rosterTimer);
+      this.#cancelDelay(this.#rosterTimer);
       this.#rosterTimer = undefined;
     }
     this.#rosterPending = undefined;
@@ -657,11 +709,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   updateRoster(sessions: readonly RosterSeedSession[]): void {
     this.#rosterPending = sessions;
-    if (this.#rosterTimer !== undefined) this.#options.cancel(this.#rosterTimer);
-    this.#rosterTimer = this.#options.schedule(() => {
+    this.#cancelDelay(this.#rosterTimer);
+    this.#rosterTimer = this.#after(ROSTER_REFRESH_DEBOUNCE_MS, () => {
       this.#rosterTimer = undefined;
       this.#tellRoster();
-    }, ROSTER_REFRESH_DEBOUNCE_MS);
+    });
   }
 
   #tellRoster(): void {
@@ -674,20 +726,22 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const session = this.#speakable();
     if (!session) return;
     this.#rosterPending = undefined;
-    session.channel.enqueue(async () => {
-      // Decided here rather than when the change settled: the channel runs one
-      // unit at a time, so any earlier refresh has landed and moved what the
-      // session knows before this one works out what is still news.
-      const update = rosterUpdate(session.rosterTold, sessions, this.#options.now());
-      if (update === undefined) return;
-      const taken = await session.channel.send(thinkingAppend(this.#input(null, update.text)), {
-        countsForIdle: false,
-      });
-      // What the session knows moves only once it has taken the append, and
-      // moves by the lines that actually travelled: a refusal, or a summary
-      // the append bound cut short, leaves the rest to be said again.
-      if (taken) session.rosterTold = update.told;
-    });
+    session.channel.enqueue(
+      Effect.gen(this, function* () {
+        // Decided here rather than when the change settled: the channel runs one
+        // unit at a time, so any earlier refresh has landed and moved what the
+        // session knows before this one works out what is still news.
+        const update = rosterUpdate(session.rosterTold, sessions, this.#now());
+        if (update === undefined) return;
+        const taken = yield* session.channel.send(thinkingAppend(this.#input(null, update.text)), {
+          countsForIdle: false,
+        });
+        // What the session knows moves only once it has taken the append, and
+        // moves by the lines that actually travelled: a refusal, or a summary
+        // the append bound cut short, leaves the rest to be said again.
+        if (taken) session.rosterTold = update.told;
+      }),
+    );
   }
 
   /** The standing session, once started and not yet ended: the only one an append can reach. */
@@ -699,19 +753,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #considerIdle(session: StandingSession): void {
     if (!session.idleReported || session.ended || !session.started) return;
     const lastSentAt = session.channel.lastSentAt;
-    const quietSince =
-      lastSentAt === undefined ? LIVE_IDLE_WINDOW_MS : this.#options.now() - lastSentAt;
+    const quietSince = lastSentAt === undefined ? LIVE_IDLE_WINDOW_MS : this.#now() - lastSentAt;
     if (quietSince >= LIVE_IDLE_WINDOW_MS && !this.#exchangeInFlight(session)) {
       this.#start(this.#end(session));
       return;
     }
-    session.idleTimer = this.#options.schedule(
-      () => {
-        session.idleTimer = undefined;
-        this.#considerIdle(session);
-      },
-      Math.max(1, LIVE_IDLE_WINDOW_MS - quietSince),
-    );
+    session.idleTimer = this.#after(Math.max(1, LIVE_IDLE_WINDOW_MS - quietSince), () => {
+      session.idleTimer = undefined;
+      this.#considerIdle(session);
+    });
   }
 
   /** Whether a reply is still coming that this session would speak: a delegation's under it, or one whose own session has since closed, which any standing session says. */
@@ -744,47 +794,53 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
-  #stand(sessionId: string, sideband: LiveSideband): StandingSession {
-    const session: StandingSession = {
-      sessionId,
-      sideband,
-      channel: new AppendChannel({
+  /**
+   * Stands one session: its channel, its ledger, and the listeners the
+   * sideband hands it. The channel serializes its sends on a fiber of the
+   * service's own scope, which its close ends.
+   */
+  #stand(sessionId: string, sideband: LiveSideband): Effect.Effect<StandingSession> {
+    return Effect.gen(this, function* () {
+      const { channel, serve } = yield* AppendChannel.make({
         sideband,
-        now: this.#options.now,
-        schedule: this.#options.schedule,
-        cancel: this.#options.cancel,
         report: this.#options.report,
         trace: this.#trace,
-      }),
-      ledger: new TranscriptLedger(),
-      started: false,
-      ended: false,
-      closing: undefined,
-      micLive: false,
-      usageSeconds: undefined,
-      lastDelegationOffsetMs: 0,
-      claimedDelegations: new Set(),
-      retained: [],
-      writtenRows: new Set(),
-      rowBeganAt: new Map(),
-      settleTimers: new Map(),
-      idleReported: false,
-      idleTimer: undefined,
-      rosterTold: undefined,
-      anticipateTimer: undefined,
-      anticipated: undefined,
-      factsAppendedFor: undefined,
-      askedRows: new Set(),
-      stopEvents: () => undefined,
-      stopClose: () => undefined,
-    };
-    session.stopEvents = sideband.onEvent((event) => this.#onEvent(session, event));
-    session.stopClose = sideband.onClose(() => {
-      if (!session.ended && !session.closing) {
-        this.#start(this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST));
-      }
+      });
+      const session: StandingSession = {
+        sessionId,
+        sideband,
+        channel,
+        ledger: new TranscriptLedger(),
+        started: false,
+        ended: false,
+        closing: undefined,
+        micLive: false,
+        usageSeconds: undefined,
+        lastDelegationOffsetMs: 0,
+        claimedDelegations: new Set(),
+        retained: [],
+        writtenRows: new Set(),
+        rowBeganAt: new Map(),
+        settleTimers: new Map(),
+        idleReported: false,
+        idleTimer: undefined,
+        rosterTold: undefined,
+        anticipateTimer: undefined,
+        anticipated: undefined,
+        factsAppendedFor: undefined,
+        askedRows: new Set(),
+        stopEvents: () => undefined,
+        stopClose: () => undefined,
+      };
+      session.stopEvents = sideband.onEvent((event) => this.#onEvent(session, event));
+      session.stopClose = sideband.onClose(() => {
+        if (!session.ended && !session.closing) {
+          this.#start(this.#connectionLost(session, LIVE_CLOSE_REASON.CONNECTION_LOST));
+        }
+      });
+      this.#start(serve);
+      return session;
     });
-    return session;
   }
 
   #onEvent(session: StandingSession, event: LiveServerEvent): void {
@@ -854,16 +910,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const utterance = session.ledger.append({ speaker, text: delta, startMs, endMs });
     if (!utterance) return;
     if (!session.rowBeganAt.has(utterance.rowId)) {
-      session.rowBeganAt.set(utterance.rowId, this.#options.now());
+      session.rowBeganAt.set(utterance.rowId, this.#now());
     }
-    const armed = session.settleTimers.get(speaker);
-    if (armed !== undefined) this.#options.cancel(armed);
+    this.#cancelDelay(session.settleTimers.get(speaker));
     session.settleTimers.set(
       speaker,
-      this.#options.schedule(() => {
+      this.#after(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS, () => {
         session.settleTimers.delete(speaker);
         this.#start(this.#writeSettled(session, speaker));
-      }, UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS),
+      }),
     );
     if (speaker === TRANSCRIPT_SPEAKER.USER && !session.askedRows.has(utterance.rowId)) {
       this.#armAnticipation(session);
@@ -879,15 +934,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #armAnticipation(session: StandingSession): void {
     if (!this.#options.brain.anticipate) return;
     this.#cancelAnticipation(session);
-    session.anticipateTimer = this.#options.schedule(() => {
+    session.anticipateTimer = this.#after(PREFETCH_DEBOUNCE_MS, () => {
       session.anticipateTimer = undefined;
       this.#anticipate(session);
-    }, PREFETCH_DEBOUNCE_MS);
+    });
   }
 
   #cancelAnticipation(session: StandingSession): void {
     if (session.anticipateTimer === undefined) return;
-    this.#options.cancel(session.anticipateTimer);
+    this.#cancelDelay(session.anticipateTimer);
     session.anticipateTimer = undefined;
   }
 
@@ -950,11 +1005,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
     session.factsAppendedFor = facts.rowId;
     this.#trace(LIVE_TRACE_DECISION.FACTS_APPENDED);
-    session.channel.enqueue(async () => {
-      await session.channel.send(thinkingAppend(this.#input(null, chunk)), {
-        countsForIdle: false,
-      });
-    });
+    session.channel.enqueue(
+      Effect.suspend(() =>
+        Effect.asVoid(
+          session.channel.send(thinkingAppend(this.#input(null, chunk)), { countsForIdle: false }),
+        ),
+      ),
+    );
   }
 
   /** Writes every utterance of one speaker not yet on record: no fragment has joined it inside the gap plus the margin. */
@@ -971,7 +1028,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #write(write: UtteranceWrite): Effect.Effect<boolean> {
     return Effect.gen(this, function* () {
       const { session, utterance } = write;
-      const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#options.now();
+      const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#now();
       const written =
         utterance.speaker === TRANSCRIPT_SPEAKER.USER
           ? yield* this.#options.record.writeDeveloperUtterance({
@@ -1122,7 +1179,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** An exchange whose ask never reached the record answers nothing: its runs are forgotten and what they said is dropped. */
   #dropExchange(exchange: Exchange): void {
-    if (exchange.finalize !== undefined) this.#options.cancel(exchange.finalize);
+    this.#cancelDelay(exchange.finalize);
     exchange.finalize = undefined;
     exchange.deferred = [];
     exchange.buffered = [];
@@ -1147,11 +1204,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         const session = this.#sessionOf(exchange);
         if (!session) return;
         const note = SLOW_STEP_NOTE.get(event.step) ?? SLOW_STEP_GENERAL_NOTE;
-        session.channel.enqueue(async () => {
-          await session.channel.send(
-            thinkingAppend(this.#input(this.#delegationOf(exchange), note)),
-          );
-        });
+        session.channel.enqueue(
+          Effect.suspend(() =>
+            Effect.asVoid(
+              session.channel.send(thinkingAppend(this.#input(this.#delegationOf(exchange), note))),
+            ),
+          ),
+        );
         return;
       }
       // The brain tells the settle as soon as no write of the run is still
@@ -1172,11 +1231,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           exchange.end = event.end;
         }
         if (exchange.runIds.size > 0) return;
-        if (exchange.finalize !== undefined) this.#options.cancel(exchange.finalize);
-        exchange.finalize = this.#options.schedule(
-          () => this.#finalize(exchange),
-          EXCHANGE_FINALIZE_MS,
-        );
+        this.#cancelDelay(exchange.finalize);
+        exchange.finalize = this.#after(EXCHANGE_FINALIZE_MS, () => this.#finalize(exchange));
         return;
       default:
         return;
@@ -1232,20 +1288,24 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     sentence: string,
   ): void {
     for (const chunk of chunkForAppend(sentence)) {
-      session.channel.enqueue(async () => {
-        const taken = await session.channel.send(
-          commentaryAppend(this.#input(delegationId, chunk)),
-        );
-        if (taken) exchange.spokenChunks += 1;
-      });
+      session.channel.enqueue(
+        Effect.gen(this, function* () {
+          const taken = yield* session.channel.send(
+            commentaryAppend(this.#input(delegationId, chunk)),
+          );
+          if (taken) exchange.spokenChunks += 1;
+        }),
+      );
     }
   }
 
   #speakInto(session: StandingSession, delegationId: LiveDelegationId, text: string): void {
     for (const chunk of chunkForAppend(text)) {
-      session.channel.enqueue(async () => {
-        await session.channel.send(commentaryAppend(this.#input(delegationId, chunk)));
-      });
+      session.channel.enqueue(
+        Effect.suspend(() =>
+          Effect.asVoid(session.channel.send(commentaryAppend(this.#input(delegationId, chunk)))),
+        ),
+      );
     }
   }
 
@@ -1284,23 +1344,25 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const chunks = speechAppends(request.turn);
     chunks.forEach((chunk, index) => {
       const last = index === chunks.length - 1;
-      session.channel.enqueue(async () => {
-        const input = this.#input(null, chunk);
-        if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
-          this.#options.onBriefingAppend?.(request.delivery, input.eventId);
-        }
-        const taken = await session.channel.send(commentaryAppend(input), {
-          ...(last
-            ? {
-                onSpoken: () => {
-                  this.#queue.spoken(request);
-                  this.#options.onProactiveSpoken?.(request.kind);
-                },
-              }
-            : undefined),
-        });
-        if (!taken && last) this.#queue.release(request);
-      });
+      session.channel.enqueue(
+        Effect.gen(this, function* () {
+          const input = this.#input(null, chunk);
+          if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+            this.#options.onBriefingAppend?.(request.delivery, input.eventId);
+          }
+          const taken = yield* session.channel.send(commentaryAppend(input), {
+            ...(last
+              ? {
+                  onSpoken: () => {
+                    this.#queue.spoken(request);
+                    this.#options.onProactiveSpoken?.(request.kind);
+                  },
+                }
+              : undefined),
+          });
+          if (!taken && last) this.#queue.release(request);
+        }),
+      );
     });
   }
 
@@ -1360,9 +1422,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     session.ended = true;
     session.stopEvents();
     session.stopClose();
-    for (const timer of session.settleTimers.values()) this.#options.cancel(timer);
+    for (const timer of session.settleTimers.values()) this.#cancelDelay(timer);
     session.settleTimers.clear();
-    if (session.idleTimer !== undefined) this.#options.cancel(session.idleTimer);
+    this.#cancelDelay(session.idleTimer);
     this.#cancelAnticipation(session);
     session.channel.close();
     session.retained = [];

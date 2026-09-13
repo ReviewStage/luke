@@ -22,10 +22,9 @@ import {
 } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveBrainTag, LiveRecordTag } from "@sidecar/voice/effect";
-import { LiveSessionService, type TimerHandle } from "@sidecar/voice/live-session";
+import { LiveSessionService } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import type { Fiber } from "effect";
-import { Clock, Duration, Effect, Either, FiberId, Option, Runtime, type Scope } from "effect";
+import { Effect, Either, Option, Runtime, type Scope } from "effect";
 import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { BrainComposer } from "./compose-brain.js";
@@ -35,45 +34,6 @@ import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { voiceRoster } from "./voice-roster.js";
-
-/**
- * The `now`/`schedule`/`cancel` seam `LiveSessionService` still takes as a
- * constructor argument, answered from this composition's own Effect runtime
- * rather than Node's own `setTimeout` — a package-local bridge rather than a
- * shared `@sidecar/host/effect` export, since P12-03 deleted
- * `@sidecar/runtime/effect`'s `timersFromRuntime` with the `ScheduledTimer`
- * seam it answered. Starting the fiber here is a run outside an Effect,
- * which the "runtime only at an edge" rule allows precisely because this is
- * that edge: it starts the work on the runtime it was handed rather than
- * building a second one. `cancel` has no way to be awaited, so it interrupts
- * the fiber without waiting for the interruption to finish: what it must
- * guarantee is that the callback does not run afterwards, never that the
- * fiber has already ended.
- */
-const liveSessionTimersOnRuntime = (runtime: Runtime.Runtime<never>) => {
-  const sync = Runtime.runSync(runtime);
-  const fork = Runtime.runFork(runtime);
-  const armed = new Map<TimerHandle, Fiber.RuntimeFiber<void>>();
-  return {
-    now: () => sync(Clock.currentTimeMillis),
-    schedule: (callback: () => void, delayMs: number): TimerHandle => {
-      const handle: TimerHandle = {};
-      const fiber = fork(
-        Effect.delay(Effect.sync(callback), Duration.millis(delayMs)).pipe(
-          Effect.ensuring(Effect.sync(() => armed.delete(handle))),
-        ),
-      );
-      armed.set(handle, fiber);
-      return handle;
-    },
-    cancel: (timer: TimerHandle) => {
-      const fiber = armed.get(timer);
-      if (fiber === undefined) return;
-      armed.delete(timer);
-      fiber.unsafeInterruptAsFork(FiberId.none);
-    },
-  };
-};
 
 /** What the live session reaches in the brain that re-decides a held briefing. */
 interface LiveLinks {
@@ -129,11 +89,9 @@ export const composeLive = (
       }
       return standing.value;
     };
-    // The service's own idle, settle, and finalize timers, over the Effect
-    // runtime this composition runs on rather than Node's own `setTimeout`, so
-    // a test driving a `TestClock` drives them too.
+    // The pass a beat's decision waits on is still run to a promise from a
+    // synchronous link; nothing else here runs on this runtime.
     const runtime = yield* Effect.runtime<never>();
-    const timers = liveSessionTimersOnRuntime(runtime);
 
     function markFirstAnnouncementSpoken(): void {
       const onboardingState = calendars.onboarding();
@@ -162,9 +120,6 @@ export const composeLive = (
       quietNow: () => calendars.announcementsQuietNow(now()),
       releaseHeldBriefings: (held) => links().releaseHeld(held),
       emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
-      now: timers.now,
-      schedule: timers.schedule,
-      cancel: timers.cancel,
       createId: kernel.createId,
       report: kernel.report,
       ...(account.agentTrace
