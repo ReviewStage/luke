@@ -472,6 +472,6 @@ export function handleAdminMetrics(
   const now = (options.now ?? Date.now)();
   return options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
     Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
-    Effect.catchAllCause((cause) => unavailableSeam("admin metrics read failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
   );
 }

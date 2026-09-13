@@ -248,9 +248,9 @@ it.effect("a fiber cut under a request is an interruption, never a request that 
 
     const refreshing = yield* Effect.forkChild(client.refresh("stale"));
     yield* Deferred.await(asked);
-    const ended = yield* Fiber.interrupt(refreshing);
+    yield* Fiber.interrupt(refreshing);
 
-    assert.equal(Exit.isInterrupted(ended), true);
+    assert.equal(Exit.hasInterrupts(yield* Fiber.await(refreshing)), true);
   }),
 );
 
@@ -457,15 +457,15 @@ it.effect("a revocation the service never answers ends on its own deadline", () 
           issue: Effect.succeed(ISSUED_TOKENS),
           use: () => Effect.fail(failure),
           revoke: () =>
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: Duration.seconds(10),
-              onTimeout: () => new Error("revocation timed out"),
+              orElse: () => Effect.fail(new Error("revocation timed out")),
             })(Effect.never),
           onRevokeFailure: (error) => revokeFailures.push(error),
         }),
       ),
     );
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     yield* TestClock.adjust(Duration.seconds(10));
 
     assert.deepEqual(yield* Fiber.join(outcome), Exit.fail(failure));

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Effect, type Schema } from "effect";
+import { Effect, type Schema, Semaphore } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -219,10 +219,10 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
  * where concurrent calls of one turn run, and a write that fails or is
  * interrupted releases it like any other.
  */
-const FACT_WRITE_PERMITS = new Map<string, Effect.Semaphore>();
+const FACT_WRITE_PERMITS = new Map<string, Semaphore.Semaphore>();
 
 function serially<A, E, R>(userId: string, write: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  const held = FACT_WRITE_PERMITS.get(userId) ?? Effect.unsafeMakeSemaphore(1);
+  const held = FACT_WRITE_PERMITS.get(userId) ?? Semaphore.makeUnsafe(1);
   FACT_WRITE_PERMITS.set(userId, held);
   return held.withPermits(1)(write);
 }

@@ -114,7 +114,7 @@ describe("the retained transcript over the client", () => {
         );
 
         assert.ok(Exit.isFailure(exit));
-        assert.ok(Exit.isFailure(exit) && Cause.isDie(exit.cause));
+        assert.ok(Exit.isFailure(exit) && Cause.hasDies(exit.cause));
         assert.deepEqual(yield* listTranscriptEffect(absent), []);
       }),
     ),

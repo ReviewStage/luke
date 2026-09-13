@@ -29,16 +29,7 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import {
-  type Clock,
-  Duration,
-  Effect,
-  Fiber,
-  Layer,
-  Option,
-  type Scope,
-  type Stream,
-} from "effect";
+import { Clock, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
@@ -300,7 +291,7 @@ interface TestNow {
 function testNow(clock: Clock.Clock): TestNow {
   return {
     get now() {
-      return clock.unsafeCurrentTimeMillis();
+      return clock.currentTimeMillisUnsafe();
     },
   };
 }
@@ -313,16 +304,16 @@ function testNow(clock: Clock.Clock): TestNow {
  */
 function advanceClock(deltaMs: number) {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
     yield* TestClock.adjust(Duration.millis(deltaMs));
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 
 /** Lets queued microtasks and forked fibers run their course. */
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 
@@ -349,7 +340,7 @@ interface Fixture {
 
 function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
   return Effect.gen(function* () {
-    const clock = testNow(yield* Effect.clock);
+    const clock = testNow(yield* Clock.Clock);
     const record = new FakeRecord();
     const sidebands: FakeSideband[] = [];
     const creates: LiveSessionOpened[] = [];
@@ -1087,7 +1078,7 @@ it.scoped(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 1);
       // The close waits exactly the timeout out: a tick short of it, nothing has given up yet.
       yield* advanceClock(SIDEBAND_CLOSE_TIMEOUT_MS - 1);
-      assert.equal(Option.isNone(yield* Fiber.poll(ending)), true);
+      assert.equal(ending.pollUnsafe(), undefined);
       yield* advanceClock(1);
       yield* Fiber.join(ending);
       assert.deepEqual(f.service.status(), {
@@ -1451,7 +1442,7 @@ it.scoped(
       assert.equal(sideband.closed, true);
       const stopping = yield* Effect.forkChild(f.service.stop());
       yield* settle();
-      assert.equal(Option.isNone(yield* Fiber.poll(stopping)), true);
+      assert.equal(stopping.pollUnsafe(), undefined);
       f.record.release(true);
       yield* Fiber.join(stopping);
       assert.deepEqual(
@@ -1476,7 +1467,7 @@ it.scoped(
       yield* settle();
       const ending = yield* Effect.forkChild(f.service.endSession());
       yield* settle();
-      assert.equal(Option.isNone(yield* Fiber.poll(ending)), true);
+      assert.equal(ending.pollUnsafe(), undefined);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.CLOSE).length, 0);
       f.record.release(true);
       yield* Fiber.join(ending);

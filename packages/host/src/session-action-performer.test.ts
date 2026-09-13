@@ -37,7 +37,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -46,7 +46,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
 /** Ticks Effect's scheduler for a fixed span, for a wait with no crisp boolean to check (a negative assertion that nothing landed). */
 function settleMicrotasks(rounds = 100): Effect.Effect<void> {
   return Effect.gen(function* () {
-    for (let tick = 0; tick < rounds; tick += 1) yield* Effect.yieldNow();
+    for (let tick = 0; tick < rounds; tick += 1) yield* Effect.yieldNow;
   });
 }
 

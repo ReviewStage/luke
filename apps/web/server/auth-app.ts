@@ -1,11 +1,12 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import {
   type HttpMethod,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's
@@ -85,17 +86,9 @@ function authPassthrough(
  * function, so the refusal says what the group declares rather than what a
  * caller can reach.
  */
-export function authApp(
-  handle: WebRequestHandler,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(AUTH_PATH_SET, authPassthrough(handle)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+export function authApp(handle: WebRequestHandler): WebRoutes<never> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, AUTH_PATH_SET, authPassthrough(handle)),
+    hostedNotFoundRoute,
   );
 }

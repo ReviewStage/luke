@@ -209,6 +209,6 @@ export function handleAdminUser(
         ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
         : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
     ),
-    Effect.catchAllCause((cause) => unavailableSeam("admin user read failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
   );
 }

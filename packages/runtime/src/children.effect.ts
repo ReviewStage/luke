@@ -64,17 +64,15 @@ export class ChildCompletionRefused extends Data.TaggedError("ChildCompletionRef
  * arms its timers with. `Schedule.map` alone would not do this — it reshapes
  * only the value a driven schedule reports, never the interval it actually
  * waits — so the cap has to be a second schedule the exponential one is
- * `union`-ed with: `union` already recurs on the shorter of the two delays,
- * and `Schedule.as` is what makes the cap's own reported value that same
- * delay rather than `Schedule.spaced`'s default of the recurrence count.
+ * combined with: `Schedule.min` recurs on the shorter of the two delays and
+ * reports that same delay as its output, which is the cap once the doubling
+ * has passed it.
  */
-export const childDeliveryBackoffSchedule = (): Schedule.Schedule<Duration.Duration> => {
-  const cap = Duration.millis(CHILD_DEFAULTS.DELIVERY_MAXIMUM_BACKOFF_MS);
-  return Schedule.exponential(Duration.millis(CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS), 2).pipe(
-    Schedule.union(Schedule.spaced(cap).pipe(Schedule.as(cap))),
-    Schedule.map(([exponential, capped]) => Duration.min(exponential, capped)),
-  );
-};
+export const childDeliveryBackoffSchedule = (): Schedule.Schedule<Duration.Duration> =>
+  Schedule.min([
+    Schedule.exponential(Duration.millis(CHILD_DEFAULTS.DELIVERY_INITIAL_BACKOFF_MS), 2),
+    Schedule.spaced(Duration.millis(CHILD_DEFAULTS.DELIVERY_MAXIMUM_BACKOFF_MS)),
+  ]);
 
 export type EffectChildRunServiceOptions = Omit<
   ChildRunServiceOptions,

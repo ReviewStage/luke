@@ -1,4 +1,4 @@
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -51,12 +51,14 @@ import {
   type HostedRefusal,
   hostedJsonResponse,
   hostedMethod,
+  hostedNotFoundRoute,
   hostedRefusalResponse,
   hostedUpstreamErrorResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { postOpenAiEffect } from "./hosted/openai.js";
 import type { HostedSpend, QuotaEffect } from "./hosted/quota.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The hosted brain contract as the one route group the brain functions serve.
@@ -412,22 +414,33 @@ function embed(seams: BrainSeams) {
 /** The group, which is the contract's five paths and the refusal anywhere else. */
 export function brainApp(
   seams: BrainSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | SqlClient.SqlClient
-  | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES, Effect.merge(capabilities(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2, Effect.merge(respond(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS, Effect.merge(countTokens(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_EMBED, Effect.merge(embed(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.BRAIN_PREFETCH, Effect.merge(prefetch(seams))),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES,
+      Effect.catch(capabilities(seams), Effect.succeed),
     ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2,
+      Effect.catch(respond(seams), Effect.succeed),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS,
+      Effect.catch(countTokens(seams), Effect.succeed),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.BRAIN_EMBED,
+      Effect.catch(embed(seams), Effect.succeed),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.BRAIN_PREFETCH,
+      Effect.catch(prefetch(seams), Effect.succeed),
+    ),
+    hostedNotFoundRoute,
   );
 }

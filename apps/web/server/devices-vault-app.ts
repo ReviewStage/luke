@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Redacted, Result } from "effect";
+import { Effect, type Schema as EffectSchema, Layer, Redacted, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
@@ -28,11 +28,13 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
+  hostedNotFoundRoute,
   hostedRefusalResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { makeRateBrake } from "./hosted/rate-brake.js";
 import type { VaultKeyEffect } from "./hosted/vault-key-store.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The device record's three writes and the provider key vault's three, on
@@ -152,7 +154,7 @@ function devicesEffect(
     const body = yield* decodeBody(deviceForgetRequestSchema, payload);
     const deleted = yield* Effect.orDie(seams.forgetDevice(userId, body.deviceId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
+  }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
 
 /** The vault's encryption secret, read from the environment, or the unavailable refusal without one. */
@@ -207,7 +209,7 @@ function vaultKeyEffect(
     const ciphertext = encryptProviderKey(key, secret);
     yield* Effect.orDie(seams.storeKey(userId, providerId, ciphertext));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
+  }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
@@ -234,7 +236,7 @@ function vaultKeysEffect(
         .filter((row) => isCloudAgentProviderId(row.providerId))
         .map((row) => ({ providerId: row.providerId, updatedAt: row.updatedAt.getTime() })),
     });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
+  }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
 }
 
 /**
@@ -246,17 +248,11 @@ function vaultKeysEffect(
  */
 export function devicesVaultApp(
   seams: DevicesVaultSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(DEVICES_PATH, devicesEffect(seams)),
-    HttpRouter.all(VAULT_KEY_PATH, vaultKeyEffect(seams)),
-    HttpRouter.all(VAULT_KEYS_PATH, vaultKeysEffect(seams)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+): WebRoutes<HostedEnvironment | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, DEVICES_PATH, devicesEffect(seams)),
+    HttpRouter.add(ANY_METHOD, VAULT_KEY_PATH, vaultKeyEffect(seams)),
+    HttpRouter.add(ANY_METHOD, VAULT_KEYS_PATH, vaultKeysEffect(seams)),
+    hostedNotFoundRoute,
   );
 }

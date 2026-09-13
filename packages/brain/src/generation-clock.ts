@@ -73,7 +73,7 @@ export class BrainGenerationClock {
   }
 
   #now(): number {
-    return this.#clock.unsafeCurrentTimeMillis();
+    return this.#clock.currentTimeMillisUnsafe();
   }
 
   #arm(state: BrainPersistedState): void {

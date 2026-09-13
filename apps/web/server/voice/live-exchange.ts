@@ -162,10 +162,10 @@ function writeReport(
     Effect.map((result) =>
       result.ok ? undefined : `The record refused a live event: ${result.refusal}`,
     ),
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       Effect.succeed(`The record could not take a live event: ${error.message}`),
     ),
-    Effect.catchAllDefect((defect) =>
+    Effect.catchDefect((defect) =>
       Effect.succeed(
         `The record could not take a live event: ${defect instanceof Error ? defect.message : String(defect)}`,
       ),
@@ -236,7 +236,7 @@ export function hostedLiveExchange(
       return () =>
         Effect.map(attach(), (sideband) =>
           observedSideband(sideband, (event) => {
-            Queue.unsafeOffer(written, writeReport(record.observe(event)));
+            Queue.offerUnsafe(written, writeReport(record.observe(event)));
           }),
         );
     };

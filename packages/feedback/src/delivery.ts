@@ -103,7 +103,7 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
     const request = HttpClientRequest.make(HTTP_METHOD.POST)(url, {
       body: HttpBody.raw(JSON.stringify(submission), { contentType: JSON_CONTENT_TYPE }),
     });
-    return Effect.catchAll(HttpClient.execute(request), (error) =>
+    return Effect.catch(HttpClient.execute(request), (error) =>
       Effect.fail(new FeedbackTransportError({ errorName: errorName(error.cause) })),
     );
   }
@@ -113,16 +113,16 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
     requestTimeoutMs,
     deliver: (submission) =>
       requested(submission).pipe(
-        Effect.timeoutFail({
+        Effect.timeoutOrElse({
           duration: deadline,
-          onTimeout: () => new FeedbackTransportError({ errorName: DEADLINE_ERROR_NAME }),
+          orElse: () => Effect.fail(new FeedbackTransportError({ errorName: DEADLINE_ERROR_NAME })),
         }),
         Effect.map((response): FeedbackResult => {
           if (answeredOk(response.status)) return { delivered: true };
           report(`Feedback delivery failed with status ${response.status}`);
           return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
         }),
-        Effect.catchAll((failure) => {
+        Effect.catch((failure) => {
           report(`Feedback delivery did not complete: ${failure.errorName ?? "unknown error"}`);
           return Effect.succeed<FeedbackResult>({
             delivered: false,

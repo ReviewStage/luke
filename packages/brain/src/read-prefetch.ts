@@ -301,7 +301,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
       yield* Deferred.succeed(slot.ready, kept);
       if (kept !== undefined) yield* this.#summarize(slot, kept);
     }).pipe(
-      Effect.catchAllDefect((defect) =>
+      Effect.catchDefect((defect) =>
         Effect.sync(() =>
           this.#options.report(
             `Read prefetch failed: ${defect instanceof Error ? defect.message : String(defect)}`,
@@ -590,9 +590,7 @@ export class ReadPrefetch implements TurnReadPrefetch {
       const now = this.#options.now();
       if (standing && now - standing.readAt <= PREFETCH_BOUNDS.TTL_MS) return standing.read;
       const fiber = yield* Effect.forkDetach(
-        Effect.catchAllDefect(execute(), () =>
-          Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED)),
-        ),
+        Effect.catchDefect(execute(), () => Effect.succeed(rejection(REFUSAL_REASON.READ_FAILED))),
       );
       const read = Fiber.join(fiber);
       byArguments.set(argumentsJson, { read, readAt: now });

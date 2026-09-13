@@ -7,7 +7,17 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Data, Deferred, Duration, Effect, FileSystem, Ref, type Scope, Stream } from "effect";
+import {
+  Data,
+  Deferred,
+  Duration,
+  Effect,
+  FileSystem,
+  Ref,
+  type Scope,
+  Semaphore,
+  Stream,
+} from "effect";
 import {
   type ConversationLineHit,
   type EmbeddingModelIdentity,
@@ -269,7 +279,7 @@ export function makeNotebookMemory(
     const passes = yield* Ref.make<Passes>({ running: undefined, follow: undefined });
     // One caller at a time decides what its call earns, so two arriving
     // together cannot both find no pass running.
-    const decision = yield* Effect.makeSemaphore(1);
+    const decision = yield* Semaphore.make(1);
 
     const reported = (message: string): Effect.Effect<void> =>
       Effect.sync(() => {
@@ -472,10 +482,10 @@ export function makeNotebookMemory(
     /** A pass that fails reports and answers nothing, without cancelling the follow-on it owes. */
     const passOnce: Effect.Effect<MemorySyncReport | undefined> = syncOnce.pipe(
       Effect.tap(() => options.onSynced ?? Effect.void),
-      Effect.catchAll((refusal) =>
+      Effect.catch((refusal) =>
         Effect.as(reported(`Notebook index sync failed: ${refusal.reason}`), undefined),
       ),
-      Effect.catchAllDefect((defect) =>
+      Effect.catchDefect((defect) =>
         Effect.as(reported(`Notebook index sync failed: ${reasonOf(defect)}`), undefined),
       ),
     );
@@ -560,7 +570,7 @@ export function makeNotebookMemory(
     const requestSync = Effect.asVoid(Effect.forkIn(Effect.interruptible(sync), scope));
 
     const watchFiles: Effect.Effect<void> = Effect.suspend(() =>
-      Effect.catchAll(
+      Effect.catch(
         Stream.runForEach(
           Stream.debounce(
             fileSystem.watch(options.workspaceDirectory(), { recursive: true }),
@@ -572,7 +582,7 @@ export function makeNotebookMemory(
       ),
     );
 
-    const watching = yield* Effect.once(
+    const watching = yield* Effect.cached(
       Effect.asVoid(Effect.forkIn(Effect.interruptible(watchFiles), scope)),
     );
 

@@ -177,7 +177,11 @@ function readPreview(
   }).pipe(
     Effect.retry({
       schedule: TRANSPORT_RETRY,
-      while: (error) => error._tag === "RequestError" || error._tag === "ResponseError",
+      // Every transport-level refusal and every response the status filter
+      // turned down is one `HttpClientError` in v4, whichever reason it
+      // carries; a body that failed to decode is not retried, since a second
+      // read of the same records would decode no better.
+      while: (error) => error._tag === "HttpClientError",
     }),
   );
 }
@@ -220,11 +224,13 @@ export function waitForPreview(
   const onReading = options.onReading ?? (() => Effect.void);
   return Effect.gen(function* () {
     const reading = yield* Effect.repeat(readPreview(source).pipe(Effect.tap(onReading)), {
-      schedule: Schedule.identity<PreviewReading>().pipe(
-        Schedule.zipLeft(Schedule.spaced(Duration.millis(wait.intervalMs))),
-        Schedule.zipLeft(Schedule.recurs(wait.attempts)),
+      schedule: Schedule.spaced(Duration.millis(wait.intervalMs)).pipe(
+        Schedule.upTo({ times: wait.attempts }),
       ),
-      until: (reading) => reading.kind !== PREVIEW_STATE.WAITING,
+      // Annotated as a plain boolean rather than left to inference: a budget
+      // spent before the record settles answers with a waiting reading, which
+      // a refinement would have read out of the type.
+      until: (reading: PreviewReading): boolean => reading.kind !== PREVIEW_STATE.WAITING,
     });
     if (reading.kind === PREVIEW_STATE.WAITING) {
       return yield* new PreviewNotReady({

@@ -85,7 +85,7 @@ async function runCall(
     ...(signal === undefined ? undefined : { signal }),
   });
   if (Exit.isSuccess(exit)) return exit.value;
-  if (signal?.aborted === true && Cause.isInterruptedOnly(exit.cause)) {
+  if (signal?.aborted === true && Cause.hasInterruptsOnly(exit.cause)) {
     const name = errorName(signal.reason);
     return { fault: CALL_FAULT.NETWORK, ...(name === undefined ? undefined : { errorName: name }) };
   }

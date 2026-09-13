@@ -11,7 +11,7 @@
  */
 import type { GatewayEventKind } from "@sidecar/gateway";
 import type { WireValue } from "@sidecar/wire";
-import { Config, Context, Deferred, Effect, Layer, Option } from "effect";
+import { Clock, Config, Context, Deferred, Effect, Layer, Option } from "effect";
 import {
   ACCOUNT_BASE_URL_VARIABLE,
   accountBaseUrlFor,
@@ -140,7 +140,7 @@ const kernelLayer = Layer.effect(
     const reporter = yield* Reporter;
     const service = yield* HostService;
     const override = yield* accountBaseUrlOverride;
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const emit = yield* kernelEmit(service);
 
     return hostKernelOver({
@@ -154,7 +154,7 @@ const kernelLayer = Layer.effect(
       // under `it.effect`, so a test drives `kernel.now()` the same way it
       // drives every other Effect timer rather than through an injected
       // closure of its own.
-      now: () => clock.unsafeCurrentTimeMillis(),
+      now: () => clock.currentTimeMillisUnsafe(),
       createId: idSource.create,
       report: reporter.report,
       emit,

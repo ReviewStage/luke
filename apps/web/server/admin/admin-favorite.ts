@@ -57,6 +57,6 @@ export function handleAdminFavorite(
         ? jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite })
         : errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND),
     ),
-    Effect.catchAllCause((cause) => unavailableSeam("admin favorite write failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin favorite write failed", cause)),
   );
 }

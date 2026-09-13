@@ -72,10 +72,10 @@ function asError(cause: unknown): Error {
  * leaving still leaves this machine.
  */
 function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effect.Effect<void> {
-  return Effect.catchAllCause(effect, (cause) =>
+  return Effect.catchCause(effect, (cause) =>
     // An interruption is not a failure of the step and is never written down
     // as one: it is the caller ending this fiber, and it stands.
-    Cause.isInterruptedOnly(cause)
+    Cause.hasInterruptsOnly(cause)
       ? Effect.interrupt
       : Effect.sync(() => {
           process.stderr.write(`${what}: ${asError(Cause.squash(cause)).message}\n`);
@@ -120,8 +120,8 @@ export class AccountSessionManager {
   /**
    * Every snapshot this session settles on, in order, as the subscription a
    * subscriber's own fiber pumps rather than a callback this class runs: the
-   * subscribe is the acquire (`Stream.fromPubSub`'s own `scoped: true`) and
-   * the subscriber's scope closing is the release, so nothing here holds a
+   * subscribe is the acquire (`PubSub.subscribe`, a scoped effect) and the
+   * subscriber's scope closing is the release, so nothing here holds a
    * handle to give back.
    */
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
@@ -136,7 +136,7 @@ export class AccountSessionManager {
   ) {
     this.#options = options;
     this.#changesPubSub = changesPubSub;
-    this.changes = Stream.fromPubSub(this.#changesPubSub, { scoped: true });
+    this.changes = PubSub.subscribe(this.#changesPubSub).pipe(Effect.map(Stream.fromSubscription));
     this.refreshOnce = singleFlightEffect(() => this.refresh());
   }
 
@@ -204,7 +204,7 @@ export class AccountSessionManager {
       const stored = yield* this.#options.store.readAccount();
       if (!stored)
         return yield* Effect.fail(new Error("No stored account credential to delete with"));
-      const deleted = yield* Effect.either(this.#deleteHosted(stored.accessToken));
+      const deleted = yield* Effect.result(this.#deleteHosted(stored.accessToken));
       if (Result.isFailure(deleted)) {
         if (!accessTokenNeedsRefresh(deleted.failure)) return yield* Effect.fail(deleted.failure);
         const generation = this.#generation;
@@ -221,7 +221,7 @@ export class AccountSessionManager {
       const stored = yield* this.#options.store.readAccount();
       if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
-      const identity = yield* Effect.either(
+      const identity = yield* Effect.result(
         this.#options.client.userInfo(stored.accessToken, stored.provider),
       );
       if (Result.isSuccess(identity)) {
@@ -232,7 +232,7 @@ export class AccountSessionManager {
         return;
       }
       if (!accessTokenNeedsRefresh(identity.failure)) return;
-      const renewed = yield* Effect.either(this.#options.client.refresh(stored.refreshToken));
+      const renewed = yield* Effect.result(this.#options.client.refresh(stored.refreshToken));
       if (Result.isFailure(renewed)) {
         if (
           accountFailureAction(renewed.failure) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
@@ -372,7 +372,7 @@ export class AccountSessionManager {
       onRevokeFailure: (error) => {
         process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
       },
-    }).pipe(Effect.catchAll((error) => Effect.succeed({ reason: error.message })));
+    }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
   }
 
   #storeCurrent(generation: number, stored: StoredAccount): Effect.Effect<boolean> {

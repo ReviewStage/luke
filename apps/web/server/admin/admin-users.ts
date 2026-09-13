@@ -159,6 +159,6 @@ export function handleAdminUsers(
     .readUsers(now, adminMetricsScope(request.url), options.viewer.userId, windowDays, search.term)
     .pipe(
       Effect.map((users) => jsonResponse(ADMIN_HTTP_STATUS.OK, users)),
-      Effect.catchAllCause((cause) => unavailableSeam("admin users read failed", cause)),
+      Effect.catchCause((cause) => unavailableSeam("admin users read failed", cause)),
     );
 }

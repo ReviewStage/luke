@@ -1,6 +1,6 @@
 import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -21,9 +21,11 @@ import {
   type HostedRefusal,
   hostedJsonResponse,
   hostedMethod,
+  hostedNotFoundRoute,
   hostedRefusalResponse,
 } from "./hosted/http-effect.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The account group: the signed-in desktop's own delete and preferences
@@ -89,7 +91,7 @@ function forgetAnalytics(
       projectId,
       ...(host ? { host } : undefined),
     }).pipe(
-      Effect.catchAll((error) =>
+      Effect.catch((error) =>
         Effect.sync(() =>
           process.stderr.write(`Analytics erasure did not complete: ${error.message}\n`),
         ),
@@ -196,26 +198,32 @@ function accountPreferencesEndpoint(
 }
 
 /**
+ * An endpoint's refusal carried back onto the answer channel. A refusal is
+ * failed with rather than returned, so an endpoint's steps read as the early
+ * returns they are; a route answers on one channel, so the group makes the
+ * two one before it registers the path.
+ */
+function refusing<R>(
+  endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> {
+  return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
+}
+
+/**
  * The group: the two account endpoints on their own paths, and the hosted
  * vocabulary's own refusal for a method the matched path does not answer or a
  * path the group declares no route for.
  */
 export function accountApp(
   seams: AccountAppSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  | HostedEnvironment
-  | HttpClient.HttpClient
-  | SqlClient.SqlClient
-  | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(ACCOUNT_PATH.DELETE, accountDeleteEndpoint(seams)),
-    HttpRouter.all(ACCOUNT_PATH.PREFERENCES, accountPreferencesEndpoint(seams)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACCOUNT_PATH.PREFERENCES,
+      refusing(accountPreferencesEndpoint(seams)),
     ),
-    Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+    hostedNotFoundRoute,
   );
 }

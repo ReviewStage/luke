@@ -328,7 +328,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -341,7 +341,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
  * the run — since the brain's publication writes no line of its own.
  */
 function seeded(
-  c: Effect.Effect.Success<ReturnType<typeof composed>>,
+  c: Effect.Success<ReturnType<typeof composed>>,
 ): Effect.Effect<{ agent: BrainAgent; client: ReturnType<typeof heldClient> }> {
   return Effect.gen(function* () {
     yield* Effect.promise(() => c.open());

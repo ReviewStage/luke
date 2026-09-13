@@ -1,4 +1,4 @@
-import { type Cause, Effect } from "effect";
+import { type Cause, type Effect, Layer } from "effect";
 import { HttpRouter, type HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin/admin-access.js";
@@ -10,6 +10,7 @@ import { type AdminUsersOptions, handleAdminUsers } from "./admin/admin-users.js
 import { adminViewerGate } from "./admin/gate.js";
 import { ADMIN_ROUTE_PATH } from "./admin/http.js";
 import { ADMIN_REFUSAL, adminRefusalResponse } from "./admin/http-effect.js";
+import { ANY_METHOD, ANY_PATH, type WebRoutes } from "./route.js";
 
 /**
  * The dashboard as the one route group its five functions serve: four reads
@@ -30,9 +31,7 @@ import { ADMIN_REFUSAL, adminRefusalResponse } from "./admin/http-effect.js";
 /** What the group is handed that the deployment alone can answer for. */
 export interface AdminSeams {
   /** The browser session the request rides in on; a refusal is an outage, never a sign-out. */
-  resolveViewer: (
-    request: Request,
-  ) => Effect.Effect<AdminViewer | undefined, Cause.UnknownException>;
+  resolveViewer: (request: Request) => Effect.Effect<AdminViewer | undefined, Cause.UnknownError>;
   readMetrics: AdminMetricsOptions["readMetrics"];
   readUsers: AdminUsersOptions["readUsers"];
   readUser: AdminUserOptions["readUser"];
@@ -59,47 +58,54 @@ function gate(
   return adminViewerGate({ methods, resolveViewer: seams.resolveViewer, handler });
 }
 
+/**
+ * The admin vocabulary's own `not-found`, on the wildcard the router reaches
+ * only once all five addresses have failed to match.
+ */
+const adminNotFoundRoute = HttpRouter.add(
+  ANY_METHOD,
+  ANY_PATH,
+  adminRefusalResponse(ADMIN_REFUSAL.NOT_FOUND),
+);
+
 /** The group, which is the dashboard's five addresses and the refusal anywhere else. */
-export function adminApp(
-  seams: AdminSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
-> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(
+export function adminApp(seams: AdminSeams): WebRoutes<SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
       ADMIN_ROUTE_PATH.METRICS,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminMetrics({ request, readMetrics: seams.readMetrics }),
       ),
     ),
-    HttpRouter.all(
+    HttpRouter.add(
+      ANY_METHOD,
       ADMIN_ROUTE_PATH.USERS,
       gate(seams, READ_METHOD, (viewer, request) =>
         handleAdminUsers({ request, viewer, readUsers: seams.readUsers }),
       ),
     ),
-    HttpRouter.all(
+    HttpRouter.add(
+      ANY_METHOD,
       ADMIN_ROUTE_PATH.USER,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminUser({ request, readUser: seams.readUser }),
       ),
     ),
-    HttpRouter.all(
+    HttpRouter.add(
+      ANY_METHOD,
       ADMIN_ROUTE_PATH.DAY,
       gate(seams, READ_METHOD, (_viewer, request) =>
         handleAdminDay({ request, readDay: seams.readDay }),
       ),
     ),
-    HttpRouter.all(
+    HttpRouter.add(
+      ANY_METHOD,
       ADMIN_ROUTE_PATH.FAVORITE,
       gate(seams, FAVORITE_METHODS, (viewer, request) =>
         handleAdminFavorite({ request, viewer, writeFavorite: seams.writeFavorite }),
       ),
     ),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(adminRefusalResponse(ADMIN_REFUSAL.NOT_FOUND)),
-    ),
+    adminNotFoundRoute,
   );
 }

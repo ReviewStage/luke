@@ -86,7 +86,7 @@ export const conversationMaintenance = (
   Effect.asVoid(
     Effect.forkScoped(
       Effect.repeat(
-        Effect.catchAllCause(
+        Effect.catchCause(
           Effect.promise(() =>
             dependencies.store
               .runMaintenance(dependencies.brain.busyConversations())

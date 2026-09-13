@@ -248,7 +248,7 @@ export const PROBE_REQUEST_INIT: RequestInit = { redirect: "manual" };
 
 /** A dropped connection is retried a few times; an answer, whatever its status, is never retried. */
 export const TRANSPORT_RETRY = Schedule.exponential(Duration.seconds(1)).pipe(
-  Schedule.intersect(Schedule.recurs(3)),
+  Schedule.upTo({ times: 3 }),
 );
 const PROBE_CONCURRENCY = 4;
 
@@ -295,8 +295,12 @@ export function probeDeployment(
           }),
           Effect.scoped,
           Effect.retry({
+            // Every failure that lands before an answer does — a dropped
+            // connection, a request this could neither address nor encode —
+            // is one `HttpClientError` in v4, and what tells it from a
+            // refused answer is that it carries no response of its own.
             schedule: TRANSPORT_RETRY,
-            while: (error) => error._tag === "RequestError",
+            while: (error) => error.response === undefined,
           }),
         ),
       { concurrency: PROBE_CONCURRENCY },

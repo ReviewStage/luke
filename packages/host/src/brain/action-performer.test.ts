@@ -33,7 +33,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Fiber, Option, Result } from "effect";
+import { Deferred, Effect, Fiber, Result } from "effect";
 import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
@@ -120,7 +120,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -725,7 +725,7 @@ it.effect(
           ),
         );
         yield* waitFor(() => invoked);
-        assert.equal(Option.isNone(yield* pending.poll), true);
+        assert.equal(pending.pollUnsafe(), undefined);
         controller.abort();
         const outcome = yield* Fiber.join(pending);
         assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);

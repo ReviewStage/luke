@@ -28,7 +28,7 @@ import {
   type ToolResult,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type UnknownActionResult } from "@sidecar/wire";
-import { Cause, Effect, Exit, Fiber } from "effect";
+import { Cause, Effect, Exit, Fiber, Semaphore } from "effect";
 import { compactContext } from "./compaction.js";
 import { whenAborted } from "./effect/settled.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
@@ -90,7 +90,7 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
   readonly #options: ToolLoopRuntimeOptions;
   readonly #checkpoint: CheckpointFormat;
   /** One ask at a time, so a second caller reads the answer the first kept rather than spending a call of its own. */
-  readonly #asking = Effect.unsafeMakeSemaphore(1);
+  readonly #asking = Semaphore.makeUnsafe(1);
   #capabilities: { readonly answer: ModelCapabilities | undefined } | undefined;
 
   constructor(options: ToolLoopRuntimeOptions) {
@@ -132,7 +132,7 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
           Effect.map((answer) =>
             answer.outcome === MODEL_RESPONSE_OUTCOME.ANSWERED ? answer.capabilities : undefined,
           ),
-          Effect.catchAllDefect(() => Effect.succeed(undefined)),
+          Effect.catchDefect(() => Effect.succeed(undefined)),
           Effect.tap((answer) =>
             Effect.sync(() => {
               this.#capabilities = { answer };
@@ -267,7 +267,7 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
         Effect.asVoid(Effect.andThen(Fiber.interrupt(running), settled)),
       );
       if (Exit.isSuccess(exit)) return exit.value;
-      if (!Cause.isInterruptedOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
+      if (!Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause);
       return yield* settled;
     }).pipe(
       Effect.ensuring(
@@ -480,7 +480,7 @@ function executeToolCall(
   revoked: () => boolean,
 ): Effect.Effect<ToolResult> {
   return Effect.gen(function* () {
-    const result = yield* Effect.catchAllDefect(
+    const result = yield* Effect.catchDefect(
       tools.execute(call, { runId, signal, isRevoked: revoked }),
       (): Effect.Effect<ToolResult> =>
         Effect.succeed({

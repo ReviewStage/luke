@@ -146,7 +146,7 @@ function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
       lostResult: Parameters<typeof inner.resume>[2],
     ): Promise<RuntimeRun | { readonly refused: string }> =>
       Effect.runPromise(
-        Effect.either(
+        Effect.result(
           inner.resume(checkpoint, { ...request, onEvent: listener(request.onEvent) }, lostResult),
         ),
       ).then((resumed) =>

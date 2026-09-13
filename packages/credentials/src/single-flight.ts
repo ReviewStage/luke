@@ -1,4 +1,4 @@
-import { Deferred, Effect } from "effect";
+import { Deferred, Effect, Semaphore } from "effect";
 
 /**
  * Collapses concurrent asks for a refresh into one in-flight run, and every
@@ -27,7 +27,7 @@ import { Deferred, Effect } from "effect";
 export function singleFlightEffect(
   run: () => Effect.Effect<void, unknown>,
 ): () => Effect.Effect<void, unknown> {
-  const gate = Effect.unsafeMakeSemaphore(1);
+  const gate = Semaphore.makeUnsafe(1);
   let flight: Deferred.Deferred<void, unknown> | undefined;
 
   function join(): Deferred.Deferred<void, unknown> {

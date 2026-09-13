@@ -3,7 +3,7 @@ import * as Registry from "@effect-atom/atom/Registry";
 import * as Result from "@effect-atom/atom/Result";
 import { useAtomValue } from "@effect-atom/atom-react/Hooks";
 import { type AppSettingsView, appSettingsView } from "@sidecar/settings/wire";
-import { Data, Effect, identity, Option, Stream } from "effect";
+import { Data, Effect, Option, Queue, Stream } from "effect";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
@@ -44,12 +44,12 @@ export const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
  * bootstrap and not a race.
  */
 const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
-  Stream.asyncPush<AppStateSnapshot, AppStateUnread>((emit) =>
+  Stream.callback<AppStateSnapshot, AppStateUnread>((queue) =>
     Effect.gen(function* () {
       yield* Effect.acquireRelease(
         Effect.sync(() =>
           source.subscribe((delivered) => {
-            emit.single(delivered);
+            Queue.offerUnsafe(queue, delivered);
           }),
         ),
         (stop) => Effect.sync(stop),
@@ -61,14 +61,8 @@ const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, App
             catch: (cause) => new AppStateUnread({ cause }),
           }),
           {
-            onFailure: (refusal) =>
-              Effect.sync(() => {
-                emit.fail(refusal);
-              }),
-            onSuccess: (answered) =>
-              Effect.sync(() => {
-                emit.single(answered);
-              }),
+            onFailure: (refusal) => Queue.fail(queue, refusal),
+            onSuccess: (answered) => Queue.offer(queue, answered),
           },
         ),
       );
@@ -85,13 +79,13 @@ const deliveries = (source: AppStateSource): Stream.Stream<AppStateSnapshot, App
 const adopted = (
   delivered: Stream.Stream<AppStateSnapshot, AppStateUnread>,
 ): Stream.Stream<AppStateSnapshot, AppStateUnread> =>
-  Stream.filterMap(
-    Stream.mapAccum(delivered, Option.none<AppStateSnapshot>(), (held, delivery) =>
+  Stream.mapAccum(
+    delivered,
+    () => Option.none<AppStateSnapshot>(),
+    (held, delivery) =>
       Option.isSome(held) && delivery.version < held.value.version
-        ? [held, Option.none<AppStateSnapshot>()]
-        : [Option.some(delivery), Option.some(delivery)],
-    ),
-    identity,
+        ? [held, []]
+        : [Option.some(delivery), [delivery]],
   );
 
 /**

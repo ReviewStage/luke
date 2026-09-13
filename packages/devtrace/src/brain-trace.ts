@@ -102,7 +102,7 @@ export function tracedModelAdapter(
         // The original rejection, never the span's own `FiberFailure` wrapper:
         // a caller above this adapter may still tell one thrown value from
         // another, and wrapping would answer that question with the wrong one.
-        const failure = Cause.failureOption(exit.cause);
+        const failure = Cause.findErrorOption(exit.cause);
         const error = Option.isSome(failure) ? failure.value : Cause.squash(exit.cause);
         recordQuietly({
           ...about,

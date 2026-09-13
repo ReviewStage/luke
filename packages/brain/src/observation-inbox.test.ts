@@ -12,8 +12,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
-import { Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { Clock, Effect, Fiber } from "effect";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
@@ -382,7 +381,7 @@ it.effect(
       const relaunched = yield* effectHarness(reading(), quiet.repository);
       relaunched.client.answers.push(answered([message("")]), answered([message("")]));
       yield* relaunched.agent.ready();
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.sinceReads.length, 0);
       assert.equal(relaunched.client.inputs.length, 1);
@@ -391,7 +390,7 @@ it.effect(
       // The next look finds nothing new in the transcript and still opens the
       // turn the standing captures are owed.
       yield* relaunched.agent.rosterLook();
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.client.inputs.length, 2);
       assert.equal(relaunched.agent.pendingWakes(), 0);

@@ -35,7 +35,7 @@ import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
-import { Chunk, Context, Duration, Effect, Scope } from "effect";
+import { Context, Duration, Effect, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
@@ -76,7 +76,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -405,13 +405,13 @@ it.scoped(
       assert.equal(completionTurns.length, 1);
       // The child's conversation stands for an hour after its end, then archives.
       const hour = 60 * 60 * 1000;
-      const sleeps = Chunk.toReadonlyArray(yield* TestClock.sleeps());
-      assert.ok(
-        sleeps.some((instant) => instant > hour - 10_000 && instant <= hour),
-        "the archive is armed for an hour after the end",
-      );
+      // v4's TestClock keeps its pending sleeps private, so what the archive is
+      // armed for is read from the clock's own edge: ten seconds short of the
+      // hour nothing has archived, and crossing it archives.
       assert.deepEqual(c.archived, []);
-      yield* TestClock.adjust(Duration.millis(hour));
+      yield* TestClock.adjust(Duration.millis(hour - 10_000));
+      assert.deepEqual(c.archived, []);
+      yield* TestClock.adjust(Duration.millis(10_000));
       yield* waitFor(() => c.archived.length > 0);
       assert.deepEqual(c.archived, [child.childSessionKey]);
       assert.equal(c.wiring.current(child.childSessionKey), undefined);

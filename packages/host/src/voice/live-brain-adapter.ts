@@ -110,7 +110,7 @@ export function brainAgentLiveBrain(
         const events = yield* Scope.provide(agent.runEvents, scope);
         yield* Effect.forkIn(
           Stream.runForEach(events, (event) =>
-            Effect.catchAllDefect(
+            Effect.catchDefect(
               Effect.sync(() => {
                 const translated = liveRunEventOf(event);
                 if (!translated) return;

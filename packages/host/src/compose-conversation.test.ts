@@ -34,7 +34,7 @@ import {
   TURN_STATUS,
   type WireValue,
 } from "@sidecar/wire";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { test } from "vitest";
 import {
   type ConversationHeadsClient,
@@ -567,10 +567,7 @@ test("a rating whose params are not one message and one verdict is refused as in
   const outcome = await rateOutcome(composer, { messageId: REPLY, rating: "sideways" });
   assert.ok(Exit.isFailure(outcome));
   assert.deepEqual(
-    Cause.failures(outcome.cause).pipe(
-      Chunk.map((refusal) => refusal.code),
-      Chunk.toReadonlyArray,
-    ),
+    outcome.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error.code),
     [GATEWAY_ERROR.INVALID_PARAMS],
   );
   assert.deepEqual(client.rated, []);

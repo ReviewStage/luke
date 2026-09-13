@@ -258,10 +258,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * for the action that reads the credential again at its own moment.
    */
   const readApiKey = (): Effect.Effect<string | undefined> =>
-    Effect.catchAllCause(input.readApiKey(), (cause) =>
+    Effect.catchCause(input.readApiKey(), (cause) =>
       // A caller ending the fiber is not a settings read that failed, so an
       // interruption is re-raised rather than read as a missing credential.
-      Cause.isInterruptedOnly(cause) ? Effect.failCause(cause) : Effect.succeed(undefined),
+      Cause.hasInterruptsOnly(cause) ? Effect.failCause(cause) : Effect.succeed(undefined),
     );
 
   const forgetObservedState = (): void => {
@@ -328,7 +328,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         ),
       );
     }
-    return Effect.catchAll(
+    return Effect.catch(
       Effect.map(readBody(response), (body) => {
         const record = wireRecord(unparsedWire(body));
         return (
@@ -363,21 +363,21 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     const transient = () =>
       new AdapterFailure(ADAPTER_FAILURE.TRANSIENT, `${provider.displayName} request failed`);
     return Effect.flatMap(
-      Effect.either(HttpClient.execute(sent(apiKey, url(segments, query), document))),
+      Effect.result(HttpClient.execute(sent(apiKey, url(segments, query), document))),
       (answer): Effect.Effect<Answered, RateLimitedRead> => {
-        if (answer._tag === "Left") return Effect.succeed(transient());
-        if (answer.right.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
+        if (answer._tag === "Failure") return Effect.succeed(transient());
+        if (answer.success.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
           return Effect.fail(
             new RateLimitedRead({
-              retryAfter: Option.getOrNull(Headers.get(answer.right.headers, "retry-after")),
+              retryAfter: Option.getOrNull(Headers.get(answer.success.headers, "retry-after")),
             }),
           );
         }
-        return readAnswer(answer.right);
+        return readAnswer(answer.success);
       },
     ).pipe(
       Effect.timeout(Duration.millis(timeoutMs)),
-      Effect.catchTag("TimeoutException", () => Effect.succeed(transient())),
+      Effect.catchTag("TimeoutError", () => Effect.succeed(transient())),
     );
   };
 
@@ -546,7 +546,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     route: CloudWriteRoute,
     subject: WriteSubject,
   ): Effect.Effect<CloudWriteOutcome, never, HttpClient.HttpClient> =>
-    Effect.catchAll(
+    Effect.catch(
       Effect.timeout(
         writeAttempt(apiKey, route, subject),
         Duration.millis(requestDeadlineMs(route.timeoutMs)),
@@ -588,7 +588,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     // the newest pass may write, or sessions read as one credential would be
     // served as another's until the next refresh.
     const pass = ++collectPass;
-    return yield* Effect.catchAllCause(
+    return yield* Effect.catchCause(
       Effect.map(input.collect(requestForPass(pass, apiKey), attemptedAt), (collected) => {
         if (pass === collectPass) {
           observations = cloudObservations(collected);
@@ -603,7 +603,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
         // reports on a credential that no longer stands, so its rejection
         // says nothing about the current one.
         if (pass !== collectPass) return Effect.succeed(observations);
-        const failure = Cause.failureOption(cause);
+        const failure = Cause.findErrorOption(cause);
         if (Option.isSome(failure)) {
           if (clearsObservedState(failure.value.failure)) forgetObservedState();
           lastFailure = failure.value.failure;

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
-import { Chunk, Context, Effect, Fiber, Stream } from "effect";
+import { Context, Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -50,9 +50,9 @@ function watchChanges(app: AppStateStore, count: number, act: () => void): Promi
   return Effect.runPromise(
     Effect.gen(function* () {
       const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(app.changes, count)));
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       act();
-      return Chunk.toArray(yield* Fiber.join(fiber));
+      return yield* Fiber.join(fiber);
     }),
   );
 }

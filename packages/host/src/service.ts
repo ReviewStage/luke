@@ -214,7 +214,7 @@ function reading(
 ): GatewayMethodHandler {
   return (params, context) =>
     Effect.suspend(() => handle(new ParamReader(params), context)).pipe(
-      Effect.catchAllDefect((defect) =>
+      Effect.catchDefect((defect) =>
         defect instanceof ParamRefusal ? invalid(defect.message) : Effect.die(defect),
       ),
     );

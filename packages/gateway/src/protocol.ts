@@ -131,8 +131,17 @@ export const GatewayParamsSchema = Schema.Record(Schema.String, WireValueSchema)
   Schema.refine(isRecord),
 );
 
-/** What a method answers: a wire value, or nothing at all, which the envelope carries as an absent field. */
-export const GatewayResultSchema = Schema.UndefinedOr(WireValueSchema);
+/**
+ * What a method answers: a wire value, or nothing at all, which the envelope
+ * carries as an absent field. The nothing arm stands first on purpose: JSON
+ * has no `undefined`, so the codec the Rpc runtime fills a message's result
+ * hole with lowers it to `null`, and the arm that reads `null` back is
+ * whichever the union names first. Naming it first is what keeps a method
+ * that answered nothing answering nothing across the wire, at the price of
+ * reading a wire value that was itself `null` as nothing — which is what the
+ * envelope's absent field already says of it.
+ */
+export const GatewayResultSchema = Schema.Union([Schema.Undefined, WireValueSchema]);
 
 /**
  * The live voice session's vocabulary, declared beside the four methods and

@@ -161,7 +161,7 @@ export function runMemoryHousekeeping(
         return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
       }),
   };
-  return Effect.catchAllDefect(
+  return Effect.catchDefect(
     Effect.map(
       runPrivateTurn({
         runtime: options.runtime,

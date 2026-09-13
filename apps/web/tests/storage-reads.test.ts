@@ -134,7 +134,7 @@ async function countConversations(id: string): Promise<number> {
 }
 
 function readRecords(
-  read: Effect.Effect.Success<ReturnType<typeof database.store.messages.list>>,
+  read: Effect.Success<ReturnType<typeof database.store.messages.list>>,
 ): readonly StoredMessageRecord[] {
   assert.equal(read.ok, true);
   return read.ok ? read.value : [];

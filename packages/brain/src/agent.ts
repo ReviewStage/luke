@@ -15,7 +15,18 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { type Clock, Context, Duration, Effect, Exit, PubSub, Result, Scope, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  PubSub,
+  Result,
+  Scope,
+  Semaphore,
+  Stream,
+} from "effect";
 import { AskLedger, type BrainRequestsListener } from "./asks.js";
 import { type BrainCompletionDelivery, ChildRuns } from "./children.js";
 import { BRAIN_DEFAULTS } from "./defaults.js";
@@ -265,7 +276,7 @@ export class BrainAgent {
    * turn and handed to the waiters in the order they asked, so the turns of
    * one conversation never overlap however many edges opened them.
    */
-  readonly #serial = Effect.unsafeMakeSemaphore(1);
+  readonly #serial = Semaphore.makeUnsafe(1);
   #stopped = false;
   #unsubscribeStore: (() => void) | undefined;
   #incompatibleReported: string | undefined;
@@ -305,7 +316,7 @@ export class BrainAgent {
   static make(options: BrainAgentOptions): Effect.Effect<BrainAgent> {
     return Effect.gen(function* () {
       const runEvents = yield* PubSub.unbounded<BrainRunEvent>();
-      const clock = yield* Effect.clock;
+      const clock = yield* Clock.Clock;
       const scope = yield* Scope.make();
       return new BrainAgent(options, runEvents, clock, scope);
     });
@@ -319,10 +330,10 @@ export class BrainAgent {
   ) {
     this.#options = options;
     this.#runEvents = runEvents;
-    this.runEvents = Stream.fromPubSub(runEvents, { scoped: true });
+    this.runEvents = Effect.map(PubSub.subscribe(runEvents), Stream.fromSubscription);
     this.#clock = clock;
     this.#scope = scope;
-    this.#now = () => clock.unsafeCurrentTimeMillis();
+    this.#now = () => clock.currentTimeMillisUnsafe();
     this.#report = options.report ?? ((message) => process.stderr.write(`${message}\n`));
     this.#execution = options.execution ?? Context.empty();
     this.#detached = detachOn(this.#execution);
@@ -792,7 +803,7 @@ export class BrainAgent {
   }
 
   #fireRunEvent(event: BrainRunEvent): void {
-    this.#runEvents.unsafeOffer(event);
+    PubSub.publishUnsafe(this.#runEvents, event);
   }
 
   /**
@@ -883,7 +894,7 @@ export class BrainAgent {
 
   #restore(): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
-      const loaded = yield* Effect.either(
+      const loaded = yield* Effect.result(
         Effect.tryPromise({ try: () => this.#options.store.load(), catch: (error) => error }),
       );
       if (Result.isFailure(loaded)) {

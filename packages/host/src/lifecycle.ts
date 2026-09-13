@@ -1,5 +1,5 @@
 import type { GatewayShutdownSteps } from "@sidecar/gateway";
-import { Cause, Effect, type Fiber, Ref, type Scope } from "effect";
+import { Cause, Effect, Fiber, Ref, type Scope } from "effect";
 
 /**
  * Two moments of the runtime host's life where one concern must not decide
@@ -27,7 +27,7 @@ export function seedWorkspaceThenStartMemory(
   options: StartupStoreOptions,
 ): Effect.Effect<void, never, Scope.Scope> {
   return Effect.andThen(
-    Effect.catchAllCause(options.seedWorkspace, (cause) => {
+    Effect.catchCause(options.seedWorkspace, (cause) => {
       const failure = Cause.squash(cause);
       return Effect.sync(() => {
         options.report(
@@ -65,12 +65,12 @@ function begunOnce(work: Effect.Effect<void>): Effect.Effect<BegunOnce> {
             // than merely stopped being waited on. It is given its first turn
             // before the quit moves on, so the work is under way from the
             // step that began it.
-            Effect.andThen(Ref.set(held, forked), Effect.yieldNow()),
+            Effect.andThen(Ref.set(held, forked), Effect.yieldNow),
           )
         : Effect.void,
     ),
     settled: Effect.flatMap(Ref.get(held), (running) =>
-      running === undefined ? Effect.void : Effect.asVoid(running.await),
+      running === undefined ? Effect.void : Effect.asVoid(Fiber.join(running)),
     ),
   }));
 }

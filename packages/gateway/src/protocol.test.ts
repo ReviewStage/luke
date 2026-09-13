@@ -119,7 +119,7 @@ function answeringLate(
     events: (sink) => transport.events(sink),
     request: (request) =>
       Effect.tap(transport.request(request), () =>
-        Effect.async<void>((resume) => {
+        Effect.callback<void>((resume) => {
           schedule(() => resume(Effect.void));
         }),
       ),

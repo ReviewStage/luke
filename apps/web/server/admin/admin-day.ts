@@ -106,6 +106,6 @@ export function handleAdminDay(
   const now = (options.now ?? Date.now)();
   return options.readDay(day, now, adminMetricsScope(request.url)).pipe(
     Effect.map((detail) => jsonResponse(ADMIN_HTTP_STATUS.OK, detail)),
-    Effect.catchAllCause((cause) => unavailableSeam("admin day read failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin day read failed", cause)),
   );
 }

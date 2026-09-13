@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { type Clock, Duration, Effect } from "effect";
+import { Clock, Duration, Effect } from "effect";
 import { advanceHarness } from "./harness.js";
 
 /**
@@ -12,10 +12,10 @@ import { advanceHarness } from "./harness.js";
  */
 const arming = Effect.gen(function* () {
   const context = yield* Effect.context<never>();
-  const clock: Clock.Clock = yield* Effect.clock;
+  const clock: Clock.Clock = yield* Clock.Clock;
   const fork = Effect.runForkWith(context);
   return {
-    now: () => clock.unsafeCurrentTimeMillis(),
+    now: () => clock.currentTimeMillisUnsafe(),
     arm: (delayMs: number, callback: () => void): void => {
       fork(Effect.andThen(clock.sleep(Duration.millis(delayMs)), Effect.sync(callback)));
     },

@@ -22,7 +22,7 @@ class FakeTransport implements SocketVerbs {
 /** Lets the fibers reading a hold's stream take what has been offered to them. */
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 
@@ -90,7 +90,7 @@ it.effect(
     Effect.gen(function* () {
       const hold = holdSocket(new FakeTransport());
       const waiting = yield* Effect.forkChild(hold.socket.takeFirst);
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       hold.hear({ frame: "answer" });
       hold.hear({ frame: "spoken-right-behind" });
       assert.deepEqual(yield* Fiber.join(waiting), { frame: "answer" });
@@ -154,8 +154,9 @@ it.effect(
           }),
         ),
       );
-      yield* Effect.yieldNow();
-      assert.equal(Exit.isInterrupted(yield* Fiber.interrupt(waiting)), true);
+      yield* Effect.yieldNow;
+      yield* Fiber.interrupt(waiting);
+      assert.equal(Exit.hasInterrupts(yield* Fiber.await(waiting)), true);
       hold.hear({ frame: "late-answer" });
       hold.hear({ close: { code: 1000 } });
       assert.deepEqual(taken, []);

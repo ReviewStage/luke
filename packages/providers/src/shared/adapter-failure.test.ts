@@ -36,7 +36,7 @@ test("a rate limit ends the pass without clearing it, and one resource's transie
   );
   const exit = await Effect.runPromiseExit(tolerateItemFailureEffect(Effect.fail(rateLimited)));
   assert.equal(Exit.isFailure(exit), true);
-  const failure = Exit.isFailure(exit) ? Cause.failureOption(exit.cause) : Option.none();
+  const failure = Exit.isFailure(exit) ? Cause.findErrorOption(exit.cause) : Option.none();
   assert.equal(Option.isSome(failure) && failure.value, rateLimited);
 });
 

@@ -222,7 +222,7 @@ it.effect("the call's own deadline still ends a write the service never answers"
     });
 
     const writing = yield* Effect.forkChild(actions.sendMessage(identityOf(CLOUD), "ship it"));
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     yield* TestClock.adjust(Duration.seconds(10));
 
     assert.equal((yield* Fiber.join(writing)).status, UNKNOWN_ACTION_STATUS);
@@ -257,7 +257,7 @@ it.effect("a write the service already carried settles though its caller is inte
     });
 
     const writing = yield* Effect.forkChild(actions.sendMessage(identityOf(CLOUD), "ship it"));
-    for (let tick = 0; tick < 100 && !reached; tick += 1) yield* Effect.yieldNow();
+    for (let tick = 0; tick < 100 && !reached; tick += 1) yield* Effect.yieldNow;
     assert.ok(reached, "the write reached the service");
     // The caller ends under the write; the answer the service is still
     // holding is read out all the same, and what it earns is not dropped.

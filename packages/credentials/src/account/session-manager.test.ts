@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
-import { Deferred, Effect, Exit, Fiber, Option, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -103,7 +103,7 @@ it.scoped("sign out closes capabilities, clears storage, broadcasts, then revoke
     yield* subject.instance.signOut({ revokeRemote: true });
     // The subscriber is a separate fiber pumping the published snapshots, so
     // enough turns are given for it to have drained both before they are read.
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     assert.deepEqual(subject.events, ["stop"]);
     assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
     assert.deepEqual(calls, ["revoke"]);
@@ -147,14 +147,14 @@ it.scoped("a sign-out interrupted mid-way runs to the cleared account rather tha
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
 
     const signingOut = yield* Effect.forkChild(subject.instance.signOut());
-    yield* Effect.yieldNow();
+    yield* Effect.yieldNow;
     yield* Effect.forkChild(Fiber.interrupt(signingOut));
     // Enough turns for the interruption to have been delivered wherever the
     // sign-out could take it. The departure is reported before the credential
     // is cleared, so it must not be taken anywhere: the fiber is still
     // running on the held clear.
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
-    assert.equal(Option.isNone(yield* Fiber.poll(signingOut)), true);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
+    assert.equal(signingOut.pollUnsafe(), undefined);
 
     yield* Deferred.succeed(holding, undefined);
     yield* Fiber.await(signingOut);

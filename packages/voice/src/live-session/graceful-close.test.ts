@@ -67,7 +67,7 @@ function closedEvent(reason: string, seconds: number) {
 /** Lets the forked close reach its wait, and whatever a received event started run its course. */
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 

@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
-import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
@@ -79,7 +79,7 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
 export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
   Layer.effect(
     SqlClient.SqlClient,
-    Effect.flatMap(Effect.makeSemaphore(1), (connections) => {
+    Effect.flatMap(Semaphore.make(1), (connections) => {
       const exclusive = Effect.acquireRelease(
         Effect.as(connections.take(1), pgliteConnection(client)),
         () => connections.release(1),

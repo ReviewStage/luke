@@ -52,7 +52,7 @@ export class ObservationLoop {
    */
   readonly #pass: Effect.Effect<void> = Effect.suspend(() =>
     this.#armed
-      ? Effect.catchAllDefect(this.refresh, (defect) =>
+      ? Effect.catchDefect(this.refresh, (defect) =>
           Effect.sync(() => {
             this.#report(
               `Observation pass failed: ${defect instanceof Error ? defect.message : String(defect)}`,

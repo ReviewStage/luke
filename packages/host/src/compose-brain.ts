@@ -64,7 +64,7 @@ import { agentRootPath } from "./store-path.js";
 import { type StoreWiring, wireStore } from "./store-wiring.js";
 import { reporterOf } from "./wire-helpers.js";
 
-type BrainWiring = Effect.Effect.Success<ReturnType<typeof wireBrain>>;
+type BrainWiring = Effect.Success<ReturnType<typeof wireBrain>>;
 
 export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
@@ -121,14 +121,14 @@ export const composeBrain = (
     yield* Effect.forkScoped(
       Effect.forever(
         Effect.flatMap(Queue.take(publications), (publication) =>
-          Effect.catchAllDefect(publication, (defect) =>
+          Effect.catchDefect(publication, (defect) =>
             Effect.logError("a host service publication failed", defect),
           ),
         ),
       ),
     );
     const publish = (through: (service: GatewayService) => void): void => {
-      Queue.unsafeOffer(
+      Queue.offerUnsafe(
         publications,
         Effect.flatMap(hostService.value, (service) => Effect.sync(() => through(service))),
       );

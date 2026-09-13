@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Exit, Fiber, Redacted } from "effect";
+import { Cause, Effect, Exit, Fiber, Option, Redacted } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
@@ -171,8 +171,9 @@ it.effect(
       const exit = yield* Fiber.await(fiber);
       assert.equal(Exit.isFailure(exit), true);
       if (Exit.isFailure(exit)) {
-        assert.equal(exit.cause._tag, "Fail");
-        if (exit.cause._tag === "Fail") assert.equal(exit.cause.error._tag, "PreviewNotReady");
+        assert.equal(Cause.hasFails(exit.cause), true);
+        const failure = Cause.findErrorOption(exit.cause);
+        assert.equal(Option.isSome(failure) && failure.value._tag, "PreviewNotReady");
       }
       assert.equal(reads.length, 3);
     }),

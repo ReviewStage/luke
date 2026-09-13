@@ -109,7 +109,7 @@ function tickOptions(
         recorded.ran.push(`observe:${userId}`);
         // A concurrent batch's passes interleave before any opens it, exactly
         // as a real pass's own await would; the yield stands in for that.
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         return yield* outcome(userId);
       }),
     openTurns: (userId) =>

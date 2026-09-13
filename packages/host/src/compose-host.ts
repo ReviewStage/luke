@@ -366,7 +366,7 @@ export const hostAssemblyLayer: Layer.Layer<
             const agent = brain.wiring.agentForRun(record.runId);
             if (!agent) continue;
             cancelled.push(record.runId);
-            yield* Effect.catchAllDefect(agent.cancelAsk(record.runId), () => Effect.void);
+            yield* Effect.catchDefect(agent.cancelAsk(record.runId), () => Effect.void);
           }
           for (const child of brain.wiring.children.children()) {
             if (isTerminalChildRunStatus(child.status)) continue;

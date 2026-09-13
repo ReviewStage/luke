@@ -205,11 +205,16 @@ export function hostedLiveBrain(
       followed.add(askId);
       const told = { seq: 0 };
       const cadence = Schedule.spaced(Duration.millis(bounds.POLL_MS)).pipe(
-        Schedule.intersect(Schedule.recurUntil((done: boolean) => done)),
-        Schedule.upTo(Duration.millis(bounds.FOLLOW_MS)),
+        Schedule.setInputType<boolean>(),
+        Schedule.while(({ input }) => !input),
+        Schedule.upTo({ duration: Duration.millis(bounds.FOLLOW_MS) }),
+        // Whichever of the two ends the follow — the turn saying it ended or
+        // the bound elapsing — the repeat answers with the last look's own
+        // word on it rather than the schedule's count.
+        Schedule.map(({ input }) => input),
       );
       const following = Effect.repeat(look(askId, told), cadence).pipe(
-        Effect.flatMap(([, done]) =>
+        Effect.flatMap((done) =>
           done
             ? Effect.void
             : Effect.sync(() => {
@@ -217,8 +222,8 @@ export function hostedLiveBrain(
                 endFailed(askId);
               }),
         ),
-        Effect.catchAllCause((cause) => {
-          if (Cause.isInterruptedOnly(cause)) return Effect.void;
+        Effect.catchCause((cause) => {
+          if (Cause.hasInterruptsOnly(cause)) return Effect.void;
           const failure = Cause.squash(cause);
           return Effect.sync(() => {
             options.report(

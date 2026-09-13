@@ -38,10 +38,9 @@ import {
  * description, the session, and the answer — with room over it, and a count
  * too low fails every run rather than one.
  */
-const settle = Effect.repeatN(
-  Effect.andThen(Effect.yieldNow(), TestClock.adjust(Duration.zero)),
-  12,
-);
+const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
+  times: 12,
+});
 
 /** Advances the clock the call's bounds are forked against, then lets what fell due settle. */
 const advance = (delayMs: number): Effect.Effect<void> =>

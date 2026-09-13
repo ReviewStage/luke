@@ -103,7 +103,7 @@ export function hostedLiveRecord({
     function enqueue(write: Write): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError> {
       const landed = Deferred.makeUnsafe<VoiceWriteResult, SqlError | Schema.SchemaError>();
       last = landed;
-      Queue.unsafeOffer(waiting, { write, landed });
+      Queue.offerUnsafe(waiting, { write, landed });
       return Deferred.await(landed);
     }
 
@@ -113,8 +113,8 @@ export function hostedLiveRecord({
     const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>) =>
       write.pipe(
         Effect.map((written) => written.ok),
-        Effect.catchAll(() => Effect.succeed(false)),
-        Effect.catchAllDefect(() => Effect.succeed(false)),
+        Effect.catch(() => Effect.succeed(false)),
+        Effect.catchDefect(() => Effect.succeed(false)),
       );
 
     return {
@@ -144,8 +144,8 @@ export function hostedLiveRecord({
           // is neither, and is the socket's scope closing under the wait.
           return consume(delegation).pipe(
             Effect.map((written) => written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED),
-            Effect.catchAll(() => Effect.succeed(false)),
-            Effect.catchAllDefect(() => Effect.succeed(false)),
+            Effect.catch(() => Effect.succeed(false)),
+            Effect.catchDefect(() => Effect.succeed(false)),
           );
         }),
       writeLukeUtterance: (record) =>

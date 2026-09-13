@@ -82,7 +82,7 @@ function frame(value: WireValue): string {
 }
 
 function parserWith(revision: GatewayRevision = RECORDED_REVISION) {
-  return gatewayEnvelopeSerialization({ revision: () => revision }).unsafeMake();
+  return gatewayEnvelopeSerialization({ revision: () => revision }).makeUnsafe();
 }
 
 function onlyMessage(messages: ReadonlyArray<unknown>) {
@@ -177,7 +177,9 @@ it.effect(
         assert.deepEqual(carried, {
           _tag: "Exit",
           requestId: held.response.id,
-          exit: { _tag: "Success", value: held.response.result },
+          // An answer with no result is `null` on the wire the Rpc runtime
+          // encodes exits onto, since JSON has no `undefined` of its own.
+          exit: { _tag: "Success", value: held.response.result ?? null },
         });
         assert.equal(parser.encode(carried), frame(held.response));
       }
@@ -196,10 +198,12 @@ it.effect(
         requestId: held.response.id,
         exit: {
           _tag: "Failure",
-          cause: {
-            _tag: "Fail",
-            error: { code: GATEWAY_ERROR.NOT_FOUND, message: REDACTED_MESSAGE },
-          },
+          cause: [
+            {
+              _tag: "Fail",
+              error: { code: GATEWAY_ERROR.NOT_FOUND, message: REDACTED_MESSAGE },
+            },
+          ],
         },
       });
       assert.equal(parser.encode(carried), frame(held.response));
@@ -225,7 +229,7 @@ it.effect(
 
       const exit = Exit.fail(refusal.value);
       const encodedExit = yield* Schema.encodeEffect(
-        Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect()),
+        Schema.toCodecJson(Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect())),
       )(exit);
       const written = parser.encode({
         _tag: "Exit",
@@ -268,9 +272,9 @@ test("a defect or an interruption answers as an internal error, and a message th
     _tag: "Exit",
     requestId: "request-1",
     exit: Exit.die(new Error("the handler fell over")).pipe((exit) =>
-      Schema.encodeSync(Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect()))(
-        exit,
-      ),
+      Schema.encodeSync(
+        Schema.toCodecJson(Schema.Exit(GatewayResultSchema, GatewayRefusalSchema, Schema.Defect())),
+      )(exit),
     ),
   });
   assert.deepEqual(redacted(died), {
@@ -282,7 +286,9 @@ test("a defect or an interruption answers as an internal error, and a message th
   const interrupted = parser.encode({
     _tag: "Exit",
     requestId: "request-2",
-    exit: { _tag: "Failure", cause: { _tag: "Interrupt", fiberId: { _tag: "None" } } },
+    // A cause is a flat array of reasons, and JSON carries the fiber a reason
+    // names — or the absence of one — as `null`.
+    exit: { _tag: "Failure", cause: [{ _tag: "Interrupt", fiberId: null }] },
   });
   assert.equal(recordOf(redacted(interrupted).error).code, GATEWAY_ERROR.INTERNAL);
   assert.equal(parser.encode({ _tag: "Ping" }), undefined);

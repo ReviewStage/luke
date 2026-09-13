@@ -142,13 +142,13 @@ function timedRequest(
 ): Effect.Effect<Response, Error> {
   return HttpClient.execute(request).pipe(
     Effect.flatMap(webResponseFromClientResponse),
-    Effect.timeoutFail({
+    Effect.timeoutOrElse({
       duration: Duration.millis(timeoutMs),
-      onTimeout: () => new DOMException("The request timed out", "TimeoutError"),
+      orElse: () => Effect.fail(new DOMException("The request timed out", "TimeoutError")),
     }),
     Effect.provide(client),
-    Effect.catchAll((error) => Effect.fail(asError(error))),
-    Effect.catchAllDefect((defect) => Effect.fail(asError(defect))),
+    Effect.catch((error) => Effect.fail(asError(error))),
+    Effect.catchDefect((defect) => Effect.fail(asError(defect))),
   );
 }
 
@@ -383,7 +383,7 @@ export function withIssuedAccountTokens<A>(options: {
   return Effect.gen(function* () {
     const tokens = yield* options.issue;
     return yield* Effect.onError(options.use(tokens), () =>
-      Effect.catchAll(onOwnFiber(options.revoke(tokens.refreshToken)), (error) =>
+      Effect.catch(onOwnFiber(options.revoke(tokens.refreshToken)), (error) =>
         Effect.sync(() => options.onRevokeFailure?.(error)),
       ),
     );

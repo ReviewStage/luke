@@ -127,7 +127,7 @@ type OpenerEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient
  * than failing the account's whole opening.
  */
 const optionally = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.option(Effect.catchAllDefect(effect, () => Effect.fail(undefined)));
+  Effect.option(Effect.catchDefect(effect, () => Effect.fail(undefined)));
 
 /** The kinds of turn the opener sends, which is what its eve client is admitted for and nothing wider. */
 export type ScheduledTurn =
@@ -367,8 +367,8 @@ function withTranscript(
     // when it was a rejected promise, and stays one now. Neither catch
     // reaches an interruption, so a cancelled tick still ends the tick.
     const read = yield* Effect.asSome(seams.transcripts.since(opening.identity)).pipe(
-      Effect.catchAllDefect(Effect.fail),
-      Effect.catchAll((failure) => {
+      Effect.catchDefect(Effect.fail),
+      Effect.catch((failure) => {
         seams.report(
           `The transcript of ${opening.identity.providerSessionId} could not be read: ${String(failure)}.`,
         );
@@ -401,9 +401,9 @@ function offered(
   turn: ScheduledTurn,
   words: string,
 ): OpenerEffect<boolean> {
-  return Effect.catchAllCause(handToEve(seams, target, turn, words), (cause) => {
+  return Effect.catchCause(handToEve(seams, target, turn, words), (cause) => {
     // A cancelled tick is not a refused send; it is the tick ending.
-    if (Cause.isInterruptedOnly(cause)) return Effect.failCause(cause);
+    if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
     seams.report(
       `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
     );

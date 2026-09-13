@@ -17,7 +17,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema, Fiber } from "effect";
+import { Clock, Effect, Schema as EffectSchema, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import {
   ABC,
@@ -175,7 +175,7 @@ const rig = (
 ): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const model = new DeferredModel();
     const transcriptReads: SessionIdentity[] = [];
     const searches: WireRecord[] = [];
@@ -201,7 +201,7 @@ const rig = (
           }),
         memory: options.memory ?? answeringMemory(searches),
         policy: async () => options.policy ?? ASK_POLICY,
-        now: () => clock.unsafeCurrentTimeMillis(),
+        now: () => clock.currentTimeMillisUnsafe(),
         createId: () => `id-${++ids}`,
         report: () => undefined,
         trace: (record) => traces.push(record),

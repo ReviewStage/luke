@@ -15,7 +15,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -161,7 +161,8 @@ it.effect(
       try {
         const opening = yield* Effect.forkChild(openSocketOverWs(remote.url, {}));
         yield* waitOnTheNetwork(() => remote.connected() === 1);
-        assert.equal(Exit.isInterrupted(yield* Fiber.interrupt(opening)), true);
+        yield* Fiber.interrupt(opening);
+        assert.equal(Exit.hasInterrupts(yield* Fiber.await(opening)), true);
         // The handshake the interrupted attempt began is given up rather than left standing.
         yield* waitOnTheNetwork(() => remote.ended() === 1);
         assert.equal(remote.ended(), 1);

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
 import { GATEWAY_METHOD, type GatewayMethod, type GatewayShutdownSteps } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { Cause, Chunk, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect";
 import { HOST_CONCERN, HOST_START_ORDER } from "../compose-host.js";
 import type { Composer } from "../composer.js";
 import { mergedMethods, startedAndStopped } from "./composer.js";
@@ -156,7 +156,10 @@ describe("the standing host", () => {
           ["third", "second", "first"],
         );
         assert.ok(Exit.isFailure(closed));
-        assert.deepEqual(Chunk.toReadonlyArray(Cause.defects(closed.cause)), [refused]);
+        assert.deepEqual(
+          closed.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect),
+          [refused],
+        );
       }),
   );
 
@@ -185,7 +188,10 @@ describe("the standing host", () => {
 
         const built = yield* Effect.exit(buildStanding(assembly, scope));
         assert.ok(Exit.isFailure(built));
-        assert.deepEqual(Chunk.toReadonlyArray(Cause.defects(built.cause)), [refused]);
+        assert.deepEqual(
+          built.cause.reasons.filter(Cause.isDieReason).map((reason) => reason.defect),
+          [refused],
+        );
         assert.deepEqual(log, [
           { step: STEP.START, concern: "first" },
           { step: STEP.START, concern: "second" },
@@ -233,12 +239,12 @@ describe("a standup interrupted", () => {
         assert.deepEqual(log, [{ step: STEP.START, concern: "first" }]);
 
         const interrupting = yield* Effect.forkChild(Fiber.interrupt(standup));
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         assert.equal(log.length, 1);
         yield* Deferred.succeed(gate, undefined);
-        const exit = yield* Fiber.join(interrupting);
+        yield* Fiber.join(interrupting);
 
-        assert.ok(Exit.isInterrupted(exit));
+        assert.ok(Exit.hasInterrupts(yield* Fiber.await(standup)));
         assert.deepEqual(log.slice(1), [
           { step: STEP.START, concern: "second" },
           { step: STEP.STOP, concern: "second" },
@@ -266,7 +272,7 @@ describe("the method fold", () => {
         ),
       );
       assert.ok(Exit.isFailure(built));
-      const refusal = Cause.failureOption(built.cause);
+      const refusal = Cause.findErrorOption(built.cause);
       assert.ok(Option.isSome(refusal));
       assert.equal(refusal.value._tag, "DuplicateGatewayMethod");
       assert.equal(refusal.value.method, GATEWAY_METHOD.SETTINGS_SNAPSHOT);
@@ -350,7 +356,7 @@ describe("the drain", () => {
       const again = yield* Effect.exit(drain({ deadlineMs: 0 }));
       for (const exit of [first, again]) {
         assert.ok(Exit.isFailure(exit));
-        const refusal = Cause.failureOption(exit.cause);
+        const refusal = Cause.findErrorOption(exit.cause);
         assert.ok(Option.isSome(refusal));
         assert.equal(refusal.value._tag, "HostDrainError");
         assert.equal(refusal.value.cause, broken);

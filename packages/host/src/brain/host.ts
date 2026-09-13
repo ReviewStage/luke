@@ -1,5 +1,5 @@
 import type { BrainAgent, Detach } from "@sidecar/brain";
-import { Cause, Effect, Fiber } from "effect";
+import { Cause, Effect, Fiber, Semaphore } from "effect";
 
 /**
  * Who owns the standing brain agent through a transition. A key or account
@@ -36,7 +36,7 @@ type RetirementOutcome = { ok: true } | { ok: false; error: Error };
  * for that transition to answer with.
  */
 function settledOutcome(drain: Effect.Effect<void>): Effect.Effect<RetirementOutcome> {
-  return Effect.catchAllCause(
+  return Effect.catchCause(
     Effect.as(drain, { ok: true } as const),
     (cause): Effect.Effect<RetirementOutcome> => {
       const squashed = Cause.squash(cause);
@@ -61,7 +61,7 @@ export class BrainHost {
    * back like any other, so a build that threw leaves nothing installed and
    * the next transition still installs.
    */
-  readonly #queue = Effect.unsafeMakeSemaphore(1);
+  readonly #queue = Semaphore.makeUnsafe(1);
 
   constructor(dependencies: BrainHostDependencies) {
     this.#dependencies = dependencies;
@@ -102,7 +102,7 @@ export class BrainHost {
       this.#detach(
         settledOutcome(
           Effect.andThen(
-            Effect.catchAllCause(previous.stop(), () => Effect.void),
+            Effect.catchCause(previous.stop(), () => Effect.void),
             unfollow ?? Effect.void,
           ),
         ),

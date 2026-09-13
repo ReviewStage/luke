@@ -152,8 +152,8 @@ function withFallback<A, E>(
   effect: Effect.Effect<A, E, SqlClient.SqlClient>,
   fallback: A,
 ): Effect.Effect<A, never, SqlClient.SqlClient> {
-  return Effect.catchAllDefect(
-    Effect.catchAll(effect, () => Effect.succeed(fallback)),
+  return Effect.catchDefect(
+    Effect.catch(effect, () => Effect.succeed(fallback)),
     () => Effect.succeed(fallback),
   );
 }

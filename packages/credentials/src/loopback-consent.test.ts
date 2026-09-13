@@ -132,7 +132,7 @@ function untilDeadline(
 ): Effect.Effect<LoopbackConsentOutcome<Grant>> {
   return Effect.raceFirst(
     Fiber.join(waiting),
-    Effect.forever(Effect.andThen(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow())),
+    Effect.forever(Effect.andThen(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow)),
   );
 }
 
@@ -424,7 +424,7 @@ it.effect("cancelling ends the wait; a grant given after lands nowhere", () =>
     assert.deepEqual(yield* Fiber.join(waiting), { reason: LOOPBACK_CONSENT_CANCELLED });
 
     // The trip's scope closed with it, so the loopback is no longer listening.
-    const late = yield* Effect.either(
+    const late = yield* Effect.result(
       Effect.tryPromise(() =>
         answerCallback(authorization.redirectUri, { state: authorization.state, code: "late" }),
       ),

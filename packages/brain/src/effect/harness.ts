@@ -16,7 +16,7 @@
  * closure rather than a clock.
  */
 
-import { Chunk, Effect } from "effect";
+import { Clock, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import {
   answered,
@@ -47,35 +47,29 @@ export const effectHarness = (
 ): Effect.Effect<Harness> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const context = yield* Effect.context<never>();
     return yield* plainHarness(
-      { execution: context, now: () => clock.unsafeCurrentTimeMillis(), ...overrides },
+      { execution: context, now: () => clock.currentTimeMillisUnsafe(), ...overrides },
       repository,
     );
   });
 
 /**
- * Advances the ambient `TestClock` to `untilMs`, one due timer at a time
- * rather than jumping straight there, settling the harness's own microtask
- * chains between each. Jumping straight to `untilMs` in one `TestClock.setTime`
- * call would already read `now` as `untilMs` by the time a callback's own
- * promise chain settles far enough to reschedule, so a short requeue computed
- * from that already-jumped `now` would read as due only after the target and
- * never fire within this advance; holding `now` at each due instant in turn is
- * what keeps a requeue's own delay landing inside the same budget.
+ * Advances the ambient `TestClock` to `untilMs` and settles the harness's own
+ * microtask chains after it. The stepping itself is the clock's: `setTime`
+ * holds `now` at each due instant in turn, opens that sleeper, and yields
+ * before it reads its pending sleeps again, so a callback whose own promise
+ * chain reschedules a short wait from the instant it was woken at has its
+ * requeue registered in time to be fired by the same advance rather than
+ * being computed from a `now` already jumped to the target. What the yield
+ * does not do is drain the promise chains a turn leaves behind it, which is
+ * what the settle here is for.
  */
 export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
   Effect.gen(function* () {
-    for (;;) {
-      const due = Chunk.toReadonlyArray(yield* TestClock.sleeps())
-        .filter((instant) => instant <= untilMs)
-        .sort((a, b) => a - b)[0];
-      if (due === undefined) break;
-      yield* TestClock.setTime(due);
-      yield* Effect.promise(() => settle());
-    }
     yield* TestClock.setTime(untilMs);
+    yield* Effect.promise(() => settle());
   });
 
 /**

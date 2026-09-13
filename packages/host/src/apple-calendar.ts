@@ -214,7 +214,7 @@ export class AppleCalendarReader {
         this.#lastObservation = undefined;
         return undefined;
       }
-      const attempt = yield* Effect.either(this.#observeConnection(connection));
+      const attempt = yield* Effect.result(this.#observeConnection(connection));
       if (Result.isSuccess(attempt)) {
         const observation = attempt.success;
         // What the next failing pass stands: a clean read's lists, or a

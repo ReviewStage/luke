@@ -285,11 +285,11 @@ function host(
   overrides: Partial<BrainAgentOptions> = {},
 ): Effect.Effect<Host> {
   return Effect.gen(function* () {
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const store = new BrainStateStore({
       repository,
       createGenerationId: () => `gen-${++ids}`,
-      now: () => clock.unsafeCurrentTimeMillis(),
+      now: () => clock.currentTimeMillisUnsafe(),
     });
     const performed: string[] = [];
     const session = normalizeSession(claude, {

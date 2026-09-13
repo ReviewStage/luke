@@ -9,7 +9,7 @@ import {
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Duration, Effect, type Layer, Schedule, type Scope } from "effect";
+import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
@@ -127,7 +127,7 @@ export class ProductEventSender {
    * it assume: a second flush asked for while one is under way waits for it
    * and then carries whatever is queued by then.
    */
-  readonly #gate = Effect.unsafeMakeSemaphore(1);
+  readonly #gate = Semaphore.makeUnsafe(1);
 
   /**
    * One flush, delayed by the cadence and then repeated on it — never an

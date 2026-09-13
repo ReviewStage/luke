@@ -1,6 +1,6 @@
 import type { ProviderTranscriptSinceResult, Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, Semaphore } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { settledUnlessAborted } from "./effect/settled.js";
 import type { Generation } from "./generation.js";
@@ -78,7 +78,7 @@ export class WakeCapture {
    */
   readonly #lastLook = new NestedMap<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
-  readonly #captures = Effect.unsafeMakeSemaphore(1);
+  readonly #captures = Semaphore.makeUnsafe(1);
   #capturesInFlight = 0;
 
   constructor(options: WakeCaptureOptions) {

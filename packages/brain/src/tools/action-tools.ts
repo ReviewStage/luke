@@ -55,7 +55,7 @@ function defineActionTool(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolM
     execute(input: WireRecord, context: ActionToolContext): Effect.Effect<ActionOutputEnvelope> {
       return Effect.gen(function* () {
         if (context.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER);
-        const admitted = yield* Effect.either(
+        const admitted = yield* Effect.result(
           admitEffect(
             { kind: spec.kind, fields: input },
             { ...context.admission, origin: context.origin, guard: context },

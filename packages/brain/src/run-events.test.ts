@@ -92,7 +92,7 @@ function reading(agent: BrainAgent, body: (event: BrainRunEvent) => void): Effec
     const stream = yield* Scope.provide(agent.runEvents, scope);
     yield* Effect.forkDetach(
       Stream.runForEach(stream, (event) =>
-        Effect.catchAllDefect(
+        Effect.catchDefect(
           Effect.sync(() => body(event)),
           () => Effect.void,
         ),
@@ -567,7 +567,7 @@ it.effect(
       const reads: SessionIdentity[] = [];
       const h = yield* effectHarness({
         readTranscript: (identity): Effect.Effect<ProviderTranscriptResult> =>
-          Effect.async<ProviderTranscriptResult>((resume) => {
+          Effect.callback<ProviderTranscriptResult>((resume) => {
             reads.push(identity);
             answer = () => {
               resume(

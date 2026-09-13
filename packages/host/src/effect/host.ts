@@ -61,7 +61,7 @@ export const hostDrain = (
         // what the steps reach is work it did not write; it is the drain's
         // named refusal here rather than a defect that would take the close
         // down with it.
-        Effect.catchAllDefect((cause) => new HostDrainError({ cause })),
+        Effect.catchDefect((cause) => new HostDrainError({ cause })),
         Effect.tap((settled) =>
           Effect.sync(() => {
             report(
@@ -74,7 +74,7 @@ export const hostDrain = (
     return (options = {}) =>
       Effect.gen(function* () {
         const taken = yield* Ref.getAndSet(claimed, true);
-        if (!taken) yield* Effect.intoDeferred(run(options), outcome);
+        if (!taken) yield* Deferred.into(run(options), outcome);
         return yield* Deferred.await(outcome);
       });
   });

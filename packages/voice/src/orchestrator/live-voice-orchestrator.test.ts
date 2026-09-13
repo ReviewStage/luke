@@ -58,7 +58,7 @@ class FakeCall implements LiveVoiceCall {
     this.opens += 1;
     this.openings.push(opening);
     this.settle(LIVE_STATUS.CONNECTING);
-    return Effect.async<boolean>((resume) => {
+    return Effect.callback<boolean>((resume) => {
       this.#release = () => {
         if (this.opensSucceed) this.settle(LIVE_STATUS.MUTED);
         else this.settle(LIVE_STATUS.FAILED);
@@ -326,7 +326,7 @@ test("a key let go of while the microphone dialog stands opens the session muted
   const f = fixture({ microphoneGranted: false });
   let grant: ((granted: boolean) => void) | undefined;
   f.setMicrophoneAsk(() =>
-    Effect.async<boolean>((resume) => {
+    Effect.callback<boolean>((resume) => {
       grant = (granted) => resume(Effect.succeed(granted));
     }),
   );
