@@ -70,19 +70,20 @@ function authUrlToPath(value: string): string {
 
 /**
  * Rewrites every address an event carries — the current one, the referrer, and
- * the first-seen pair PostHog keeps once on the person — so an auth page's
- * address never leaves whole, wherever in the properties it sits. Anything that
+ * the first-seen pair PostHog keeps once on the person under `$set`/`$set_once`
+ * — so an auth page's address never leaves whole. An address only ever sits as
+ * a string value in an object, so the walk descends into objects alone: it
+ * leaves an array untouched, which keeps it out of a recording's own snapshot
+ * (`$snapshot_data`) and out of an autocaptured element's list. Anything that
  * is not an auth page's address stays as it was.
  */
 /* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion --
-   PostHog's properties bag is the untyped JSON this boundary parses: an address
-   can sit at any depth (an event property, or the first-seen pair under
-   `$set_once`), so the walk branches on each node's runtime shape and the
-   assertions restate the branch the `typeof`/`Array.isArray` guard just proved. */
+   PostHog's properties bag is the untyped JSON this boundary parses, so the
+   walk branches on each node's runtime shape and the assertions restate the
+   branch the `typeof` guard just proved. */
 export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
   if (typeof value === "string") return authUrlToPath(value) as Value;
-  if (Array.isArray(value)) return value.map(sanitizeAnalyticsUrls) as Value;
-  if (value && typeof value === "object") {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
     return Object.fromEntries(
       Object.entries(value).map(([key, inner]) => [key, sanitizeAnalyticsUrls(inner)]),
     ) as Value;
