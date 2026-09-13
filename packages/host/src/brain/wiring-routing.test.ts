@@ -36,7 +36,7 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Effect, Runtime } from "effect";
+import { Effect, Fiber, Runtime } from "effect";
 import { type TestContext, test } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
@@ -292,11 +292,11 @@ async function composed(t: TestContext, gate?: Gate): Promise<Composed> {
 
 test("each conversation's standing context is built for its own key", async (t) => {
   const c = await composed(t);
-  await c.wiring.rebuild();
+  await Effect.runPromise(c.wiring.rebuild());
   await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
+  Effect.runSync(c.wiring.retire());
+  await Effect.runPromise(c.wiring.rebuild());
 });
 
 it.effect(
@@ -304,7 +304,7 @@ it.effect(
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       yield* c.wiring.rosterLook();
       yield* Effect.promise(() =>
         until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 2),
@@ -356,15 +356,15 @@ it.effect(
       yield* Effect.promise(() => until(() => c.wiring.current(defKey) === undefined));
       assert.equal(c.wiring.current(defKey), undefined);
       assert.ok(c.wiring.current(abcKey));
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
 test("a roster look opens a cloud session's conversation like a local one, reads no message, and stands it down when the session leaves", async (t) => {
   const c = await composed(t);
   c.roster.push(cloudSession());
-  await c.wiring.rebuild();
+  await Effect.runPromise(c.wiring.rebuild());
   await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 3 && c.wiring.pendingNotices().length === 3);
   const cloudKey = observedSessionKey(CLOUD);
@@ -396,8 +396,8 @@ test("a roster look opens a cloud session's conversation like a local one, reads
   await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.wiring.current(cloudKey) === undefined);
   assert.ok(c.wiring.current(observedSessionKey(ABC)));
-  c.wiring.retire();
-  await c.wiring.rebuild();
+  Effect.runSync(c.wiring.retire());
+  await Effect.runPromise(c.wiring.rebuild());
 });
 
 it.effect(
@@ -405,7 +405,7 @@ it.effect(
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const abcKey = observedSessionKey(ABC);
       yield* c.wiring.wake([
         {
@@ -436,8 +436,8 @@ it.effect(
       assert.equal(releases.length, 2);
       // The wake rode into the source conversation's hold-release turn, and main's carried none.
       assert.equal(observed.pendingWakes(), 0);
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -446,7 +446,7 @@ it.effect(
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const goneKey = observedSessionKey({ providerId: claude.id, providerSessionId: "gone" });
       yield* c.wiring.releaseHeld([
         { briefing: "a session that has stood down", decidedAt: 1, sessionKey: goneKey },
@@ -472,8 +472,8 @@ it.effect(
       assert.equal(releases().length, 1);
       // Main read nothing of it: the one notice is the source's own turn.
       assert.equal(c.wiring.pendingNotices().length, 1);
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -486,7 +486,7 @@ it.effect(
         release: () => undefined,
       };
       const c = yield* Effect.promise(() => composed(t, gate));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const abcKey = observedSessionKey(ABC);
       yield* c.wiring.rosterLook();
       yield* Effect.promise(() =>
@@ -515,8 +515,8 @@ it.effect(
       // The next look, with the analysis over and nothing owed, stands it down.
       yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.current(abcKey) === undefined));
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -525,7 +525,7 @@ it.effect(
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const abcKey = observedSessionKey(ABC);
       yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
@@ -552,8 +552,8 @@ it.effect(
       // first was let go of before the second was opened.
       assert.ok(c.wiring.current(abcKey));
       assert.equal(c.repositories.get(abcKey), 2);
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -562,7 +562,7 @@ it.effect(
   (t) =>
     Effect.gen(function* () {
       const c = yield* Effect.promise(() => composed(t));
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const abcKey = observedSessionKey(ABC);
       yield* c.wiring.rosterLook();
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 2));
@@ -572,9 +572,9 @@ it.effect(
       const buildsBefore = c.builds();
       // The close has begun and is awaiting its drain when the rebuild lands in
       // the same tick: the interleave is fixed by construction, not by timing.
-      const closing = c.wiring.closeConversation(abcKey);
-      yield* Effect.promise(() => c.wiring.rebuild());
-      yield* Effect.promise(() => closing);
+      const closing = Effect.runFork(c.wiring.closeConversation(abcKey));
+      yield* c.wiring.rebuild();
+      yield* Fiber.join(closing);
       assert.equal(c.wiring.current(abcKey), undefined);
       // The rebuild built main's brain and def's, and nothing onto the host the
       // close was about to discard, where no retire could ever reach it; the
@@ -595,33 +595,33 @@ it.effect(
       yield* Effect.promise(() => until(() => c.wiring.pendingNotices().length === 3));
       assert.ok(c.wiring.current(abcKey));
       assert.equal(c.repositories.get(abcKey), 2);
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
 test("a conversation reopened while it stands down waits for the close and stands on its own new store", async (t) => {
   const c = await composed(t);
-  await c.wiring.rebuild();
+  await Effect.runPromise(c.wiring.rebuild());
   const threadKey = threadSessionKey("t-1");
-  await c.wiring.openConversation(threadKey);
+  await Effect.runPromise(c.wiring.openConversation(threadKey));
   assert.ok(c.wiring.current(threadKey));
   assert.equal(c.repositories.get(threadKey), 1);
   // Archive then unarchive before the close has drained.
-  const closing = c.wiring.closeConversation(threadKey);
-  const reopening = c.wiring.openConversation(threadKey);
+  const closing = Effect.runPromise(c.wiring.closeConversation(threadKey));
+  const reopening = Effect.runPromise(c.wiring.openConversation(threadKey));
   await Promise.all([closing, reopening]);
   // The reopen built on nothing the close discards: its brain stands in the
   // directory, on the second store, and the first is gone.
   assert.ok(c.wiring.current(threadKey));
   assert.equal(c.repositories.get(threadKey), 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
+  Effect.runSync(c.wiring.retire());
+  await Effect.runPromise(c.wiring.rebuild());
 });
 
 test("two opens of one key landing in the same tick, a wake and a held briefing, build one store and list the conversation once", async (t) => {
   const c = await composed(t);
-  await c.wiring.rebuild();
+  await Effect.runPromise(c.wiring.rebuild());
   const abcKey = observedSessionKey(ABC);
   assert.equal(c.repositories.get(abcKey), undefined);
   // Nothing stands for abc yet; both paths reach the same opening.
@@ -646,14 +646,14 @@ test("two opens of one key landing in the same tick, a wake and a held briefing,
   // Both turns ran, one after the other, in that one conversation: the
   // later call's context carries the hook's wake and the release together.
   assert.equal(c.inputs.length, 2);
-  c.wiring.retire();
-  await c.wiring.rebuild();
+  Effect.runSync(c.wiring.retire());
+  await Effect.runPromise(c.wiring.rebuild());
 });
 
 test("one observed conversation waiting on its model neither blocks another nor main", async (t) => {
   const gate: Gate = { holds: (texts) => texts.includes(SECRET("def")), release: () => undefined };
   const c = await composed(t, gate);
-  await c.wiring.rebuild();
+  await Effect.runPromise(c.wiring.rebuild());
   await Effect.runPromise(c.wiring.rosterLook());
   await until(() => c.inputs.length >= 2 && c.wiring.pendingNotices().length === 1);
   // def's inference is held; abc's has finished and left its notice.
@@ -684,6 +684,6 @@ test("one observed conversation waiting on its model neither blocks another nor 
   assert.equal(c.wiring.lanes.snapshot("agent").active, 0);
   assert.equal(c.wiring.pendingNotices().length, 1);
   assert.equal(c.wiring.pendingNotices()[0]?.label, "Claude Code: def");
-  c.wiring.retire();
-  await c.wiring.rebuild();
+  Effect.runSync(c.wiring.retire());
+  await Effect.runPromise(c.wiring.rebuild());
 });

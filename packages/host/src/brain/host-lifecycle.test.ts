@@ -4,18 +4,16 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   type BrainRequestRecord,
-  carryOn,
 } from "@sidecar/brain";
-import { Effect, Runtime } from "effect";
+import { Effect } from "effect";
 import { answerOf, brainHarness, heldModel } from "../testing/index.js";
 
 /**
  * A transition on the same default runtime the harness's agents run their
  * turns on, rather than on the test's own fiber and its test clock.
  */
-const onDefaultRuntime = carryOn(Runtime.defaultRuntime);
 const runHost = <Value>(effect: Effect.Effect<Value>): Effect.Effect<Value> =>
-  Effect.promise(() => onDefaultRuntime(effect));
+  Effect.promise(() => Effect.runPromise(effect));
 
 /**
  * Polls `condition` across up to `rounds` batches of a hundred fiber yields

@@ -4,10 +4,10 @@ import { Effect } from "effect";
 
 /**
  * One voice source transition, from the seams the host owns: the brain
- * wiring's synchronous retire, the assembler's application, and the rebuild
- * that installs what the applied capability allows. The retire is immediate,
- * so no run keeps the old source's authority past the transition's first
- * await. The rebuild belongs to the current application alone, asked at the
+ * wiring's retire, the assembler's application, and the rebuild that installs
+ * what the applied capability allows. The retire is immediate — its own work
+ * is synchronous and it is run before anything here suspends — so no run keeps
+ * the old source's authority past the transition's first suspension. The rebuild belongs to the current application alone, asked at the
  * moment of use rather than read off the answer: a newer transition can begin
  * between the assembler's publication and this continuation, and it has
  * already retired the wiring, so a rebuild on the older one's behalf would be
@@ -17,19 +17,19 @@ import { Effect } from "effect";
  * whether this transition was the one that installed.
  */
 export interface VoiceSourceTransitionSeams {
-  retire: () => void;
+  retire: () => Effect.Effect<void>;
   apply: () => Effect.Effect<VoiceCapabilityApplication, PlatformError>;
-  rebuild: () => Promise<void>;
+  rebuild: () => Effect.Effect<void>;
 }
 
 export function transitionVoiceSource(
   seams: VoiceSourceTransitionSeams,
 ): Effect.Effect<boolean, PlatformError> {
   return Effect.gen(function* () {
-    seams.retire();
+    yield* seams.retire();
     const applied = yield* seams.apply();
     if (!applied.latest || !applied.isCurrent()) return false;
-    yield* Effect.promise(seams.rebuild);
+    yield* seams.rebuild();
     return true;
   });
 }

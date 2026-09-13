@@ -1099,16 +1099,16 @@ actually rate-limited. P10-16 moved every route it converted onto
 `RateBrake.check` directly; the door goes with the last hosted route that still
 answers a promise (`conversation-read.ts`, `events.ts`, `devices-vault-app.ts`).
 
-`packages/brain/src/effect/carry.ts` holds the brain's doors onto the host's
-`ExecutionRuntime`, and P12-16m settled that there are two of them rather than
-one, on opposite schedules. `detachOn` is permanent and is named as the detach
-door below. `carryOn` is the shim, and P12-16m took the last of `BrainAgent`'s
-own surface off it: nothing inside the brain awaits it, and what is left is one
-caller in the host. `runtimeExit`, the dispatch between a
-`ManagedRuntime` and a plain `Runtime` both doors are built over, is exported
-beside them since P12-04d for the two narrower callers that still need their
-own exit-handling on top of it rather than `Carry`'s own throw-on-failure
-shape: `BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced
+`packages/brain/src/effect/carry.ts` holds the brain's door onto the host's
+`ExecutionRuntime`. P12-16m settled that there were two of them rather than
+one, on opposite schedules: `detachOn`, permanent and named as the detach door
+below, and `carryOn`, the shim, whose last caller inside the brain P12-16m took
+off it. P12-16n took the last one above it and deleted `carryOn` and the
+`Carry` type with it. `runtimeExit`, the dispatch between a
+`ManagedRuntime` and a plain `Runtime` the door is built over, is exported
+beside it since P12-04d for the two narrower callers that need their
+own exit-handling rather than a throw-on-failure shape:
+`BrainTransport#send`'s `runCall` and `tracedModelAdapter`'s traced
 `respond`, in `@sidecar/brain`'s own `client.ts` and `@sidecar/devtrace`'s
 `brain-trace.ts`. A turn is a
 fiber end to end from `TurnRunner` inward: the opening words, the deltas, the
@@ -1138,18 +1138,20 @@ in either, for the two waits a fiber's interruption cannot state: one held
 under an uninterruptible region, where only the signal can end it, and one
 whose value must be owned by exactly one party.
 
-What keeps `carryOn` is what the brain is still asked for in promises, and
-since P12-16m that is nothing inside the brain at all: the ask face left it
+What kept `carryOn` was what the brain was still asked for in promises, and
+since P12-16m that was nothing inside the brain at all: the ask face left it
 with the queue beneath it in P12-16g, so an ask, a wait, a cancel, a mark, a
 context snapshot, a stop, the four child verbs, and a run-event subscription
 are each an `Effect` its caller runs, and `AgentSeam#detach` — the last thing
 in the agent that held a promise nobody read — is on the detach door instead.
-The one caller left is the host above the agent: `wireBrain`'s own promise
-face, `rebuild` and `closeConversation` in
-`packages/host/src/brain/wiring.ts`, which run `BrainHost`'s transition as a
-promise because the seams above this wiring ask for one rather than because
-anything of the brain's is one. P12-16n takes those two, and `carryOn` goes
-with them. The child
+The one caller left was the host above the agent, and P12-16n took it:
+`wireBrain`'s `rebuild`, `retire`, `openConversation`, and
+`closeConversation` in `packages/host/src/brain/wiring.ts` are effects the
+composers above them run — `compose-brain`'s lifetime, `compose-host`'s
+`rebuildBrain` and `retireBrain` links, the voice source transition, and the
+child service's archive seam — so nothing asks the brain for a promise any
+more and `carryOn` and the `Carry` type are deleted. What stands in
+`carry.ts` is the detach door and the `runtimeExit` dispatch beneath it. The child
 service's executor seams left this door in P12-16k.
 `packages/host/src/brain/wiring-children.ts` writes all six of them — the
 spawn's start, the adoption a relaunch resumes, the cancel a cascade reaches,
@@ -1204,18 +1206,16 @@ generation's before the signal's finalizer, so one close still fires the
 signal first and lets go of the context behind it, and an open that settles
 after that close adds its finalizer to a scope already closed, which runs it
 there and then. `resetConversation` answers an `Effect<boolean>`, which is
-what its capture and its context snapshot already were. The one thing left
-awaiting `carryOn` is `wireBrain`'s own promise face, `rebuild` and
-`closeConversation`, which P12-16n takes. P12-16j took `BrainHost`'s build and
+what its capture and its context snapshot already were. P12-16j took `BrainHost`'s build and
 stop and `followBrainRequests`' marks off it: a transition is an effect
 its caller runs, serialized by one `Effect.unsafeMakeSemaphore(1)` permit held
 for the whole of it rather than by a promise chain, and a follower is a queue
 the brain's listener writes to and one fiber marks from, so the reports a
 retirement drains are awaited as that fiber's own barrier.
 
-`detachOn`, exported beside `carryOn` in the same file and built over the same
-`ExecutionRuntime` dispatch, is the other door, and P12-16m settled that it is
-permanent. Two callers hold it. `BrainHost`'s retirement, which P12-16j put
+`detachOn`, exported from the same file and built over the same
+`ExecutionRuntime` dispatch, is the door that stands, and P12-16m settled that
+it is permanent. Three callers hold it. `BrainHost`'s retirement, which P12-16j put
 there: it begins a stop's drain on a fiber of its own before it returns, so
 the revocation stands in the step that asked for it, and answers that fiber,
 so the next transition awaits how the drain ended rather than a promise nobody
@@ -1242,7 +1242,13 @@ named permanent rather than a shim owed a deletion, and it is the only place
 the brain runs anything: `packages/brain/src/effect/carry.test.ts` pins the
 synchronous start against `Effect.forkDaemon`'s scheduled one, and
 `agent.test.ts` pins the conversation reading busy in the step that released a
-hold.
+hold. The third caller is the brain wiring, which P12-16n put there for the
+two seams it keeps in maps: a conversation's close and its open are each begun
+through `detachOn` and shared under their key as the settling of that fiber,
+so the retirement a close opens with stands in the step that asked for it, a
+roster look that lets a departed session go begins the stand-down without
+holding its drain, and two opens of one key landing in the same tick join one
+fiber rather than building two stores on one envelope.
 `brainAgentLiveBrain`'s ask and subscription left it in P12-16l, named above:
 the adapter runs the agent's own effects on the composition's runtime it was
 built on rather than carrying them; `wireChildren`'s four executor seams left
@@ -1255,8 +1261,8 @@ same `LaneScheduler` — and the conversation's serialization is one
 promise chain stood, so the turns of a conversation are handed the permit in
 the order they asked for it, a stop drains the queue by taking that permit,
 and `busy()` counts a turn from the moment its fiber asks until it has given
-the permit back. What is left in the host is promise-shaped because the seam
-above it is, not because anything of the brain's is.
+the permit back. Nothing of the host's is promise-shaped over the brain any
+longer.
 
 What the door does not carry is the other two seams. `ModelAdapter` and
 `ContextEngine` stay as the host hands them in, because each is owned above
@@ -1555,8 +1561,7 @@ design decision stated as such:
 | `ReattachingSocket`'s recovery fiber over its own runtime | P6-07 | once the plain `LiveSocket` it wraps answers effects itself |
 | `LiveSessionSourceTag`/`IntroductionSessionSourceTag` over their plain source objects | P6-08 | pending — every caller today (`compose-live.ts`'s `account.voiceCapabilities.liveSessions`, the renderer's orchestrator, the desktop main's introduction flow) reads its source as a getter whose answer changes over the run; a static `Layer.succeed` cannot stand in for that, so nothing adopts the tag yet |
 | `LiveBrainTag`/`LiveRecordTag` over their plain collaborator objects | P6-08 | pending — P7-07 is the first real caller (`compose-host.ts` builds the plain `LiveBrain`/`LiveRecord` and hands them to `compose-live.ts` through these tags), but `LiveSessionService`'s own constructor still takes them as plain fields, so the adaptor stands until that class reads the tags itself, a `packages/voice` change beyond a host composer |
-| `carryOn`, the brain's promise door onto the host's `ExecutionRuntime` | P12-02 | P12-16n — P12-16m took `AgentSeam#detach` off it onto `detachOn`, leaving `wireBrain`'s `rebuild`/`closeConversation` as the only caller |
-| `detachOn`, the brain's synchronous-start door onto the same runtime | P12-16j | never — P12-16m named it permanent as the detach door: only a run begins the effect on the calling stack, and both `AgentSeam#detach`'s queue registration and `BrainHost`'s retirement revocation must stand in the step that asked for them |
+| `detachOn`, the brain's synchronous-start door onto the same runtime | P12-16j | never — P12-16m named it permanent as the detach door: only a run begins the effect on the calling stack, and `AgentSeam#detach`'s queue registration, `BrainHost`'s retirement revocation, and the brain wiring's close and open (P12-16n) must each stand in the step that asked for them |
 | `BrainAgent#onRunEvent`'s per-subscription fiber over `Stream.fromPubSub`, an `Effect<() => void>` since P12-16g rather than a run | P5-06 | once a subscriber reads the stream directly |
 | `StoreDatabase`'s synchronous `prepare`/`exec`/`transaction` beside its `sql` layer | P5-08 | with `StoreDatabase#run` |
 | `StoreDatabase#run` and `#close`, the OpenClaw ports' handle over the store's own `SqlClient` | P5-10a | a synchronous accessor for `archives.ts` and `maintenance-run.ts`; unscheduled |

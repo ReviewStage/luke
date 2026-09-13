@@ -350,7 +350,7 @@ it.effect(
       const c = yield* Effect.promise(() =>
         composed(t, delegatingScript(), { childTimers: childTimersOn(runtime) }),
       );
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       const runId = yield* Effect.promise(() => ask(c, "look into the last commit"));
       yield* waitFor(() =>
         [...c.completions.values()].some(
@@ -405,8 +405,8 @@ it.effect(
       yield* waitFor(() => c.archived.length > 0);
       assert.deepEqual(c.archived, [child.childSessionKey]);
       assert.equal(c.wiring.current(child.childSessionKey), undefined);
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -431,7 +431,7 @@ it.effect(
       const c = yield* Effect.promise(() =>
         composed(t, script, { childTimers: childTimersOn(runtime) }),
       );
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       yield* Effect.promise(() => ask(c, "go deep"));
       yield* waitFor(
         () =>
@@ -453,8 +453,8 @@ it.effect(
       for (const record of c.children.values()) {
         assert.equal(record.status, CHILD_RUN_STATUS.COMPLETED);
       }
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -483,7 +483,7 @@ it.effect(
       const c = yield* Effect.promise(() =>
         composed(t, script, { childTimers: childTimersOn(runtime) }),
       );
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       // Main first says something memorable, so its context holds a secret to fork.
       const first = yield* Effect.promise(() => ask(c, "remember this", "s-0"));
       yield* waitFor(() => c.wiring.current() !== undefined);
@@ -511,8 +511,8 @@ it.effect(
       const isolatedTurn = childTurns.find((seen) => !seen.texts.includes(MAIN_SECRET));
       assert.ok(forkedTurn, "the forked child read the requester's earlier words");
       assert.ok(isolatedTurn, "the isolated child read none of them");
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -543,7 +543,7 @@ it.effect(
           { childTimers: childTimersOn(runtime) },
         ),
       );
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.rebuild();
       yield* Effect.promise(() => ask(c, "start something long"));
       yield* waitFor(() =>
         [...c.children.values()].some((record) => record.status === CHILD_RUN_STATUS.RUNNING),
@@ -560,8 +560,8 @@ it.effect(
       assert.ok(completion);
       assert.equal(completion.status, CHILD_RUN_STATUS.CANCELLED);
       releaseChild?.();
-      c.wiring.retire();
-      yield* Effect.promise(() => c.wiring.rebuild());
+      yield* c.wiring.retire();
+      yield* c.wiring.rebuild();
     }),
 );
 
@@ -590,13 +590,13 @@ it("a reset capture that was skipped reports nothing, while one that failed is s
         },
       }),
     });
-    await c.wiring.rebuild();
+    await Effect.runPromise(c.wiring.rebuild());
     const main = c.wiring.current();
     assert.ok(main);
     const runId = await ask(c, "remember this");
     await Effect.runPromise(main.waitAsk(runId, 60_000));
     assert.equal(await Effect.runPromise(c.wiring.resetConversation(MAIN_SESSION_KEY)), true);
     assert.equal(captures, 1, "the capture ran over the context the reset let go of");
-    c.wiring.retire();
+    Effect.runSync(c.wiring.retire());
   }
 });

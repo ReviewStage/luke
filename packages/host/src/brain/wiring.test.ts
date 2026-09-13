@@ -95,7 +95,7 @@ it.effect("with no model to run on, a rebuild opens no conversation and loads no
   Effect.gen(function* () {
     const { wiring, loads } = dependencies();
     const brains = wireBrain(wiring);
-    yield* Effect.promise(() => brains.rebuild());
+    yield* brains.rebuild();
     assert.deepEqual(loads, []);
     assert.equal(brains.current(), undefined);
     assert.deepEqual(brains.allRequests(), []);
@@ -104,11 +104,11 @@ it.effect("with no model to run on, a rebuild opens no conversation and loads no
     brains.store();
     yield* waitFor(() => loads.length === 1);
     assert.deepEqual(loads, [MAIN_SESSION_KEY]);
-    yield* Effect.promise(() => brains.openConversation(threadSessionKey("t-1")));
+    yield* brains.openConversation(threadSessionKey("t-1"));
     yield* waitFor(() => loads.length === 2);
     assert.deepEqual(loads, [MAIN_SESSION_KEY, threadSessionKey("t-1")]);
     assert.equal(brains.current(threadSessionKey("t-1")), undefined);
-    yield* Effect.promise(() => brains.closeConversation(threadSessionKey("t-1")));
-    brains.retire();
+    yield* brains.closeConversation(threadSessionKey("t-1"));
+    yield* brains.retire();
   }),
 );

@@ -24,7 +24,6 @@ import {
   brainPromptVoice,
   brainToolCatalog,
   brainToolNotes,
-  carryOn,
   detachOn,
   LOOK_SUBJECT,
   resolveTurnToolPolicy,
@@ -82,7 +81,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { SESSION_STATUS, type Session, type SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Cause, Effect, Fiber } from "effect";
 import {
   type BrainActionPerformerDependencies,
   createBrainActionPerformer,
@@ -208,18 +207,18 @@ export interface BrainWiring {
    * a fixture or capture run, which observes nothing and sends nothing, and
    * never past a closed account gate.
    */
-  rebuild: () => Promise<void>;
-  /** Withdraws every standing brain now; their stops are awaited by the next rebuild. */
-  retire: () => void;
+  rebuild: () => Effect.Effect<void>;
+  /** Withdraws every standing brain in the step this is run in; their stops are awaited by the next rebuild. */
+  retire: () => Effect.Effect<void>;
   /** Opens a conversation for asks: its store is built and, when a model stands, its brain. */
-  openConversation: (sessionKey: SessionKey) => Promise<void>;
+  openConversation: (sessionKey: SessionKey) => Effect.Effect<void>;
   /**
    * Retires a conversation's brain, drains its publication, and forgets its
    * store, so nothing of the old lifetime can write. An archive closes a
    * thread for good; a deletion closes any conversation, main included, and
    * opens it again over the emptied rows.
    */
-  closeConversation: (sessionKey: SessionKey) => Promise<void>;
+  closeConversation: (sessionKey: SessionKey) => Effect.Effect<void>;
   /**
    * Start fresh: a new lifetime for the conversation, its history and
    * transcript untouched. Every child the conversation asked for, and theirs,
@@ -320,11 +319,39 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
 const RESET_CAPTURE_SIGNAL = new AbortController().signal;
 
 export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
-  // The transition chain and the publication are the brain's own effects; what
-  // is still a promise is the face this wiring answers the host above it with,
-  // so the carrying happens here rather than inside either of them.
-  const carry = carryOn(dependencies.execution);
+  // Every transition this wiring answers with is an effect its caller runs.
+  // What is begun on a fiber of its own rather than on the caller's is a
+  // conversation's close and its open, so the retirement each opens with
+  // stands in the step that asked for it and two callers of one key share the
+  // one fiber.
   const detach = detachOn(dependencies.execution);
+  /**
+   * Begins work on a fiber of its own and shares how that fiber settles under
+   * its key until it has: the fiber is started here rather than forked, so the
+   * work's first step stands in the step that asked for it, and a caller
+   * finding the key already standing joins that fiber instead of beginning a
+   * second one. Work that settles before it could be registered leaves nothing
+   * behind, since there is no longer anything for a later caller to join.
+   */
+  const begun = <Value>(
+    standing: Map<SessionKey, Effect.Effect<Value>>,
+    sessionKey: SessionKey,
+    work: Effect.Effect<Value>,
+  ): Effect.Effect<Value> => {
+    let settled = false;
+    const fiber = detach(
+      Effect.ensuring(
+        work,
+        Effect.sync(() => {
+          settled = true;
+          standing.delete(sessionKey);
+        }),
+      ),
+    );
+    const settling = Fiber.join(fiber);
+    if (!settled) standing.set(sessionKey, settling);
+    return settling;
+  };
   const conversations = new Map<SessionKey, OpenConversation>();
   const latestRecords = new Map<SessionKey, readonly BrainRequestSnapshot[]>();
   // Each standing follower's publication, awaited by a wait that found its
@@ -641,51 +668,54 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     opened: OpenConversation,
     model: ModelAdapter | undefined,
     fork?: readonly WireRecord[],
-  ): Promise<void> =>
-    carry(
-      opened.host.replace(() =>
-        Effect.suspend(() => {
-          if (!model) {
-            if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
-            return Effect.succeed(undefined);
-          }
-          return build(
-            model,
-            publishConfiguration(dependencies.credential()),
-            opened.store,
-            sessionKey,
-            fork,
-          );
-        }),
-      ),
+  ): Effect.Effect<void> =>
+    opened.host.replace(() =>
+      Effect.suspend(() => {
+        if (!model) {
+          if (sessionKey === MAIN_SESSION_KEY) dependencies.dropBriefings();
+          return Effect.succeed(undefined);
+        }
+        return build(
+          model,
+          publishConfiguration(dependencies.credential()),
+          opened.store,
+          sessionKey,
+          fork,
+        );
+      }),
     );
 
-  // Conversations standing down, until their store is let go.
-  const closings = new Map<SessionKey, Promise<void>>();
-  const rebuild = async (): Promise<void> => {
-    const model = liveModel();
-    // Main's conversation is opened the moment a brain may stand on it, and
-    // not before: a launch with nothing to run leaves the store untouched.
-    if (model) openConversation(MAIN_SESSION_KEY);
-    // A conversation standing down is left to its close: a rebuild landing
-    // while its drain is awaited would be the newer transition, and would
-    // install a live agent on a host the close is about to drop from the
-    // directory, where nothing could ever retire it. The reopen that follows
-    // the close builds on the model then standing.
-    await Promise.all(
-      [...conversations.entries()]
-        .filter(([sessionKey]) => !closings.has(sessionKey))
-        .map(([sessionKey, opened]) => rebuildOne(sessionKey, opened, model)),
-    );
-    // Recovery of what the last launch left waits for a model to stand: a
-    // launch with none has nothing to run a child on, and a child marked
-    // unknown for that alone would be a budget spent on nothing.
-    if (model) await children.service.start();
-  };
+  // Conversations standing down, until their store is let go: each entry is
+  // how its close's own fiber settles, which an open of the same key waits on
+  // and a second close answers with rather than beginning another.
+  const closings = new Map<SessionKey, Effect.Effect<void>>();
+  const rebuild = (): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const model = liveModel();
+      // Main's conversation is opened the moment a brain may stand on it, and
+      // not before: a launch with nothing to run leaves the store untouched.
+      if (model) openConversation(MAIN_SESSION_KEY);
+      // A conversation standing down is left to its close: a rebuild landing
+      // while its drain is awaited would be the newer transition, and would
+      // install a live agent on a host the close is about to drop from the
+      // directory, where nothing could ever retire it. The reopen that follows
+      // the close builds on the model then standing.
+      yield* Effect.all(
+        [...conversations.entries()]
+          .filter(([sessionKey]) => !closings.has(sessionKey))
+          .map(([sessionKey, opened]) => rebuildOne(sessionKey, opened, model)),
+        { concurrency: "unbounded", discard: true },
+      );
+      // Recovery of what the last launch left waits for a model to stand: a
+      // launch with none has nothing to run a child on, and a child marked
+      // unknown for that alone would be a budget spent on nothing.
+      if (model) yield* Effect.promise(() => children.service.start());
+    });
 
-  const retire = (): void => {
-    for (const opened of conversations.values()) opened.host.retire();
-  };
+  const retire = (): Effect.Effect<void> =>
+    Effect.sync(() => {
+      for (const opened of conversations.values()) opened.host.retire();
+    });
 
   /**
    * The directory row a conversation is listed under before its brain is
@@ -728,37 +758,41 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
    * With no model nothing is opened: there is no brain to hand back, and a
    * store opened for nobody would only be a load spent.
    */
-  const openings = new Map<SessionKey, Promise<BrainAgent | undefined>>();
+  const openings = new Map<SessionKey, Effect.Effect<BrainAgent | undefined>>();
   const openAny = (
     sessionKey: SessionKey,
     fork?: readonly WireRecord[],
-  ): Promise<BrainAgent | undefined> => {
-    const standing = conversations.get(sessionKey)?.host.current();
-    if (standing && !closings.has(sessionKey)) return Promise.resolve(standing);
-    const pending = openings.get(sessionKey);
-    if (pending) return pending;
-    const opening = (async () => {
-      try {
-        await closings.get(sessionKey);
-        const model = liveModel();
-        if (!model) return undefined;
-        await ensureListed(sessionKey);
-        const opened = openConversation(sessionKey);
-        if (!opened.host.current()) await rebuildOne(sessionKey, opened, model, fork);
-        return opened.host.current();
-      } catch (error) {
-        dependencies.report(
-          `Conversation ${sessionKey} could not be opened: ${error instanceof Error ? error.message : String(error)}`,
-        );
-        return undefined;
-      } finally {
-        openings.delete(sessionKey);
-      }
-    })();
-    openings.set(sessionKey, opening);
-    return opening;
-  };
-  const openObserved = (identity: SessionIdentity): Promise<BrainAgent | undefined> =>
+  ): Effect.Effect<BrainAgent | undefined> =>
+    Effect.suspend(() => {
+      const standing = conversations.get(sessionKey)?.host.current();
+      if (standing && !closings.has(sessionKey)) return Effect.succeed(standing);
+      const pending = openings.get(sessionKey);
+      if (pending) return pending;
+      return begun(
+        openings,
+        sessionKey,
+        Effect.catchAllCause(
+          Effect.gen(function* () {
+            yield* closings.get(sessionKey) ?? Effect.void;
+            const model = liveModel();
+            if (!model) return undefined;
+            yield* Effect.promise(() => ensureListed(sessionKey));
+            const opened = openConversation(sessionKey);
+            if (!opened.host.current()) yield* rebuildOne(sessionKey, opened, model, fork);
+            return opened.host.current();
+          }),
+          (cause) =>
+            Effect.sync(() => {
+              const error = Cause.squash(cause);
+              dependencies.report(
+                `Conversation ${sessionKey} could not be opened: ${error instanceof Error ? error.message : String(error)}`,
+              );
+              return undefined;
+            }),
+        ),
+      );
+    });
+  const openObserved = (identity: SessionIdentity): Effect.Effect<BrainAgent | undefined> =>
     openAny(observedSessionKey(identity));
 
   /**
@@ -784,9 +818,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       }
       for (const { identity, events: own } of bySession.values()) {
         yield* Effect.forkDaemon(
-          Effect.flatMap(
-            Effect.promise(() => openObserved(identity)),
-            (agent) => (agent ? agent.wake(own) : Effect.void),
+          Effect.flatMap(openObserved(identity), (agent) =>
+            agent ? agent.wake(own) : Effect.void,
           ),
         );
       }
@@ -824,9 +857,8 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
         const open = conversations.has(sessionKey);
         if (!(live || open)) continue;
         yield* Effect.forkDaemon(
-          Effect.flatMap(
-            Effect.promise(() => openObserved(identity)),
-            (agent) => (agent ? agent.rosterLook() : Effect.void),
+          Effect.flatMap(openObserved(identity), (agent) =>
+            agent ? agent.rosterLook() : Effect.void,
           ),
         );
       }
@@ -836,7 +868,9 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       for (const sessionKey of [...conversations.keys()]) {
         if (!observedSessionRefOf(sessionKey) || present.has(sessionKey) || busy(sessionKey))
           continue;
-        void closeConversation(sessionKey);
+        // The stand-down is begun here and its drain left to its own fiber:
+        // this look holds nothing open for a session that has left the roster.
+        yield* beginClosing(sessionKey);
       }
     });
 
@@ -856,7 +890,7 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       for (const [sessionKey, own] of bySource) {
         const observed = observedSessionRefOf(sessionKey);
         const opening = observed
-          ? Effect.promise(() => openObserved(observed))
+          ? openObserved(observed)
           : Effect.sync(() => current(sessionKey) ?? current(MAIN_SESSION_KEY));
         yield* Effect.forkDaemon(
           Effect.flatMap(opening, (agent) => {
@@ -870,31 +904,40 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
       }
     });
 
-  const closeConversation = (sessionKey: SessionKey): Promise<void> => {
-    const closing = closings.get(sessionKey);
-    if (closing) return closing;
-    const opened = conversations.get(sessionKey);
-    if (!opened) return Promise.resolve();
-    const work = (async () => {
-      // The replacement with nothing awaits every retirement's drain, so the
-      // follower has written its last interruption before the store is let
-      // go. The entry stays in the directory until then: an open that lands
-      // meanwhile waits on this closing rather than building a second store
-      // on the same envelope.
-      opened.host.retire();
-      await carry(opened.host.replace(() => Effect.succeed(undefined)));
-      opened.clock.stop();
-      opened.unsubscribe();
-      conversations.delete(sessionKey);
-      latestRecords.delete(sessionKey);
-      publications.delete(sessionKey);
-      broadcast();
-    })().finally(() => {
-      closings.delete(sessionKey);
+  /**
+   * Begins a conversation's stand-down and answers how its own fiber settles,
+   * for a caller with nothing to wait on: the retirement stands in the step
+   * that asked for it and the drain behind it is left to run.
+   */
+  const beginClosing = (sessionKey: SessionKey): Effect.Effect<Effect.Effect<void>> =>
+    Effect.sync(() => {
+      const closing = closings.get(sessionKey);
+      if (closing) return closing;
+      const opened = conversations.get(sessionKey);
+      if (!opened) return Effect.void;
+      return begun(
+        closings,
+        sessionKey,
+        Effect.gen(function* () {
+          // The replacement with nothing awaits every retirement's drain, so the
+          // follower has written its last interruption before the store is let
+          // go. The entry stays in the directory until then: an open that lands
+          // meanwhile waits on this closing rather than building a second store
+          // on the same envelope.
+          opened.host.retire();
+          yield* opened.host.replace(() => Effect.succeed(undefined));
+          opened.clock.stop();
+          opened.unsubscribe();
+          conversations.delete(sessionKey);
+          latestRecords.delete(sessionKey);
+          publications.delete(sessionKey);
+          broadcast();
+        }),
+      );
     });
-    closings.set(sessionKey, work);
-    return work;
-  };
+
+  const closeConversation = (sessionKey: SessionKey): Effect.Effect<void> =>
+    Effect.flatten(beginClosing(sessionKey));
 
   const publicationSettled = (): Effect.Effect<void> =>
     Effect.all([...publications.values()], { concurrency: "unbounded", discard: true });
@@ -935,14 +978,15 @@ export function wireBrain(dependencies: BrainWiringDependencies): BrainWiring {
     busyConversations: () => [...latestRecords.keys()].filter(busy),
     rebuild,
     retire,
-    openConversation: async (sessionKey) => {
-      // The same wait an observed opening keeps: a conversation still
-      // standing down is let go of before it is opened again, so the reopen
-      // never builds onto the host the close will discard.
-      await closings.get(sessionKey);
-      const opened = openConversation(sessionKey);
-      if (!opened.host.current()) await rebuildOne(sessionKey, opened, liveModel());
-    },
+    openConversation: (sessionKey) =>
+      Effect.gen(function* () {
+        // The same wait an observed opening keeps: a conversation still
+        // standing down is let go of before it is opened again, so the reopen
+        // never builds onto the host the close will discard.
+        yield* closings.get(sessionKey) ?? Effect.void;
+        const opened = openConversation(sessionKey);
+        if (!opened.host.current()) yield* rebuildOne(sessionKey, opened, liveModel());
+      }),
     closeConversation,
     lanes,
     wake,
