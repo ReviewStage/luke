@@ -15,7 +15,7 @@ warning, and the four disagreement cases are all about that one event, and a
 live document about a dead migration is the kind nobody feels entitled to
 remove. Three parts are general to any change in how production is built and
 are written down here for the first time, so they are kept when the rest goes,
-under a new name or in `WORKFLOW.md`: the eight probes as a table with why
+under a new name or in `WORKFLOW.md`: the nine probes as a table with why
 each code is the right answer and the sentence that a 404 anywhere is the
 failure; the rollback anchor read as a record at the moment it is needed and
 never trusted from a document, with its two commands; and the read of
@@ -106,14 +106,14 @@ failure; the treadmill is the one that can eat a night.
    behind Deployment Protection, and which CI's Preview probe job sends for
    it once the project opens one of the two doors
    `apps/web/server/preview-probe.ts` documents.
-5. **Dean reads the two log facts and the eight probes** (below) and reports
+5. **Dean reads the two log facts and the nine probes** (below) and reports
    them as they are.
 6. **The worker presses within the minute** by starting the enqueue watcher
    armed (`scripts/queue-watch.sh --press <number>`). Every other merge to
    `main` in the window fails production, so the window is kept short and the
    PR merges first.
 7. **The worker reads production to terminal state and probes it**, cache
-   busted, with the same eight codes plus `/eve/v1/health`.
+   busted, with the same nine codes plus `/eve/v1/health`.
 
 ## The two log facts
 
@@ -153,7 +153,7 @@ one of:
   the only warnings in that log were pnpm's "Ignored build scripts". It is
   listed so a reader neither aborts on seeing it nor distrusts a log without it.
 
-## The eight probes
+## The nine probes
 
 Signed in, against the redeployed preview, expecting exactly what production
 answers today. The list is derived from what the clients request, never from
@@ -171,6 +171,7 @@ handshake.
 | `GET /api/brain/ask` | 405 | Handler present; POST only. |
 | `GET /api/voice/sessions` | 426 | Handler present; it upgrades WebSockets. |
 | `GET /api/voice/introduction` | 426 | Handler present; it upgrades WebSockets. |
+| `GET /api/voice/audio` | 426 | Handler present; it upgrades WebSockets. |
 | `GET /api/feedback` | 405 | Handler present; POST only; the client's spelling. |
 
 Plus `GET /eve/v1/health` answering a JSON body, which proves the eve service
@@ -178,7 +179,7 @@ is served and was the one fact the first sitting got right.
 
 `apps/web/scripts/preview-probe.ts --url <address>` sends these probes to a
 deployment, over the whole list the callers check derives rather than these
-eight alone, and judges each answer by whose it is; it is also the read of
+nine alone, and judges each answer by whose it is; it is also the read of
 production after a merge. CI's Preview probe workflow runs the same script
 against every PR's own preview, found through the head's GitHub deployment
 record, once the repository variable `PREVIEW_PROBE_DOOR` names the door.
@@ -239,7 +240,7 @@ them.
 ## After the merge
 
 Read `main`'s production deployment record to terminal state (environment
-Production, state `success`), then probe production with the eight requests
+Production, state `success`), then probe production with the nine requests
 above plus `/eve/v1/health`, each with `?nocache=<nanoseconds>` and
 `Cache-Control: no-cache`, expecting `x-vercel-cache: MISS` on the functions.
 Report the record id, the environment in the word, and every code by name.

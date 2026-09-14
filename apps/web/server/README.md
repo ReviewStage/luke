@@ -686,15 +686,16 @@ backstop and should be configured with it.
 
 ## Hosted voice service
 
-`server/routes/voice/sessions.ts` and `server/routes/voice/introduction.ts` are the hosted voice
-service: two Vercel Functions serving WebSockets on Fluid compute, the part of
+`server/routes/voice/sessions.ts`, `server/routes/voice/introduction.ts`, and
+`server/routes/voice/audio.ts` are the hosted voice
+service: three Vercel Functions serving WebSockets on Fluid compute, the part of
 this deployment that holds the GPT Live project key and owns each hosted voice
-session (`live-contract.ts` in `@sidecar/hosted` is the desktop's contract
+session (`live-contract.ts` in `@sidecar/hosted` is a device's contract
 with them). Each file exports the `http.Server` that `server/voice/service.ts`'s
 `voiceServer()` builds, with `ws` handling the upgrade on it, exactly as
-Vercel's WebSocket guide has it; the desktop opens `wss://` on this deployment's own origin,
+Vercel's WebSocket guide has it; a device opens `wss://` on this deployment's own origin,
 `HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
-A plain request to either path answers 426, since the path is a socket's.
+A plain request to any of the three paths answers 426, since the path is a socket's.
 
 On `/api/voice/sessions` a signed-in device's handshake carries its account
 bearer, resolved through the same in-process `/oauth2/userinfo` seam every
@@ -713,8 +714,9 @@ client delegation), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, and the quota. From then on the relay is a pipe: OpenAI frames to the
 device untouched except `session.input_audio.append` and
-`session.output_audio.delta`, dropped by type so the developer's voice and
-Luke's never transit the service; and from the device exactly four frames
+`session.output_audio.delta`, dropped by type so on this route and the
+introduction's the developer's voice and Luke's never transit the service (the
+audio route below is the one place they do); and from the device exactly four frames
 (`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
 graceful hang-up's `session.close`, forwarded untouched, and three in the
 service's own vocabulary, read here and handed to the exchange rather than
@@ -745,6 +747,41 @@ caller sees is visible in the counts; a line where no such row was read — ever
 upgrade refusal, a handshake naming no device, a claim on a row the account
 does not hold, the introduction, and a re-attach, which proves the session's
 owner rather than a device — carries none.
+
+On `/api/voice/audio` a signed-in device with no WebRTC of its own — the
+watch, once it moves — makes the same handshake as on `/api/voice/sessions`,
+bearer and device header alike, and opens with a `session.create` that names
+a voice and one of the four `LIVE_AUDIO_FORMAT`s and carries no offer and no
+seed (`SessionAudioCreateFrame`). The service's opener (`server/voice/opening.ts`,
+which is where every route's first frame becomes a session or a refusal)
+opens the session's primary WebSocket to OpenAI itself on the deployment's
+key (`openPrimary` in `server/voice/openai.ts`), sends the
+`livePrimarySessionConfig` document
+under that format, and reads the session's id off `session.started`, which is
+the only place a session of this kind names itself; the `voice_sessions` row
+is written then, with the device's id, the exchange is stood on the same
+socket, and the device is answered `session.created` with the id and the
+quota and no SDP answer (`SessionAudioCreatedFrame`). Whatever the socket
+said beside `session.started` in the handshake's own chunk is handed to both
+consumers ahead of anything the socket says next (`replayHeldFrames` for the
+exchange's reader, `VoiceSocketOptions.held` for the pipe's), so no frame is
+heard by nobody, twice, or out of its place. From then on the relay is the same pipe with two arms of its
+own (`frames.ts`, `AUDIO_CLIENT_EVENTS` and `AUDIO_REPORT_FRAMES`): from the
+device, `session.input_audio.append` and `session.close` are forwarded as the
+bytes they arrived as, `session.activity` and `session.stop` are read for the
+exchange, and anything else — the beat included — closes the socket; toward
+the device, `session.output_audio.delta` and what a renderer's own data
+channel is shown are forwarded, and the echo of the device's own appends is
+dropped. So on this one route the developer's voice and Luke's transit the
+service in both directions, a product decision recorded on LUKE-211 and
+disclosed by `PRIVACY.md`'s rewrite under LUKE-221; the record is untouched
+by it, because the sideband reader the exchange and the voice writer stand on
+drops both audio events by type before either sees them. The device's byte
+budget on this route, `SOCKET_BYTE_BUDGET.AUDIO`, is sized for PCM16 at 16 kHz
+as base64 in JSON over the function's whole 800 seconds, and counted on what
+the device sends alone. There is no `session.attach` on this route: the
+service's own socket is the session, so the call ends when the function does,
+and an attach as a first frame is refused as any unadmitted first frame is.
 
 The service itself is a scope. `VoiceService.make(options)` answers
 `Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
@@ -1058,7 +1095,9 @@ its main process and the phone from `URLSession`), `503` while
 `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
-or `session.attach`, or an attach on the introduction; `invalid-token` for a
+or `session.attach`, an attach on the introduction, or, on the audio route, a
+first frame that is not the `session.create` naming a format, an attach
+included; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
 did not create; `quota-exhausted` for a spent allowance, or an introduction
 past the shared ceiling; `upstream-error` when OpenAI refused the

@@ -8,15 +8,21 @@ import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import type { HostedSpend, IntroductionSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
-import { LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
+import {
+  LIVE_SERVER_EVENT,
+  LIVE_SESSION_START,
+  LIVE_SESSIONS_PATH,
+  LIVE_TRANSPORT_TYPE,
+} from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
 import type { VoiceSessionRecord } from "../../server/voice/session-record";
 
 /**
  * What the voice service talks to, stood up for a test: an OpenAI on this
- * machine that creates sessions and takes attaches, handing the test the far
- * end of every socket so it can play OpenAI's part, and an in-memory account
- * side that remembers what it was asked and answers what the test told it to.
+ * machine that creates sessions, takes attaches, and starts a session on a
+ * primary socket, handing the test the far end of every socket so it can play
+ * OpenAI's part, and an in-memory account side that remembers what it was
+ * asked and answers what the test told it to.
  */
 
 const LOOPBACK = "127.0.0.1";
@@ -67,38 +73,114 @@ interface RecordedAttach {
   socket: WebSocket;
 }
 
+interface RecordedPrimary {
+  authorization: string | undefined;
+  /** The `session.start` the service sent as the socket's first message. */
+  start: WireRecord;
+  /** The id the fake answered `session.started` with. */
+  sessionId: string;
+  /** OpenAI's end of the primary socket: what the test sends here, the service receives; what the service forwards, the test reads here. */
+  socket: WebSocket;
+}
+
 export interface FakeOpenAi {
   baseUrl: string;
   creates: RecordedCreate[];
   attaches: RecordedAttach[];
+  /** Every primary socket the service started a session on, in order, once each was started. */
+  primaries: RecordedPrimary[];
   /** The status the next create answers with; 201 unless a test says otherwise. */
   createStatus: number;
+  /** The status the next primary upgrade is refused with, where one is; a socket otherwise. */
+  primaryStatus: number | undefined;
+  /**
+   * Text frames written into the same chunk as `session.started`, behind it,
+   * so they reach the door in the one tick that event does; none by default.
+   */
+  startedBeside: string[];
+  /** Text frames sent as their own writes the instant that chunk has gone, so they arrive while the door still holds the socket paused; none by default. */
+  startedThen: string[];
   /** Resolves with the next attach the service opens, or the one already waiting. */
   nextAttach(): Promise<RecordedAttach>;
+  /** Resolves with the next primary socket the service started a session on, or the one already waiting. */
+  nextPrimary(): Promise<RecordedPrimary>;
   close(): Promise<void>;
 }
 
 const ATTACH_PATH = new RegExp(`^/v1${LIVE_SESSIONS_PATH}/([^/]+)/attach$`);
+const PRIMARY_PATH = `/v1${LIVE_SESSIONS_PATH}`;
+
+/** One unmasked text frame as a server writes it, for a payload under the two-byte length. */
+const TEXT_FRAME = {
+  FIN_TEXT: 0x81,
+  ONE_BYTE_LENGTH_MAX: 125,
+  TWO_BYTE_LENGTH: 126,
+  TWO_BYTE_LENGTH_MAX: 65_535,
+} as const;
+
+/**
+ * One text frame written to the raw socket under `ws`, the way a fake OpenAI
+ * puts a second frame in the chunk the first one arrives in: two `send` calls
+ * are two writes, and a frame beside another in one write is what a door's
+ * held frames are.
+ */
+export function textFrame(text: string): Buffer {
+  const payload = Buffer.from(text, "utf8");
+  if (payload.byteLength > TEXT_FRAME.TWO_BYTE_LENGTH_MAX) {
+    throw new Error("A framed fake payload must fit a two-byte length");
+  }
+  const header =
+    payload.byteLength <= TEXT_FRAME.ONE_BYTE_LENGTH_MAX
+      ? Buffer.from([TEXT_FRAME.FIN_TEXT, payload.byteLength])
+      : Buffer.from([
+          TEXT_FRAME.FIN_TEXT,
+          TEXT_FRAME.TWO_BYTE_LENGTH,
+          payload.byteLength >> 8,
+          payload.byteLength & 0xff,
+        ]);
+  return Buffer.concat([header, payload]);
+}
+
+/** A waiting line: the values that arrived with nobody asking, and the askers that arrived with nothing waiting. */
+function waitingLine<Value>() {
+  const unclaimed: Value[] = [];
+  const waiting: Array<(value: Value) => void> = [];
+  return {
+    next: () =>
+      new Promise<Value>((resolve) => {
+        const ready = unclaimed.shift();
+        if (ready) resolve(ready);
+        else waiting.push(resolve);
+      }),
+    arrived: (value: Value) => {
+      const waiter = waiting.shift();
+      if (waiter) waiter(value);
+      else unclaimed.push(value);
+    },
+  };
+}
 
 export async function startFakeOpenAi(): Promise<FakeOpenAi> {
   const creates: RecordedCreate[] = [];
   const attaches: RecordedAttach[] = [];
-  const unclaimed: RecordedAttach[] = [];
-  const waiting: Array<(attach: RecordedAttach) => void> = [];
+  const primaries: RecordedPrimary[] = [];
+  const attachLine = waitingLine<RecordedAttach>();
+  const primaryLine = waitingLine<RecordedPrimary>();
   let sessions = 0;
   const fake: FakeOpenAi = {
     baseUrl: "",
     creates,
     attaches,
+    primaries,
     createStatus: HTTP_CREATED,
-    nextAttach: () =>
-      new Promise((resolve) => {
-        const ready = unclaimed.shift();
-        if (ready) resolve(ready);
-        else waiting.push(resolve);
-      }),
+    primaryStatus: undefined,
+    startedBeside: [],
+    startedThen: [],
+    nextAttach: attachLine.next,
+    nextPrimary: primaryLine.next,
     close: async () => {
       for (const attach of attaches) attach.socket.terminate();
+      for (const primary of primaries) primary.socket.terminate();
       sockets.close();
       await closeServer(server);
     },
@@ -126,6 +208,44 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     response.writeHead(404).end();
   });
   server.on("upgrade", (request, socket, head) => {
+    if (request.url === PRIMARY_PATH) {
+      if (fake.primaryStatus !== undefined) {
+        socket.end(`HTTP/1.1 ${fake.primaryStatus} Refused\r\nConnection: close\r\n\r\n`);
+        return;
+      }
+      sockets.handleUpgrade(request, socket, head, (webSocket) => {
+        // The session starts on the socket's first message and on nothing
+        // else: `session.started` goes back, with whatever the test asked to
+        // ride in the same chunk written behind it to the raw socket, since
+        // two `send` calls are two writes and the door's held frames are
+        // what arrives inside the one write.
+        webSocket.once("message", (data: RawData) => {
+          const start = jsonRecord(data.toString());
+          if (start.type !== LIVE_SESSION_START) {
+            webSocket.terminate();
+            return;
+          }
+          sessions += 1;
+          const sessionId = `live_primary_${sessions}_${randomUUID()}`;
+          const started = JSON.stringify({
+            type: LIVE_SERVER_EVENT.SESSION_STARTED,
+            event_id: `started_${sessions}`,
+            session: { id: sessionId },
+          });
+          socket.write(Buffer.concat([started, ...fake.startedBeside].map(textFrame)));
+          for (const frame of fake.startedThen) webSocket.send(frame);
+          const primary: RecordedPrimary = {
+            authorization: request.headers.authorization,
+            start,
+            sessionId,
+            socket: webSocket,
+          };
+          primaries.push(primary);
+          primaryLine.arrived(primary);
+        });
+      });
+      return;
+    }
     const match = ATTACH_PATH.exec(request.url ?? "");
     if (!match?.[1]) {
       socket.destroy();
@@ -139,9 +259,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
         socket: webSocket,
       };
       attaches.push(attach);
-      const waiter = waiting.shift();
-      if (waiter) waiter(attach);
-      else unclaimed.push(attach);
+      attachLine.arrived(attach);
     });
   });
   const port = await listen(server);

@@ -35,7 +35,7 @@ export interface DeploymentExchangeSeams {
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
   readonly eve?: (accountId: string) => EveSessions;
   readonly now: () => number;
-  /** Where a standing exchange's own reports go, each named with the platform of the session it stood on. */
+  /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
   readonly report: (report: ExchangeReport) => void;
 }
 

@@ -3,11 +3,14 @@ import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { test } from "vitest";
 import {
   LIVE_CLIENT_EVENT,
+  LIVE_INPUT_AUDIO_APPEND,
   LIVE_SERVER_EVENT,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
 } from "../server/live";
 import {
+  AUDIO_CLIENT_EVENTS,
+  AUDIO_REPORT_FRAMES,
   deviceFrameDecision,
   FRAME_DECISION,
   frameType,
@@ -19,10 +22,12 @@ import {
 } from "../server/voice/frames";
 import { frameBytes, frameText } from "../server/voice/socket";
 
-test("the two upgrade paths map to the two routes and nothing else does", () => {
+test("the three upgrade paths map to the three routes and nothing else does", () => {
   assert.equal(routeForPath(VOICE_SERVICE_PATH.SESSIONS), VOICE_ROUTE.SESSIONS);
   assert.equal(routeForPath(VOICE_SERVICE_PATH.INTRODUCTION), VOICE_ROUTE.INTRODUCTION);
+  assert.equal(routeForPath(VOICE_SERVICE_PATH.AUDIO), VOICE_ROUTE.AUDIO);
   assert.equal(routeForPath(`${VOICE_SERVICE_PATH.SESSIONS}/`), undefined);
+  assert.equal(routeForPath(`${VOICE_SERVICE_PATH.AUDIO}/`), undefined);
   assert.equal(routeForPath("/"), undefined);
 });
 
@@ -41,8 +46,8 @@ test("a binary frame reads as nothing, a text frame as its text, and each counts
   assert.equal(frameBytes({ text: "é" }), 2);
 });
 
-test("reflected audio is dropped by type toward the device on both routes", () => {
-  for (const route of Object.values(VOICE_ROUTE)) {
+test("reflected audio is dropped by type toward the device on the Mac's and phone's routes", () => {
+  for (const route of [VOICE_ROUTE.SESSIONS, VOICE_ROUTE.INTRODUCTION]) {
     assert.equal(
       upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, route),
       FRAME_DECISION.DROP_AUDIO,
@@ -127,4 +132,64 @@ test("the introduction is shown exactly the renderer's server events and may sen
       FRAME_DECISION.DROP_UNPERMITTED,
     );
   }
+});
+
+test("the audio route forwards Luke's audio and the renderer's server events to the device, and drops the echo of the device's own audio and everything else", () => {
+  assert.equal(
+    upstreamFrameDecision(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, VOICE_ROUTE.AUDIO),
+    FRAME_DECISION.FORWARD,
+  );
+  for (const selector of RENDERER_SERVER_EVENTS) {
+    assert.equal(upstreamFrameDecision(selector.type, VOICE_ROUTE.AUDIO), FRAME_DECISION.FORWARD);
+  }
+  assert.equal(
+    upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, VOICE_ROUTE.AUDIO),
+    FRAME_DECISION.DROP_AUDIO,
+  );
+  for (const type of [
+    LIVE_SERVER_EVENT.DELEGATION_CREATED,
+    LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
+    LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+    LIVE_SERVER_EVENT.THINKING_APPENDED,
+    undefined,
+  ]) {
+    assert.equal(upstreamFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.DROP_UNPERMITTED);
+  }
+});
+
+test("the audio route forwards the device's audio and its hang-up, reads its idle and its stop, and is refused on anything else, the beat included", () => {
+  assert.deepEqual(AUDIO_CLIENT_EVENTS, [LIVE_INPUT_AUDIO_APPEND, LIVE_CLIENT_EVENT.CLOSE]);
+  assert.deepEqual(AUDIO_REPORT_FRAMES, [
+    VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
+    VOICE_SERVICE_FRAME.SESSION_STOP,
+  ]);
+  for (const type of AUDIO_CLIENT_EVENTS) {
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.FORWARD);
+  }
+  for (const type of AUDIO_REPORT_FRAMES) {
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.REPORT);
+  }
+  for (const type of [
+    VOICE_SERVICE_FRAME.SESSION_BEAT,
+    LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+    LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND,
+    LIVE_CLIENT_EVENT.THINKING_APPEND,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE,
+    LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE,
+    VOICE_SERVICE_FRAME.SESSION_CREATE,
+    VOICE_SERVICE_FRAME.SESSION_ATTACH,
+    LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA,
+    undefined,
+  ]) {
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.AUDIO), FRAME_DECISION.REFUSE);
+  }
+  // The device's audio is the audio route's alone: the sessions route still closes the socket on it.
+  assert.equal(
+    deviceFrameDecision(LIVE_INPUT_AUDIO_APPEND, VOICE_ROUTE.SESSIONS),
+    FRAME_DECISION.REFUSE,
+  );
+  assert.equal(
+    deviceFrameDecision(LIVE_INPUT_AUDIO_APPEND, VOICE_ROUTE.INTRODUCTION),
+    FRAME_DECISION.DROP_UNPERMITTED,
+  );
 });
