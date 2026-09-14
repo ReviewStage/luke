@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { it } from "@effect/vitest";
-import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME } from "@sidecar/live";
+import { LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
@@ -11,34 +10,6 @@ import {
   type VoiceSettings,
 } from "./capability-assembler.js";
 import { scriptedOpenSocket } from "./testing.js";
-
-const SDP_OFFER =
-  "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
-const SDP_ANSWER =
-  "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n";
-
-interface RecordedRequest {
-  url: string;
-  init: RequestInit | undefined;
-}
-
-function recordingOpenAi() {
-  const requests: RecordedRequest[] = [];
-  const fetchLike = async (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ): Promise<Response> => {
-    requests.push({ url: String(input), init });
-    return new Response(
-      JSON.stringify({
-        session: { id: "ls_test", model: LIVE_DEFAULTS.MODEL },
-        transport: { type: "webrtc", sdp: SDP_ANSWER },
-      }),
-      { status: 201 },
-    );
-  };
-  return { requests, fetchLike };
-}
 
 test("fixture runs never expose or select a credential", () => {
   assert.deepEqual(
@@ -100,7 +71,7 @@ function settingsFor(options: {
 }
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("the assembler builds and clears the keyed voice as one unit, and a key alone builds no brain", async () => {
+test("a key of the developer's own stands nothing: no live session opens on it, and no brain", async () => {
   let key: string | undefined = "test-key";
   const reports: string[] = [];
   const assembler = new VoiceCapabilityAssembler({
@@ -118,12 +89,13 @@ test("the assembler builds and clears the keyed voice as one unit, and a key alo
   });
 
   await Effect.runPromise(assembler.apply());
-  assert.ok(assembler.liveSessions);
+  assert.equal(assembler.liveSessions, undefined);
   assert.equal(assembler.brainModel, undefined);
   assert.equal(assembler.prefetchModel, undefined);
+  assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
   assert.ok(
-    reports.some((report) => report.startsWith("Luke brain: absent")),
-    "the key's run says the brain is absent rather than enabled",
+    reports.some((report) => report.startsWith("Luke voice: unavailable")),
+    "the key's run says voice is unavailable rather than enabled",
   );
 
   key = undefined;
@@ -205,7 +177,7 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   await Effect.runPromise(assembler.apply());
   assert.equal(assembler.liveSessions, undefined);
   assert.equal(assembler.unavailableLiveDiagnostics.fixtureMode, false);
-  assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
+  assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
 });
 
 test("the brain stands on the signed-in account alone: none on a key, none signed out, none in a fixture run", async () => {
@@ -229,14 +201,14 @@ test("the brain stands on the signed-in account alone: none on a key, none signe
   assert.ok(hosted.brainModel);
   assert.equal(hosted.brainModel?.model, undefined);
 
-  // A key of the developer's own opens a voice session and nothing else: no
-  // brain answers it, whatever the account beside it.
+  // A key of the developer's own stands nothing, whatever the account beside
+  // it: no session opens on it, and no brain answers one.
   const keyed = new VoiceCapabilityAssembler({
     ...seams,
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await Effect.runPromise(keyed.apply());
-  assert.ok(keyed.liveSessions);
+  assert.equal(keyed.liveSessions, undefined);
   assert.equal(keyed.brainModel, undefined);
   assert.equal(keyed.prefetchModel, undefined);
 
@@ -258,7 +230,7 @@ test("the brain stands on the signed-in account alone: none on a key, none signe
   assert.equal(fixture.brainModel, undefined);
 });
 
-test("live sessions follow the voice source, and stand only where a socket seam was handed", async () => {
+test("live sessions stand on the account alone, and only where a socket seam was handed", async () => {
   const { openSocket } = scriptedOpenSocket([]);
   const seams = {
     credentialsUsable: () => true,
@@ -276,8 +248,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await Effect.runPromise(keyed.apply());
-  assert.equal(keyed.liveSessions?.diagnostics().apiKeyConfigured, true);
-  assert.equal(keyed.liveSessions?.diagnostics().hosted, undefined);
+  assert.equal(keyed.liveSessions, undefined);
 
   const hosted = new VoiceCapabilityAssembler({
     ...seams,
@@ -285,8 +256,8 @@ test("live sessions follow the voice source, and stand only where a socket seam 
     settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT, key: "stored-but-unchosen" }),
   });
   await Effect.runPromise(hosted.apply());
-  assert.equal(hosted.liveSessions?.diagnostics().hosted, true);
-  assert.equal(hosted.liveSessions?.diagnostics().apiKeyConfigured, false);
+  assert.ok(hosted.liveSessions);
+  assert.equal(hosted.liveSessions.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.NOT_ATTEMPTED);
 
   const signedOut = new VoiceCapabilityAssembler({
     ...seams,
@@ -296,7 +267,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   });
   await Effect.runPromise(signedOut.apply());
   assert.equal(signedOut.liveSessions, undefined);
-  assert.equal(signedOut.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
+  assert.equal(signedOut.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
 
   const fixture = new VoiceCapabilityAssembler({
     ...seams,
@@ -320,33 +291,3 @@ test("live sessions follow the voice source, and stand only where a socket seam 
   assert.ok(withoutSeam.brainModel);
   assert.equal(withoutSeam.liveSessions, undefined);
 });
-
-it.scoped(
-  "the assembler's own HTTP client reaches the keyed live session it builds, not the real network",
-  () =>
-    Effect.gen(function* () {
-      const { openSocket } = scriptedOpenSocket([]);
-      const { requests, fetchLike } = recordingOpenAi();
-
-      const keyed = new VoiceCapabilityAssembler({
-        credentialsUsable: () => true,
-        fixtureRun: () => false,
-        accountSignedIn: () => true,
-        hostedServiceBaseUrl: "https://example.test",
-        refreshAccount: () => Effect.void,
-        report: () => undefined,
-        httpClient: fakeHttpClientLayer(fetchLike),
-        openSocket,
-        settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
-      });
-      yield* keyed.apply();
-
-      const sessions = keyed.liveSessions;
-      assert.ok(sessions);
-      const opened = yield* sessions.create({ sdpOffer: SDP_OFFER, input: [] });
-
-      assert.ok(opened);
-      assert.equal(requests.length, 1);
-      assert.equal(requests[0]?.url, "https://api.openai.com/v1/live/sessions");
-    }),
-);

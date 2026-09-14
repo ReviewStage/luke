@@ -15,7 +15,6 @@ import {
 import { Effect, type Layer } from "effect";
 import {
   HostedLiveSessionSource,
-  keyedLiveSessions,
   type LiveSessionSource,
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
@@ -134,7 +133,6 @@ export class VoiceCapabilityAssembler {
     this.#options = options;
     this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
       fixtureMode: options.fixtureRun(),
-      apiKeyConfigured: false,
     });
   }
 
@@ -173,10 +171,11 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * Where a GPT Live session comes from under the same policy as the brain's
-   * model: the developer's key straight to OpenAI, or the signed-in account
-   * through Luke's voice service. Nothing when neither stands, or
-   * when the host handed no socket seam.
+   * Where a GPT Live session comes from, under the same policy as the brain's
+   * model: the signed-in account through Luke's voice service. Nothing when no
+   * account stands, when the developer's own key source is chosen (a session
+   * on that key has no service and so no brain behind it since E5-3), or when
+   * the host handed no socket seam.
    */
   get liveSessions(): LiveSessionSource | undefined {
     return this.#liveSessions;
@@ -244,29 +243,20 @@ export class VoiceCapabilityAssembler {
           ? this.#options.wrapBrainModel(builtPrefetchModel)
           : builtPrefetchModel;
       const openSocket = this.#options.openSocket;
-      this.#liveSessions = !openSocket
-        ? undefined
-        : apiKey
-          ? keyedLiveSessions(apiKey, {
+      this.#liveSessions =
+        openSocket && policy.useHosted
+          ? new HostedLiveSessionSource({
+              serviceOrigin: this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
               openSocket,
+              readAccessToken: seams.readAccessToken,
+              refreshAccount: seams.refreshAccount,
+              readAccountKey: seams.readAccountKey,
+              ...(this.#options.deviceId ? { deviceId: this.#options.deviceId } : undefined),
               ...(voice ? { voice } : undefined),
-              ...(httpClient ? { httpClient } : undefined),
             })
-          : policy.useHosted
-            ? new HostedLiveSessionSource({
-                serviceOrigin:
-                  this.#options.hostedVoiceServiceOrigin ?? HOSTED_VOICE_SERVICE_ORIGIN,
-                openSocket,
-                readAccessToken: seams.readAccessToken,
-                refreshAccount: seams.refreshAccount,
-                readAccountKey: seams.readAccountKey,
-                ...(this.#options.deviceId ? { deviceId: this.#options.deviceId } : undefined),
-                ...(voice ? { voice } : undefined),
-              })
-            : undefined;
+          : undefined;
       this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
         fixtureMode: this.#options.fixtureRun(),
-        apiKeyConfigured: apiKey !== undefined,
       });
       this.#voiceSource = policy.source;
       this.#report(apiKey !== undefined);
@@ -278,8 +268,7 @@ export class VoiceCapabilityAssembler {
   #report(apiKeyConfigured: boolean): void {
     const write = this.#options.report ?? ((message: string) => process.stderr.write(message));
     if (this.#liveSessions) {
-      const report = this.#liveSessions.diagnostics();
-      write(`Luke voice: enabled (${report.hosted ? "hosted, " : ""}${report.model})\n`);
+      write(`Luke voice: enabled (hosted, ${this.#liveSessions.diagnostics().model})\n`);
     } else {
       write(`Luke voice: unavailable — ${this.#unavailableLiveDiagnostics.lastOutcome}\n`);
     }

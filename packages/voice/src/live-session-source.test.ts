@@ -12,23 +12,17 @@ import {
   LIVE_DEFAULTS,
   LIVE_SERVER_EVENT,
   LIVE_SESSION_OUTCOME,
-  LIVE_SESSIONS_PATH,
   LIVE_VOICE,
-  liveAttachPath,
   PROACTIVE_SPEECH_KIND,
-  RENDERER_CLIENT_EVENTS,
-  RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
-import { fakeHttpClientLayer, type ParsedJsonObject } from "@sidecar/wire/testing";
-import { Effect, Exit, TestClock } from "effect";
+import type { ParsedJsonObject } from "@sidecar/wire/testing";
+import { Effect, TestClock } from "effect";
 import { test } from "vitest";
 import {
   HOSTED_REATTACH_DELAYS_MS,
   type HostedLiveSessionOptions,
   HostedLiveSessionSource,
   IntroductionLiveSessionSource,
-  KeyedLiveSessionSource,
-  keyedLiveSessions,
   unavailableLiveDiagnostics,
 } from "./live-session-source.js";
 import { SOCKET_OPEN_FAULT } from "./live-socket.js";
@@ -49,209 +43,6 @@ const SESSION_ID = "ls_123";
 const SERVICE_ORIGIN = "wss://voice.example.test";
 const INPUT = [developerSeedItem("Roster: one session working.")];
 const QUOTA = { used: 3, limit: 50, resetsAt: NOW + 3_600_000 };
-
-interface RecordedRequest {
-  url: string;
-  init: RequestInit;
-}
-
-function openAi(answers: Array<() => Response>) {
-  const requests: RecordedRequest[] = [];
-  let call = 0;
-  const fetchLike = async (url: string, init: RequestInit): Promise<Response> => {
-    requests.push({ url, init });
-    const answer = answers[Math.min(call, answers.length - 1)];
-    call += 1;
-    if (!answer) throw new Error("no scripted answer");
-    return answer();
-  };
-  return { requests, fetchLike };
-}
-
-function created(body: ParsedJsonObject = {}) {
-  return () =>
-    new Response(
-      JSON.stringify({
-        session: { id: SESSION_ID, model: LIVE_DEFAULTS.MODEL },
-        transport: { type: "webrtc", sdp: SDP_ANSWER },
-        ...body,
-      }),
-      { status: 201 },
-    );
-}
-
-function status(code: number) {
-  return () => new Response(JSON.stringify({ error: "refused" }), { status: code });
-}
-
-function requestBody(request: RecordedRequest | undefined): ParsedJsonObject {
-  // SAFETY: the test scripted the body as JSON; the assertions read its shape.
-  return JSON.parse(String(request?.init.body)) as ParsedJsonObject;
-}
-
-function keyed(fetchLike: (url: string, init: RequestInit) => Promise<Response>) {
-  const script = scriptedOpenSocket([() => undefined]);
-  const source = new KeyedLiveSessionSource({
-    apiKey: "sk-test",
-    httpClient: fakeHttpClientLayer(fetchLike),
-    openSocket: script.openSocket,
-    now: () => NOW,
-  });
-  return { source, ...script };
-}
-
-it.scopedLive("the keyed source posts the live session document with the key as its bearer", () =>
-  Effect.gen(function* () {
-    const { requests, fetchLike } = openAi([created()]);
-    const { source } = keyed(fetchLike);
-    source.setVoice(LIVE_VOICE.CEDAR);
-
-    const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
-
-    assert.equal(opened?.sessionId, SESSION_ID);
-    assert.equal(opened?.sdpAnswer, SDP_ANSWER);
-    const [request] = requests;
-    assert.equal(request?.url, `https://api.openai.com/v1${LIVE_SESSIONS_PATH}`);
-    assert.equal(request?.init.method, "POST");
-    assert.equal(new Headers(request?.init.headers).get("authorization"), "Bearer sk-test");
-    const body = requestBody(request);
-    assert.deepEqual(body.transport, { type: "webrtc", sdp: SDP_OFFER });
-    // SAFETY: the request body was composed by liveSessionConfig, whose session is a record.
-    const session = body.session as ParsedJsonObject;
-    assert.equal(session.model, LIVE_DEFAULTS.MODEL);
-    assert.deepEqual(session.audio, { output: { voice: LIVE_VOICE.CEDAR } });
-    assert.deepEqual(session.delegation, { type: "client" });
-    assert.equal(session.store, false);
-    assert.deepEqual(session.input, INPUT);
-    assert.deepEqual(session.client, {
-      data_channel: {
-        allowed_client_events: RENDERER_CLIENT_EVENTS,
-        allowed_server_events: RENDERER_SERVER_EVENTS,
-      },
-    });
-    assert.equal("tools" in session, false);
-    // SAFETY: the same document's audio field is the record asserted two lines above.
-    assert.equal("format" in (session.audio as ParsedJsonObject), false);
-    const report = source.diagnostics();
-    assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
-    assert.equal(report.apiKeyConfigured, true);
-    assert.equal(report.hosted, undefined);
-    assert.equal(report.voice, LIVE_VOICE.CEDAR);
-    assert.equal(report.sidebandAttached, false);
-    assert.equal(report.lastAttemptAt, NOW);
-  }),
-);
-
-it.scopedLive(
-  "the keyed source attaches its sideband at the session's attach path under the same key",
-  () =>
-    Effect.gen(function* () {
-      const { fetchLike } = openAi([created()]);
-      const { source, opens, sockets } = keyed(fetchLike);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-
-      const read = yield* readSideband(yield* opened.attach());
-
-      const [open] = opens;
-      assert.equal(open?.url, `wss://api.openai.com/v1${liveAttachPath(SESSION_ID)}`);
-      assert.deepEqual(open?.headers, { authorization: "Bearer sk-test" });
-      assert.equal(source.diagnostics().sidebandAttached, true);
-
-      const [socket] = sockets;
-      socket?.receive({
-        type: LIVE_SERVER_EVENT.SESSION_STARTED,
-        event_id: "ev_1",
-        session: { id: SESSION_ID },
-      });
-      socket?.receive({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: "AAAA" });
-      yield* pause;
-      assert.deepEqual(
-        read.events.map((event) => event.type),
-        [LIVE_SERVER_EVENT.SESSION_STARTED],
-      );
-
-      socket?.closeFromServer({ code: 1000 });
-      yield* pause;
-      assert.equal(source.diagnostics().sidebandAttached, false);
-    }),
-);
-
-it.scopedLive(
-  "the keyed source records a sideband that would not open and rejects the attach",
-  () =>
-    Effect.gen(function* () {
-      const { fetchLike } = openAi([created()]);
-      const script = scriptedOpenSocket([
-        () => ({ fault: SOCKET_OPEN_FAULT.REFUSED, status: 403 }),
-      ]);
-      const source = new KeyedLiveSessionSource({
-        apiKey: "sk-test",
-        httpClient: fakeHttpClientLayer(fetchLike),
-        openSocket: script.openSocket,
-      });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-
-      const attached = yield* Effect.exit(opened.attach());
-      assert.equal(Exit.isFailure(attached), true);
-      assert.equal(source.diagnostics().lastOutcome, LIVE_SESSION_OUTCOME.SIDEBAND_FAILED);
-      assert.equal(source.diagnostics().sidebandAttached, false);
-    }),
-);
-
-it.scopedLive("the keyed source names each failure class and answers nothing", () =>
-  Effect.gen(function* () {
-    const cases: Array<{ answer: () => Response; outcome: string }> = [
-      { answer: status(401), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-      { answer: status(429), outcome: LIVE_SESSION_OUTCOME.HTTP_ERROR },
-      {
-        answer: () => new Response("<html>", { status: 200 }),
-        outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-      },
-      {
-        answer: () =>
-          new Response(JSON.stringify({ session: { id: SESSION_ID } }), { status: 200 }),
-        outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-      },
-      {
-        answer: () => {
-          throw new TypeError("fetch failed");
-        },
-        outcome: LIVE_SESSION_OUTCOME.NETWORK_ERROR,
-      },
-    ];
-    for (const { answer, outcome } of cases) {
-      const { fetchLike } = openAi([answer]);
-      const { source } = keyed(fetchLike);
-      assert.equal(yield* source.create({ sdpOffer: SDP_OFFER, input: [] }), undefined);
-      assert.equal(source.diagnostics().lastOutcome, outcome);
-    }
-  }),
-);
-
-test("the keyed source falls back to its configured voice when a setting is cleared or unknown", () => {
-  const { fetchLike } = openAi([created()]);
-  const { source } = keyed(fetchLike);
-  assert.equal(source.diagnostics().voice, LIVE_DEFAULTS.VOICE);
-  source.setVoice(LIVE_VOICE.ASH);
-  assert.equal(source.diagnostics().voice, LIVE_VOICE.ASH);
-  source.setVoice("not-a-voice");
-  assert.equal(source.diagnostics().voice, LIVE_DEFAULTS.VOICE);
-  source.setVoice(undefined);
-  assert.equal(source.diagnostics().voice, LIVE_DEFAULTS.VOICE);
-});
-
-test("a keyed source is built only from a key", () => {
-  const { openSocket } = scriptedOpenSocket([]);
-  assert.equal(keyedLiveSessions(undefined, { openSocket }), undefined);
-  assert.equal(keyedLiveSessions("  ", { openSocket }), undefined);
-  assert.equal(keyedLiveSessions("sk-test", { openSocket })?.model, LIVE_DEFAULTS.MODEL);
-  assert.equal(
-    keyedLiveSessions("sk-test", { openSocket, model: "gpt-live-next" })?.model,
-    "gpt-live-next",
-  );
-});
 
 function createdFrame(overrides: ParsedJsonObject = {}) {
   return {
@@ -320,8 +111,6 @@ it.scopedLive(
         input: INPUT,
       });
       const report = source.diagnostics();
-      assert.equal(report.hosted, true);
-      assert.equal(report.apiKeyConfigured, false);
       assert.equal(report.lastOutcome, LIVE_SESSION_OUTCOME.SUCCEEDED);
       assert.deepEqual(report.quota, QUOTA);
     }),
@@ -864,21 +653,6 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
-  "a keyed session opens no door for the idle report, the stop, or the beats: nothing stands between it and OpenAI to tell",
-  () =>
-    Effect.gen(function* () {
-      const { fetchLike } = openAi([created()]);
-      const { source } = keyed(fetchLike);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-      assert.equal(opened.reportActivity, undefined);
-      assert.equal(opened.stopSpeaking, undefined);
-      assert.equal(opened.speakBeat, undefined);
-      assert.equal(opened.onSpoken, undefined);
-    }),
-);
-
 it.scopedLive("re-attaching tries as many times as it has delays and then reports the loss", () =>
   Effect.gen(function* () {
     const script = scriptedOpenSocket([answering(createdFrame()), closingOnSend(1011)]);
@@ -1059,13 +833,13 @@ it.scopedLive("the introduction source never reads a refusal as signed out", () 
   }),
 );
 
-test("unavailable diagnostics name the fixture run apart from the missing key", () => {
+test("unavailable diagnostics name the fixture run apart from the missing account", () => {
   assert.equal(
-    unavailableLiveDiagnostics({ fixtureMode: true, apiKeyConfigured: false }).lastOutcome,
+    unavailableLiveDiagnostics({ fixtureMode: true }).lastOutcome,
     LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE,
   );
-  const missing = unavailableLiveDiagnostics({ fixtureMode: false, apiKeyConfigured: false });
-  assert.equal(missing.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
+  const missing = unavailableLiveDiagnostics({ fixtureMode: false });
+  assert.equal(missing.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
   assert.equal(missing.sidebandAttached, false);
   assert.equal(missing.voice, LIVE_DEFAULTS.VOICE);
 });
@@ -1174,40 +948,6 @@ it.scopedLive(
         read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
       );
-    }),
-);
-
-it.scopedLive(
-  "a close that lands in the keyed attach's open gap reaches the sideband that subscribes after the attached flag, and the flag reads false",
-  () =>
-    Effect.gen(function* () {
-      const { fetchLike } = openAi([created()]);
-      const script = scriptedOpenSocket([
-        (socket) => {
-          queueMicrotask(() => socket.closeFromServer({ code: 1006 }));
-          return undefined;
-        },
-      ]);
-      const source = new KeyedLiveSessionSource({
-        apiKey: "sk-test",
-        httpClient: fakeHttpClientLayer(fetchLike),
-        openSocket: script.openSocket,
-        now: () => NOW,
-      });
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
-      assert.ok(opened);
-      const sideband = yield* opened.attach();
-      // The close was queued behind the handshake, and the attach is an effect
-      // that answers without waiting for it; this pause is the gap it lands in,
-      // before the sideband's reader stands.
-      yield* pause;
-      const read = yield* readSideband(sideband);
-      yield* pause;
-      assert.deepEqual(
-        read.closes.map((close) => close.code),
-        [1006],
-      );
-      assert.equal(source.diagnostics().sidebandAttached, false);
     }),
 );
 

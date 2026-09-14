@@ -9,8 +9,8 @@ import type { HeldSocket } from "./held-socket.js";
 
 /**
  * The socket seam a live session source opens its trusted connections
- * through: OpenAI's attach endpoint on the keyed tier, Luke's voice service on
- * the hosted one. The seam is injected so this package never reaches `ws`;
+ * through: Luke's voice service, for the account's sessions and the
+ * introduction's alike. The seam is injected so this package never reaches `ws`;
  * the host implements it over `ws`, and a test hands in a scripted socket.
  */
 

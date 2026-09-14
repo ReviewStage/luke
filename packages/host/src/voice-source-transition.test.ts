@@ -226,11 +226,11 @@ function assertHostedSet(c: ReturnType<typeof composition>) {
   assert.ok(c.assembler.liveSessions);
 }
 
-/** The key source stands a voice session on the developer's key and no brain at all. */
+/** The key source stands nothing: no session opens on the developer's key, and no brain. */
 function assertKeyedSet(c: ReturnType<typeof composition>) {
   assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
   assert.equal(c.assembler.brainModel, undefined);
-  assert.equal(c.assembler.liveSessions?.diagnostics().apiKeyConfigured, true);
+  assert.equal(c.assembler.liveSessions, undefined);
   assert.equal(c.host.current(), undefined);
 }
 
@@ -416,17 +416,15 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
   }),
 );
 
-test("transitions that do not overlap each install in turn: a key stands no brain, the account stands one", async () => {
+test("transitions that do not overlap each install in turn: a key stands nothing, the account stands the set", async () => {
   const c = composition();
   assert.equal(await c.transition(), true);
   assertKeyedSet(c);
-  const keyedLive = c.assembler.liveSessions;
   c.settings.source = VOICE_SOURCE.ACCOUNT;
   assert.equal(await c.transition(), true);
   assertHostedSet(c);
   const second = c.host.current();
   assert.ok(second);
-  assert.notEqual(c.assembler.liveSessions, keyedLive);
   assert.deepEqual(c.builds, ["hosted"]);
   await Effect.runPromise(second.stop());
 });

@@ -4,13 +4,13 @@
     "code": {
       "type": "string",
       "enum": [
-        "no-api-key"
+        "no-account"
       ]
     },
     "_tag": {
       "type": "string",
       "enum": [
-        "NoApiKeyRefusal"
+        "NoAccountRefusal"
       ]
     }
   },

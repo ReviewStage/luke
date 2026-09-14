@@ -28,7 +28,7 @@ import {
   LiveTransportTypeSchema,
   MalformedResponseRefusal,
   NetworkErrorRefusal,
-  NoApiKeyRefusal,
+  NoAccountRefusal,
   NotSignedInRefusal,
   QuotaExhaustedRefusal,
   SidebandFailedRefusal,
@@ -93,7 +93,7 @@ test("a voice arriving from storage or IPC is a schema of the SDK's built-in set
 
 test("every non-success session outcome has its own tagged error carrying the legacy code", () => {
   assert.equal(LIVE_SESSION_REFUSALS.length, 9);
-  assert.equal(new NoApiKeyRefusal({ code: LIVE_SESSION_OUTCOME.NO_API_KEY }).code, "no-api-key");
+  assert.equal(new NoAccountRefusal({ code: LIVE_SESSION_OUTCOME.NO_ACCOUNT }).code, "no-account");
   assert.equal(
     new DisabledByFixtureRefusal({ code: LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE }).code,
     "disabled-by-fixture",
@@ -127,7 +127,7 @@ test("every non-success session outcome has its own tagged error carrying the le
 
 test("each refusal's tag names its own class alone", () => {
   const tags = [
-    new NoApiKeyRefusal({ code: LIVE_SESSION_OUTCOME.NO_API_KEY })._tag,
+    new NoAccountRefusal({ code: LIVE_SESSION_OUTCOME.NO_ACCOUNT })._tag,
     new DisabledByFixtureRefusal({ code: LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE })._tag,
     new HttpErrorRefusal({ code: LIVE_SESSION_OUTCOME.HTTP_ERROR })._tag,
     new NetworkErrorRefusal({ code: LIVE_SESSION_OUTCOME.NETWORK_ERROR })._tag,

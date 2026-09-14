@@ -355,10 +355,7 @@ export const composeLive = (
         Effect.sync(() => ({
           diagnostics: carried(
             account.voiceCapabilities.liveSessions?.diagnostics() ??
-              unavailableLiveDiagnostics({
-                fixtureMode: !runMode.sendsNetwork,
-                apiKeyConfigured: false,
-              }),
+              unavailableLiveDiagnostics({ fixtureMode: !runMode.sendsNetwork }),
           ),
         })),
       // One live event the renderer's tap saw cross the data channel, into the
