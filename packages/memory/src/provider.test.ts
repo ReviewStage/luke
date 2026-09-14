@@ -19,13 +19,13 @@ import {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
-  NOTEBOOK_MEMORY_TOOL,
   NOTEBOOK_RECALL_ID,
   type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
   notebookMemoryProvider,
   notebookMemoryToolShapes,
 } from "./provider.js";
+import { NOTEBOOK_MEMORY_TOOL } from "./tool-names.js";
 
 const SCOPE: MemoryScope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "main" };
 const OTHER: MemoryScope = { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: "someone-else" };

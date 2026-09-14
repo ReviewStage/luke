@@ -23,6 +23,7 @@ import {
 import { describeWire } from "@sidecar/wire/effect";
 import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
+import { NOTEBOOK_MEMORY_TOOL, type NotebookMemoryToolName } from "./tool-names.js";
 
 /**
  * The notebook as a memory provider: `USER.md`, `MEMORY.md`, and the dated
@@ -59,14 +60,6 @@ export interface NotebookMemoryAccess {
     readonly lines?: number;
   }): Effect.Effect<WireRecord>;
 }
-
-export const NOTEBOOK_MEMORY_TOOL = {
-  SEARCH: "memory_search",
-  GET: "memory_get",
-} as const;
-
-export type NotebookMemoryToolName =
-  (typeof NOTEBOOK_MEMORY_TOOL)[keyof typeof NOTEBOOK_MEMORY_TOOL];
 
 /** The most results one memory search answers, and the longest query it takes. */
 export const maximumMemorySearchResults = 20;

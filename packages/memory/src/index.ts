@@ -27,13 +27,12 @@ export {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
-  NOTEBOOK_MEMORY_TOOL,
   NOTEBOOK_RECALL_ID,
   type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
-  type NotebookMemoryToolName,
   type NotebookMemoryToolShape,
   notebookMemoryProvider,
   notebookMemoryToolShapes,
   primedNotesText,
 } from "./provider.js";
+export { NOTEBOOK_MEMORY_TOOL, type NotebookMemoryToolName } from "./tool-names.js";

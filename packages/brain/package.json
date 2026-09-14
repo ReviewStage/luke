@@ -8,6 +8,7 @@
     "./envelope": "./src/envelope.js",
     "./requests": "./src/requests.js",
     "./testing": "./src/testing.js",
+    "./tool-names": "./src/tools/names.js",
     "./tool-set": "./src/tool-set.js",
     "./ui-message-context": "./src/ui-message-context.js"
   },

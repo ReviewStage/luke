@@ -84,6 +84,8 @@ const FIXTURE_TOOL_KINDS: ConversationViewToolKinds = new Map([
   ["add_workspace_agent", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["rename_workspace", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["rename_session", CONVERSATION_VIEW_TOOL_KIND.ACTION],
+  ["change_app_setting", CONVERSATION_VIEW_TOOL_KIND.ACTION],
+  ["remember_fact", CONVERSATION_VIEW_TOOL_KIND.ACTION],
 ]);
 
 const identity = (providerSessionId: string) => ({
@@ -175,6 +177,8 @@ export const FIXTURE_TURN = {
   SINGLE: "1a000000-0000-4000-8000-000000000106",
   /** A hold's release in main: Luke's own judgment, with words and an action of his own. */
   OWN: "1a000000-0000-4000-8000-000000000107",
+  /** The turn's working: the brain's own reads and writes beside two app actions, one write refused. */
+  WORKING: "1a000000-0000-4000-8000-000000000108",
 } as const;
 
 const TURN = FIXTURE_TURN;
@@ -186,6 +190,7 @@ const AT = {
   ANNOUNCED: 1757505900000,
   RUNNING: 1757506000000,
   SINGLE: 1757506100000,
+  WORKING: 1757506150000,
   OWN: 1757506200000,
 } as const;
 
@@ -420,6 +425,40 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       createdAt: AT.SINGLE + 800,
     },
     {
+      message: ask(
+        "2b000000-0000-4000-8000-000000000212",
+        "What did we decide about the notch last week? And turn announcements on.",
+      ),
+      seq: 11,
+      turnId: TURN.WORKING,
+      createdAt: AT.WORKING,
+    },
+    {
+      message: reply("2b000000-0000-4000-8000-000000000213", [
+        { type: "step-start" },
+        call("list_sessions", {}, { roster: "(the roster as text)" }),
+        call("memory_search", { query: "notch clipping decision" }, { results: [] }),
+        call("memory_get", { path: "memory/2026-09-08.md" }, { content: "(a note)" }),
+        call("read_workspace_file", { name: "MEMORY.md" }, { status: "accepted", content: "" }),
+        call(
+          "write_workspace_file",
+          { name: "memory/2026-09-14.md", content: "Decided: clip the panel to the notch." },
+          { status: "rejected", reason: "not run: this agent has no workspace" },
+        ),
+        call("change_app_setting", { setting_id: "announcements", value: "on" }, accepted({})),
+        call("remember_fact", { words: "Prefers the panel clipped to the notch." }, accepted({})),
+        { type: "step-start" },
+        {
+          type: "text",
+          text: "You decided to clip the panel to the notch. Announcements are on.",
+          state: "done",
+        },
+      ]),
+      seq: 12,
+      turnId: TURN.WORKING,
+      createdAt: AT.WORKING + 3000,
+    },
+    {
       message: reply("2b000000-0000-4000-8000-000000000211", [
         { type: "step-start" },
         {
@@ -433,7 +472,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
           accepted({ target: target(FIXTURE_SESSION.HELD, FIXTURE_TITLE.HELD) }),
         ),
       ]),
-      seq: 11,
+      seq: 13,
       turnId: TURN.OWN,
       createdAt: AT.OWN,
     },
@@ -496,6 +535,12 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       origin: TURN_ORIGIN.TYPED,
       status: TURN_STATUS.SETTLED,
       queuedAt: AT.SINGLE,
+    },
+    {
+      id: TURN.WORKING,
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: AT.WORKING,
     },
     {
       id: TURN.OWN,

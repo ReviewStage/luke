@@ -18,6 +18,12 @@ export const BRAIN_TOOL = {
 
 export type BrainToolName = (typeof BRAIN_TOOL)[keyof typeof BRAIN_TOOL];
 
+/** What a `subagents` call does: list the children, the default, or cancel one. */
+export const SUBAGENTS_ACTION = {
+  LIST: "list",
+  CANCEL: "cancel",
+} as const;
+
 const BRAIN_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set(Object.values(BRAIN_TOOL));
 
 /** Whether a call names a tool the agent answers itself rather than an action or the memory provider's. */

@@ -18,11 +18,10 @@ import {
   ratingFeedbackDraft,
 } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
-import { TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
+import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import {
   announcedWords,
   ConversationTurns,
-  detailToolLabel,
   foldOpen,
   judgmentOf,
   turnPending,
@@ -59,7 +58,7 @@ function count(markup: string, attribute: string, value: string): number {
 
 const TOOL_FOLD_OPENING = '<details class="conversation-actions-fold"';
 
-test("the fixture scenarios draw every session action kind inside tool-call folds", () => {
+test("the fixture scenarios draw every session action kind, folded or as a row of its own", () => {
   const markup = render(fixtureConversationTurns(), OPEN);
   const kinds = new Set<string>();
   for (const match of markup.matchAll(/data-action-kind="([^"]+)"/g)) {
@@ -71,12 +70,20 @@ test("the fixture scenarios draw every session action kind inside tool-call fold
     "create-workspace",
     "message",
     "open",
+    "remember",
     "rename-session",
     "rename-workspace",
+    "setting",
   ]);
   assert.ok(count(markup, "data-tool-calls-fold", "settled") >= 1);
   assert.ok(count(markup, "data-tool-calls-fold", "running") >= 1);
-  // Both the accepted actions and the other outcomes stand in the tool-call folds.
+  // Every fold's line leads with the chevron, and nothing else draws one.
+  assert.equal(
+    count(markup, "class", "settings-chevron"),
+    count(markup, "data-tool-calls-fold", "settled") +
+      count(markup, "data-tool-calls-fold", "running"),
+  );
+  // Both the accepted actions and the other outcomes stand in the thread.
   assert.ok(count(markup, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED) >= 7);
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.UNKNOWN), 1);
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.FAILED), 1);
@@ -131,12 +138,19 @@ function actionRows(markup: string): number {
   return (markup.match(/data-action-kind="/g) ?? []).length;
 }
 
-test("a message's tool calls fold under a count, open while it runs and closed once settled", () => {
+test("a message's tool calls fold under a count once there are two, open while it runs and closed once settled", () => {
   const running = render([groupOf(FIXTURE_TURN.RUNNING)], OPEN);
   assert.equal(count(running, "data-tool-calls-fold", "running"), 1);
   assert.equal(count(running, "data-tool-calls-fold", "settled"), 0);
   assert.equal((running.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 1);
   assert.equal(actionRows(running), 3);
+  // The fold's line: the chevron, then the count, and no marker of the browser's own.
+  const summary = running.slice(
+    running.indexOf('<summary class="conversation-turn-summary">'),
+    running.indexOf("</summary>"),
+  );
+  assert.equal(count(summary, "class", "settings-chevron"), 1);
+  assert.ok(summary.includes("3 tool calls"));
 
   // Inside the fold the rows carry no stamp of their own; the fold's line carries the message's.
   const [runningBefore, insideRunning] = running.split(TOOL_FOLD_OPENING);
@@ -174,12 +188,52 @@ test("a fold follows the turn's state, and a press holds only until that state n
   assert.equal(foldOpen({ pending: false, open: false }, true), true);
 });
 
-test("even one action is shown inside the tool-call fold, with no wait once settled", () => {
+test("a message of one tool call draws the row itself, stamped, with no fold and no wait", () => {
   const markup = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
-  assert.equal(count(markup, "data-tool-calls-fold", "settled"), 1);
+  assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
+  assert.equal(count(markup, "class", "settings-chevron"), 0);
   assert.equal(actionRows(markup), 1);
   assert.equal(count(markup, "data-thinking", "true"), 0);
-  assert.equal(count(markup, "data-judgment", "ask"), 2);
+  assert.equal(count(markup, "data-judgment", "ask"), 1);
+  // The row stands between the ask and the reply, and carries the message's stamp as they do.
+  assert.equal(count(markup, "class", "conversation-time"), 3);
+  const [beforeRow, afterRow] = markup.split('data-action-kind="');
+  assert.ok(beforeRow !== undefined && afterRow !== undefined);
+  assert.equal(count(beforeRow, "data-speaker", "you"), 1);
+  assert.equal(count(afterRow, "data-speaker", "luke"), 1);
+
+  // One read is a row on the same terms: a transcript read led by its mark, naming its session as a chip, no fold.
+  const asked = render([groupOf(FIXTURE_TURN.ASK)], OPEN);
+  assert.equal((asked.match(/data-tool-calls-fold=/g) ?? []).length, 0);
+  assert.equal(count(asked, "data-tool-kind", "transcript"), 1);
+  assert.equal(actionRows(asked), 0);
+  assert.equal(count(asked, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 1);
+  assert.equal(count(asked, "class", "conversation-action-mark"), 1);
+  assert.equal(count(asked, "class", "conversation-action-chip"), 1);
+  assert.equal(count(asked, "class", "conversation-time"), 3);
+});
+
+test("the brain's own tools draw as rows of the turn's working, each led by a mark, a refusal saying why", () => {
+  const working = render([groupOf(FIXTURE_TURN.WORKING)], OPEN);
+  assert.equal(count(working, "data-tool-calls-fold", "settled"), 1);
+  for (const kind of [
+    "roster",
+    "notebook-search",
+    "notebook-read",
+    "workspace-read",
+    "workspace-write",
+  ]) {
+    assert.equal(count(working, "data-tool-kind", kind), 1, kind);
+  }
+  // The two app actions are actions, and the reads are not.
+  assert.equal(actionRows(working), 2);
+  assert.equal(count(working, "data-action-kind", "setting"), 1);
+  assert.equal(count(working, "data-action-kind", "remember"), 1);
+  // Every row wears a mark, and the refused write alone carries a reason.
+  assert.equal(count(working, "class", "conversation-action-mark"), 7);
+  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
+  assert.equal(count(working, "class", "conversation-action-reason"), 1);
+  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 6);
 });
 
 test("a running turn ends in Luke's wait, driven by the turn row's status alone", () => {
@@ -199,11 +253,11 @@ test("a running turn ends in Luke's wait, driven by the turn row's status alone"
 
 test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
   const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
-  assert.equal(count(own, "data-judgment", "own"), 3);
+  assert.equal(count(own, "data-judgment", "own"), 2);
   assert.equal(count(own, "data-judgment", "ask"), 0);
   assert.equal(count(own, "data-own-words", "true"), 1);
   assert.equal(count(own, "data-speaker", "luke"), 0);
-  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 3);
+  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 2);
 
   const asked = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
   assert.equal(count(asked, "data-judgment", "own"), 0);
@@ -257,10 +311,11 @@ test("the words an announce call carries are its briefing, and a detail's label 
   assert.equal(announcedWords(announce), "The fixture session is waiting on a permission prompt.");
   assert.equal(announcedWords({ ...announce, input: { text: "not a briefing" } }), undefined);
   assert.equal(detailToolLabel("read_transcript"), "read transcript");
+  // The announce call is its bubble and nothing else: no tool call row, no fold, for a message that only announced.
   const markup = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
-  const foldAt = markup.indexOf(TOOL_FOLD_OPENING);
-  const bubbleAt = markup.indexOf('data-speaker="luke"');
-  assert.ok(foldAt !== -1 && bubbleAt !== -1 && foldAt < bubbleAt);
+  assert.equal(count(markup, "data-speaker", "luke"), 1);
+  assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
+  assert.equal((markup.match(/data-tool-kind="/g) ?? []).length, 0);
 });
 
 test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {
@@ -339,8 +394,8 @@ function pressed(markup: string, label: string): readonly boolean[] {
 
 test("each of Luke's messages carries one rating control on its last words, and the developer's ask and the brain's note carry none", () => {
   const groups = fixtureConversationTurns();
-  // The fixture's messages of Luke's with words: four replies, one briefing, one on his own judgment.
-  const lukes = 6;
+  // The fixture's messages of Luke's with words: five replies, one briefing, one on his own judgment.
+  const lukes = 7;
   const markup = render(groups, OPEN);
   assert.equal(ratingControls(markup), lukes);
   assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.UP]).length, lukes);
