@@ -15,6 +15,7 @@ import {
   LIVE_SESSIONS_PATH,
   LIVE_VOICE,
   liveAttachPath,
+  PROACTIVE_SPEECH_KIND,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
@@ -807,7 +808,64 @@ it.scopedLive(
 );
 
 it.scopedLive(
-  "a keyed session opens no door for the idle report or the stop: nothing stands between it and OpenAI to tell",
+  "a beat rides the socket as the service's own frame, and the service's spoken word is taken off the socket for the listener before the sideband reads it",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
+      assert.ok(opened?.speakBeat && opened.onSpoken);
+      const heard: string[] = [];
+      opened.onSpoken((kind) => heard.push(kind));
+      const reading = yield* readSideband(yield* opened.attach());
+      const beat = {
+        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+        firstName: "Ada",
+      } as const;
+      opened.speakBeat(beat);
+      const [first] = script.sockets;
+      assert.ok(first);
+      assert.deepEqual(
+        first.sent.map((data) => JSON.parse(data)),
+        [
+          {
+            type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+            sdp: SDP_OFFER,
+            voice: LIVE_DEFAULTS.VOICE,
+            input: [],
+          },
+          beat,
+        ],
+      );
+      first.receive({
+        type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+      });
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      // A frame that only mentions the type inside a value is a session's own and reads as one.
+      first.receive({
+        type: LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        event_id: "e2",
+        delta: "session.spoken",
+        start_ms: 0,
+        end_ms: 10,
+      });
+      yield* pause;
+      assert.deepEqual(heard, [PROACTIVE_SPEECH_KIND.LAUNCH]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA],
+      );
+    }),
+);
+
+it.scopedLive(
+  "a keyed session opens no door for the idle report, the stop, or the beats: nothing stands between it and OpenAI to tell",
   () =>
     Effect.gen(function* () {
       const { fetchLike } = openAi([created()]);
@@ -816,6 +874,8 @@ it.scopedLive(
       assert.ok(opened);
       assert.equal(opened.reportActivity, undefined);
       assert.equal(opened.stopSpeaking, undefined);
+      assert.equal(opened.speakBeat, undefined);
+      assert.equal(opened.onSpoken, undefined);
     }),
 );
 

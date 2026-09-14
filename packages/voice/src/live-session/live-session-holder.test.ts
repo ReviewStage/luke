@@ -5,6 +5,7 @@ import {
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
+import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import {
   type InitialItem,
   LIVE_CLIENT_EVENT,
@@ -12,6 +13,8 @@ import {
   LIVE_DELEGATION_TARGET,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
+  PROACTIVE_SPEECH_KIND,
+  type ProactiveSpeechKind,
   parseLiveServerEvent,
   type RosterSeedSession,
   rosterSeed,
@@ -107,6 +110,12 @@ interface Fixture {
   reports: boolean[];
   /** How many times the source's stop door was asked. */
   stops: number;
+  /** Every beat the source's door was handed, in order. */
+  beats: SessionBeatFrame[];
+  /** Every kind the holder told its caller was spoken, in order. */
+  spoken: ProactiveSpeechKind[];
+  /** The service's word that a turn was spoken, as the source's door would deliver it. */
+  tellSpoken(kind: ProactiveSpeechKind): void;
   created: number;
   entries: ConversationEntry[];
   roster: RosterSeedSession[];
@@ -123,6 +132,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const seeds: (readonly InitialItem[])[] = [];
     const changes: VoiceLiveSessionChanged[] = [];
     const reports: boolean[] = [];
+    const beats: SessionBeatFrame[] = [];
+    const spoken: ProactiveSpeechKind[] = [];
+    let spokenListener: ((kind: ProactiveSpeechKind) => void) | undefined;
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
     let ids = 0;
@@ -154,6 +166,12 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   stopSpeaking: () => {
                     state.stops += 1;
                   },
+                  speakBeat: (beat: SessionBeatFrame) => {
+                    beats.push(beat);
+                  },
+                  onSpoken: (listener: (kind: ProactiveSpeechKind) => void) => {
+                    spokenListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -171,6 +189,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       emit: (change) => changes.push(change),
       createId: () => `id-${++ids}`,
       report: () => undefined,
+      onSpoken: (kind) => {
+        spoken.push(kind);
+      },
       onSessionCreated: () => {
         state.created += 1;
       },
@@ -194,6 +215,11 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       get stops() {
         return state.stops;
+      },
+      beats,
+      spoken,
+      tellSpoken: (kind) => {
+        spokenListener?.(kind);
       },
       get reportsActivity() {
         return state.reportsActivity;
@@ -526,4 +552,137 @@ it.scoped("the holder's scope closing releases a session still standing", () =>
     yield* settle();
     assert.equal(sideband.closed, true);
   }),
+);
+
+const ARRIVAL: SessionBeatFrame = {
+  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+  kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+  sessionTitle: "Fix the flaky test",
+};
+const CALENDAR: SessionBeatFrame = {
+  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+  kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+};
+const LAUNCH: SessionBeatFrame = {
+  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+  kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+  firstName: "Ada",
+};
+
+it.scoped(
+  "a beat asked for with no session announces wanted, goes through the source's door once the session starts, is settled by the service's word, and may then be asked again",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.speakBeat(ARRIVAL), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      // One ask per kind stands at a time.
+      assert.equal(f.holder.speakBeat(ARRIVAL), false);
+      assert.deepEqual(f.beats, []);
+      const created = yield* f.holder.createSession("offer");
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      // Created and not yet started: the beat waits for the start, and nothing left the sideband.
+      assert.deepEqual(f.beats, []);
+      sideband.started(created.sessionId);
+      yield* settle();
+      assert.deepEqual(f.beats, [ARRIVAL]);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(f.holder.speakBeat(ARRIVAL), false);
+      // A briefing the service reports spoken is the caller's to count and settles no beat.
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.BRIEFING);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING]);
+      assert.equal(f.holder.speakBeat(ARRIVAL), false);
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.ARRIVAL);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.BRIEFING, PROACTIVE_SPEECH_KIND.ARRIVAL]);
+      // Settled: the kind may be asked for again, and a started session takes it at once.
+      assert.equal(f.holder.speakBeat(ARRIVAL), true);
+      assert.deepEqual(f.beats, [ARRIVAL, ARRIVAL]);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.STARTED,
+      ]);
+    }),
+);
+
+it.scoped(
+  "a waiting beat is withdrawn; one the service already has is the service's to speak; every beat goes with the session that ended",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.speakBeat(CALENDAR), true);
+      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING), true);
+      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING), false);
+      const created = yield* f.holder.createSession("offer");
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+      assert.deepEqual(f.beats, []);
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(f.beats, [LAUNCH]);
+      assert.equal(f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.LAUNCH), false);
+      assert.equal(f.holder.speakBeat(LAUNCH), false);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
+      yield* settle();
+      // The session ended with the greeting unspoken: nothing is carried to the next, and the ask stands again.
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.STARTED,
+        LIVE_SESSION_PHASE.CLOSED,
+        LIVE_SESSION_PHASE.WANTED,
+      ]);
+      // A word about a session already over settles nothing and tells nobody.
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.LAUNCH);
+      assert.deepEqual(f.spoken, []);
+    }),
+);
+
+it.scoped(
+  "a session that could not be stood leaves no beat waiting for it, so the kind may be asked again and wanted announced again",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.sourceAvailable = false;
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.equal(yield* f.holder.createSession("offer"), undefined);
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      f.sourceAvailable = true;
+      f.attachFails = true;
+      assert.equal(yield* f.holder.createSession("offer"), undefined);
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.CLOSED,
+        LIVE_SESSION_PHASE.WANTED,
+      ]);
+      assert.deepEqual(f.beats, []);
+    }),
+);
+
+it.scoped(
+  "a beat is dropped on a source with no door, since a session with no service between will never speak it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.reportsActivity = false;
+      assert.equal(f.holder.speakBeat(ARRIVAL), true);
+      const created = yield* f.holder.createSession("offer");
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+      assert.deepEqual(f.beats, []);
+      assert.deepEqual(sideband.sent, []);
+      // Dropped rather than held: the kind may be asked for again.
+      assert.equal(f.holder.speakBeat(ARRIVAL), true);
+    }),
 );
