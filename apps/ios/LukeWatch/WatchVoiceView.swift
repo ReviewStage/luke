@@ -28,7 +28,13 @@ struct WatchVoiceView: View {
             await store.load()
         }
         .onChange(of: voice) { _, newVoice in model.changeVoice(newVoice) }
+        // A hang-up disables the talk control, which cancels a drag still held
+        // without its `onEnded`; the press is let go here so the next one is heard.
+        .onChange(of: model.status) { _, status in
+            if status == .closing || status == .idle || status == .failed { isPressing = false }
+        }
         .onDisappear {
+            isPressing = false
             model.hangUp()
         }
         .navigationTitle("Luke")
