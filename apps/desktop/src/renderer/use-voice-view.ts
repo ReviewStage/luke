@@ -1,4 +1,3 @@
-import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
 import { Effect } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -19,9 +18,6 @@ import { rendererServicesNow } from "./renderer-runtime";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
-
-/** No run standing, which is what a document with no brain answer yet reads as. */
-const EMPTY_BRAIN_REQUESTS: readonly BrainRequestSnapshot[] = [];
 
 /** What the strip says when the stored thread could not be deleted. */
 /** What the strip says of a Clear the service did not take: the thread stands exactly as it was. */
@@ -195,8 +191,6 @@ export interface VoiceViewState {
   levels: VoiceLevels;
   /** Which speakers are audibly talking, on the relayed levels' own hangover. */
   voiceActive: VoiceActivity;
-  /** Every run the brain holds, for Conversation to draw a pending ask beside its words. */
-  brainRequests: readonly BrainRequestSnapshot[];
   /** Escape out of an open turn: forget the press and the latch, and stop listening. */
   stopSpeaking: () => void;
   requestMicrophoneAccess: () => void;
@@ -245,10 +239,6 @@ export function useVoiceView(): VoiceViewState {
     return created;
   });
   useEffect(() => () => strip.stop(), [strip]);
-  // Every version of the document carries the whole list the standing brain
-  // holds: a run absent from it is one no current brain can find, so its row
-  // must go.
-  const brainRequests = state?.brain.runs ?? EMPTY_BRAIN_REQUESTS;
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
@@ -272,7 +262,6 @@ export function useVoiceView(): VoiceViewState {
     listening: view.listening,
     levels: levelReport.levels,
     voiceActive,
-    brainRequests,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,

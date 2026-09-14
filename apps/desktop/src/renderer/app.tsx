@@ -3,7 +3,6 @@ import {
   PRODUCT_SEARCH_SURFACE,
   PRODUCT_SURFACE_EVENT,
 } from "@sidecar/analytics";
-import { brainRequestPending } from "@sidecar/brain/requests-wire";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import {
   CREDENTIAL_PROVIDER_ID,
@@ -533,7 +532,6 @@ export function App(): React.JSX.Element {
     listening,
     levels: voiceLevels,
     voiceActive,
-    brainRequests,
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,
@@ -543,10 +541,6 @@ export function App(): React.JSX.Element {
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
-  // Whether a run of Luke's is still going, from the same records Conversation
-  // draws its wait from: the strip's face, the stage's growth for the dots
-  // beside it, and the thread's wait all read one answer.
-  const thinking = brainRequests.some(brainRequestPending);
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
@@ -954,11 +948,6 @@ export function App(): React.JSX.Element {
       // rests on.
       data-luke-speaking={String(speakers.lukeSpeaking)}
       data-listening={String(speakers.listening)}
-      // Whether a run of Luke's is still going, so the capsule can make room
-      // for the wait's dots the same way; the dots stand through a spoken
-      // exchange, so his reply's own growth is spent alongside the wait's
-      // rather than instead of it.
-      data-thinking={String(thinking)}
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
@@ -1026,7 +1015,6 @@ export function App(): React.JSX.Element {
             liveConversationEntries={liveConversationEntries}
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
-            brainRequests={brainRequests}
             onFieldEngaged={changeAskEngagement}
             offerOptions={sessions.offerOptions}
             optionsOpen={sessions.optionsOpen}
@@ -1137,7 +1125,6 @@ export function App(): React.JSX.Element {
         voiceActive={voiceActive}
         fixtureSpeaking={fixtureSpeaking}
         voiceOpening={talkOpening}
-        thinking={thinking}
         announcementsHeld={announcementsHeld}
         sessionsSettled={sessionsSettled}
         presentation={presentation}

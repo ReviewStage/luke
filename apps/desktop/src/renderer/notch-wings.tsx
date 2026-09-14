@@ -8,13 +8,7 @@ import {
   type VoiceSpeakers,
 } from "#shared/messages/voice-view";
 import { errandOriginProps } from "./luke-errand";
-import {
-  type FaceContext,
-  speechFaceInputs,
-  thinkingDotsShown,
-  useFaceHover,
-  useFaceMotion,
-} from "./luke-face-mood";
+import { type FaceContext, speechFaceInputs, useFaceHover, useFaceMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import type { ProviderTally, SessionTally } from "./session-model";
 import {
@@ -24,7 +18,6 @@ import {
   WING_SLOT_ID_ATTRIBUTE,
   WING_SPREAD_ATTRIBUTE,
 } from "./session-motion";
-import { ThinkingDots } from "./thinking-dots";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { NO_VOICE_ACTIVITY, type VoiceActivity } from "./use-voice-view";
 import { WAVEFORM_VOICE, Waveform, type WaveformVoice } from "./waveform";
@@ -67,12 +60,6 @@ interface NotchWingsProps {
   voiceActive?: VoiceActivity;
   fixtureSpeaking: boolean;
   voiceOpening: boolean;
-  /**
-   * Whether a run of Luke's is still going, read from the same records the
-   * Conversation tab draws its wait from, so the strip and the thread cannot
-   * disagree about whether Luke is thinking.
-   */
-  thinking: boolean;
   /** Whether announcements are held, by the announce switch off or a meeting — the face sleeps on it. */
   announcementsHeld: boolean;
   /**
@@ -197,7 +184,6 @@ export function NotchWings({
   voiceActive: relayedVoiceActive,
   fixtureSpeaking,
   voiceOpening,
-  thinking,
   announcementsHeld,
   sessionsSettled,
   presentation,
@@ -229,7 +215,6 @@ export function NotchWings({
   const faceElement = useRef<HTMLSpanElement>(null);
   const faceContext: FaceContext = {
     ...speechFaceInputs(speakers),
-    thinking,
     announcementsHeld,
     settled: sessionsSettled,
     attention: tally.attentionIds,
@@ -290,22 +275,6 @@ export function NotchWings({
               grows the capsule, and the meter trails the edge growing under
               it rather than being drawn on the desktop ahead of it. */}
           {placement.lukeMeter && meterFor(WAVEFORM_VOICE.LUKE)}
-          {/* The wait's dots, trailing outward from the face: the same three
-              the Conversation bubble draws. Drawn for as long as a run of
-              Luke's is going, whichever motion the face is playing about the
-              exchange, so a run under a held talk key is reported rather than
-              hidden behind the listening rest; only the gate displacing the
-              face leaves none. Between the face and Luke's meter, so each of
-              the three keeps its distance from the housing whether or not the
-              other two stand. The peek and the panel unfold their slot the way
-              they unfold the meter's; the capsule grows its own room for it,
-              the way it grows for Luke's reply meter, and grows for both
-              together while a run is answered aloud. */}
-          {thinkingDotsShown(faceContext, placement.face) && (
-            <span className="wing-thinking">
-              <ThinkingDots />
-            </span>
-          )}
           {/* Luke himself. He is drawn in every state but the gate: your own
               voice is answered on the other wing, so it never displaces him,
               and he listens to it as a face.
