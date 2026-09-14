@@ -100,23 +100,21 @@ const actionEncryptionSecret: Effect.Effect<string | undefined, never, HostedEnv
  * runs on this group's fiber and reads the connection the edge already
  * opened; a failed statement is a defect here, as a rejected promise was.
  */
-function actionPassthrough(
+const actionPassthrough = /* @__PURE__ */ Effect.fn("actionPassthrough")(function* (
   handle: HostedActionHandler,
-): Effect.Effect<
+): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
   ActionsServices | HttpServerRequest.HttpServerRequest
 > {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const encryptionSecret = yield* actionEncryptionSecret;
-    const answer = yield* Effect.orDie(handle({ ...hostedVaultSeams, encryptionSecret, request }));
-    return incoming.method === BODYLESS_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const encryptionSecret = yield* actionEncryptionSecret;
+  const answer = yield* Effect.orDie(handle({ ...hostedVaultSeams, encryptionSecret, request }));
+  return incoming.method === BODYLESS_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /**
  * The group, built from the handlers named. A path outside the six answers

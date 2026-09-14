@@ -134,138 +134,134 @@ export interface HostedLiveBrainOptions {
  */
 export type HostedLiveBrain = LiveBrain;
 
-export function hostedLiveBrain(
+export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("hostedLiveBrain")(function* (
   options: HostedLiveBrainOptions,
-): Effect.Effect<HostedLiveBrain, never, Scope.Scope | SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const socket = yield* Effect.scope;
-    const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
-    const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-    const followed = new Set<string>();
-    const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
+): Effect.fn.Return<HostedLiveBrain, never, Scope.Scope | SqlClient.SqlClient> {
+  const sql = yield* SqlClient.SqlClient;
+  const socket = yield* Effect.scope;
+  const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
+  const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  const followed = new Set<string>();
+  const reads: AskStandingReads = { store: options.store, asks: options.asks.asks };
 
-    function emit(event: LiveBrainRunEvent): void {
-      for (const listener of [...listeners]) listener(event);
+  function emit(event: LiveBrainRunEvent): void {
+    for (const listener of [...listeners]) listener(event);
+  }
+
+  /** The one end a follow that could not reach the turn's own tells the service. */
+  function endFailed(askId: string): void {
+    emit({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.FAILED });
+  }
+
+  /**
+   * One look at where the ask stands: the events its turn has produced so
+   * far, those past the ones already told emitted under the ask's id.
+   * Answers whether the turn has ended. An ask the record no longer holds
+   * ends as failed, since nothing of it can be told again, and so does a
+   * turn whose journal the store cannot read: its sentences are in that
+   * journal, so telling the turn's end without them would be a reply the
+   * voice says nothing of, and reading again finds the same rows.
+   */
+  const look = Effect.fnUntraced(function* (askId: string, told: { seq: number }) {
+    const standing = yield* askStanding(reads, options.userId, askId);
+    if (standing === undefined) {
+      endFailed(askId);
+      return true;
     }
-
-    /** The one end a follow that could not reach the turn's own tells the service. */
-    function endFailed(askId: string): void {
-      emit({ kind: LIVE_BRAIN_RUN_EVENT.ENDED, runId: askId, end: LIVE_BRAIN_RUN_END.FAILED });
+    const { turn } = standing;
+    if (turn === undefined) return false;
+    const journal = yield* options.store.messages.byClientId(
+      options.userId,
+      turn.conversationId,
+      CATALOG_TOOL_SET,
+      turn.id,
+    );
+    if (!journal.ok) {
+      options.report("A spoken ask's journal could not be read; its turn is told as failed");
+      endFailed(askId);
+      return true;
     }
-
-    /**
-     * One look at where the ask stands: the events its turn has produced so
-     * far, those past the ones already told emitted under the ask's id.
-     * Answers whether the turn has ended. An ask the record no longer holds
-     * ends as failed, since nothing of it can be told again, and so does a
-     * turn whose journal the store cannot read: its sentences are in that
-     * journal, so telling the turn's end without them would be a reply the
-     * voice says nothing of, and reading again finds the same rows.
-     */
-    function look(askId: string, told: { seq: number }) {
-      return Effect.gen(function* () {
-        const standing = yield* askStanding(reads, options.userId, askId);
-        if (standing === undefined) {
-          endFailed(askId);
-          return true;
-        }
-        const { turn } = standing;
-        if (turn === undefined) return false;
-        const journal = yield* options.store.messages.byClientId(
-          options.userId,
-          turn.conversationId,
-          CATALOG_TOOL_SET,
-          turn.id,
-        );
-        if (!journal.ok) {
-          options.report("A spoken ask's journal could not be read; its turn is told as failed");
-          endFailed(askId);
-          return true;
-        }
-        const events = projectTurnEvents(turn, journal.value[0]?.message);
-        for (const event of events.slice(told.seq)) {
-          emit(runEventOf(event, askId));
-          told.seq = event.seq;
-        }
-        return events.at(-1)?.kind === TURN_EVENT_KIND.ENDED;
-      });
+    const events = projectTurnEvents(turn, journal.value[0]?.message);
+    for (const event of events.slice(told.seq)) {
+      emit(runEventOf(event, askId));
+      told.seq = event.seq;
     }
-
-    /**
-     * Follows one accepted ask to its turn's end on a schedule, on a fiber of
-     * the socket's scope, or until the follow bound or that scope's close. A
-     * bound reached with the turn still unended is told as a failed end, so
-     * the exchange settles and the voice says the standing note rather than
-     * waiting forever on a turn eve never started. A follow the scope's close
-     * interrupted tells nothing: the session it would have told is gone.
-     */
-    function follow(askId: string) {
-      if (followed.has(askId)) return Effect.void;
-      followed.add(askId);
-      const told = { seq: 0 };
-      const cadence = Schedule.spaced(Duration.millis(bounds.POLL_MS)).pipe(
-        Schedule.setInputType<boolean>(),
-        Schedule.while(({ input }) => !input),
-        Schedule.upTo({ duration: Duration.millis(bounds.FOLLOW_MS) }),
-        // Whichever of the two ends the follow — the turn saying it ended or
-        // the bound elapsing — the repeat answers with the last look's own
-        // word on it rather than the schedule's count.
-        Schedule.map(({ input }) => input),
-      );
-      const following = Effect.repeat(look(askId, told), cadence).pipe(
-        Effect.flatMap((done) =>
-          done
-            ? Effect.void
-            : Effect.sync(() => {
-                options.report("A spoken ask's turn did not end inside the follow bound");
-                endFailed(askId);
-              }),
-        ),
-        Effect.catchCause((cause) => {
-          if (Cause.hasInterruptsOnly(cause)) return Effect.void;
-          const failure = Cause.squash(cause);
-          return Effect.sync(() => {
-            options.report(
-              `Following a spoken ask failed: ${failure instanceof Error ? failure.message : String(failure)}`,
-            );
-            endFailed(askId);
-          });
-        }),
-      );
-      return Effect.asVoid(Effect.forkIn(following, socket));
-    }
-
-    return {
-      submitAsk(ask) {
-        const input: AskInput = {
-          userId: options.userId,
-          question: ask.question,
-          origin: ASK_ORIGIN.SPOKEN,
-          clientId: ask.submissionId,
-        };
-        const pinned = options.conversationId;
-        return Effect.gen(function* () {
-          const outcome = yield* acceptAsk(
-            options.asks,
-            pinned === undefined ? input : { ...input, conversationId: pinned },
-          );
-          if (!outcome.ok) {
-            return {
-              outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-              refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.refusal],
-            };
-          }
-          yield* follow(outcome.answer.id);
-          return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.answer.id };
-        }).pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie);
-      },
-      onRunEvent(listener) {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
-    };
+    return events.at(-1)?.kind === TURN_EVENT_KIND.ENDED;
   });
-}
+
+  /**
+   * Follows one accepted ask to its turn's end on a schedule, on a fiber of
+   * the socket's scope, or until the follow bound or that scope's close. A
+   * bound reached with the turn still unended is told as a failed end, so
+   * the exchange settles and the voice says the standing note rather than
+   * waiting forever on a turn eve never started. A follow the scope's close
+   * interrupted tells nothing: the session it would have told is gone.
+   */
+  function follow(askId: string) {
+    if (followed.has(askId)) return Effect.void;
+    followed.add(askId);
+    const told = { seq: 0 };
+    const cadence = Schedule.spaced(Duration.millis(bounds.POLL_MS)).pipe(
+      Schedule.setInputType<boolean>(),
+      Schedule.while(({ input }) => !input),
+      Schedule.upTo({ duration: Duration.millis(bounds.FOLLOW_MS) }),
+      // Whichever of the two ends the follow — the turn saying it ended or
+      // the bound elapsing — the repeat answers with the last look's own
+      // word on it rather than the schedule's count.
+      Schedule.map(({ input }) => input),
+    );
+    const following = Effect.repeat(look(askId, told), cadence).pipe(
+      Effect.flatMap((done) =>
+        done
+          ? Effect.void
+          : Effect.sync(() => {
+              options.report("A spoken ask's turn did not end inside the follow bound");
+              endFailed(askId);
+            }),
+      ),
+      Effect.catchCause((cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.void;
+        const failure = Cause.squash(cause);
+        return Effect.sync(() => {
+          options.report(
+            `Following a spoken ask failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+          );
+          endFailed(askId);
+        });
+      }),
+    );
+    return Effect.asVoid(Effect.forkIn(following, socket));
+  }
+
+  return {
+    submitAsk(ask) {
+      const input: AskInput = {
+        userId: options.userId,
+        question: ask.question,
+        origin: ASK_ORIGIN.SPOKEN,
+        clientId: ask.submissionId,
+      };
+      const pinned = options.conversationId;
+      return Effect.gen(function* () {
+        const outcome = yield* acceptAsk(
+          options.asks,
+          pinned === undefined ? input : { ...input, conversationId: pinned },
+        );
+        if (!outcome.ok) {
+          return {
+            outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+            refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.refusal],
+          };
+        }
+        yield* follow(outcome.answer.id);
+        return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.answer.id };
+      }).pipe(Effect.provideService(SqlClient.SqlClient, sql), Effect.orDie);
+    },
+    onRunEvent(listener) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+});

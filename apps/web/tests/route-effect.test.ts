@@ -14,7 +14,7 @@ import {
   readJsonBodyEffect,
 } from "../server/hosted/http-effect.js";
 import { ANY_METHOD, ANY_PATH } from "../server/route.js";
-import { routeFromHttpApp } from "../server/route-effect.js";
+import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
 /**
@@ -55,7 +55,7 @@ const AUTHORIZATION = "Bearer token";
  * case naming another key ends the runtime before it asks for the next.
  */
 function capabilitiesRoute(userId: string | undefined) {
-  return routeFromHttpApp(
+  return routeFromHttpRouter(
     brainApp({
       resolveUserId: () => Effect.succeed(userId),
       spend: () => Effect.die(new Error("capabilities spend nothing")),
@@ -100,7 +100,7 @@ const CASES = [
 
 test("the route reads a bearer the request carries", async () => {
   const seen: (string | undefined)[] = [];
-  const route = routeFromHttpApp(
+  const route = routeFromHttpRouter(
     brainApp({
       resolveUserId: (authorization) => {
         seen.push(authorization);
@@ -115,7 +115,7 @@ test("the route reads a bearer the request carries", async () => {
 });
 
 function bodyRoute() {
-  return routeFromHttpApp(
+  return routeFromHttpRouter(
     HttpRouter.add(
       ANY_METHOD,
       ANY_PATH,

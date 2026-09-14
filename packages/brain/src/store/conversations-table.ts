@@ -155,7 +155,9 @@ export const conversationCutoffEffect = (
 
 const cutoffRowAt = SqlSchema.findOneOption({
   Request: Schema.String,
-  Result: Schema.Struct({ conversation_cleared_at: Schema.NullOr(Schema.Number) }),
+  Result: Schema.Struct({
+    conversation_cleared_at: Schema.NullOr(Schema.Number),
+  }),
   execute: (key) =>
     Effect.flatMap(
       Client.SqlClient,
@@ -189,44 +191,43 @@ export const touchConversationEffect = (
   ).pipe(Effect.asVoid);
 
 /** Archives the conversation for the reason given; a main conversation cannot be archived at all. */
-export const archiveConversationEffect = (
-  key: SessionKey,
-  now: number,
-  reason: ArchiveReason,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const archiveConversationEffect = /* @__PURE__ */ Effect.fn("archiveConversationEffect")(
+  function* (
+    key: SessionKey,
+    now: number,
+    reason: ArchiveReason,
+  ): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
     const sql = yield* Client.SqlClient;
     const record = yield* conversationRecordEffect(key);
     if (!record || record.kind === CONVERSATION_KIND.MAIN) return false;
     if (record.archivedAt !== undefined) return true;
     yield* sql`UPDATE conversations SET archived_at = ${now}, archive_reason = ${reason}
-               WHERE session_key = ${key}`;
+             WHERE session_key = ${key}`;
     return true;
-  });
+  },
+);
 
-export const unarchiveConversationEffect = (
-  key: SessionKey,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const unarchiveConversationEffect = /* @__PURE__ */ Effect.fn("unarchiveConversationEffect")(
+  function* (key: SessionKey): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
     const sql = yield* Client.SqlClient;
     const changes = yield* changedRows(
       sql`UPDATE conversations SET archived_at = NULL, archive_reason = NULL
-          WHERE session_key = ${key}`.raw,
+        WHERE session_key = ${key}`.raw,
     );
     return changes > 0;
-  });
+  },
+);
 
-export const pinConversationEffect = (
+export const pinConversationEffect = /* @__PURE__ */ Effect.fn("pinConversationEffect")(function* (
   key: SessionKey,
   pinnedAt: number | undefined,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    const changes = yield* changedRows(
-      sql`UPDATE conversations SET pinned_at = ${pinnedAt ?? null} WHERE session_key = ${key}`.raw,
-    );
-    return changes > 0;
-  });
+): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  const changes = yield* changedRows(
+    sql`UPDATE conversations SET pinned_at = ${pinnedAt ?? null} WHERE session_key = ${key}`.raw,
+  );
+  return changes > 0;
+});
 
 /**
  * Removes everything a conversation holds beneath its row: its history
@@ -236,16 +237,15 @@ export const pinConversationEffect = (
  * recoverable deletion and maintenance are the two callers, and each has
  * committed or needs no archive by the time it gets here.
  */
-const removeConversationRowsEffect = (
+const removeConversationRowsEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: SessionKey,
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    yield* sql`DELETE FROM conversation_events WHERE session_key = ${key}`;
-    yield* sql`DELETE FROM compaction_boundaries WHERE session_key = ${key}`;
-    yield* sql`DELETE FROM transcript_events WHERE session_key = ${key}`;
-    yield* sql`DELETE FROM conversation_sessions WHERE session_key = ${key}`;
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  yield* sql`DELETE FROM conversation_events WHERE session_key = ${key}`;
+  yield* sql`DELETE FROM compaction_boundaries WHERE session_key = ${key}`;
+  yield* sql`DELETE FROM transcript_events WHERE session_key = ${key}`;
+  yield* sql`DELETE FROM conversation_sessions WHERE session_key = ${key}`;
+});
 
 /**
  * Removes what stood at or before `instant`: the lines and transcript
@@ -254,22 +254,21 @@ const removeConversationRowsEffect = (
  * A line accepted after the instant — a voice line landing while the
  * deletion waited on the disk — is not the deletion's to take.
  */
-const removeConversationRowsAtOrBeforeEffect = (
+const removeConversationRowsAtOrBeforeEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: SessionKey,
   instant: number,
   keepSessionId: string | undefined,
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    yield* sql`DELETE FROM conversation_events
-               WHERE session_key = ${key} AND recorded_at <= ${instant}`;
-    yield* sql`DELETE FROM compaction_boundaries
-               WHERE session_key = ${key} AND created_at <= ${instant}`;
-    yield* sql`DELETE FROM transcript_events
-               WHERE session_key = ${key} AND recorded_at <= ${instant}`;
-    yield* sql`DELETE FROM conversation_sessions
-               WHERE session_key = ${key} AND session_id IS NOT ${keepSessionId ?? null}`;
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  yield* sql`DELETE FROM conversation_events
+             WHERE session_key = ${key} AND recorded_at <= ${instant}`;
+  yield* sql`DELETE FROM compaction_boundaries
+             WHERE session_key = ${key} AND created_at <= ${instant}`;
+  yield* sql`DELETE FROM transcript_events
+             WHERE session_key = ${key} AND recorded_at <= ${instant}`;
+  yield* sql`DELETE FROM conversation_sessions
+             WHERE session_key = ${key} AND session_id IS NOT ${keepSessionId ?? null}`;
+});
 
 /** Removes the conversation row itself, after the rows under it are gone. */
 const removeConversationRowEffect = (

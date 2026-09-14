@@ -330,7 +330,7 @@ endpoint of its own.
 
 ## A route built from a route layer
 
-`server/route-effect.ts` holds `routeFromHttpApp(routes)`, which turns the
+`server/route-effect.ts` holds `routeFromHttpRouter(routes)`, which turns the
 route layer a group registers its paths with — `WebRoutes<R>`, the same file's
 own name for it — into the one fetch handler a function default-exports. It
 reads the runtime through `runWeb` and then holds the handler for the
@@ -485,7 +485,7 @@ down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
 gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
 is the deployment's real wiring — the same account store `hostedVaultSeams`
 carries for the other hosted routes — so each of the three route files is one line
-handing it to `routeFromHttpApp(devicesVaultApp(...))`.
+handing it to `routeFromHttpRouter(devicesVaultApp(...))`.
 `HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
 (429), for the device brake's own refusal. Reading a body through
 `readJsonBodyEffect` needed a byte bound neither route held before; both take

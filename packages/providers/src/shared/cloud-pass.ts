@@ -230,7 +230,9 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   const now = input.now ?? Date.now;
   const { minimumRefreshIntervalMs } = resolveOptions(
     input,
-    { minimumRefreshIntervalMs: CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS },
+    {
+      minimumRefreshIntervalMs: CLOUD_ADAPTER_DEFAULTS.MINIMUM_REFRESH_INTERVAL_MS,
+    },
     { nonNegative: ["minimumRefreshIntervalMs"] },
   );
   const requestHeaders = input.requestHeaders ?? DEFAULT_REQUEST_HEADERS;
@@ -381,37 +383,36 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     );
   };
 
-  const requestJson = (
+  const requestJson = /* @__PURE__ */ Effect.fnUntraced(function* (
     apiKey: string,
     budget: BackoffBudget,
     segments: readonly string[],
     query: Readonly<Record<string, string>> = {},
     options: Readonly<{ timeoutMs?: number; document?: string }> = {},
-  ): Effect.Effect<WireRecord, AdapterFailure, HttpClient.HttpClient> =>
-    Effect.gen(function* () {
-      const name = provider.displayName;
-      const timeoutMs = requestDeadlineMs(options.timeoutMs);
-      // A read document rides as a POST because that is how its endpoint is
-      // documented, not because it writes: the body carries the document and
-      // nothing else, so the request can still express nothing but a read.
-      const document = options.document;
-      // A 429 is retried on the cadence the pass's one budget allows, each
-      // attempt under its own deadline. Once that cadence stops, the pass is
-      // rate limited rather than merely failed: every further read would meet
-      // the same door, so the roster stops here whole as it was rather than
-      // continuing as a partial one.
-      const cadence = rateLimitSchedule(budget, now);
-      const answered: Answered = yield* Effect.retry(
-        readOnce(apiKey, segments, query, document, timeoutMs),
-        cadence,
-      ).pipe(
-        Effect.catchTag("RateLimitedRead", () =>
-          Effect.fail(new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`)),
-        ),
-      );
-      if (answered instanceof AdapterFailure) return yield* Effect.fail(answered);
-      return answered;
-    });
+  ): Effect.fn.Return<WireRecord, AdapterFailure, HttpClient.HttpClient> {
+    const name = provider.displayName;
+    const timeoutMs = requestDeadlineMs(options.timeoutMs);
+    // A read document rides as a POST because that is how its endpoint is
+    // documented, not because it writes: the body carries the document and
+    // nothing else, so the request can still express nothing but a read.
+    const document = options.document;
+    // A 429 is retried on the cadence the pass's one budget allows, each
+    // attempt under its own deadline. Once that cadence stops, the pass is
+    // rate limited rather than merely failed: every further read would meet
+    // the same door, so the roster stops here whole as it was rather than
+    // continuing as a partial one.
+    const cadence = rateLimitSchedule(budget, now);
+    const answered: Answered = yield* Effect.retry(
+      readOnce(apiKey, segments, query, document, timeoutMs),
+      cadence,
+    ).pipe(
+      Effect.catchTag("RateLimitedRead", () =>
+        Effect.fail(new AdapterFailure(ADAPTER_FAILURE.RATE_LIMITED, `${name} is rate limiting`)),
+      ),
+    );
+    if (answered instanceof AdapterFailure) return yield* Effect.fail(answered);
+    return answered;
+  });
 
   const assertPassCurrent = (pass: number): Effect.Effect<void, AdapterFailure> =>
     pass === collectPass
@@ -450,84 +451,82 @@ export function cloudPass(input: CloudPassInput): CloudPass {
    * adapter that needs it — a creation response names the thing it created —
    * and travels no further.
    */
-  const writeAttempt = (
+  const writeAttempt = /* @__PURE__ */ Effect.fnUntraced(function* (
     apiKey: string,
     route: CloudWriteRoute,
     subject: WriteSubject,
-  ): Effect.Effect<CloudWriteOutcome, HttpClientError.HttpClientError, HttpClient.HttpClient> =>
-    Effect.gen(function* () {
-      const name = provider.displayName;
-      const requested = HttpClientRequest.post(url(route.segments, {}, route.action), {
-        // The same layering as a read: the provider's own headers first, the
-        // credential after them so no override can replace it.
-        headers: {
-          ...requestHeaders,
-          ...authorizationHeaders(apiKey),
-        },
-        // An endpoint that documents an empty request gets exactly that, not
-        // an empty JSON object it never asked for.
-        ...(route.body === undefined
-          ? undefined
-          : {
-              body: HttpBody.raw(JSON.stringify(route.body), { contentType: JSON_CONTENT_TYPE }),
+  ): Effect.fn.Return<CloudWriteOutcome, HttpClientError.HttpClientError, HttpClient.HttpClient> {
+    const name = provider.displayName;
+    const requested = HttpClientRequest.post(url(route.segments, {}, route.action), {
+      // The same layering as a read: the provider's own headers first, the
+      // credential after them so no override can replace it.
+      headers: {
+        ...requestHeaders,
+        ...authorizationHeaders(apiKey),
+      },
+      // An endpoint that documents an empty request gets exactly that, not
+      // an empty JSON object it never asked for.
+      ...(route.body === undefined
+        ? undefined
+        : {
+            body: HttpBody.raw(JSON.stringify(route.body), {
+              contentType: JSON_CONTENT_TYPE,
             }),
-      });
-      const response = yield* HttpClient.execute(requested);
-      if (response.status >= OK_STATUS.FIRST && response.status < OK_STATUS.PAST) {
-        // A write that landed changes what the session is doing, so the
-        // refresh that follows must actually ask: served from the cache inside
-        // the minimum interval, the row would keep offering what the provider
-        // has already taken.
-        lastAttemptAt = Number.NEGATIVE_INFINITY;
-        // An unreadable body is not a failed write: the provider already said
-        // yes, so only a follow-up that needed the body has anything to miss.
-        const body = yield* Effect.option(readBody(response));
-        const record = Option.isSome(body) ? wireRecord(unparsedWire(body.value)) : undefined;
-        return {
-          outcome: { status: ACTION_RESULT_STATUS.ACCEPTED },
-          ...(record === undefined ? undefined : { body: record }),
-        };
-      }
-      if (
-        response.status === HTTP_STATUS.UNAUTHORIZED ||
-        response.status === HTTP_STATUS.FORBIDDEN
-      ) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} rejected the configured API key.`,
-          },
-        };
-      }
-      if (response.status === HTTP_STATUS.NOT_FOUND) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} no longer has this ${subject}.`,
-          },
-        };
-      }
-      if (response.status === HTTP_STATUS.CONFLICT) {
-        return {
-          outcome: {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason: `${name} says this ${subject} has moved on since Luke last looked.`,
-          },
-        };
-      }
-      // Any other status is an answer that says nothing certain about the
-      // action — a gateway that gave up may stand in front of a write that
-      // finished — so this hedges the way a failed request does, and the
-      // refresh that follows must actually ask rather than keep advertising
-      // what the provider may have already taken.
+          }),
+    });
+    const response = yield* HttpClient.execute(requested);
+    if (response.status >= OK_STATUS.FIRST && response.status < OK_STATUS.PAST) {
+      // A write that landed changes what the session is doing, so the
+      // refresh that follows must actually ask: served from the cache inside
+      // the minimum interval, the row would keep offering what the provider
+      // has already taken.
       lastAttemptAt = Number.NEGATIVE_INFINITY;
+      // An unreadable body is not a failed write: the provider already said
+      // yes, so only a follow-up that needed the body has anything to miss.
+      const body = yield* Effect.option(readBody(response));
+      const record = Option.isSome(body) ? wireRecord(unparsedWire(body.value)) : undefined;
+      return {
+        outcome: { status: ACTION_RESULT_STATUS.ACCEPTED },
+        ...(record === undefined ? undefined : { body: record }),
+      };
+    }
+    if (response.status === HTTP_STATUS.UNAUTHORIZED || response.status === HTTP_STATUS.FORBIDDEN) {
       return {
         outcome: {
           status: ACTION_RESULT_STATUS.REJECTED,
-          reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+          reason: `${name} rejected the configured API key.`,
         },
       };
-    });
+    }
+    if (response.status === HTTP_STATUS.NOT_FOUND) {
+      return {
+        outcome: {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: `${name} no longer has this ${subject}.`,
+        },
+      };
+    }
+    if (response.status === HTTP_STATUS.CONFLICT) {
+      return {
+        outcome: {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: `${name} says this ${subject} has moved on since Luke last looked.`,
+        },
+      };
+    }
+    // Any other status is an answer that says nothing certain about the
+    // action — a gateway that gave up may stand in front of a write that
+    // finished — so this hedges the way a failed request does, and the
+    // refresh that follows must actually ask rather than keep advertising
+    // what the provider may have already taken.
+    lastAttemptAt = Number.NEGATIVE_INFINITY;
+    return {
+      outcome: {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: `${name} answered with status ${response.status}, so the request may not have landed.`,
+      },
+    };
+  });
 
   /**
    * The write under the route's own deadline, which covers reading the answer

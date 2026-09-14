@@ -131,38 +131,37 @@ function renderNotAffected(reading: PreviewReading & { readonly kind: "not-affec
   return `deployment record ${reading.id} (Preview) was skipped by Vercel's ignoreCommand: nothing under the deployed tree changed, so there is no preview of this head to probe\n`;
 }
 
-function appendStepSummary(text: string): Effect.Effect<void, never, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const path = yield* stepSummaryConfig;
-    if (Option.isNone(path)) return;
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.writeFileString(path.value, text, { flag: "a" });
-  }).pipe(Effect.orDie);
-}
+const appendStepSummary = /* @__PURE__ */ Effect.fnUntraced(function* (text: string) {
+  const path = yield* stepSummaryConfig;
+  if (Option.isNone(path)) return;
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.writeFileString(path.value, text, { flag: "a" });
+}, Effect.orDie);
 
 const describeReading = (reading: PreviewReading) =>
   write(`preview: ${reading.kind}${"id" in reading ? ` (record ${reading.id})` : ""}\n`);
 
 /** The address to probe: the one given, or the head's preview once its record has settled; none when Vercel skipped the build. */
-const resolveTarget = (bypassSecret: ProbeTarget["bypassSecret"]) =>
-  Effect.gen(function* () {
-    const given = addressArgument(process.argv.slice(2));
-    if (given !== undefined) return { address: given, bypassSecret };
-    const source = {
-      repository: yield* Config.String(ENV.REPOSITORY),
-      sha: yield* Config.String(ENV.SHA),
-      token: yield* Config.Redacted(ENV.TOKEN),
-    };
-    const reading = yield* waitForPreview(source, { onReading: describeReading });
-    switch (reading.kind) {
-      case PREVIEW_STATE.READY:
-        return { address: reading.address, bypassSecret };
-      case PREVIEW_STATE.NOT_AFFECTED:
-        return reading;
-      case PREVIEW_STATE.NOT_BUILT:
-        return yield* new PreviewNotBuilt(reading);
-    }
-  });
+const resolveTarget = /* @__PURE__ */ Effect.fn("resolveTarget")(function* (
+  bypassSecret: ProbeTarget["bypassSecret"],
+) {
+  const given = addressArgument(process.argv.slice(2));
+  if (given !== undefined) return { address: given, bypassSecret };
+  const source = {
+    repository: yield* Config.String(ENV.REPOSITORY),
+    sha: yield* Config.String(ENV.SHA),
+    token: yield* Config.Redacted(ENV.TOKEN),
+  };
+  const reading = yield* waitForPreview(source, { onReading: describeReading });
+  switch (reading.kind) {
+    case PREVIEW_STATE.READY:
+      return { address: reading.address, bypassSecret };
+    case PREVIEW_STATE.NOT_AFFECTED:
+      return reading;
+    case PREVIEW_STATE.NOT_BUILT:
+      return yield* new PreviewNotBuilt(reading);
+  }
+});
 
 const program = Effect.gen(function* () {
   const door = yield* doorConfig;

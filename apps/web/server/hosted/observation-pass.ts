@@ -37,9 +37,6 @@ import type { VaultKeyRow } from "./vault-route.js";
 /** The slice of the store an observation pass reaches. */
 export type ObservationStore = Pick<HostedStore, "roster">;
 
-/** What a pass answers: an effect over the ambient client, which the edge that owns the connection runs. */
-type ObservationEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
-
 /**
  * A read whose answer is optional however it failed. The payload envelope
  * refuses a body it cannot open by throwing, which is a defect rather than a
@@ -160,118 +157,114 @@ function rosterObservedUnder(
  * open is not a failed read but a snapshot with no roster, so the instant
  * alone is answered and the next pass replaces it.
  */
-export function storedRoster(
+export const storedRoster = /* @__PURE__ */ Effect.fn("storedRoster")(function* (
   store: ObservationStore,
   userId: string,
   rows: readonly VaultKeyRow[],
   secret: string,
-): Effect.Effect<StoredSnapshot | undefined, never, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const read = yield* optionally(store.roster.read(userId));
-    if (Option.isNone(read)) {
-      const observedAt = yield* optionally(store.roster.observedAt(userId));
-      const instant = Option.getOrUndefined(Option.flatMapNullishOr(observedAt, (found) => found));
-      return instant === undefined ? undefined : { observedAt: instant };
-    }
-    const snapshot: RosterSnapshotRecord | undefined = read.value;
-    if (!snapshot) return undefined;
-    const roster = decodeObservedRoster(snapshot.body);
-    return roster && rosterObservedUnder(roster, rows, secret)
-      ? { observedAt: snapshot.observedAt, roster }
-      : { observedAt: snapshot.observedAt };
-  });
-}
+): Effect.fn.Return<StoredSnapshot | undefined, never, SqlClient.SqlClient> {
+  const read = yield* optionally(store.roster.read(userId));
+  if (Option.isNone(read)) {
+    const observedAt = yield* optionally(store.roster.observedAt(userId));
+    const instant = Option.getOrUndefined(Option.flatMapNullishOr(observedAt, (found) => found));
+    return instant === undefined ? undefined : { observedAt: instant };
+  }
+  const snapshot: RosterSnapshotRecord | undefined = read.value;
+  if (!snapshot) return undefined;
+  const roster = decodeObservedRoster(snapshot.body);
+  return roster && rosterObservedUnder(roster, rows, secret)
+    ? { observedAt: snapshot.observedAt, roster }
+    : { observedAt: snapshot.observedAt };
+});
 
-export function observeAndSnapshot(
+export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot")(function* (
   input: ObservationPassInput,
-): ObservationEffect<ObservationPassOutcome> {
-  return Effect.gen(function* () {
-    const { userId, store, now } = input;
-    // The attempt is on record before the provider is asked, so a pass that
-    // hangs or is cut off with the function still moves this account to the
-    // back of the schedule's order and reads as unfinished until a later pass
-    // answers for it.
-    yield* store.roster.recordPass(userId, {
-      attemptedAt: now,
-      failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
-    });
-    const previous = yield* storedRoster(store, userId, input.rows, input.secret);
-    const standing: Pick<ObservationPassOutcome, "roster" | "observedAt"> = {};
-    if (previous?.roster) {
-      standing.roster = previous.roster;
-      standing.observedAt = previous.observedAt;
-    }
-
-    const providerIds = keyedCloudProviderIds(input.rows);
-    const passes = yield* observeCloudProviders({
-      providerIds,
-      readApiKey: readApiKeyFor(input.rows, input.secret),
-      seams: input.seams,
-    });
-    const failed = passes.find((pass) => pass.failure !== undefined);
-    if (failed?.failure) {
-      yield* store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure });
-      return { complete: false, failure: failed.failure, changed: false, ...standing };
-    }
-
-    const fingerprints = keyFingerprints(input.rows, input.secret);
-    const roster: ObservedRoster = {
-      version: OBSERVED_ROSTER_VERSION,
-      providers: passes.map((pass) => ({
-        providerId: pass.providerId,
-        keyFingerprint: fingerprints.get(pass.providerId) ?? "",
-        observations: pass.observations,
-        projects: pass.projects,
-      })),
-    };
-    const diff = previous?.roster ? rosterDiff(previous.roster, roster) : undefined;
-    const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
-    // A roster read whole that could not be written down is a failed pass for
-    // this user; the snapshot on record, if any, is whatever stood.
-    const advanced = yield* optionally(
-      Effect.tap(
-        store.roster.advance(
-          userId,
-          { body: encodeObservedRoster(roster), observedAt: now },
-          previous?.observedAt,
-        ),
-        (landed) => (landed ? store.roster.recordPass(userId, { attemptedAt: now }) : Effect.void),
-      ),
-    );
-    if (Option.isNone(advanced)) {
-      yield* optionally(
-        store.roster.recordPass(userId, {
-          attemptedAt: now,
-          failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
-        }),
-      );
-      return {
-        complete: false,
-        failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
-        changed: false,
-        ...standing,
-      };
-    }
-    const landed = advanced.value;
-    if (!landed) {
-      // Another pass wrote the roster first; its snapshot is the one that
-      // stands and the transition it recorded is not recorded again here. This
-      // pass still read the roster whole, and a whole roster stands, so the
-      // account's record says so at this pass's own instant: the record only
-      // moves forward, so an older instant here changes nothing, and a newer
-      // one closes the unfinished attempt it opened above.
-      yield* store.roster.recordPass(userId, { attemptedAt: now });
-      const superseded = yield* storedRoster(store, userId, input.rows, input.secret);
-      const outcome: ObservationPassOutcome = { complete: true, changed: false };
-      if (superseded?.roster) {
-        outcome.roster = superseded.roster;
-        outcome.observedAt = superseded.observedAt;
-      }
-      return outcome;
-    }
-    return { complete: true, changed, roster, observedAt: now };
+): Effect.fn.Return<ObservationPassOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const { userId, store, now } = input;
+  // The attempt is on record before the provider is asked, so a pass that
+  // hangs or is cut off with the function still moves this account to the
+  // back of the schedule's order and reads as unfinished until a later pass
+  // answers for it.
+  yield* store.roster.recordPass(userId, {
+    attemptedAt: now,
+    failure: CLOUD_OBSERVE_FAILURE.UNFINISHED,
   });
-}
+  const previous = yield* storedRoster(store, userId, input.rows, input.secret);
+  const standing: Pick<ObservationPassOutcome, "roster" | "observedAt"> = {};
+  if (previous?.roster) {
+    standing.roster = previous.roster;
+    standing.observedAt = previous.observedAt;
+  }
+
+  const providerIds = keyedCloudProviderIds(input.rows);
+  const passes = yield* observeCloudProviders({
+    providerIds,
+    readApiKey: readApiKeyFor(input.rows, input.secret),
+    seams: input.seams,
+  });
+  const failed = passes.find((pass) => pass.failure !== undefined);
+  if (failed?.failure) {
+    yield* store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure });
+    return { complete: false, failure: failed.failure, changed: false, ...standing };
+  }
+
+  const fingerprints = keyFingerprints(input.rows, input.secret);
+  const roster: ObservedRoster = {
+    version: OBSERVED_ROSTER_VERSION,
+    providers: passes.map((pass) => ({
+      providerId: pass.providerId,
+      keyFingerprint: fingerprints.get(pass.providerId) ?? "",
+      observations: pass.observations,
+      projects: pass.projects,
+    })),
+  };
+  const diff = previous?.roster ? rosterDiff(previous.roster, roster) : undefined;
+  const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
+  // A roster read whole that could not be written down is a failed pass for
+  // this user; the snapshot on record, if any, is whatever stood.
+  const advanced = yield* optionally(
+    Effect.tap(
+      store.roster.advance(
+        userId,
+        { body: encodeObservedRoster(roster), observedAt: now },
+        previous?.observedAt,
+      ),
+      (landed) => (landed ? store.roster.recordPass(userId, { attemptedAt: now }) : Effect.void),
+    ),
+  );
+  if (Option.isNone(advanced)) {
+    yield* optionally(
+      store.roster.recordPass(userId, {
+        attemptedAt: now,
+        failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
+      }),
+    );
+    return {
+      complete: false,
+      failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
+      changed: false,
+      ...standing,
+    };
+  }
+  const landed = advanced.value;
+  if (!landed) {
+    // Another pass wrote the roster first; its snapshot is the one that
+    // stands and the transition it recorded is not recorded again here. This
+    // pass still read the roster whole, and a whole roster stands, so the
+    // account's record says so at this pass's own instant: the record only
+    // moves forward, so an older instant here changes nothing, and a newer
+    // one closes the unfinished attempt it opened above.
+    yield* store.roster.recordPass(userId, { attemptedAt: now });
+    const superseded = yield* storedRoster(store, userId, input.rows, input.secret);
+    const outcome: ObservationPassOutcome = { complete: true, changed: false };
+    if (superseded?.roster) {
+      outcome.roster = superseded.roster;
+      outcome.observedAt = superseded.observedAt;
+    }
+    return outcome;
+  }
+  return { complete: true, changed, roster, observedAt: now };
+});
 
 /**
  * The roster an action is admitted against: the stored snapshot's slice for
@@ -280,7 +273,7 @@ export function observeAndSnapshot(
  * here so the next action and the next observe read what it stored rather
  * than asking the provider again.
  */
-export function rosterForAction(input: {
+export const rosterForAction = /* @__PURE__ */ Effect.fn("rosterForAction")(function* (input: {
   userId: string;
   providerId: CloudAgentProviderId;
   secret: string;
@@ -288,19 +281,17 @@ export function rosterForAction(input: {
   readVaultKeys: (userId: string) => VaultKeyEffect<VaultKeyRow[]>;
   seams: CloudObserveSeams;
   now: number;
-}): ObservationEffect<ActionRoster> {
-  return Effect.gen(function* () {
-    const rows = yield* input.readVaultKeys(input.userId);
-    const stored = yield* storedRoster(input.store, input.userId, rows, input.secret);
-    if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
-    const outcome = yield* observeAndSnapshot({
-      userId: input.userId,
-      rows,
-      secret: input.secret,
-      store: input.store,
-      seams: input.seams,
-      now: input.now,
-    });
-    return actionRosterFor(input.providerId, outcome);
+}): Effect.fn.Return<ActionRoster, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const rows = yield* input.readVaultKeys(input.userId);
+  const stored = yield* storedRoster(input.store, input.userId, rows, input.secret);
+  if (stored?.roster) return actionRosterFor(input.providerId, { roster: stored.roster });
+  const outcome = yield* observeAndSnapshot({
+    userId: input.userId,
+    rows,
+    secret: input.secret,
+    store: input.store,
+    seams: input.seams,
+    now: input.now,
   });
-}
+  return actionRosterFor(input.providerId, outcome);
+});

@@ -129,185 +129,178 @@ export interface DeviceCadence {
  * nothing. What the poll answers of the resources' heads is not read here:
  * the reads behind them are another concern's.
  */
-export const deviceCadence = (
+export const deviceCadence = /* @__PURE__ */ Effect.fn("deviceCadence")(function* (
   options: DeviceCadenceOptions,
-): Effect.Effect<DeviceCadence, never, Scope.Scope> =>
-  Effect.gen(function* () {
-    const intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
-    let generation = 0;
-    let standing = false;
-    /**
-     * The call under way, as the effect that waits for it to have settled. A
-     * start waits for it before registering, so a registration already on the
-     * wire at sign-out lands before the next account's rather than after it,
-     * where it would move the row back. A stop never waits for it: the work
-     * may be waiting on a token refresh that is itself signing out.
-     */
-    const inFlight = yield* Ref.make<Effect.Effect<void>>(Effect.void);
+): Effect.fn.Return<DeviceCadence, never, Scope.Scope> {
+  const intervalMs = options.pollIntervalMs ?? DEVICE_POLL_INTERVAL_MS;
+  let generation = 0;
+  let standing = false;
+  /**
+   * The call under way, as the effect that waits for it to have settled. A
+   * start waits for it before registering, so a registration already on the
+   * wire at sign-out lands before the next account's rather than after it,
+   * where it would move the row back. A stop never waits for it: the work
+   * may be waiting on a token refresh that is itself signing out.
+   */
+  const inFlight = yield* Ref.make<Effect.Effect<void>>(Effect.void);
 
-    /** Runs `work` once the call under way has settled, and holds the slot until it has, however it ended. */
-    const settle = (work: Effect.Effect<void>): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const done = yield* Deferred.make<void>();
-        const standingCall = yield* Ref.modify(inFlight, (current) => [
-          current,
-          Deferred.await(done),
-        ]);
-        return yield* Effect.onExit(Effect.andThen(standingCall, work), (exit) =>
-          // A wait the disarm interrupted hands the slot on to the call still
-          // under way rather than opening it, so a registration on the wire
-          // keeps its place in the order however many sign-outs arrive while
-          // it is out; only a wait that reached its own work releases it.
-          Exit.hasInterrupts(exit)
-            ? Deferred.completeWith(done, standingCall)
-            : Deferred.succeed(done, undefined),
-        );
-      });
-
-    function installationId(): string {
-      const current = options.state.read();
-      if (current) return current.installationId;
-      return options.state.update(() => ({
-        installationId: options.mintInstallationId().toLowerCase(),
-      })).installationId;
-    }
-
-    /** Registers the installation; answers the row's id where the registration landed for this generation. */
-    const register = (gen: number): Effect.Effect<string | undefined> =>
-      Effect.gen(function* () {
-        const id = installationId();
-        const answer = yield* options.client.register({
-          platform: DEVICE_PLATFORM.MACOS,
-          installationId: id,
-        });
-        if (gen !== generation || answer === undefined) return undefined;
-        options.state.update((current) => ({
-          installationId: current?.installationId ?? id,
-          deviceId: answer.deviceId,
-        }));
-        return answer.deviceId;
-      });
-
-    /** One poll carrying the presence read now; answers whether the service still holds the row, or nothing for no answer. */
-    const poll = (gen: number, deviceId: string): Effect.Effect<boolean | undefined> =>
-      Effect.gen(function* () {
-        const presence = yield* options.presence;
-        if (gen !== generation) return undefined;
-        // A quiet instant not yet known is left off the request: an absent field leaves the row's instant, where a sent value would claim to know it.
-        const answer = yield* options.client.poll({
-          deviceId,
-          activeUntil: presence.activeUntil,
-          ...(presence.quietUntil !== undefined ? { quietUntil: presence.quietUntil } : undefined),
-        });
-        return gen === generation ? answer?.seen : undefined;
-      });
-
-    /** Registers and, where the registration landed, polls at once so the row never reads absent for want of a report. */
-    const registerAndPoll = (gen: number): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const deviceId = yield* register(gen);
-        if (deviceId !== undefined) yield* poll(gen, deviceId);
-      });
-
-    /**
-     * One beat. Every way it can fail is a defect here, since each of the
-     * calls it makes answers an effect that cannot fail, so the report stands
-     * where the caught throw used to and an interruption still passes through.
-     */
-    const beat = (gen: number): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const deviceId = options.state.read()?.deviceId;
-        if (deviceId === undefined) {
-          yield* registerAndPoll(gen);
-        } else if ((yield* poll(gen, deviceId)) === false) {
-          yield* registerAndPoll(gen);
-        }
-      }).pipe(
-        Effect.catchDefect((error) =>
-          Effect.sync(() => {
-            options.report?.(
-              `The device poll failed and will be tried again: ${error instanceof Error ? error.message : String(error)}`,
-            );
-          }),
-        ),
-      );
-
-    /**
-     * What an arming stands up: the registration's own beat and the cadence
-     * after it, as one fiber the arming's scope interrupts. `Effect.schedule`
-     * and not `Effect.repeat`: the cadence's first beat is one interval on
-     * from the registration's, where a repeat would beat again at once. The
-     * fork is marked interruptible because an acquire runs uninterruptibly and
-     * a fiber inherits that from whoever forked it, which would leave the
-     * disarm's interruption with nothing to land on and the cadence beating
-     * for the rest of the run. The beat itself is then uninterruptible and the
-     * interruption forked rather than awaited, for the same reason cancelling
-     * a timer never was: what a disarm has to guarantee is that no further
-     * beat starts, never that a call already on the wire has answered, since
-     * it may be waiting on a token refresh that is itself signing out. The
-     * generation is bumped when the scope closes, so a call still out when the
-     * account changed installs nothing.
-     */
-    const armed = Effect.gen(function* () {
-      const gen = ++generation;
-      standing = true;
-      const pass = Effect.suspend(() =>
-        gen === generation ? settle(Effect.uninterruptible(beat(gen))) : Effect.void,
-      );
-      yield* Effect.acquireRelease(
-        Effect.forkDetach(
-          Effect.interruptible(
-            Effect.andThen(
-              pass,
-              Effect.schedule(pass, Schedule.spaced(Duration.millis(intervalMs))),
-            ),
-          ),
-        ),
-        (fiber) => Effect.sync(() => fiber.interruptUnsafe()),
-      );
-      // Registered after the fork, so it runs before the interruption: a beat
-      // the interruption has not reached yet reads the bumped generation and
-      // sends nothing.
-      yield* Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          generation += 1;
-          standing = false;
-        }),
-      );
-    });
-
-    const gate = yield* cadenceGate(armed);
-
-    return {
-      get standing() {
-        return standing;
-      },
-      deviceId: () => options.state.read()?.deviceId,
-      start: gate.arm,
-      stop: (stopOptions: { forget: DepartingCredential | false }) =>
-        Effect.gen(function* () {
-          yield* gate.disarm;
-          if (stopOptions.forget === false) return;
-          const deviceId = options.state.read()?.deviceId;
-          if (deviceId === undefined) return;
-          // The row is let go of on the state before the service answers: the
-          // account is leaving whether or not the service heard, and a row the
-          // service still holds is re-keyed by the next sign-in's registration.
-          options.state.update((current) => ({
-            installationId: current?.installationId ?? installationId(),
-          }));
-          const forgetting = yield* Effect.forkDetach(
-            options.client.forget({ deviceId }, stopOptions.forget),
-          );
-          yield* Ref.update(inFlight, (standingCall) =>
-            Effect.asVoid(
-              Effect.all([standingCall, Fiber.await(forgetting)], { concurrency: "unbounded" }),
-            ),
-          );
-          yield* Effect.asVoid(Fiber.join(forgetting));
-        }),
-    };
+  /** Runs `work` once the call under way has settled, and holds the slot until it has, however it ended. */
+  const settle = /* @__PURE__ */ Effect.fnUntraced(function* (
+    work: Effect.Effect<void>,
+  ): Effect.fn.Return<void> {
+    const done = yield* Deferred.make<void>();
+    const standingCall = yield* Ref.modify(inFlight, (current) => [current, Deferred.await(done)]);
+    return yield* Effect.onExit(Effect.andThen(standingCall, work), (exit) =>
+      // A wait the disarm interrupted hands the slot on to the call still
+      // under way rather than opening it, so a registration on the wire
+      // keeps its place in the order however many sign-outs arrive while
+      // it is out; only a wait that reached its own work releases it.
+      Exit.hasInterrupts(exit)
+        ? Deferred.completeWith(done, standingCall)
+        : Deferred.succeed(done, undefined),
+    );
   });
+
+  function installationId(): string {
+    const current = options.state.read();
+    if (current) return current.installationId;
+    return options.state.update(() => ({
+      installationId: options.mintInstallationId().toLowerCase(),
+    })).installationId;
+  }
+
+  /** Registers the installation; answers the row's id where the registration landed for this generation. */
+  const register = /* @__PURE__ */ Effect.fnUntraced(function* (
+    gen: number,
+  ): Effect.fn.Return<string | undefined> {
+    const id = installationId();
+    const answer = yield* options.client.register({
+      platform: DEVICE_PLATFORM.MACOS,
+      installationId: id,
+    });
+    if (gen !== generation || answer === undefined) return undefined;
+    options.state.update((current) => ({
+      installationId: current?.installationId ?? id,
+      deviceId: answer.deviceId,
+    }));
+    return answer.deviceId;
+  });
+
+  /** One poll carrying the presence read now; answers whether the service still holds the row, or nothing for no answer. */
+  const poll = /* @__PURE__ */ Effect.fnUntraced(function* (
+    gen: number,
+    deviceId: string,
+  ): Effect.fn.Return<boolean | undefined> {
+    const presence = yield* options.presence;
+    if (gen !== generation) return undefined;
+    // A quiet instant not yet known is left off the request: an absent field leaves the row's instant, where a sent value would claim to know it.
+    const answer = yield* options.client.poll({
+      deviceId,
+      activeUntil: presence.activeUntil,
+      ...(presence.quietUntil !== undefined ? { quietUntil: presence.quietUntil } : undefined),
+    });
+    return gen === generation ? answer?.seen : undefined;
+  });
+
+  /** Registers and, where the registration landed, polls at once so the row never reads absent for want of a report. */
+  const registerAndPoll = /* @__PURE__ */ Effect.fnUntraced(function* (
+    gen: number,
+  ): Effect.fn.Return<void> {
+    const deviceId = yield* register(gen);
+    if (deviceId !== undefined) yield* poll(gen, deviceId);
+  });
+
+  /**
+   * One beat. Every way it can fail is a defect here, since each of the
+   * calls it makes answers an effect that cannot fail, so the report stands
+   * where the caught throw used to and an interruption still passes through.
+   */
+  const beat = /* @__PURE__ */ Effect.fnUntraced(
+    function* (gen: number): Effect.fn.Return<void> {
+      const deviceId = options.state.read()?.deviceId;
+      if (deviceId === undefined) {
+        yield* registerAndPoll(gen);
+      } else if ((yield* poll(gen, deviceId)) === false) {
+        yield* registerAndPoll(gen);
+      }
+    },
+    Effect.catchDefect((error) =>
+      Effect.sync(() => {
+        options.report?.(
+          `The device poll failed and will be tried again: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }),
+    ),
+  );
+
+  /**
+   * What an arming stands up: the registration's own beat and the cadence
+   * after it, as one fiber the arming's scope interrupts. `Effect.schedule`
+   * and not `Effect.repeat`: the cadence's first beat is one interval on
+   * from the registration's, where a repeat would beat again at once. The
+   * beat itself is uninterruptible and the interruption forked rather than
+   * awaited, for the same reason cancelling a timer never was: what a disarm
+   * has to guarantee is that no further beat starts, never that a call
+   * already on the wire has answered, since it may be waiting on a token
+   * refresh that is itself signing out. The generation is bumped when the
+   * scope closes, so a call still out when the account changed installs
+   * nothing.
+   */
+  const armed = Effect.gen(function* () {
+    const gen = ++generation;
+    standing = true;
+    const pass = Effect.suspend(() =>
+      gen === generation ? settle(Effect.uninterruptible(beat(gen))) : Effect.void,
+    );
+    yield* Effect.acquireRelease(
+      Effect.forkDetach(
+        Effect.andThen(pass, Effect.schedule(pass, Schedule.spaced(Duration.millis(intervalMs)))),
+      ),
+      (fiber) => Effect.sync(() => fiber.interruptUnsafe()),
+    );
+    // Registered after the fork, so it runs before the interruption: a beat
+    // the interruption has not reached yet reads the bumped generation and
+    // sends nothing.
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        generation += 1;
+        standing = false;
+      }),
+    );
+  });
+
+  const gate = yield* cadenceGate(armed);
+
+  return {
+    get standing() {
+      return standing;
+    },
+    deviceId: () => options.state.read()?.deviceId,
+    start: gate.arm,
+    stop: (stopOptions: { forget: DepartingCredential | false }) =>
+      Effect.gen(function* () {
+        yield* gate.disarm;
+        if (stopOptions.forget === false) return;
+        const deviceId = options.state.read()?.deviceId;
+        if (deviceId === undefined) return;
+        // The row is let go of on the state before the service answers: the
+        // account is leaving whether or not the service heard, and a row the
+        // service still holds is re-keyed by the next sign-in's registration.
+        options.state.update((current) => ({
+          installationId: current?.installationId ?? installationId(),
+        }));
+        const forgetting = yield* Effect.forkDetach(
+          options.client.forget({ deviceId }, stopOptions.forget),
+        );
+        yield* Ref.update(inFlight, (standingCall) =>
+          Effect.asVoid(
+            Effect.all([standingCall, Fiber.await(forgetting)], { concurrency: "unbounded" }),
+          ),
+        );
+        yield* Effect.asVoid(Fiber.join(forgetting));
+      }),
+  };
+});
 
 export interface DevicesComposer extends Composer {
   /**
@@ -341,58 +334,57 @@ export interface DevicesDependencies {
  * host's own state root beside the onboarding record, and a fixture or
  * evidence run, which sends nothing, registers nothing.
  */
-export const composeDevices = (
+export const composeDevices = /* @__PURE__ */ Effect.fn("composeDevices")(function* (
   dependencies: DevicesDependencies,
-): Effect.Effect<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> =>
-  Effect.gen(function* () {
-    const { account, calendars } = dependencies;
-    const kernel: HostKernel = yield* HostKernelTag;
-    const machinePresence = yield* MachinePresenceReader;
-    const { runMode, report, now } = kernel;
+): Effect.fn.Return<DevicesComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> {
+  const { account, calendars } = dependencies;
+  const kernel: HostKernel = yield* HostKernelTag;
+  const machinePresence = yield* MachinePresenceReader;
+  const { runMode, report, now } = kernel;
 
-    const credential = { serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token };
-    const devicesClient = new HostedDeviceClient(credential);
-    const changesClient = new HostedChangesClient(credential);
+  const credential = { serviceBaseUrl: kernel.hostedServiceBaseUrl, ...account.token };
+  const devicesClient = new HostedDeviceClient(credential);
+  const changesClient = new HostedChangesClient(credential);
 
-    const cadence = yield* deviceCadence({
-      // Every call of this row is the client's own effect, yielded by the
-      // beat. `poll` carries no client of its own, so the ambient one is
-      // provided to it here.
-      client: {
-        register: (request) => devicesClient.register(request),
-        poll: (request) => Effect.provide(changesClient.poll(request), FetchHttpClient.layer),
-        forget: (request, departing) => devicesClient.forget(request, departing),
-      },
-      state: deviceStateFile(() => kernel.stateRoot, report),
-      mintInstallationId: kernel.createId,
-      presence: Effect.gen(function* () {
-        const at = now();
-        return {
-          activeUntil: activeUntilFrom(machinePresence.read?.(), at),
-          quietUntil: yield* calendars.meetingQuietUntil(at),
-        };
-      }),
-      report,
+  const cadence = yield* deviceCadence({
+    // Every call of this row is the client's own effect, yielded by the
+    // beat. `poll` carries no client of its own, so the ambient one is
+    // provided to it here.
+    client: {
+      register: (request) => devicesClient.register(request),
+      poll: (request) => Effect.provide(changesClient.poll(request), FetchHttpClient.layer),
+      forget: (request, departing) => devicesClient.forget(request, departing),
+    },
+    state: deviceStateFile(() => kernel.stateRoot, report),
+    mintInstallationId: kernel.createId,
+    presence: Effect.gen(function* () {
+      const at = now();
+      return {
+        activeUntil: activeUntilFrom(machinePresence.read?.(), at),
+        quietUntil: yield* calendars.meetingQuietUntil(at),
+      };
+    }),
+    report,
+  });
+
+  const register = Effect.suspend(() =>
+    runMode.sendsNetwork && account.capabilitiesActive() ? cadence.start : Effect.void,
+  );
+
+  const release = (departing: StoredAccount | undefined): Effect.Effect<void> =>
+    cadence.stop({
+      forget:
+        departing !== undefined && runMode.sendsNetwork
+          ? { accessToken: departing.accessToken }
+          : false,
     });
 
-    const register = Effect.suspend(() =>
-      runMode.sendsNetwork && account.capabilitiesActive() ? cadence.start : Effect.void,
-    );
-
-    const release = (departing: StoredAccount | undefined): Effect.Effect<void> =>
-      cadence.stop({
-        forget:
-          departing !== undefined && runMode.sendsNetwork
-            ? { accessToken: departing.accessToken }
-            : false,
-      });
-
-    return {
-      methods: {},
-      register,
-      release,
-      deviceId: () => cadence.deviceId(),
-      // A quit is not a sign-out: the poll stops and the row stands for the next launch.
-      lifetime: Effect.addFinalizer(() => release(undefined)),
-    };
-  });
+  return {
+    methods: {},
+    register,
+    release,
+    deviceId: () => cadence.deviceId(),
+    // A quit is not a sign-out: the poll stops and the row stands for the next launch.
+    lifetime: Effect.addFinalizer(() => release(undefined)),
+  };
+});

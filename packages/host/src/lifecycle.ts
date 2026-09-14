@@ -20,8 +20,7 @@ export interface StartupStoreOptions {
  * rewritten. A seed that failed leaves the files that already stand, which
  * are still worth indexing, so the index starts whatever became of the seed
  * and the start does not wait on the index: the index's own start is a fiber
- * of the scope this runs in, which is the caller's lifetime, forked
- * interruptible because the start this runs inside is not.
+ * of the scope this runs in, which is the caller's lifetime.
  */
 export function seedWorkspaceThenStartMemory(
   options: StartupStoreOptions,
@@ -35,7 +34,7 @@ export function seedWorkspaceThenStartMemory(
         );
       });
     }),
-    Effect.asVoid(Effect.forkScoped(Effect.interruptible(options.startMemory))),
+    Effect.asVoid(Effect.forkScoped(options.startMemory)),
   );
 }
 

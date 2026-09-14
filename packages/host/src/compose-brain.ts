@@ -84,322 +84,319 @@ export interface BrainDependencies {
   };
 }
 
-export const composeBrain = (
+export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* (
   dependencies: BrainDependencies,
-): Effect.Effect<
+): Effect.fn.Return<
   BrainComposer,
   never,
   HostKernelTag | HostService | StoreWorker | FileSystem.FileSystem | Scope.Scope
-> =>
-  Effect.gen(function* () {
-    const { account, observation, announcements } = dependencies;
-    const kernel = yield* HostKernelTag;
-    const hostService = yield* HostService;
-    const storeWorker = yield* StoreWorker;
-    // The index's watch, its start, and every pass of it are fibers of a
-    // scope of this composer's own, closed in its stop before the store is:
-    // the notebook's own scope closing is what used to be `memory.stop()`,
-    // and a file event arriving after it can no longer begin a reconcile
-    // against a store that has closed.
-    const indexScope = yield* Scope.fork(yield* Effect.scope);
-    // The services the store's asks and every run of the tool loop are begun
-    // under: the host's own, so a turn and the host that cancels it stand on
-    // one set rather than on a second one built where the work lives.
-    const execution = yield* Effect.context<never>();
-    const { runMode, report, now, createId } = kernel;
+> {
+  const { account, observation, announcements } = dependencies;
+  const kernel = yield* HostKernelTag;
+  const hostService = yield* HostService;
+  const storeWorker = yield* StoreWorker;
+  // The index's watch, its start, and every pass of it are fibers of a
+  // scope of this composer's own, closed in its stop before the store is:
+  // the notebook's own scope closing is what used to be `memory.stop()`,
+  // and a file event arriving after it can no longer begin a reconcile
+  // against a store that has closed.
+  const indexScope = yield* Scope.fork(yield* Effect.scope);
+  // The services the store's asks and every run of the tool loop are begun
+  // under: the host's own, so a turn and the host that cancels it stand on
+  // one set rather than on a second one built where the work lives.
+  const execution = yield* Effect.context<never>();
+  const { runMode, report, now, createId } = kernel;
 
-    /**
-     * What the store and the wiring tell the clients, as effects taken in turn
-     * by a fiber of this composer's scope. Both doors are synchronous
-     * callbacks of collaborators that hold no fiber, and the service they
-     * speak through is what the merge composes after this composer is built,
-     * so each offers its publication here and the take awaits the service:
-     * nothing is dropped for having been reported before the merge, and the
-     * order two publications were offered in is the order they are made.
-     */
-    const publications = yield* Queue.unbounded<Effect.Effect<void>>();
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.flatMap(Queue.take(publications), (publication) =>
-          Effect.catchDefect(publication, (defect) =>
-            Effect.logError("a host service publication failed", defect),
-          ),
+  /**
+   * What the store and the wiring tell the clients, as effects taken in turn
+   * by a fiber of this composer's scope. Both doors are synchronous
+   * callbacks of collaborators that hold no fiber, and the service they
+   * speak through is what the merge composes after this composer is built,
+   * so each offers its publication here and the take awaits the service:
+   * nothing is dropped for having been reported before the merge, and the
+   * order two publications were offered in is the order they are made.
+   */
+  const publications = yield* Queue.unbounded<Effect.Effect<void>>();
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.flatMap(Queue.take(publications), (publication) =>
+        Effect.catchDefect(publication, (defect) =>
+          Effect.logError("a host service publication failed", defect),
         ),
       ),
+    ),
+  );
+  const publish = (through: (service: GatewayService) => void): void => {
+    Queue.offerUnsafe(
+      publications,
+      Effect.flatMap(hostService.value, (service) => Effect.sync(() => through(service))),
     );
-    const publish = (through: (service: GatewayService) => void): void => {
-      Queue.offerUnsafe(
-        publications,
-        Effect.flatMap(hostService.value, (service) => Effect.sync(() => through(service))),
-      );
-    };
+  };
 
-    /**
-     * The brain's store and the conversation it holds: one retained thread
-     * shared by every panel window and persisted for the next launch. A window's
-     * report is appended under an opaque reporter the client minted, so the
-     * history event can skip echoing it to the window that reported it, and the
-     * reporter names nothing about the window to anyone else.
-     */
-    const store = wireStore({
-      persistent: runMode.observesProviders,
-      transport: workerStoreTransport(storeWorker.create),
-      execution,
-      agentRoot: () => agentRootPath(kernel.stateRoot),
-      workspaceDirectory: kernel.agentWorkspacePath,
-      ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
-      now,
-      createEventId: createId,
-      onConversationChanged: (sessionKey, entries, except) => {
-        publish((service) => service.conversationChanged(sessionKey, entries, except));
-      },
-      onDirectoryChanged: () => undefined,
-      report,
-    });
-    let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
-
-    const memory: MemoryWiring = runMode.observesProviders
-      ? yield* Scope.provide(
-          composeNotebookMemory({
-            client: store.client,
-            embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
-            workspaceDirectory: kernel.agentWorkspacePath,
-            conversationDirectory: () => store.directory(),
-            isTemporary: store.isTemporary,
-            now,
-            report,
-            onSynced: Effect.asVoid(Effect.promise(() => store.refreshNotebook())),
-          }),
-          indexScope,
-        )
-      : INERT_MEMORY_WIRING;
-    const memoryMaintenance = wireMemoryMaintenance({
-      persistent: runMode.observesProviders,
-      client: store.client,
-      createRuntime: () => wiring.createRuntime(),
-      workspaceDirectory: kernel.agentWorkspacePath,
-      isTemporary: store.isTemporary,
-      now,
-      createId,
-      report,
-      onNotebookChanged: memory.requestSync,
-    });
-
-    /**
-     * The notebook as every conversation's memory provider, bound to this
-     * Mac's one account: the one agent's workspace is its notebook, so the
-     * agent's id is the scope's key.
-     */
-    const memoryDefinitions = wireMemoryDefinitions({
-      scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
-      index: memory,
-      maintenance: memoryMaintenance,
-      facts: store.rememberedFacts,
-      workspaceDirectory: kernel.agentWorkspacePath,
-      now,
-    });
-
-    /**
-     * What a conversation is handed beside the roster, by which conversation it
-     * is. The recent exchange reaches every conversation, so an observed
-     * session's knows what the developer was just told before it briefs; the
-     * remembered facts reach every conversation too, recalled by the memory
-     * provider rather than rendered here. The app guide and the projects a
-     * workspace could be created in belong to the conversations the developer
-     * actually holds; an observed session's conversation and a child's brief
-     * one session or one task, and would pay for both on every call and every
-     * iteration of their tool loops.
-     */
-    function standingContext(sessionKey: SessionKey): string {
-      const sessions = observation.actableSessions();
-      const kind = conversationKindOf(sessionKey);
-      const developerHeld = kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
-      const defaults = observation.heldWorkspaceDefaults();
-      return [
-        ...(developerHeld
-          ? [
-              workspaceProjectContextText(
-                observation.workspaceProjects(),
-                defaults.defaultProviderId,
-                defaults.defaultProjectIds,
-              ),
-            ]
-          : []),
-        conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
-        ...(developerHeld ? [appGuideContextText(appGuide)] : []),
-      ]
-        .filter((part): part is string => part !== undefined && part.trim().length > 0)
-        .join("\n\n");
-    }
-
-    /**
-     * Carries an app act only a renderer can perform to the native node, as the
-     * validated action itself, serialized: the node hands it to the panel and
-     * answers what became of it. No node connected, or one that answers in a
-     * shape this build cannot read, is a refusal, and the action is left undone.
-     */
-    function performAppAction(action: BrainAppActionRequest["action"]): Effect.Effect<WireRecord> {
-      return Effect.map(
-        kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACTION, { action: carried(action) }),
-        (result) => {
-          if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value))
-            return result.value;
-          if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-            return { status: UNKNOWN_ACTION_STATUS, reason: result.reason };
-          }
-          return {
-            status: ACTION_RESULT_STATUS.REJECTED,
-            reason:
-              result.status === NODE_CAPABILITY_STATUS.OK
-                ? "The panel answered in a shape this build cannot read."
-                : result.reason,
-          };
-        },
-      );
-    }
-
-    const wiring = yield* wireBrain({
-      execution,
-      repositoryFor: (sessionKey) => store.brainStateRepository(sessionKey),
-      ensureObservedConversation: async (sessionKey, name) => {
-        await store.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
-      },
-      ensureChildConversation: async (sessionKey, name) => {
-        await store.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
-      },
-      archiveConversation: (sessionKey) => store.archive(sessionKey),
-      conversationDirectory: () => store.directory(),
-      conversationLines: (sessionKey) => store.thread(sessionKey).entries(),
-      childStore: () => store.childStore(),
-      createId,
-      report,
-      ...(account.agentTrace
-        ? {
-            traceTurn: (record) => account.agentTrace?.recordBrainTurn(record),
-            tracePrefetch: (record) => account.agentTrace?.recordBrainPrefetch(record),
-          }
-        : undefined),
-      broadcastRequests: (snapshots) => {
-        publish((service) => service.runsReported(snapshots));
-      },
-      onGenerationReplaced: (sessionKey) => {
-        if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
-      },
-      actions: {
-        sessionActions: observation.sessionActions,
-        sessions: observation.actableSessions,
-        // The pass admission asks for before a session action is the loop's
-        // own effect, waited on by the fiber the action is admitted on.
-        refreshSessions: () => observation.loop.refresh,
-        workspaceProjects: observation.workspaceProjects,
-        workspaceDefaults: observation.workspaceDefaults,
-        appGuide: () => appGuide,
-        rememberedFacts: store.rememberedFacts,
-        notebook: {
-          remember: store.rememberNotebookEntry,
-          forget: store.forgetNotebookEntry,
-        },
-        performAppAction: (action) => performAppAction(action),
-        recordConversationEntry: store.recordConversationEntry,
-      },
-      roster: observation.roster,
-      standingContext,
-      transcripts: observation.transcripts,
-      session: observation.session,
-      deliver: announcements.deliverBriefing,
-      model: () => account.voiceCapabilities.brainModel,
-      prefetchModel: () => account.voiceCapabilities.prefetchModel,
-      credential: () =>
-        account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
-          ? {
-              kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
-              providerId: CREDENTIAL_PROVIDER_ID.OPENAI,
-            }
-          : { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
-      workspaceDirectory: kernel.agentWorkspacePath,
-      skillRoots: () => [kernel.agentSkillsPath()],
-      runnable: () =>
-        runMode.observesProviders && runMode.sendsNetwork && account.capabilitiesActive(),
-      dropBriefings: announcements.dropBriefings,
-      memory: memoryDefinitions,
-      flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
-    });
-
-    const conversations = conversationOperations({
-      store,
-      brain: wiring,
-      now,
-      report,
-    });
-
-    const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
-        const guide = params.guide;
-        if (!isAppGuideSnapshot(guide)) return invalid("guide is not the shape a panel reports");
-        appGuide = guide;
-        return Effect.succeed({});
-      },
-      [GATEWAY_METHOD.CONVERSATION_APPEND]: (params) =>
-        Effect.gen(function* () {
-          const sessionKey =
-            params.sessionKey === undefined
-              ? MAIN_SESSION_KEY
-              : isIdentifier(params.sessionKey)
-                ? toSessionKey(params.sessionKey)
-                : undefined;
-          if (!sessionKey) return yield* invalid("sessionKey must be a non-empty string");
-          if (!Array.isArray(params.entries)) return yield* invalid("entries must be a list");
-          const entries: ConversationEntry[] = [];
-          for (const entry of params.entries) {
-            const stored = storedConversationEntry(entry);
-            if (!stored) return yield* invalid("an entry is not the shape Conversation keeps");
-            entries.push(stored);
-          }
-          const accepted = yield* Effect.promise(() =>
-            store.thread(sessionKey).append(entries, reporterOf(params)),
-          );
-          return { accepted };
-        }),
-    };
-
-    return {
-      methods,
-      wiring,
-      store,
-      conversations,
-      memoryMode: memory.mode,
-      syncMemory: memory.requestSync,
-      // The hourly pass is armed after the start that opened the store and
-      // ends with the scope this composer's lifetime is, before its stop.
-      lifetime: Effect.andThen(
-        startedAndStopped(
-          Effect.gen(function* () {
-            if (!runMode.observesProviders) return;
-            yield* Effect.promise(() => store.open());
-            yield* Scope.provide(
-              seedWorkspaceThenStartMemory({
-                seedWorkspace: Effect.asVoid(
-                  Effect.mapError(wiring.seedWorkspace(), (error) => error.cause),
-                ),
-                startMemory: memory.start,
-                report,
-              }),
-              indexScope,
-            );
-            yield* Effect.promise(() => wiring.store().load());
-            yield* Effect.promise(() => store.restore());
-          }),
-          Effect.gen(function* () {
-            yield* wiring.retire();
-            yield* Scope.close(indexScope, Exit.void);
-            yield* Effect.promise(() => store.close());
-          }),
-        ),
-        Effect.suspend(() =>
-          runMode.observesProviders
-            ? conversationMaintenance({ store, brain: wiring })
-            : Effect.void,
-        ),
-      ),
-    };
+  /**
+   * The brain's store and the conversation it holds: one retained thread
+   * shared by every panel window and persisted for the next launch. A window's
+   * report is appended under an opaque reporter the client minted, so the
+   * history event can skip echoing it to the window that reported it, and the
+   * reporter names nothing about the window to anyone else.
+   */
+  const store = wireStore({
+    persistent: runMode.observesProviders,
+    transport: workerStoreTransport(storeWorker.create),
+    execution,
+    agentRoot: () => agentRootPath(kernel.stateRoot),
+    workspaceDirectory: kernel.agentWorkspacePath,
+    ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
+    now,
+    createEventId: createId,
+    onConversationChanged: (sessionKey, entries, except) => {
+      publish((service) => service.conversationChanged(sessionKey, entries, except));
+    },
+    onDirectoryChanged: () => undefined,
+    report,
   });
+  let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
+
+  const memory: MemoryWiring = runMode.observesProviders
+    ? yield* Scope.provide(
+        composeNotebookMemory({
+          client: store.client,
+          embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
+          workspaceDirectory: kernel.agentWorkspacePath,
+          conversationDirectory: () => store.directory(),
+          isTemporary: store.isTemporary,
+          now,
+          report,
+          onSynced: Effect.asVoid(Effect.promise(() => store.refreshNotebook())),
+        }),
+        indexScope,
+      )
+    : INERT_MEMORY_WIRING;
+  const memoryMaintenance = wireMemoryMaintenance({
+    persistent: runMode.observesProviders,
+    client: store.client,
+    createRuntime: () => wiring.createRuntime(),
+    workspaceDirectory: kernel.agentWorkspacePath,
+    isTemporary: store.isTemporary,
+    now,
+    createId,
+    report,
+    onNotebookChanged: memory.requestSync,
+  });
+
+  /**
+   * The notebook as every conversation's memory provider, bound to this
+   * Mac's one account: the one agent's workspace is its notebook, so the
+   * agent's id is the scope's key.
+   */
+  const memoryDefinitions = wireMemoryDefinitions({
+    scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
+    index: memory,
+    maintenance: memoryMaintenance,
+    facts: store.rememberedFacts,
+    workspaceDirectory: kernel.agentWorkspacePath,
+    now,
+  });
+
+  /**
+   * What a conversation is handed beside the roster, by which conversation it
+   * is. The recent exchange reaches every conversation, so an observed
+   * session's knows what the developer was just told before it briefs; the
+   * remembered facts reach every conversation too, recalled by the memory
+   * provider rather than rendered here. The app guide and the projects a
+   * workspace could be created in belong to the conversations the developer
+   * actually holds; an observed session's conversation and a child's brief
+   * one session or one task, and would pay for both on every call and every
+   * iteration of their tool loops.
+   */
+  function standingContext(sessionKey: SessionKey): string {
+    const sessions = observation.actableSessions();
+    const kind = conversationKindOf(sessionKey);
+    const developerHeld = kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
+    const defaults = observation.heldWorkspaceDefaults();
+    return [
+      ...(developerHeld
+        ? [
+            workspaceProjectContextText(
+              observation.workspaceProjects(),
+              defaults.defaultProviderId,
+              defaults.defaultProjectIds,
+            ),
+          ]
+        : []),
+      conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
+      ...(developerHeld ? [appGuideContextText(appGuide)] : []),
+    ]
+      .filter((part): part is string => part !== undefined && part.trim().length > 0)
+      .join("\n\n");
+  }
+
+  /**
+   * Carries an app act only a renderer can perform to the native node, as the
+   * validated action itself, serialized: the node hands it to the panel and
+   * answers what became of it. No node connected, or one that answers in a
+   * shape this build cannot read, is a refusal, and the action is left undone.
+   */
+  function performAppAction(action: BrainAppActionRequest["action"]): Effect.Effect<WireRecord> {
+    return Effect.map(
+      kernel.nodes.invoke(HOST_NODE_CAPABILITY.PANEL_APP_ACTION, { action: carried(action) }),
+      (result) => {
+        if (result.status === NODE_CAPABILITY_STATUS.OK && isRecord(result.value))
+          return result.value;
+        if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
+          return { status: UNKNOWN_ACTION_STATUS, reason: result.reason };
+        }
+        return {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason:
+            result.status === NODE_CAPABILITY_STATUS.OK
+              ? "The panel answered in a shape this build cannot read."
+              : result.reason,
+        };
+      },
+    );
+  }
+
+  const wiring = yield* wireBrain({
+    execution,
+    repositoryFor: (sessionKey) => store.brainStateRepository(sessionKey),
+    ensureObservedConversation: async (sessionKey, name) => {
+      await store.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
+    },
+    ensureChildConversation: async (sessionKey, name) => {
+      await store.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
+    },
+    archiveConversation: (sessionKey) => store.archive(sessionKey),
+    conversationDirectory: () => store.directory(),
+    conversationLines: (sessionKey) => store.thread(sessionKey).entries(),
+    childStore: () => store.childStore(),
+    createId,
+    report,
+    ...(account.agentTrace
+      ? {
+          traceTurn: (record) => account.agentTrace?.recordBrainTurn(record),
+          tracePrefetch: (record) => account.agentTrace?.recordBrainPrefetch(record),
+        }
+      : undefined),
+    broadcastRequests: (snapshots) => {
+      publish((service) => service.runsReported(snapshots));
+    },
+    onGenerationReplaced: (sessionKey) => {
+      if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
+    },
+    actions: {
+      sessionActions: observation.sessionActions,
+      sessions: observation.actableSessions,
+      // The pass admission asks for before a session action is the loop's
+      // own effect, waited on by the fiber the action is admitted on.
+      refreshSessions: () => observation.loop.refresh,
+      workspaceProjects: observation.workspaceProjects,
+      workspaceDefaults: observation.workspaceDefaults,
+      appGuide: () => appGuide,
+      rememberedFacts: store.rememberedFacts,
+      notebook: {
+        remember: store.rememberNotebookEntry,
+        forget: store.forgetNotebookEntry,
+      },
+      performAppAction: (action) => performAppAction(action),
+      recordConversationEntry: store.recordConversationEntry,
+    },
+    roster: observation.roster,
+    standingContext,
+    transcripts: observation.transcripts,
+    session: observation.session,
+    deliver: announcements.deliverBriefing,
+    model: () => account.voiceCapabilities.brainModel,
+    prefetchModel: () => account.voiceCapabilities.prefetchModel,
+    credential: () =>
+      account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
+        ? {
+            kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
+            providerId: CREDENTIAL_PROVIDER_ID.OPENAI,
+          }
+        : { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
+    workspaceDirectory: kernel.agentWorkspacePath,
+    skillRoots: () => [kernel.agentSkillsPath()],
+    runnable: () =>
+      runMode.observesProviders && runMode.sendsNetwork && account.capabilitiesActive(),
+    dropBriefings: announcements.dropBriefings,
+    memory: memoryDefinitions,
+    flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
+  });
+
+  const conversations = conversationOperations({
+    store,
+    brain: wiring,
+    now,
+    report,
+  });
+
+  const methods: GatewayMethodTable = {
+    [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
+      const guide = params.guide;
+      if (!isAppGuideSnapshot(guide)) return invalid("guide is not the shape a panel reports");
+      appGuide = guide;
+      return Effect.succeed({});
+    },
+    [GATEWAY_METHOD.CONVERSATION_APPEND]: (params) =>
+      Effect.gen(function* () {
+        const sessionKey =
+          params.sessionKey === undefined
+            ? MAIN_SESSION_KEY
+            : isIdentifier(params.sessionKey)
+              ? toSessionKey(params.sessionKey)
+              : undefined;
+        if (!sessionKey) return yield* invalid("sessionKey must be a non-empty string");
+        if (!Array.isArray(params.entries)) return yield* invalid("entries must be a list");
+        const entries: ConversationEntry[] = [];
+        for (const entry of params.entries) {
+          const stored = storedConversationEntry(entry);
+          if (!stored) return yield* invalid("an entry is not the shape Conversation keeps");
+          entries.push(stored);
+        }
+        const accepted = yield* Effect.promise(() =>
+          store.thread(sessionKey).append(entries, reporterOf(params)),
+        );
+        return { accepted };
+      }),
+  };
+
+  return {
+    methods,
+    wiring,
+    store,
+    conversations,
+    memoryMode: memory.mode,
+    syncMemory: memory.requestSync,
+    // The hourly pass is armed after the start that opened the store and
+    // ends with the scope this composer's lifetime is, before its stop.
+    lifetime: Effect.andThen(
+      startedAndStopped(
+        Effect.gen(function* () {
+          if (!runMode.observesProviders) return;
+          yield* Effect.promise(() => store.open());
+          yield* Scope.provide(
+            seedWorkspaceThenStartMemory({
+              seedWorkspace: Effect.asVoid(
+                Effect.mapError(wiring.seedWorkspace(), (error) => error.cause),
+              ),
+              startMemory: memory.start,
+              report,
+            }),
+            indexScope,
+          );
+          yield* Effect.promise(() => wiring.store().load());
+          yield* Effect.promise(() => store.restore());
+        }),
+        Effect.gen(function* () {
+          yield* wiring.retire();
+          yield* Scope.close(indexScope, Exit.void);
+          yield* Effect.promise(() => store.close());
+        }),
+      ),
+      Effect.suspend(() =>
+        runMode.observesProviders ? conversationMaintenance({ store, brain: wiring }) : Effect.void,
+      ),
+    ),
+  };
+});

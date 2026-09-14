@@ -54,35 +54,33 @@ export const listChildRunsEffect: Effect.Effect<
   return records;
 });
 
-export const putChildRunEffect = (
+export const putChildRunEffect = /* @__PURE__ */ Effect.fn("putChildRunEffect")(function* (
   record: ChildRunRecord,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const payload = JSON.stringify(record);
-    if (!childRunRecordFromWire(parsed(payload))) return false;
-    const sql = yield* Client.SqlClient;
-    yield* sql`INSERT INTO child_runs
-                 (child_id, requester_session_key, child_session_key, status, accepted_at,
-                  settled_at, archived_at, payload)
-               VALUES (${record.childId}, ${record.requesterSessionKey}, ${record.childSessionKey},
-                       ${record.status}, ${record.acceptedAt}, ${record.settledAt ?? null},
-                       ${record.archivedAt ?? null}, ${payload})
-               ON CONFLICT(child_id) DO UPDATE SET
-                 status = excluded.status,
-                 settled_at = excluded.settled_at,
-                 archived_at = excluded.archived_at,
-                 payload = excluded.payload`;
-    return true;
-  });
+): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
+  const payload = JSON.stringify(record);
+  if (!childRunRecordFromWire(parsed(payload))) return false;
+  const sql = yield* Client.SqlClient;
+  yield* sql`INSERT INTO child_runs
+               (child_id, requester_session_key, child_session_key, status, accepted_at,
+                settled_at, archived_at, payload)
+             VALUES (${record.childId}, ${record.requesterSessionKey}, ${record.childSessionKey},
+                     ${record.status}, ${record.acceptedAt}, ${record.settledAt ?? null},
+                     ${record.archivedAt ?? null}, ${payload})
+             ON CONFLICT(child_id) DO UPDATE SET
+               status = excluded.status,
+               settled_at = excluded.settled_at,
+               archived_at = excluded.archived_at,
+               payload = excluded.payload`;
+  return true;
+});
 
-export const deleteChildRunEffect = (
+export const deleteChildRunEffect = /* @__PURE__ */ Effect.fn("deleteChildRunEffect")(function* (
   childId: string,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    const changes = yield* changedRows(sql`DELETE FROM child_runs WHERE child_id = ${childId}`.raw);
-    return changes > 0;
-  });
+): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  const changes = yield* changedRows(sql`DELETE FROM child_runs WHERE child_id = ${childId}`.raw);
+  return changes > 0;
+});
 
 const childCompletionRows = SqlSchema.findAll({
   Request: Schema.Void,
@@ -107,33 +105,33 @@ export const listChildCompletionsEffect: Effect.Effect<
   return records;
 });
 
-export const putChildCompletionEffect = (
-  completion: ChildCompletionRecord,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const putChildCompletionEffect = /* @__PURE__ */ Effect.fn("putChildCompletionEffect")(
+  function* (
+    completion: ChildCompletionRecord,
+  ): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
     const payload = JSON.stringify(completion);
     if (!childCompletionRecordFromWire(parsed(payload))) return false;
     const sql = yield* Client.SqlClient;
     yield* sql`INSERT INTO child_completions
-                 (completion_id, child_id, destination_session_key, delivery_status, created_at,
-                  next_attempt_at, payload)
-               VALUES (${completion.completionId}, ${completion.childId}, ${completion.destination},
-                       ${completion.delivery}, ${completion.createdAt},
-                       ${completion.nextAttemptAt ?? null}, ${payload})
-               ON CONFLICT(completion_id) DO UPDATE SET
-                 delivery_status = excluded.delivery_status,
-                 next_attempt_at = excluded.next_attempt_at,
-                 payload = excluded.payload`;
+               (completion_id, child_id, destination_session_key, delivery_status, created_at,
+                next_attempt_at, payload)
+             VALUES (${completion.completionId}, ${completion.childId}, ${completion.destination},
+                     ${completion.delivery}, ${completion.createdAt},
+                     ${completion.nextAttemptAt ?? null}, ${payload})
+             ON CONFLICT(completion_id) DO UPDATE SET
+               delivery_status = excluded.delivery_status,
+               next_attempt_at = excluded.next_attempt_at,
+               payload = excluded.payload`;
     return true;
-  });
+  },
+);
 
-export const deleteChildCompletionEffect = (
-  completionId: string,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const deleteChildCompletionEffect = /* @__PURE__ */ Effect.fn("deleteChildCompletionEffect")(
+  function* (completionId: string): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
     const sql = yield* Client.SqlClient;
     const changes = yield* changedRows(
       sql`DELETE FROM child_completions WHERE completion_id = ${completionId}`.raw,
     );
     return changes > 0;
-  });
+  },
+);

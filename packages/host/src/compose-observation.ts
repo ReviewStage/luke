@@ -117,431 +117,426 @@ export interface ObservationDependencies {
  * constructor argument; its sibling concerns stay plain arguments because the
  * cycles between them forbid a tag on either side.
  */
-export const composeObservation = (
+export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation")(function* (
   dependencies: ObservationDependencies,
-): Effect.Effect<ObservationComposer, never, HostKernelTag | Scope.Scope> =>
-  Effect.gen(function* () {
-    const { settings, account, observationGate } = dependencies;
-    const kernel = yield* HostKernelTag;
-    const { runMode, report, now } = kernel;
-    const late = yield* lateService<ObservationLinks>();
+): Effect.fn.Return<ObservationComposer, never, HostKernelTag | Scope.Scope> {
+  const { settings, account, observationGate } = dependencies;
+  const kernel = yield* HostKernelTag;
+  const { runMode, report, now } = kernel;
+  const late = yield* lateService<ObservationLinks>();
 
-    const sessionRegistry = new SessionRoster();
-    const rosterClient = new HostedRosterClient({
-      serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
-    });
-    const actionClient = new HostedActionClient({
-      serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
-    });
-    const messagesClient = new HostedSessionMessagesClient({
-      serviceBaseUrl: kernel.hostedServiceBaseUrl,
-      ...account.token,
-    });
-    /**
-     * The redraw a landed write earns. A row's press and the brain's carried
-     * act each settle on their own fiber now, so the poke is a fork from
-     * there rather than a run: the write's answer goes back the moment the
-     * pass is started, exactly as the detached run it replaces did.
-     */
-    const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
+  const sessionRegistry = new SessionRoster();
+  const rosterClient = new HostedRosterClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
+  });
+  const actionClient = new HostedActionClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
+  });
+  const messagesClient = new HostedSessionMessagesClient({
+    serviceBaseUrl: kernel.hostedServiceBaseUrl,
+    ...account.token,
+  });
+  /**
+   * The redraw a landed write earns. A row's press and the brain's carried
+   * act each settle on their own fiber now, so the poke is a fork from
+   * there rather than a run: the write's answer goes back the moment the
+   * pass is started, exactly as the detached run it replaces did.
+   */
+  const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
 
-    const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
-    let unsubscribeSessions: (() => void) | undefined;
-    let lastWorkspaceProjects: string | undefined;
-    /** Where a workspace can be created, as the service's snapshot last listed it. */
-    let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
-    let workspaceProjectsBroadcastGeneration = 0;
-    let rosterBroadcast = false;
-    const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
-    let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
+  const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
+  let unsubscribeSessions: (() => void) | undefined;
+  let lastWorkspaceProjects: string | undefined;
+  /** Where a workspace can be created, as the service's snapshot last listed it. */
+  let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
+  let workspaceProjectsBroadcastGeneration = 0;
+  let rosterBroadcast = false;
+  const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
+  let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
 
-    function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
-      return heldWorkspaceProjects.some(
-        (project) =>
-          project.providerId === providerId &&
-          workspaceProjectSelectionId(project) === providerProjectId,
-      );
-    }
-
-    // The one list every offer of a project reads: the settings rows, the
-    // bootstrap, and the brain's admission all see what the service's stored
-    // snapshot lists for the account's keys, which is what a creation is
-    // admitted against there.
-    function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-      return runMode.observesProviders ? heldWorkspaceProjects : [];
-    }
-
-    const readWorkspaceDefaultsEffect: Effect.Effect<WorkspaceCreationDefaults> = Effect.gen(
-      function* () {
-        const [defaultProviderId, defaultProjectIds] = yield* Effect.all([
-          Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
-          Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)),
-        ]);
-        const defaults: WorkspaceCreationDefaults = {};
-        if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
-        if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
-        brainWorkspaceDefaults = defaults;
-        return defaults;
-      },
+  function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
+    return heldWorkspaceProjects.some(
+      (project) =>
+        project.providerId === providerId &&
+        workspaceProjectSelectionId(project) === providerProjectId,
     );
+  }
 
-    function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-      return normalizeObservedWorkspaceProjects(
-        offeredWorkspaceProjects(),
-        brainWorkspaceDefaults.defaultProjectIds,
+  // The one list every offer of a project reads: the settings rows, the
+  // bootstrap, and the brain's admission all see what the service's stored
+  // snapshot lists for the account's keys, which is what a creation is
+  // admitted against there.
+  function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+    return runMode.observesProviders ? heldWorkspaceProjects : [];
+  }
+
+  const readWorkspaceDefaultsEffect: Effect.Effect<WorkspaceCreationDefaults> = Effect.gen(
+    function* () {
+      const [defaultProviderId, defaultProjectIds] = yield* Effect.all([
+        Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
+        Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)),
+      ]);
+      const defaults: WorkspaceCreationDefaults = {};
+      if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
+      if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
+      brainWorkspaceDefaults = defaults;
+      return defaults;
+    },
+  );
+
+  function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
+    return normalizeObservedWorkspaceProjects(
+      offeredWorkspaceProjects(),
+      brainWorkspaceDefaults.defaultProjectIds,
+    );
+  }
+
+  const pruneWorkspaceProjectDefaultsEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
+    projects: readonly ObservedWorkspaceProject[],
+    defaults: Readonly<Partial<Record<string, string>>> | undefined,
+    isCurrent: () => boolean,
+  ): Effect.fn.Return<void> {
+    if (account.signedIn()) return;
+    for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
+      if (!isCurrent()) return;
+      const expected = defaults?.[providerId];
+      if (expected === undefined) continue;
+      const outcome = yield* Effect.result(
+        settings.store.clearEntryIfUnchanged(
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+          providerId,
+          expected,
+        ),
       );
+      if (Result.isFailure(outcome)) return;
+      const saved = outcome.success;
+      if (!saved.cleared) continue;
+      if (!isCurrent()) return;
+      settings.emitSettingsSnapshot(saved.settings);
     }
+  });
 
-    const pruneWorkspaceProjectDefaultsEffect = (
-      projects: readonly ObservedWorkspaceProject[],
-      defaults: Readonly<Partial<Record<string, string>>> | undefined,
-      isCurrent: () => boolean,
-    ): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        if (account.signedIn()) return;
-        for (const providerId of staleWorkspaceProjectDefaults(projects, defaults)) {
-          if (!isCurrent()) return;
-          const expected = defaults?.[providerId];
-          if (expected === undefined) continue;
-          const outcome = yield* Effect.result(
-            settings.store.clearEntryIfUnchanged(
-              APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-              providerId,
-              expected,
-            ),
-          );
-          if (Result.isFailure(outcome)) return;
-          const saved = outcome.success;
-          if (!saved.cleared) continue;
-          if (!isCurrent()) return;
-          settings.emitSettingsSnapshot(saved.settings);
-        }
-      });
+  const broadcastWorkspaceProjects: Effect.Effect<void> = Effect.gen(function* () {
+    const generation = ++workspaceProjectsBroadcastGeneration;
+    const offeredProjects = offeredWorkspaceProjects();
+    const defaults = (yield* readWorkspaceDefaultsEffect).defaultProjectIds;
+    if (generation !== workspaceProjectsBroadcastGeneration) return;
+    yield* pruneWorkspaceProjectDefaultsEffect(
+      offeredProjects,
+      defaults,
+      () => generation === workspaceProjectsBroadcastGeneration,
+    );
+    if (generation !== workspaceProjectsBroadcastGeneration) return;
+    const projects = normalizeObservedWorkspaceProjects(offeredProjects, defaults);
+    const serialized = JSON.stringify(projects);
+    if (serialized === lastWorkspaceProjects) return;
+    lastWorkspaceProjects = serialized;
+    kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
+  });
 
-    const broadcastWorkspaceProjects: Effect.Effect<void> = Effect.gen(function* () {
-      const generation = ++workspaceProjectsBroadcastGeneration;
-      const offeredProjects = offeredWorkspaceProjects();
-      const defaults = (yield* readWorkspaceDefaultsEffect).defaultProjectIds;
-      if (generation !== workspaceProjectsBroadcastGeneration) return;
-      yield* pruneWorkspaceProjectDefaultsEffect(
-        offeredProjects,
-        defaults,
-        () => generation === workspaceProjectsBroadcastGeneration,
-      );
-      if (generation !== workspaceProjectsBroadcastGeneration) return;
-      const projects = normalizeObservedWorkspaceProjects(offeredProjects, defaults);
-      const serialized = JSON.stringify(projects);
-      if (serialized === lastWorkspaceProjects) return;
-      lastWorkspaceProjects = serialized;
-      kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
-    });
-
-    const rememberWorkspaceDefaultsEffect = (
+  const rememberWorkspaceDefaultsEffect = /* @__PURE__ */ Effect.fnUntraced(
+    function* (
       providerId: CloudAgentProviderId,
       providerProjectId: string,
       namedSelection: WorkspaceAgentSelection | undefined,
-    ): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        let accountPreferencesTouched = false;
-        if (
-          (yield* settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) ===
-          undefined
-        ) {
-          const saved = yield* settings.store.set(
-            APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-            providerId,
-          );
-          settings.emitSettingsSnapshot(saved.settings);
-          accountPreferencesTouched = true;
-        }
-        if (
-          (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
-            providerId
-          ] === undefined
-        ) {
-          const saved = yield* settings.store.setEntry(
-            APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-            providerId,
-            workspaceProjectSelectionId({ providerProjectId }),
-          );
-          settings.emitSettingsSnapshot(saved.settings);
-          accountPreferencesTouched = true;
-        }
-        if (
-          namedSelection !== undefined &&
-          (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-            providerId
-          ] === undefined
-        ) {
-          const saved = yield* settings.store.setEntry(
-            APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-            providerId,
-            namedSelection,
-          );
-          settings.emitSettingsSnapshot(saved.settings);
-          accountPreferencesTouched = true;
-        }
-        if (accountPreferencesTouched) settings.pushAccountPreferences();
-      }).pipe(
-        // The reply is the creation's; a failed remember has no line in it,
-        // exactly as the try/catch this replaced swallowed every step's own.
-        Effect.catch(() => Effect.void),
-      );
-
-    function openCreatedWorkspaces(sessions: readonly Session[]): void {
-      for (const created of createdWorkspaceOpens.claim(sessions, now())) {
-        const link = created.detail.link;
-        if (!link) continue;
-        kernel.openExternalThroughNode(link).catch((error: Error) => {
-          report(`Created workspace could not be opened: ${error.message}`);
-        });
+    ) {
+      let accountPreferencesTouched = false;
+      if (
+        (yield* settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
+      ) {
+        const saved = yield* settings.store.set(
+          APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
+          providerId,
+        );
+        settings.emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
-    }
-
-    const sessionActions = createSessionActionPerformer({
-      sessionRegistry,
-      openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
-      actions: actionClient,
-      refreshSessions: pokeRefresh,
-      sendsNetwork: runMode.sendsNetwork,
-      settingsStore: settings.store,
-      rememberWorkspaceDefaults: rememberWorkspaceDefaultsEffect,
-      expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
-      openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
-      recordProductEvent: settings.recordProductEvent,
-    });
-
-    const transcripts = hostedTranscriptReads({
-      client: messagesClient,
-      session: (identity) => sessionRegistry.get(identity),
-    });
-
-    // A row's own send or press is admitted where its roster is: the service
-    // admits it against the stored snapshot the row was drawn from, the same
-    // observation and not a second one read here, so a control the provider
-    // withdrew since the last pass is refused there rather than carried on the
-    // row's stale picture of it.
-    const rowActions = createSessionRowActions({
-      drawn: actableSessions,
-      client: actionClient,
-      refresh: pokeRefresh,
-      recordProductEvent: settings.recordProductEvent,
-    });
-
-    const loop = new ObservationLoop({
-      gate: observationGate,
-      intervalMs: SESSION_REFRESH_INTERVAL_MS,
-      // The projects are drawn before the roster, so the broadcast the roster's
-      // commit fires already reads the list the same pass listed.
-      run: (generation) =>
-        Effect.provide(
-          Effect.gen(function* () {
-            const isCurrent = () => loop.isCurrent(generation);
-            const projects = yield* drawSnapshotProjects({
-              client: rosterClient,
-              isCurrent,
-              report,
-            });
-            if (projects) heldWorkspaceProjects = projects;
-            yield* drawSnapshotRoster({
-              client: rosterClient,
-              registry: sessionRegistry,
-              isCurrent,
-              report,
-            });
-            // The roster's own subscriber only broadcasts sessions; the
-            // projects broadcast the same pass earns is yielded here, on the
-            // pass's own fiber, rather than forked from that plain callback.
-            // Gated the same way `drawSnapshotRoster` gates its own write, so
-            // a pass a newer one superseded broadcasts nothing stale.
-            if (isCurrent()) yield* broadcastWorkspaceProjects;
-          }),
-          FetchHttpClient.layer,
-        ),
-      afterRun: () => Effect.flatMap(late.value, (links) => links.rosterLook()),
-    });
-
-    /**
-     * The roster keeps every observation whole, and the adapters age out and cap
-     * nothing, so this one gate is where a session that settled long ago stops
-     * being a row. Every client-facing read passes through it: the broadcast,
-     * the bootstrap and roster method, and the sessions an action may name, so
-     * the panel, the voice, and admission see one roster. The pass announces
-     * every run whether or not anything moved, so a session that crosses its
-     * horizon between observations leaves on the next broadcast.
-     */
-    function relevantSessions(sessions: readonly Session[]): readonly Session[] {
-      return rosterRelevantSessions(sessions, now());
-    }
-
-    function broadcastSessions(sessions: readonly Session[]): void {
-      rosterBroadcast = true;
-      emitSessions(relevantSessions(sessions));
-    }
-
-    /**
-     * The one place the drawn roster leaves this composer, so every reader of
-     * it sees the same desk: the panel over the event, and the concerns that
-     * draw nothing over the listeners. The stop's empty roster travels here
-     * too — a voice session outlives the account gate closing, and one left
-     * holding the last desk it was told would keep offering agents that are
-     * no longer observed.
-     */
-    function emitSessions(drawn: readonly Session[]): void {
-      kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
-      for (const listener of rosterListeners) listener(drawn);
-    }
-
-    function countObservedSessions(sessions: readonly Session[]): void {
-      const counts = new Map<string, number>();
-      for (const session of sessions) {
-        counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
+      if (
+        (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
+          providerId
+        ] === undefined
+      ) {
+        const saved = yield* settings.store.setEntry(
+          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
+          providerId,
+          workspaceProjectSelectionId({ providerProjectId }),
+        );
+        settings.emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
-      for (const [providerId, count] of counts) {
-        if (!isProviderId(providerId)) continue;
-        settings.recordProductEventOncePerDay(PRODUCT_EVENT.SESSION_OBSERVE, providerId, {
-          provider_id: providerId,
-          session_count: productSessionCountBucket(count),
-        });
+      if (
+        namedSelection !== undefined &&
+        (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
+          providerId
+        ] === undefined
+      ) {
+        const saved = yield* settings.store.setEntry(
+          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
+          providerId,
+          namedSelection,
+        );
+        settings.emitSettingsSnapshot(saved.settings);
+        accountPreferencesTouched = true;
       }
-    }
+      if (accountPreferencesTouched) settings.pushAccountPreferences();
+    },
+    // The reply is the creation's; a failed remember has no line in it,
+    // exactly as the try/catch this replaced swallowed every step's own.
+    Effect.catch(() => Effect.void),
+  );
 
-    function startObservation(): void {
-      if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions)
-        return;
-      unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
-        broadcastSessions(sessions);
-        openCreatedWorkspaces(sessions);
-        countObservedSessions(sessions);
+  function openCreatedWorkspaces(sessions: readonly Session[]): void {
+    for (const created of createdWorkspaceOpens.claim(sessions, now())) {
+      const link = created.detail.link;
+      if (!link) continue;
+      kernel.openExternalThroughNode(link).catch((error: Error) => {
+        report(`Created workspace could not be opened: ${error.message}`);
       });
     }
+  }
 
-    function stopObservation(): void {
-      workspaceProjectsBroadcastGeneration += 1;
-      unsubscribeSessions?.();
-      unsubscribeSessions = undefined;
-      // The snapshot fills the roster one cloud provider at a time, so the stop
-      // empties it the same way.
-      for (const id of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
-        sessionRegistry.replaceProvider(PROVIDER_IDENTITY_BY_ID[id], []);
-      }
-      emitSessions([]);
-      kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
-      lastWorkspaceProjects = undefined;
-      heldWorkspaceProjects = [];
-    }
-
-    function actableSessions(): readonly Session[] {
-      return relevantSessions(sessionRegistry.list()).filter(
-        (session) => session.realtimeVoice !== true,
-      );
-    }
-
-    function rosterForClients(): readonly Session[] {
-      return runMode.observesProviders && account.capabilitiesActive()
-        ? relevantSessions(sessionRegistry.list())
-        : [];
-    }
-
-    const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.SESSION_ROSTER]: () =>
-        Effect.sync(() => ({
-          sessions: carried(rosterForClients()),
-          settled: !runMode.observesProviders || rosterBroadcast,
-        })),
-      [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
-        const identity = params.identity;
-        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        return Effect.map(sessionActions.openSession(identity), (answer) => carried(answer));
-      },
-      [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
-        const identity = params.identity;
-        const applicationId = params.applicationId;
-        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
-          return invalid("applicationId is not one this build knows");
-        }
-        return Effect.map(
-          sessionActions.openSessionApplication(identity, applicationId),
-          (answer) => carried(answer),
-        );
-      },
-      [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
-        const identity = params.identity;
-        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        return Effect.map(sessionActions.openSessionChange(identity), (answer) => carried(answer));
-      },
-      [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
-        const identity = params.identity;
-        const text = params.text;
-        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        if (!isWireString(text)) return invalid("text must be a string");
-        return Effect.map(rowActions.sendMessage(identity, text), (answer) => carried(answer));
-      },
-      [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: (params) => {
-        const identity = params.identity;
-        const controlId = params.controlId;
-        if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-        if (!isWireString(controlId)) return invalid("controlId must be a string");
-        return Effect.map(rowActions.executeControl(identity, controlId), (answer) =>
-          carried(answer),
-        );
-      },
-      [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>
-        Effect.gen(function* () {
-          if (!account.capabilitiesActive()) return { projects: carried([]) };
-          const defaults = yield* Effect.orDie(
-            settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
-          );
-          return {
-            projects: carried(
-              normalizeObservedWorkspaceProjects(offeredWorkspaceProjects(), defaults),
-            ),
-          };
-        }),
-    };
-
-    return {
-      methods,
-      loop,
-      sessionActions,
-      transcripts,
-      session: (identity) => sessionRegistry.get(identity),
-      observedSessionCount: () => actableSessions().length,
-      rosterForClients,
-      onRosterChange: (listener) => {
-        rosterListeners.push(listener);
-      },
-      rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
-      offeredWorkspaceProjects,
-      workspaceProjectOffered,
-      broadcastWorkspaceProjects,
-      actableSessions,
-      roster: () => {
-        const at = now();
-        const sessions = actableSessions();
-        return {
-          text: sessionContextText(sessions, at),
-          identities: sessions.map((session) => ({
-            providerId: session.providerId,
-            providerSessionId: session.providerSessionId,
-          })),
-          sessions,
-        };
-      },
-      workspaceProjects: brainWorkspaceProjects,
-      workspaceDefaults: readWorkspaceDefaultsEffect,
-      heldWorkspaceDefaults: () => brainWorkspaceDefaults,
-      startObservation,
-      stopObservation,
-      link: (next) => Effect.asVoid(late.set(next)),
-      lifetime: Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          unsubscribeSessions?.();
-          unsubscribeSessions = undefined;
-        }),
-      ),
-    };
+  const sessionActions = createSessionActionPerformer({
+    sessionRegistry,
+    openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
+    actions: actionClient,
+    refreshSessions: pokeRefresh,
+    sendsNetwork: runMode.sendsNetwork,
+    settingsStore: settings.store,
+    rememberWorkspaceDefaults: rememberWorkspaceDefaultsEffect,
+    expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
+    openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
+    recordProductEvent: settings.recordProductEvent,
   });
+
+  const transcripts = hostedTranscriptReads({
+    client: messagesClient,
+    session: (identity) => sessionRegistry.get(identity),
+  });
+
+  // A row's own send or press is admitted where its roster is: the service
+  // admits it against the stored snapshot the row was drawn from, the same
+  // observation and not a second one read here, so a control the provider
+  // withdrew since the last pass is refused there rather than carried on the
+  // row's stale picture of it.
+  const rowActions = createSessionRowActions({
+    drawn: actableSessions,
+    client: actionClient,
+    refresh: pokeRefresh,
+    recordProductEvent: settings.recordProductEvent,
+  });
+
+  const loop = new ObservationLoop({
+    gate: observationGate,
+    intervalMs: SESSION_REFRESH_INTERVAL_MS,
+    // The projects are drawn before the roster, so the broadcast the roster's
+    // commit fires already reads the list the same pass listed.
+    run: (generation) =>
+      Effect.provide(
+        Effect.gen(function* () {
+          const isCurrent = () => loop.isCurrent(generation);
+          const projects = yield* drawSnapshotProjects({
+            client: rosterClient,
+            isCurrent,
+            report,
+          });
+          if (projects) heldWorkspaceProjects = projects;
+          yield* drawSnapshotRoster({
+            client: rosterClient,
+            registry: sessionRegistry,
+            isCurrent,
+            report,
+          });
+          // The roster's own subscriber only broadcasts sessions; the
+          // projects broadcast the same pass earns is yielded here, on the
+          // pass's own fiber, rather than forked from that plain callback.
+          // Gated the same way `drawSnapshotRoster` gates its own write, so
+          // a pass a newer one superseded broadcasts nothing stale.
+          if (isCurrent()) yield* broadcastWorkspaceProjects;
+        }),
+        FetchHttpClient.layer,
+      ),
+    afterRun: () => Effect.flatMap(late.value, (links) => links.rosterLook()),
+  });
+
+  /**
+   * The roster keeps every observation whole, and the adapters age out and cap
+   * nothing, so this one gate is where a session that settled long ago stops
+   * being a row. Every client-facing read passes through it: the broadcast,
+   * the bootstrap and roster method, and the sessions an action may name, so
+   * the panel, the voice, and admission see one roster. The pass announces
+   * every run whether or not anything moved, so a session that crosses its
+   * horizon between observations leaves on the next broadcast.
+   */
+  function relevantSessions(sessions: readonly Session[]): readonly Session[] {
+    return rosterRelevantSessions(sessions, now());
+  }
+
+  function broadcastSessions(sessions: readonly Session[]): void {
+    rosterBroadcast = true;
+    emitSessions(relevantSessions(sessions));
+  }
+
+  /**
+   * The one place the drawn roster leaves this composer, so every reader of
+   * it sees the same desk: the panel over the event, and the concerns that
+   * draw nothing over the listeners. The stop's empty roster travels here
+   * too — a voice session outlives the account gate closing, and one left
+   * holding the last desk it was told would keep offering agents that are
+   * no longer observed.
+   */
+  function emitSessions(drawn: readonly Session[]): void {
+    kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
+    for (const listener of rosterListeners) listener(drawn);
+  }
+
+  function countObservedSessions(sessions: readonly Session[]): void {
+    const counts = new Map<string, number>();
+    for (const session of sessions) {
+      counts.set(session.providerId, (counts.get(session.providerId) ?? 0) + 1);
+    }
+    for (const [providerId, count] of counts) {
+      if (!isProviderId(providerId)) continue;
+      settings.recordProductEventOncePerDay(PRODUCT_EVENT.SESSION_OBSERVE, providerId, {
+        provider_id: providerId,
+        session_count: productSessionCountBucket(count),
+      });
+    }
+  }
+
+  function startObservation(): void {
+    if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions) return;
+    unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
+      broadcastSessions(sessions);
+      openCreatedWorkspaces(sessions);
+      countObservedSessions(sessions);
+    });
+  }
+
+  function stopObservation(): void {
+    workspaceProjectsBroadcastGeneration += 1;
+    unsubscribeSessions?.();
+    unsubscribeSessions = undefined;
+    // The snapshot fills the roster one cloud provider at a time, so the stop
+    // empties it the same way.
+    for (const id of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
+      sessionRegistry.replaceProvider(PROVIDER_IDENTITY_BY_ID[id], []);
+    }
+    emitSessions([]);
+    kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: [] });
+    lastWorkspaceProjects = undefined;
+    heldWorkspaceProjects = [];
+  }
+
+  function actableSessions(): readonly Session[] {
+    return relevantSessions(sessionRegistry.list()).filter(
+      (session) => session.realtimeVoice !== true,
+    );
+  }
+
+  function rosterForClients(): readonly Session[] {
+    return runMode.observesProviders && account.capabilitiesActive()
+      ? relevantSessions(sessionRegistry.list())
+      : [];
+  }
+
+  const methods: GatewayMethodTable = {
+    [GATEWAY_METHOD.SESSION_ROSTER]: () =>
+      Effect.sync(() => ({
+        sessions: carried(rosterForClients()),
+        settled: !runMode.observesProviders || rosterBroadcast,
+      })),
+    [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
+      const identity = params.identity;
+      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+      return Effect.map(sessionActions.openSession(identity), (answer) => carried(answer));
+    },
+    [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
+      const identity = params.identity;
+      const applicationId = params.applicationId;
+      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+      if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
+        return invalid("applicationId is not one this build knows");
+      }
+      return Effect.map(sessionActions.openSessionApplication(identity, applicationId), (answer) =>
+        carried(answer),
+      );
+    },
+    [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
+      const identity = params.identity;
+      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+      return Effect.map(sessionActions.openSessionChange(identity), (answer) => carried(answer));
+    },
+    [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
+      const identity = params.identity;
+      const text = params.text;
+      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+      if (!isWireString(text)) return invalid("text must be a string");
+      return Effect.map(rowActions.sendMessage(identity, text), (answer) => carried(answer));
+    },
+    [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: (params) => {
+      const identity = params.identity;
+      const controlId = params.controlId;
+      if (!isSessionIdentity(identity)) return invalid("identity must name a session");
+      if (!isWireString(controlId)) return invalid("controlId must be a string");
+      return Effect.map(rowActions.executeControl(identity, controlId), (answer) =>
+        carried(answer),
+      );
+    },
+    [GATEWAY_METHOD.WORKSPACE_PROJECTS]: () =>
+      Effect.gen(function* () {
+        if (!account.capabilitiesActive()) return { projects: carried([]) };
+        const defaults = yield* Effect.orDie(
+          settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+        );
+        return {
+          projects: carried(
+            normalizeObservedWorkspaceProjects(offeredWorkspaceProjects(), defaults),
+          ),
+        };
+      }),
+  };
+
+  return {
+    methods,
+    loop,
+    sessionActions,
+    transcripts,
+    session: (identity) => sessionRegistry.get(identity),
+    observedSessionCount: () => actableSessions().length,
+    rosterForClients,
+    onRosterChange: (listener) => {
+      rosterListeners.push(listener);
+    },
+    rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
+    offeredWorkspaceProjects,
+    workspaceProjectOffered,
+    broadcastWorkspaceProjects,
+    actableSessions,
+    roster: () => {
+      const at = now();
+      const sessions = actableSessions();
+      return {
+        text: sessionContextText(sessions, at),
+        identities: sessions.map((session) => ({
+          providerId: session.providerId,
+          providerSessionId: session.providerSessionId,
+        })),
+        sessions,
+      };
+    },
+    workspaceProjects: brainWorkspaceProjects,
+    workspaceDefaults: readWorkspaceDefaultsEffect,
+    heldWorkspaceDefaults: () => brainWorkspaceDefaults,
+    startObservation,
+    stopObservation,
+    link: (next) => Effect.asVoid(late.set(next)),
+    lifetime: Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        unsubscribeSessions?.();
+        unsubscribeSessions = undefined;
+      }),
+    ),
+  };
+});

@@ -83,31 +83,28 @@ export interface ResourceReadOptions {
   store: Pick<HostedStore, "messages" | "events" | "turns" | "directory">;
 }
 
-/** What a read answers: an effect over the ambient client, run by the store route's own edge. */
-type ReadEffect<A> = Effect.Effect<A, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient>;
-
 type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | Response;
 
 /** The gate every read shares, in the hosted order: method, bearer, brake. */
-function readGate(options: ResourceReadOptions): Effect.Effect<ReadGate> {
-  return Effect.gen(function* () {
-    const { request, resolveUserId } = options;
-    if (request.method !== "GET") {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
-    }
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
-    if (!(yield* readBrake.check(userId))) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-    }
-    return { userId, query: new URL(request.url).searchParams };
-  });
-}
+const readGate = /* @__PURE__ */ Effect.fnUntraced(function* (
+  options: ResourceReadOptions,
+): Effect.fn.Return<ReadGate> {
+  const { request, resolveUserId } = options;
+  if (request.method !== "GET") {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    );
+  }
+  const userId = yield* resolveUserId(request);
+  if (!userId) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+  if (!(yield* readBrake.check(userId))) {
+    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+  }
+  return { userId, query: new URL(request.url).searchParams };
+});
 
 interface ReadPage<Cursor> {
   readonly after: Cursor | undefined;
@@ -248,7 +245,7 @@ interface SequenceRowReading<Row> {
  * so a read that cut them all is one whose window they fall outside of, for
  * good.
  */
-function walkSequences<Row, Failure>(
+const walkSequences = /* @__PURE__ */ Effect.fnUntraced(function* <Row, Failure>(
   standing: readonly StandingConversation[],
   page: ReadPage<SequenceReadCursor>,
   headOf: (conversation: StandingConversation) => SequenceHead,
@@ -258,67 +255,65 @@ function walkSequences<Row, Failure>(
     limit: number,
   ) => Effect.Effect<readonly Row[], Failure, SqlClient.SqlClient>,
   reading: SequenceRowReading<Row>,
-): Effect.Effect<SequenceWalk<Row>, Failure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const positions = new Map(
-      (page.after?.positions ?? []).map((position) => [position.conversationId, position]),
-    );
-    const next: SequencePosition[] = [];
-    const taken: TakenRows<Row>[] = [];
-    let remaining = page.limit;
-    let hasMore = false;
-    const at = (conversationId: string, seq: number, revision: number | undefined) => {
-      next.push({ conversationId, seq, ...(revision === undefined ? undefined : { revision }) });
-    };
-    for (const conversation of standing) {
-      const head = headOf(conversation);
-      const position = positions.get(conversation.id);
-      const from = position?.seq ?? 0;
-      const revision =
-        head.revision === undefined ? undefined : (position?.revision ?? head.revision);
-      const behindInPlace = head.revision !== undefined && (revision ?? 0) < head.revision;
-      if (from >= head.seq && !behindInPlace) {
-        at(conversation.id, from, head.revision);
-        continue;
-      }
-      if (remaining === 0) {
-        at(conversation.id, from, revision);
-        hasMore = true;
-        continue;
-      }
-      const fetched = yield* read(
-        conversation,
-        { seq: from, ...(revision === undefined ? undefined : { revision }) },
-        remaining,
-      );
-      const last = fetched.at(-1);
-      remaining -= fetched.length;
-      taken.push({ conversation, rows: fetched });
-      if (last === undefined) {
-        at(conversation.id, head.seq, head.revision);
-        continue;
-      }
-      const lastSeq = reading.seqOf(last);
-      const full = remaining === 0;
-      // The rows written in place stand at or before the position and come
-      // first, in the order they were written, so a full page ending among
-      // them may have more of them behind it whatever their sequence: it
-      // keeps the position, names the last revision it took, and says more
-      // stands. A page that reached the rows past the position took every
-      // row written in place with it and stands at the head's revision; it
-      // says more stands only while rows stand between it and the head.
-      const endedAmongWritten = lastSeq <= from;
-      if (full && endedAmongWritten) {
-        hasMore = true;
-        at(conversation.id, from, reading.revisionOf?.(last) ?? revision);
-        continue;
-      }
-      if (full && lastSeq < head.seq) hasMore = true;
-      at(conversation.id, Math.max(from, lastSeq), head.revision);
+): Effect.fn.Return<SequenceWalk<Row>, Failure, SqlClient.SqlClient> {
+  const positions = new Map(
+    (page.after?.positions ?? []).map((position) => [position.conversationId, position]),
+  );
+  const next: SequencePosition[] = [];
+  const taken: TakenRows<Row>[] = [];
+  let remaining = page.limit;
+  let hasMore = false;
+  const at = (conversationId: string, seq: number, revision: number | undefined) => {
+    next.push({ conversationId, seq, ...(revision === undefined ? undefined : { revision }) });
+  };
+  for (const conversation of standing) {
+    const head = headOf(conversation);
+    const position = positions.get(conversation.id);
+    const from = position?.seq ?? 0;
+    const revision =
+      head.revision === undefined ? undefined : (position?.revision ?? head.revision);
+    const behindInPlace = head.revision !== undefined && (revision ?? 0) < head.revision;
+    if (from >= head.seq && !behindInPlace) {
+      at(conversation.id, from, head.revision);
+      continue;
     }
-    return { taken, next: encodeSequenceReadCursor(next), hasMore };
-  });
-}
+    if (remaining === 0) {
+      at(conversation.id, from, revision);
+      hasMore = true;
+      continue;
+    }
+    const fetched = yield* read(
+      conversation,
+      { seq: from, ...(revision === undefined ? undefined : { revision }) },
+      remaining,
+    );
+    const last = fetched.at(-1);
+    remaining -= fetched.length;
+    taken.push({ conversation, rows: fetched });
+    if (last === undefined) {
+      at(conversation.id, head.seq, head.revision);
+      continue;
+    }
+    const lastSeq = reading.seqOf(last);
+    const full = remaining === 0;
+    // The rows written in place stand at or before the position and come
+    // first, in the order they were written, so a full page ending among
+    // them may have more of them behind it whatever their sequence: it
+    // keeps the position, names the last revision it took, and says more
+    // stands. A page that reached the rows past the position took every
+    // row written in place with it and stands at the head's revision; it
+    // says more stands only while rows stand between it and the head.
+    const endedAmongWritten = lastSeq <= from;
+    if (full && endedAmongWritten) {
+      hasMore = true;
+      at(conversation.id, from, reading.revisionOf?.(last) ?? revision);
+      continue;
+    }
+    if (full && lastSeq < head.seq) hasMore = true;
+    at(conversation.id, Math.max(from, lastSeq), head.revision);
+  }
+  return { taken, next: encodeSequenceReadCursor(next), hasMore };
+});
 
 /**
  * A stored message as the view reads it. A row no turn owns stands in a
@@ -380,8 +375,10 @@ type ServerMessagesAnswer = Omit<ConversationMessagesAnswer, "groups"> & {
 };
 
 /** GET: the view over the page's rows, grouped by turn, with the cursor to read on from. */
-export function handleConversationMessages(options: ResourceReadOptions): ReadEffect<Response> {
-  return Effect.gen(function* () {
+export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConversationMessages")(
+  function* (
+    options: ResourceReadOptions,
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
     const gate = yield* readGate(options);
     if (gate instanceof Response) return gate;
     const { userId, query } = gate;
@@ -482,8 +479,8 @@ export function handleConversationMessages(options: ResourceReadOptions): ReadEf
       hasMore: walk.hasMore,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  },
+);
 
 function readEvent(event: StoredEventRecord): ConversationReadEvent {
   return {
@@ -500,8 +497,10 @@ function readEvent(event: StoredEventRecord): ConversationReadEvent {
 }
 
 /** GET: the events about the view's conversations' messages, each conversation's in its own sequence. */
-export function handleConversationEvents(options: ResourceReadOptions): ReadEffect<Response> {
-  return Effect.gen(function* () {
+export const handleConversationEvents = /* @__PURE__ */ Effect.fn("handleConversationEvents")(
+  function* (
+    options: ResourceReadOptions,
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
     const gate = yield* readGate(options);
     if (gate instanceof Response) return gate;
     const { userId, query } = gate;
@@ -526,8 +525,8 @@ export function handleConversationEvents(options: ResourceReadOptions): ReadEffe
       hasMore: walk.hasMore,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  },
+);
 
 function readTurn(turn: StoredTurnRecord): BrainTurnRecord {
   return {
@@ -543,29 +542,29 @@ function readTurn(turn: StoredTurnRecord): BrainTurnRecord {
 }
 
 /** GET: the account's turns past the cursor in the order they last changed, so a turn is answered again when a stamp on it moves. */
-export function handleBrainTurns(options: ResourceReadOptions): ReadEffect<Response> {
-  return Effect.gen(function* () {
-    const gate = yield* readGate(options);
-    if (gate instanceof Response) return gate;
-    const { userId, query } = gate;
-    const page = readPage<TurnReadCursor>(query, turnReadCursorSchema);
-    if (!page) return invalidRequest();
-    const { store } = options;
+export const handleBrainTurns = /* @__PURE__ */ Effect.fn("handleBrainTurns")(function* (
+  options: ResourceReadOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const gate = yield* readGate(options);
+  if (gate instanceof Response) return gate;
+  const { userId, query } = gate;
+  const page = readPage<TurnReadCursor>(query, turnReadCursorSchema);
+  if (!page) return invalidRequest();
+  const { store } = options;
 
-    const rows = yield* store.turns.list(userId, { after: page.after, limit: page.limit });
-    // An empty page moves the cursor back to the last turn at or before it: a cursor can name a turn
-    // a Clear has since taken, behind which the remaining turns all stand earlier, and echoing it
-    // would leave the device asking the same empty page forever. Read after the page, and never past
-    // the cursor, so a turn that landed meanwhile is answered by the next read rather than jumped.
-    const last =
-      rows.at(-1)?.cursor ??
-      (page.after === undefined ? undefined : yield* store.turns.latest(userId, page.after));
-    const hasMore = rows.length === page.limit;
-    const answer: BrainTurnsAnswer = {
-      turns: rows.map(readTurn),
-      ...(last !== undefined ? { next: encodeTurnReadCursor(last) } : undefined),
-      hasMore,
-    };
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  const rows = yield* store.turns.list(userId, { after: page.after, limit: page.limit });
+  // An empty page moves the cursor back to the last turn at or before it: a cursor can name a turn
+  // a Clear has since taken, behind which the remaining turns all stand earlier, and echoing it
+  // would leave the device asking the same empty page forever. Read after the page, and never past
+  // the cursor, so a turn that landed meanwhile is answered by the next read rather than jumped.
+  const last =
+    rows.at(-1)?.cursor ??
+    (page.after === undefined ? undefined : yield* store.turns.latest(userId, page.after));
+  const hasMore = rows.length === page.limit;
+  const answer: BrainTurnsAnswer = {
+    turns: rows.map(readTurn),
+    ...(last !== undefined ? { next: encodeTurnReadCursor(last) } : undefined),
+    hasMore,
+  };
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});

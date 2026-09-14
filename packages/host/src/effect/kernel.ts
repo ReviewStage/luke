@@ -69,40 +69,35 @@ export const lateService = <A>(): Effect.Effect<LateService<A>> =>
  * the queue is plain state a synchronous callback reads and writes, held for
  * the kernel's own life rather than a scope's.
  *
- * The fork is marked interruptible on top of being a daemon: `kernelLayer`
- * builds inside `Layer.build`'s own `uninterruptibleMask`, and a fork made
- * from an uninterruptible region inherits that status forever, which no
- * `Fiber.interrupt` could then end. It is deliberately not tied to this
- * kernel's own scope — `Layer.effect` has none of its own — because the
- * `Deferred` it awaits settles at most once, ever: once the merge sets the
- * service, this fork drains what queued ahead of it and finishes on its
- * own. A build that never reaches the merge leaves it suspended holding
+ * The fork is a daemon, and deliberately not tied to this kernel's own scope —
+ * `Layer.effect` has none of its own — because the `Deferred` it awaits settles
+ * at most once, ever: once the merge sets the service, this fork drains what
+ * queued ahead of it and finishes on its own. A build that never reaches the merge leaves it suspended holding
  * the queue, which is bounded because the kernel is built exactly once per
  * process life; the one runtime edge disposing is what ends it then.
  */
-const kernelEmit = (service: LateService<GatewayService>): Effect.Effect<HostKernel["emit"]> =>
-  Effect.gen(function* () {
-    let standing: GatewayService | undefined;
-    const pending: Array<{ readonly kind: GatewayEventKind; readonly payload: WireValue }> = [];
+const kernelEmit = /* @__PURE__ */ Effect.fnUntraced(function* (
+  service: LateService<GatewayService>,
+): Effect.fn.Return<HostKernel["emit"]> {
+  let standing: GatewayService | undefined;
+  const pending: Array<{ readonly kind: GatewayEventKind; readonly payload: WireValue }> = [];
 
-    yield* Effect.forkDetach(
-      Effect.interruptible(
-        Effect.map(service.value, (resolved) => {
-          standing = resolved;
-          for (const queued of pending) resolved.emit(queued.kind, queued.payload);
-          pending.length = 0;
-        }),
-      ),
-    );
+  yield* Effect.forkDetach(
+    Effect.map(service.value, (resolved) => {
+      standing = resolved;
+      for (const queued of pending) resolved.emit(queued.kind, queued.payload);
+      pending.length = 0;
+    }),
+  );
 
-    return (kind, payload) => {
-      if (standing) {
-        standing.emit(kind, payload);
-      } else {
-        pending.push({ kind, payload });
-      }
-    };
-  });
+  return (kind, payload) => {
+    if (standing) {
+      standing.emit(kind, payload);
+    } else {
+      pending.push({ kind, payload });
+    }
+  };
+});
 
 /** The service the merge composes, awaited by every concern that reads it. */
 export class HostService extends Context.Service<HostService, LateService<GatewayService>>()(

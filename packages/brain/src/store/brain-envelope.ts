@@ -220,10 +220,8 @@ const journalRowsOf = SqlSchema.findAll({
  * token a writer names to replace it, so an unreadable generation can be
  * repaired by the store that loaded it and by nothing that did not.
  */
-export const loadBrainEnvelopeEffect = (
-  key: SessionKey,
-): Effect.Effect<EnvelopeRead, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const loadBrainEnvelopeEffect = /* @__PURE__ */ Effect.fn("loadBrainEnvelopeEffect")(
+  function* (key: SessionKey): Effect.fn.Return<EnvelopeRead, SqlError, Client.SqlClient> {
     const session = yield* standingGenerationEffect(key);
     if (!session) return {};
     const generation = session.sessionId;
@@ -266,7 +264,8 @@ export const loadBrainEnvelopeEffect = (
     } satisfies WireRecord;
     const state = brainPersistedStateFromWire(wire);
     return state ? { state, generation } : { unreadable: true, generation };
-  });
+  },
+);
 
 /**
  * Makes the envelope given the one that stands, if the save's generation is
@@ -344,31 +343,30 @@ export const saveBrainEnvelopeEffect = (
     ),
   );
 
-const replaceGeneration = (
+const replaceGeneration = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: SessionKey,
   state: BrainPersistedState,
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    yield* sql`DELETE FROM conversation_sessions WHERE session_key = ${key}`;
-    yield* sql`INSERT INTO conversation_sessions
-                 (session_id, session_key, created_at, expires_at, reset_cleared_at,
-                  reset_generation_id, checkpoint_format, compaction_count)
-               VALUES (${state.generationId}, ${key}, ${state.createdAt}, ${state.expiresAt},
-                       ${state.reset?.clearedAt ?? null}, ${state.reset?.generationId ?? null},
-                       ${state.checkpointFormat ?? null}, ${state.compactionCount})`;
-    if (state.reset) yield* raiseConversationCutoffEffect(key, state.reset.clearedAt);
-    yield* insertItems(state.generationId, state.items, 0);
-    yield* insertCursors(state.generationId, state.cursors);
-    yield* insertCaptureCursors(state.generationId, state.captureCursors);
-    yield* insertInbox(state.generationId, state.inbox);
-    yield* Effect.forEach(state.requests, (record, ordinal) =>
-      upsertRequest(state.generationId, ordinal, record),
-    );
-    yield* Effect.forEach(state.journal, (entry, ordinal) =>
-      upsertJournal(state.generationId, ordinal, entry),
-    );
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  yield* sql`DELETE FROM conversation_sessions WHERE session_key = ${key}`;
+  yield* sql`INSERT INTO conversation_sessions
+               (session_id, session_key, created_at, expires_at, reset_cleared_at,
+                reset_generation_id, checkpoint_format, compaction_count)
+             VALUES (${state.generationId}, ${key}, ${state.createdAt}, ${state.expiresAt},
+                     ${state.reset?.clearedAt ?? null}, ${state.reset?.generationId ?? null},
+                     ${state.checkpointFormat ?? null}, ${state.compactionCount})`;
+  if (state.reset) yield* raiseConversationCutoffEffect(key, state.reset.clearedAt);
+  yield* insertItems(state.generationId, state.items, 0);
+  yield* insertCursors(state.generationId, state.cursors);
+  yield* insertCaptureCursors(state.generationId, state.captureCursors);
+  yield* insertInbox(state.generationId, state.inbox);
+  yield* Effect.forEach(state.requests, (record, ordinal) =>
+    upsertRequest(state.generationId, ordinal, record),
+  );
+  yield* Effect.forEach(state.journal, (entry, ordinal) =>
+    upsertJournal(state.generationId, ordinal, entry),
+  );
+});
 
 const insertItems = (
   sessionId: string,

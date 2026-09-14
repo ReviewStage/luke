@@ -362,19 +362,17 @@ type Located =
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
 /** The offer on one of the account's messages as it stands now, or why there is none to move. */
-function locate(
+const locate = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   messageId: string,
-): Effect.Effect<Located, SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const conversation = yield* findMessageConversation({ userId, messageId });
-    if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    const events = yield* speechEventsOf([messageId]);
-    const standing = speechStandingOf(events.get(messageId) ?? []);
-    if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
-    return { ok: true, conversationId: conversation.value.conversationId, standing };
-  });
-}
+): Effect.fn.Return<Located, SpeechReadFailure, SqlClient.SqlClient> {
+  const conversation = yield* findMessageConversation({ userId, messageId });
+  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  const events = yield* speechEventsOf([messageId]);
+  const standing = speechStandingOf(events.get(messageId) ?? []);
+  if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
+  return { ok: true, conversationId: conversation.value.conversationId, standing };
+});
 
 /**
  * One transition an offer may take: the event it writes, the states it may
@@ -458,46 +456,44 @@ type Moved =
     }
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
-function move(
+const move = /* @__PURE__ */ Effect.fnUntraced(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   { transition, deviceId, payload, guard }: Move,
-): SpeechEffect<Moved> {
-  return Effect.gen(function* () {
-    const located = yield* locate(userId, messageId);
-    if (!located.ok) return located;
-    const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
-    if (refusal !== undefined) return { ok: false, refusal };
-    const written = yield* store.writer.recordEvent(
-      { userId, conversationId: located.conversationId },
-      {
-        messageId,
-        kind: transition.kind,
-        ...(deviceId !== undefined ? { deviceId } : undefined),
-        ...(payload !== undefined ? { payload: unparsedWire(payload) } : undefined),
-        unless: transition.unless,
-      },
-    );
-    if (written.ok) return { ...written, conversationId: located.conversationId };
-    switch (written.refusal) {
-      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-        return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
-      case STORE_WRITE_REFUSAL.SUPERSEDED: {
-        const now = yield* locate(userId, messageId);
-        return {
-          ok: false,
-          refusal: now.ok
-            ? (transition.refusals[now.standing.state] ?? SPEECH_REFUSAL.SETTLED)
-            : now.refusal,
-        };
-      }
-      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-      case STORE_WRITE_REFUSAL.NO_MESSAGE:
-        return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+): Effect.fn.Return<Moved, SpeechReadFailure, SqlClient.SqlClient> {
+  const located = yield* locate(userId, messageId);
+  if (!located.ok) return located;
+  const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
+  if (refusal !== undefined) return { ok: false, refusal };
+  const written = yield* store.writer.recordEvent(
+    { userId, conversationId: located.conversationId },
+    {
+      messageId,
+      kind: transition.kind,
+      ...(deviceId !== undefined ? { deviceId } : undefined),
+      ...(payload !== undefined ? { payload: unparsedWire(payload) } : undefined),
+      unless: transition.unless,
+    },
+  );
+  if (written.ok) return { ...written, conversationId: located.conversationId };
+  switch (written.refusal) {
+    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+      return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
+    case STORE_WRITE_REFUSAL.SUPERSEDED: {
+      const now = yield* locate(userId, messageId);
+      return {
+        ok: false,
+        refusal: now.ok
+          ? (transition.refusals[now.standing.state] ?? SPEECH_REFUSAL.SETTLED)
+          : now.refusal,
+      };
     }
-  });
-}
+    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+    case STORE_WRITE_REFUSAL.NO_MESSAGE:
+      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  }
+});
 
 /**
  * Puts a briefing on offer on the message that announced it, expiring
@@ -505,44 +501,42 @@ function move(
  * is answered as it stands: the relay tells a settled call once, but the
  * event eve re-emits may reach it again.
  */
-export function offerSpeech(
+export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   now: number,
-): SpeechEffect<SpeechWriteResult> {
-  return Effect.gen(function* () {
-    const conversation = yield* findMessageConversation({ userId, messageId });
-    if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    const standing = yield* findOfferedEvent(messageId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, seq: standing.value.seq };
+): Effect.fn.Return<SpeechWriteResult, SpeechReadFailure, SqlClient.SqlClient> {
+  const conversation = yield* findMessageConversation({ userId, messageId });
+  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  const standing = yield* findOfferedEvent(messageId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, seq: standing.value.seq };
+  }
+  const written = yield* store.writer.recordEvent(
+    { userId, conversationId: conversation.value.conversationId },
+    {
+      messageId,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      payload: unparsedWire({ expiresAt: now + SPEECH_OFFER.TTL_MS }),
+      unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
+    },
+  );
+  if (written.ok) return written;
+  switch (written.refusal) {
+    case STORE_WRITE_REFUSAL.SUPERSEDED: {
+      // The same offer landed from another caller between the read and the lock; it is the one to answer.
+      const landed = yield* findOfferedEvent(messageId);
+      return Option.isNone(landed)
+        ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
+        : { ok: true, id: landed.value.id, seq: landed.value.seq };
     }
-    const written = yield* store.writer.recordEvent(
-      { userId, conversationId: conversation.value.conversationId },
-      {
-        messageId,
-        kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-        payload: unparsedWire({ expiresAt: now + SPEECH_OFFER.TTL_MS }),
-        unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
-      },
-    );
-    if (written.ok) return written;
-    switch (written.refusal) {
-      case STORE_WRITE_REFUSAL.SUPERSEDED: {
-        // The same offer landed from another caller between the read and the lock; it is the one to answer.
-        const landed = yield* findOfferedEvent(messageId);
-        return Option.isNone(landed)
-          ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
-          : { ok: true, id: landed.value.id, seq: landed.value.seq };
-      }
-      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-      case STORE_WRITE_REFUSAL.NO_MESSAGE:
-        return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    }
-  });
-}
+    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+    case STORE_WRITE_REFUSAL.NO_MESSAGE:
+      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  }
+});
 
 /**
  * One device takes the offer, while it is offered, not yet due, and not
@@ -550,30 +544,28 @@ export function offerSpeech(
  * re-reads the claim under the conversation's lock and answers the second
  * by name; the partial unique index stands behind that as the backstop.
  */
-export function claimSpeech(
+export const claimSpeech = /* @__PURE__ */ Effect.fn("claimSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   deviceId: string,
   now: number,
-): SpeechEffect<SpeechClaimResult> {
-  return Effect.gen(function* () {
-    const moved = yield* move(store, userId, messageId, {
-      transition: CLAIM,
-      deviceId,
-      guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
-    });
-    if (!moved.ok) return moved;
-    // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
-    const claim = {
-      userId,
-      conversationId: moved.conversationId,
-      messageId,
-      deviceId,
-    } as SpeechClaim;
-    return { ok: true, id: moved.id, seq: moved.seq, claim };
+): Effect.fn.Return<SpeechClaimResult, SpeechReadFailure, SqlClient.SqlClient> {
+  const moved = yield* move(store, userId, messageId, {
+    transition: CLAIM,
+    deviceId,
+    guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
   });
-}
+  if (!moved.ok) return moved;
+  // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
+  const claim = {
+    userId,
+    conversationId: moved.conversationId,
+    messageId,
+    deviceId,
+  } as SpeechClaim;
+  return { ok: true, id: moved.id, seq: moved.seq, claim };
+});
 
 /**
  * The device that claimed the offer reports it said, with the voice session
@@ -687,25 +679,23 @@ const findOfferedMessages = SqlSchema.findAll({
  * message — over standing conversations, oldest offer first, each folded to
  * how it stands now.
  */
-export function openSpeechOffers(
+export const openSpeechOffers = /* @__PURE__ */ Effect.fn("openSpeechOffers")(function* (
   query: OpenSpeechOffersQuery = {},
-): Effect.Effect<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const offered = yield* findOfferedMessages({
-      userId: query.userId ?? null,
-      userIds: query.userIds ?? null,
-      notUserIds: query.notUserIds ?? [],
-      limit: query.limit ?? OPEN_OFFERS.MAX,
-    });
-    // A message told its offer twice is one offer; the first row keeps its place.
-    const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
-    const speech = yield* speechEventsOf(distinct.map((row) => row.messageId));
-    return distinct.flatMap((row) => {
-      const standing = speechStandingOf(speech.get(row.messageId) ?? []);
-      return standing === undefined ? [] : [{ ...row, ...standing }];
-    });
+): Effect.fn.Return<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
+  const offered = yield* findOfferedMessages({
+    userId: query.userId ?? null,
+    userIds: query.userIds ?? null,
+    notUserIds: query.notUserIds ?? [],
+    limit: query.limit ?? OPEN_OFFERS.MAX,
   });
-}
+  // A message told its offer twice is one offer; the first row keeps its place.
+  const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
+  const speech = yield* speechEventsOf(distinct.map((row) => row.messageId));
+  return distinct.flatMap((row) => {
+    const standing = speechStandingOf(speech.get(row.messageId) ?? []);
+    return standing === undefined ? [] : [{ ...row, ...standing }];
+  });
+});
 
 /** What one sweep did, as counts. */
 export interface SpeechSweepOutcome {
@@ -813,54 +803,52 @@ function sweepWrite(
  * one read over every other account, held offers of quiet accounts left
  * out, releases and expires.
  */
-export function sweepSpeech(
+export const sweepSpeech = /* @__PURE__ */ Effect.fn("sweepSpeech")(function* (
   store: SpeechSweepStore,
   options: SpeechSweepOptions,
-): SpeechEffect<SpeechSweepOutcome> {
-  return Effect.gen(function* () {
-    const { now, limit, userIds } = options;
-    const quiet = yield* quietUntilByAccount(now, userIds);
-    const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
-    for (const [userId, quietUntil] of quiet) {
-      for (const offer of yield* openSpeechOffers({ userId, limit })) {
-        if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
-        if (yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
-          outcome.held += 1;
-        }
+): Effect.fn.Return<SpeechSweepOutcome, SpeechReadFailure, SqlClient.SqlClient> {
+  const { now, limit, userIds } = options;
+  const quiet = yield* quietUntilByAccount(now, userIds);
+  const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
+  for (const [userId, quietUntil] of quiet) {
+    for (const offer of yield* openSpeechOffers({ userId, limit })) {
+      if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
+      if (yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
+        outcome.held += 1;
       }
     }
-    const released = new Set<string>();
-    const unheld = yield* openSpeechOffers({
-      userIds,
-      notUserIds: [...quiet.keys()],
-      limit,
-    });
-    for (const offer of unheld) {
-      if (offer.state === SPEECH_STATE.HELD) {
-        const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
-          reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED,
-        });
-        if (!ended) continue;
-        outcome.released += 1;
-        if (released.has(offer.conversationId)) continue;
-        released.add(offer.conversationId);
-        const queued = yield* store.writer.enqueueTurn(
-          { userId: offer.userId, conversationId: offer.conversationId },
-          { origin: TURN_ORIGIN.HOLD_RELEASE },
-        );
-        if (queued.ok) outcome.turns += 1;
-        continue;
-      }
-      if (offer.expiresAt <= now) {
-        const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
-          reason: SPEECH_EXPIRY_REASON.DUE,
-        });
-        if (ended) outcome.expired += 1;
-      }
-    }
-    return outcome;
+  }
+  const released = new Set<string>();
+  const unheld = yield* openSpeechOffers({
+    userIds,
+    notUserIds: [...quiet.keys()],
+    limit,
   });
-}
+  for (const offer of unheld) {
+    if (offer.state === SPEECH_STATE.HELD) {
+      const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED,
+      });
+      if (!ended) continue;
+      outcome.released += 1;
+      if (released.has(offer.conversationId)) continue;
+      released.add(offer.conversationId);
+      const queued = yield* store.writer.enqueueTurn(
+        { userId: offer.userId, conversationId: offer.conversationId },
+        { origin: TURN_ORIGIN.HOLD_RELEASE },
+      );
+      if (queued.ok) outcome.turns += 1;
+      continue;
+    }
+    if (offer.expiresAt <= now) {
+      const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.DUE,
+      });
+      if (ended) outcome.expired += 1;
+    }
+  }
+  return outcome;
+});
 
 /** One briefing a hold released unspoken: the words the announce call carried, and when the brain decided them. */
 export interface ReleasedBriefing {
@@ -1123,37 +1111,35 @@ const findReleases = SqlSchema.findAll({
  * message since a settled offer takes no second transition — and never from
  * the words of anything else.
  */
-export function releasedBriefings(
+export const releasedBriefings = /* @__PURE__ */ Effect.fn("releasedBriefings")(function* (
   target: ConversationTarget,
   query: ReleasedBriefingsQuery,
-): Effect.Effect<readonly ReleasedBriefing[], SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const carried = yield* carriedBriefings(target);
-    const uncarried: ReleasedBriefing[] = [];
-    let afterSeq = 0;
-    while (uncarried.length < query.limit) {
-      const rows = yield* findReleases({
-        userId: target.userId,
-        conversationId: target.conversationId,
-        afterSeq,
-        limit: RELEASE_PAGE,
+): Effect.fn.Return<readonly ReleasedBriefing[], SpeechReadFailure, SqlClient.SqlClient> {
+  const carried = yield* carriedBriefings(target);
+  const uncarried: ReleasedBriefing[] = [];
+  let afterSeq = 0;
+  while (uncarried.length < query.limit) {
+    const rows = yield* findReleases({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      afterSeq,
+      limit: RELEASE_PAGE,
+    });
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      afterSeq = row.seq;
+      const briefing = briefingOf(row.parts);
+      if (briefing === undefined) continue;
+      if (carried.has(carriedKey(row.decidedAt.getTime(), briefing))) continue;
+      uncarried.push({
+        messageId: row.messageId,
+        briefing,
+        decidedAt: row.decidedAt.getTime(),
+        releasedAt: row.releasedAt.getTime(),
       });
-      if (rows.length === 0) break;
-      for (const row of rows) {
-        afterSeq = row.seq;
-        const briefing = briefingOf(row.parts);
-        if (briefing === undefined) continue;
-        if (carried.has(carriedKey(row.decidedAt.getTime(), briefing))) continue;
-        uncarried.push({
-          messageId: row.messageId,
-          briefing,
-          decidedAt: row.decidedAt.getTime(),
-          releasedAt: row.releasedAt.getTime(),
-        });
-        if (uncarried.length >= query.limit) break;
-      }
-      if (rows.length < RELEASE_PAGE) break;
+      if (uncarried.length >= query.limit) break;
     }
-    return uncarried;
-  });
-}
+    if (rows.length < RELEASE_PAGE) break;
+  }
+  return uncarried;
+});

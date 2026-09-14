@@ -1124,24 +1124,24 @@ function admitted(
  * counter fell behind it, and the counter moved past whichever was handed
  * out. The read of `max(seq)` is served by the unique index over the pair.
  */
-function allocateMessageSeq(context: WriterContext): Write<number> {
-  return Effect.gen(function* () {
-    const row = yield* allocateMessageSequence({
-      conversationId: context.target.conversationId,
-      now: context.now(),
-    });
-    const allocated = yield* required(row, "the conversation vanished under its own lock");
-    return allocated.next - 1;
+const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
+  const row = yield* allocateMessageSequence({
+    conversationId: context.target.conversationId,
+    now: context.now(),
   });
-}
+  const allocated = yield* required(row, "the conversation vanished under its own lock");
+  return allocated.next - 1;
+});
 
-function allocateEventSeq(context: WriterContext): Write<number> {
-  return Effect.gen(function* () {
-    const row = yield* allocateEventSequence(context.target.conversationId);
-    const allocated = yield* required(row, "the conversation vanished under its own lock");
-    return allocated.next - 1;
-  });
-}
+const allocateEventSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
+  const row = yield* allocateEventSequence(context.target.conversationId);
+  const allocated = yield* required(row, "the conversation vanished under its own lock");
+  return allocated.next - 1;
+});
 
 function turnRow(
   context: WriterContext,
@@ -1166,7 +1166,7 @@ interface InsertedMessage {
   readonly seq: number;
 }
 
-function insertMessage(
+const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: {
     clientId: string;
@@ -1174,27 +1174,25 @@ function insertMessage(
     message: StoredUIMessage;
     finishedAt: Date | undefined;
   },
-): Write<InsertedMessage> {
-  return Effect.gen(function* () {
-    const seq = yield* allocateMessageSeq(context);
-    const metadata: StoredMessageMetadata | undefined =
-      row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
-    const inserted = yield* insertMessageRow({
-      userId: context.target.userId,
-      conversationId: context.target.conversationId,
-      seq,
-      turnId: nullable(row.turnId),
-      clientId: row.clientId,
-      role: row.message.role,
-      parts: row.message.parts,
-      metadata: nullable(metadata),
-      createdAt: context.now(),
-      finishedAt: nullable(row.finishedAt),
-    });
-    const written = yield* required(inserted, "the message insert answered no row");
-    return { id: written.id, seq };
+): Effect.fn.Return<InsertedMessage, WriteFailure, SqlClient.SqlClient> {
+  const seq = yield* allocateMessageSeq(context);
+  const metadata: StoredMessageMetadata | undefined =
+    row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
+  const inserted = yield* insertMessageRow({
+    userId: context.target.userId,
+    conversationId: context.target.conversationId,
+    seq,
+    turnId: nullable(row.turnId),
+    clientId: row.clientId,
+    role: row.message.role,
+    parts: row.message.parts,
+    metadata: nullable(metadata),
+    createdAt: context.now(),
+    finishedAt: nullable(row.finishedAt),
   });
-}
+  const written = yield* required(inserted, "the message insert answered no row");
+  return { id: written.id, seq };
+});
 
 type Journal =
   | { readonly ok: true; readonly row: MessageRow }
@@ -1222,110 +1220,105 @@ function openTurn(
  * reports while the turn still runs, and closed by the turn's answer or its
  * end. A turn that has ended opens no journal after the fact.
  */
-function journal(context: WriterContext, turnId: string): Write<Journal> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, turnId);
-    if (Option.isSome(standing)) return { ok: true, row: standing.value };
-    const closed = yield* openTurn(context, turnId);
-    if (closed !== undefined) return closed;
-    const { id } = yield* insertMessage(context, {
-      clientId: turnId,
-      turnId,
-      message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
-      finishedAt: undefined,
-    });
-    return { ok: true, row: { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null } };
+const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<Journal, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, turnId);
+  if (Option.isSome(standing)) return { ok: true, row: standing.value };
+  const closed = yield* openTurn(context, turnId);
+  if (closed !== undefined) return closed;
+  const { id } = yield* insertMessage(context, {
+    clientId: turnId,
+    turnId,
+    message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
+    finishedAt: undefined,
   });
-}
+  return { ok: true, row: { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null } };
+});
 
 /** Writes the journal's parts as they now stand, held to the vocabulary first. */
-function amendJournal(
+const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: MessageRow,
   parts: Parts,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const read = yield* admitted(context, {
-      id: row.id,
-      role: MESSAGE_ROLE.ASSISTANT,
-      metadata: BRAIN_AUTHORED,
-      parts,
-    });
-    if (!read.ok) return read;
-    yield* updateMessageParts({
-      id: row.id,
-      conversationId: context.target.conversationId,
-      parts: read.message.parts,
-    });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const read = yield* admitted(context, {
+    id: row.id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_AUTHORED,
+    parts,
   });
-}
+  if (!read.ok) return read;
+  yield* updateMessageParts({
+    id: row.id,
+    conversationId: context.target.conversationId,
+    parts: read.message.parts,
+  });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function turnStarted(
+const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, event.turnId);
-    const startedAt = new Date(event.at);
-    if (Option.isNone(standing)) {
-      yield* insertStartedTurn({
-        turnId: event.turnId,
-        userId: context.target.userId,
-        conversationId: context.target.conversationId,
-        origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
-        startedAt,
-      });
-      return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-    }
-    if (standing.value.status !== TURN_STATUS.QUEUED) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    yield* startTurn({ turnId: event.turnId, startedAt });
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, event.turnId);
+  const startedAt = new Date(event.at);
+  if (Option.isNone(standing)) {
+    yield* insertStartedTurn({
+      turnId: event.turnId,
+      userId: context.target.userId,
+      conversationId: context.target.conversationId,
+      origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
+      startedAt,
+    });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-  });
-}
+  }
+  if (standing.value.status !== TURN_STATUS.QUEUED) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  yield* startTurn({ turnId: event.turnId, startedAt });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function turnEnded(
+const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, event.turnId);
-    if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const settledAt = new Date(event.at);
-    const status = turnStatusOf(event.status);
-    // A failed turn names its failure word where the run had one, and the status
-    // it ended in otherwise, so a timed-out or interrupted turn still says which.
-    const failure = event.failure ?? (status === TURN_STATUS.FAILED ? event.status : undefined);
-    yield* settleTurn({
-      turnId: event.turnId,
-      status,
-      settledAt,
-      failure: nullable(failure),
-      usage: nullable(event.usage),
-      responseIds: event.responseIds,
-    });
-    const open = yield* messageByClientId(context, event.turnId);
-    if (Option.isSome(open) && open.value.finishedAt === null) {
-      const parts = open.value.parts.map((part) =>
-        isStoredToolPart(part) && !isSettledToolPartState(part.state)
-          ? unansweredToolPart(part, event.status)
-          : part,
-      );
-      yield* finishMessage({
-        id: open.value.id,
-        conversationId: context.target.conversationId,
-        parts,
-        finishedAt: settledAt,
-      });
-    }
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, event.turnId);
+  if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const settledAt = new Date(event.at);
+  const status = turnStatusOf(event.status);
+  // A failed turn names its failure word where the run had one, and the status
+  // it ended in otherwise, so a timed-out or interrupted turn still says which.
+  const failure = event.failure ?? (status === TURN_STATUS.FAILED ? event.status : undefined);
+  yield* settleTurn({
+    turnId: event.turnId,
+    status,
+    settledAt,
+    failure: nullable(failure),
+    usage: nullable(event.usage),
+    responseIds: event.responseIds,
   });
-}
+  const open = yield* messageByClientId(context, event.turnId);
+  if (Option.isSome(open) && open.value.finishedAt === null) {
+    const parts = open.value.parts.map((part) =>
+      isStoredToolPart(part) && !isSettledToolPartState(part.state)
+        ? unansweredToolPart(part, event.status)
+        : part,
+    );
+    yield* finishMessage({
+      id: open.value.id,
+      conversationId: context.target.conversationId,
+      parts,
+      finishedAt: settledAt,
+    });
+  }
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * A step joins the journal as the boundary before its parts. Steps are
@@ -1335,70 +1328,64 @@ function turnEnded(
  * dropped between. The turn's completed projection replaces the journal
  * whole, boundaries and all, when the turn answers.
  */
-function stepStarted(
+const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
-    if (held >= event.step) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
+  if (held >= event.step) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
+});
 
-function toolCallStarted(
+const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (toolPartOf(row.parts, event.callId) !== undefined) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [
-      ...row.parts,
-      pendingToolPart(event.name, event.callId, event.input),
-    ]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (toolPartOf(row.parts, event.callId) !== undefined) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [
+    ...row.parts,
+    pendingToolPart(event.name, event.callId, event.input),
+  ]);
+});
 
-function toolCallSettled(
+const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, event.turnId);
-    if (Option.isNone(standing)) {
-      const turn = yield* turnRow(context, event.turnId);
-      return {
-        ok: false,
-        refusal: Option.isNone(turn) ? STORE_WRITE_REFUSAL.NO_TURN : STORE_WRITE_REFUSAL.NO_CALL,
-      };
-    }
-    const row = standing.value;
-    const found = toolPartOf(row.parts, event.callId);
-    if (found === undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL };
-    // A call settles once. The same settlement told again is a repeat; a
-    // different one, after the turn's end already settled the call as
-    // unanswered, finds the call closed and is refused rather than rewritten.
-    if (isSettledToolPartState(found.part.state)) {
-      return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
-        ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
-        : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    const parts = [...row.parts];
-    parts[found.index] = settledToolPart(found.part, event.settlement);
-    return yield* amendJournal(context, row, parts);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, event.turnId);
+  if (Option.isNone(standing)) {
+    const turn = yield* turnRow(context, event.turnId);
+    return {
+      ok: false,
+      refusal: Option.isNone(turn) ? STORE_WRITE_REFUSAL.NO_TURN : STORE_WRITE_REFUSAL.NO_CALL,
+    };
+  }
+  const row = standing.value;
+  const found = toolPartOf(row.parts, event.callId);
+  if (found === undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL };
+  // A call settles once. The same settlement told again is a repeat; a
+  // different one, after the turn's end already settled the call as
+  // unanswered, finds the call closed and is refused rather than rewritten.
+  if (isSettledToolPartState(found.part.state)) {
+    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
+      ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
+      : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  const parts = [...row.parts];
+  parts[found.index] = settledToolPart(found.part, event.settlement);
+  return yield* amendJournal(context, row, parts);
+});
 
 /**
  * A reasoning summary joins the journal under its item's id. An item that
@@ -1406,23 +1393,21 @@ function toolCallSettled(
  * a second item, and the turn's completed projection carries every summary
  * under the id the adapter lifted for it.
  */
-function reasoningCompleted(
+const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const { id } = event.item;
-    if (!isWireString(id)) return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (row.parts.some((part) => part.type === UI_PART_TYPE.REASONING && part.id === id)) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [...row.parts, reasoningPart(event.summary, id)]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const { id } = event.item;
+  if (!isWireString(id)) return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (row.parts.some((part) => part.type === UI_PART_TYPE.REASONING && part.id === id)) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [...row.parts, reasoningPart(event.summary, id)]);
+});
 
 /**
  * A completed message: a user message lands as its own row by its id; the
@@ -1432,45 +1417,43 @@ function reasoningCompleted(
  * A closed journal takes the same projection again as a repeat and a
  * different one as the late write it is.
  */
-function messageCompleted(
+const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const read = yield* admitted(context, event.message);
-    if (!read.ok) return read;
-    const { message } = read;
-    if (message.role !== MESSAGE_ROLE.ASSISTANT) {
-      const standing = yield* messageByClientId(context, message.id);
-      if (Option.isSome(standing)) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-      const closed = yield* openTurn(context, event.turnId);
-      if (closed !== undefined) return closed;
-      yield* insertMessage(context, {
-        clientId: message.id,
-        turnId: event.turnId,
-        message,
-        finishedAt: context.now(),
-      });
-      return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-    }
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (row.finishedAt !== null) {
-      return isDeepStrictEqual(row.parts, message.parts)
-        ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
-        : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    }
-    yield* completeMessage({
-      id: row.id,
-      conversationId: context.target.conversationId,
-      parts: message.parts,
-      metadata: nullable(message.metadata),
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const read = yield* admitted(context, event.message);
+  if (!read.ok) return read;
+  const { message } = read;
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) {
+    const standing = yield* messageByClientId(context, message.id);
+    if (Option.isSome(standing)) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+    const closed = yield* openTurn(context, event.turnId);
+    if (closed !== undefined) return closed;
+    yield* insertMessage(context, {
+      clientId: message.id,
+      turnId: event.turnId,
+      message,
       finishedAt: context.now(),
     });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+  }
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (row.finishedAt !== null) {
+    return isDeepStrictEqual(row.parts, message.parts)
+      ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
+      : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  }
+  yield* completeMessage({
+    id: row.id,
+    conversationId: context.target.conversationId,
+    parts: message.parts,
+    metadata: nullable(message.metadata),
+    finishedAt: context.now(),
   });
-}
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWriteResult> {
   switch (event.kind) {
@@ -1501,27 +1484,28 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
   }
 }
 
-function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEnqueueResult> {
-  return Effect.gen(function* () {
-    const turnId = enqueue.turnId ?? randomUUID();
-    if (Option.isSome(yield* turnRow(context, turnId))) {
-      return { ok: true, turnId, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    yield* insertQueuedTurn({
-      turnId,
-      userId: context.target.userId,
-      conversationId: context.target.conversationId,
-      origin: enqueue.origin,
-      eveTurnId: nullable(enqueue.eveTurnId),
-      model: nullable(enqueue.model),
-      reasoningEffort: nullable(enqueue.reasoningEffort),
-      promptHash: nullable(enqueue.promptHash),
-      toolSetHash: nullable(enqueue.toolSetHash),
-      queuedAt: context.now(),
-    });
-    return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
+const enqueueTurn = /* @__PURE__ */ Effect.fn("enqueueTurn")(function* (
+  context: WriterContext,
+  enqueue: TurnEnqueue,
+): Effect.fn.Return<TurnEnqueueResult, WriteFailure, SqlClient.SqlClient> {
+  const turnId = enqueue.turnId ?? randomUUID();
+  if (Option.isSome(yield* turnRow(context, turnId))) {
+    return { ok: true, turnId, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  yield* insertQueuedTurn({
+    turnId,
+    userId: context.target.userId,
+    conversationId: context.target.conversationId,
+    origin: enqueue.origin,
+    eveTurnId: nullable(enqueue.eveTurnId),
+    model: nullable(enqueue.model),
+    reasoningEffort: nullable(enqueue.reasoningEffort),
+    promptHash: nullable(enqueue.promptHash),
+    toolSetHash: nullable(enqueue.toolSetHash),
+    queuedAt: context.now(),
   });
-}
+  return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * A queued row is the opener's inbox, never the run's record: the turn eve
@@ -1570,20 +1554,21 @@ const stampTurnCancel = SqlSchema.findAll({
     ),
 });
 
-function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, turnId);
-    if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    if (standing.value.status !== TURN_STATUS.QUEUED) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    }
-    if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    }
-    yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-  });
-}
+const dequeueTurn = /* @__PURE__ */ Effect.fn("dequeueTurn")(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, turnId);
+  if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  if (standing.value.status !== TURN_STATUS.QUEUED) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  }
+  if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  }
+  yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * The Stop on a turn's row: the instant it was asked, written once, so the
@@ -1591,23 +1576,21 @@ function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteRe
  * the first instant standing and writes nothing; a turn the conversation does
  * not hold is refused.
  */
-function requestTurnCancel(
+const requestTurnCancel = /* @__PURE__ */ Effect.fn("requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
-): Write<TurnCancelResult> {
-  return Effect.gen(function* () {
-    if (Option.isNone(yield* turnRow(context, cancel.turnId))) return NO_TURN;
-    const stamped = yield* stampTurnCancel({
-      turnId: cancel.turnId,
-      conversationId: context.target.conversationId,
-      at: cancel.at,
-    });
-    return {
-      ok: true,
-      effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
-    };
+): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
+  if (Option.isNone(yield* turnRow(context, cancel.turnId))) return NO_TURN;
+  const stamped = yield* stampTurnCancel({
+    turnId: cancel.turnId,
+    conversationId: context.target.conversationId,
+    at: cancel.at,
   });
-}
+  return {
+    ok: true,
+    effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
+  };
+});
 
 /** Whether a stored row is a compaction: an assistant row whose metadata names what it folded. */
 function isCompactionRow(row: MessageRow): boolean {
@@ -1623,50 +1606,48 @@ function isCompactionRow(row: MessageRow): boolean {
  * owner's id names one of its own folds: a row of another kind under it is
  * the owner's mistake, not a repeat.
  */
-function recordCompaction(
+const recordCompaction = /* @__PURE__ */ Effect.fn("recordCompaction")(function* (
   context: WriterContext,
   compaction: CompactionWrite,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, compaction.clientId);
-    if (Option.isSome(standing)) {
-      if (!isCompactionRow(standing.value)) {
-        return yield* Effect.die(
-          new Error("a compaction's client id names a message that is not a compaction"),
-        );
-      }
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, compaction.clientId);
+  if (Option.isSome(standing)) {
+    if (!isCompactionRow(standing.value)) {
+      return yield* Effect.die(
+        new Error("a compaction's client id names a message that is not a compaction"),
+      );
     }
-    if (compaction.turnId !== undefined) {
-      const turn = yield* turnRow(context, compaction.turnId);
-      if (Option.isNone(turn)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    }
-    const built = compactionSummaryMessage(compaction.clientId, {
-      text: compaction.text,
-      firstKeptMessageId: compaction.firstKeptMessageId,
-      ...(compaction.tokensBefore !== undefined
-        ? { tokensBefore: compaction.tokensBefore }
-        : undefined),
-    });
-    if (built === undefined) {
-      return {
-        ok: false,
-        refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
-        reason: SCHEMA_REFUSAL.MALFORMED,
-        path: [],
-      };
-    }
-    const read = yield* admitted(context, built);
-    if (!read.ok) return read;
-    yield* insertMessage(context, {
-      clientId: compaction.clientId,
-      turnId: compaction.turnId,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (compaction.turnId !== undefined) {
+    const turn = yield* turnRow(context, compaction.turnId);
+    if (Option.isNone(turn)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  }
+  const built = compactionSummaryMessage(compaction.clientId, {
+    text: compaction.text,
+    firstKeptMessageId: compaction.firstKeptMessageId,
+    ...(compaction.tokensBefore !== undefined
+      ? { tokensBefore: compaction.tokensBefore }
+      : undefined),
   });
-}
+  if (built === undefined) {
+    return {
+      ok: false,
+      refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
+      reason: SCHEMA_REFUSAL.MALFORMED,
+      path: [],
+    };
+  }
+  const read = yield* admitted(context, built);
+  if (!read.ok) return read;
+  yield* insertMessage(context, {
+    clientId: compaction.clientId,
+    turnId: compaction.turnId,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAskEndResult> {
   return Effect.map(
@@ -1680,66 +1661,62 @@ function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAs
   );
 }
 
-function recordUserMessage(
+const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(function* (
   context: WriterContext,
   write: UserMessageWrite,
-): Write<UserMessageWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, write.clientId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const read = yield* admitted(context, {
-      id: write.clientId,
-      role: MESSAGE_ROLE.USER,
-      metadata: write.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return read;
-    const turnId =
-      write.turnId ??
-      (write.turnOfAsk
-        ? yield* askTurnOf({
-            conversationId: context.target.conversationId,
-            clientId: write.clientId,
-          })
-        : undefined);
-    const { id, seq } = yield* insertMessage(context, {
-      clientId: write.clientId,
-      turnId,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
-    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, write.clientId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const read = yield* admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.USER,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return read;
+  const turnId =
+    write.turnId ??
+    (write.turnOfAsk
+      ? yield* askTurnOf({
+          conversationId: context.target.conversationId,
+          clientId: write.clientId,
+        })
+      : undefined);
+  const { id, seq } = yield* insertMessage(context, {
+    clientId: write.clientId,
+    turnId,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
+  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function recordSpokenReply(
+const recordSpokenReply = /* @__PURE__ */ Effect.fn("recordSpokenReply")(function* (
   context: WriterContext,
   write: SpokenReplyWrite,
-): Write<UserMessageWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, write.clientId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const read = yield* admitted(context, {
-      id: write.clientId,
-      role: MESSAGE_ROLE.ASSISTANT,
-      metadata: write.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return read;
-    const { id } = yield* insertMessage(context, {
-      clientId: write.clientId,
-      turnId: undefined,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, write.clientId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const read = yield* admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return read;
+  const { id } = yield* insertMessage(context, {
+    clientId: write.clientId,
+    turnId: undefined,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write<SpokenLineResult> {
   return Effect.map(
@@ -1764,43 +1741,41 @@ function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write
   );
 }
 
-function adoptSpokenLine(
+const adoptSpokenLine = /* @__PURE__ */ Effect.fn("adoptSpokenLine")(function* (
   context: WriterContext,
   adoption: SpokenLineAdoption,
-): Write<SpokenLineAdoptionResult> {
-  return Effect.gen(function* () {
-    // A delegation told twice adopts once: the second telling finds its row standing.
-    const standing = yield* messageByClientId(context, adoption.delegationId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const line = yield* messageByClientId(context, adoption.lineClientId);
-    if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const read = yield* admitted(context, {
-      id: adoption.delegationId,
-      role: MESSAGE_ROLE.USER,
-      metadata: adoption.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: adoption.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const rekeyed = yield* rekeySpokenLine({
-      id: line.value.id,
-      delegationId: adoption.delegationId,
-      parts: read.message.parts,
-      metadata: adoption.metadata,
-    });
-    if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const turnId = yield* askTurnOf({
-      conversationId: context.target.conversationId,
-      clientId: adoption.delegationId,
-    });
-    if (turnId !== undefined) {
-      const seq = yield* takeLineIntoTurn(context, turnId, line.value.id);
-      yield* moveTurnWorkAfter(context, turnId, seq);
-    }
-    return { ok: true, id: line.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<SpokenLineAdoptionResult, WriteFailure, SqlClient.SqlClient> {
+  // A delegation told twice adopts once: the second telling finds its row standing.
+  const standing = yield* messageByClientId(context, adoption.delegationId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const line = yield* messageByClientId(context, adoption.lineClientId);
+  if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const read = yield* admitted(context, {
+    id: adoption.delegationId,
+    role: MESSAGE_ROLE.USER,
+    metadata: adoption.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: adoption.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const rekeyed = yield* rekeySpokenLine({
+    id: line.value.id,
+    delegationId: adoption.delegationId,
+    parts: read.message.parts,
+    metadata: adoption.metadata,
+  });
+  if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const turnId = yield* askTurnOf({
+    conversationId: context.target.conversationId,
+    clientId: adoption.delegationId,
+  });
+  if (turnId !== undefined) {
+    const seq = yield* takeLineIntoTurn(context, turnId, line.value.id);
+    yield* moveTurnWorkAfter(context, turnId, seq);
+  }
+  return { ok: true, id: line.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * The turn an ask of the conversation has learned, by the ask's client id,
@@ -1926,26 +1901,27 @@ function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number):
   });
 }
 
-function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesAttached> {
-  return Effect.gen(function* () {
-    const standing = yield* findUnattachedAskLines({
-      conversationId: context.target.conversationId,
-      turnId,
-    });
-    const attached: string[] = [];
-    for (const row of standing) {
-      const seq = yield* takeLineIntoTurn(context, turnId, row.id);
-      // The received message ordinarily precedes the first step, so nothing of
-      // the turn's stands yet; where one does — a received message eve told
-      // again after the step, an attach refused the first time — the work moves
-      // behind the line all the same, so the order holds by the store's own
-      // sequence on every path a line enters a turn by.
-      yield* moveTurnWorkAfter(context, turnId, seq);
-      attached.push(row.id);
-    }
-    return { ok: true, attached };
+const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* findUnattachedAskLines({
+    conversationId: context.target.conversationId,
+    turnId,
   });
-}
+  const attached: string[] = [];
+  for (const row of standing) {
+    const seq = yield* takeLineIntoTurn(context, turnId, row.id);
+    // The received message ordinarily precedes the first step, so nothing of
+    // the turn's stands yet; where one does — a received message eve told
+    // again after the step, an attach refused the first time — the work moves
+    // behind the line all the same, so the order holds by the store's own
+    // sequence on every path a line enters a turn by.
+    yield* moveTurnWorkAfter(context, turnId, seq);
+    attached.push(row.id);
+  }
+  return { ok: true, attached };
+});
 
 /**
  * One event about a message. A claim is the one kind the schema makes
@@ -1957,44 +1933,42 @@ function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesA
  * landed between the read and the lock, rather than re-opening a settled
  * offer by landing after it.
  */
-function recordEvent(
+const recordEvent = /* @__PURE__ */ Effect.fn("recordEvent")(function* (
   context: WriterContext,
   event: EventWrite | SpeechEventWrite,
-): Write<EventWriteResult> {
-  return Effect.gen(function* () {
-    const { conversationId, userId } = context.target;
-    const message = yield* findMessageInConversation({
-      messageId: event.messageId,
-      conversationId,
-    });
-    if (Option.isNone(message)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
-    const excluding: ConversationEventKind[] = [
-      ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
-      ...("unless" in event ? event.unless : []),
-    ];
-    if (excluding.length > 0) {
-      const standing = yield* findEventKinds({ messageId: event.messageId, kinds: excluding });
-      if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
-        return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
-      }
-      if (standing.length > 0) return { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED };
-    }
-    const seq = yield* allocateEventSeq(context);
-    const inserted = yield* insertEvent({
-      userId,
-      conversationId,
-      seq,
-      messageId: event.messageId,
-      kind: event.kind,
-      deviceId: nullable(event.deviceId),
-      payload: nullable(event.payload),
-      createdAt: context.now(),
-    });
-    const written = yield* required(inserted, "the event insert answered no row");
-    return { ok: true, id: written.id, seq };
+): Effect.fn.Return<EventWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const { conversationId, userId } = context.target;
+  const message = yield* findMessageInConversation({
+    messageId: event.messageId,
+    conversationId,
   });
-}
+  if (Option.isNone(message)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
+  const excluding: ConversationEventKind[] = [
+    ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
+    ...("unless" in event ? event.unless : []),
+  ];
+  if (excluding.length > 0) {
+    const standing = yield* findEventKinds({ messageId: event.messageId, kinds: excluding });
+    if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
+      return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
+    }
+    if (standing.length > 0) return { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED };
+  }
+  const seq = yield* allocateEventSeq(context);
+  const inserted = yield* insertEvent({
+    userId,
+    conversationId,
+    seq,
+    messageId: event.messageId,
+    kind: event.kind,
+    deviceId: nullable(event.deviceId),
+    payload: nullable(event.payload),
+    createdAt: context.now(),
+  });
+  const written = yield* required(inserted, "the event insert answered no row");
+  return { ok: true, id: written.id, seq };
+});
 
 /**
  * Composes the writer over one catalog, which is where the catalog is held to

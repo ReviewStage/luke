@@ -317,14 +317,14 @@ fi
 # nothing.
 #
 # The function sources are checked alongside the packages because the builder
-# treats them identically: `apps/web/api` and `apps/web/server` are the entry
-# points of the very graph the doors in `server/core.ts` exist to pull in, so a
-# rule enforced on the packages alone leaves the two directories nearest the
-# failure uncovered. Side-effect imports count — a door is spelled `import "…"`
-# with no names, and an extensionless one fails exactly the same way.
+# treats them identically: `apps/web/server` — whose `routes/` subtree holds one
+# module per deployed function — is the entry point of the very graph the doors
+# in `server/core.ts` exist to pull in, so a rule enforced on the packages alone
+# leaves the directory nearest the failure uncovered. Side-effect imports count
+# — a door is spelled `import "…"` with no names, and an extensionless one fails
+# exactly the same way.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
     "$SIDECAR_REPO_ROOT"/packages/*/src \
-    "$SIDECAR_REPO_ROOT"/apps/web/api \
     "$SIDECAR_REPO_ROOT"/apps/web/server |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then

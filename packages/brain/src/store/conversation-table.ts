@@ -55,10 +55,8 @@ const standingLineage = SqlSchema.findOneOption({
  * standing generation's marker and the conversation's own durable cutoff,
  * which outlives the generation.
  */
-export const conversationClearedAtEffect = (
-  key: SessionKey,
-): Effect.Effect<number | undefined, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const conversationClearedAtEffect = /* @__PURE__ */ Effect.fn("conversationClearedAtEffect")(
+  function* (key: SessionKey): Effect.fn.Return<number | undefined, SqlError, Client.SqlClient> {
     const durable = yield* conversationCutoffEffect(key);
     const standing = yield* columnsDecoded(standingLineage(key));
     const marker = Option.flatMap(
@@ -67,7 +65,8 @@ export const conversationClearedAtEffect = (
     ).pipe(Option.getOrUndefined);
     if (durable === undefined) return marker;
     return marker === undefined ? durable : Math.max(durable, marker);
-  });
+  },
+);
 
 /**
  * Appends lines to the conversation, idempotently. A line the thread
@@ -107,7 +106,10 @@ const HeldLineRow = Schema.Struct({
 });
 
 const heldLine = SqlSchema.findOneOption({
-  Request: Schema.Struct({ sessionKey: Schema.String, eventKey: Schema.String }),
+  Request: Schema.Struct({
+    sessionKey: Schema.String,
+    eventKey: Schema.String,
+  }),
   Result: HeldLineRow,
   execute: ({ sessionKey, eventKey }) =>
     Effect.flatMap(
@@ -134,56 +136,58 @@ const publishedLine = SqlSchema.findOneOption({
     ),
 });
 
-const appendOne = (
+const appendOne = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: SessionKey,
   sessionId: string | undefined,
   entry: ConversationEntry & { recordedAt: number },
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    const eventKey = conversationEventKey(entry);
-    const held = yield* columnsDecoded(heldLine({ sessionKey: key, eventKey }));
-    if (Option.isSome(held)) {
-      if (held.value.request_id !== null || entry.requestId === undefined) return false;
-      // The once-published index refuses the update when the run's line of
-      // this kind already stands elsewhere; OR IGNORE turns the refusal into
-      // no change, which is the whole of how the two are told apart.
-      const changes = yield* changedRows(
-        sql`UPDATE OR IGNORE conversation_events
-            SET request_id = ${entry.requestId}, payload = ${conversationPayload(entry)}
-            WHERE session_key = ${key} AND sequence = ${held.value.sequence}`.raw,
-      );
-      return changes > 0;
-    }
-    // Asked before the sequence is taken, so a publication the index would
-    // refuse burns no number and the sequence stays dense.
-    if (entry.requestId !== undefined) {
-      const stands = yield* columnsDecoded(
-        publishedLine({ sessionKey: key, requestId: entry.requestId, kind: entry.kind }),
-      );
-      if (Option.isSome(stands)) return false;
-    }
-    yield* insertLine(key, sessionId, entry);
-    return true;
-  });
+): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  const eventKey = conversationEventKey(entry);
+  const held = yield* columnsDecoded(heldLine({ sessionKey: key, eventKey }));
+  if (Option.isSome(held)) {
+    if (held.value.request_id !== null || entry.requestId === undefined) return false;
+    // The once-published index refuses the update when the run's line of
+    // this kind already stands elsewhere; OR IGNORE turns the refusal into
+    // no change, which is the whole of how the two are told apart.
+    const changes = yield* changedRows(
+      sql`UPDATE OR IGNORE conversation_events
+          SET request_id = ${entry.requestId}, payload = ${conversationPayload(entry)}
+          WHERE session_key = ${key} AND sequence = ${held.value.sequence}`.raw,
+    );
+    return changes > 0;
+  }
+  // Asked before the sequence is taken, so a publication the index would
+  // refuse burns no number and the sequence stays dense.
+  if (entry.requestId !== undefined) {
+    const stands = yield* columnsDecoded(
+      publishedLine({
+        sessionKey: key,
+        requestId: entry.requestId,
+        kind: entry.kind,
+      }),
+    );
+    if (Option.isSome(stands)) return false;
+  }
+  yield* insertLine(key, sessionId, entry);
+  return true;
+});
 
-const insertLine = (
+const insertLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   key: SessionKey,
   sessionId: string | undefined,
   entry: ConversationEntry & { recordedAt: number },
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    const sequence = yield* nextConversationSequence(key);
-    yield* sql`INSERT INTO conversation_events
-                 (session_key, sequence, session_id, event_key, kind, words, recorded_at, request_id,
-                  provider_id, provider_session_id, payload)
-               VALUES (${key}, ${sequence}, ${sessionId ?? null}, ${conversationEventKey(entry)},
-                       ${entry.kind}, ${entry.words}, ${entry.recordedAt},
-                       ${entry.requestId ?? null}, ${entry.identity?.providerId ?? null},
-                       ${entry.identity?.providerSessionId ?? null},
-                       ${conversationPayload(entry)})`;
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  const sequence = yield* nextConversationSequence(key);
+  yield* sql`INSERT INTO conversation_events
+               (session_key, sequence, session_id, event_key, kind, words, recorded_at, request_id,
+                provider_id, provider_session_id, payload)
+             VALUES (${key}, ${sequence}, ${sessionId ?? null}, ${conversationEventKey(entry)},
+                     ${entry.kind}, ${entry.words}, ${entry.recordedAt},
+                     ${entry.requestId ?? null}, ${entry.identity?.providerId ?? null},
+                     ${entry.identity?.providerSessionId ?? null},
+                     ${conversationPayload(entry)})`;
+});
 
 const takenConversationSequence = SqlSchema.findOneOption({
   Request: Schema.String,
@@ -273,7 +277,10 @@ const CONVERSATION_SEARCH_PAGE_MULTIPLIER = 4;
 /** The most prefiltered rows one search reads before it answers what it has. */
 export const CONVERSATION_SEARCH_MAXIMUM_SCANNED_ROWS = 2_000;
 
-const SearchRow = Schema.Struct({ session_key: Schema.String, payload: Schema.String });
+const SearchRow = Schema.Struct({
+  session_key: Schema.String,
+  payload: Schema.String,
+});
 
 const searchPage = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -320,13 +327,13 @@ const searchPage = SqlSchema.findAll({
  * the conversation row and the standing generation's marker both — so a
  * Clear hides its lines here as it does everywhere.
  */
-export const searchConversationEffect = (
-  sessionKeys: readonly SessionKey[],
-  query: string,
-  limit: number,
-  now: number,
-): Effect.Effect<readonly ConversationSearchHit[], SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const searchConversationEffect = /* @__PURE__ */ Effect.fn("searchConversationEffect")(
+  function* (
+    sessionKeys: readonly SessionKey[],
+    query: string,
+    limit: number,
+    now: number,
+  ): Effect.fn.Return<readonly ConversationSearchHit[], SqlError, Client.SqlClient> {
     const tokens = [...tokenize(query)];
     if (tokens.length === 0 || sessionKeys.length === 0 || limit <= 0) return [];
     const pageSize = Math.min(
@@ -359,7 +366,8 @@ export const searchConversationEffect = (
       if (rows.length < asked) break;
     }
     return hits;
-  });
+  },
+);
 
 /** Whether a canonical line may stand now: recorded no later than now and after any Clear. */
 function conversationEntryAdmitted(

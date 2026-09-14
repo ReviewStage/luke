@@ -95,7 +95,11 @@ function readIfFile(
   try {
     const stat = fs.statSync(absolute);
     if (!stat.isFile()) return undefined;
-    return { content: fs.readFileSync(absolute, "utf8"), mtimeMs: stat.mtimeMs, size: stat.size };
+    return {
+      content: fs.readFileSync(absolute, "utf8"),
+      mtimeMs: stat.mtimeMs,
+      size: stat.size,
+    };
   } catch {
     return undefined;
   }
@@ -189,11 +193,18 @@ const lacksVectorsEffect = (
   identity: EmbeddingModelIdentity,
 ): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
   Effect.map(columnsDecoded(vectorCountRow({ filePath, model: identity.model })), (row) =>
-    Option.match(row, { onNone: () => false, onSome: ({ count }) => count > 0 }),
+    Option.match(row, {
+      onNone: () => false,
+      onSome: ({ count }) => count > 0,
+    }),
   );
 
 const cachedEmbeddingRow = SqlSchema.findOneOption({
-  Request: Schema.Struct({ provider: Schema.String, model: Schema.String, hash: Schema.String }),
+  Request: Schema.Struct({
+    provider: Schema.String,
+    model: Schema.String,
+    hash: Schema.String,
+  }),
   Result: Schema.Struct({ embedding: Schema.String }),
   execute: ({ provider, model, hash }) =>
     Effect.flatMap(
@@ -204,24 +215,27 @@ const cachedEmbeddingRow = SqlSchema.findOneOption({
     ),
 });
 
-const cachedEmbeddingsEffect = (
+const cachedEmbeddingsEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   identity: EmbeddingModelIdentity,
   hashes: readonly string[],
-): Effect.Effect<Map<string, readonly number[]>, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const found = new Map<string, readonly number[]>();
-    for (const hash of hashes) {
-      const row = yield* columnsDecoded(
-        cachedEmbeddingRow({ provider: identity.provider, model: identity.model, hash }),
-      );
-      const vector = Option.match(row, {
-        onNone: () => undefined,
-        onSome: ({ embedding }) => parseEmbedding(embedding),
-      });
-      if (vector) found.set(hash, vector);
-    }
-    return found;
-  });
+): Effect.fn.Return<Map<string, readonly number[]>, SqlError, Client.SqlClient> {
+  const found = new Map<string, readonly number[]>();
+  for (const hash of hashes) {
+    const row = yield* columnsDecoded(
+      cachedEmbeddingRow({
+        provider: identity.provider,
+        model: identity.model,
+        hash,
+      }),
+    );
+    const vector = Option.match(row, {
+      onNone: () => undefined,
+      onSome: ({ embedding }) => parseEmbedding(embedding),
+    });
+    if (vector) found.set(hash, vector);
+  }
+  return found;
+});
 
 /**
  * Compares the files on disk with the index and plans the apply: files whose
@@ -232,112 +246,110 @@ const cachedEmbeddingsEffect = (
  * handed in: the plan itself writes nothing, so the caller reconciles the
  * notebook first.
  */
-export const planMemorySyncEffect = (
+export const planMemorySyncEffect = /* @__PURE__ */ Effect.fn("planMemorySyncEffect")(function* (
   root: string,
   identity: EmbeddingModelIdentity | undefined,
   entries: readonly Pick<NotebookEntry, "id" | "words">[],
-): Effect.Effect<MemoryScanPlan, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const files = scanMemoryFiles(root);
-    const indexed = new Map(
-      (yield* listIndexedSourcesEffect).map((record) => [record.path, record]),
-    );
-    const changed: IndexedFileWrite[] = [];
-    let unchanged = 0;
-    for (const file of files) {
-      const known = indexed.get(file.path);
-      indexed.delete(file.path);
-      // An unchanged file is done only when every chunk of it already carries a
-      // vector under the identity asked for: a file indexed before a credential
-      // stood, or while the embedding provider was failing, is planned again so
-      // its vectors are backfilled without waiting for the developer to edit it.
-      if (
-        known &&
-        known.hash === file.hash &&
-        !(identity && (yield* lacksVectorsEffect(file.path, identity)))
-      ) {
-        unchanged += 1;
-        continue;
-      }
-      const entryLines =
-        file.path === WORKSPACE_FILE.USER
-          ? new Map(
-              parseNotebook(file.content).entries.flatMap((parsed) => {
-                const entry = entries.find((candidate) => candidate.words === parsed.words);
-                return entry ? [[parsed.line, entry.id] as const] : [];
-              }),
-            )
-          : new Map<number, string>();
-      changed.push({
-        path: file.path,
-        source: MEMORY_SOURCE.MEMORY,
-        hash: file.hash,
-        mtimeMs: file.mtimeMs,
-        size: file.size,
-        origin: MEMORY_ORIGIN.AGENT,
-        chunks: chunkMarkdown(file.content).map((chunk) => {
-          const ids = [...entryLines.entries()]
-            .filter(([line]) => line >= chunk.startLine && line <= chunk.endLine)
-            .map(([, id]) => id);
-          return {
-            startLine: chunk.startLine,
-            endLine: chunk.endLine,
-            text: chunk.text,
-            hash: chunk.hash,
-            ...(ids.length > 0 ? { entryIds: ids } : undefined),
-          };
-        }),
-      });
+): Effect.fn.Return<MemoryScanPlan, SqlError, Client.SqlClient> {
+  const files = scanMemoryFiles(root);
+  const indexed = new Map((yield* listIndexedSourcesEffect).map((record) => [record.path, record]));
+  const changed: IndexedFileWrite[] = [];
+  let unchanged = 0;
+  for (const file of files) {
+    const known = indexed.get(file.path);
+    indexed.delete(file.path);
+    // An unchanged file is done only when every chunk of it already carries a
+    // vector under the identity asked for: a file indexed before a credential
+    // stood, or while the embedding provider was failing, is planned again so
+    // its vectors are backfilled without waiting for the developer to edit it.
+    if (
+      known &&
+      known.hash === file.hash &&
+      !(identity && (yield* lacksVectorsEffect(file.path, identity)))
+    ) {
+      unchanged += 1;
+      continue;
     }
-    const hashes = new Set(changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash)));
-    const cached = identity ? yield* cachedEmbeddingsEffect(identity, [...hashes]) : new Map();
-    const missing = new Map<string, string>();
-    if (identity) {
-      for (const file of changed) {
-        for (const chunk of file.chunks) {
-          if (!cached.has(chunk.hash) && chunk.text.trim().length > 0) {
-            missing.set(chunk.hash, chunk.text);
-          }
+    const entryLines =
+      file.path === WORKSPACE_FILE.USER
+        ? new Map(
+            parseNotebook(file.content).entries.flatMap((parsed) => {
+              const entry = entries.find((candidate) => candidate.words === parsed.words);
+              return entry ? [[parsed.line, entry.id] as const] : [];
+            }),
+          )
+        : new Map<number, string>();
+    changed.push({
+      path: file.path,
+      source: MEMORY_SOURCE.MEMORY,
+      hash: file.hash,
+      mtimeMs: file.mtimeMs,
+      size: file.size,
+      origin: MEMORY_ORIGIN.AGENT,
+      chunks: chunkMarkdown(file.content).map((chunk) => {
+        const ids = [...entryLines.entries()]
+          .filter(([line]) => line >= chunk.startLine && line <= chunk.endLine)
+          .map(([, id]) => id);
+        return {
+          startLine: chunk.startLine,
+          endLine: chunk.endLine,
+          text: chunk.text,
+          hash: chunk.hash,
+          ...(ids.length > 0 ? { entryIds: ids } : undefined),
+        };
+      }),
+    });
+  }
+  const hashes = new Set(changed.flatMap((file) => file.chunks.map((chunk) => chunk.hash)));
+  const cached = identity ? yield* cachedEmbeddingsEffect(identity, [...hashes]) : new Map();
+  const missing = new Map<string, string>();
+  if (identity) {
+    for (const file of changed) {
+      for (const chunk of file.chunks) {
+        if (!cached.has(chunk.hash) && chunk.text.trim().length > 0) {
+          missing.set(chunk.hash, chunk.text);
         }
       }
     }
-    return {
-      changed,
-      removed: [...indexed.keys()],
-      missingEmbeddings: [...missing.entries()].map(([hash, text]) => ({ hash, text })),
-      unchanged,
-    };
-  });
+  }
+  return {
+    changed,
+    removed: [...indexed.keys()],
+    missingEmbeddings: [...missing.entries()].map(([hash, text]) => ({
+      hash,
+      text,
+    })),
+    unchanged,
+  };
+});
 
-const putCachedEmbeddingsEffect = (
+const putCachedEmbeddingsEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   identity: EmbeddingModelIdentity,
   embeddings: readonly EmbeddingWrite[],
   now: number,
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    for (const embedding of embeddings) {
-      yield* sql`INSERT INTO memory_embedding_cache (provider, model, hash, embedding, dims, updated_at)
-                 VALUES (${identity.provider}, ${identity.model}, ${embedding.hash},
-                         ${serializeEmbedding(embedding.vector)}, ${embedding.vector.length}, ${now})
-                 ON CONFLICT(provider, model, hash) DO UPDATE SET embedding = excluded.embedding,
-                   dims = excluded.dims, updated_at = excluded.updated_at`;
-    }
-    yield* sql`DELETE FROM memory_embedding_cache WHERE rowid IN (
-                 SELECT rowid FROM memory_embedding_cache ORDER BY updated_at DESC, rowid DESC
-                 LIMIT -1 OFFSET ${MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES}
-               )`;
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  for (const embedding of embeddings) {
+    yield* sql`INSERT INTO memory_embedding_cache (provider, model, hash, embedding, dims, updated_at)
+               VALUES (${identity.provider}, ${identity.model}, ${embedding.hash},
+                       ${serializeEmbedding(embedding.vector)}, ${embedding.vector.length}, ${now})
+               ON CONFLICT(provider, model, hash) DO UPDATE SET embedding = excluded.embedding,
+                 dims = excluded.dims, updated_at = excluded.updated_at`;
+  }
+  yield* sql`DELETE FROM memory_embedding_cache WHERE rowid IN (
+               SELECT rowid FROM memory_embedding_cache ORDER BY updated_at DESC, rowid DESC
+               LIMIT -1 OFFSET ${MEMORY_SEARCH_DEFAULTS.EMBEDDING_CACHE_MAXIMUM_ENTRIES}
+             )`;
+});
 
-const removeIndexedPathEffect = (
+const removeIndexedPathEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   filePath: string,
-): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    yield* sql`DELETE FROM memory_index_chunks_fts WHERE path = ${filePath}`;
-    yield* sql`DELETE FROM memory_index_chunks WHERE path = ${filePath}`;
-    yield* sql`DELETE FROM memory_index_sources WHERE path = ${filePath}`;
-  });
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  yield* sql`DELETE FROM memory_index_chunks_fts WHERE path = ${filePath}`;
+  yield* sql`DELETE FROM memory_index_chunks WHERE path = ${filePath}`;
+  yield* sql`DELETE FROM memory_index_sources WHERE path = ${filePath}`;
+});
 
 /**
  * Writes a planned sync: each changed file's chunks replace what the index
@@ -520,24 +532,23 @@ const keywordChunkRows = SqlSchema.findAll({
     ),
 });
 
-const keywordSearchEffect = (
+const keywordSearchEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   query: string,
   limit: number,
-): Effect.Effect<readonly KeywordHit[], SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const fts = buildFtsQuery(query);
-    if (!fts) return [];
-    const rows = yield* columnsDecoded(keywordChunkRows({ fts, limit }));
-    return rows.map((row) => ({
-      id: row.id,
-      path: row.path,
-      startLine: row.start_line,
-      endLine: row.end_line,
-      snippet: row.text,
-      textScore: bm25RankToScore(row.rank),
-      provenance: provenanceOf(row),
-    }));
-  });
+): Effect.fn.Return<readonly KeywordHit[], SqlError, Client.SqlClient> {
+  const fts = buildFtsQuery(query);
+  if (!fts) return [];
+  const rows = yield* columnsDecoded(keywordChunkRows({ fts, limit }));
+  return rows.map((row) => ({
+    id: row.id,
+    path: row.path,
+    startLine: row.start_line,
+    endLine: row.end_line,
+    snippet: row.text,
+    textScore: bm25RankToScore(row.rank),
+    provenance: provenanceOf(row),
+  }));
+});
 
 const vectorChunkRows = SqlSchema.findAll({
   Request: Schema.String,
@@ -579,10 +590,10 @@ const vectorSearchEffect = (
   });
 
 /** One hybrid search: candidates from both rankings under the multiplier, merged, decayed, diversified, and windowed. */
-export const searchMemoryIndexEffect = (
-  query: MemorySearchQuery,
-): Effect.Effect<MemorySearchOutcome, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const searchMemoryIndexEffect = /* @__PURE__ */ Effect.fn("searchMemoryIndexEffect")(
+  function* (
+    query: MemorySearchQuery,
+  ): Effect.fn.Return<MemorySearchOutcome, SqlError, Client.SqlClient> {
     const maxResults = query.maxResults ?? MEMORY_SEARCH_DEFAULTS.MAXIMUM_RESULTS;
     const minScore = query.minScore ?? MEMORY_SEARCH_DEFAULTS.MINIMUM_SCORE;
     const candidates = Math.max(1, maxResults * MEMORY_SEARCH_DEFAULTS.CANDIDATE_MULTIPLIER);
@@ -598,11 +609,17 @@ export const searchMemoryIndexEffect = (
       defaultRankingOptions(query.now),
     );
     return {
-      results: selectHybridSearchResults({ merged, keyword, maxResults, minScore }),
+      results: selectHybridSearchResults({
+        merged,
+        keyword,
+        maxResults,
+        minScore,
+      }),
       keywordHits: keyword.length,
       vectorHits: vector.length,
     };
-  });
+  },
+);
 
 /** The most lines one read answers when none are asked for. */
 const MEMORY_READ_DEFAULT_LINES = 120;

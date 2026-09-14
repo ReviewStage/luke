@@ -163,37 +163,37 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * fiber rather than through a runner of its own, so a failed statement it
  * reads is a defect here.
  */
-function effectPassthrough<R>(
+const effectPassthrough = /* @__PURE__ */ Effect.fn("effectPassthrough")(function* <R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
-): Effect.Effect<
+): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
   R | HttpServerRequest.HttpServerRequest
 > {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.orDie(handle(request));
-    return incoming.method === HTTP_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const answer = yield* Effect.orDie(handle(request));
+  return incoming.method === HTTP_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
-function sessionsMessagesEffect(
+const sessionsMessagesEffect = /* @__PURE__ */ Effect.fn("sessionsMessagesEffect")(function* (
   request: Request,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.gen(function* () {
-    const encryptionSecret = yield* hostedEncryptionSecretEffect;
-    return yield* handleConversationRead({
-      ...hostedVaultSeams,
-      encryptionSecret,
-      request,
-      execute: executeConversationRead,
-    });
+): Effect.fn.Return<
+  Response,
+  SqlError | Schema.SchemaError,
+  SqlClient.SqlClient | HostedEnvironment
+> {
+  const encryptionSecret = yield* hostedEncryptionSecretEffect;
+  return yield* handleConversationRead({
+    ...hostedVaultSeams,
+    encryptionSecret,
+    request,
+    execute: executeConversationRead,
   });
-}
+});
 
 /** Lists where the signed-in user's keys can create a workspace. */
 function projectsEffect(
@@ -221,27 +221,25 @@ function observeEffect(
  * userinfo call is better-auth's own foreign promise, so it is wrapped here,
  * at the seam's implementation, rather than inside the handler.
  */
-function eventsEffect(
+const eventsEffect = /* @__PURE__ */ Effect.fn("eventsEffect")(function* (
   request: Request,
-): Effect.Effect<Response, never, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const options: EventsOptions = {
-      request,
-      projectApiKey:
-        environment.posthogProjectApiKey === undefined
-          ? undefined
-          : Redacted.value(environment.posthogProjectApiKey),
-      resolveUserId: (incoming) =>
-        hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
-      // Read from the service's own user row rather than from the request, so
-      // the desktop still sends nothing that names anybody.
-      readPerson,
-    };
-    if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
-    return yield* handleEvents(options);
-  });
-}
+): Effect.fn.Return<Response, never, SqlClient.SqlClient | HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  const options: EventsOptions = {
+    request,
+    projectApiKey:
+      environment.posthogProjectApiKey === undefined
+        ? undefined
+        : Redacted.value(environment.posthogProjectApiKey),
+    resolveUserId: (incoming) =>
+      hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
+    // Read from the service's own user row rather than from the request, so
+    // the desktop still sends nothing that names anybody.
+    readPerson,
+  };
+  if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
+  return yield* handleEvents(options);
+});
 
 /**
  * The scheduled observation's one entry, called by Vercel's cron on the
@@ -260,111 +258,109 @@ function eventsEffect(
  * tick's own secret, so the account named to eve is only ever one this tick
  * enumerated.
  */
-function observationTickEffect(
+const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")(function* (
   request: Request,
-): Effect.Effect<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const encryptionSecret = environment.providerKeyEncryptionSecret
-      ? Redacted.value(environment.providerKeyEncryptionSecret)
-      : undefined;
-    const store = encryptionSecret
-      ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
-      : undefined;
-    const sender = environment.apnsCredentials
-      ? new ApnsSender({ credentials: environment.apnsCredentials })
-      : undefined;
-    const cronSecret =
-      environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
-    const eveOrigin = eveOriginFor(new URL(request.url).origin);
+): Effect.fn.Return<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  const encryptionSecret = environment.providerKeyEncryptionSecret
+    ? Redacted.value(environment.providerKeyEncryptionSecret)
+    : undefined;
+  const store = encryptionSecret
+    ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
+    : undefined;
+  const sender = environment.apnsCredentials
+    ? new ApnsSender({ credentials: environment.apnsCredentials })
+    : undefined;
+  const cronSecret =
+    environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
+  const eveOrigin = eveOriginFor(new URL(request.url).origin);
 
-    const options: ObservationTickOptions = {
-      request,
-      cronSecret,
-      encryptionSecret,
-      listAccounts: (limit, seenAfter) => listEligibleAccounts(limit, seenAfter),
-      forgetIneligible: (seenAfter) =>
-        store
-          ? store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter })
-          : Effect.void,
-      purgeCleared: (now) =>
-        store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
-      sweepSpeech: (now) =>
-        store === undefined
-          ? Effect.succeed(NOTHING_SWEPT)
-          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
-              sweepSpeech({ writer }, { now }),
+  const options: ObservationTickOptions = {
+    request,
+    cronSecret,
+    encryptionSecret,
+    listAccounts: (limit, seenAfter) => listEligibleAccounts(limit, seenAfter),
+    forgetIneligible: (seenAfter) =>
+      store
+        ? store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter })
+        : Effect.void,
+    purgeCleared: (now) =>
+      store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
+    sweepSpeech: (now) =>
+      store === undefined
+        ? Effect.succeed(NOTHING_SWEPT)
+        : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+            sweepSpeech({ writer }, { now }),
+          ),
+    pushSpeech: (now) =>
+      store === undefined || sender === undefined
+        ? Effect.succeed(NOTHING_PUSHED)
+        : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+            pushSpeech(
+              {
+                store: { writer },
+                tools: CATALOG_TOOL_SET,
+                send: (notification) => sender.send(notification),
+                forgetDevice: deviceSeams().forgetDevice,
+              },
+              { now },
             ),
-      pushSpeech: (now) =>
-        store === undefined || sender === undefined
-          ? Effect.succeed(NOTHING_PUSHED)
-          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
-              pushSpeech(
-                {
-                  store: { writer },
-                  tools: CATALOG_TOOL_SET,
-                  send: (notification) => sender.send(notification),
-                  forgetDevice: deviceSeams().forgetDevice,
-                },
-                { now },
-              ),
-            ),
-      observe: (userId) => {
-        if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
-        return Effect.gen(function* () {
-          const rows = yield* readStoredVaultKeys(userId);
-          const outcome = yield* observeAndSnapshot({
-            userId,
-            rows,
-            secret: encryptionSecret,
+          ),
+    observe: (userId) => {
+      if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
+      return Effect.gen(function* () {
+        const rows = yield* readStoredVaultKeys(userId);
+        const outcome = yield* observeAndSnapshot({
+          userId,
+          rows,
+          secret: encryptionSecret,
+          store,
+          seams: {},
+          now: Date.now(),
+        });
+        return { complete: outcome.complete, changed: outcome.changed };
+      });
+    },
+    openTurns: (userId) => {
+      if (!store || !encryptionSecret || !cronSecret) return Effect.succeed(NOTHING_OPENED);
+      return Effect.gen(function* () {
+        const rows = yield* readStoredVaultKeys(userId);
+        const readApiKey = readApiKeyFor(rows, encryptionSecret);
+        const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
+        return yield* openAccountTurns(
+          {
             store,
-            seams: {},
-            now: Date.now(),
-          });
-          return { complete: outcome.complete, changed: outcome.changed };
-        });
-      },
-      openTurns: (userId) => {
-        if (!store || !encryptionSecret || !cronSecret) return Effect.succeed(NOTHING_OPENED);
-        return Effect.gen(function* () {
-          const rows = yield* readStoredVaultKeys(userId);
-          const readApiKey = readApiKeyFor(rows, encryptionSecret);
-          const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
-          return yield* openAccountTurns(
-            {
-              store,
-              writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
-              eve: eveSessions<ScheduledTurn>({
-                origin: eveOrigin,
-                caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
-              }),
-              roster,
-              transcripts: hostedTranscriptReads({
-                client: yield* SqlClient.SqlClient,
-                userId,
-                roster: () => Effect.succeed(roster),
-                pluginFor: (providerId) =>
-                  cloudSessionPluginFor(providerId, {
-                    readApiKey: readApiKey(providerId),
-                    reported: () => roster.observations.get(providerId) ?? [],
-                  }),
-                now: Date.now,
-              }),
+            writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
+            eve: eveSessions<ScheduledTurn>({
+              origin: eveOrigin,
+              caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
+            }),
+            roster,
+            transcripts: hostedTranscriptReads({
+              client: yield* SqlClient.SqlClient,
+              userId,
+              roster: () => Effect.succeed(roster),
+              pluginFor: (providerId) =>
+                cloudSessionPluginFor(providerId, {
+                  readApiKey: readApiKey(providerId),
+                  reported: () => roster.observations.get(providerId) ?? [],
+                }),
               now: Date.now,
-              report: (message) => console.warn(message),
-            },
-            userId,
-          );
-        });
-      },
-    };
+            }),
+            now: Date.now,
+            report: (message) => console.warn(message),
+          },
+          userId,
+        );
+      });
+    },
+  };
 
-    return yield* Effect.ensuring(
-      handleObservationTick(options),
-      sender ? Effect.promise(() => sender.close()) : Effect.void,
-    );
-  });
-}
+  return yield* Effect.ensuring(
+    handleObservationTick(options),
+    sender ? Effect.promise(() => sender.close()) : Effect.void,
+  );
+});
 
 /**
  * The group: each path's handler carried to an `HttpApp`, and

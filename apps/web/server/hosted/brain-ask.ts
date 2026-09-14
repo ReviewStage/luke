@@ -63,9 +63,6 @@ export type { AskRecord, AskRow } from "./store/asks.js";
  * scope over these rows and never two.
  */
 
-/** What a handler or a read here answers: an effect over the ambient client. */
-type AskEffect<A> = Effect.Effect<A, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient>;
-
 /** An ask carries a bounded question, an origin, and two ids; a body past this is not one. */
 const MAXIMUM_ASK_BODY_BYTES = 64 * 1024;
 
@@ -117,26 +114,27 @@ export interface BrainAskOptions {
 type Gate = { readonly userId: string; readonly authorization: string } | Response;
 
 /** The gate the three routes share: method, bearer, brake. */
-function gate(options: BrainAskOptions, method: string): Effect.Effect<Gate> {
-  return Effect.gen(function* () {
-    const { request, resolveUserId } = options;
-    if (request.method !== method) {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
-    }
-    const userId = yield* resolveUserId(request);
-    const authorization = request.headers.get("authorization")?.trim();
-    if (!userId || !authorization) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
-    if (!(yield* askBrake.check(userId))) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-    }
-    return { userId, authorization };
-  });
-}
+const gate = /* @__PURE__ */ Effect.fnUntraced(function* (
+  options: BrainAskOptions,
+  method: string,
+): Effect.fn.Return<Gate> {
+  const { request, resolveUserId } = options;
+  if (request.method !== method) {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    );
+  }
+  const userId = yield* resolveUserId(request);
+  const authorization = request.headers.get("authorization")?.trim();
+  if (!userId || !authorization) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+  if (!(yield* askBrake.check(userId))) {
+    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+  }
+  return { userId, authorization };
+});
 
 /** The path's id as the route rewrite hands it over: the one `id` query parameter, held to the uuid shape. */
 function pathId(request: Request): string | Response {
@@ -222,25 +220,27 @@ export interface AskStandingReads {
  * route with, so it reads the standing here until the turn's own id is set
  * and projects the turn's events from there.
  */
-export function askStanding(
+export const askStanding = /* @__PURE__ */ Effect.fn("askStanding")(function* (
   reads: AskStandingReads,
   userId: string,
   id: string,
-): AskEffect<AskStanding | undefined> {
-  return Effect.gen(function* () {
-    const [turn] = yield* reads.store.turns.named(userId, [id]);
-    if (turn) return { answer: turnAnswer(id, turn), ask: undefined, turn };
-    const ask = yield* reads.asks.named(userId, id);
-    if (!ask || !(yield* conversationOwnedBy(userId, ask.conversationId))) {
-      return undefined;
-    }
-    if (ask.turnId !== undefined) {
-      const [started] = yield* reads.store.turns.named(userId, [ask.turnId]);
-      if (started) return { answer: turnAnswer(id, started), ask, turn: started };
-    }
-    return { answer: queuedAnswer(ask), ask, turn: undefined };
-  });
-}
+): Effect.fn.Return<
+  AskStanding | undefined,
+  SqlError | EffectSchema.SchemaError,
+  SqlClient.SqlClient
+> {
+  const [turn] = yield* reads.store.turns.named(userId, [id]);
+  if (turn) return { answer: turnAnswer(id, turn), ask: undefined, turn };
+  const ask = yield* reads.asks.named(userId, id);
+  if (!ask || !(yield* conversationOwnedBy(userId, ask.conversationId))) {
+    return undefined;
+  }
+  if (ask.turnId !== undefined) {
+    const [started] = yield* reads.store.turns.named(userId, [ask.turnId]);
+    if (started) return { answer: turnAnswer(id, started), ask, turn: started };
+  }
+  return { answer: queuedAnswer(ask), ask, turn: undefined };
+});
 
 /**
  * Why an ask was not accepted: the conversation is not the caller's or does
@@ -283,141 +283,139 @@ export interface AskSeams {
  * with the same client id finds the record and dispatches again only where
  * the first dispatch never reached eve.
  */
-export function acceptAsk(seams: AskSeams, input: AskInput): AskEffect<AskOutcome> {
-  return Effect.gen(function* () {
-    const { userId, question, origin, clientId } = input;
-    const now = new Date(seams.now());
-    let conversationId: string;
-    if (input.conversationId !== undefined) {
-      if (!(yield* conversationOwnedBy(userId, input.conversationId))) {
-        return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
-      }
-      conversationId = input.conversationId;
-    } else {
-      const opened = yield* Effect.result(standingMain(userId, now));
-      if (Result.isFailure(opened))
-        return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.failure };
-      conversationId = opened.success;
-    }
-
-    const ask = yield* seams.asks.record({
-      userId,
-      conversationId,
-      clientId,
-      origin,
-      question,
-      createdAt: now,
-    });
-    const accepted: AskOutcome = {
-      ok: true,
-      answer: { id: ask.id, conversationId, queuedAt: ask.createdAt.getTime() },
-    };
-    if (ask.sessionId !== undefined) return accepted;
-    const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
-
-    // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
-    // conversation: of two retries for one client id the second finds the session written and
-    // hands eve nothing, and of two first asks the second reads the session the first opened and
-    // sends into it rather than opening a second the forward-only claim would lose. A Clear that
-    // lands between the admission above and this lock finds no conversation to dispatch in, and the
-    // ask is refused as not found rather than dispatched into a conversation the account has cleared.
-    let failed: AskOutcome | undefined;
-    const dispatched = yield* seams.asks.dispatchOnce(
-      { userId, conversationId },
-      ask.id,
-      async (sessionId) => {
-        if (sessionId !== undefined) {
-          const sent = await seams.eve.send(sessionId, message);
-          if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
-            return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
-          }
-          if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-            failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
-            return undefined;
-          }
-        }
-        const opened = await seams.eve.open(message);
-        if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
-          failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
-          return undefined;
-        }
-        return {
-          sessionId: opened.sessionId,
-          turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
-        };
-      },
-    );
-    if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+export const acceptAsk = /* @__PURE__ */ Effect.fn("acceptAsk")(function* (
+  seams: AskSeams,
+  input: AskInput,
+): Effect.fn.Return<AskOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const { userId, question, origin, clientId } = input;
+  const now = new Date(seams.now());
+  let conversationId: string;
+  if (input.conversationId !== undefined) {
+    if (!(yield* conversationOwnedBy(userId, input.conversationId))) {
       return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
     }
-    return failed ?? accepted;
+    conversationId = input.conversationId;
+  } else {
+    const opened = yield* Effect.result(standingMain(userId, now));
+    if (Result.isFailure(opened))
+      return { ok: false, refusal: ASK_REFUSAL.STORE, cause: opened.failure };
+    conversationId = opened.success;
+  }
+
+  const ask = yield* seams.asks.record({
+    userId,
+    conversationId,
+    clientId,
+    origin,
+    question,
+    createdAt: now,
   });
-}
+  const accepted: AskOutcome = {
+    ok: true,
+    answer: { id: ask.id, conversationId, queuedAt: ask.createdAt.getTime() },
+  };
+  if (ask.sessionId !== undefined) return accepted;
+  const message = { conversationId, turn: HOST_TURN_OF_ASK_ORIGIN[origin], message: question };
+
+  // The dispatch runs under the conversation's lock, so one dispatch at a time runs in a
+  // conversation: of two retries for one client id the second finds the session written and
+  // hands eve nothing, and of two first asks the second reads the session the first opened and
+  // sends into it rather than opening a second the forward-only claim would lose. A Clear that
+  // lands between the admission above and this lock finds no conversation to dispatch in, and the
+  // ask is refused as not found rather than dispatched into a conversation the account has cleared.
+  let failed: AskOutcome | undefined;
+  const dispatched = yield* seams.asks.dispatchOnce(
+    { userId, conversationId },
+    ask.id,
+    async (sessionId) => {
+      if (sessionId !== undefined) {
+        const sent = await seams.eve.send(sessionId, message);
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) {
+          return { sessionId: sent.sessionId, deliveryId: sent.deliveryId };
+        }
+        if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+          failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: sent.status };
+          return undefined;
+        }
+      }
+      const opened = await seams.eve.open(message);
+      if (opened.outcome === EVE_SEND_OUTCOME.FAILED) {
+        failed = { ok: false, refusal: ASK_REFUSAL.UPSTREAM, status: opened.status };
+        return undefined;
+      }
+      return {
+        sessionId: opened.sessionId,
+        turnId: hostTurnId(opened.sessionId, EVE_FIRST_TURN_ID),
+      };
+    },
+  );
+  if (dispatched === ASK_DISPATCH_REFUSAL.NO_CONVERSATION) {
+    return { ok: false, refusal: ASK_REFUSAL.NOT_FOUND };
+  }
+  return failed ?? accepted;
+});
 
 /** `POST /api/brain/ask`: the gate and the body, then `acceptAsk` under the caller's own bearer. */
-export function handleBrainAsk(options: BrainAskOptions): AskEffect<Response> {
-  return Effect.gen(function* () {
-    const admitted = yield* gate(options, "POST");
-    if (admitted instanceof Response) return admitted;
-    const parsed = yield* Effect.promise(() =>
-      readJsonBody(options.request, MAXIMUM_ASK_BODY_BYTES),
-    );
-    if (parsed instanceof Response) return parsed;
-    const request = readEither(hostedBrainAskRequestSchema)(parsed);
-    if (Result.isFailure(request)) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
-    const outcome = yield* acceptAsk(
-      {
-        asks: options.asks,
-        eve: options.eve(admitted.authorization),
-        now: options.now ?? Date.now,
-      },
-      { ...request.success, userId: admitted.userId },
-    );
-    if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.answer);
-    switch (outcome.refusal) {
-      case ASK_REFUSAL.NOT_FOUND:
-        return notFound();
-      case ASK_REFUSAL.UPSTREAM:
-        return upstream(outcome.status);
-      case ASK_REFUSAL.STORE:
-        return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-    }
-  });
-}
+export const handleBrainAsk = /* @__PURE__ */ Effect.fn("handleBrainAsk")(function* (
+  options: BrainAskOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const admitted = yield* gate(options, "POST");
+  if (admitted instanceof Response) return admitted;
+  const parsed = yield* Effect.promise(() => readJsonBody(options.request, MAXIMUM_ASK_BODY_BYTES));
+  if (parsed instanceof Response) return parsed;
+  const request = readEither(hostedBrainAskRequestSchema)(parsed);
+  if (Result.isFailure(request)) {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+  const outcome = yield* acceptAsk(
+    {
+      asks: options.asks,
+      eve: options.eve(admitted.authorization),
+      now: options.now ?? Date.now,
+    },
+    { ...request.success, userId: admitted.userId },
+  );
+  if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, outcome.answer);
+  switch (outcome.refusal) {
+    case ASK_REFUSAL.NOT_FOUND:
+      return notFound();
+    case ASK_REFUSAL.UPSTREAM:
+      return upstream(outcome.status);
+    case ASK_REFUSAL.STORE:
+      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+});
 
-export function handleBrainTurn(options: BrainAskOptions): AskEffect<Response> {
-  return Effect.gen(function* () {
-    const admitted = yield* gate(options, "GET");
-    if (admitted instanceof Response) return admitted;
-    const id = pathId(options.request);
-    if (id instanceof Response) return id;
-    const waitText = new URL(options.request.url).searchParams.get(TURN_WAIT_QUERY);
-    const wait =
-      waitText === null
-        ? Result.succeed(0)
-        : readEither(waitSchema)(unparsedWire(waitText === "" ? Number.NaN : Number(waitText)));
-    if (Result.isFailure(wait)) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
-    const now = options.now ?? Date.now;
-    const sleep =
-      options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
-    const deadline = now() + wait.success;
-    let standing = yield* askStanding(options, admitted.userId, id);
-    while (
-      standing !== undefined &&
-      !TERMINAL_TURN_STATUSES.has(standing.answer.status) &&
-      now() < deadline
-    ) {
-      yield* Effect.promise(() => sleep(Math.min(TURN_WAIT_POLL_MS, deadline - now())));
-      standing = yield* askStanding(options, admitted.userId, id);
-    }
-    if (standing === undefined) return notFound();
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, standing.answer);
-  });
-}
+export const handleBrainTurn = /* @__PURE__ */ Effect.fn("handleBrainTurn")(function* (
+  options: BrainAskOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const admitted = yield* gate(options, "GET");
+  if (admitted instanceof Response) return admitted;
+  const id = pathId(options.request);
+  if (id instanceof Response) return id;
+  const waitText = new URL(options.request.url).searchParams.get(TURN_WAIT_QUERY);
+  const wait =
+    waitText === null
+      ? Result.succeed(0)
+      : readEither(waitSchema)(unparsedWire(waitText === "" ? Number.NaN : Number(waitText)));
+  if (Result.isFailure(wait)) {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const deadline = now() + wait.success;
+  let standing = yield* askStanding(options, admitted.userId, id);
+  while (
+    standing !== undefined &&
+    !TERMINAL_TURN_STATUSES.has(standing.answer.status) &&
+    now() < deadline
+  ) {
+    yield* Effect.promise(() => sleep(Math.min(TURN_WAIT_POLL_MS, deadline - now())));
+    standing = yield* askStanding(options, admitted.userId, id);
+  }
+  if (standing === undefined) return notFound();
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, standing.answer);
+});
 
 /** Why a Stop was not carried: nothing of the caller's stands under the id, no session runs the turn, or eve did not take the cancel. */
 export const STOP_REFUSAL = {
@@ -452,62 +450,64 @@ export interface StopSeams extends AskStandingReads {
  * or written before the column stood: eve runs nothing this build can name
  * under it, so the Stop is the stamp alone and eve is asked nothing.
  */
-export function stopAsk(seams: StopSeams, userId: string, id: string): AskEffect<StopOutcome> {
-  return Effect.gen(function* () {
-    const standing = yield* askStanding(seams, userId, id);
-    if (standing === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-    if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
-      return { ok: true, answer: standing.answer };
-    const at = new Date(seams.now());
-    let turn: StoredTurnRecord;
-    if (standing.turn === undefined) {
-      yield* seams.asks.cancelRequested(standing.ask.id, at);
-      // The stamp and the start's binding are two writes with no lock between them, so the ask is
-      // read again once the stamp stands: a start that bound it meanwhile has read the row before
-      // the stamp and carries nothing, and the Stop is then eve's cancel of that turn from here. A
-      // start that binds it after this read finds the stamp and carries it. Either order stops the
-      // turn once; neither leaves a turn running that its client was told is stopped.
-      const stampedAt = standing.ask.cancelRequestedAt ?? at;
-      const stampedAnswer: StopOutcome = {
-        ok: true,
-        answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() },
-      };
-      const bound = yield* seams.asks.named(userId, standing.ask.id);
-      if (bound?.turnId === undefined) return stampedAnswer;
-      const [started] = yield* seams.store.turns.named(userId, [bound.turnId]);
-      if (started === undefined) return stampedAnswer;
-      turn = started;
-    } else {
-      turn = standing.turn;
+export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
+  seams: StopSeams,
+  userId: string,
+  id: string,
+): Effect.fn.Return<StopOutcome, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const standing = yield* askStanding(seams, userId, id);
+  if (standing === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
+  if (TERMINAL_TURN_STATUSES.has(standing.answer.status))
+    return { ok: true, answer: standing.answer };
+  const at = new Date(seams.now());
+  let turn: StoredTurnRecord;
+  if (standing.turn === undefined) {
+    yield* seams.asks.cancelRequested(standing.ask.id, at);
+    // The stamp and the start's binding are two writes with no lock between them, so the ask is
+    // read again once the stamp stands: a start that bound it meanwhile has read the row before
+    // the stamp and carries nothing, and the Stop is then eve's cancel of that turn from here. A
+    // start that binds it after this read finds the stamp and carries it. Either order stops the
+    // turn once; neither leaves a turn running that its client was told is stopped.
+    const stampedAt = standing.ask.cancelRequestedAt ?? at;
+    const stampedAnswer: StopOutcome = {
+      ok: true,
+      answer: { ...standing.answer, cancelRequestedAt: stampedAt.getTime() },
+    };
+    const bound = yield* seams.asks.named(userId, standing.ask.id);
+    if (bound?.turnId === undefined) return stampedAnswer;
+    const [started] = yield* seams.store.turns.named(userId, [bound.turnId]);
+    if (started === undefined) return stampedAnswer;
+    turn = started;
+  } else {
+    turn = standing.turn;
+  }
+  // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
+  // is answered as it stands: a stamp that stands is the one cancel this turn gets.
+  const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
+  if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
+  if (turn.cancelRequestedAt) {
+    return {
+      ok: true,
+      answer: { ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() },
+    };
+  }
+  const target = { userId, conversationId: turn.conversationId };
+  const sessionId = yield* recordedRuntimeSession(target);
+  if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
+  // The cancel names the turn the row was written for and never the session's turn under way:
+  // a turn that ends between the read above and eve's answer is answered `no_active_turn`, and
+  // the turn queued after it, now the one under way, is left running.
+  if (turn.eveTurnId !== null) {
+    const eveTurnId = turn.eveTurnId;
+    const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
+    if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+      return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
     }
-    // A turn already settled, or already carrying a Stop (the start's honour, or an earlier Stop),
-    // is answered as it stands: a stamp that stands is the one cancel this turn gets.
-    const answer = turn === standing.turn ? standing.answer : turnAnswer(id, turn);
-    if (TERMINAL_TURN_STATUSES.has(turn.status)) return { ok: true, answer };
-    if (turn.cancelRequestedAt) {
-      return {
-        ok: true,
-        answer: { ...answer, cancelRequestedAt: turn.cancelRequestedAt.getTime() },
-      };
-    }
-    const target = { userId, conversationId: turn.conversationId };
-    const sessionId = yield* recordedRuntimeSession(target);
-    if (sessionId === undefined) return { ok: false, refusal: STOP_REFUSAL.NOT_RUNNING };
-    // The cancel names the turn the row was written for and never the session's turn under way:
-    // a turn that ends between the read above and eve's answer is answered `no_active_turn`, and
-    // the turn queued after it, now the one under way, is left running.
-    if (turn.eveTurnId !== null) {
-      const eveTurnId = turn.eveTurnId;
-      const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
-      if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-        return { ok: false, refusal: STOP_REFUSAL.UPSTREAM, status: cancelled.status };
-      }
-    }
-    const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
-    if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
-    return { ok: true, answer: { ...answer, cancelRequestedAt: at.getTime() } };
-  });
-}
+  }
+  const stamped = yield* seams.writer.requestTurnCancel(target, { turnId: turn.id, at });
+  if (!stamped.ok) return { ok: false, refusal: STOP_REFUSAL.NOT_FOUND };
+  return { ok: true, answer: { ...answer, cancelRequestedAt: at.getTime() } };
+});
 
 /** `POST /api/brain/turns/{id}/cancel`: the gate and the path's id, then `stopAsk` under the caller's own bearer. */
 /** What the Stop route holds beyond the ask routes: the writer, for the one write a Stop makes on a turn's row. Only the cancel function composes it, so the read routes' bundles never reach the writer. */
@@ -515,31 +515,31 @@ export interface BrainTurnCancelOptions extends BrainAskOptions {
   writer: Pick<StoreWriter, "requestTurnCancel">;
 }
 
-export function handleBrainTurnCancel(options: BrainTurnCancelOptions): AskEffect<Response> {
-  return Effect.gen(function* () {
-    const admitted = yield* gate(options, "POST");
-    if (admitted instanceof Response) return admitted;
-    const id = pathId(options.request);
-    if (id instanceof Response) return id;
-    const outcome = yield* stopAsk(
-      {
-        store: options.store,
-        asks: options.asks,
-        writer: options.writer,
-        eve: options.eve(admitted.authorization),
-        now: options.now ?? Date.now,
-      },
-      admitted.userId,
-      id,
-    );
-    if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.answer);
-    switch (outcome.refusal) {
-      case STOP_REFUSAL.NOT_FOUND:
-        return notFound();
-      case STOP_REFUSAL.NOT_RUNNING:
-        return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
-      case STOP_REFUSAL.UPSTREAM:
-        return upstream(outcome.status);
-    }
-  });
-}
+export const handleBrainTurnCancel = /* @__PURE__ */ Effect.fn("handleBrainTurnCancel")(function* (
+  options: BrainTurnCancelOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const admitted = yield* gate(options, "POST");
+  if (admitted instanceof Response) return admitted;
+  const id = pathId(options.request);
+  if (id instanceof Response) return id;
+  const outcome = yield* stopAsk(
+    {
+      store: options.store,
+      asks: options.asks,
+      writer: options.writer,
+      eve: options.eve(admitted.authorization),
+      now: options.now ?? Date.now,
+    },
+    admitted.userId,
+    id,
+  );
+  if (outcome.ok) return jsonResponse(HOSTED_HTTP_STATUS.OK, outcome.answer);
+  switch (outcome.refusal) {
+    case STOP_REFUSAL.NOT_FOUND:
+      return notFound();
+    case STOP_REFUSAL.NOT_RUNNING:
+      return errorResponse(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NOT_RUNNING);
+    case STOP_REFUSAL.UPSTREAM:
+      return upstream(outcome.status);
+  }
+});

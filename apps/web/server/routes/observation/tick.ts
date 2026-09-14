@@ -1,5 +1,5 @@
 import { observationApp } from "../../observation-app.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
  * The scheduled observation's one entry, called by Vercel's cron on the
@@ -8,4 +8,4 @@ import { routeFromHttpApp } from "../../route-effect.js";
  * `server/observation-app.ts`; this file only hands the group's export to the
  * route adaptor.
  */
-export default routeFromHttpApp(observationApp());
+export default routeFromHttpRouter(observationApp());

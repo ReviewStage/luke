@@ -57,59 +57,53 @@ export interface ProjectsOptions
  * listed; a provider whose keys stand but that documents no creation offers
  * nowhere to create.
  */
-export function handleProjects(
+export const handleProjects = /* @__PURE__ */ Effect.fn("handleProjects")(function* (
   options: ProjectsOptions,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
+): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
 
-    if (request.method !== "GET") {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
-    }
-
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
-
-    const secret = (encryptionSecret ?? "").trim();
-    if (!secret) {
-      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-    }
-
-    const rows = yield* readVaultKeys(userId);
-    const creating = keyedCloudProviderIds(rows).filter(
-      (providerId) =>
-        actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined,
+  if (request.method !== "GET") {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
-    if (creating.length === 0)
-      return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
+  }
 
-    const store = options.store(secret);
-    let roster = (yield* storedRoster(store, userId, rows, secret))?.roster;
-    if (!roster) {
-      const now = (options.now ?? Date.now)();
-      if (!(yield* projectsBrake.check(userId))) {
-        return errorResponse(
-          HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS,
-          HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-        );
-      }
-      roster = (yield* observeAndSnapshot({
-        userId,
-        rows,
-        secret,
-        store,
-        seams: options,
-        now,
-      })).roster;
+  const userId = yield* resolveUserId(request);
+  if (!userId) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+
+  const secret = (encryptionSecret ?? "").trim();
+  if (!secret) {
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+
+  const rows = yield* readVaultKeys(userId);
+  const creating = keyedCloudProviderIds(rows).filter(
+    (providerId) => actionUnsupportedReason(ACTION_KIND.CREATE_WORKSPACE, providerId) === undefined,
+  );
+  if (creating.length === 0)
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(undefined, creating));
+
+  const store = options.store(secret);
+  let roster = (yield* storedRoster(store, userId, rows, secret))?.roster;
+  if (!roster) {
+    const now = (options.now ?? Date.now)();
+    if (!(yield* projectsBrake.check(userId))) {
+      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
     }
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(roster, creating));
-  });
-}
+    roster = (yield* observeAndSnapshot({
+      userId,
+      rows,
+      secret,
+      store,
+      seams: options,
+      now,
+    })).roster;
+  }
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, projectsAnswer(roster, creating));
+});
 
 /** The snapshot's projects for the creation-capable providers, each with the build's agent table beside it. */
 function projectsAnswer(

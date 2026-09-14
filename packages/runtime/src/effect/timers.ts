@@ -9,27 +9,20 @@ import { Duration, Effect, type Fiber, type Schedule, type Scope } from "effect"
  * Runs `work` once, `delayMs` after the fork, in a fiber the scope interrupts.
  * The scope closing is what cancels the schedule, so no caller holds a handle
  * whose only purpose is to be handed back.
- *
- * The forked body is marked interruptible because a fork inherits the runtime
- * flags of the fiber that made it: armed from inside an uninterruptible region
- * — a composer's start, an acquire, a finalizer — the fiber would be one the
- * scope's close could not end, and the close would wait on a sleep that
- * outlives it.
  */
 export const scheduleOnce = <A, E, R>(
   delayMs: number,
   work: Effect.Effect<A, E, R>,
 ): Effect.Effect<Fiber.Fiber<A, E>, never, R | Scope.Scope> =>
-  Effect.forkScoped(Effect.interruptible(Effect.delay(work, Duration.millis(delayMs))));
+  Effect.forkScoped(Effect.delay(work, Duration.millis(delayMs)));
 
 /**
  * Repeats `work` on a schedule, in a fiber the scope interrupts. The cadence
  * stays data — a `Schedule` composed from the delays a caller already states —
- * rather than a loop reading a flag another fiber writes. The forked body is
- * interruptible for the reason {@link scheduleOnce}'s is.
+ * rather than a loop reading a flag another fiber writes.
  */
 export const scheduleRepeat = <A, E, R, Out>(
   schedule: Schedule.Schedule<Out, A, never, R>,
   work: Effect.Effect<A, E, R>,
 ): Effect.Effect<Fiber.Fiber<Out, E>, never, R | Scope.Scope> =>
-  Effect.forkScoped(Effect.interruptible(Effect.repeat(work, schedule)));
+  Effect.forkScoped(Effect.repeat(work, schedule));

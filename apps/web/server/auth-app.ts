@@ -63,22 +63,20 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * OAuth callbacks are made of. A HEAD is the exception the helper above
  * covers, since there the record is all the web handler reads.
  */
-function authPassthrough(
+const authPassthrough = /* @__PURE__ */ Effect.fn("authPassthrough")(function* (
   handle: WebRequestHandler,
-): Effect.Effect<
+): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   never,
   HttpServerRequest.HttpServerRequest
 > {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.promise(() => handle(request));
-    return incoming.method === BODYLESS_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const answer = yield* Effect.promise(() => handle(request));
+  return incoming.method === BODYLESS_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /**
  * The group, which is the passthrough on the auth path set and the hosted

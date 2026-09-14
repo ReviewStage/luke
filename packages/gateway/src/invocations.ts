@@ -31,7 +31,11 @@ export function unavailableInvocation(
   invocation: Pick<NodeInvocation, "capability">,
   reason: string,
 ): NodeCapabilityResult {
-  return { status: NODE_CAPABILITY_STATUS.UNAVAILABLE, capability: invocation.capability, reason };
+  return {
+    status: NODE_CAPABILITY_STATUS.UNAVAILABLE,
+    capability: invocation.capability,
+    reason,
+  };
 }
 
 /** Dispatched and unanswered: the action may have happened and is never repeated on that account. */
@@ -70,7 +74,10 @@ export class PendingInvocations {
       );
     }
     const deferred = Deferred.makeUnsafe<NodeCapabilityResult>();
-    this.#pending.set(invocation.invocationId, { capability: invocation.capability, deferred });
+    this.#pending.set(invocation.invocationId, {
+      capability: invocation.capability,
+      deferred,
+    });
     return Deferred.await(deferred);
   }
 
@@ -169,69 +176,67 @@ function openInvocation(
  * take the performance the duplicates are joined to; the scope that served
  * the handler is what ends them all.
  */
-export function invocationMemory(
+export const invocationMemory = /* @__PURE__ */ Effect.fn("invocationMemory")(function* (
   options: InvocationMemoryOptions,
-): Effect.Effect<InvocationMemory, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const capacity = options.capacity ?? INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY;
-    const ledger = yield* Ref.make<InvocationLedger>({ held: new Map(), answered: [] });
-    const performances = yield* FiberSet.make<void>();
-
-    /** Writes the id down as answered and forgets the oldest the memory no longer holds room for. */
-    const remember = (invocationId: string): Effect.Effect<void> =>
-      Ref.update(ledger, (standing) => {
-        const answered = [...standing.answered, invocationId];
-        if (answered.length <= capacity) return { held: standing.held, answered };
-        const held = new Map(standing.held);
-        for (const forgotten of answered.splice(0, answered.length - capacity)) {
-          held.delete(forgotten);
-        }
-        return { held, answered };
-      });
-
-    const perform = (
-      invocation: NodeInvocation,
-      answer: Deferred.Deferred<NodeCapabilityResult>,
-    ): Effect.Effect<void> =>
-      Effect.ensuring(
-        Effect.gen(function* () {
-          // A handler that died answers failed on this node rather than
-          // taking the connection down with it; the host reads a typed
-          // refusal either way.
-          const result = yield* Effect.catchDefect(options.handler(invocation), (defect) =>
-            Effect.succeed<NodeCapabilityResult>({
-              status: NODE_CAPABILITY_STATUS.FAILED,
-              capability: invocation.capability,
-              reason: defect instanceof Error ? defect.message : String(defect),
-            }),
-          );
-          yield* Deferred.succeed(answer, result);
-          yield* remember(invocation.invocationId);
-        }),
-        Deferred.interrupt(answer),
-      );
-
-    const take = (invocation: NodeInvocation): Effect.Effect<NodeInvocationAnswer> =>
-      // The frame that opened an id is the frame that performs it: the ledger
-      // is read and written and the performance forked in one step nothing
-      // interrupts, so no duplicate finds the id unopened and performs it a
-      // second time.
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const opened = yield* Ref.modify(ledger, (standing) =>
-            openInvocation(standing, invocation.invocationId),
-          );
-          if (opened.first) {
-            yield* FiberSet.run(
-              performances,
-              Effect.interruptible(perform(invocation, opened.answer)),
-            );
-          }
-          const result = yield* restore(Deferred.await(opened.answer));
-          return { invocationId: invocation.invocationId, result };
-        }),
-      );
-
-    return { take };
+): Effect.fn.Return<InvocationMemory, never, Scope.Scope> {
+  const capacity = options.capacity ?? INVOCATION_MEMORY_DEFAULTS.SETTLED_CAPACITY;
+  const ledger = yield* Ref.make<InvocationLedger>({
+    held: new Map(),
+    answered: [],
   });
-}
+  const performances = yield* FiberSet.make<void>();
+
+  /** Writes the id down as answered and forgets the oldest the memory no longer holds room for. */
+  const remember = (invocationId: string): Effect.Effect<void> =>
+    Ref.update(ledger, (standing) => {
+      const answered = [...standing.answered, invocationId];
+      if (answered.length <= capacity) return { held: standing.held, answered };
+      const held = new Map(standing.held);
+      for (const forgotten of answered.splice(0, answered.length - capacity)) {
+        held.delete(forgotten);
+      }
+      return { held, answered };
+    });
+
+  const perform = (
+    invocation: NodeInvocation,
+    answer: Deferred.Deferred<NodeCapabilityResult>,
+  ): Effect.Effect<void> =>
+    Effect.ensuring(
+      Effect.gen(function* () {
+        // A handler that died answers failed on this node rather than
+        // taking the connection down with it; the host reads a typed
+        // refusal either way.
+        const result = yield* Effect.catchDefect(options.handler(invocation), (defect) =>
+          Effect.succeed<NodeCapabilityResult>({
+            status: NODE_CAPABILITY_STATUS.FAILED,
+            capability: invocation.capability,
+            reason: defect instanceof Error ? defect.message : String(defect),
+          }),
+        );
+        yield* Deferred.succeed(answer, result);
+        yield* remember(invocation.invocationId);
+      }),
+      Deferred.interrupt(answer),
+    );
+
+  const take = (invocation: NodeInvocation): Effect.Effect<NodeInvocationAnswer> =>
+    // The frame that opened an id is the frame that performs it: the ledger
+    // is read and written and the performance forked in one step nothing
+    // interrupts, so no duplicate finds the id unopened and performs it a
+    // second time.
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const opened = yield* Ref.modify(ledger, (standing) =>
+          openInvocation(standing, invocation.invocationId),
+        );
+        if (opened.first) {
+          yield* FiberSet.run(performances, perform(invocation, opened.answer));
+        }
+        const result = yield* restore(Deferred.await(opened.answer));
+        return { invocationId: invocation.invocationId, result };
+      }),
+    );
+
+  return { take };
+});

@@ -84,35 +84,19 @@ export const claimedUnlessAborted = <A, E, R>(
     Effect.gen(function* () {
       const decision = yield* Deferred.make<Option.Option<A>, E>();
       if (signal.aborted) yield* Deferred.succeed(decision, Option.none());
-      // Interruptible for the reason the listener below is: the work owns a
-      // race or a scope of its own — a context open does — and under an
-      // uninterruptible region it could interrupt neither, so what is meant to
-      // be a daemon nothing cuts would be a daemon nothing can finish either.
       yield* Effect.forkDetach(
-        Effect.interruptible(
-          Effect.matchCauseEffect(work, {
-            onFailure: (cause) => Deferred.failCause(decision, cause),
-            onSuccess: (value) =>
-              Effect.uninterruptible(
-                Effect.flatMap(Deferred.succeed(decision, Option.some(value)), (claimed) =>
-                  claimed ? Effect.void : Effect.sync(() => discard(value)),
-                ),
+        Effect.matchCauseEffect(work, {
+          onFailure: (cause) => Deferred.failCause(decision, cause),
+          onSuccess: (value) =>
+            Effect.uninterruptible(
+              Effect.flatMap(Deferred.succeed(decision, Option.some(value)), (claimed) =>
+                claimed ? Effect.void : Effect.sync(() => discard(value)),
               ),
-          }),
-        ),
+            ),
+        }),
       );
-      // Interruptible whatever the asking fiber's own status. v3 required
-      // this: a fork inherited the runtime flags of the fiber that made it, so
-      // under the uninterruptible region this function is written for the
-      // listener would have been a fiber the scope's close could not
-      // interrupt, and the close would have waited on it forever for a signal
-      // that never fires. v4 forks interruptible by default and inherits only
-      // on `uninterruptible: "inherit"`, so the wrapper is now redundant
-      // rather than load-bearing.
       yield* Effect.forkScoped(
-        Effect.interruptible(
-          Effect.andThen(whenAborted(signal), Deferred.succeed(decision, Option.none())),
-        ),
+        Effect.andThen(whenAborted(signal), Deferred.succeed(decision, Option.none())),
       );
       // The waiting fiber can be interrupted by something other than this
       // signal — the turn it runs in ending — and the value would then be

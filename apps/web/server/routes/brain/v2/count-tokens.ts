@@ -1,6 +1,6 @@
 import { brainApp } from "../../../brain-app.js";
 import { hostedBrainSeams } from "../../../hosted/brain-route.js";
-import { routeFromHttpApp } from "../../../route-effect.js";
+import { routeFromHttpRouter } from "../../../route-effect.js";
 
 /**
  * Counts the input tokens of one prepared brain request, for a signed-in
@@ -8,4 +8,4 @@ import { routeFromHttpApp } from "../../../route-effect.js";
  * group in `server/brain-app.ts`; this file only hands it the deployment's
  * real seams.
  */
-export default routeFromHttpApp(brainApp(hostedBrainSeams()));
+export default routeFromHttpRouter(brainApp(hostedBrainSeams()));

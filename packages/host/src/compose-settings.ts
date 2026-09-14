@@ -126,12 +126,12 @@ export interface SettingsComposer extends Composer {
  * constructor argument. It is the first composer built, so it takes no
  * sibling composer as a dependency.
  */
-export const composeSettings = (): Effect.Effect<
-  SettingsComposer,
-  never,
-  HostKernelTag | Environment | SecretCipher | AppIdentity | FileSystem.FileSystem | Scope.Scope
-> =>
-  Effect.gen(function* () {
+export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
+  function* (): Effect.fn.Return<
+    SettingsComposer,
+    never,
+    HostKernelTag | Environment | SecretCipher | AppIdentity | FileSystem.FileSystem | Scope.Scope
+  > {
     const kernel = yield* HostKernelTag;
     const cipher = yield* SecretCipher;
     const identity = yield* AppIdentity;
@@ -298,17 +298,18 @@ export const composeSettings = (): Effect.Effect<
      * pressed Save is answered once the steps ahead of it are done and its
      * own has ended, with whatever its own ended in.
      */
-    const enqueueVault = <Answer>(step: Effect.Effect<Answer>): Effect.Effect<Answer> =>
-      Effect.gen(function* () {
-        const answer = yield* Deferred.make<Answer>();
-        yield* Queue.offer(
-          vaultActions,
-          Effect.flatMap(Effect.exit(vaultStep(step)), (exit) =>
-            Effect.asVoid(Deferred.done(answer, exit)),
-          ),
-        );
-        return yield* Deferred.await(answer);
-      });
+    const enqueueVault = /* @__PURE__ */ Effect.fnUntraced(function* <Answer>(
+      step: Effect.Effect<Answer>,
+    ): Effect.fn.Return<Answer> {
+      const answer = yield* Deferred.make<Answer>();
+      yield* Queue.offer(
+        vaultActions,
+        Effect.flatMap(Effect.exit(vaultStep(step)), (exit) =>
+          Effect.asVoid(Deferred.done(answer, exit)),
+        ),
+      );
+      return yield* Deferred.await(answer);
+    });
 
     /** The queue drained one step at a time, for as long as the fiber running it stands. */
     const drainVaultActions = Queue.take(vaultActions).pipe(
@@ -363,18 +364,17 @@ export const composeSettings = (): Effect.Effect<
      * until the next reconcile: a save, a sign-in, or a launch. Answers the
      * providers listed, or nothing when the vault could not be asked.
      */
-    const refreshVaultKeys = (
+    const refreshVaultKeys = /* @__PURE__ */ Effect.fnUntraced(function* (
       generation: number,
       accountKey: string,
-    ): Effect.Effect<ReadonlySet<CloudAgentProviderId> | undefined> =>
-      Effect.gen(function* () {
-        const listed = (yield* hostedVault.listKeys()) ?? (yield* hostedVault.listKeys());
-        if (listed === undefined) return undefined;
-        if (!(yield* vaultStillCurrent(generation, accountKey))) return undefined;
-        vaultKeys.clear();
-        for (const entry of listed) vaultKeys.add(entry.providerId);
-        return new Set(vaultKeys);
-      });
+    ): Effect.fn.Return<ReadonlySet<CloudAgentProviderId> | undefined> {
+      const listed = (yield* hostedVault.listKeys()) ?? (yield* hostedVault.listKeys());
+      if (listed === undefined) return undefined;
+      if (!(yield* vaultStillCurrent(generation, accountKey))) return undefined;
+      vaultKeys.clear();
+      for (const entry of listed) vaultKeys.add(entry.providerId);
+      return new Set(vaultKeys);
+    });
 
     /**
      * A cloud provider's key an earlier build kept encrypted on this Mac is
@@ -391,36 +391,35 @@ export const composeSettings = (): Effect.Effect<
      * next sign-in rather than losing it; an environment key is not Luke's to
      * send. Answers whether the vault's list moved.
      */
-    const migrateLocalCloudKeys = (
+    const migrateLocalCloudKeys = /* @__PURE__ */ Effect.fnUntraced(function* (
       generation: number,
       account: StoredAccount,
       held: ReadonlySet<CloudAgentProviderId>,
-    ): Effect.Effect<boolean> =>
-      Effect.gen(function* () {
-        const tenant = yield* Effect.orDie(store.readVaultSyncAccount());
-        if (tenant === undefined || (tenant !== account.id && tenant !== account.email)) {
-          return false;
+    ): Effect.fn.Return<boolean> {
+      const tenant = yield* Effect.orDie(store.readVaultSyncAccount());
+      if (tenant === undefined || (tenant !== account.id && tenant !== account.email)) {
+        return false;
+      }
+      let moved = false;
+      for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
+        const local = yield* Effect.orDie(store.readStoredApiKey(providerId));
+        if (local === undefined) continue;
+        if (!held.has(providerId)) {
+          const stored = yield* hostedVault.storeKey(providerId, local);
+          if (!stored?.stored) continue;
+          moved = true;
         }
-        let moved = false;
-        for (const providerId of Object.values(CLOUD_AGENT_PROVIDER_ID)) {
-          const local = yield* Effect.orDie(store.readStoredApiKey(providerId));
-          if (local === undefined) continue;
-          if (!held.has(providerId)) {
-            const stored = yield* hostedVault.storeKey(providerId, local);
-            if (!stored?.stored) continue;
-            moved = true;
-          }
-          if (!(yield* vaultStillCurrent(generation, account.email))) return moved;
-          // The vault answered that it holds this key, so the row says so from
-          // here whether or not the list that follows can be read.
-          vaultKeys.add(providerId);
-          yield* Effect.orDie(store.setApiKey(providerId, undefined));
-        }
-        return moved;
-      });
+        if (!(yield* vaultStillCurrent(generation, account.email))) return moved;
+        // The vault answered that it holds this key, so the row says so from
+        // here whether or not the list that follows can be read.
+        vaultKeys.add(providerId);
+        yield* Effect.orDie(store.setApiKey(providerId, undefined));
+      }
+      return moved;
+    });
 
-    const reconcileVaultKeys = (): Effect.Effect<void> =>
-      Effect.gen(function* () {
+    const reconcileVaultKeys = /* @__PURE__ */ Effect.fnUntraced(
+      function* (): Effect.fn.Return<void> {
         const account = yield* readStoredAccount();
         if (!account) return;
         const era: VaultStepEra = { generation: vaultGeneration, accountKey: account.email };
@@ -441,7 +440,8 @@ export const composeSettings = (): Effect.Effect<
             }
           }),
         );
-      });
+      },
+    );
 
     /**
      * The account is gone: the set empties now and the generation moves, so
@@ -462,76 +462,72 @@ export const composeSettings = (): Effect.Effect<
      * earlier build kept here is deleted in the same press, since the vault's
      * key is now the one that stands.
      */
-    const storeCloudKey = (
+    const storeCloudKey = /* @__PURE__ */ Effect.fnUntraced(function* (
       providerId: CloudAgentProviderId,
       apiKey: string | undefined,
       reporter: string | undefined,
-    ): Effect.Effect<SettingsUpdateResult> =>
-      Effect.gen(function* () {
-        // The era is the press's, read before the step is offered: a Save
-        // that waits behind the steps ahead of it belongs to the account that
-        // pressed, and begins under no other.
-        const era = yield* vaultEraNow();
-        if (era === undefined) {
-          return yield* refusedSettings(
-            "Sign in first: this key is held by Luke's service, not on this Mac.",
-          );
-        }
-        return yield* enqueueVault(storeCloudKeyStep(era, providerId, apiKey, reporter));
-      });
+    ): Effect.fn.Return<SettingsUpdateResult> {
+      // The era is the press's, read before the step is offered: a Save
+      // that waits behind the steps ahead of it belongs to the account that
+      // pressed, and begins under no other.
+      const era = yield* vaultEraNow();
+      if (era === undefined) {
+        return yield* refusedSettings(
+          "Sign in first: this key is held by Luke's service, not on this Mac.",
+        );
+      }
+      return yield* enqueueVault(storeCloudKeyStep(era, providerId, apiKey, reporter));
+    });
 
     /** The Save's own step, once the queue reaches it. */
-    const storeCloudKeyStep = (
+    const storeCloudKeyStep = /* @__PURE__ */ Effect.fnUntraced(function* (
       era: VaultStepEra,
       providerId: CloudAgentProviderId,
       apiKey: string | undefined,
       reporter: string | undefined,
-    ): Effect.Effect<SettingsUpdateResult> =>
-      Effect.gen(function* () {
-        const { generation, accountKey } = era;
-        if (!(yield* beginVaultStep(era))) {
-          return yield* refusedSettings(
-            "The account changed before the key was stored; sign in and enter it again.",
-          );
-        }
-        const normalized = apiKey?.trim();
-        if (normalized) {
-          // The same door the local path holds, and it already holds the
-          // vault's own shape rule: the length it caps at is the vault's, and
-          // printable ASCII admits no whitespace, so a key that passes here is
-          // one the vault stores, and each refusal names its own reason.
-          const rejection = apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat);
-          if (rejection) return yield* refusedSettings(rejection);
-          const stored = yield* hostedVault.storeKey(providerId, normalized);
-          if (!stored?.stored) {
-            return yield* refusedSettings("Could not store that key with Luke's service.");
-          }
-          if (!(yield* vaultStillCurrent(generation, accountKey))) {
-            return yield* refusedSettings("The account signed out while the key was being stored.");
-          }
-          vaultKeys.add(providerId);
-          yield* linked((links) => links.cloudKeyHeld);
-          yield* Effect.orDie(store.setApiKey(providerId, undefined));
-        } else {
-          const deleted = yield* hostedVault.deleteKey(providerId);
-          if (deleted === undefined) {
-            return yield* refusedSettings("Could not remove that key from Luke's service.");
-          }
-          if (!(yield* vaultStillCurrent(generation, accountKey))) {
-            return yield* refusedSettings(
-              "The account signed out while the key was being removed.",
-            );
-          }
-          vaultKeys.delete(providerId);
-        }
-        recordProductEvent(
-          normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
-          { connection_id: providerId },
+    ): Effect.fn.Return<SettingsUpdateResult> {
+      const { generation, accountKey } = era;
+      if (!(yield* beginVaultStep(era))) {
+        return yield* refusedSettings(
+          "The account changed before the key was stored; sign in and enter it again.",
         );
-        const settings = yield* Effect.orDie(store.snapshot());
-        emitSettingsSnapshot(settings, reporter);
-        return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
-      });
+      }
+      const normalized = apiKey?.trim();
+      if (normalized) {
+        // The same door the local path holds, and it already holds the
+        // vault's own shape rule: the length it caps at is the vault's, and
+        // printable ASCII admits no whitespace, so a key that passes here is
+        // one the vault stores, and each refusal names its own reason.
+        const rejection = apiKeyRejection(normalized, CREDENTIAL_PROVIDERS[providerId].keyFormat);
+        if (rejection) return yield* refusedSettings(rejection);
+        const stored = yield* hostedVault.storeKey(providerId, normalized);
+        if (!stored?.stored) {
+          return yield* refusedSettings("Could not store that key with Luke's service.");
+        }
+        if (!(yield* vaultStillCurrent(generation, accountKey))) {
+          return yield* refusedSettings("The account signed out while the key was being stored.");
+        }
+        vaultKeys.add(providerId);
+        yield* linked((links) => links.cloudKeyHeld);
+        yield* Effect.orDie(store.setApiKey(providerId, undefined));
+      } else {
+        const deleted = yield* hostedVault.deleteKey(providerId);
+        if (deleted === undefined) {
+          return yield* refusedSettings("Could not remove that key from Luke's service.");
+        }
+        if (!(yield* vaultStillCurrent(generation, accountKey))) {
+          return yield* refusedSettings("The account signed out while the key was being removed.");
+        }
+        vaultKeys.delete(providerId);
+      }
+      recordProductEvent(
+        normalized ? PRODUCT_EVENT.PROVIDER_CONNECT : PRODUCT_EVENT.PROVIDER_DISCONNECT,
+        { connection_id: providerId },
+      );
+      const settings = yield* Effect.orDie(store.snapshot());
+      emitSettingsSnapshot(settings, reporter);
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, settings };
+    });
 
     const readAccountPreferenceAccountKey = (): Effect.Effect<string | undefined, PlatformError> =>
       Effect.map(store.readAccount(), (account) => account?.email);
@@ -544,16 +540,15 @@ export const composeSettings = (): Effect.Effect<
       return JSON.stringify(left) === JSON.stringify(right);
     }
 
-    const accountPreferenceHydrationBaseline = (
+    const accountPreferenceHydrationBaseline = /* @__PURE__ */ Effect.fnUntraced(function* (
       accountEmail: string,
-    ): Effect.Effect<AccountPreferences, PlatformError> =>
-      Effect.gen(function* () {
-        const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
-        if (baseline !== undefined) return baseline;
-        const preferences = yield* store.accountPreferences();
-        yield* store.setAccountPreferencesSyncBaseline(accountEmail, preferences);
-        return preferences;
-      });
+    ): Effect.fn.Return<AccountPreferences, PlatformError> {
+      const baseline = yield* store.accountPreferencesSyncBaseline(accountEmail);
+      if (baseline !== undefined) return baseline;
+      const preferences = yield* store.accountPreferences();
+      yield* store.setAccountPreferencesSyncBaseline(accountEmail, preferences);
+      return preferences;
+    });
 
     function isAccountPreferenceField(field: AppSettingField): field is AccountPreferenceField {
       return ACCOUNT_PREFERENCE_FIELDS.some((candidate) => candidate === field);
@@ -578,45 +573,46 @@ export const composeSettings = (): Effect.Effect<
         );
       });
 
-    const hydrateAccountPreferences = (accountKey: string): Effect.Effect<boolean, PlatformError> =>
-      Effect.gen(function* () {
-        const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
-        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        const remote = yield* accountPreferencesClient.readPreferences();
-        if (!remote || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+    const hydrateAccountPreferences = /* @__PURE__ */ Effect.fnUntraced(function* (
+      accountKey: string,
+    ): Effect.fn.Return<boolean, PlatformError> {
+      const baseline = yield* accountPreferenceHydrationBaseline(accountKey);
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      const remote = yield* accountPreferencesClient.readPreferences();
+      if (!remote || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
 
-        if (!remote.hasStoredSnapshot) {
-          const preferences = yield* store.accountPreferences();
-          if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-          if (!accountPreferencesEmpty(preferences)) {
-            const written = yield* accountPreferencesClient.writePreferences(preferences);
-            if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-          }
-          if (!(yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
-            return false;
-          }
-          accountPreferencesHydratedAccount = accountKey;
-          return true;
-        }
-
-        const saved = yield* store.applyAccountPreferences(remote.preferences, {
-          accountEmail: accountKey,
-          preferences: baseline,
-        });
-        if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        accountPreferencesHydratedAccount = accountKey;
+      if (!remote.hasStoredSnapshot) {
         const preferences = yield* store.accountPreferences();
         if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
-        if (saved.changed.length > 0) {
-          yield* applyAccountPreferenceSideEffects(saved, saved.changed);
-        }
-        if (!accountPreferencesSame(preferences, remote.preferences)) {
+        if (!accountPreferencesEmpty(preferences)) {
           const written = yield* accountPreferencesClient.writePreferences(preferences);
-          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return true;
+          if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
         }
-        yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
+        if (!(yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences))) {
+          return false;
+        }
+        accountPreferencesHydratedAccount = accountKey;
         return true;
+      }
+
+      const saved = yield* store.applyAccountPreferences(remote.preferences, {
+        accountEmail: accountKey,
+        preferences: baseline,
       });
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      accountPreferencesHydratedAccount = accountKey;
+      const preferences = yield* store.accountPreferences();
+      if ((yield* readAccountPreferenceAccountKey()) !== accountKey) return false;
+      if (saved.changed.length > 0) {
+        yield* applyAccountPreferenceSideEffects(saved, saved.changed);
+      }
+      if (!accountPreferencesSame(preferences, remote.preferences)) {
+        const written = yield* accountPreferencesClient.writePreferences(preferences);
+        if (!written || (yield* readAccountPreferenceAccountKey()) !== accountKey) return true;
+      }
+      yield* store.setAccountPreferencesSyncBaseline(accountKey, preferences);
+      return true;
+    });
 
     function pushAccountPreferences(): void {
       queueAccountPreferencesSync(
@@ -687,23 +683,22 @@ export const composeSettings = (): Effect.Effect<
     ): Effect.Effect<void> =>
       sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
 
-    const applyAccountPreferenceSideEffects = (
+    const applyAccountPreferenceSideEffects = /* @__PURE__ */ Effect.fnUntraced(function* (
       result: SettingsUpdateResult,
       changed: readonly AccountPreferenceField[],
-    ): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        for (const field of changed) {
-          yield* applyHostSettingSideEffect(field, result.settings);
-        }
-        if (
-          changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
-          changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
-          changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
-        ) {
-          yield* linked((links) => links.broadcastWorkspaceProjects);
-        }
-        emitSettingsSnapshot(result.settings);
-      });
+    ): Effect.fn.Return<void> {
+      for (const field of changed) {
+        yield* applyHostSettingSideEffect(field, result.settings);
+      }
+      if (
+        changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
+        changed.includes(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field) ||
+        changed.includes(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)
+      ) {
+        yield* linked((links) => links.broadcastWorkspaceProjects);
+      }
+      emitSettingsSnapshot(result.settings);
+    });
 
     const refusedSettings = (reason: string): Effect.Effect<SettingsUpdateResult> =>
       Effect.map(Effect.orDie(store.snapshot()), (settings) => ({
@@ -916,4 +911,5 @@ export const composeSettings = (): Effect.Effect<
         yield* Effect.forkScoped(drainVaultActions);
       }),
     };
-  });
+  },
+);

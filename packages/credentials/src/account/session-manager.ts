@@ -282,12 +282,7 @@ export class AccountSessionManager {
         yield* this.#publishChange();
         const consent = this.#consent(provider, generation);
         this.#cancelSignIn = () => consent.cancel();
-        // `Effect.interruptible` because a fork inherits the mask above, and
-        // the trip's own scope has to be able to close on the deadline and on
-        // a withdrawal rather than run to its end whatever happens.
-        const fiber = yield* Effect.forkDetach(
-          Effect.interruptible(this.#trip(consent, generation)),
-        );
+        const fiber = yield* Effect.forkDetach(this.#trip(consent, generation));
         this.#signInRunning = fiber;
         return yield* restore(Fiber.join(fiber));
       }),
@@ -333,7 +328,11 @@ export class AccountSessionManager {
         timedOut: "Sign-in timed out.",
       },
       authorizationUrl: ({ state, redirectUri, codeChallenge }) =>
-        this.#options.client.authorizeUrl({ redirectUri, state, codeChallenge }),
+        this.#options.client.authorizeUrl({
+          redirectUri,
+          state,
+          codeChallenge,
+        }),
       exchange: (input) => this.#exchange(provider, generation, input),
       openExternal: (url) => this.#options.openExternal(url),
     });
@@ -408,5 +407,9 @@ function sameIdentity(stored: StoredAccount, identity: AccountIdentity): boolean
 }
 
 function mergedIdentity(stored: StoredAccount, identity: AccountIdentity): StoredAccount {
-  return { accessToken: stored.accessToken, refreshToken: stored.refreshToken, ...identity };
+  return {
+    accessToken: stored.accessToken,
+    refreshToken: stored.refreshToken,
+    ...identity,
+  };
 }

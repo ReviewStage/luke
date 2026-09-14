@@ -220,75 +220,74 @@ const NESTED_OUTERMOST_SAVEPOINT = savepointAt(0);
 const control = (statement: string) => (connection: Connection) =>
   Effect.asVoid(connection.executeUnprepared(statement, [], undefined));
 
-const makeFromHandle = (
+const makeFromHandle = /* @__PURE__ */ Effect.fnUntraced(function* (
   db: DatabaseSync,
-): Effect.Effect<Client.SqlClient, never, Reactivity.Reactivity> =>
-  Effect.gen(function* () {
-    const connection = yield* makeConnection(db);
-    const permit = yield* Semaphore.make(1);
-    const acquirer: Acquirer = Effect.uninterruptibleMask((restore) =>
-      restore(permit.take(1)).pipe(
-        Effect.andThen(Effect.addFinalizer(() => permit.release(1))),
-        Effect.as(connection),
-      ),
-    );
-    const client = yield* Client.make({
-      acquirer,
-      compiler: Statement.makeCompilerSqlite(),
-      spanAttributes: SPAN_ATTRIBUTES,
-    });
-    // The synchronous surface and this client share the one handle, so an
-    // Effect transaction opened while `StoreDatabase#transaction` already
-    // stands nests inside it as a savepoint: SQLite refuses a second BEGIN,
-    // and a step of a larger atomic operation has to roll back to its own
-    // point and leave the transaction around it standing. One outermost
-    // transaction holds the connection's permit for its whole scope, so
-    // which of the two a commit ends is the one thing tracked here.
-    let nestedInHandleTransaction = false;
-    // The library's own transaction folds every failure into a ROLLBACK, and
-    // a ROLLBACK with nothing open is itself an error SQLite raises: a BEGIN
-    // IMMEDIATE refused as busy, or a failure SQLite already rolled back on
-    // its own, would end as a defect rather than the SqlError it is. The
-    // handle knows whether a transaction stands, so the rollback runs only
-    // when there is one to roll back.
-    const withTransaction = Client.makeWithTransaction({
-      transactionService: client.transactionService,
-      spanAttributes: SPAN_ATTRIBUTES,
-      acquireConnection: Effect.flatMap(Scope.make(), (scope) =>
-        Effect.map(
-          Scope.provide(acquirer, scope),
-          (held): readonly [Scope.Closeable, Connection] => [scope, held],
-        ),
-      ),
-      begin: (held) =>
-        Effect.suspend(() => {
-          nestedInHandleTransaction = db.isTransaction;
-          return nestedInHandleTransaction
-            ? control(`SAVEPOINT ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
-            : control("BEGIN IMMEDIATE")(held);
-        }),
-      savepoint: (held, depth) => control(`SAVEPOINT ${savepointAt(depth)}`)(held),
-      commit: (held) =>
-        nestedInHandleTransaction
-          ? control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
-          : control("COMMIT")(held),
-      rollback: (held) => {
-        if (nestedInHandleTransaction) {
-          return Effect.andThen(
-            control(`ROLLBACK TO ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
-            control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
-          );
-        }
-        return db.isTransaction ? control("ROLLBACK")(held) : Effect.void;
-      },
-      rollbackSavepoint: (held, depth) =>
-        Effect.andThen(
-          control(`ROLLBACK TO ${savepointAt(depth)}`)(held),
-          control(`RELEASE ${savepointAt(depth)}`)(held),
-        ),
-    });
-    return Object.assign(client, { withTransaction });
+): Effect.fn.Return<Client.SqlClient, never, Reactivity.Reactivity> {
+  const connection = yield* makeConnection(db);
+  const permit = yield* Semaphore.make(1);
+  const acquirer: Acquirer = Effect.uninterruptibleMask((restore) =>
+    restore(permit.take(1)).pipe(
+      Effect.andThen(Effect.addFinalizer(() => permit.release(1))),
+      Effect.as(connection),
+    ),
+  );
+  const client = yield* Client.make({
+    acquirer,
+    compiler: Statement.makeCompilerSqlite(),
+    spanAttributes: SPAN_ATTRIBUTES,
   });
+  // The synchronous surface and this client share the one handle, so an
+  // Effect transaction opened while `StoreDatabase#transaction` already
+  // stands nests inside it as a savepoint: SQLite refuses a second BEGIN,
+  // and a step of a larger atomic operation has to roll back to its own
+  // point and leave the transaction around it standing. One outermost
+  // transaction holds the connection's permit for its whole scope, so
+  // which of the two a commit ends is the one thing tracked here.
+  let nestedInHandleTransaction = false;
+  // The library's own transaction folds every failure into a ROLLBACK, and
+  // a ROLLBACK with nothing open is itself an error SQLite raises: a BEGIN
+  // IMMEDIATE refused as busy, or a failure SQLite already rolled back on
+  // its own, would end as a defect rather than the SqlError it is. The
+  // handle knows whether a transaction stands, so the rollback runs only
+  // when there is one to roll back.
+  const withTransaction = Client.makeWithTransaction({
+    transactionService: client.transactionService,
+    spanAttributes: SPAN_ATTRIBUTES,
+    acquireConnection: Effect.flatMap(Scope.make(), (scope) =>
+      Effect.map(Scope.provide(acquirer, scope), (held): readonly [Scope.Closeable, Connection] => [
+        scope,
+        held,
+      ]),
+    ),
+    begin: (held) =>
+      Effect.suspend(() => {
+        nestedInHandleTransaction = db.isTransaction;
+        return nestedInHandleTransaction
+          ? control(`SAVEPOINT ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
+          : control("BEGIN IMMEDIATE")(held);
+      }),
+    savepoint: (held, depth) => control(`SAVEPOINT ${savepointAt(depth)}`)(held),
+    commit: (held) =>
+      nestedInHandleTransaction
+        ? control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held)
+        : control("COMMIT")(held),
+    rollback: (held) => {
+      if (nestedInHandleTransaction) {
+        return Effect.andThen(
+          control(`ROLLBACK TO ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
+          control(`RELEASE ${NESTED_OUTERMOST_SAVEPOINT}`)(held),
+        );
+      }
+      return db.isTransaction ? control("ROLLBACK")(held) : Effect.void;
+    },
+    rollbackSavepoint: (held, depth) =>
+      Effect.andThen(
+        control(`ROLLBACK TO ${savepointAt(depth)}`)(held),
+        control(`RELEASE ${savepointAt(depth)}`)(held),
+      ),
+  });
+  return Object.assign(client, { withTransaction });
+});
 
 const make = (
   options: NodeSqliteClientOptions,

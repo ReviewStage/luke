@@ -77,7 +77,10 @@ export class AccountClientError extends Error {
 
   constructor(
     message: string,
-    options: { status?: number | undefined; oauthError?: string | undefined } = {},
+    options: {
+      status?: number | undefined;
+      oauthError?: string | undefined;
+    } = {},
   ) {
     super(message);
     this.name = "AccountClientError";
@@ -90,34 +93,37 @@ function record(value: UnparsedWireValue): WireRecord | undefined {
   return isRecord(value) ? value : undefined;
 }
 
-function responseRecord(response: Response): Effect.Effect<WireRecord, AccountClientError> {
-  return Effect.gen(function* () {
-    const body = record(yield* Effect.promise(() => response.json().catch(() => undefined)));
-    if (!response.ok) {
-      return yield* Effect.fail(
-        new AccountClientError(
-          text(body?.error_description) ?? `Account service returned ${response.status}`,
-          {
-            status: response.status,
-            ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
-          },
-        ),
-      );
-    }
-    if (!body) {
-      return yield* Effect.fail(
-        new AccountClientError("Account service returned an invalid response"),
-      );
-    }
-    return body;
-  });
-}
+const responseRecord = /* @__PURE__ */ Effect.fnUntraced(function* (
+  response: Response,
+): Effect.fn.Return<WireRecord, AccountClientError> {
+  const body = record(yield* Effect.promise(() => response.json().catch(() => undefined)));
+  if (!response.ok) {
+    return yield* Effect.fail(
+      new AccountClientError(
+        text(body?.error_description) ?? `Account service returned ${response.status}`,
+        {
+          status: response.status,
+          ...(text(body?.error) ? { oauthError: text(body?.error) } : undefined),
+        },
+      ),
+    );
+  }
+  if (!body) {
+    return yield* Effect.fail(
+      new AccountClientError("Account service returned an invalid response"),
+    );
+  }
+  return body;
+});
 
 function tokensFrom(body: WireRecord): Effect.Effect<AccountTokens, AccountClientError> {
   if (!isWireString(body.access_token) || !isWireString(body.refresh_token)) {
     return Effect.fail(new AccountClientError("Account service did not return both tokens"));
   }
-  return Effect.succeed({ accessToken: body.access_token, refreshToken: body.refresh_token });
+  return Effect.succeed({
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token,
+  });
 }
 
 const FORM_CONTENT_TYPE = "application/x-www-form-urlencoded";
@@ -209,7 +215,11 @@ export class AccountClient {
         refresh_token: refreshToken,
         client_id: this.#clientId,
       }),
-      (body) => tokensFrom({ ...body, refresh_token: body.refresh_token ?? refreshToken }),
+      (body) =>
+        tokensFrom({
+          ...body,
+          refresh_token: body.refresh_token ?? refreshToken,
+        }),
     );
   }
 
@@ -333,25 +343,25 @@ export interface AccountDeletionOptions {
  * an expired access token (refresh and retry) from a service that actually
  * said no.
  */
-export function deleteHostedAccount(options: AccountDeletionOptions): Effect.Effect<void, Error> {
-  return Effect.gen(function* () {
-    const response = yield* timedRequest(
-      options.httpClient ?? FetchHttpClient.layer,
-      HttpClientRequest.post(
-        `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
-        { headers: { authorization: `Bearer ${options.accessToken}` } },
-      ),
-      options.timeoutMs ?? DELETE_TIMEOUT_MS,
+export const deleteHostedAccount = /* @__PURE__ */ Effect.fn("deleteHostedAccount")(function* (
+  options: AccountDeletionOptions,
+): Effect.fn.Return<void, Error> {
+  const response = yield* timedRequest(
+    options.httpClient ?? FetchHttpClient.layer,
+    HttpClientRequest.post(
+      `${options.serviceBaseUrl.replace(/\/$/, "")}${HOSTED_SERVICE_PATH.ACCOUNT_DELETE}`,
+      { headers: { authorization: `Bearer ${options.accessToken}` } },
+    ),
+    options.timeoutMs ?? DELETE_TIMEOUT_MS,
+  );
+  if (!response.ok) {
+    return yield* Effect.fail(
+      new AccountClientError(`Account service returned ${response.status}`, {
+        status: response.status,
+      }),
     );
-    if (!response.ok) {
-      return yield* Effect.fail(
-        new AccountClientError(`Account service returned ${response.status}`, {
-          status: response.status,
-        }),
-      );
-    }
-  });
-}
+  }
+});
 
 /**
  * One call made on a fiber of its own and waited for where it was asked for.
@@ -360,12 +370,12 @@ export function deleteHostedAccount(options: AccountDeletionOptions): Effect.Eff
  * region is one nothing inside it may interrupt either, including the
  * deadline {@link timedRequest} races against its own request, which would
  * then never win and never end a hung revocation. The call is forked as a
- * daemon and made interruptible again, so its deadline ends it exactly as it
- * did when the request ran on a fiber of its own, and the unwinding still
- * waits for what it asked for.
+ * daemon, and a fork is interruptible whatever the status of the fiber that
+ * made it, so its deadline ends it exactly as it did when the request ran on a
+ * fiber of its own, and the unwinding still waits for what it asked for.
  */
 function onOwnFiber<A, E>(effect: Effect.Effect<A, E>): Effect.Effect<A, E> {
-  return Effect.flatMap(Effect.forkDetach(Effect.interruptible(effect)), Fiber.join);
+  return Effect.flatMap(Effect.forkDetach(effect), Fiber.join);
 }
 
 /**

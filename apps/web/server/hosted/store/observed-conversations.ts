@@ -83,20 +83,20 @@ const insertObservedConversation = SqlSchema.void({
 });
 
 /** The id of the account's standing observed conversation for the session, opened now where none stood. */
-export function standingObservedConversation(
+export const standingObservedConversation = /* @__PURE__ */ Effect.fn(
+  "standingObservedConversation",
+)(function* (
   userId: string,
   identity: SessionIdentity,
   now: Date,
-): Effect.Effect<string | undefined, ObservedConversationFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const standing = yield* standingObservedConversationId(userId, identity);
-    if (standing !== undefined) return standing;
-    yield* insertObservedConversation({
-      userId,
-      providerId: identity.providerId,
-      providerSessionId: identity.providerSessionId,
-      now,
-    });
-    return yield* standingObservedConversationId(userId, identity);
+): Effect.fn.Return<string | undefined, ObservedConversationFailure, SqlClient.SqlClient> {
+  const standing = yield* standingObservedConversationId(userId, identity);
+  if (standing !== undefined) return standing;
+  yield* insertObservedConversation({
+    userId,
+    providerId: identity.providerId,
+    providerSessionId: identity.providerSessionId,
+    now,
   });
-}
+  return yield* standingObservedConversationId(userId, identity);
+});

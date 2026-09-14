@@ -269,44 +269,46 @@ function probeRequest(
 }
 
 /** Every planned request sent to the target and judged; the answer's body is never read. */
-export function probeDeployment(
+export const probeDeployment = /* @__PURE__ */ Effect.fn("probeDeployment")(function* (
   target: ProbeTarget,
   plan: readonly PlannedRequest[],
-): Effect.Effect<readonly ProbeResult[], HttpClientError.HttpClientError, HttpClient.HttpClient> {
-  return Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const now = yield* Clock.currentTimeMillis;
-    return yield* Effect.forEach(
-      plan,
-      (planned, index) =>
-        client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
-          Effect.map((response): ProbeResult => {
-            const answer: ProbeAnswer = {
-              status: response.status,
-              vercelError: Headers.get(response.headers, HEADER.VERCEL_ERROR),
-              location: Headers.get(response.headers, HEADER.LOCATION),
-            };
-            return {
-              ...planned,
-              status: answer.status,
-              vercelError: Option.getOrUndefined(answer.vercelError),
-              verdict: judge(planned, answer),
-            };
-          }),
-          Effect.scoped,
-          Effect.retry({
-            // Every failure that lands before an answer does — a dropped
-            // connection, a request this could neither address nor encode —
-            // is one `HttpClientError` in v4, and what tells it from a
-            // refused answer is that it carries no response of its own.
-            schedule: TRANSPORT_RETRY,
-            while: (error) => error.response === undefined,
-          }),
-        ),
-      { concurrency: PROBE_CONCURRENCY },
-    );
-  });
-}
+): Effect.fn.Return<
+  readonly ProbeResult[],
+  HttpClientError.HttpClientError,
+  HttpClient.HttpClient
+> {
+  const client = yield* HttpClient.HttpClient;
+  const now = yield* Clock.currentTimeMillis;
+  return yield* Effect.forEach(
+    plan,
+    (planned, index) =>
+      client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
+        Effect.map((response): ProbeResult => {
+          const answer: ProbeAnswer = {
+            status: response.status,
+            vercelError: Headers.get(response.headers, HEADER.VERCEL_ERROR),
+            location: Headers.get(response.headers, HEADER.LOCATION),
+          };
+          return {
+            ...planned,
+            status: answer.status,
+            vercelError: Option.getOrUndefined(answer.vercelError),
+            verdict: judge(planned, answer),
+          };
+        }),
+        Effect.scoped,
+        Effect.retry({
+          // Every failure that lands before an answer does — a dropped
+          // connection, a request this could neither address nor encode —
+          // is one `HttpClientError` in v4, and what tells it from a
+          // refused answer is that it carries no response of its own.
+          schedule: TRANSPORT_RETRY,
+          while: (error) => error.response === undefined,
+        }),
+      ),
+    { concurrency: PROBE_CONCURRENCY },
+  );
+});
 
 export function probeFailures(report: ProbeReport): readonly ProbeResult[] {
   return report.results.filter((result) => result.verdict !== VERDICT.OK);

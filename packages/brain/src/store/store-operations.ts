@@ -95,7 +95,10 @@ const SessionKeySchema: Schema.Codec<SessionKey, string> = Schema.NonEmptyString
 const AgentIdSchema: Schema.Codec<AgentId, string> = Schema.NonEmptyString.pipe(
   Schema.decodeTo(
     carried<AgentId>(),
-    SchemaTransformation.transform<AgentId, string>({ decode: agentId, encode: (id) => id }),
+    SchemaTransformation.transform<AgentId, string>({
+      decode: agentId,
+      encode: (id) => id,
+    }),
   ),
 );
 
@@ -257,13 +260,20 @@ export const StoreRpcs = RpcGroup.make(
   operation("conversations.create", carried<ConversationCreation>(), carried<ConversationRecord>()),
   operation(
     "conversations.archive",
-    { sessionKey: SessionKeySchema, now: Schema.Number, reason: ArchiveReasonSchema },
+    {
+      sessionKey: SessionKeySchema,
+      now: Schema.Number,
+      reason: ArchiveReasonSchema,
+    },
     Schema.Boolean,
   ),
   operation("conversations.unarchive", { sessionKey: SessionKeySchema }, Schema.Boolean),
   operation(
     "conversations.pin",
-    { sessionKey: SessionKeySchema, pinnedAt: Schema.optionalKey(Schema.Number) },
+    {
+      sessionKey: SessionKeySchema,
+      pinnedAt: Schema.optionalKey(Schema.Number),
+    },
     Schema.Boolean,
   ),
   operation(
@@ -307,28 +317,25 @@ const WORKSPACE_DIRECTORY = "workspace";
  * stable facts an earlier build kept move into the notebook at the first
  * open that finds them, under their own ids, and never again.
  */
-export function openStore(
+export const openStore = /* @__PURE__ */ Effect.fn("openStore")(function* (
   options: StoreOpenOptions,
-): Effect.Effect<OpenStore, SqlError | StoreSchemaRefused, Scope.Scope> {
-  return Effect.gen(function* () {
-    const workspace =
-      options.workspaceDirectory ?? path.join(options.agentRoot, WORKSPACE_DIRECTORY);
-    const db = yield* Effect.acquireRelease(
-      StoreDatabase.open(path.join(options.agentRoot, AGENT_DATABASE_FILE)),
-      (database) => Effect.sync(() => database.close()),
-    );
-    yield* Effect.provide(
-      Effect.andThen(
-        createConversationEffect({
-          agentId: options.agentId,
-          sessionKey: options.sessionKey,
-          name: options.conversationName,
-          now: options.now,
-        }),
-        migrateFactsIntoNotebookEffect(workspace, options.now),
-      ),
-      db.sql,
-    );
-    return { db, agentRoot: options.agentRoot, workspace };
-  });
-}
+): Effect.fn.Return<OpenStore, SqlError | StoreSchemaRefused, Scope.Scope> {
+  const workspace = options.workspaceDirectory ?? path.join(options.agentRoot, WORKSPACE_DIRECTORY);
+  const db = yield* Effect.acquireRelease(
+    StoreDatabase.open(path.join(options.agentRoot, AGENT_DATABASE_FILE)),
+    (database) => Effect.sync(() => database.close()),
+  );
+  yield* Effect.provide(
+    Effect.andThen(
+      createConversationEffect({
+        agentId: options.agentId,
+        sessionKey: options.sessionKey,
+        name: options.conversationName,
+        now: options.now,
+      }),
+      migrateFactsIntoNotebookEffect(workspace, options.now),
+    ),
+    db.sql,
+  );
+  return { db, agentRoot: options.agentRoot, workspace };
+});

@@ -116,19 +116,17 @@ export interface SidebandReading {
  * fiber of the scope this is yielded in — and answers what it has heard so
  * far, which a test reads after giving that fiber its turns.
  */
-export function readSideband(
+export const readSideband = /* @__PURE__ */ Effect.fnUntraced(function* (
   sideband: LiveSideband,
-): Effect.Effect<SidebandReading, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const reading: SidebandReading = { events: [], closes: [] };
-    yield* Effect.forkScoped(
-      Stream.runForEach(sideband.arrivals, (arrival) =>
-        Effect.sync(() => {
-          if ("close" in arrival) reading.closes.push(arrival.close);
-          else reading.events.push(arrival.event);
-        }),
-      ),
-    );
-    return reading;
-  });
-}
+): Effect.fn.Return<SidebandReading, never, Scope.Scope> {
+  const reading: SidebandReading = { events: [], closes: [] };
+  yield* Effect.forkScoped(
+    Stream.runForEach(sideband.arrivals, (arrival) =>
+      Effect.sync(() => {
+        if ("close" in arrival) reading.closes.push(arrival.close);
+        else reading.events.push(arrival.event);
+      }),
+    ),
+  );
+  return reading;
+});

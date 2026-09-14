@@ -309,13 +309,11 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
 /** A reset's capture is cut by the capture's own timeout and by nothing of the reset's, so the signal it is handed never fires. */
 const RESET_CAPTURE_SIGNAL = new AbortController().signal;
 
-export function wireBrain(
+export const wireBrain = /* @__PURE__ */ Effect.fn("wireBrain")(function* (
   dependencies: BrainWiringDependencies,
-): Effect.Effect<BrainWiring, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    return buildBrainWiring(dependencies, yield* Clock.Clock, yield* Effect.scope);
-  });
-}
+): Effect.fn.Return<BrainWiring, never, Scope.Scope> {
+  return buildBrainWiring(dependencies, yield* Clock.Clock, yield* Effect.scope);
+});
 
 /**
  * The wiring itself, built in one synchronous step from the two things only a
@@ -704,28 +702,27 @@ function buildBrainWiring(
   // how its close's own fiber settles, which an open of the same key waits on
   // and a second close answers with rather than beginning another.
   const closings = new Map<SessionKey, Effect.Effect<void>>();
-  const rebuild = (): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const model = liveModel();
-      // Main's conversation is opened the moment a brain may stand on it, and
-      // not before: a launch with nothing to run leaves the store untouched.
-      if (model) openConversation(MAIN_SESSION_KEY);
-      // A conversation standing down is left to its close: a rebuild landing
-      // while its drain is awaited would be the newer transition, and would
-      // install a live agent on a host the close is about to drop from the
-      // directory, where nothing could ever retire it. The reopen that follows
-      // the close builds on the model then standing.
-      yield* Effect.all(
-        [...conversations.entries()]
-          .filter(([sessionKey]) => !closings.has(sessionKey))
-          .map(([sessionKey, opened]) => rebuildOne(sessionKey, opened, model)),
-        { concurrency: "unbounded", discard: true },
-      );
-      // Recovery of what the last launch left waits for a model to stand: a
-      // launch with none has nothing to run a child on, and a child marked
-      // unknown for that alone would be a budget spent on nothing.
-      if (model) yield* Effect.promise(() => children.service.start());
-    });
+  const rebuild = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<void> {
+    const model = liveModel();
+    // Main's conversation is opened the moment a brain may stand on it, and
+    // not before: a launch with nothing to run leaves the store untouched.
+    if (model) openConversation(MAIN_SESSION_KEY);
+    // A conversation standing down is left to its close: a rebuild landing
+    // while its drain is awaited would be the newer transition, and would
+    // install a live agent on a host the close is about to drop from the
+    // directory, where nothing could ever retire it. The reopen that follows
+    // the close builds on the model then standing.
+    yield* Effect.all(
+      [...conversations.entries()]
+        .filter(([sessionKey]) => !closings.has(sessionKey))
+        .map(([sessionKey, opened]) => rebuildOne(sessionKey, opened, model)),
+      { concurrency: "unbounded", discard: true },
+    );
+    // Recovery of what the last launch left waits for a model to stand: a
+    // launch with none has nothing to run a child on, and a child marked
+    // unknown for that alone would be a budget spent on nothing.
+    if (model) yield* Effect.promise(() => children.service.start());
+  });
 
   const retire = (): Effect.Effect<void> =>
     Effect.sync(() => {
@@ -818,27 +815,26 @@ function buildBrainWiring(
    * cursor rolled back on a refusal — is the agent's own and is unchanged by
    * where the fiber came from.
    */
-  const wake = (events: readonly BrainWakeEvent[]): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      if (!liveModel()) return;
-      const bySession = new Map<
-        SessionKey,
-        { identity: SessionIdentity; events: BrainWakeEvent[] }
-      >();
-      for (const event of events) {
-        const key = observedSessionKey(event.identity);
-        const held = bySession.get(key) ?? { identity: event.identity, events: [] };
-        held.events.push(event);
-        bySession.set(key, held);
-      }
-      for (const { identity, events: own } of bySession.values()) {
-        yield* Effect.forkDetach(
-          Effect.flatMap(openObserved(identity), (agent) =>
-            agent ? agent.wake(own) : Effect.void,
-          ),
-        );
-      }
-    });
+  const wake = /* @__PURE__ */ Effect.fnUntraced(function* (
+    events: readonly BrainWakeEvent[],
+  ): Effect.fn.Return<void> {
+    if (!liveModel()) return;
+    const bySession = new Map<
+      SessionKey,
+      { identity: SessionIdentity; events: BrainWakeEvent[] }
+    >();
+    for (const event of events) {
+      const key = observedSessionKey(event.identity);
+      const held = bySession.get(key) ?? { identity: event.identity, events: [] };
+      held.events.push(event);
+      bySession.set(key, held);
+    }
+    for (const { identity, events: own } of bySession.values()) {
+      yield* Effect.forkDetach(
+        Effect.flatMap(openObserved(identity), (agent) => (agent ? agent.wake(own) : Effect.void)),
+      );
+    }
+  });
 
   // A conversation is busy while any run of it is pending in Conversation's view,
   // or while its brain has anything under way or owed: a turn running or
@@ -855,39 +851,38 @@ function buildBrainWiring(
    * answer one session's transcript must not hold the next pass — or the
    * other sessions' looks — behind it.
    */
-  const rosterLook = (): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      if (!liveModel()) return;
-      const roster = dependencies.roster();
-      const present = new Set<SessionKey>();
-      for (const session of roster.sessions ?? []) {
-        const identity: SessionIdentity = {
-          providerId: session.providerId,
-          providerSessionId: session.providerSessionId,
-        };
-        const sessionKey = observedSessionKey(identity);
-        present.add(sessionKey);
-        const live =
-          session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
-        const open = conversations.has(sessionKey);
-        if (!(live || open)) continue;
-        yield* Effect.forkDetach(
-          Effect.flatMap(openObserved(identity), (agent) =>
-            agent ? agent.rosterLook() : Effect.void,
-          ),
-        );
-      }
-      // A session the roster no longer holds has nothing left to observe: its
-      // conversation stands down once no run is under way in it, and its
-      // history stays in the store for the selector and for maintenance.
-      for (const sessionKey of [...conversations.keys()]) {
-        if (!observedSessionRefOf(sessionKey) || present.has(sessionKey) || busy(sessionKey))
-          continue;
-        // The stand-down is begun here and its drain left to its own fiber:
-        // this look holds nothing open for a session that has left the roster.
-        yield* beginClosing(sessionKey);
-      }
-    });
+  const rosterLook = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<void> {
+    if (!liveModel()) return;
+    const roster = dependencies.roster();
+    const present = new Set<SessionKey>();
+    for (const session of roster.sessions ?? []) {
+      const identity: SessionIdentity = {
+        providerId: session.providerId,
+        providerSessionId: session.providerSessionId,
+      };
+      const sessionKey = observedSessionKey(identity);
+      present.add(sessionKey);
+      const live =
+        session.status === SESSION_STATUS.WORKING || session.status === SESSION_STATUS.WAITING;
+      const open = conversations.has(sessionKey);
+      if (!(live || open)) continue;
+      yield* Effect.forkDetach(
+        Effect.flatMap(openObserved(identity), (agent) =>
+          agent ? agent.rosterLook() : Effect.void,
+        ),
+      );
+    }
+    // A session the roster no longer holds has nothing left to observe: its
+    // conversation stands down once no run is under way in it, and its
+    // history stays in the store for the selector and for maintenance.
+    for (const sessionKey of [...conversations.keys()]) {
+      if (!observedSessionRefOf(sessionKey) || present.has(sessionKey) || busy(sessionKey))
+        continue;
+      // The stand-down is begun here and its drain left to its own fiber:
+      // this look holds nothing open for a session that has left the roster.
+      yield* beginClosing(sessionKey);
+    }
+  });
 
   // A held briefing goes back to the conversation that decided it, because
   // that conversation is the one that knows the session it was about. An
@@ -895,29 +890,30 @@ function buildBrainWiring(
   // rather than the briefing being re-decided in main, which never read that
   // session; only a source that cannot be reopened at all falls to main, and
   // says so.
-  const releaseHeld = (held: readonly BrainDelivery[]): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      const bySource = new Map<SessionKey, BrainDelivery[]>();
-      for (const delivery of held) {
-        const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
-        bySource.set(source, [...(bySource.get(source) ?? []), delivery]);
-      }
-      for (const [sessionKey, own] of bySource) {
-        const observed = observedSessionRefOf(sessionKey);
-        const opening = observed
-          ? openObserved(observed)
-          : Effect.sync(() => current(sessionKey) ?? current(MAIN_SESSION_KEY));
-        yield* Effect.forkDetach(
-          Effect.flatMap(opening, (agent) => {
-            if (agent) return agent.releaseHeld(own);
-            dependencies.report(
-              `Held briefings of ${sessionKey} could not return to their conversation and are re-decided in main`,
-            );
-            return current(MAIN_SESSION_KEY)?.releaseHeld(own) ?? Effect.void;
-          }),
-        );
-      }
-    });
+  const releaseHeld = /* @__PURE__ */ Effect.fnUntraced(function* (
+    held: readonly BrainDelivery[],
+  ): Effect.fn.Return<void> {
+    const bySource = new Map<SessionKey, BrainDelivery[]>();
+    for (const delivery of held) {
+      const source = delivery.sessionKey ?? MAIN_SESSION_KEY;
+      bySource.set(source, [...(bySource.get(source) ?? []), delivery]);
+    }
+    for (const [sessionKey, own] of bySource) {
+      const observed = observedSessionRefOf(sessionKey);
+      const opening = observed
+        ? openObserved(observed)
+        : Effect.sync(() => current(sessionKey) ?? current(MAIN_SESSION_KEY));
+      yield* Effect.forkDetach(
+        Effect.flatMap(opening, (agent) => {
+          if (agent) return agent.releaseHeld(own);
+          dependencies.report(
+            `Held briefings of ${sessionKey} could not return to their conversation and are re-decided in main`,
+          );
+          return current(MAIN_SESSION_KEY)?.releaseHeld(own) ?? Effect.void;
+        }),
+      );
+    }
+  });
 
   /**
    * Begins a conversation's stand-down and answers how its own fiber settles,

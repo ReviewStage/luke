@@ -415,17 +415,17 @@ function dispatchAskOnce(
 }
 
 /** The one place a client id becomes a row: the insert lands or is refused by the index, and the row is read back either way. */
-function recordAsk(ask: AskWrite): Effect.Effect<AskRow, AskFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    yield* insertAsk(ask);
-    const row = yield* findAskByClient({
-      conversationId: ask.conversationId,
-      clientId: ask.clientId,
-    });
-    if (Option.isNone(row)) throw new Error("the ask's row is not standing after its insert");
-    return askRow(row.value);
+const recordAsk = /* @__PURE__ */ Effect.fn("recordAsk")(function* (
+  ask: AskWrite,
+): Effect.fn.Return<AskRow, AskFailure, SqlClient.SqlClient> {
+  yield* insertAsk(ask);
+  const row = yield* findAskByClient({
+    conversationId: ask.conversationId,
+    clientId: ask.clientId,
   });
-}
+  if (Option.isNone(row)) throw new Error("the ask's row is not standing after its insert");
+  return askRow(row.value);
+});
 
 /** The record over the ambient client: every method an effect its caller composes into its own request. */
 export function askRecord(): AskRecord & AskDeliveryBinding {

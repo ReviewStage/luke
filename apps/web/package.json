@@ -60,7 +60,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@electric-sql/pglite": "0.5.8",
-    "@types/node": "catalog:web",
+    "@types/node": "catalog:",
     "@types/pg": "8.21.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",

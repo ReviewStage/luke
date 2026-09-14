@@ -127,7 +127,12 @@ const recordHashEffect = (
   ).pipe(Effect.asVoid);
 
 const insertEntryEffect = (
-  entry: { id: string; words: string; origin: MemoryOrigin; migratedFactId?: string },
+  entry: {
+    id: string;
+    words: string;
+    origin: MemoryOrigin;
+    migratedFactId?: string;
+  },
   now: number,
 ): Effect.Effect<void, SqlError, Client.SqlClient> =>
   Effect.flatMap(
@@ -150,39 +155,37 @@ const deleteEntryEffect = (id: string): Effect.Effect<void, SqlError, Client.Sql
  * own origin under a fresh id, and an entry whose line is gone is dropped.
  * Answers the entries as they then stand and the content that was read.
  */
-const reconcileNotebookEffect = (
+const reconcileNotebookEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
   root: string,
   now: number,
-): Effect.Effect<NotebookReconciliation, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const content = readUserFile(root);
-    const hash = hashText(content);
-    if ((yield* recordedHashEffect) === hash)
-      return { entries: yield* selectEntriesEffect, content };
-    const parsed = parseNotebook(content);
-    const sql = yield* Client.SqlClient;
-    const entries = yield* sql.withTransaction(
-      Effect.gen(function* () {
-        const held = yield* selectEntriesEffect;
-        const words = new Set(parsed.entries.map((entry) => entry.words));
-        for (const entry of held) {
-          if (!words.has(entry.words)) yield* deleteEntryEffect(entry.id);
-        }
-        const known = new Set(held.map((entry) => entry.words));
-        for (const line of parsed.entries) {
-          if (known.has(line.words)) continue;
-          known.add(line.words);
-          yield* insertEntryEffect(
-            { id: randomUUID(), words: line.words, origin: MEMORY_ORIGIN.USER },
-            now,
-          );
-        }
-        yield* recordHashEffect(hash, now);
-        return yield* selectEntriesEffect;
-      }),
-    );
-    return { entries, content };
-  });
+): Effect.fn.Return<NotebookReconciliation, SqlError, Client.SqlClient> {
+  const content = readUserFile(root);
+  const hash = hashText(content);
+  if ((yield* recordedHashEffect) === hash) return { entries: yield* selectEntriesEffect, content };
+  const parsed = parseNotebook(content);
+  const sql = yield* Client.SqlClient;
+  const entries = yield* sql.withTransaction(
+    Effect.gen(function* () {
+      const held = yield* selectEntriesEffect;
+      const words = new Set(parsed.entries.map((entry) => entry.words));
+      for (const entry of held) {
+        if (!words.has(entry.words)) yield* deleteEntryEffect(entry.id);
+      }
+      const known = new Set(held.map((entry) => entry.words));
+      for (const line of parsed.entries) {
+        if (known.has(line.words)) continue;
+        known.add(line.words);
+        yield* insertEntryEffect(
+          { id: randomUUID(), words: line.words, origin: MEMORY_ORIGIN.USER },
+          now,
+        );
+      }
+      yield* recordHashEffect(hash, now);
+      return yield* selectEntriesEffect;
+    }),
+  );
+  return { entries, content };
+});
 
 export const listNotebookEntriesEffect = (
   root: string,
@@ -212,7 +215,11 @@ function notebookMutationOf(
   result: Result.Result<{ entries: readonly NotebookEntry[] }, NotebookRefusal>,
 ): NotebookMutation {
   return Result.match(result, {
-    onFailure: (refusal) => ({ ok: false, entries: refusal.entries, reason: refusal.reason }),
+    onFailure: (refusal) => ({
+      ok: false,
+      entries: refusal.entries,
+      reason: refusal.reason,
+    }),
     onSuccess: ({ entries }) => ({ ok: true, entries }),
   });
 }
@@ -228,18 +235,21 @@ function notebookMutationOf(
  * leaves a line with no row, which the next reconcile adopts under a fresh id
  * of the developer's origin, and the caller still sees a failure, not an id.
  */
-export const rememberNotebookEntryEffect = (
-  root: string,
-  ask: { id: string; words: string; replaces?: string },
-  now: number,
-): Effect.Effect<NotebookMutation, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const rememberNotebookEntryEffect = /* @__PURE__ */ Effect.fn("rememberNotebookEntryEffect")(
+  function* (
+    root: string,
+    ask: { id: string; words: string; replaces?: string },
+    now: number,
+  ): Effect.fn.Return<NotebookMutation, SqlError, Client.SqlClient> {
     const words = notebookEntryText(ask.words);
     const current = yield* reconcileNotebookEffect(root, now);
     if (!words)
       return notebookMutationOf(
         Result.fail(
-          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.EMPTY, entries: current.entries }),
+          new NotebookRefusal({
+            reason: NOTEBOOK_REFUSAL.EMPTY,
+            entries: current.entries,
+          }),
         ),
       );
     const replaced = ask.replaces
@@ -248,7 +258,10 @@ export const rememberNotebookEntryEffect = (
     if (ask.replaces !== undefined && !replaced) {
       return notebookMutationOf(
         Result.fail(
-          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
+          new NotebookRefusal({
+            reason: NOTEBOOK_REFUSAL.UNKNOWN_ID,
+            entries: current.entries,
+          }),
         ),
       );
     }
@@ -259,7 +272,10 @@ export const rememberNotebookEntryEffect = (
       if (!replaced && current.entries.length >= maximumRememberedFacts) {
         return notebookMutationOf(
           Result.fail(
-            new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.FULL, entries: current.entries }),
+            new NotebookRefusal({
+              reason: NOTEBOOK_REFUSAL.FULL,
+              entries: current.entries,
+            }),
           ),
         );
       }
@@ -279,20 +295,24 @@ export const rememberNotebookEntryEffect = (
       }),
     );
     return notebookMutationOf(Result.succeed({ entries }));
-  });
+  },
+);
 
-export const forgetNotebookEntryEffect = (
-  root: string,
-  id: string,
-  now: number,
-): Effect.Effect<NotebookMutation, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const forgetNotebookEntryEffect = /* @__PURE__ */ Effect.fn("forgetNotebookEntryEffect")(
+  function* (
+    root: string,
+    id: string,
+    now: number,
+  ): Effect.fn.Return<NotebookMutation, SqlError, Client.SqlClient> {
     const current = yield* reconcileNotebookEffect(root, now);
     const entry = current.entries.find((candidate) => candidate.id === id);
     if (!entry)
       return notebookMutationOf(
         Result.fail(
-          new NotebookRefusal({ reason: NOTEBOOK_REFUSAL.UNKNOWN_ID, entries: current.entries }),
+          new NotebookRefusal({
+            reason: NOTEBOOK_REFUSAL.UNKNOWN_ID,
+            entries: current.entries,
+          }),
         ),
       );
     const content = removeNotebookEntry(current.content, entry.words);
@@ -306,7 +326,8 @@ export const forgetNotebookEntryEffect = (
       }),
     );
     return notebookMutationOf(Result.succeed({ entries }));
-  });
+  },
+);
 
 const personalFactRows = SqlSchema.findAll({
   Request: Schema.Void,
@@ -326,42 +347,40 @@ const personalFactRows = SqlSchema.findAll({
  * fact whose words the notebook already holds adds no line. Idempotent: a
  * launch that finds the table empty does nothing.
  */
-export const migrateFactsIntoNotebookEffect = (
-  root: string,
-  now: number,
-): Effect.Effect<number, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const facts = yield* columnsDecoded(personalFactRows());
-    if (facts.length === 0) return 0;
-    const current = yield* reconcileNotebookEffect(root, now);
-    const known = new Set(current.entries.map((entry) => entry.words));
-    let content = current.content;
-    const added: { id: string; words: string }[] = [];
-    for (const fact of facts) {
-      const words = notebookEntryText(fact.words);
-      if (!words || known.has(words)) continue;
-      known.add(words);
-      content = appendNotebookEntry(content, words);
-      added.push({ id: fact.id, words });
-    }
-    const sql = yield* Client.SqlClient;
-    yield* sql.withTransaction(
-      Effect.gen(function* () {
-        for (const fact of added) {
-          yield* insertEntryEffect(
-            {
-              id: fact.id,
-              words: fact.words,
-              origin: MEMORY_ORIGIN.MIGRATED_FACT,
-              migratedFactId: fact.id,
-            },
-            now,
-          );
-        }
-        yield* sql`DELETE FROM personal_facts`;
-        yield* recordHashEffect(hashText(content), now);
-        if (content !== current.content) writeUserFile(root, content);
-      }),
-    );
-    return facts.length;
-  });
+export const migrateFactsIntoNotebookEffect = /* @__PURE__ */ Effect.fn(
+  "migrateFactsIntoNotebookEffect",
+)(function* (root: string, now: number): Effect.fn.Return<number, SqlError, Client.SqlClient> {
+  const facts = yield* columnsDecoded(personalFactRows());
+  if (facts.length === 0) return 0;
+  const current = yield* reconcileNotebookEffect(root, now);
+  const known = new Set(current.entries.map((entry) => entry.words));
+  let content = current.content;
+  const added: { id: string; words: string }[] = [];
+  for (const fact of facts) {
+    const words = notebookEntryText(fact.words);
+    if (!words || known.has(words)) continue;
+    known.add(words);
+    content = appendNotebookEntry(content, words);
+    added.push({ id: fact.id, words });
+  }
+  const sql = yield* Client.SqlClient;
+  yield* sql.withTransaction(
+    Effect.gen(function* () {
+      for (const fact of added) {
+        yield* insertEntryEffect(
+          {
+            id: fact.id,
+            words: fact.words,
+            origin: MEMORY_ORIGIN.MIGRATED_FACT,
+            migratedFactId: fact.id,
+          },
+          now,
+        );
+      }
+      yield* sql`DELETE FROM personal_facts`;
+      yield* recordHashEffect(hashText(content), now);
+      if (content !== current.content) writeUserFile(root, content);
+    }),
+  );
+  return facts.length;
+});

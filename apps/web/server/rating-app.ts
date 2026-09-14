@@ -26,12 +26,12 @@ type RatingServices = SqlClient.SqlClient;
  * be read to settle. The write it names no tool, so its writer stands over no
  * registry.
  */
-function ratingPassthrough(): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  never,
-  RatingServices | HttpServerRequest.HttpServerRequest
-> {
-  return Effect.gen(function* () {
+const ratingPassthrough = /* @__PURE__ */ Effect.fn("ratingPassthrough")(
+  function* (): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    RatingServices | HttpServerRequest.HttpServerRequest
+  > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const answer = yield* Effect.orDie(
@@ -46,8 +46,8 @@ function ratingPassthrough(): Effect.Effect<
       }),
     );
     return HttpServerResponse.raw(answer);
-  });
-}
+  },
+);
 
 /** The group, over the one path this function's rewrite ever sends here. */
 export function ratingApp(): WebRoutes<RatingServices> {

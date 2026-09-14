@@ -80,202 +80,200 @@ export interface LiveDependencies {
  * each. The kernel is read as a tag on the same terms; the sibling composers
  * stay constructor arguments, since the cycles between them forbid tags.
  */
-export const composeLive = (
+export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   dependencies: LiveDependencies,
-): Effect.Effect<LiveComposer, never, HostKernelTag | LiveBrainTag | LiveRecordTag | Scope.Scope> =>
-  Effect.gen(function* () {
-    const { settings, account, calendars, observation, brain } = dependencies;
-    const kernel = yield* HostKernelTag;
-    const { now, runMode } = kernel;
-    const late = yield* lateService<LiveLinks>();
-    // What a caller asked for and nothing waits on: each beat is taken in
-    // turn by a fiber of this composer's scope, and a beat that dies is
-    // written down rather than left to end the fiber every later beat needs.
-    const beats = yield* Queue.unbounded<Effect.Effect<void>>();
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.flatMap(Queue.take(beats), (beat) =>
-          Effect.catchDefect(beat, (defect) =>
-            Effect.logError("an onboarding beat failed", defect),
-          ),
-        ),
+): Effect.fn.Return<
+  LiveComposer,
+  never,
+  HostKernelTag | LiveBrainTag | LiveRecordTag | Scope.Scope
+> {
+  const { settings, account, calendars, observation, brain } = dependencies;
+  const kernel = yield* HostKernelTag;
+  const { now, runMode } = kernel;
+  const late = yield* lateService<LiveLinks>();
+  // What a caller asked for and nothing waits on: each beat is taken in
+  // turn by a fiber of this composer's scope, and a beat that dies is
+  // written down rather than left to end the fiber every later beat needs.
+  const beats = yield* Queue.unbounded<Effect.Effect<void>>();
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.flatMap(Queue.take(beats), (beat) =>
+        Effect.catchDefect(beat, (defect) => Effect.logError("an onboarding beat failed", defect)),
       ),
-    );
+    ),
+  );
 
-    function markFirstAnnouncementSpoken(): void {
-      const onboardingState = calendars.onboarding();
-      if (!countsFirstAnnouncement(onboardingState)) return;
-      const signedInAt = onboardingState?.arrivalSignedInAt;
-      const at = now();
-      const signedInAtMs = signedInAt !== undefined ? Date.parse(signedInAt) : Number.NaN;
-      if (Number.isFinite(signedInAtMs)) {
-        settings.recordProductEvent(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
-          sign_in_age: productSignInAge(at - signedInAtMs),
-        });
-      }
-      calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
+  function markFirstAnnouncementSpoken(): void {
+    const onboardingState = calendars.onboarding();
+    if (!countsFirstAnnouncement(onboardingState)) return;
+    const signedInAt = onboardingState?.arrivalSignedInAt;
+    const at = now();
+    const signedInAtMs = signedInAt !== undefined ? Date.parse(signedInAt) : Number.NaN;
+    if (Number.isFinite(signedInAtMs)) {
+      settings.recordProductEvent(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
+        sign_in_age: productSignInAge(at - signedInAtMs),
+      });
     }
+    calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
+  }
 
-    // The service stands for this composition's own scope, which is the
-    // host's: the fiber it runs what a socket event began on is that scope's,
-    // and the graceful close stays a drain step of `compose-host.ts` rather
-    // than a finalizer, so a quit ends the session inside its own deadline.
-    const service = yield* LiveSessionService.make<BrainDelivery>({
-      source: () => account.voiceCapabilities.liveSessions,
-      conversationEntries: () => brain.store.thread().entries(),
-      roster: () => voiceRoster(observation.rosterForClients()),
-      quietNow: () => calendars.announcementsQuietNow(now()),
-      releaseHeldBriefings: (held) =>
-        Effect.flatMap(late.value, (links) => links.releaseHeld(held)),
-      emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
-      createId: kernel.createId,
-      report: kernel.report,
-      ...(account.agentTrace
-        ? { trace: (record) => account.agentTrace?.recordSpeechDecision(record) }
-        : undefined),
-      onSessionCreated: () => {
-        settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-          session_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
-        });
-      },
-      onProactiveSpoken: (kind) => {
-        if (kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
-          settings.recordProductEvent(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
-          markFirstAnnouncementSpoken();
-        }
-        if (kind === PROACTIVE_SPEECH_KIND.ARRIVAL && arrivalBeatOwed(calendars.onboarding())) {
-          calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
-        }
-      },
-    });
-
-    // The desk moving is the one thing that refreshes what the voice knows of
-    // it. The service holds the append until the change settles and sends
-    // nothing while no session stands, so a roster that moves all day on a
-    // quiet Mac costs nothing.
-    observation.onRosterChange((sessions) => {
-      service.updateRoster(voiceRoster(sessions));
-    });
-
-    /**
-     * The arrival beat's observed values: one working session's title, read
-     * from the same roster the rows draw, and the talk key worded for a
-     * sentence, read from the stored choice the desktop registers first. The
-     * key is suggested only while voice could actually take it.
-     */
-    const arrivalBeat = Effect.gen(function* () {
-      const working = observation
-        .rosterForClients()
-        .find((session) => session.status === SESSION_STATUS.WORKING);
-      const talkKey = voiceHotkeyCandidates(
-        yield* Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
-      )[0];
-      return {
-        kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
-        decidedAt: now(),
-        ...(working ? { sessionTitle: working.title } : undefined),
-        ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
-      } as const;
-    });
-
-    const onboardingBeat = Effect.gen(function* () {
-      if (!runMode.requiresAccount || !account.signedIn()) return;
-      if (!account.voiceCapabilities.liveSessions) return;
-      // The greeting comes first and speaks in its own session; the beats are
-      // asked for again by the completion that takes the introduction down.
-      if (calendars.introductionOwed()) return;
-      // The key step has no beat of its own: the gate says on screen what it
-      // asks, and the calendar beat waits its turn behind it.
-      if (calendars.keyGateOwed()) return;
-      if (yield* calendars.gateOfferable()) {
-        service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
-        return;
+  // The service stands for this composition's own scope, which is the
+  // host's: the fiber it runs what a socket event began on is that scope's,
+  // and the graceful close stays a drain step of `compose-host.ts` rather
+  // than a finalizer, so a quit ends the session inside its own deadline.
+  const service = yield* LiveSessionService.make<BrainDelivery>({
+    source: () => account.voiceCapabilities.liveSessions,
+    conversationEntries: () => brain.store.thread().entries(),
+    roster: () => voiceRoster(observation.rosterForClients()),
+    quietNow: () => calendars.announcementsQuietNow(now()),
+    releaseHeldBriefings: (held) => Effect.flatMap(late.value, (links) => links.releaseHeld(held)),
+    emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
+    createId: kernel.createId,
+    report: kernel.report,
+    ...(account.agentTrace
+      ? { trace: (record) => account.agentTrace?.recordSpeechDecision(record) }
+      : undefined),
+    onSessionCreated: () => {
+      settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
+        session_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
+      });
+    },
+    onProactiveSpoken: (kind) => {
+      if (kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+        settings.recordProductEvent(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+        markFirstAnnouncementSpoken();
       }
-      if (!arrivalBeatOwed(calendars.onboarding())) return;
-      // The beat's own decision waits on the pass, so the pass is yielded
-      // here rather than run: a link that cannot wait for it offers this
-      // whole effect to the queue above instead.
-      yield* observation.loop.refresh;
-      if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
-      service.speakBeat(yield* arrivalBeat);
-    });
-
-    const methods: GatewayMethodTable = {
-      // The peer's offer becomes the one session, seeded and attached before
-      // the answer leaves; the idempotency key on the method is what stops a
-      // retried offer creating and billing a second one.
-      [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: (params) =>
-        Effect.gen(function* () {
-          const request = Result.getOrUndefined(
-            readEither(voiceCreateLiveSessionParamsSchema)(params),
-          );
-          if (!request) return yield* invalid("sdp must be the peer's offer");
-          const created = yield* service.createSession(request.sdp);
-          if (!created)
-            return yield* Effect.fail(
-              new RefusedRefusal({ message: "no live session could be created" }),
-            );
-          return carried(created);
-        }),
-      [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
-      [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
-        const report = Result.getOrUndefined(
-          readEither(voiceReportLiveTransportParamsSchema)(params),
-        );
-        if (!report) return invalid("state is not one the peer connection reports");
-        service.reportTransport(report.state);
-        return Effect.succeed({});
-      },
-      [GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY]: (params) => {
-        const report = Result.getOrUndefined(
-          readEither(voiceReportLiveActivityParamsSchema)(params),
-        );
-        if (!report) return invalid("idle must be a boolean");
-        service.reportActivity(report.idle);
-        return Effect.succeed({});
-      },
-      // The stop key alone: the mute the peer sends on its own says nothing
-      // about Luke's output, so this is the one ask that tells him to stop.
-      [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
-        Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
-      // What the host knows about why voice is or is not available, carrying no
-      // credential and no session's SDP: the source's own reading while one
-      // stands, and the reason there is none otherwise.
-      [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
-        Effect.sync(() => ({
-          diagnostics: carried(
-            account.voiceCapabilities.liveSessions?.diagnostics() ??
-              unavailableLiveDiagnostics({
-                fixtureMode: !runMode.sendsNetwork,
-                apiKeyConfigured: false,
-              }),
-          ),
-        })),
-      // One live event the renderer's tap saw cross the data channel, into the
-      // development trace. Read again here for the shape the tap sends; on a
-      // run without a writer — packaged, fixture, or simply untraced — it lands
-      // here and stops.
-      [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
-        const trace = params.trace;
-        if (!isAgentWireTrace(trace)) return invalid("trace is not one tapped wire event");
-        account.agentTrace?.recordWire(trace);
-        return Effect.succeed({});
-      },
-    };
-
-    return {
-      methods,
-      service,
-      requestOnboardingBeat: () => {
-        Queue.offerUnsafe(beats, onboardingBeat);
-      },
-      seedArrivalOnFirstSignIn: () => {
-        if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
-        calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
-      },
-      link: (next) => Effect.asVoid(late.set(next)),
-      // The session itself is closed by the drain, inside the quit's deadline,
-      // before any composer stops; nothing is left here to give back.
-      lifetime: Effect.void,
-    };
+      if (kind === PROACTIVE_SPEECH_KIND.ARRIVAL && arrivalBeatOwed(calendars.onboarding())) {
+        calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
+      }
+    },
   });
+
+  // The desk moving is the one thing that refreshes what the voice knows of
+  // it. The service holds the append until the change settles and sends
+  // nothing while no session stands, so a roster that moves all day on a
+  // quiet Mac costs nothing.
+  observation.onRosterChange((sessions) => {
+    service.updateRoster(voiceRoster(sessions));
+  });
+
+  /**
+   * The arrival beat's observed values: one working session's title, read
+   * from the same roster the rows draw, and the talk key worded for a
+   * sentence, read from the stored choice the desktop registers first. The
+   * key is suggested only while voice could actually take it.
+   */
+  const arrivalBeat = Effect.gen(function* () {
+    const working = observation
+      .rosterForClients()
+      .find((session) => session.status === SESSION_STATUS.WORKING);
+    const talkKey = voiceHotkeyCandidates(
+      yield* Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    )[0];
+    return {
+      kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+      decidedAt: now(),
+      ...(working ? { sessionTitle: working.title } : undefined),
+      ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
+    } as const;
+  });
+
+  const onboardingBeat = Effect.gen(function* () {
+    if (!runMode.requiresAccount || !account.signedIn()) return;
+    if (!account.voiceCapabilities.liveSessions) return;
+    // The greeting comes first and speaks in its own session; the beats are
+    // asked for again by the completion that takes the introduction down.
+    if (calendars.introductionOwed()) return;
+    // The key step has no beat of its own: the gate says on screen what it
+    // asks, and the calendar beat waits its turn behind it.
+    if (calendars.keyGateOwed()) return;
+    if (yield* calendars.gateOfferable()) {
+      service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: now() });
+      return;
+    }
+    if (!arrivalBeatOwed(calendars.onboarding())) return;
+    // The beat's own decision waits on the pass, so the pass is yielded
+    // here rather than run: a link that cannot wait for it offers this
+    // whole effect to the queue above instead.
+    yield* observation.loop.refresh;
+    if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
+    service.speakBeat(yield* arrivalBeat);
+  });
+
+  const methods: GatewayMethodTable = {
+    // The peer's offer becomes the one session, seeded and attached before
+    // the answer leaves; the idempotency key on the method is what stops a
+    // retried offer creating and billing a second one.
+    [GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION]: (params) =>
+      Effect.gen(function* () {
+        const request = Result.getOrUndefined(
+          readEither(voiceCreateLiveSessionParamsSchema)(params),
+        );
+        if (!request) return yield* invalid("sdp must be the peer's offer");
+        const created = yield* service.createSession(request.sdp);
+        if (!created)
+          return yield* Effect.fail(
+            new RefusedRefusal({ message: "no live session could be created" }),
+          );
+        return carried(created);
+      }),
+    [GATEWAY_METHOD.VOICE_END_LIVE_SESSION]: () => Effect.as(service.endSession(), {}),
+    [GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT]: (params) => {
+      const report = Result.getOrUndefined(
+        readEither(voiceReportLiveTransportParamsSchema)(params),
+      );
+      if (!report) return invalid("state is not one the peer connection reports");
+      service.reportTransport(report.state);
+      return Effect.succeed({});
+    },
+    [GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY]: (params) => {
+      const report = Result.getOrUndefined(readEither(voiceReportLiveActivityParamsSchema)(params));
+      if (!report) return invalid("idle must be a boolean");
+      service.reportActivity(report.idle);
+      return Effect.succeed({});
+    },
+    // The stop key alone: the mute the peer sends on its own says nothing
+    // about Luke's output, so this is the one ask that tells him to stop.
+    [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
+      Effect.sync(() => carried({ stopped: service.stopSpeaking() })),
+    // What the host knows about why voice is or is not available, carrying no
+    // credential and no session's SDP: the source's own reading while one
+    // stands, and the reason there is none otherwise.
+    [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
+      Effect.sync(() => ({
+        diagnostics: carried(
+          account.voiceCapabilities.liveSessions?.diagnostics() ??
+            unavailableLiveDiagnostics({
+              fixtureMode: !runMode.sendsNetwork,
+              apiKeyConfigured: false,
+            }),
+        ),
+      })),
+    // One live event the renderer's tap saw cross the data channel, into the
+    // development trace. Read again here for the shape the tap sends; on a
+    // run without a writer — packaged, fixture, or simply untraced — it lands
+    // here and stops.
+    [GATEWAY_METHOD.VOICE_RECORD_TRACE]: (params) => {
+      const trace = params.trace;
+      if (!isAgentWireTrace(trace)) return invalid("trace is not one tapped wire event");
+      account.agentTrace?.recordWire(trace);
+      return Effect.succeed({});
+    },
+  };
+
+  return {
+    methods,
+    service,
+    requestOnboardingBeat: () => {
+      Queue.offerUnsafe(beats, onboardingBeat);
+    },
+    seedArrivalOnFirstSignIn: () => {
+      if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
+      calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
+    },
+    link: (next) => Effect.asVoid(late.set(next)),
+    // The session itself is closed by the drain, inside the quit's deadline,
+    // before any composer stops; nothing is left here to give back.
+    lifetime: Effect.void,
+  };
+});

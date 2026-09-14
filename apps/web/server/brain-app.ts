@@ -222,16 +222,51 @@ interface BrainModels {
 }
 
 /**
+ * The upstream's answer as the wire value the operation reads, or the refusal
+ * to hand down. The request is carried by the ambient `HttpClient`, whose
+ * interruption is the fiber's own: a turn cancelled mid-call drops the
+ * request with it, so an interrupted turn spends no more of the upstream than
+ * it already had.
+ */
+const upstream = /* @__PURE__ */ Effect.fn("upstream")(function* (
+  seams: BrainSeams,
+  apiKey: string,
+  path: string,
+  body: Parameters<typeof postOpenAiEffect>[1],
+): Effect.fn.Return<UnparsedWireValue | undefined, Answer, HttpClient.HttpClient> {
+  const response = yield* postOpenAiEffect(path, body, {
+    apiKey,
+    timeoutMs: seams.timeoutMs ?? HOSTED_BRAIN_DEFAULTS.UPSTREAM_TIMEOUT_MS,
+  });
+  if (response?.status === HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS) {
+    // The provider itself is rate limiting: the desktop cools down for the
+    // bounded wait the header names, as a keyed desktop would, and never
+    // mistakes it for a spent allowance. The allowance was still spent.
+    const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
+    return yield* Effect.fail(
+      hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
+        error: HOSTED_API_ERROR.UPSTREAM_THROTTLED,
+        upstreamStatus: response.status,
+      }).pipe(HttpServerResponse.setHeader(RETRY_AFTER_HEADER, String(Math.ceil(waitMs / 1000)))),
+    );
+  }
+  if (!response?.ok) return yield* Effect.fail(hostedUpstreamErrorResponse(response?.status));
+  const parsed: unknown = yield* Effect.promise(() => response.json().catch(() => undefined));
+  // SAFETY: response.json returns a runtime value; every reader below validates it as wire.
+  return parsed as UnparsedWireValue;
+});
+
+/**
  * The one shape every POST operation has: the body within its byte bound and
  * read whole, the request admitted by the contract's own reader, the
  * allowance spent — before the upstream call, and spent whether or not it
  * answers, the convention every hosted meter keeps — then one upstream post
  * and the answer as the operation reads it.
  */
-function brainOperation<Admitted>(
+const brainOperation = /* @__PURE__ */ Effect.fn("brainOperation")(function* <Admitted>(
   seams: BrainSeams,
   operation: BrainOperation<Admitted>,
-): Effect.Effect<
+): Effect.fn.Return<
   Answer,
   Answer,
   | HttpServerRequest.HttpServerRequest
@@ -239,71 +274,32 @@ function brainOperation<Admitted>(
   | HttpClient.HttpClient
   | SqlClient.SqlClient
 > {
-  return Effect.gen(function* () {
-    const { userId, apiKey, model, prefetchModel } = yield* account(seams, HTTP_METHOD.POST);
-    const payload = yield* refusing(readJsonBodyEffect(maximumHostedBrainRequestBytes));
-    const read = operation.read(payload);
-    if (!read.ok) return yield* refuse(REFUSAL_ERROR[read.refusal]);
-    const spend = yield* Effect.orDie(seams.spend(userId));
-    if (!spend.allowed) {
-      return yield* Effect.fail(
-        hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
-          error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-          quota: spend.quota,
-        }),
-      );
-    }
-    const answered = yield* upstream(
-      seams,
-      apiKey,
-      operation.path,
-      operation.body(read.request, {
-        model: modelOf(model),
-        prefetchModel: prefetchModelOf(prefetchModel),
+  const { userId, apiKey, model, prefetchModel } = yield* account(seams, HTTP_METHOD.POST);
+  const payload = yield* refusing(readJsonBodyEffect(maximumHostedBrainRequestBytes));
+  const read = operation.read(payload);
+  if (!read.ok) return yield* refuse(REFUSAL_ERROR[read.refusal]);
+  const spend = yield* Effect.orDie(seams.spend(userId));
+  if (!spend.allowed) {
+    return yield* Effect.fail(
+      hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
+        error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+        quota: spend.quota,
       }),
     );
-    const body = answered === undefined ? undefined : operation.answer(answered);
-    if (!body) return yield* Effect.fail(hostedUpstreamErrorResponse(undefined));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, body);
-  });
-}
-
-/**
- * The upstream's answer as the wire value the operation reads, or the refusal
- * to hand down. The request is carried by the ambient `HttpClient`, whose
- * interruption is the fiber's own: a turn cancelled mid-call drops the
- * request with it, so an interrupted turn spends no more of the upstream than
- * it already had.
- */
-function upstream(
-  seams: BrainSeams,
-  apiKey: string,
-  path: string,
-  body: Parameters<typeof postOpenAiEffect>[1],
-): Effect.Effect<UnparsedWireValue | undefined, Answer, HttpClient.HttpClient> {
-  return Effect.gen(function* () {
-    const response = yield* postOpenAiEffect(path, body, {
-      apiKey,
-      timeoutMs: seams.timeoutMs ?? HOSTED_BRAIN_DEFAULTS.UPSTREAM_TIMEOUT_MS,
-    });
-    if (response?.status === HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS) {
-      // The provider itself is rate limiting: the desktop cools down for the
-      // bounded wait the header names, as a keyed desktop would, and never
-      // mistakes it for a spent allowance. The allowance was still spent.
-      const waitMs = rateLimitWaitMs(response.headers.get(RETRY_AFTER_HEADER));
-      return yield* Effect.fail(
-        hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
-          error: HOSTED_API_ERROR.UPSTREAM_THROTTLED,
-          upstreamStatus: response.status,
-        }).pipe(HttpServerResponse.setHeader(RETRY_AFTER_HEADER, String(Math.ceil(waitMs / 1000)))),
-      );
-    }
-    if (!response?.ok) return yield* Effect.fail(hostedUpstreamErrorResponse(response?.status));
-    const parsed: unknown = yield* Effect.promise(() => response.json().catch(() => undefined));
-    // SAFETY: response.json returns a runtime value; every reader below validates it as wire.
-    return parsed as UnparsedWireValue;
-  });
-}
+  }
+  const answered = yield* upstream(
+    seams,
+    apiKey,
+    operation.path,
+    operation.body(read.request, {
+      model: modelOf(model),
+      prefetchModel: prefetchModelOf(prefetchModel),
+    }),
+  );
+  const body = answered === undefined ? undefined : operation.answer(answered);
+  if (!body) return yield* Effect.fail(hostedUpstreamErrorResponse(undefined));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, body);
+});
 
 /** GET: what this service speaks, so a desktop can refuse to run against one that lacks it. */
 function capabilities(

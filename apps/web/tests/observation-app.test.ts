@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { routeFromHttpApp } from "../server/route-effect.js";
+import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import { runWithoutDatabase } from "./support/no-database.js";
 import {
@@ -159,7 +159,7 @@ afterEach(async () => {
 
 test("the group answers each route the way its own handler answers it", async () => {
   for (const exchange of EXCHANGES) {
-    const answered = await routeFromHttpApp(observationApp()).fetch(exchange.request());
+    const answered = await routeFromHttpRouter(observationApp()).fetch(exchange.request());
     const carried = await recordedResponse(answered);
     const direct = await recordedResponse(await exchange.handle());
 
@@ -169,7 +169,7 @@ test("the group answers each route the way its own handler answers it", async ()
 });
 
 test("a wrong method on a declared path is the handler's own refusal, not the group's", async () => {
-  const answered = await routeFromHttpApp(observationApp()).fetch(
+  const answered = await routeFromHttpRouter(observationApp()).fetch(
     new Request(`${ORIGIN}/api/projects`, { method: "DELETE" }),
   );
   const carried = await recordedResponse(answered);
@@ -179,7 +179,7 @@ test("a wrong method on a declared path is the handler's own refusal, not the gr
 });
 
 test("a path the group declares no route for is refused with the hosted not-found", async () => {
-  const answered = await routeFromHttpApp(observationApp()).fetch(
+  const answered = await routeFromHttpRouter(observationApp()).fetch(
     new Request(`${ORIGIN}/api/not-in-this-group`),
   );
   const carried = await recordedResponse(answered);
@@ -189,7 +189,7 @@ test("a path the group declares no route for is refused with the hosted not-foun
 });
 
 test("a HEAD on a declared path keeps the handler's own status and drops the body", async () => {
-  const answered = await routeFromHttpApp(observationApp()).fetch(
+  const answered = await routeFromHttpRouter(observationApp()).fetch(
     new Request(`${ORIGIN}/api/projects`, { method: "HEAD" }),
   );
   const carried = await recordedResponse(answered);

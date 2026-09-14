@@ -78,21 +78,19 @@ const stampChildren = SqlSchema.findAll({
 });
 
 /** Stamps every not-yet-stamped child of the given rows, level by level, and answers every id stamped. */
-function stampDescendants(
+const stampDescendants = /* @__PURE__ */ Effect.fn("stampDescendants")(function* (
   parents: readonly string[],
   deletedAt: Date,
-): Effect.Effect<string[], ClearFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const stamped: string[] = [];
-    let frontier = parents;
-    while (frontier.length > 0) {
-      const children = yield* stampChildren({ parents: [...frontier], deletedAt });
-      frontier = children.map((child) => child.id);
-      stamped.push(...frontier);
-    }
-    return stamped;
-  });
-}
+): Effect.fn.Return<string[], ClearFailure, SqlClient.SqlClient> {
+  const stamped: string[] = [];
+  let frontier = parents;
+  while (frontier.length > 0) {
+    const children = yield* stampChildren({ parents: [...frontier], deletedAt });
+    frontier = children.map((child) => child.id);
+    stamped.push(...frontier);
+  }
+  return stamped;
+});
 
 const OpenMainSchema = Schema.Struct({ userId: Schema.String, now: Schema.Date });
 

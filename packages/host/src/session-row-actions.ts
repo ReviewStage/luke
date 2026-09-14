@@ -60,41 +60,40 @@ export function createSessionRowActions(
 ): SessionRowActions {
   const { drawn, client, refresh, recordProductEvent } = dependencies;
 
-  const carry = (
+  const carry = /* @__PURE__ */ Effect.fnUntraced(function* (
     identity: SessionIdentity,
     counted: ProductSessionAction,
     call: (target: HostedActionTarget) => Effect.Effect<HostedActionOutcome>,
-  ): Effect.Effect<SessionWriteResult> =>
-    Effect.gen(function* () {
-      const session = sessionWithIdentity(identity, drawn());
-      if (!session)
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
-      const providerId = session.providerId;
-      if (!isCloudAgentProviderId(providerId)) {
-        return {
-          status: ACTION_RESULT_STATUS.UNSUPPORTED,
-          reason: HOSTED_ACTION_ANSWER.NO_ENDPOINT,
-        };
-      }
-      // From the call to the settle the fiber is uninterruptible: a write the
-      // service already carried to the provider may have landed, so the
-      // redraw it earns and the count it earns are never dropped by a
-      // request fiber ending under them.
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const outcome = yield* carriedHostedCall(
-            call({ providerId, providerSessionId: session.providerSessionId }),
-          );
-          return yield* settleHostedWrite(
-            hostedActionResult(outcome),
-            providerId,
-            counted,
-            refresh,
-            recordProductEvent,
-          );
-        }),
-      );
-    });
+  ): Effect.fn.Return<SessionWriteResult> {
+    const session = sessionWithIdentity(identity, drawn());
+    if (!session)
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: ACTION_REFUSAL.NO_SESSION };
+    const providerId = session.providerId;
+    if (!isCloudAgentProviderId(providerId)) {
+      return {
+        status: ACTION_RESULT_STATUS.UNSUPPORTED,
+        reason: HOSTED_ACTION_ANSWER.NO_ENDPOINT,
+      };
+    }
+    // From the call to the settle the fiber is uninterruptible: a write the
+    // service already carried to the provider may have landed, so the
+    // redraw it earns and the count it earns are never dropped by a
+    // request fiber ending under them.
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const outcome = yield* carriedHostedCall(
+          call({ providerId, providerSessionId: session.providerSessionId }),
+        );
+        return yield* settleHostedWrite(
+          hostedActionResult(outcome),
+          providerId,
+          counted,
+          refresh,
+          recordProductEvent,
+        );
+      }),
+    );
+  });
 
   return {
     sendMessage: (identity, text) =>

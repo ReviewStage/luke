@@ -138,26 +138,24 @@ const findSignupsByDay = SqlSchema.findAll({
     }),
 });
 
-function readUserMetrics(
+const readUserMetrics = /* @__PURE__ */ Effect.fn("readUserMetrics")(function* (
   fetchStart: Date,
   scope: AdminMetricsScope,
-): Effect.Effect<AdminMetricsSource["users"], AdminQueryFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const [total, links, signups] = yield* Effect.all(
-      [findUserTotal(scope), findSignInLinks(scope), findSignupsByDay({ fetchStart, scope })],
-      { concurrency: "unbounded" },
-    );
+): Effect.fn.Return<AdminMetricsSource["users"], AdminQueryFailure, SqlClient.SqlClient> {
+  const [total, links, signups] = yield* Effect.all(
+    [findUserTotal(scope), findSignInLinks(scope), findSignupsByDay({ fetchStart, scope })],
+    { concurrency: "unbounded" },
+  );
 
-    const signupsByDay = new Map<string, number>();
-    for (const row of signups) signupsByDay.set(row.day, row.value);
+  const signupsByDay = new Map<string, number>();
+  for (const row of signups) signupsByDay.set(row.day, row.value);
 
-    return {
-      total: Option.match(total, { onNone: () => 0, onSome: (row) => row.value }),
-      signInMethods: countSignInMethods(links),
-      signupsByDay,
-    };
-  });
-}
+  return {
+    total: Option.match(total, { onNone: () => 0, onSome: (row) => row.value }),
+    signInMethods: countSignInMethods(links),
+    signupsByDay,
+  };
+});
 
 const DaySumRowSchema = Schema.Struct({
   day: Schema.String,
@@ -257,50 +255,48 @@ const findTopUsers = SqlSchema.findAll({
     ),
 });
 
-function readUsageMetrics(
+const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function* (
   todayKey: string,
   windowStartDay: string,
   fetchStartDay: string,
   scope: AdminMetricsScope,
-): Effect.Effect<AdminMetricsSource["usage"], AdminQueryFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const [usageRows, activeToday, activeWindow, topUserRows] = yield* Effect.all(
-      [
-        findUsageByDay({ fetchStartDay, scope }),
-        findActiveUsersOnDay({ day: todayKey, scope }),
-        findActiveUsersInWindow({ windowStartDay, scope }),
-        findTopUsers({ windowStartDay, scope }),
-      ],
-      { concurrency: "unbounded" },
-    );
+): Effect.fn.Return<AdminMetricsSource["usage"], AdminQueryFailure, SqlClient.SqlClient> {
+  const [usageRows, activeToday, activeWindow, topUserRows] = yield* Effect.all(
+    [
+      findUsageByDay({ fetchStartDay, scope }),
+      findActiveUsersOnDay({ day: todayKey, scope }),
+      findActiveUsersInWindow({ windowStartDay, scope }),
+      findTopUsers({ windowStartDay, scope }),
+    ],
+    { concurrency: "unbounded" },
+  );
 
-    const byDay = new Map<string, number>();
-    for (const row of usageRows) byDay.set(row.day, toNumber(row.calls));
+  const byDay = new Map<string, number>();
+  for (const row of usageRows) byDay.set(row.day, toNumber(row.calls));
 
-    const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      image: row.image,
-      admin: isAdminRole(row.role),
-      activeDays: row.activeDays,
-      lastActiveDay: row.lastActiveDay,
-      calls: toNumber(row.calls),
-    }));
+  const topUsers: AdminTopUser[] = topUserRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    image: row.image,
+    admin: isAdminRole(row.role),
+    activeDays: row.activeDays,
+    lastActiveDay: row.lastActiveDay,
+    calls: toNumber(row.calls),
+  }));
 
-    const countOf = Option.match({
-      onNone: () => 0,
-      onSome: (row: { value: number }) => row.value,
-    });
-
-    return {
-      byDay,
-      activeUsersToday: countOf(activeToday),
-      activeUsersWindow: countOf(activeWindow),
-      topUsers,
-    };
+  const countOf = Option.match({
+    onNone: () => 0,
+    onSome: (row: { value: number }) => row.value,
   });
-}
+
+  return {
+    byDay,
+    activeUsersToday: countOf(activeToday),
+    activeUsersWindow: countOf(activeWindow),
+    topUsers,
+  };
+});
 
 /**
  * Both week expressions truncate with Postgres's `date_trunc('week')`, which
@@ -370,36 +366,34 @@ const findCohortActivity = SqlSchema.findAll({
     }),
 });
 
-function readRetentionMetrics(
+const readRetentionMetrics = /* @__PURE__ */ Effect.fn("readRetentionMetrics")(function* (
   now: number,
   scope: AdminMetricsScope,
-): Effect.Effect<AdminMetricsSource["retention"], AdminQueryFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
-    const oldestWeekStartDay = weekKeys[0] ?? utcWeekStartKey(now);
-    const oldestWeekStart = new Date(`${oldestWeekStartDay}T00:00:00.000Z`);
+): Effect.fn.Return<AdminMetricsSource["retention"], AdminQueryFailure, SqlClient.SqlClient> {
+  const weekKeys = lastNWeekStartKeys(now, ADMIN_RETENTION_WEEKS);
+  const oldestWeekStartDay = weekKeys[0] ?? utcWeekStartKey(now);
+  const oldestWeekStart = new Date(`${oldestWeekStartDay}T00:00:00.000Z`);
 
-    const [sizeRows, activeRows] = yield* Effect.all(
-      [
-        findCohortSizes({ oldestWeekStart, scope }),
-        findCohortActivity({ oldestWeekStart, oldestWeekStartDay, scope }),
-      ],
-      { concurrency: "unbounded" },
-    );
+  const [sizeRows, activeRows] = yield* Effect.all(
+    [
+      findCohortSizes({ oldestWeekStart, scope }),
+      findCohortActivity({ oldestWeekStart, oldestWeekStartDay, scope }),
+    ],
+    { concurrency: "unbounded" },
+  );
 
-    const cohortSizes = new Map<string, number>();
-    for (const row of sizeRows) cohortSizes.set(row.week, row.value);
+  const cohortSizes = new Map<string, number>();
+  for (const row of sizeRows) cohortSizes.set(row.week, row.value);
 
-    const activeByCohortWeek = new Map<string, Map<string, number>>();
-    for (const row of activeRows) {
-      const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
-      byWeek.set(row.activityWeek, row.value);
-      activeByCohortWeek.set(row.signupWeek, byWeek);
-    }
+  const activeByCohortWeek = new Map<string, Map<string, number>>();
+  for (const row of activeRows) {
+    const byWeek = activeByCohortWeek.get(row.signupWeek) ?? new Map<string, number>();
+    byWeek.set(row.activityWeek, row.value);
+    activeByCohortWeek.set(row.signupWeek, byWeek);
+  }
 
-    return { cohortSizes, activeByCohortWeek };
-  });
-}
+  return { cohortSizes, activeByCohortWeek };
+});
 
 /**
  * The counter past its daily ceiling — the row a spend was refused on. The
@@ -444,33 +438,31 @@ const findQuotaLimitedInWindow = SqlSchema.findOneOption({
     ),
 });
 
-function readReliabilityMetrics(
+const readReliabilityMetrics = /* @__PURE__ */ Effect.fn("readReliabilityMetrics")(function* (
   todayKey: string,
   windowStartDay: string,
   scope: AdminMetricsScope,
-): Effect.Effect<
+): Effect.fn.Return<
   Omit<AdminMetricsSource["reliability"], "analyticsConsoleUrl">,
   AdminQueryFailure,
   SqlClient.SqlClient
 > {
-  return Effect.gen(function* () {
-    const [today, window] = yield* Effect.all(
-      [
-        findQuotaLimitedOnDay({ day: todayKey, scope }),
-        findQuotaLimitedInWindow({ windowStartDay, scope }),
-      ],
-      { concurrency: "unbounded" },
-    );
-    const countOf = Option.match({
-      onNone: () => 0,
-      onSome: (row: { value: number }) => row.value,
-    });
-    return {
-      quotaLimitedUserDaysToday: countOf(today),
-      quotaLimitedUserDaysWindow: countOf(window),
-    };
+  const [today, window] = yield* Effect.all(
+    [
+      findQuotaLimitedOnDay({ day: todayKey, scope }),
+      findQuotaLimitedInWindow({ windowStartDay, scope }),
+    ],
+    { concurrency: "unbounded" },
+  );
+  const countOf = Option.match({
+    onNone: () => 0,
+    onSome: (row: { value: number }) => row.value,
   });
-}
+  return {
+    quotaLimitedUserDaysToday: countOf(today),
+    quotaLimitedUserDaysWindow: countOf(window),
+  };
+});
 
 function emptySource(
   integrations: readonly AdminIntegration[],

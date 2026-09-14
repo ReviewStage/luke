@@ -68,32 +68,31 @@ const standingVersion: Effect.Effect<
 });
 
 /** Whether the named table, or the named column of it, stands. */
-const stands = (target: {
+const stands = /* @__PURE__ */ Effect.fnUntraced(function* (target: {
   readonly table: string;
   readonly column?: string;
-}): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    const table = yield* sql.unsafe(
-      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
-      [target.table],
-    );
-    if (table.length === 0) return false;
-    if (target.column === undefined) return true;
-    const column = yield* sql.unsafe("SELECT 1 FROM pragma_table_info(?) WHERE name = ?", [
-      target.table,
-      target.column,
-    ]);
-    return column.length > 0;
-  });
+}): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  const table = yield* sql.unsafe("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", [
+    target.table,
+  ]);
+  if (table.length === 0) return false;
+  if (target.column === undefined) return true;
+  const column = yield* sql.unsafe("SELECT 1 FROM pragma_table_info(?) WHERE name = ?", [
+    target.table,
+    target.column,
+  ]);
+  return column.length > 0;
+});
 
-const applyStep = (step: SchemaMigrationStep): Effect.Effect<void, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
-    const sql = yield* Client.SqlClient;
-    if (step.onlyIf !== undefined && !(yield* stands(step.onlyIf))) return;
-    if (step.unless !== undefined && (yield* stands(step.unless))) return;
-    yield* sql.unsafe(step.sql, step.params);
-  });
+const applyStep = /* @__PURE__ */ Effect.fnUntraced(function* (
+  step: SchemaMigrationStep,
+): Effect.fn.Return<void, SqlError, Client.SqlClient> {
+  const sql = yield* Client.SqlClient;
+  if (step.onlyIf !== undefined && !(yield* stands(step.onlyIf))) return;
+  if (step.unless !== undefined && (yield* stands(step.unless))) return;
+  yield* sql.unsafe(step.sql, step.params);
+});
 
 const upgrade: Effect.Effect<void, SqlError | StoreSchemaRefused, Client.SqlClient> = Effect.gen(
   function* () {

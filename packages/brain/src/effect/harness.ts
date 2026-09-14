@@ -41,19 +41,22 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../test
  * handed over beside it, so every turn of the harness's conversation is a
  * fiber of the test's own.
  */
-export const effectHarness = (
+export const effectHarness = /* @__PURE__ */ Effect.fn("effectHarness")(function* (
   overrides: HarnessOverrides = {},
   repository: FakeBrainStateRepository = fakeBrainStateRepository(),
-): Effect.Effect<Harness> =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(NOW);
-    const clock = yield* Clock.Clock;
-    const context = yield* Effect.context<never>();
-    return yield* plainHarness(
-      { execution: context, now: () => clock.currentTimeMillisUnsafe(), ...overrides },
-      repository,
-    );
-  });
+): Effect.fn.Return<Harness> {
+  yield* TestClock.setTime(NOW);
+  const clock = yield* Clock.Clock;
+  const context = yield* Effect.context<never>();
+  return yield* plainHarness(
+    {
+      execution: context,
+      now: () => clock.currentTimeMillisUnsafe(),
+      ...overrides,
+    },
+    repository,
+  );
+});
 
 /**
  * Advances the ambient `TestClock` to `untilMs` and settles the harness's own
@@ -66,38 +69,38 @@ export const effectHarness = (
  * does not do is drain the promise chains a turn leaves behind it, which is
  * what the settle here is for.
  */
-export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(untilMs);
-    yield* Effect.promise(() => settle());
-  });
+export const advanceHarness = /* @__PURE__ */ Effect.fn("advanceHarness")(function* (
+  untilMs: number,
+): Effect.fn.Return<void> {
+  yield* TestClock.setTime(untilMs);
+  yield* Effect.promise(() => settle());
+});
 
 /**
  * `../harness.ts`'s `reviewing` over `effectHarness` instead of `harness`: a
  * conversation held busy by an observation turn, over the ambient `TestClock`.
  */
-export const effectReviewing = (
+export const effectReviewing = /* @__PURE__ */ Effect.fn("effectReviewing")(function* (
   ...replies: readonly BrainClientAnswer[]
-): Effect.Effect<{
+): Effect.fn.Return<{
   h: Harness;
   inner: FakeClient;
   release: () => Effect.Effect<void>;
-}> =>
-  Effect.gen(function* () {
-    const inner = new FakeClient();
-    const gated = gatedClient(inner);
-    const h = yield* effectHarness({ client: gated.client });
-    inner.answers.push(answered([message("nothing spoken")]), ...replies);
-    yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-    yield* Effect.promise(() => settle());
-    return {
-      h,
-      inner,
-      release: () =>
-        Effect.gen(function* () {
-          gated.open();
-          yield* Effect.promise(() => settle());
-          while (h.agent.busy()) yield* Effect.promise(() => settle());
-        }),
-    };
-  });
+}> {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = yield* effectHarness({ client: gated.client });
+  inner.answers.push(answered([message("nothing spoken")]), ...replies);
+  yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+  yield* Effect.promise(() => settle());
+  return {
+    h,
+    inner,
+    release: () =>
+      Effect.gen(function* () {
+        gated.open();
+        yield* Effect.promise(() => settle());
+        while (h.agent.busy()) yield* Effect.promise(() => settle());
+      }),
+  };
+});

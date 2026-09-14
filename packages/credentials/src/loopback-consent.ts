@@ -233,7 +233,7 @@ function parameter(
  * about would fail at the redirect instead. An attempt that never listened
  * releases as a no-op, so a port tried past costs the trip nothing.
  */
-function serveConsent(
+const serveConsent = /* @__PURE__ */ Effect.fnUntraced(function* (
   // The request and the scope are both the server's to supply per request: the
   // handler runs under a scope of its own, closed once the response has been
   // written, which is the scope the landing card's finalizer settles on.
@@ -244,34 +244,32 @@ function serveConsent(
   >,
   ports: readonly number[],
   onRequest: () => void,
-): Effect.Effect<number | undefined, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    for (const port of ports) {
-      const node = yield* Effect.sync(() => createServer());
-      // The loopback answers this machine alone: the provider's redirect lands
-      // in the user's own browser, which hands the code back across localhost.
-      const bound = yield* Effect.result(
-        NodeHttpServer.make(() => node, { port, host: LOOPBACK_HOST }),
-      );
-      if (Result.isFailure(bound)) continue;
-      const server = bound.success;
-      yield* Effect.provideService(HttpServer.serveEffect(app), HttpServer.HttpServer, server);
-      // A request is announced here rather than in the handler because this is
-      // where the old synchronous callback cleared its timer: the handler runs
-      // in a fiber of its own, which the deadline could reach first.
-      yield* Effect.sync(() => node.on("request", onRequest));
-      // The browser keeps its connection alive after the redirect, and a
-      // socket it holds open would keep this port bound — which, on a
-      // registered port rather than an ephemeral one, is the next trip's port.
-      // Ending those connections is what makes the flow repeatable, and this
-      // finalizer runs ahead of the server's own close because it was added
-      // after it.
-      yield* Effect.addFinalizer(() => Effect.sync(() => node.closeAllConnections()));
-      return NetAddress.isInetAddress(server.address) ? server.address.port : undefined;
-    }
-    return undefined;
-  });
-}
+): Effect.fn.Return<number | undefined, never, Scope.Scope> {
+  for (const port of ports) {
+    const node = yield* Effect.sync(() => createServer());
+    // The loopback answers this machine alone: the provider's redirect lands
+    // in the user's own browser, which hands the code back across localhost.
+    const bound = yield* Effect.result(
+      NodeHttpServer.make(() => node, { port, host: LOOPBACK_HOST }),
+    );
+    if (Result.isFailure(bound)) continue;
+    const server = bound.success;
+    yield* Effect.provideService(HttpServer.serveEffect(app), HttpServer.HttpServer, server);
+    // A request is announced here rather than in the handler because this is
+    // where the old synchronous callback cleared its timer: the handler runs
+    // in a fiber of its own, which the deadline could reach first.
+    yield* Effect.sync(() => node.on("request", onRequest));
+    // The browser keeps its connection alive after the redirect, and a
+    // socket it holds open would keep this port bound — which, on a
+    // registered port rather than an ephemeral one, is the next trip's port.
+    // Ending those connections is what makes the flow repeatable, and this
+    // finalizer runs ahead of the server's own close because it was added
+    // after it.
+    yield* Effect.addFinalizer(() => Effect.sync(() => node.closeAllConnections()));
+    return NetAddress.isInetAddress(server.address) ? server.address.port : undefined;
+  }
+  return undefined;
+});
 
 /**
  * `Grant` is an object so a refusal can be told from a grant by the one field
@@ -296,136 +294,137 @@ export function loopbackConsent<Grant extends object>(
     });
   }
 
-  function trip(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope> {
-    return Effect.gen(function* () {
-      const codeVerifier = createCodeVerifier();
-      const challenge = codeChallenge(codeVerifier);
-      const state = loopbackState(options.statePrefix);
-      const settled = yield* Deferred.make<LoopbackConsentOutcome<Grant>>();
-      // Assigned once a port has bound, before the browser is opened — no
-      // request can arrive ahead of it.
-      let redirectUri = "";
-      let claimed = false;
-      let arrived = false;
-      // Cancel is one door for the whole trip, armed before anything is bound
-      // and read back at every step that would carry the trip further. A press
-      // given before the loopback is listening has nothing to withdraw but the
-      // intention, which the steps below read; a press after it ends the wait
-      // where it stands. A callback already claimed is a code in hand rather
-      // than an open door, so a cancel that arrives after it withdraws nothing.
-      let withdrawn = false;
-      abandon = () => {
-        if (claimed) return;
-        withdrawn = true;
-        Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
+  const trip = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
+    LoopbackConsentOutcome<Grant>,
+    never,
+    Scope.Scope
+  > {
+    const codeVerifier = createCodeVerifier();
+    const challenge = codeChallenge(codeVerifier);
+    const state = loopbackState(options.statePrefix);
+    const settled = yield* Deferred.make<LoopbackConsentOutcome<Grant>>();
+    // Assigned once a port has bound, before the browser is opened — no
+    // request can arrive ahead of it.
+    let redirectUri = "";
+    let claimed = false;
+    let arrived = false;
+    // Cancel is one door for the whole trip, armed before anything is bound
+    // and read back at every step that would carry the trip further. A press
+    // given before the loopback is listening has nothing to withdraw but the
+    // intention, which the steps below read; a press after it ends the wait
+    // where it stands. A callback already claimed is a code in hand rather
+    // than an open door, so a cancel that arrives after it withdraws nothing.
+    let withdrawn = false;
+    abandon = () => {
+      if (claimed) return;
+      withdrawn = true;
+      Deferred.doneUnsafe(settled, Exit.succeed({ reason: LOOPBACK_CONSENT_CANCELLED }));
+    };
+
+    const callback = /* @__PURE__ */ Effect.fnUntraced(function* (
+      parameters: Readonly<Record<string, string | Array<string>>>,
+    ) {
+      if (parameter(parameters, "state") !== state) return NOT_FOUND;
+      if (claimed) {
+        return card(RESPONSE_STATUS.ALREADY_USED, LOOPBACK_PAGE_TONE.SETTLED, ALREADY_USED_CARD);
+      }
+      claimed = true;
+      // The landing card is the last thing the sign-in shows, so the trip is
+      // settled only once the card has been written: this finalizer runs when
+      // the request's own scope closes, which is after the last byte, and the
+      // trip's scope closing is what stops the server. It is registered
+      // before the exchange rather than after it, and the refusal stands
+      // until the exchange answers, because a claimed code that answered
+      // nothing at all — an exchange that broke its own contract and threw —
+      // must still end the trip rather than leave the loopback listening on
+      // a deadline its claim disarmed.
+      let outcome: LoopbackConsentOutcome<Grant> = {
+        reason: options.reasons.refused,
       };
-
-      const callback = (parameters: Readonly<Record<string, string | Array<string>>>) =>
-        Effect.gen(function* () {
-          if (parameter(parameters, "state") !== state) return NOT_FOUND;
-          if (claimed) {
-            return card(
-              RESPONSE_STATUS.ALREADY_USED,
-              LOOPBACK_PAGE_TONE.SETTLED,
-              ALREADY_USED_CARD,
-            );
-          }
-          claimed = true;
-          // The landing card is the last thing the sign-in shows, so the trip is
-          // settled only once the card has been written: this finalizer runs when
-          // the request's own scope closes, which is after the last byte, and the
-          // trip's scope closing is what stops the server. It is registered
-          // before the exchange rather than after it, and the refusal stands
-          // until the exchange answers, because a claimed code that answered
-          // nothing at all — an exchange that broke its own contract and threw —
-          // must still end the trip rather than leave the loopback listening on
-          // a deadline its claim disarmed.
-          let outcome: LoopbackConsentOutcome<Grant> = { reason: options.reasons.refused };
-          yield* Effect.addFinalizer(() => Deferred.succeed(settled, outcome));
-          const refused = parameter(parameters, "error");
-          const code = parameter(parameters, "code");
-          if (!refused && code) {
-            outcome = yield* options.exchange({ code, redirectUri, codeVerifier });
-          }
-          const granted = !("reason" in outcome);
-          return card(
-            RESPONSE_STATUS.ANSWERED,
-            granted ? LOOPBACK_PAGE_TONE.SETTLED : LOOPBACK_PAGE_TONE.ATTENTION,
-            granted ? options.pages.granted : options.pages.notGranted,
-          );
-        });
-
-      // The path match is the app's own first statement: every other path is
-      // refused in the build's own words rather than the platform's empty one,
-      // and the callback reads the query the request itself carries rather
-      // than a service a router would have provided.
-      const app = Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest;
-        const url = HttpServerRequest.toURL(request);
-        if (Option.isNone(url) || url.value.pathname !== options.callbackPath) return NOT_FOUND;
-        return yield* callback(HttpServerRequest.searchParamsFromURL(url.value));
-      });
-      const port = yield* serveConsent(app, options.ports ?? [EPHEMERAL_PORT], () => {
-        arrived = true;
-      });
-      if (port === undefined) return { reason: SHARED_REASON.UNAVAILABLE };
-      redirectUri = `http://${LOOPBACK_HOST}:${port}${options.callbackPath}`;
-
-      // A press on Cancel given while the port was binding is read back here,
-      // and the scheduler is handed a turn before it is: a bound port resumes
-      // this fiber on the listening callback's own stack, so a cancel that
-      // has been waiting its turn since before the bind would otherwise still
-      // be queued when the trip walked past this line and opened the browser.
-      yield* Effect.yieldNow;
-      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
-
-      const authorizationUrl = options.authorizationUrl({
-        state,
-        redirectUri,
-        codeChallenge: challenge,
-      });
-      reopenPage = () => {
-        void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
-      };
-      // Composing the page runs the flow's own callback, which is foreign code
-      // this module hands the trip's step to: a press it let through — a fiber
-      // it woke, a window it drew — is a cancel given before there was ever a
-      // tab, so the browser is not opened on it.
-      if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
-      const opened = yield* Effect.result(
-        Effect.tryPromise(() => Promise.resolve(options.openExternal(authorizationUrl))),
+      yield* Effect.addFinalizer(() => Deferred.succeed(settled, outcome));
+      const refused = parameter(parameters, "error");
+      const code = parameter(parameters, "code");
+      if (!refused && code) {
+        outcome = yield* options.exchange({ code, redirectUri, codeVerifier });
+      }
+      const granted = !("reason" in outcome);
+      return card(
+        RESPONSE_STATUS.ANSWERED,
+        granted ? LOOPBACK_PAGE_TONE.SETTLED : LOOPBACK_PAGE_TONE.ATTENTION,
+        granted ? options.pages.granted : options.pages.notGranted,
       );
-      // A page that never opened is a trip nobody can complete, and saying
-      // so beats waiting out the timeout on a tab that does not exist.
-      if (Result.isFailure(opened)) return { reason: SHARED_REASON.BROWSER };
-
-      yield* Effect.forkScoped(
-        Effect.sleep(Duration.millis(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)).pipe(
-          // A request already on the loopback when the deadline comes is not an
-          // abandoned trip, and a consent the developer has just given must not
-          // lose a race to the clock: the deadline gives way for as long as
-          // requests keep arriving unclaimed, and decides a grace period after
-          // the last one, so a stray request delays it rather than holding the
-          // trip open.
-          Effect.andThen(
-            // The loop is stated rather than described: v4 removed the
-            // Effect-specific loop helper, so the grace period is a `while`
-            // over the same two flags the helper's condition read.
-            Effect.gen(function* () {
-              while (arrived && !claimed) {
-                arrived = false;
-                yield* Effect.sleep(Duration.millis(ARRIVAL_GRACE_MS));
-              }
-            }),
-          ),
-          Effect.flatMap(() =>
-            claimed ? Effect.void : Deferred.succeed(settled, { reason: options.reasons.timedOut }),
-          ),
-        ),
-      );
-      return yield* Deferred.await(settled);
     });
-  }
+
+    // The path match is the app's own first statement: every other path is
+    // refused in the build's own words rather than the platform's empty one,
+    // and the callback reads the query the request itself carries rather
+    // than a service a router would have provided.
+    const app = Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest;
+      const url = HttpServerRequest.toURL(request);
+      if (Option.isNone(url) || url.value.pathname !== options.callbackPath) return NOT_FOUND;
+      return yield* callback(HttpServerRequest.searchParamsFromURL(url.value));
+    });
+    const port = yield* serveConsent(app, options.ports ?? [EPHEMERAL_PORT], () => {
+      arrived = true;
+    });
+    if (port === undefined) return { reason: SHARED_REASON.UNAVAILABLE };
+    redirectUri = `http://${LOOPBACK_HOST}:${port}${options.callbackPath}`;
+
+    // A press on Cancel given while the port was binding is read back here,
+    // and the scheduler is handed a turn before it is: a bound port resumes
+    // this fiber on the listening callback's own stack, so a cancel that
+    // has been waiting its turn since before the bind would otherwise still
+    // be queued when the trip walked past this line and opened the browser.
+    yield* Effect.yieldNow;
+    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
+
+    const authorizationUrl = options.authorizationUrl({
+      state,
+      redirectUri,
+      codeChallenge: challenge,
+    });
+    reopenPage = () => {
+      void Promise.resolve(options.openExternal(authorizationUrl)).catch(() => undefined);
+    };
+    // Composing the page runs the flow's own callback, which is foreign code
+    // this module hands the trip's step to: a press it let through — a fiber
+    // it woke, a window it drew — is a cancel given before there was ever a
+    // tab, so the browser is not opened on it.
+    if (withdrawn) return { reason: LOOPBACK_CONSENT_CANCELLED };
+    const opened = yield* Effect.result(
+      Effect.tryPromise(() => Promise.resolve(options.openExternal(authorizationUrl))),
+    );
+    // A page that never opened is a trip nobody can complete, and saying
+    // so beats waiting out the timeout on a tab that does not exist.
+    if (Result.isFailure(opened)) return { reason: SHARED_REASON.BROWSER };
+
+    yield* Effect.forkScoped(
+      Effect.sleep(Duration.millis(options.timeoutMs ?? DEFAULT_TIMEOUT_MS)).pipe(
+        // A request already on the loopback when the deadline comes is not an
+        // abandoned trip, and a consent the developer has just given must not
+        // lose a race to the clock: the deadline gives way for as long as
+        // requests keep arriving unclaimed, and decides a grace period after
+        // the last one, so a stray request delays it rather than holding the
+        // trip open.
+        Effect.andThen(
+          // The loop is stated rather than described: v4 removed the
+          // Effect-specific loop helper, so the grace period is a `while`
+          // over the same two flags the helper's condition read.
+          Effect.gen(function* () {
+            while (arrived && !claimed) {
+              arrived = false;
+              yield* Effect.sleep(Duration.millis(ARRIVAL_GRACE_MS));
+            }
+          }),
+        ),
+        Effect.flatMap(() =>
+          claimed ? Effect.void : Deferred.succeed(settled, { reason: options.reasons.timedOut }),
+        ),
+      ),
+    );
+    return yield* Deferred.await(settled);
+  });
 
   function signInEffect(): Effect.Effect<LoopbackConsentOutcome<Grant>, never, Scope.Scope> {
     return Effect.suspend(() => {

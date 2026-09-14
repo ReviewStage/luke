@@ -71,15 +71,14 @@ function isIgnorableReadFailure(error: PlatformError): boolean {
  * store already treated as "no file yet" rather than an I/O error worth
  * surfacing.
  */
-export const readSettingsFileText = (
+export const readSettingsFileText = /* @__PURE__ */ Effect.fn("readSettingsFileText")(function* (
   directory: string,
-): Effect.Effect<string | undefined, PlatformError, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem
-      .readFileString(path.join(directory, SETTINGS_FILE_NAME))
-      .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
-  });
+): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem> {
+  const fileSystem = yield* FileSystem.FileSystem;
+  return yield* fileSystem
+    .readFileString(path.join(directory, SETTINGS_FILE_NAME))
+    .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
+});
 
 /**
  * Writes the settings file atomically: the new contents land in a temporary
@@ -89,11 +88,11 @@ export const readSettingsFileText = (
  * effect when the file is created — a temporary file left behind by an
  * earlier interrupted write would otherwise keep whatever mode it already had.
  */
-export const writeSettingsFileAtomic = (
-  directory: string,
-  contents: string,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
+export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("writeSettingsFileAtomic")(
+  function* (
+    directory: string,
+    contents: string,
+  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
     const fileSystem = yield* FileSystem.FileSystem;
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
     const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
@@ -101,4 +100,5 @@ export const writeSettingsFileAtomic = (
     yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
     yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
     yield* fileSystem.rename(temporaryPath, settingsPath);
-  });
+  },
+);

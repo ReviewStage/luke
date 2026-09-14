@@ -22,14 +22,12 @@ export interface VoiceSourceTransitionSeams {
   rebuild: () => Effect.Effect<void>;
 }
 
-export function transitionVoiceSource(
+export const transitionVoiceSource = /* @__PURE__ */ Effect.fn("transitionVoiceSource")(function* (
   seams: VoiceSourceTransitionSeams,
-): Effect.Effect<boolean, PlatformError> {
-  return Effect.gen(function* () {
-    yield* seams.retire();
-    const applied = yield* seams.apply();
-    if (!applied.latest || !applied.isCurrent()) return false;
-    yield* seams.rebuild();
-    return true;
-  });
-}
+): Effect.fn.Return<boolean, PlatformError> {
+  yield* seams.retire();
+  const applied = yield* seams.apply();
+  if (!applied.latest || !applied.isCurrent()) return false;
+  yield* seams.rebuild();
+  return true;
+});
