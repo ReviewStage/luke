@@ -576,7 +576,7 @@ button.conversation-action-chip:focus-visible {
     flip-block flip-inline;
   inset: auto;
   margin: 4px 0 0;
-  padding: 4px;
+  padding: 6px 8px;
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
@@ -640,8 +640,8 @@ button.conversation-action-chip:focus-visible {
 
 .conversation-rating-offer {
   min-height: 24px;
-  margin-left: 4px;
-  padding: 0 8px;
+  margin-left: 6px;
+  padding: 0 10px;
   border-radius: 8px;
   background: var(--raised);
   color: var(--text-secondary);
@@ -657,7 +657,7 @@ button.conversation-action-chip:focus-visible {
 
 .conversation-rating-refusal {
   flex-basis: 100%;
-  padding: 0 2px 2px;
+  padding: 2px 2px 0;
   color: var(--danger);
   font-size: 10.5px;
   line-height: 1.4;
