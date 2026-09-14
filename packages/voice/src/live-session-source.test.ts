@@ -503,17 +503,21 @@ it.live(
       const source = reattaching(script);
       const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: [] });
       assert.ok(opened?.reportActivity);
-      yield* opened.attach();
+      const sideband = yield* opened.attach();
       // No report yet: a recycled connection is told nothing it was not told.
+      // Absence is read as order: a send made in the gap is flushed behind the
+      // standing frames once the fresh connection is adopted, so a standing
+      // report would stand between the attach frame and the probe.
       script.sockets[0]?.closeFromServer({ code: 1001 });
       yield* openedSockets(script, 2);
+      yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "probe" });
       yield* settled(
-        () => (script.sockets[1]?.sent.length ?? 0) >= 1,
-        "the attach frame on the second connection",
+        () => (script.sockets[1]?.sent.length ?? 0) >= 2,
+        "the probe behind the attach frame on the second connection",
       );
       assert.deepEqual(
         script.sockets[1]?.sent.map((data) => JSON.parse(data).type),
-        [VOICE_SERVICE_FRAME.SESSION_ATTACH],
+        [VOICE_SERVICE_FRAME.SESSION_ATTACH, LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE],
       );
       opened.reportActivity(true);
       script.sockets[1]?.closeFromServer({ code: 1001 });
