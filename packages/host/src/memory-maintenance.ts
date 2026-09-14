@@ -24,8 +24,8 @@ import { Effect } from "effect";
  * conversation's memory provider carries — the pre-compaction flush at a
  * compaction, the reset capture before the conversation starts fresh — and
  * the flush marker the brain keeps its cycle by. Every model call is a
- * workspace-only run over a private context that is dropped at its end, on
- * the developer's own key or through Luke's service, and what it writes is a
+ * workspace-only run over a private context that is dropped at its end,
+ * through Luke's service on the signed-in account, and what it writes is a
  * dated note in the agent's workspace on disk.
  */
 
