@@ -37,6 +37,7 @@ import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isRecord,
   isWireString,
+  type MessageRating,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnOrigin,
@@ -218,8 +219,38 @@ function BubbleRow({
   copy?: boolean;
   unspoken?: boolean;
   /** The rating control, on the last words of one of Luke's messages and nowhere else. */
-  rating?: React.ReactNode;
+  rating?: ConversationBubbleRating;
 }): React.JSX.Element {
+  const controls =
+    rating === undefined ? (
+      copy ? (
+        <span className="conversation-bubble-actions">
+          <ConversationCopyButton words={words} />
+        </span>
+      ) : null
+    ) : (
+      <ConversationRatingControl
+        rated={rating.rated}
+        rating={rating.rating}
+        {...(rating.onOfferFeedback ? { onOfferFeedback: rating.onOfferFeedback } : undefined)}
+      >
+        {({ rating: currentRating, busy, buttons, details }) => (
+          <>
+            <span className="conversation-bubble-actions">
+              {copy ? <ConversationCopyButton words={words} /> : null}
+              <span
+                className="conversation-rating conversation-rating-inline"
+                data-rating={currentRating}
+                aria-busy={busy ? "true" : undefined}
+              >
+                {buttons}
+              </span>
+            </span>
+            {details}
+          </>
+        )}
+      </ConversationRatingControl>
+    );
   return (
     <li
       className="conversation-entry"
@@ -227,13 +258,15 @@ function BubbleRow({
       data-unspoken={unspoken ? "true" : undefined}
     >
       <small className="visually-hidden">{voice.label}</small>
-      <div className="conversation-message">
+      <div
+        className="conversation-message"
+        data-bubble-actions={controls === null ? undefined : voice.speaker}
+      >
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
           {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
-          {copy ? <ConversationCopyButton words={words} /> : null}
         </span>
-        {rating}
+        {controls}
       </div>
       <RowStamp at={at} />
     </li>
@@ -272,7 +305,7 @@ function OwnWordsRow({
   words: string;
   at: number;
   /** The rating control, on the last words of the message and nowhere else. */
-  rating?: React.ReactNode;
+  rating?: ConversationBubbleRating;
 }): React.JSX.Element {
   return (
     <li
@@ -289,7 +322,15 @@ function OwnWordsRow({
           </span>
           <span className="conversation-action-body">
             <MarkdownMessage words={words} className="conversation-words" />
-            {rating}
+            {rating === undefined ? null : (
+              <ConversationRatingControl
+                rated={rating.rated}
+                rating={rating.rating}
+                {...(rating.onOfferFeedback
+                  ? { onOfferFeedback: rating.onOfferFeedback }
+                  : undefined)}
+              />
+            )}
           </span>
         </span>
       </div>
@@ -576,6 +617,12 @@ interface RatingContext {
   readonly onOfferFeedback?: ((draft: string) => void) | undefined;
 }
 
+interface ConversationBubbleRating {
+  readonly rated: RatedMessageDraft;
+  readonly rating: MessageRating | undefined;
+  readonly onOfferFeedback?: ((draft: string) => void) | undefined;
+}
+
 /** Whether a part draws Luke's words: a text part, or an announce call carrying its briefing. */
 function drawsWords(
   part: StoredPart,
@@ -600,19 +647,16 @@ function ratingControl(
   view: ConversationViewMessage,
   words: string,
   context: RatingContext,
-): React.JSX.Element {
-  const rated: RatedMessageDraft = {
-    messageId: view.message.id,
-    words,
-    ...(context.ask !== undefined && context.ask.length > 0 ? { ask: context.ask } : undefined),
+): ConversationBubbleRating {
+  return {
+    rated: {
+      messageId: view.message.id,
+      words,
+      ...(context.ask !== undefined && context.ask.length > 0 ? { ask: context.ask } : undefined),
+    } satisfies RatedMessageDraft,
+    rating: view.rating?.rating,
+    ...(context.onOfferFeedback ? { onOfferFeedback: context.onOfferFeedback } : undefined),
   };
-  return (
-    <ConversationRatingControl
-      rated={rated}
-      rating={view.rating?.rating}
-      {...(context.onOfferFeedback ? { onOfferFeedback: context.onOfferFeedback } : undefined)}
-    />
-  );
 }
 
 /** One tool call as a message hands it on: the row it composes to, under the key its part stands at. */
@@ -688,14 +732,19 @@ function messageRows(
     if (isTextPart(part)) {
       rows.push(
         judgment === JUDGMENT.OWN ? (
-          <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={placed} />
+          <OwnWordsRow
+            key={key}
+            words={part.text}
+            at={view.createdAt}
+            {...(placed === undefined ? undefined : { rating: placed })}
+          />
         ) : (
           <BubbleRow
             key={key}
             voice={VOICE.LUKE}
             words={part.text}
             at={view.createdAt}
-            rating={placed}
+            {...(placed === undefined ? undefined : { rating: placed })}
           />
         ),
       );
@@ -717,7 +766,7 @@ function messageRows(
             words={words}
             at={view.createdAt}
             unspoken={tool.unspoken}
-            rating={placed}
+            {...(placed === undefined ? undefined : { rating: placed })}
           />,
         );
         return;

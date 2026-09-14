@@ -85,12 +85,20 @@ export function ConversationRatingControl({
   rated,
   rating,
   onOfferFeedback,
+  children,
 }: {
   rated: RatedMessageDraft;
   /** The developer's latest verdict on the message, as the view holds it; absent where none was given. */
   rating: MessageRating | undefined;
   /** Opens the composer on the draft; absent where no composer can be offered, and a thumbs down offers nothing. */
   onOfferFeedback?: (draft: string) => void;
+  /** Lets a caller place the thumbs and the follow-up copy in different slots without rebuilding the control's state. */
+  children?: (parts: {
+    readonly rating: MessageRating | undefined;
+    readonly busy: boolean;
+    readonly buttons: React.JSX.Element;
+    readonly details: React.JSX.Element | null;
+  }) => React.JSX.Element;
 }): React.JSX.Element {
   const { act } = useAct();
   const [pending, setPending] = useState<MessageRating | undefined>(undefined);
@@ -122,15 +130,15 @@ export function ConversationRatingControl({
     </button>
   );
 
-  return (
-    <span
-      className="conversation-rating"
-      data-rating={rating}
-      aria-busy={pending === undefined ? undefined : "true"}
-    >
+  const buttons = (
+    <span className="conversation-rating-buttons">
       {thumb(MESSAGE_RATING.UP, ThumbsUpIcon)}
       {thumb(MESSAGE_RATING.DOWN, ThumbsDownIcon)}
-      {rating === MESSAGE_RATING.DOWN && onOfferFeedback !== undefined ? (
+    </span>
+  );
+  const details =
+    rating === MESSAGE_RATING.DOWN && onOfferFeedback !== undefined ? (
+      <span className="conversation-rating-details">
         <button
           type="button"
           className="conversation-rating-offer"
@@ -138,12 +146,37 @@ export function ConversationRatingControl({
         >
           {OFFER_LABEL}
         </button>
-      ) : null}
-      {refusal === undefined ? null : (
+        {refusal === undefined ? null : (
+          <span className="conversation-rating-refusal" role="status">
+            {refusal}
+          </span>
+        )}
+      </span>
+    ) : refusal === undefined ? null : (
+      <span className="conversation-rating-details">
         <span className="conversation-rating-refusal" role="status">
           {refusal}
         </span>
-      )}
+      </span>
+    );
+
+  if (children) {
+    return children({
+      rating,
+      busy: pending !== undefined,
+      buttons,
+      details,
+    });
+  }
+
+  return (
+    <span
+      className="conversation-rating"
+      data-rating={rating}
+      aria-busy={pending === undefined ? undefined : "true"}
+    >
+      {buttons}
+      {details}
     </span>
   );
 }

@@ -383,7 +383,8 @@ test("a turn that followed a long silence is dated over it, and the caller's row
 
 /** The rating controls a rendering draws, each on one of Luke's messages. */
 function ratingControls(markup: string): number {
-  return count(markup, "class", "conversation-rating");
+  return (markup.match(/class="conversation-rating(?: conversation-rating-inline)?"/g) ?? [])
+    .length;
 }
 
 function pressed(markup: string, label: string): readonly boolean[] {
@@ -439,6 +440,45 @@ test("the thumbs show the message's newest rating, and a thumbs down stands the 
   assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.UP]), [false]);
   assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.DOWN]), [false]);
   assert.equal(count(unrated, "class", "conversation-rating-offer"), 0);
+});
+
+test("Luke's reply keeps copy and the thumbs in one side rail, and the thumbs-down follow-up stays on its own line", () => {
+  const reply = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
+  const luke = reply.slice(reply.indexOf('data-bubble-actions="luke"'));
+  assert.ok(luke);
+  assert.equal(count(luke, "class", "conversation-bubble-actions"), 1);
+  assert.equal(count(luke, "class", "conversation-copy"), 1);
+  assert.equal(count(luke, "class", "conversation-rating conversation-rating-inline"), 1);
+  assert.equal(count(luke, "class", "conversation-rating-details"), 0);
+  assert.ok(
+    luke.indexOf('class="conversation-bubble-actions"') < luke.indexOf('class="conversation-time"'),
+  );
+
+  const offered = renderToStaticMarkup(
+    createElement(ConversationTurns, {
+      groups: [groupOf(FIXTURE_TURN.ASK)],
+      roster: FIXTURE_ROSTER,
+      now: FIXTURE_NOW,
+      onOfferRatingFeedback: () => undefined,
+    }),
+  );
+  const ratedLuke = offered.slice(offered.lastIndexOf('data-bubble-actions="luke"'));
+  assert.ok(ratedLuke);
+  assert.equal(count(ratedLuke, "class", "conversation-bubble-actions"), 1);
+  assert.equal(count(ratedLuke, "class", "conversation-rating conversation-rating-inline"), 1);
+  assert.equal(count(ratedLuke, "class", "conversation-rating-details"), 1);
+  assert.ok(
+    ratedLuke.indexOf('class="conversation-bubble-actions"') <
+      ratedLuke.indexOf('class="conversation-rating-details"'),
+  );
+  assert.equal(
+    count(
+      render([groupOf(FIXTURE_TURN.OWN)], OPEN),
+      "class",
+      "conversation-rating conversation-rating-inline",
+    ),
+    0,
+  );
 });
 
 test("the offered draft quotes the ask the turn answered and then the rated message, each cut to the quote bound, over a blank line to write under", () => {

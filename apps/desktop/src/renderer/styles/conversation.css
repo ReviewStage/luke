@@ -153,9 +153,9 @@
   transform: translate(calc(-1 * var(--conversation-time-column)), -50%);
 }
 
-/* The bubble is the copy control's anchor. It stacks: the words, then the
-   wait an ask still running draws beneath them, so a pending label never
-   shares the row with the question and squeezes beside it into a column. */
+/* The bubble is the message's body: the words, and where needed the unheard
+   marker under them. The side controls live alongside it rather than inside
+   it, so moving them changes nothing of the bubble's own text layout. */
 .conversation-bubble {
   position: relative;
   display: flex;
@@ -164,15 +164,44 @@
   flex-direction: column;
 }
 
-/* Copy sits in the bubble's free margin, absolutely positioned so a thread
-   with the control lays out exactly like one without it, and hover-revealed
-   because a control on every bubble would out-shout the words. It stays
-   keyboard-reachable while hidden, :focus-visible reveals it, and the glyph
-   alone speaks: the accessible name captions it for a reader, and the copied
-   confirmation is the same green check a finished session wears. */
+/* A bubble with side controls becomes a two-column row: the bubble and the
+   rail beside it, with any thumbs-down follow-up in a second line below. The
+   sent side flips the order so copy stays on the bubble's outside edge. */
+.conversation-message[data-bubble-actions] {
+  display: grid;
+  align-items: center;
+  column-gap: 4px;
+  row-gap: 4px;
+}
+
+.conversation-message[data-bubble-actions] .conversation-bubble {
+  grid-area: bubble;
+}
+
+.conversation-message[data-bubble-actions="luke"] {
+  grid-template-columns: minmax(0, max-content) auto;
+  grid-template-areas:
+    "bubble rail"
+    "details details";
+  justify-content: flex-start;
+}
+
+.conversation-message[data-bubble-actions="you"] {
+  grid-template-columns: auto minmax(0, max-content);
+  grid-template-areas: "rail bubble";
+  justify-content: flex-end;
+}
+
+.conversation-bubble-actions {
+  grid-area: rail;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Copy stays hover-revealed because it is an occasional utility, not a
+   standing verdict. The rail keeps it keyboard-reachable while hidden. */
 .conversation-copy {
-  position: absolute;
-  top: 50%;
   display: inline-flex;
   width: 24px;
   height: 24px;
@@ -182,22 +211,14 @@
   background: transparent;
   color: var(--text-secondary);
   opacity: 0;
-  transform: translateY(-50%);
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease,
     opacity var(--duration-hover) ease;
 }
 
-.conversation-entry[data-speaker="luke"] .conversation-copy {
-  left: calc(100% + 4px);
-}
-
-.conversation-entry[data-speaker="you"] .conversation-copy {
-  right: calc(100% + 4px);
-}
-
 .conversation-entry:hover .conversation-copy,
+.conversation-bubble-actions:focus-within .conversation-copy,
 .conversation-copy:focus-visible,
 .conversation-copy[data-copied] {
   opacity: 1;
@@ -519,29 +540,41 @@ button.conversation-action-chip:focus-visible {
   vertical-align: middle;
 }
 
-/* Luke's rows stack: the bubble, then the thumbs under it. The thumbs stand
-   beside the bubble rather than inside it, so the copy control, anchored to
-   the bubble's own middle, still centres on the words and not on the words
-   and the thumbs together. */
-.conversation-entry[data-speaker="luke"] .conversation-message {
-  flex-direction: column;
-  align-items: flex-start;
-}
-
 /* The developer's verdict on one of Luke's messages: two thumbs under the
    words, quiet until chosen, the chosen one filled and in the text colour so
    a verdict already given reads at a glance. Each thumb keeps a 24px target
    around a smaller glyph, and the pair is always drawn rather than revealed
    on hover, because a control that records something is one a reader has
-   to be able to find. A thumbs down stands the composer's offer beside them
-   for as long as the verdict does; a refused press says so under them, in
-   the danger colour, as a live status. */
+   to be able to find. A thumbs down stands the composer's offer and any
+   refusal under that rail, in the same quiet voice as before. */
 .conversation-rating {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 1px 6px 0;
+}
+
+.conversation-rating-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.conversation-rating-inline {
+  padding: 0;
+}
+
+.conversation-rating-details {
+  grid-area: details;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
-  padding: 1px 6px 0;
+  gap: 4px;
+}
+
+.conversation-message[data-bubble-actions="luke"] .conversation-rating-details {
+  padding-left: 10px;
 }
 
 .conversation-rating-thumb,
@@ -587,7 +620,6 @@ button.conversation-action-chip:focus-visible {
 
 .conversation-rating-offer {
   min-height: 24px;
-  margin-left: 4px;
   padding: 0 8px;
   border-radius: 8px;
   background: var(--raised);
@@ -604,7 +636,6 @@ button.conversation-action-chip:focus-visible {
 
 .conversation-rating-refusal {
   flex-basis: 100%;
-  padding: 0 2px 2px;
   color: var(--danger);
   font-size: 10.5px;
   line-height: 1.4;
