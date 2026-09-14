@@ -18,6 +18,15 @@ the host, and a web function alike.
   trusted side.**
 - `liveSessionConfig` sets **no field the API does not document for WebRTC** — no
   `audio.format`, no tools, no speed, no truncation.
+- `livePrimarySessionConfig` is the same startup document for a **primary
+  WebSocket**: `audio.format` and **no** `client.data_channel`, since a socket
+  that *is* the session has no channel to restrict and only a primary WebSocket
+  is given a format. One format carries **both directions** and is fixed at
+  startup, so the default — PCM16 at 16 kHz, ruled on 2026-09-14 — is Luke's
+  voice as much as the device's microphone, and changing it is a product
+  decision. `session.start` stands beside the creation request rather than in
+  `LIVE_CLIENT_EVENT`, which is the in-session set a renderer's channel and the
+  service's frame decisions are stated over.
 - `instructions.ts` is the Live prompting guide's starter template with its
   brackets filled in and nothing beside them. **Every optional control from the
   guide's appendix is absent until listening shows a behavior it would change.**
