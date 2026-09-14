@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { BRAIN_PREFETCH_MODEL } from "@sidecar/brain";
 import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME } from "@sidecar/live";
 import { APP_SETTING_SCHEMA, VOICE_SOURCE } from "@sidecar/settings";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
@@ -101,7 +100,7 @@ function settingsFor(options: {
 }
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-test("the assembler builds and clears the keyed voice capabilities as one unit", async () => {
+test("the assembler builds and clears the keyed voice as one unit, and a key alone builds no brain", async () => {
   let key: string | undefined = "test-key";
   const reports: string[] = [];
   const assembler = new VoiceCapabilityAssembler({
@@ -120,7 +119,12 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
 
   await Effect.runPromise(assembler.apply());
   assert.ok(assembler.liveSessions);
-  assert.ok(assembler.brainModel);
+  assert.equal(assembler.brainModel, undefined);
+  assert.equal(assembler.prefetchModel, undefined);
+  assert.ok(
+    reports.some((report) => report.startsWith("Luke brain: absent")),
+    "the key's run says the brain is absent rather than enabled",
+  );
 
   key = undefined;
   await Effect.runPromise(assembler.apply());
@@ -129,21 +133,18 @@ test("the assembler builds and clears the keyed voice capabilities as one unit",
 });
 
 test("a wrapped brain model stands where the built one would, and only when one was built", async () => {
-  const wrapped: string[] = [];
-  let key: string | undefined = "test-key";
+  const wrapped: number[] = [];
+  const gate = { signedIn: true };
   const assembler = new VoiceCapabilityAssembler({
-    settings: {
-      ...settingsFor({ source: VOICE_SOURCE.KEY }),
-      readApiKey: () => Effect.succeed(key),
-    },
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
     credentialsUsable: () => true,
     fixtureRun: () => false,
-    accountSignedIn: () => false,
+    accountSignedIn: () => gate.signedIn,
     hostedServiceBaseUrl: "https://example.test",
     refreshAccount: () => Effect.void,
     report: () => undefined,
     wrapBrainModel: (model) => {
-      wrapped.push(model.model ?? "unnamed");
+      wrapped.push(1);
       return model;
     },
   });
@@ -151,15 +152,15 @@ test("a wrapped brain model stands where the built one would, and only when one 
   await Effect.runPromise(assembler.apply());
   assert.ok(assembler.brainModel);
   assert.ok(assembler.prefetchModel);
-  // The brain's model and the prefetch's small one are each wrapped once, in that order.
-  assert.deepEqual(wrapped, ["gpt-5.6-terra", BRAIN_PREFETCH_MODEL]);
+  // The brain's model and the prefetch's small one are each wrapped once.
+  assert.equal(wrapped.length, 2);
 
   // No client, nothing to decorate: the wrapper must not conjure one.
-  key = undefined;
+  gate.signedIn = false;
   await Effect.runPromise(assembler.apply());
   assert.equal(assembler.brainModel, undefined);
   assert.equal(assembler.prefetchModel, undefined);
-  assert.deepEqual(wrapped, ["gpt-5.6-terra", BRAIN_PREFETCH_MODEL]);
+  assert.equal(wrapped.length, 2);
 });
 
 test("the assembler keeps fixture runs credential-free without reading a key", async () => {
@@ -207,7 +208,7 @@ test("a signed-out live run is diagnosed as missing credentials, not as a fixtur
   assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_API_KEY);
 });
 
-test("the brain follows the voice source: hosted on an account, direct on a key, none in a fixture run", async () => {
+test("the brain stands on the signed-in account alone: none on a key, none signed out, none in a fixture run", async () => {
   const seams = {
     openSocket: scriptedOpenSocket([]).openSocket,
     credentialsUsable: () => true,
@@ -228,12 +229,16 @@ test("the brain follows the voice source: hosted on an account, direct on a key,
   assert.ok(hosted.brainModel);
   assert.equal(hosted.brainModel?.model, undefined);
 
+  // A key of the developer's own opens a voice session and nothing else: no
+  // brain answers it, whatever the account beside it.
   const keyed = new VoiceCapabilityAssembler({
     ...seams,
     settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
   });
   await Effect.runPromise(keyed.apply());
-  assert.ok(keyed.brainModel?.model);
+  assert.ok(keyed.liveSessions);
+  assert.equal(keyed.brainModel, undefined);
+  assert.equal(keyed.prefetchModel, undefined);
 
   const signedOut = new VoiceCapabilityAssembler({
     ...seams,
@@ -309,7 +314,7 @@ test("live sessions follow the voice source, and stand only where a socket seam 
 
   const withoutSeam = new VoiceCapabilityAssembler({
     ...seams,
-    settings: settingsFor({ source: VOICE_SOURCE.KEY, key: "test-key" }),
+    settings: settingsFor({ source: VOICE_SOURCE.ACCOUNT }),
   });
   await Effect.runPromise(withoutSeam.apply());
   assert.ok(withoutSeam.brainModel);

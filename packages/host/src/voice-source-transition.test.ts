@@ -226,6 +226,14 @@ function assertHostedSet(c: ReturnType<typeof composition>) {
   assert.ok(c.assembler.liveSessions);
 }
 
+/** The key source stands a voice session on the developer's key and no brain at all. */
+function assertKeyedSet(c: ReturnType<typeof composition>) {
+  assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
+  assert.equal(c.assembler.brainModel, undefined);
+  assert.equal(c.assembler.liveSessions?.diagnostics().apiKeyConfigured, true);
+  assert.equal(c.host.current(), undefined);
+}
+
 function assertAbsentSet(c: ReturnType<typeof composition>) {
   assert.equal(c.assembler.brainModel, undefined);
   assert.equal(c.assembler.liveSessions, undefined);
@@ -351,26 +359,27 @@ it.effect(
       yield* waitFor(() => c.settings.pendingReads() > 0);
       c.settings.source = VOICE_SOURCE.KEY;
       assert.equal(yield* Effect.promise(() => c.transition()), true);
-      assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
-      const keyedAgent = c.host.current();
-      assert.ok(keyedAgent);
+      assertKeyedSet(c);
+      const live = c.assembler.liveSessions;
 
       c.settings.source = VOICE_SOURCE.ACCOUNT;
       c.settings.release();
       assert.equal(yield* Effect.promise(() => older), false);
       yield* Effect.promise(() => onDefault(c.host.settled()));
-      assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
-      assert.equal(c.host.current(), keyedAgent);
-      assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
-      yield* keyedAgent.stop();
+      // The late account read installed neither its brain nor its live source.
+      assertKeyedSet(c);
+      assert.equal(c.assembler.liveSessions, live);
+      assert.deepEqual(c.builds, []);
     }),
 );
 
 it.effect("a late read cannot resurrect a capability the newer transition removed", () =>
   Effect.gen(function* () {
     const c = composition();
+    c.settings.source = VOICE_SOURCE.ACCOUNT;
     assert.equal(yield* Effect.promise(() => c.transition()), true);
     assert.ok(c.host.current());
+    c.settings.source = VOICE_SOURCE.KEY;
     c.settings.holdNext = HELD_READ.SOURCE;
     const older = c.transition();
     yield* waitFor(() => c.settings.pendingReads() > 0);
@@ -389,7 +398,7 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     assert.equal(yield* Effect.promise(() => older), false);
     yield* Effect.promise(() => onDefault(c.host.settled()));
     assertAbsentSet(c);
-    assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
+    assert.deepEqual(c.builds, ["hosted"]);
     assert.equal(c.reports.length, reportsAfterRemoval);
     assert.equal(c.warms.length, warmsAfterRemoval);
 
@@ -403,20 +412,21 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     assert.equal(yield* Effect.promise(() => heldAgain), false);
     yield* Effect.promise(() => onDefault(c.host.settled()));
     assertAbsentSet(c);
-    assert.deepEqual(c.builds, ["gpt-5.6-terra"]);
+    assert.deepEqual(c.builds, ["hosted"]);
   }),
 );
 
-test("transitions that do not overlap each install in turn", async () => {
+test("transitions that do not overlap each install in turn: a key stands no brain, the account stands one", async () => {
   const c = composition();
   assert.equal(await c.transition(), true);
-  const first = c.host.current();
-  assert.ok(first);
+  assertKeyedSet(c);
+  const keyedLive = c.assembler.liveSessions;
   c.settings.source = VOICE_SOURCE.ACCOUNT;
   assert.equal(await c.transition(), true);
+  assertHostedSet(c);
   const second = c.host.current();
   assert.ok(second);
-  assert.notEqual(second, first);
-  assert.deepEqual(c.builds, ["gpt-5.6-terra", "hosted"]);
+  assert.notEqual(c.assembler.liveSessions, keyedLive);
+  assert.deepEqual(c.builds, ["hosted"]);
   await Effect.runPromise(second.stop());
 });
