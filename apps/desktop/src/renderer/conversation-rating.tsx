@@ -42,7 +42,7 @@ const RATE_REFUSAL_COPY = {
   [CONVERSATION_RATE_STATUS.NOT_RATEABLE]: "That message cannot be rated.",
 } as const satisfies Record<ConversationRateStatus, string | undefined>;
 
-const OFFER_LABEL = "Say what went wrong";
+const OFFER_LABEL = "Explain";
 
 /**
  * The most characters each quoted line of the offered draft carries. The
