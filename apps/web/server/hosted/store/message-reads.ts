@@ -561,6 +561,14 @@ const TURN_CHANGED_AT_SQL =
 
 const turnChangedAt = (sql: SqlClient.SqlClient) => sql.literal(TURN_CHANGED_AT_SQL);
 
+// The cursor's instant travels as text (a millisecond number cannot tell two
+// stamps in one millisecond apart), and `timestamptz::text` renders in the
+// session's TimeZone, so the same instant would read as two strings on two
+// connections. Rendering the UTC wall clock and spelling the zone ourselves
+// makes the text a property of the query rather than of the connection.
+const TURN_CHANGED_AT_TEXT_SQL = `((${TURN_CHANGED_AT_SQL}) at time zone 'UTC')::text || '+00'`;
+const turnChangedAtText = (sql: SqlClient.SqlClient) => sql.literal(TURN_CHANGED_AT_TEXT_SQL);
+
 const TURN_COLUMNS =
   "turns.id, turns.user_id, turns.conversation_id, turns.origin, turns.status, turns.model, " +
   "turns.reasoning_effort, turns.prompt_hash, turns.tool_set_hash, turns.response_ids, " +
@@ -652,7 +660,7 @@ export function listTurns(
     const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
     if (cursor.after !== undefined) conditions.push(changedAfterFragment(sql, cursor.after));
     return sql`
-      select ${sql.literal(TURN_COLUMNS)}, (${turnChangedAt(sql)})::text as changed_at
+      select ${sql.literal(TURN_COLUMNS)}, ${turnChangedAtText(sql)} as changed_at
       from turns
       ${standingJoin(sql, "turns.conversation_id")}
       where ${sql.and(conditions)}
@@ -717,7 +725,7 @@ export function turnsNamed(
   if (turnIds.length === 0) return Effect.succeed([]);
   return statement(
     (sql) => sql`
-      select ${sql.literal(TURN_COLUMNS)}, (${turnChangedAt(sql)})::text as changed_at
+      select ${sql.literal(TURN_COLUMNS)}, ${turnChangedAtText(sql)} as changed_at
       from turns
       ${standingJoin(sql, "turns.conversation_id")}
       where turns.user_id = ${userId}
@@ -765,7 +773,7 @@ export function latestTurnPosition(
     const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
     if (notAfter !== undefined) conditions.push(changedAtOrBeforeFragment(sql, notAfter));
     return sql`
-      select turns.id as id, (${turnChangedAt(sql)})::text as changed_at
+      select turns.id as id, ${turnChangedAtText(sql)} as changed_at
       from turns
       ${standingJoin(sql, "turns.conversation_id")}
       where ${sql.and(conditions)}

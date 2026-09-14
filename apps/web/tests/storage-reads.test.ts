@@ -521,3 +521,45 @@ test("a row whose parts are not a message's refuses the page as malformed", asyn
   assert.equal(read.seq, 4);
   assert.deepEqual(read.path, []);
 });
+
+test("the turn cursor's instant reads as one string whatever time zone the database session keeps", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const preciseId = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const rows = yield* sql`
+        insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
+        values (
+          ${userId}, ${main}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.RUNNING},
+          '2026-09-10 12:00:00.000500+00'::timestamptz, '2026-09-10 12:00:00.000500+00'::timestamptz
+        )
+        returning id
+      `;
+      return rows[0]?.id;
+    }),
+  );
+  assert.ok(preciseId);
+  const sessionZone = (zone: string) =>
+    database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql.unsafe(`set time zone '${zone}'`);
+      }),
+    );
+  // A zone west of UTC, so a render in the session's zone would move both the
+  // wall clock and the offset; the test harness holds one connection, so the
+  // setting stands for every read below until it is reset.
+  await sessionZone("America/Anchorage");
+  try {
+    const [answered] = await database.run(database.store.turns.list(userId));
+    assert.equal(answered?.id, preciseId);
+    assert.equal(answered?.cursor.changedAt, "2026-09-10 12:00:00.0005+00");
+    assert.deepEqual(
+      await database.run(database.store.turns.list(userId, { after: answered.cursor })),
+      [],
+    );
+  } finally {
+    await sessionZone("UTC");
+  }
+});
