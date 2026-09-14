@@ -30,6 +30,25 @@ interface MethodEntry {
   readonly mutates: boolean;
 }
 
+/**
+ * Nine methods and five events below are the protocol's own test vocabulary
+ * and nothing more: `conversation.delete`, `run.submit`, `run.cancel`,
+ * `run.wait`, `run.list`, `child.list`, `memory.status`,
+ * `configuration.update`, and `guide.report`, with `runs.changed`,
+ * `directory.changed`, `child.changed`, `configuration.changed`, and
+ * `observation.changed`. They were the local brain's Gateway surface, and no
+ * host answers or emits them since LUKE-206 deleted that brain from the
+ * desktop: a request naming one of the methods is refused as unknown by every
+ * host this repository composes, and no event of those kinds is ever
+ * appended. They stay because this package's own tests use them as the
+ * synthetic names their protocol cases run on (`protocol.test.ts`,
+ * `server.test.ts`, `websocket.test.ts`, `socket-frames.test.ts`,
+ * `protocol-envelopes.test.ts`, `node-invocations.test.ts`, `rpc.test.ts`)
+ * and the goldens under `fixtures/protocol` are keyed by them; re-pointing
+ * those and re-recording the goldens is a ticket of its own. A new method or
+ * event a host will answer is added beside them as before; nothing here is a
+ * reservation.
+ */
 const GATEWAY_METHODS = {
   HELLO: { name: "gateway.hello", mutates: false },
   RECONNECT: { name: "gateway.reconnect", mutates: false },
