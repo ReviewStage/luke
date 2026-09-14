@@ -305,6 +305,9 @@ export const composeLive = (
 
     /** When this Mac last asked for a session on a briefing's account, for the debounce. */
     let briefingSessionAskedAt: number | undefined;
+    /** The offer count as last told, and whether a hold kept a briefing back, so the hold's lift re-decides it. */
+    let lastOpenOffers = 0;
+    let briefingHeld = false;
 
     /**
      * A briefing on offer, decided from observed rows and this Mac's own
@@ -316,14 +319,21 @@ export const composeLive = (
      */
     const briefingSession = (openOffers: number) =>
       Effect.gen(function* () {
+        lastOpenOffers = openOffers;
         if (!runMode.requiresAccount || !account.signedIn()) return;
         if (!account.voiceCapabilities.liveSessions) return;
         const at = now();
+        const held = yield* speechHeld;
+        // A briefing kept back by the hold is decided again when the hold's
+        // read finds speech free; the offer may have gone to the phone by then,
+        // in which case the session opened finds nothing and closes on idle.
+        briefingHeld = held && openOffers > 0;
         const decision = briefingSessionDecision({
           openOffers,
           present: activeUntilFrom(machinePresence.read?.(), at) !== null,
-          held: yield* speechHeld,
-          sessionStands: service.sessionStands(),
+          held,
+          // A `wanted` already out for a beat is a session on its way: one word to the peer, not two.
+          sessionStands: service.sessionStands() || service.sessionWanted(),
           lastOpenedAt: briefingSessionAskedAt,
           now: at,
         });
@@ -345,8 +355,8 @@ export const composeLive = (
         }
         return;
       }
-      if (!beatHeld) return;
-      yield* onboardingBeat;
+      if (beatHeld) yield* onboardingBeat;
+      if (briefingHeld) yield* briefingSession(lastOpenOffers);
     });
 
     const methods: GatewayMethodTable = {

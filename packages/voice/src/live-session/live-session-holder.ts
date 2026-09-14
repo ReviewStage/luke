@@ -127,6 +127,13 @@ export class LiveSessionHolder {
    * withdrawn, or lost with its session.
    */
   readonly #beats = new Map<BeatKind, { readonly beat: SessionBeatFrame; sent: boolean }>();
+  /**
+   * Whether the peer has been told a session is wanted and has not yet
+   * offered one: one word, however many reasons stand behind it, since the
+   * peer reads a repeated `wanted` as a fresh ask and would open twice.
+   * Cleared when a session comes to stand or the attempt to stand one ends.
+   */
+  #wanted = false;
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
@@ -187,6 +194,8 @@ export class LiveSessionHolder {
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
     return Effect.gen(this, function* () {
       if (this.#held) yield* this.endSession();
+      // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
+      this.#wanted = false;
       const source = this.#options.source();
       if (!source) {
         this.#beats.clear();
@@ -429,11 +438,16 @@ export class LiveSessionHolder {
     this.#beats.set(beat.kind, { beat, sent: false });
     const session = this.#held;
     if (session === undefined || session.ended) {
-      this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
+      this.#askWanted();
       return true;
     }
     if (session.started) this.#sendBeats(session);
     return true;
+  }
+
+  /** Whether the peer has been told a session is wanted and has not yet offered one. */
+  sessionWanted(): boolean {
+    return this.#wanted;
   }
 
   /**
@@ -441,13 +455,20 @@ export class LiveSessionHolder {
    * stands on offer to the account, and the service's exchange will claim
    * and speak it once a session stands. The peer is told the session is
    * wanted so it opens one muted, exactly as for a beat; a session already
-   * standing is left to its own exchange's look. Answers whether the peer
-   * was told.
+   * standing is left to its own exchange's look, and a `wanted` already out
+   * for a beat is the same word. Answers whether the peer was told.
    */
   wantSession(): boolean {
-    if (this.sessionStands()) return false;
-    this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
+    if (this.sessionStands() || this.#wanted) return false;
+    this.#askWanted();
     return true;
+  }
+
+  /** One `wanted` to the peer for however many reasons stand, until it answers with an offer. */
+  #askWanted(): void {
+    if (this.#wanted) return;
+    this.#wanted = true;
+    this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
   }
 
   /**
