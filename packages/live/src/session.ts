@@ -47,7 +47,54 @@ export const LIVE_DELEGATION_TYPE = "client";
 
 export const LiveDelegationTypeSchema = Schema.Literal(LIVE_DELEGATION_TYPE);
 
-export interface LiveSessionOptions {
+/**
+ * Every audio encoding a primary WebSocket session may be started under, as
+ * the WebSockets guide names them and the SDK's `AudioFormat` declares them.
+ * Nothing compressed beyond G.711 is offered, so no Opus.
+ */
+export const LIVE_AUDIO_ENCODING = {
+  PCM16: "audio/pcm",
+  G711_ULAW: "audio/pcmu",
+  G711_ALAW: "audio/pcma",
+} as const;
+
+/**
+ * The four formats the guide names, each encoding with the rate it is spoken
+ * at: PCM16 at either 24 or 16 kHz, and G.711 at 8 kHz in both companding
+ * laws. One of these applies to the session's input and its output alike, is
+ * fixed at startup, and cannot change while the session stands, so choosing
+ * one for what a device sends chooses it for Luke's own voice too.
+ */
+export const LIVE_AUDIO_FORMAT = {
+  PCM16_24K: { type: LIVE_AUDIO_ENCODING.PCM16, rate: 24_000 },
+  PCM16_16K: { type: LIVE_AUDIO_ENCODING.PCM16, rate: 16_000 },
+  G711_ULAW_8K: { type: LIVE_AUDIO_ENCODING.G711_ULAW, rate: 8_000 },
+  G711_ALAW_8K: { type: LIVE_AUDIO_ENCODING.G711_ALAW, rate: 8_000 },
+} as const;
+
+export type LiveAudioFormat = (typeof LIVE_AUDIO_FORMAT)[keyof typeof LIVE_AUDIO_FORMAT];
+
+/**
+ * The format a primary WebSocket session is started under when the caller
+ * names none. PCM16 at 16 kHz is the compromise ruled on 2026-09-14 between
+ * the bytes a wrist streams through the service and Luke's own voice, which
+ * the same format carries back. The API's own default is 24 kHz, so this is a
+ * choice rather than an omission, and changing it is a product decision.
+ */
+export const LIVE_DEFAULT_AUDIO_FORMAT = LIVE_AUDIO_FORMAT.PCM16_16K;
+
+/**
+ * The one client event that starts a session, sent as the first message on a
+ * primary WebSocket. It stands here beside the creation request rather than
+ * among `LIVE_CLIENT_EVENT`'s events because it is a startup message and not
+ * one a standing session takes: a WebRTC session is started by the request
+ * that created it and must never be sent this on its data channel, and that
+ * set is what a renderer's channel and the service's frame decisions are
+ * stated over.
+ */
+export const LIVE_SESSION_START = "session.start";
+
+interface LiveStartupOptions {
   scene: LiveScene;
   /** The model, where a deployment pins one; `LIVE_DEFAULTS.MODEL` otherwise. */
   model?: string | undefined;
@@ -55,30 +102,49 @@ export interface LiveSessionOptions {
   voice?: LiveVoice;
   /** The startup history; `conversationSeedItems` bounds it. */
   input?: readonly InitialItem[];
+}
+
+export interface LiveSessionOptions extends LiveStartupOptions {
   /** What the renderer's data channel may send; `RENDERER_CLIENT_EVENTS` by default. */
   clientEvents?: readonly LiveClientEventType[];
   /** What the renderer's data channel is shown; `RENDERER_SERVER_EVENTS` by default. */
   serverEvents?: readonly LiveServerEventSelector[];
 }
 
+export interface LivePrimarySessionOptions extends LiveStartupOptions {
+  /** One format for both directions; `LIVE_DEFAULT_AUDIO_FORMAT` otherwise. */
+  format?: LiveAudioFormat;
+}
+
 /**
- * The session document a WebRTC session is created with. The delegation is the
- * client's, because Luke's brain is the backend and nothing else may act; the
- * session is not stored; the renderer's data channel is restricted to the
- * events named, so an untrusted window cannot append to the model or start
- * anything. Nothing else is set: WebRTC negotiates the audio format, this
- * model has no tools, no speed, and no truncation, and a field the API does
- * not document is refused at creation.
+ * What both documents name whatever transport carries the session: the model,
+ * the scene's instructions, the startup history where there is one, the
+ * client's delegation, because Luke's brain is the backend and nothing else
+ * may act, and no storage. This model has no tools, no speed, and no
+ * truncation, and a field the API does not document is refused at startup.
  */
-export function liveSessionConfig(options: LiveSessionOptions) {
+function startupDocument(options: LiveStartupOptions) {
   const input = options.input ?? [];
   return {
     model: options.model ?? LIVE_DEFAULTS.MODEL,
     instructions: sessionInstructions(options.scene),
     ...(input.length > 0 ? { input: [...input] } : undefined),
-    audio: { output: { voice: options.voice ?? LIVE_DEFAULTS.VOICE } },
     delegation: { type: LIVE_DELEGATION_TYPE },
     store: false,
+  };
+}
+
+/**
+ * The session document a WebRTC session is created with: the startup document
+ * with the voice, and the renderer's data channel restricted to the events
+ * named, so an untrusted window cannot append to the model or start anything.
+ * No `audio.format`, because WebRTC negotiates its own and only a primary
+ * WebSocket is given one.
+ */
+export function liveSessionConfig(options: LiveSessionOptions) {
+  return {
+    ...startupDocument(options),
+    audio: { output: { voice: options.voice ?? LIVE_DEFAULTS.VOICE } },
     client: {
       data_channel: {
         allowed_client_events: [...(options.clientEvents ?? RENDERER_CLIENT_EVENTS)],
@@ -92,9 +158,41 @@ export function liveSessionConfig(options: LiveSessionOptions) {
 
 export type LiveSessionConfig = ReturnType<typeof liveSessionConfig>;
 
+/**
+ * The session document a primary WebSocket is started with: the same startup
+ * document and the same voice, with the audio format the socket carries in
+ * both directions. No `transport`, since the socket is the transport and the
+ * document travels over it rather than in a creation request; and no
+ * `client.data_channel`, since a primary WebSocket has no data channel and
+ * the trusted server holding it is the only thing reading the session, so what
+ * a device is shown is that server's decision and not an allowlist the API
+ * enforces.
+ */
+export function livePrimarySessionConfig(options: LivePrimarySessionOptions) {
+  return {
+    ...startupDocument(options),
+    audio: {
+      format: { ...(options.format ?? LIVE_DEFAULT_AUDIO_FORMAT) },
+      output: { voice: options.voice ?? LIVE_DEFAULTS.VOICE },
+    },
+  };
+}
+
+export type LivePrimarySessionConfig = ReturnType<typeof livePrimarySessionConfig>;
+
 /** The body `POST /v1/live/sessions` takes: the session and the renderer's SDP offer. */
 export function liveCreateRequest(session: LiveSessionConfig, sdpOffer: string) {
   return { session, transport: { type: LIVE_TRANSPORT_TYPE, sdp: sdpOffer } };
+}
+
+/**
+ * The first message a primary WebSocket sends, and the whole of what starts
+ * that session. It names no `event_id`: the only answer waited on is
+ * `session.started`, and an `error` arriving in its place is a refusal
+ * whichever command it says it is about.
+ */
+export function liveStartRequest(session: LivePrimarySessionConfig) {
+  return { type: LIVE_SESSION_START, session };
 }
 
 /**

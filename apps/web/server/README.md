@@ -767,12 +767,13 @@ every frame in arrival order, so the opening frame is taken from the same
 reader the relay then streams the rest from and nothing between the two lands
 nowhere. `server/voice/relay.ts` pipes the two streams, settles on a
 `Deferred`, and arms its graceful-close and opening waits as `Effect.sleep`
-forked into that scope; `server/voice/openai.ts` answers effects for both the
-session create and the sideband attach, the sideband acquired with
-`Effect.acquireRelease` so a session that ends, however it ends, leaves no
-socket standing. A socket handed over by `ws` is paused until its reader
-stands, because `ws` emits a frame to whoever listens at that instant and the
-reader is a fiber away.
+forked into that scope; `server/voice/openai.ts` answers effects for the
+session create, the sideband attach, and the primary socket that is a session
+itself — `openPrimary`, for a device with no WebRTC of its own, which no route
+reaches yet — each socket acquired with `Effect.acquireRelease` so a session
+that ends, however it ends, leaves no socket standing. A socket handed over by
+`ws` is paused until its reader stands, because `ws` emits a frame to whoever
+listens at that instant and the reader is a fiber away.
 
 `/api/voice/introduction` takes a fresh install with no account, under the
 same durable shared daily ceiling the introduction mint spends
