@@ -25,9 +25,9 @@ import {
 
 /**
  * The one OpenAI Responses request a brain turn may be, and the one reading of
- * its answer. Built here once so the keyed client and the hosted service send
- * the same shape: instructions, tools, and the reasoning summary are fixed by
- * the build, and only the input array varies. The request leaves OpenAI's
+ * its answer. Built here once so the hosted service, which alone sends it
+ * upstream, sends one shape: instructions, tools, and the reasoning summary
+ * are fixed by the build, and only the input array varies. The request leaves OpenAI's
  * `store` at its default, so each response stands with OpenAI under its own
  * retention and is named back by its id, which the run keeps; the brain
  * still replays its context itself and never reads a stored response back.
