@@ -15,6 +15,7 @@ import {
   SESSION_STATUS,
   sessionKey,
   type WireRecord,
+  WORKSPACE_TASK_SUPPORT,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
@@ -229,6 +230,71 @@ test("a session message is admitted against the stored roster and carried with t
   });
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(noKey.executed, []);
+});
+
+test("a created workspace keeps the created session identity in its action envelope", async () => {
+  const remembered: string[] = [];
+  const roster = () =>
+    Effect.succeed(
+      hostedRosterFrom(
+        {
+          version: 1,
+          providers: [
+            {
+              providerId: "conductor",
+              keyFingerprint: "f",
+              observations: [observation(SESSION_UUID)],
+              projects: [
+                {
+                  providerProjectId: "project-1",
+                  repository: "repo",
+                  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+                },
+              ],
+            },
+          ],
+        },
+        NOW,
+      ),
+    );
+  const carrier = hostedActionCarrier({
+    roster,
+    defaults: () => Effect.succeed({}),
+    facts: factsWriter(remembered),
+    apiKey: () => Effect.succeed("conductor-key"),
+    execute: () =>
+      Effect.succeed({
+        result: ACTION_RESULT_STATUS.ACCEPTED,
+        providerSessionId: "workspace-created",
+      }),
+  });
+  const seams: HostedToolSeams = {
+    conversation: { userId: "user-a", conversationId: "c-1" },
+    roster,
+    carrier,
+    transcripts: {
+      whole: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
+    },
+    workspace: {
+      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
+      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
+    },
+    now: () => NOW,
+  };
+
+  const created = await call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
+    provider_id: "conductor",
+    project_id: "project-1",
+    name: "Checkout",
+  });
+
+  assert.deepEqual(created, {
+    status: ACTION_OUTPUT_STATUS.ACCEPTED,
+    target: { providerId: "conductor" },
+    createdSession: { providerId: "conductor", providerSessionId: "workspace-created" },
+  });
 });
 
 test("read_transcript answers for a session the roster holds and refuses one it does not", async () => {

@@ -122,6 +122,7 @@ export const hostAssemblyLayer: Layer.Layer<
       settings,
       account,
       devices,
+      refreshRoster: observation.refreshRoster,
       onOpenOffers: (count) => briefingsOffered(count),
       // Both clients carry the account's own token, holder fence included, so
       // the one retry after a 401 can tell a renewed bearer from another person's.

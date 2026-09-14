@@ -98,13 +98,36 @@ export interface HostedActionCarrier {
   ): Effect.Effect<ActionOutputEnvelope>;
 }
 
-function carriedResult(executed: ActionExecutionAnswer): CarriedActionResult {
+function createdSessionOf(
+  action: ValidatedAction<SessionActionKind>,
+  executed: ActionExecutionAnswer,
+) {
+  if (
+    action.kind !== ACTION_KIND.CREATE_WORKSPACE ||
+    executed.result !== ACTION_RESULT_STATUS.ACCEPTED ||
+    executed.providerSessionId === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    providerId: action.providerId,
+    providerSessionId: executed.providerSessionId,
+  };
+}
+
+function carriedResult(
+  action: ValidatedAction<SessionActionKind>,
+  executed: ActionExecutionAnswer,
+): CarriedActionResult {
   switch (executed.result) {
-    case ACTION_RESULT_STATUS.ACCEPTED:
+    case ACTION_RESULT_STATUS.ACCEPTED: {
+      const createdSession = createdSessionOf(action, executed);
       return {
         status: executed.result,
+        ...(createdSession !== undefined ? { createdSession } : undefined),
         ...(executed.reason ? { note: executed.reason } : undefined),
       };
+    }
     case ACTION_RESULT_STATUS.REJECTED:
     case ACTION_RESULT_STATUS.UNSUPPORTED:
       return { status: executed.result, reason: executed.reason ?? executed.result };
@@ -146,7 +169,7 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
         apiKey,
         roster: actionRosterFor(providerId, storedRosterOf(stored)),
       });
-      return actionOutputFromResult(carriedResult(executed), target);
+      return actionOutputFromResult(carriedResult(action, executed), target);
     });
 
   const wrote = (
