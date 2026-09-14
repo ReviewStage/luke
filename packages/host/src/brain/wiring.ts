@@ -301,10 +301,9 @@ function observedName(session: Session | undefined, identity: SessionIdentity): 
  * run under the shared lanes, one execution per conversation at a time. Nothing here detects a change for a brain — no
  * status edge, no notice — because the brain notices changes itself,
  * against its own memory. Built by `rebuild` whenever the credential policy
- * is applied, on whichever model adapter the policy chose: the developer's
- * own OpenAI key directly, or Luke's hosted service on the signed-in
- * account. With neither there is no brain, nothing is announced, and an ask
- * is answered with the honest refusal.
+ * is applied, on the one model adapter the policy can choose: Luke's hosted
+ * service on the signed-in account. Without one there is no brain, nothing
+ * is announced, and an ask is answered with the honest refusal.
  */
 /** A reset's capture is cut by the capture's own timeout and by nothing of the reset's, so the signal it is handed never fires. */
 const RESET_CAPTURE_SIGNAL = new AbortController().signal;
