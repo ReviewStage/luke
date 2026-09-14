@@ -74,6 +74,52 @@ it.effect(
     }),
 );
 
+it.scoped(
+  "settled is answered when the follow-up finds the gate closed, and when the loop is disarmed mid-pass",
+  () =>
+    Effect.gen(function* () {
+      let enabled = true;
+      const first = yield* Deferred.make<void>();
+      const loop = new ObservationLoop({
+        gate: () => enabled,
+        intervalMs: 60_000,
+        run: () => Deferred.await(first),
+      });
+      const running = yield* Effect.fork(loop.refresh);
+      yield* Effect.yieldNow();
+      yield* loop.refresh;
+      const waiting = yield* Effect.fork(loop.settled);
+      yield* Effect.yieldNow();
+      // The gate closes before the follow-up runs: it runs nothing, and settles the wait itself.
+      enabled = false;
+      yield* Deferred.succeed(first, undefined);
+      yield* running.await;
+      yield* Effect.yieldNow();
+      yield* Effect.yieldNow();
+      yield* waiting.await;
+
+      // A pass in flight when the loop is disarmed: the disarm settles the wait, since no follow-up will run.
+      enabled = true;
+      const second = yield* Deferred.make<void>();
+      const armed = new ObservationLoop({
+        gate: () => enabled,
+        intervalMs: 60_000,
+        run: () => Deferred.await(second),
+      });
+      const scope = yield* Scope.make();
+      yield* Scope.extend(armed.cadence, scope);
+      const pass = yield* Effect.fork(armed.refresh);
+      yield* Effect.yieldNow();
+      const waitingArmed = yield* Effect.fork(armed.settled);
+      yield* Effect.yieldNow();
+      yield* Scope.close(scope, Exit.void);
+      yield* waitingArmed.await;
+      yield* Deferred.succeed(second, undefined);
+      yield* pass.await;
+      yield* armed.settled;
+    }),
+);
+
 it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;

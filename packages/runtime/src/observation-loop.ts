@@ -89,12 +89,22 @@ export class ObservationLoop {
             this.#generation += 1;
             this.#queued = false;
             this.#armed = false;
+            // A disarm ends the waiting too: a pass still in flight settles
+            // nothing a waiter could use, and no follow-up will run.
+            this.#settleIdle();
           }),
         ),
       ),
       Effect.asVoid,
     );
   });
+
+  /** Settles whoever waits on `settled`, once, and opens the wait afresh for the next pass. */
+  #settleIdle(): void {
+    const idle = this.#idle;
+    this.#idle = undefined;
+    if (idle !== undefined) Deferred.unsafeDone(idle, Effect.void);
+  }
 
   constructor(options: ObservationLoopOptions) {
     this.#options = options;
@@ -121,7 +131,11 @@ export class ObservationLoop {
   );
 
   readonly refresh: Effect.Effect<void> = Effect.suspend(() => {
-    if (!this.#options.gate()) return Effect.void;
+    if (!this.#options.gate()) {
+      // Nothing will run: a waiter on `settled` has nothing to wait for.
+      this.#settleIdle();
+      return Effect.void;
+    }
     if (this.#running) {
       this.#queued = true;
       return Effect.void;
@@ -139,13 +153,14 @@ export class ObservationLoop {
         // the empty one the stop just published.
         const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
         if (!this.#queued) {
-          const idle = this.#idle;
-          this.#idle = undefined;
-          if (idle !== undefined) Deferred.unsafeDone(idle, Effect.void);
+          this.#settleIdle();
           return after ?? Effect.void;
         }
         this.#queued = false;
-        return Effect.zipRight(
+        // The follow-up is forked however the hook ends, so the waiter on
+        // `settled` is handed to the pass that will settle it, or to the
+        // refresh that finds nothing to run and settles it itself.
+        return Effect.ensuring(
           after ?? Effect.void,
           Effect.asVoid(Effect.forkDaemon(this.refresh)),
         );
