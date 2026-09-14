@@ -55,6 +55,13 @@ final class ProductEventsTests: XCTestCase {
         XCTAssertEqual(ProductEvent.settingsReset.name, "settings:reset")
         XCTAssertTrue(ProductEvent.settingsReset.wireProperties(appVersion: "0.1.1").isEmpty)
 
+        let call = ProductEvent.voiceCallStart(source: .hosted)
+        XCTAssertEqual(call.name, "voice:call_start")
+        XCTAssertEqual(
+            call.wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["session_source": "hosted"]
+        )
+
         let rated = ProductEvent.conversationRated(rating: .down, kind: .announcement)
         XCTAssertEqual(rated.name, "conversation:rated")
         XCTAssertEqual(

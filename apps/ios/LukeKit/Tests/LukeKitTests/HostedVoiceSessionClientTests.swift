@@ -577,6 +577,47 @@ final class HostedVoiceSessionClientTests: XCTestCase {
     }
 
     @MainActor
+    func testSettlingASendMadeInTheGapWaitsForTheConnectionThatCarriesIt() async throws {
+        var held: FakeSocket?
+        let opener = ScriptedOpener([Self.answering(Self.created()), { held = $0 }])
+        let session = try opened(await client(opener).create(sdpOffer: Self.sdpOffer, voice: .marin))
+        opener.sockets[0].closeFromServer(code: 1001)
+        await settled("the attach frame on the held connection") { held?.sent.count == 1 }
+        session.hangUp()
+        let flushed = Flag()
+        let settling = Task {
+            await session.settleSends()
+            flushed.raised = true
+        }
+        try? await Task.sleep(for: .milliseconds(20))
+        XCTAssertFalse(flushed.raised, "a hang-up held for the next connection is not settled before one stands")
+        try XCTUnwrap(held).deliver(Self.attached())
+        await settling.value
+        XCTAssertEqual(held?.sentTypes, ["session.attach", "session.close"])
+        session.close()
+    }
+
+    @MainActor
+    func testSettlingASendMadeInTheGapEndsWhenTheSessionGivesUpOrIsClosed() async throws {
+        var held: FakeSocket?
+        let opener = ScriptedOpener([Self.answering(Self.created()), { held = $0 }])
+        let session = try opened(await client(opener).create(sdpOffer: Self.sdpOffer, voice: .marin))
+        opener.sockets[0].closeFromServer(code: 1001)
+        await settled("the attach frame on the held connection") { held?.sent.count == 1 }
+        session.hangUp()
+        let settling = Task { await session.settleSends() }
+        session.close()
+        await settling.value
+        XCTAssertEqual(held?.sentTypes, ["session.attach"], "the frame the phone would not wait for is gone with the session")
+    }
+
+    /// A fact a task sets for the test to read.
+    @MainActor
+    private final class Flag {
+        var raised = false
+    }
+
+    @MainActor
     func testTheStandingIdleReportIsToldFirstToEachFreshConnection() async throws {
         let opener = ScriptedOpener([
             Self.answering(Self.created()), Self.answering(Self.attached()), Self.answering(Self.attached()),
