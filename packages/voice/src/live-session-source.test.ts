@@ -147,7 +147,7 @@ it.live(
         event_id: "ev_1",
         client_event_id: "c_1",
       });
-      yield* pause;
+      yield* settled(() => read.events.length === 2, "both events to be read");
       assert.deepEqual(
         read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
@@ -156,7 +156,10 @@ it.live(
       yield* sideband.send({ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "c_2" });
       assert.equal(socket.sent.length, 2);
       socket.closeFromServer({ code: 1000 });
-      yield* pause;
+      yield* settled(
+        () => !source.diagnostics().sidebandAttached,
+        "the close to detach the sideband",
+      );
       assert.equal(source.diagnostics().sidebandAttached, false);
     }),
 );
@@ -346,11 +349,21 @@ function openedSockets(script: ScriptedSocketSeam, count: number): Effect.Effect
 
 /** Waits for the socket's close to have reached its listeners, or fails. */
 function closesReported(closes: readonly unknown[]): Effect.Effect<void> {
+  return settled(() => closes.length > 0, "the close to reach its listeners");
+}
+
+/**
+ * Waits for what a real socket event lands on a reader to have landed, or
+ * fails naming what it waited for: a fixed pause raced the event under load
+ * and read before it arrived, so every assertion on observed frames waits on
+ * the frames themselves.
+ */
+function settled(condition: () => boolean, waitedFor: string): Effect.Effect<void> {
   return Effect.promise(async () => {
-    for (let waited = 0; closes.length === 0 && waited < 200; waited += 1) {
+    for (let waited = 0; !condition() && waited < 200; waited += 1) {
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
-    assert.equal(closes.length > 0, true);
+    assert.equal(condition(), true, `waited for ${waitedFor}`);
   });
 }
 
@@ -375,7 +388,7 @@ it.live(
       yield* openedSockets(script, 2);
       const [, second] = script.sockets;
       assert.ok(second);
-      yield* pause;
+      yield* settled(() => second.sent.length >= 1, "the attach frame on the fresh connection");
 
       assert.deepEqual(script.opens[1], {
         url: `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`,
@@ -393,7 +406,10 @@ it.live(
         event_id: "ev_2",
         client_event_id: "c_2",
       });
-      yield* pause;
+      yield* settled(
+        () => read.events.length === 1,
+        "the event to be read on the fresh connection",
+      );
       assert.deepEqual(
         read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
@@ -417,9 +433,9 @@ it.live("sends made during the gap are held and sent on the re-attached connecti
     yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
     yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
     yield* openedSockets(script, 2);
-    yield* pause;
     const second = script.sockets[1];
     assert.ok(second);
+    yield* settled(() => second.sent.length >= 3, "the held sends behind the attach frame");
     assert.deepEqual(
       second.sent.map((data) => JSON.parse(data).type),
       [
@@ -457,9 +473,9 @@ it.live(
       );
       first.closeFromServer({ code: 1001 });
       yield* openedSockets(script, 2);
-      yield* pause;
       const second = script.sockets[1];
       assert.ok(second);
+      yield* settled(() => second.sent.length >= 2, "the standing report behind the attach frame");
       // The report last made stands for the session, so the fresh connection
       // is told it first; a report made after rides the new connection as any
       // send does.
@@ -491,7 +507,10 @@ it.live(
       // No report yet: a recycled connection is told nothing it was not told.
       script.sockets[0]?.closeFromServer({ code: 1001 });
       yield* openedSockets(script, 2);
-      yield* pause;
+      yield* settled(
+        () => (script.sockets[1]?.sent.length ?? 0) >= 1,
+        "the attach frame on the second connection",
+      );
       assert.deepEqual(
         script.sockets[1]?.sent.map((data) => JSON.parse(data).type),
         [VOICE_SERVICE_FRAME.SESSION_ATTACH],
@@ -499,7 +518,10 @@ it.live(
       opened.reportActivity(true);
       script.sockets[1]?.closeFromServer({ code: 1001 });
       yield* openedSockets(script, 3);
-      yield* pause;
+      yield* settled(
+        () => (script.sockets[2]?.sent.length ?? 0) >= 2,
+        "the standing report behind the attach frame on the third connection",
+      );
       assert.deepEqual(
         script.sockets[2]?.sent.map((data) => JSON.parse(data)),
         [
@@ -535,7 +557,10 @@ it.live(
       yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
       assert.ok(held);
       held.receive(attachedFrame());
-      yield* pause;
+      yield* settled(
+        () => (held?.sent.length ?? 0) >= 3,
+        "the standing report and the held send behind the attach frame",
+      );
       // The standing report says heard, once; the stale idle never reaches the fresh exchange, and the other held send does.
       assert.deepEqual(
         held.sent.map((data) => JSON.parse(data)),
@@ -578,9 +603,9 @@ it.live(
       // Pressed in the gap: the model is still speaking across the service's recycle, so the stop is still meant.
       opened.stopSpeaking();
       yield* openedSockets(script, 2);
-      yield* pause;
       const second = script.sockets[1];
       assert.ok(second);
+      yield* settled(() => second.sent.length >= 2, "the held stop behind the attach frame");
       assert.deepEqual(
         second.sent.map((data) => JSON.parse(data)),
         [
@@ -639,7 +664,10 @@ it.live(
         start_ms: 0,
         end_ms: 10,
       });
-      yield* pause;
+      yield* settled(
+        () => heard.length === 1 && reading.events.length === 2,
+        "the spoken word and the two session events to land",
+      );
       assert.deepEqual(heard, [PROACTIVE_SPEECH_KIND.LAUNCH]);
       assert.deepEqual(
         reading.events.map((event) => event.type),
@@ -701,7 +729,10 @@ it.effect("closing while an attach attempt waits for its answer closes the socke
     script.sockets[0]?.closeFromServer({ code: 1006 });
     yield* openedSockets(script, 2);
     yield* sideband.close;
-    yield* pause;
+    yield* settled(
+      () => script.sockets[1]?.closedByClient === true,
+      "the close to reach the attempt",
+    );
 
     assert.equal(script.sockets.length, 2);
     assert.equal(script.sockets[1]?.closedByClient, true);
@@ -754,7 +785,7 @@ it.live(
       assert.ok(first);
       const firstRead = yield* readSideband(yield* first.attach());
       normal.sockets[0]?.closeFromServer({ code: 1000 });
-      yield* pause;
+      yield* closesReported(firstRead.closes);
       assert.deepEqual(firstRead.closes, [{ code: 1000 }]);
       assert.equal(normal.sockets.length, 1);
 
@@ -767,7 +798,7 @@ it.live(
       yield* sideband.close;
       assert.equal(own.sockets[0]?.closedByClient, true);
       own.sockets[0]?.closeFromServer({ code: 1005 });
-      yield* pause;
+      yield* closesReported(secondRead.closes);
       assert.deepEqual(secondRead.closes, [{ code: 1005 }]);
       assert.equal(own.sockets.length, 1);
     }),
@@ -912,7 +943,10 @@ it.live(
       // reader takes it, and nothing reads it in this pause.
       yield* pause;
       const read = yield* readSideband(sideband);
-      yield* pause;
+      yield* settled(
+        () => read.events.length === 2,
+        "the held frames to be read by the sideband's reader",
+      );
       assert.deepEqual(
         read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED, LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
@@ -938,7 +972,10 @@ it.live(
       assert.ok(first);
       first.closeFromServer({ code: 1006 });
       yield* openedSockets(script, 2);
-      yield* pause;
+      yield* settled(
+        () => read.events.length === 1,
+        "the frame behind session.attached to be read",
+      );
       assert.deepEqual(
         read.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.INPUT_AUDIO_MUTED],
