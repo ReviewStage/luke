@@ -71,6 +71,14 @@ public struct LiveCallSeams: Sendable {
     public var onCallStarted: @MainActor @Sendable () -> Void
     /// The clock the captions settle on.
     public var now: @MainActor @Sendable () -> Date
+    /// The wait the idle window stands on, injected so a test ends the window
+    /// itself rather than sleeping through it on the runner's clock. It must
+    /// return or throw promptly when the task awaiting it is cancelled, as
+    /// `Task.sleep` does, since a word arriving cancels the window standing.
+    /// The speaking hangover and the caption settle tick keep their own
+    /// `Task.sleep`: this is the one wait whose passing puts a frame on the
+    /// wire.
+    public var idleSleep: VoiceSleep
     public var idleWindow: Duration
     public var speakingHangover: Duration
     public var captionSettleTick: Duration
@@ -86,6 +94,7 @@ public struct LiveCallSeams: Sendable {
         voice: @MainActor @Sendable @escaping () -> LiveVoice,
         onCallStarted: @MainActor @Sendable @escaping () -> Void = {},
         now: @MainActor @Sendable @escaping () -> Date = Date.init,
+        idleSleep: @escaping VoiceSleep = { try await Task.sleep(for: $0) },
         idleWindow: Duration = LiveCallBounds.idleWindow,
         speakingHangover: Duration = LiveCallBounds.speakingHangover,
         captionSettleTick: Duration = LiveCallBounds.captionSettleTick,
@@ -100,6 +109,7 @@ public struct LiveCallSeams: Sendable {
         self.voice = voice
         self.onCallStarted = onCallStarted
         self.now = now
+        self.idleSleep = idleSleep
         self.idleWindow = idleWindow
         self.speakingHangover = speakingHangover
         self.captionSettleTick = captionSettleTick
@@ -460,8 +470,8 @@ public final class LiveCall {
 
     private func armIdle() {
         idleTimer?.cancel()
-        idleTimer = Task { [weak self, window = seams.idleWindow] in
-            try? await Task.sleep(for: window)
+        idleTimer = Task { [weak self, window = seams.idleWindow, sleep = seams.idleSleep] in
+            try? await sleep(window)
             guard !Task.isCancelled, let self, standing, !idleReported else { return }
             idleReported = true
             session?.reportActivity(idle: true)

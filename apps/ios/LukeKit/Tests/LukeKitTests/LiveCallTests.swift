@@ -123,10 +123,46 @@ private final class FakeSideband: LiveSessionSideband {
     }
 }
 
+/// The wait the call arms its idle window with. Every window armed stands
+/// until the test lets it pass, so the window ends where the test says and
+/// never on a clock a loaded runner shares; a window the call cancelled — a
+/// word arrived, the call ended — passes with it and is read by nobody.
+private final class IdleClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var waiting: [AsyncStream<Void>.Continuation] = []
+    private var armed: [Duration] = []
+
+    var sleep: VoiceSleep {
+        { [self] duration in
+            let window = AsyncStream<Void> { continuation in
+                lock.withLock {
+                    armed.append(duration)
+                    waiting.append(continuation)
+                }
+            }
+            for await _ in window {}
+        }
+    }
+
+    /// Every window armed so far, the cancelled ones among them.
+    var windows: [Duration] { lock.withLock { armed } }
+
+    /// Lets every window standing pass.
+    func pass() {
+        let passing: [AsyncStream<Void>.Continuation] = lock.withLock {
+            let standing = waiting
+            waiting = []
+            return standing
+        }
+        for continuation in passing { continuation.finish() }
+    }
+}
+
 /// A call over fakes, with the service scripted and every report recorded.
 @MainActor
 private final class Harness {
     let connection = FakePeerConnection()
+    let idleClock = IdleClock()
     let microphone = FakeTrack()
     var sideband = FakeSideband()
     var refusal: HostedVoiceSessionRefusal?
@@ -162,6 +198,7 @@ private final class Harness {
                 voice: { self.voice },
                 onCallStarted: { self.callStarts += 1 },
                 now: { self.now },
+                idleSleep: idleClock.sleep,
                 idleWindow: idleWindow,
                 speakingHangover: speakingHangover,
                 captionSettleTick: captionSettleTick,
@@ -207,6 +244,17 @@ private final class Harness {
         await until { self.channel?.sentTypes.last == LiveClientEventType.inputAudioMute.rawValue }
         channel?.acknowledgeLastSwitch()
         await releasing.value
+    }
+
+    /// The idle window the call is waiting on, passing. Every window standing
+    /// on the harness's clock is let through until the call has reported
+    /// itself idle, so a window an earlier word already cancelled is never
+    /// mistaken for the one the call is waiting on now.
+    func passIdleWindow() async {
+        await until {
+            self.idleClock.pass()
+            return self.sideband.sent.last == .activity(idle: true)
+        }
     }
 
     func hear(_ speaker: LiveTranscriptSpeaker, _ text: String, _ startMs: Int, _ endMs: Int) {
@@ -350,19 +398,28 @@ final class LiveCallTests: XCTestCase {
 
     @MainActor
     func testTheIdleWindowIsReportedAsActivityAndTakenBackOnTheNextWord() async throws {
-        let harness = Harness(idleWindow: .milliseconds(30))
+        let harness = Harness(idleWindow: LiveCallBounds.idleWindow)
         _ = await harness.pressAndOpen()
         await harness.release()
 
-        await until { harness.sideband.sent == [.activity(idle: true)] }
+        await harness.passIdleWindow()
         XCTAssertEqual(harness.sideband.sent, [.activity(idle: true)])
+        XCTAssertEqual(
+            harness.idleClock.windows.last,
+            LiveCallBounds.idleWindow,
+            "the window waited out is the contract's own, not a bound the test shortened"
+        )
         XCTAssertTrue(harness.call.standing, "the close is the service's decision, not the peer's")
 
         harness.hear(.assistant, "Still here.", 0, 400)
         XCTAssertEqual(harness.sideband.sent, [.activity(idle: true), .activity(idle: false)])
 
-        await until { harness.sideband.sent.count == 3 }
-        XCTAssertEqual(harness.sideband.sent.last, .activity(idle: true), "quiet again, reported again")
+        await harness.passIdleWindow()
+        XCTAssertEqual(
+            harness.sideband.sent,
+            [.activity(idle: true), .activity(idle: false), .activity(idle: true)],
+            "quiet again, reported again"
+        )
     }
 
     @MainActor
