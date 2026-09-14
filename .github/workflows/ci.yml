@@ -86,3 +86,22 @@ jobs:
         env:
           DATABASE_URL: postgresql://luke:luke@localhost:5432/luke
           PROVIDER_KEY_ENCRYPTION_SECRET: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+  # LukeKit is a SwiftPM package with no dependencies, so everything in it that
+  # is neither a drawing nor an Apple framework compiles and runs on a Swift
+  # toolchain alone, and this job is what keeps a Swift change from landing
+  # uncompiled. `apps/ios/LukeKit/scripts/test-linux.sh` names every file it
+  # leaves out and why; the image pins the toolchain by digest so no download
+  # stands between a merge and a green check. A Mac still runs the whole
+  # package and the app targets, which is where the excluded files compile at
+  # all.
+  lukekit:
+    name: LukeKit (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    # swift:6.3.1-noble
+    container:
+      image: swift@sha256:af0181a2fe491b45c935a962a45ab77db3d0b867016e481ac164704f09c656fa
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - run: ./apps/ios/LukeKit/scripts/test-linux.sh

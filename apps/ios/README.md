@@ -38,6 +38,44 @@ pick up an SPM test target from this app scheme — neither as a testable
 reference nor through a test plan — so a scheme entry would claim coverage the
 simulator run does not deliver.
 
+CI runs the LukeKit suites too, on Linux, where there is no Xcode and no
+simulator: the package has no dependencies, so everything in it that is neither
+a drawing nor an Apple framework compiles and runs on a Swift toolchain alone.
+
+```sh
+./apps/ios/LukeKit/scripts/test-linux.sh
+```
+
+All the script adds to `swift test` is the pinned toolchain — Swift 6.3.1,
+fetched into `~/.cache/luke/` where none is on the PATH — and the suites below.
+What Linux leaves out is stated where SwiftPM already reads it, in
+`Package.swift`'s own `#if os(Linux)`, so a plain `swift test` on a Linux host
+builds the same thing the job does, and a Mac still builds the whole package.
+
+Two things are left out, for two different reasons:
+
+- The files Linux cannot compile, excluded in `Package.swift` with a reason
+  each: the keychain and the PKCE challenge (Security, CryptoKit), the call's
+  audio (AVFoundation), Luke's face (SwiftUI), Markdown rendering (Apple
+  Foundation's `AttributedString` Markdown), the account session that reads the
+  keychain, and the suites over those. A new file importing one of those, or
+  WatchConnectivity, UIKit, or a binary framework, belongs there. An exclusion
+  is coverage the job no longer has, so a file lands there only when Linux
+  cannot compile it at all.
+- The suites Linux compiles but cannot answer for, skipped by the script at the
+  run rather than excluded from the build, so the compiler still checks them on
+  every pull request. There is one: `DeviceSettingsSyncTests`, because
+  swift-corelibs-foundation's `UserDefaults` posts no `didChangeNotification`,
+  so the sync's local-change relay publishes nothing there and half its cases
+  fail on an empty relay rather than on anything the phone does (LUKE-162). A
+  Mac runs that suite.
+
+One thing to know before writing a test here: a test whose subject is
+`@MainActor` carries `@MainActor` on the test method and is `async`, never on
+the `XCTestCase` class. Linux's XCTest dispatches a test through a `() -> ()`
+signature it cannot cast an isolated one to, and a class-level attribute traps
+the whole run before its first assertion.
+
 A third suite needs no Xcode and runs with the rest of the repository:
 `tools/ios-parity` diffs every Swift enum that transcribes a TypeScript
 vocabulary against the vocabulary itself, so a value added in `packages/` and

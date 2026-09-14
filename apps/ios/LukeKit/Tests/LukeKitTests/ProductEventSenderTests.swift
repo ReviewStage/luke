@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -95,10 +98,10 @@ private func sentEvents(_ request: URLRequest) -> [[String: Any]] {
 
 // MARK: - Tests
 
-@MainActor
 final class ProductEventSenderTests: XCTestCase {
     private let serviceURL = URL(string: "https://luke.test")!
 
+    @MainActor
     private func makeSender(
         client: ProductEventClient = .iOS,
         sends: Bool = true,
@@ -127,6 +130,7 @@ final class ProductEventSenderTests: XCTestCase {
         return (sender, log)
     }
 
+    @MainActor
     func testARunThatSendsNoNetworkQueuesNothing() async {
         let (sender, log) = makeSender(sends: false)
         sender.arm()
@@ -137,6 +141,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertTrue(requests.isEmpty)
     }
 
+    @MainActor
     func testASenderThatWasNeverArmedSendsNothing() async {
         let (sender, log) = makeSender()
         sender.record(.appLaunch)
@@ -146,6 +151,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertTrue(requests.isEmpty)
     }
 
+    @MainActor
     func testAFlushPostsOneBearerBatchNamingThisAppAndEmptiesTheQueue() async {
         let clock = Clock()
         let (sender, log) = makeSender(clock: clock)
@@ -178,6 +184,7 @@ final class ProductEventSenderTests: XCTestCase {
 
     /// The header only ever carries a member of the client set, so a watch
     /// batch is stamped as the watch's and never mistaken for the phone's.
+    @MainActor
     func testTheClientHeaderNamesTheAppThatPosted() async {
         let (sender, log) = makeSender(client: .watchOS)
         sender.arm()
@@ -188,6 +195,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(requests[0].value(forHTTPHeaderField: "x-luke-client"), "watchos")
     }
 
+    @MainActor
     func testA401RefreshesAndRetriesOnceAndTheSameTokenTwiceDoesNot() async {
         let refreshing = StubTokens(valid: "stale", refreshed: "fresh")
         let (sender, log) = makeSender(tokens: refreshing) { request in
@@ -216,6 +224,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(stuckRequests.count, 1)
     }
 
+    @MainActor
     func testAFailedSendDropsItsBatchRatherThanRetryingItBehindTheNextOne() async {
         let (sender, log) = makeSender { _ in throw URLError(.notConnectedToInternet) }
         sender.arm()
@@ -233,6 +242,7 @@ final class ProductEventSenderTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testSignedOutTheQueueWaitsRatherThanBeingSpent() async {
         let tokens = StubTokens(valid: nil)
         let (sender, log) = makeSender(tokens: tokens)
@@ -249,6 +259,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(sentEvents(requests[0]).count, 1)
     }
 
+    @MainActor
     func testPastTheQueueLimitTheOldestGoAndTheNewestStay() async {
         let (sender, log) = makeSender(queueLimit: 3)
         sender.arm()
@@ -264,6 +275,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(providers, ["codex", "conductor", "omp"])
     }
 
+    @MainActor
     func testABatchPastTheWireLimitIsLeftForTheNextFlushRatherThanRefused() async {
         let (sender, log) = makeSender()
         sender.arm()
@@ -279,6 +291,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(sentEvents(requests[1]).count, 10)
     }
 
+    @MainActor
     func testTheDayMarkerRecordsOnceADayAndAgainOnceTheDayHasTurned() async {
         let clock = Clock()
         let (sender, log) = makeSender(clock: clock)
@@ -301,6 +314,7 @@ final class ProductEventSenderTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testAnObservationIsCountedOncePerProviderPerDay() async {
         let (sender, log) = makeSender()
         sender.arm()
@@ -323,6 +337,7 @@ final class ProductEventSenderTests: XCTestCase {
     /// flush may already be mid-request with an earlier batch; an action queued
     /// after that batch was taken must ride its own request, not wait behind
     /// a token the sign-out is about to clear.
+    @MainActor
     func testAFlushCalledMidRequestChainsBehindItRatherThanReturningIt() async {
         let taken = Gate()
         let release = Gate()
@@ -353,6 +368,7 @@ final class ProductEventSenderTests: XCTestCase {
     /// A predecessor finishing must not free the slot a successor still
     /// holds: a third flush arriving then would run beside the successor,
     /// and two requests would overlap.
+    @MainActor
     func testFlushesNeverOverlapHoweverTheyInterleave() async {
         let meter = Meter()
         let firstTaken = Gate()
@@ -405,6 +421,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(peak, 1)
     }
 
+    @MainActor
     func testCountsRecordedBeforeAnyoneSignedInGoToTheFirstAccount() async {
         let tokens = StubTokens(valid: nil)
         tokens.accountEmail = nil
@@ -424,6 +441,7 @@ final class ProductEventSenderTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testADifferentAccountStartsCleanAndTheSameAccountKeepsItsMarks() async {
         let tokens = StubTokens()
         let (sender, log) = makeSender(tokens: tokens)
@@ -459,6 +477,7 @@ final class ProductEventSenderTests: XCTestCase {
         XCTAssertEqual(requests.count, 2)
     }
 
+    @MainActor
     func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {
         let (sender, log) = makeSender()
         sender.arm()

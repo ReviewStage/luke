@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -31,7 +34,6 @@ private final class AccountPreferencesTokenSource: AccountTokenProviding {
     }
 }
 
-@MainActor
 final class AccountPreferencesSyncTests: XCTestCase {
     private var suites: [String] = []
     private let base = URL(string: "https://tryluke.dev")!
@@ -47,6 +49,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         return UserDefaults(suiteName: suite)!
     }
 
+    @MainActor
     func testReconcileRestoresAccountPreferencesIntoUserDefaults() async {
         let store = makeStore()
         let tokenSource = AccountPreferencesTokenSource()
@@ -93,6 +96,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         ))
     }
 
+    @MainActor
     func testReconcilePublishesLocalPreferencesWhenTheAccountHasNoRow() async {
         let store = makeStore()
         DeviceSettingsSnapshot(
@@ -136,6 +140,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         ])
     }
 
+    @MainActor
     func testReconcileDoesNotCreateARowForUntouchedDefaults() async {
         let store = makeStore()
         let tokenSource = AccountPreferencesTokenSource()
@@ -155,6 +160,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         XCTAssertEqual(methods, ["GET"])
     }
 
+    @MainActor
     func testReconcileLeavesNewerLocalPreferenceWhenItChangesDuringTheRead() async {
         let store = makeStore()
         DeviceSettingsSnapshot(voice: .sage).write(to: store)
@@ -195,6 +201,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store).voice, .coral)
     }
 
+    @MainActor
     func testReconcileKeepsLocalEditsAcrossFailedHostedWriteAndRestart() async {
         let store = makeStore()
         DeviceSettingsSnapshot(voice: .sage).write(to: store)
@@ -255,7 +262,8 @@ final class AccountPreferencesSyncTests: XCTestCase {
         XCTAssertEqual(writtenPreferences?["voiceSpeed"] as? Double, 1.5)
     }
 
-    func testClearAccountPreferencesRemovesLocalPreferences() {
+    @MainActor
+    func testClearAccountPreferencesRemovesLocalPreferences() async {
         let store = makeStore()
         DeviceSettingsSnapshot(
             voice: .sage,
@@ -277,6 +285,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store), DeviceSettingsSnapshot())
     }
 
+    @MainActor
     func testA401RefreshesAndRetriesOnce() async {
         let store = makeStore()
         let tokenSource = AccountPreferencesTokenSource()

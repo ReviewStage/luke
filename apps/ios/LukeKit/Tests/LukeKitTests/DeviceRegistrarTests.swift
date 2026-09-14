@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -123,7 +126,6 @@ private final class GatedHTTP: HTTPClient, @unchecked Sendable {
     }
 }
 
-@MainActor
 final class DeviceRegistrarTests: XCTestCase {
     private var suites: [String] = []
     private let base = URL(string: "https://tryluke.dev")!
@@ -139,21 +141,23 @@ final class DeviceRegistrarTests: XCTestCase {
         return UserDefaults(suiteName: suite)!
     }
 
+    @MainActor
     private func registrar(
         store: UserDefaults,
         http: any HTTPClient,
-        session: RegistrarTokenSource = RegistrarTokenSource(),
+        session: RegistrarTokenSource? = nil,
         platform: DevicePlatform = .iOS
     ) -> DeviceRegistrar {
         DeviceRegistrar(
             store: store,
             client: DeviceClient(baseURL: base, http: http),
-            session: session,
+            session: session ?? RegistrarTokenSource(),
             platform: platform
         )
     }
 
-    func testInstallationIdIsMintedOnceAndKept() {
+    @MainActor
+    func testInstallationIdIsMintedOnceAndKept() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [])
         let first = registrar(store: store, http: http).installationId
@@ -162,6 +166,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(store.string(forKey: DeviceRegistrar.Key.installationId), first)
     }
 
+    @MainActor
     func testRegisterSendsThePlatformAndInstallationAndKeepsTheRowId() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [(200, ["deviceId": deviceId])])
@@ -178,6 +183,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, deviceId)
     }
 
+    @MainActor
     func testRegisterRefreshesOnceOnAnUnauthorizedAnswer() async {
         let store = makeStore()
         let session = RegistrarTokenSource()
@@ -194,6 +200,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, deviceId)
     }
 
+    @MainActor
     func testSignedOutSessionRegistersNothing() async {
         let store = makeStore()
         let session = RegistrarTokenSource()
@@ -207,6 +214,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertNil(subject.deviceId)
     }
 
+    @MainActor
     func testHeartbeatNamesTheRowAndRegistersAgainWhenItIsGone() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [
@@ -228,6 +236,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, otherDeviceId)
     }
 
+    @MainActor
     func testHeartbeatWithoutARowRegistersInstead() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [(200, ["deviceId": deviceId])])
@@ -239,6 +248,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, deviceId)
     }
 
+    @MainActor
     func testAPushTokenArrivingLaterTravelsAsAChangeAndWithEveryRegistration() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [
@@ -263,6 +273,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(http.sent[3].body["pushEnvironment"] as? String, "sandbox")
     }
 
+    @MainActor
     func testAPushTokenTheServiceNeverAcknowledgedRidesTheNextHeartbeat() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [
@@ -282,6 +293,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(http.sent[3].body.keys.sorted(), ["deviceId"])
     }
 
+    @MainActor
     func testAWithdrawnTokenRidesTheNextHeartbeatAsAClearUntilAcknowledgedAndOnceOnly() async {
         let http = RecordingHTTP(answers: [
             (200, ["deviceId": deviceId]),
@@ -311,6 +323,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(http.sent[5].body.keys.sorted(), ["deviceId"])
     }
 
+    @MainActor
     func testAWithdrawalBeforeARowRegistersAndThenClearsOnAHeartbeatOfItsOwn() async {
         let http = RecordingHTTP(answers: [
             (200, ["deviceId": deviceId]),
@@ -324,6 +337,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertTrue(http.sent[1].body["pushToken"] is NSNull)
     }
 
+    @MainActor
     func testATokenArrivingAgainReplacesAPendingClear() async {
         let http = RecordingHTTP(answers: [
             (200, ["deviceId": deviceId]),
@@ -345,6 +359,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(http.sent[3].body.keys.sorted(), ["deviceId"])
     }
 
+    @MainActor
     func testARegistrationStillOutAtSignOutInstallsNothing() async {
         let store = makeStore()
         let http = GatedHTTP(answers: [(200, ["deviceId": deviceId])])
@@ -361,6 +376,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(http.sent.map(\.method), ["POST"], "nothing was registered, so nothing was forgotten")
     }
 
+    @MainActor
     func testASignOutFromInsideARefreshTheRegisterIsWaitingOnDoesNotDeadlock() async {
         let store = makeStore()
         let session = RegistrarTokenSource()
@@ -385,6 +401,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertNil(subject.deviceId)
     }
 
+    @MainActor
     func testARegistrationStillOnTheWireAtSignOutLandsBeforeTheNextAccountRegisters() async {
         let store = makeStore()
         let http = GatedHTTP(answers: [
@@ -408,6 +425,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, otherDeviceId, "the row the new sign-in registered stands")
     }
 
+    @MainActor
     func testARegisterAskedRightAfterAForgetRunsBehindIt() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [
@@ -426,6 +444,7 @@ final class DeviceRegistrarTests: XCTestCase {
         XCTAssertEqual(subject.deviceId, otherDeviceId, "the row the new sign-in registered stands")
     }
 
+    @MainActor
     func testForgetUsesTheDepartingTokenAndDropsTheRowIdFirst() async {
         let store = makeStore()
         let http = RecordingHTTP(answers: [

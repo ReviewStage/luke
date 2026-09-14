@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// The platforms a device row may name — `DEVICE_PLATFORM` in
 /// `@sidecar/hosted`. Every app that registers itself names one, and the

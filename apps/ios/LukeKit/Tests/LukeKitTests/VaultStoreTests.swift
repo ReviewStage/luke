@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -59,14 +62,14 @@ private actor Gate {
     }
 }
 
-@MainActor
 final class VaultStoreTests: XCTestCase {
     private let base = URL(string: "https://tryluke.dev")!
 
     /// The two failures need different words: a local sign-out and a server
     /// that refuses a freshly refreshed token have different ways out, and
     /// one sentence for both once cost a live debugging session.
-    func testATokenRefusalReadsDifferentlyFromASignOut() {
+    @MainActor
+    func testATokenRefusalReadsDifferentlyFromASignOut() async {
         let signedOut = VaultStore.message(for: AccountSessionError.signedOut)
         let refused = VaultStore.message(
             for: VaultClientError.serverError(status: 401, apiError: .invalidToken)
@@ -75,6 +78,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertTrue(refused.contains("token"))
     }
 
+    @MainActor
     func testRefusedTokenRefreshesOnceAndRetries() async {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in
@@ -95,6 +99,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertEqual(source.refreshCalls, 1)
     }
 
+    @MainActor
     func testEntriesAnswerOnlyUnderTheirAccount() async {
         let stub = StubHTTPClient { request in
             let payload: [String: Any] = [
@@ -114,6 +119,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .conductor))
     }
 
+    @MainActor
     func testARetryNeverActsForADifferentAccount() async throws {
         let gate = Gate()
         let counter = CallCounter()
@@ -147,6 +153,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .conductor))
     }
 
+    @MainActor
     func testASaveFinishingUnderANewAccountTouchesNothing() async throws {
         let gate = Gate()
         let counter = CallCounter()
@@ -177,6 +184,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNil(store.entry(for: .conductor))
     }
 
+    @MainActor
     func testSuccessfulActionClearsAStaleLoadError() async throws {
         let counter = CallCounter()
         let stub = StubHTTPClient { request in
@@ -206,6 +214,7 @@ final class VaultStoreTests: XCTestCase {
         XCTAssertNotNil(store.entry(for: .conductor))
     }
 
+    @MainActor
     func testStaleListAnswerDoesNotOverwriteASave() async throws {
         let gate = Gate()
         let counter = CallCounter()

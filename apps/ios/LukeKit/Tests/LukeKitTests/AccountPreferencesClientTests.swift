@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -11,13 +14,13 @@ private func preferencesJSONData(_ dict: [String: Any]) -> Data {
     try! JSONSerialization.data(withJSONObject: dict)
 }
 
-@MainActor
 final class AccountPreferencesClientTests: XCTestCase {
     private let base = URL(string: "https://tryluke.dev")!
 
-    func testAccountPreferencesWireOmitsDefaultValuesAndIncludesWorkspaceDefaults() {
+    @MainActor
+    func testAccountPreferencesWireOmitsDefaultValuesAndIncludesWorkspaceDefaults() async {
         let snapshot = DeviceSettingsSnapshot(
-            voice: .marin,
+            voice: .coral,
             speed: .default,
             workspaceProviderId: "conductor",
             workspaceProjectIds: ["conductor": "project-1"],
@@ -30,7 +33,7 @@ final class AccountPreferencesClientTests: XCTestCase {
         )
 
         let wire = snapshot.accountPreferencesWire
-        XCTAssertEqual(wire["voice"] as? String, "marin")
+        XCTAssertEqual(wire["voice"] as? String, "coral")
         XCTAssertNil(wire["voiceSpeed"])
         XCTAssertEqual(wire["defaultWorkspaceProvider"] as? String, "conductor")
         XCTAssertEqual(wire["workspaceProjectDefaults"] as? [String: String], [
@@ -46,7 +49,8 @@ final class AccountPreferencesClientTests: XCTestCase {
         )
     }
 
-    func testAccountPreferencesWireParsesHostedSnapshot() {
+    @MainActor
+    func testAccountPreferencesWireParsesHostedSnapshot() async {
         let snapshot = DeviceSettingsSnapshot(accountPreferencesWire: [
             "voice": "coral",
             "voiceSpeed": 1.5,
@@ -68,7 +72,8 @@ final class AccountPreferencesClientTests: XCTestCase {
         ])
     }
 
-    func testAccountPreferencesWireRejectsUnknownAndInvalidHostedValues() {
+    @MainActor
+    func testAccountPreferencesWireRejectsUnknownAndInvalidHostedValues() async {
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["futureSetting": "ignored"]))
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voice": "baritone"]))
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voiceSpeed": true]))
@@ -84,6 +89,7 @@ final class AccountPreferencesClientTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testReadAccountPreferencesParsesSnapshotAndStoredMarker() async throws {
         let stub = StubHTTPClient { request in
             XCTAssertEqual(request.httpMethod, "GET")
@@ -109,6 +115,7 @@ final class AccountPreferencesClientTests: XCTestCase {
         XCTAssertTrue(answer.hasStoredSnapshot)
     }
 
+    @MainActor
     func testWriteAccountPreferencesSendsSnapshot() async throws {
         let stub = StubHTTPClient { request in
             XCTAssertEqual(request.httpMethod, "PUT")
@@ -138,6 +145,7 @@ final class AccountPreferencesClientTests: XCTestCase {
         XCTAssertEqual(answer.preferences.speed, .slow)
     }
 
+    @MainActor
     func testReadWithoutStoredRowParsesAsDefaults() async throws {
         let stub = StubHTTPClient { request in
             (
@@ -152,6 +160,7 @@ final class AccountPreferencesClientTests: XCTestCase {
         XCTAssertFalse(answer.hasStoredSnapshot)
     }
 
+    @MainActor
     func testRefusalCarriesHostedReason() async {
         let stub = StubHTTPClient { request in
             (

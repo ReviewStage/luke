@@ -3,7 +3,6 @@ import XCTest
 
 @testable import LukeKit
 
-@MainActor
 final class DeviceSettingsSyncTests: XCTestCase {
     private var suites: [String] = []
     private var clock = Date(timeIntervalSinceReferenceDate: 1_000)
@@ -36,7 +35,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         ]
     )
 
-    func testSnapshotRoundTripsThroughTheStore() {
+    @MainActor
+    func testSnapshotRoundTripsThroughTheStore() async {
         let store = makeStore()
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store), DeviceSettingsSnapshot())
         changed.write(to: store)
@@ -49,7 +49,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertNil(WorkspaceCreationDefaults(store: store).lastProviderId)
     }
 
-    func testALocalChangePublishesOnceAndTheOtherDeviceApplies() {
+    @MainActor
+    func testALocalChangePublishesOnceAndTheOtherDeviceApplies() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var phonePublished: [[String: Any]] = []
@@ -69,7 +70,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertTrue(watchPublished.isEmpty, "applying a received snapshot must not echo it back")
     }
 
-    func testEveryFieldTravels() {
+    @MainActor
+    func testEveryFieldTravels() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var published: [[String: Any]] = []
@@ -84,7 +86,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore), changed)
     }
 
-    func testAnOlderSnapshotIsIgnored() {
+    @MainActor
+    func testAnOlderSnapshotIsIgnored() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var phonePublished: [[String: Any]] = []
@@ -106,7 +109,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore).voice, .default)
     }
 
-    func testSettingsChangedBeforeEverSyncingWinOverAFreshPair() {
+    @MainActor
+    func testSettingsChangedBeforeEverSyncingWinOverAFreshPair() async {
         let phoneStore = makeStore()
         changed.write(to: phoneStore)
         let watchStore = makeStore()
@@ -121,7 +125,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore), changed)
     }
 
-    func testTwoPreSyncCopiesSettleOnThePrimaryWhicheverActivatesFirst() {
+    @MainActor
+    func testTwoPreSyncCopiesSettleOnThePrimaryWhicheverActivatesFirst() async {
         for primaryFirst in [true, false] {
             let phoneStore = makeStore()
             let watchStore = makeStore()
@@ -155,7 +160,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         }
     }
 
-    func testAChangeMadeAfterSyncingBeatsAPreSyncCopy() {
+    @MainActor
+    func testAChangeMadeAfterSyncingBeatsAPreSyncCopy() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         changed.write(to: phoneStore)
@@ -178,7 +184,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .verse)
     }
 
-    func testAnUntouchedDeviceNeverOverwritesAChangedOne() {
+    @MainActor
+    func testAnUntouchedDeviceNeverOverwritesAChangedOne() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var watchPublished: [[String: Any]] = []
@@ -193,7 +200,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .sage)
     }
 
-    func testTheStampSurvivesARelaunch() {
+    @MainActor
+    func testTheStampSurvivesARelaunch() async {
         let phoneStore = makeStore()
         let watchStore = makeStore()
         var watchPublished: [[String: Any]] = []
@@ -213,7 +221,8 @@ final class DeviceSettingsSyncTests: XCTestCase {
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .ash)
     }
 
-    func testUnreadablePayloadsAreIgnored() {
+    @MainActor
+    func testUnreadablePayloadsAreIgnored() async {
         let store = makeStore()
         let sync = DeviceSettingsSync(store: store, role: .primary, now: tick) { _ in }
         sync.start()
