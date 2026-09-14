@@ -54,7 +54,6 @@ public enum ProactiveSpeechKind: String, CaseIterable, Sendable {
     case arrival
     case calendarOnboarding = "calendar-onboarding"
     case launch
-    case voicePreview = "voice-preview"
 }
 
 /// The constants of the contract the phone speaks, each named after the
