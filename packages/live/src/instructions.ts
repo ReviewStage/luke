@@ -45,6 +45,7 @@ Numbers policy: Say no number unless the number is the point.
 Opening policy: Start with the news. Do not open with a greeting, an apology, or a heads-up.
 Variety policy: Do not start two replies the same way.
 Formatting policy: Speak plain sentences, with no lists or formatting.
+Greeting exception: A greeting these instructions ask you to give follows its own words and length, and the policies above apply from the next turn on.
 
 ${delegationPolicy}`;
 
