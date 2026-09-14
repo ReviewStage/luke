@@ -1,5 +1,8 @@
 import Foundation
 import XCTest
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 @testable import LukeKit
 
@@ -17,11 +20,11 @@ private func identity(_ id: String = "s1", provider: String = "conductor") -> [S
 
 /// The gauntlet every spoken action runs on the phone and the watch alike,
 /// exercised once here so the two surfaces cannot drift apart.
-@MainActor
 final class VoiceActionDispatcherTests: XCTestCase {
     private let base = URL(string: "https://example.com")!
     private let everyTool = VoiceToolName.allCases.map(\.rawValue)
 
+    @MainActor
     private func context(
         mintedTools: [String]?,
         sessions: [RosterSession] = [],
@@ -51,6 +54,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testAToolOutsideTheVocabularyIsRefused() async {
         let output = await dispatchVoiceToolCall(
             name: "remember_fact", arguments: [:], context: context(mintedTools: everyTool)
@@ -58,6 +62,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(output, #"{"reason":"No such tool exists.","result":"rejected"}"#)
     }
 
+    @MainActor
     func testACallBeforeTheMintedSetIsKnownIsRefused() async {
         let output = await dispatchVoiceToolCall(
             name: VoiceToolName.openSession.rawValue,
@@ -69,6 +74,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testAToolTheServiceDidNotMintIsRefusedEvenWhenCarried() async {
         var opened: [RosterSession] = []
         let output = await dispatchVoiceToolCall(
@@ -86,6 +92,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertTrue(opened.isEmpty)
     }
 
+    @MainActor
     func testAnOpenLandsOnlyOnARosterSessionAndIsCounted() async {
         var opened: [RosterSession] = []
         var counted: [(ProductSessionAction, String)] = []
@@ -113,6 +120,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(counted.first?.1, "conductor")
     }
 
+    @MainActor
     func testAListAskIsValidatedBeforeItIsShown() async {
         var shown: [VoiceAsks.SessionListAsk] = []
         let ctx = context(
@@ -137,6 +145,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(shown, [VoiceAsks.SessionListAsk(filters: [.status("waiting")], sort: .recency)])
     }
 
+    @MainActor
     func testAMessageIsCarriedToTheActionEndpointCountedAndFollowedByARefresh() async {
         let http = StubHTTPClient { request in
             XCTAssertEqual(request.url?.path, "/api/actions/message")
@@ -167,6 +176,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(refreshes, 1)
     }
 
+    @MainActor
     func testAMessageTheServerRefusedCarriesItsReasonAndCountsNothing() async {
         let http = StubHTTPClient { request in
             (
@@ -192,6 +202,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(refreshes, 0)
     }
 
+    @MainActor
     func testAMessageToAClosedInboxNeverReachesTheEndpoint() async {
         let http = StubHTTPClient { _ in
             XCTFail("A refused ask must not be sent.")
@@ -207,6 +218,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testASignedOutCredentialIsSaidAsSuch() async {
         let output = await dispatchVoiceToolCall(
             name: VoiceToolName.sendSessionMessage.rawValue,
@@ -220,6 +232,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         XCTAssertEqual(output, #"{"error":"signed out"}"#)
     }
 
+    @MainActor
     func testACreationAskWaitsForTheProjectsAnswer() async {
         let output = await dispatchVoiceToolCall(
             name: VoiceToolName.createWorkspace.rawValue,
@@ -232,6 +245,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testAcceptedCreationPersistsTheChosenAgentModelAndEffort() async {
         let suite = "VoiceActionDispatcherTests.\(UUID().uuidString)"
         let store = UserDefaults(suiteName: suite)!
@@ -289,6 +303,7 @@ final class VoiceActionDispatcherTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testAcceptedKindOnlyCreationPersistsTheChosenAgent() async {
         let suite = "VoiceActionDispatcherTests.\(UUID().uuidString)"
         let store = UserDefaults(suiteName: suite)!

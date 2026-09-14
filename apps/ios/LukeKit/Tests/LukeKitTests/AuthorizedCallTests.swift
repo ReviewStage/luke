@@ -6,7 +6,6 @@ import XCTest
 /// The one retry every hosted client on the phone shares, and the fence on
 /// it: a retry is a second request, and the account can change between the
 /// two.
-@MainActor
 final class AuthorizedCallTests: XCTestCase {
     private struct Refusal: Error, HostedUnauthorizedSignaling {
         var isUnauthorized: Bool { true }
@@ -32,6 +31,7 @@ final class AuthorizedCallTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testAnUnauthorizedAnswerRefreshesAndRetriesOnceUnderTheSameHolder() async throws {
         let session = Session(holder: "dev@example.invalid")
         var tokens: [String] = []
@@ -45,6 +45,7 @@ final class AuthorizedCallTests: XCTestCase {
         XCTAssertEqual(session.refreshes, 1)
     }
 
+    @MainActor
     func testARetryUnderAnotherHolderIsRefusedBeforeItTravels() async {
         let session = Session(holder: "first@example.invalid")
         session.holderAfterRefresh = "second@example.invalid"
@@ -63,6 +64,7 @@ final class AuthorizedCallTests: XCTestCase {
         XCTAssertEqual(tokens, ["first"])
     }
 
+    @MainActor
     func testARetryAfterASignOutIsRefused() async {
         let session = Session(holder: "first@example.invalid")
         session.holderAfterRefresh = nil
@@ -81,6 +83,7 @@ final class AuthorizedCallTests: XCTestCase {
         XCTAssertEqual(attempts, 1)
     }
 
+    @MainActor
     func testASignedOutSessionMakesNoCall() async {
         let session = Session(holder: nil)
         var attempts = 0
@@ -98,6 +101,7 @@ final class AuthorizedCallTests: XCTestCase {
         XCTAssertEqual(attempts, 0)
     }
 
+    @MainActor
     func testAnErrorThatIsNotUnauthorizedIsNotRetried() async {
         struct Other: Error {}
         let session = Session(holder: "dev@example.invalid")

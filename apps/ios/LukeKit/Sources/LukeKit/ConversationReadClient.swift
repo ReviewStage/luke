@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// A stored row the service could not read back, named as the refusal names
 /// it: the page it stood on was refused whole rather than thinned, and the

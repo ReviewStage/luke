@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Whether a new workspace in a project takes — or needs — an opening task.
 /// Mirrors `WORKSPACE_TASK_SUPPORT` in `@sidecar/session`.

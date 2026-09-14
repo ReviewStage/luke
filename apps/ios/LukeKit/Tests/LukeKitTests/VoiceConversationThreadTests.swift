@@ -3,9 +3,9 @@ import XCTest
 
 @testable import LukeKit
 
-@MainActor
 final class VoiceConversationThreadTests: XCTestCase {
-    func testCaptionStreamsIntoOneMessage() {
+    @MainActor
+    func testCaptionStreamsIntoOneMessage() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordCaption("Working")
@@ -14,7 +14,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.first?.speaker, .luke)
     }
 
-    func testCaptionAfterSegmentEndStartsANewBubble() {
+    @MainActor
+    func testCaptionAfterSegmentEndStartsANewBubble() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordCaption("First reply")
@@ -23,7 +24,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.words), ["First reply", "Tool follow-up"])
     }
 
-    func testLateSpokenAskLandsBeforeItsTurnsReply() {
+    @MainActor
+    func testLateSpokenAskLandsBeforeItsTurnsReply() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordCaption("The tests are green.")
@@ -35,7 +37,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.speaker), [.developer, .luke])
     }
 
-    func testSpokenAskReplacesItsTurnsEarlierTranscription() {
+    @MainActor
+    func testSpokenAskReplacesItsTurnsEarlierTranscription() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordSpokenAsk("How are")
@@ -43,7 +46,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.words), ["How are the tests?"])
     }
 
-    func testTurnsStaySeparated() {
+    @MainActor
+    func testTurnsStaySeparated() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordSpokenAsk("First ask")
@@ -58,7 +62,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         )
     }
 
-    func testTypedAskOpensItsOwnTurn() {
+    @MainActor
+    func testTypedAskOpensItsOwnTurn() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordSpokenAsk("First ask")
@@ -78,27 +83,31 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages[2].turnId, thread.messages[3].turnId)
     }
 
-    func testLateTranscriptNeverReplacesATypedAsk() {
+    @MainActor
+    func testLateTranscriptNeverReplacesATypedAsk() async {
         let thread = VoiceConversationThread()
         thread.recordTypedAsk("Open the Codex session")
         thread.recordSpokenAsk("A spoken turn's late transcript")
         XCTAssertEqual(thread.messages.map(\.words), ["Open the Codex session"])
     }
 
-    func testEmptyTypedAskRecordsNothing() {
+    @MainActor
+    func testEmptyTypedAskRecordsNothing() async {
         let thread = VoiceConversationThread()
         thread.recordTypedAsk("   \n")
         XCTAssertTrue(thread.messages.isEmpty)
     }
 
-    func testEmptySpokenAskRecordsNothing() {
+    @MainActor
+    func testEmptySpokenAskRecordsNothing() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordSpokenAsk("   \n")
         XCTAssertTrue(thread.messages.isEmpty)
     }
 
-    func testClearEmptiesTheThreadAndTheTurnState() {
+    @MainActor
+    func testClearEmptiesTheThreadAndTheTurnState() async {
         let thread = VoiceConversationThread()
         thread.beginTurn()
         thread.recordSpokenAsk("Before sign-out")
@@ -109,7 +118,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.words), ["After"])
     }
 
-    func testEveryLineIsStampedWhenFirstRecorded() {
+    @MainActor
+    func testEveryLineIsStampedWhenFirstRecorded() async {
         var clock = Date(timeIntervalSince1970: 1_000)
         let thread = VoiceConversationThread(now: { clock })
         thread.beginTurn()
@@ -126,7 +136,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         )
     }
 
-    func testAFullerTranscriptionKeepsTheAsksFirstStamp() {
+    @MainActor
+    func testAFullerTranscriptionKeepsTheAsksFirstStamp() async {
         var clock = Date(timeIntervalSince1970: 1_000)
         let thread = VoiceConversationThread(now: { clock })
         thread.beginTurn()
@@ -136,7 +147,8 @@ final class VoiceConversationThreadTests: XCTestCase {
         XCTAssertEqual(thread.messages.map(\.recordedAt.timeIntervalSince1970), [1_000])
     }
 
-    func testRetentionDropsTheOldestLines() {
+    @MainActor
+    func testRetentionDropsTheOldestLines() async {
         let thread = VoiceConversationThread()
         for index in 0 ..< (VoiceConversationThread.maximumRetainedMessages + 5) {
             thread.beginTurn()
