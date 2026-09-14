@@ -33,6 +33,136 @@ it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
   }),
 );
 
+/** Gives the scheduler a few turns, so a fiber that could settle has. */
+const turns = Effect.forEach([1, 2, 3, 4], () => Effect.yieldNow, { discard: true });
+
+it.effect("settled answers at once while the loop is idle", () =>
+  Effect.gen(function* () {
+    const loop = new ObservationLoop({
+      gate: () => true,
+      intervalMs: 60_000,
+      run: () => Effect.void,
+    });
+    yield* loop.settled;
+    yield* loop.refresh;
+    yield* loop.settled;
+  }),
+);
+
+it.effect("settled waits for the pass in flight and answers once it ends with nothing queued", () =>
+  Effect.gen(function* () {
+    const pending = yield* Deferred.make<void>();
+    const loop = new ObservationLoop({
+      gate: () => true,
+      intervalMs: 60_000,
+      run: () => Deferred.await(pending),
+    });
+    const running = yield* Effect.forkChild(loop.refresh);
+    yield* Effect.yieldNow;
+    const waiting = yield* Effect.forkChild(loop.settled);
+    yield* turns;
+    assert.equal(waiting.pollUnsafe() === undefined, true, "a pass is still running");
+    yield* Deferred.succeed(pending, undefined);
+    yield* Fiber.join(running);
+    yield* Fiber.join(waiting);
+  }),
+);
+
+it.effect(
+  "refresh then settled reads past the follow-up a coalesced poke earned, which refresh alone does not",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* Deferred.make<void>();
+      const passes: number[] = [];
+      const loop = new ObservationLoop({
+        gate: () => true,
+        intervalMs: 60_000,
+        run: () =>
+          Effect.suspend(() => {
+            passes.push(passes.length + 1);
+            return passes.length === 1 ? Deferred.await(first) : Effect.void;
+          }),
+      });
+      const cadence = yield* Effect.forkChild(loop.refresh);
+      yield* Effect.yieldNow;
+      // The arrival's shape: a poke while the cadence's pass is in flight,
+      // then the wait for whatever that poke earned.
+      const arrival = yield* Effect.forkChild(
+        Effect.gen(function* () {
+          yield* loop.refresh;
+          const afterRefresh = passes.length;
+          yield* loop.settled;
+          return { afterRefresh, afterSettled: passes.length };
+        }),
+      );
+      yield* turns;
+      assert.equal(arrival.pollUnsafe() === undefined, true, "the first pass still runs");
+      yield* Deferred.succeed(first, undefined);
+      yield* Fiber.join(cadence);
+      const seen = yield* Fiber.join(arrival);
+      // refresh answered with the pass it found running; settled answered
+      // only once the follow-up behind it had run too.
+      assert.deepEqual(seen, { afterRefresh: 1, afterSettled: 2 });
+      assert.deepEqual(passes, [1, 2]);
+      yield* loop.settled;
+    }),
+);
+
+it.effect("a follow-up that finds the gate closed still settles the wait", () =>
+  Effect.gen(function* () {
+    let enabled = true;
+    const first = yield* Deferred.make<void>();
+    let passes = 0;
+    const loop = new ObservationLoop({
+      gate: () => enabled,
+      intervalMs: 60_000,
+      run: () =>
+        Effect.suspend(() => {
+          passes += 1;
+          return passes === 1 ? Deferred.await(first) : Effect.void;
+        }),
+    });
+    const running = yield* Effect.forkChild(loop.refresh);
+    yield* Effect.yieldNow;
+    yield* loop.refresh;
+    const waiting = yield* Effect.forkChild(loop.settled);
+    yield* turns;
+    assert.equal(waiting.pollUnsafe() === undefined, true);
+    // The gate closes while the pass runs; the follow-up it queued runs nothing.
+    enabled = false;
+    yield* Deferred.succeed(first, undefined);
+    yield* Fiber.join(running);
+    yield* Fiber.join(waiting);
+    assert.equal(passes, 1);
+  }),
+);
+
+it.effect(
+  "a poke that finds the gate closed while a pass still runs does not settle the wait early",
+  () =>
+    Effect.gen(function* () {
+      let enabled = true;
+      const pending = yield* Deferred.make<void>();
+      const loop = new ObservationLoop({
+        gate: () => enabled,
+        intervalMs: 60_000,
+        run: () => Deferred.await(pending),
+      });
+      const running = yield* Effect.forkChild(loop.refresh);
+      yield* Effect.yieldNow;
+      const waiting = yield* Effect.forkChild(loop.settled);
+      enabled = false;
+      // The gate dropped mid-pass; a poke now runs nothing, and must not tell
+      // the waiter the roster is written while the pass is still writing it.
+      yield* loop.refresh;
+      yield* turns;
+      assert.equal(waiting.pollUnsafe() === undefined, true, "the pass is still running");
+      yield* Deferred.succeed(pending, undefined);
+      yield* Fiber.join(running);
+      yield* Fiber.join(waiting);
+    }),
+);
+
 it.effect("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;

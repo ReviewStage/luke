@@ -263,8 +263,12 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     if (arrivalBeatOwed(calendars.onboarding())) {
       // The beat's own decision waits on the pass, so the pass is yielded
       // here rather than run: a link that cannot wait for it offers this
-      // whole effect to the queue above instead.
+      // whole effect to the queue above instead. A poke that found the
+      // cadence's own pass in flight answers with that pass, before the
+      // follow-up it earned has read the roster; the settle waits for it,
+      // so the title the beat reads is the one that pass named.
       yield* observation.loop.refresh;
+      yield* observation.loop.settled;
       if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
       // The pass took time, and the hold's reads wait behind this decision
       // on the same queue: a hold that began during the pass is read here.
