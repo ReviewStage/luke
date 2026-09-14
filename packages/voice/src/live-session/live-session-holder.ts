@@ -184,7 +184,17 @@ export class LiveSessionHolder {
    * it, and the session's own end, give it up.
    */
   #auditionSession: HeldSession | undefined;
-  /** Which audition is the standing one, so a superseded one's clocks end nothing. */
+  /**
+   * When that session is to be given back, on the holder's own clock: the
+   * ceiling from the moment it stood, brought in to the linger once its line
+   * has been heard. One fiber watches this deadline for one session, so a
+   * line heard late is not cut off by a clock armed before the session
+   * existed, and a word about a session already superseded moves nothing.
+   */
+  #auditionCloseAt: number | undefined;
+  /** Settled whenever that deadline moves, so the fiber waiting on it wakes to the deadline as it now stands. */
+  #auditionMoved: Deferred.Deferred<void> | undefined;
+  /** Which audition is the standing one, so a superseded one's asks end nothing. */
   #audition = 0;
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   readonly #clock: Clock.Clock;
@@ -258,10 +268,19 @@ export class LiveSessionHolder {
         this.#clock.currentTimeMillisUnsafe(),
       );
       const scope = yield* Scope.fork(this.#sessions, "sequential");
-      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
-        Exit.isSuccess(exit) && exit.value !== undefined
-          ? Effect.void
-          : Scope.close(scope, Exit.void),
+      // Which audition this session is being created for, read before the
+      // create is out: the voice it will speak with is fixed by the source
+      // now, so a voice chosen while the create is in flight is a voice this
+      // session cannot say, and the stand below sees that it was overtaken.
+      const audition = this.#beats.has(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW)
+        ? this.#audition
+        : undefined;
+      const created = yield* Effect.onExit(
+        this.#stand(source, sdpOffer, seeded, scope, audition),
+        (exit) =>
+          Exit.isSuccess(exit) && exit.value !== undefined
+            ? Effect.void
+            : Scope.close(scope, Exit.void),
       );
       // A session that could not be stood leaves no beat waiting for it: the
       // caller decides again at its next reason, and asks then stand rather
@@ -276,6 +295,8 @@ export class LiveSessionHolder {
     sdpOffer: string,
     seeded: RosterSummary | undefined,
     scope: Scope.Closeable,
+    /** The audition this session was created for, where one asked for it. */
+    audition: number | undefined,
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
     return Effect.gen({ self: this }, function* () {
       const opened = yield* Scope.provide(
@@ -319,9 +340,7 @@ export class LiveSessionHolder {
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
-      // The peer answered a `wanted` an audition asked for: this session is
-      // the audition's to close, until something else is spoken into it.
-      if (this.#beats.has(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW)) this.#auditionSession = session;
+      if (audition !== undefined) this.#holdAudition(session, audition);
       this.#options.onSessionCreated?.();
       return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
     });
@@ -515,7 +534,7 @@ export class LiveSessionHolder {
     const audition = ++this.#audition;
     const session = this.#held;
     if (session === undefined || session.ended) {
-      this.#beginAudition(audition);
+      this.#beginAudition();
       return true;
     }
     if (this.#auditionSession !== session) return false;
@@ -525,7 +544,7 @@ export class LiveSessionHolder {
         // Overtaken while the close was out: the audition that overtook this
         // one has asked for its own session and this one adds nothing.
         if (audition !== this.#audition) return;
-        this.#beginAudition(audition);
+        this.#beginAudition();
       }),
     );
     return true;
@@ -537,9 +556,39 @@ export class LiveSessionHolder {
    * so an audition whose session never comes, or whose line is never heard,
    * still gives the session back.
    */
-  #beginAudition(audition: number): void {
+  #beginAudition(): void {
     this.#arm(VOICE_PREVIEW_BEAT);
-    this.#endAuditionAfter(audition, VOICE_PREVIEW_SESSION.CEILING_MS);
+  }
+
+  /**
+   * The session the peer opened for an audition, taken as that audition's to
+   * close until something else is spoken into it. A session created for an
+   * audition the developer has already moved past speaks the voice they left
+   * behind — the source fixed it before the create went out — so it is closed
+   * and the audition standing now asks for one of its own.
+   */
+  #holdAudition(session: HeldSession, audition: number): void {
+    if (audition !== this.#audition) {
+      this.#auditionSession = session;
+      this.#start(
+        Effect.gen({ self: this }, function* () {
+          const overtaking = this.#audition;
+          yield* this.#end(session);
+          if (overtaking !== this.#audition) return;
+          // The word the overtaking choice put out while the create was in
+          // flight is the word this session answered: it is spent here, so
+          // the ask below is one the peer has not already answered.
+          this.#wantedAt = undefined;
+          this.#beginAudition();
+        }),
+      );
+      return;
+    }
+    this.#auditionSession = session;
+    this.#moveAuditionClose(
+      this.#clock.currentTimeMillisUnsafe() + VOICE_PREVIEW_SESSION.CEILING_MS,
+    );
+    this.#start(this.#watchAudition(session));
   }
 
   /** A beat put where the session that speaks it will find it, and the peer told one is wanted if none stands. */
@@ -554,20 +603,34 @@ export class LiveSessionHolder {
   }
 
   /**
-   * The audition's session given back on its own clock, on a fiber of the
-   * holder's own: the audition that armed it must still be the standing one,
-   * and the session must still be the audition's alone.
+   * The one fiber that gives an audition's session back, waiting on the
+   * deadline as it stands rather than on the delay it was armed with, so the
+   * line being heard moves the deadline rather than racing a second clock.
+   * It ends the moment the session stops being the audition's.
    */
-  #endAuditionAfter(audition: number, delayMs: number): void {
-    this.#start(
-      Effect.gen({ self: this }, function* () {
-        yield* Effect.sleep(Duration.millis(delayMs));
-        if (audition !== this.#audition) return;
-        const session = this.#auditionSession;
-        if (session === undefined || session.ended) return;
-        yield* this.#end(session);
-      }),
-    );
+  #watchAudition(session: HeldSession): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      while (this.#auditionSession === session && !session.ended) {
+        const closeAt = this.#auditionCloseAt;
+        if (closeAt === undefined) return;
+        const remaining = closeAt - this.#clock.currentTimeMillisUnsafe();
+        if (remaining <= 0) {
+          yield* this.#end(session);
+          return;
+        }
+        const moved = yield* Deferred.make<void>();
+        this.#auditionMoved = moved;
+        yield* Effect.race(Effect.sleep(Duration.millis(remaining)), Deferred.await(moved));
+      }
+    });
+  }
+
+  /** The audition's deadline as it now stands, with whoever waits on the old one woken to read it. */
+  #moveAuditionClose(closeAt: number | undefined): void {
+    this.#auditionCloseAt = closeAt;
+    const moved = this.#auditionMoved;
+    this.#auditionMoved = undefined;
+    if (moved) Deferred.doneUnsafe(moved, Exit.void);
   }
 
   /** Whether the peer has been told a session is wanted, within the word's own standing, and has not yet offered one. */
@@ -646,12 +709,19 @@ export class LiveSessionHolder {
     if (kind === PROACTIVE_SPEECH_KIND.VOICE_PREVIEW) {
       // Heard, not finished: a commentary settles as spoken when the output
       // first runs past it, so the session stands a moment longer and the
-      // line is not cut off by the close that follows it.
-      this.#endAuditionAfter(this.#audition, VOICE_PREVIEW_SESSION.LINGER_MS);
+      // line is not cut off by the close that follows it. The deadline is
+      // this session's own, so a word about one already superseded closes
+      // nothing that came after it.
+      if (this.#auditionSession === session) {
+        this.#moveAuditionClose(
+          this.#clock.currentTimeMillisUnsafe() + VOICE_PREVIEW_SESSION.LINGER_MS,
+        );
+      }
     } else if (this.#auditionSession === session) {
       // Something the audition did not ask for was spoken into its session:
       // it is a session with a turn in it now, and no longer one to close.
       this.#auditionSession = undefined;
+      this.#moveAuditionClose(undefined);
     }
     this.#options.onSpoken?.(kind);
   }
@@ -695,7 +765,10 @@ export class LiveSessionHolder {
   #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
     session.ended = true;
     if (this.#held === session) this.#held = undefined;
-    if (this.#auditionSession === session) this.#auditionSession = undefined;
+    if (this.#auditionSession === session) {
+      this.#auditionSession = undefined;
+      this.#moveAuditionClose(undefined);
+    }
     // A beat the session ended on, sent or waiting, is not carried to the
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.

@@ -22,7 +22,7 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import {
@@ -124,6 +124,9 @@ interface Fixture {
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
   attachFails: boolean;
+  /** The next create waits until `releaseCreate`, so a test can act while one is out. */
+  holdCreate(): Effect.Effect<void>;
+  releaseCreate(): void;
   open(): Effect.Effect<FakeSideband>;
 }
 
@@ -146,9 +149,12 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       created: 0,
       stops: 0,
     };
+    /** While set, a create waits here, so a test can act in the window where the voice is already fixed and no session stands yet. */
+    let createGate: Deferred.Deferred<void> | undefined;
     const source: LiveSessionSource = {
       create: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          if (createGate !== undefined) yield* Deferred.await(createGate);
           seeds.push([...input.input]);
           const sideband = new FakeSideband();
           sidebands.push(sideband);
@@ -233,6 +239,15 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       set attachFails(value: boolean) {
         state.attachFails = value;
+      },
+      holdCreate: () =>
+        Effect.gen(function* () {
+          createGate = yield* Deferred.make<void>();
+        }),
+      releaseCreate: () => {
+        const gate = createGate;
+        createGate = undefined;
+        if (gate) Deferred.doneUnsafe(gate, Exit.void);
       },
       open: () =>
         Effect.gen(function* () {
@@ -871,4 +886,61 @@ it.effect("nothing is auditioned while voice is unavailable, so no word goes out
     assert.equal(f.holder.previewVoice(), false);
     assert.deepEqual(phases(f.changes), []);
   }),
+);
+
+it.effect(
+  "a line heard near the ceiling is not cut off by it: the audition's session stands on one deadline, brought in to the linger by the word that heard it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      const sideband = yield* f.open();
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.CEILING_MS - 1));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW);
+      yield* settle();
+      // The ceiling would have closed it here; the line was heard, so the
+      // linger stands instead and the words run out.
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.LINGER_MS - 1));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      assert.deepEqual(sideband.sent, []);
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* settle();
+      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+    }),
+);
+
+it.effect(
+  "a voice chosen while the peer's create is still out closes the session that comes up under the voice left behind, and asks for one under the voice chosen",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      // The peer is opening a session for the first choice; the second choice
+      // lands before it stands, by which time the source has the newer voice
+      // and this session can only ever speak the older one.
+      yield* f.holdCreate();
+      const creating = yield* Effect.forkChild(f.holder.createSession("offer"));
+      yield* settle();
+      assert.equal(f.holder.previewVoice(), true);
+      f.releaseCreate();
+      assert.ok(yield* Fiber.join(creating));
+      const stale = f.sidebands[0];
+      assert.ok(stale);
+      stale.started("sess-1");
+      yield* settle();
+      stale.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), false);
+      assert.deepEqual(phases(f.changes).at(-1), LIVE_SESSION_PHASE.WANTED);
+      const fresh = yield* f.open();
+      assert.notEqual(fresh, stale);
+      assert.deepEqual(f.beats, [PREVIEW, PREVIEW]);
+      // A word about the session left behind moves nothing on the one that replaced it.
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.LINGER_MS));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+    }),
 );
