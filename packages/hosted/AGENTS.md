@@ -10,9 +10,9 @@ which imports nothing of this one, so the edge points down.
 
 A client sits here because it speaks nothing but hosted vocabulary and holds no
 credential of its own. **Behavior that needs anything above this boundary belongs
-above it**: the brain's hosted client in `@sidecar/brain`, the hosted live session
-source in `@sidecar/voice`, the account preference client in `@sidecar/host`
-because the snapshot it carries is settings vocabulary.
+above it**: the hosted live session source in `@sidecar/voice`, the account
+preference client in `@sidecar/host` because the snapshot it carries is settings
+vocabulary.
 
 **A request frame refuses a key it did not name; an answer ignores one a newer
 service added.** Every wire module here keeps that rule.

@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { LIVE_SESSION_OUTCOME, LIVE_VOICE } from "@sidecar/live";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "./capability-assembler.js";
@@ -27,15 +26,13 @@ function seamsFor(overrides: Partial<ConstructorParameters<typeof VoiceCapabilit
     credentialsUsable: () => true,
     fixtureRun: () => false,
     accountSignedIn: () => true,
-    hostedServiceBaseUrl: "https://example.test",
     refreshAccount: () => Effect.void,
     report: () => undefined,
-    httpClient: fakeHttpClientLayer(async () => new Response(null, { status: 204 })),
     ...overrides,
   };
 }
 
-test("a signed-in account stands the whole set: the hosted brain, its prefetch model, and the hosted live source", async () => {
+test("a signed-in account stands the set: the hosted live source, on the voice it prefers", async () => {
   const reports: string[] = [];
   const assembler = new VoiceCapabilityAssembler(
     seamsFor({
@@ -48,12 +45,7 @@ test("a signed-in account stands the whole set: the hosted brain, its prefetch m
   await Effect.runPromise(assembler.apply());
   assert.ok(assembler.liveSessions);
   assert.equal(assembler.liveSessions.diagnostics().voice, LIVE_VOICE.MARIN);
-  // The service names the model on its first turn; nothing here does.
-  assert.ok(assembler.brainModel);
-  assert.equal(assembler.brainModel.model, undefined);
-  assert.ok(assembler.prefetchModel);
   assert.ok(reports.some((report) => report.startsWith("Luke voice: enabled (hosted")));
-  assert.ok(reports.some((report) => report.startsWith("Luke brain: enabled")));
 });
 
 test("signing out clears the whole set as one unit, and the absence is diagnosed as the missing account, not a fixture run", async () => {
@@ -66,13 +58,10 @@ test("signing out clears the whole set as one unit, and the absence is diagnosed
   );
   await Effect.runPromise(assembler.apply());
   assert.ok(assembler.liveSessions);
-  assert.ok(assembler.brainModel);
 
   gate.signedIn = false;
   await Effect.runPromise(assembler.apply());
   assert.equal(assembler.liveSessions, undefined);
-  assert.equal(assembler.brainModel, undefined);
-  assert.equal(assembler.prefetchModel, undefined);
   assert.equal(assembler.unavailableLiveDiagnostics.fixtureMode, false);
   assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
 });
@@ -88,9 +77,8 @@ test("a closed credential gate stands nothing, even for a signed-in account", as
   );
   await Effect.runPromise(assembler.apply());
   assert.equal(assembler.liveSessions, undefined);
-  assert.equal(assembler.brainModel, undefined);
   assert.equal(assembler.unavailableLiveDiagnostics.lastOutcome, LIVE_SESSION_OUTCOME.NO_ACCOUNT);
-  assert.ok(reports.some((report) => report.startsWith("Luke brain: absent")));
+  assert.ok(reports.some((report) => report.startsWith("Luke voice: unavailable")));
 });
 
 test("a fixture run is diagnosed as the fixture, apart from a run that merely lacks an account", async () => {
@@ -103,7 +91,6 @@ test("a fixture run is diagnosed as the fixture, apart from a run that merely la
   );
   await Effect.runPromise(assembler.apply());
   assert.equal(assembler.liveSessions, undefined);
-  assert.equal(assembler.brainModel, undefined);
   assert.equal(assembler.unavailableLiveDiagnostics.fixtureMode, true);
   assert.equal(
     assembler.unavailableLiveDiagnostics.lastOutcome,
@@ -111,36 +98,8 @@ test("a fixture run is diagnosed as the fixture, apart from a run that merely la
   );
 });
 
-test("a wrapped brain model stands where the built one would, and only when one was built", async () => {
-  const wrapped: number[] = [];
-  const gate = { signedIn: true };
-  const assembler = new VoiceCapabilityAssembler(
-    seamsFor({
-      accountSignedIn: () => gate.signedIn,
-      wrapBrainModel: (model) => {
-        wrapped.push(1);
-        return model;
-      },
-    }),
-  );
-
-  await Effect.runPromise(assembler.apply());
-  assert.ok(assembler.brainModel);
-  assert.ok(assembler.prefetchModel);
-  // The brain's model and the prefetch's small one are each wrapped once.
-  assert.equal(wrapped.length, 2);
-
-  // No client, nothing to decorate: the wrapper must not conjure one.
-  gate.signedIn = false;
-  await Effect.runPromise(assembler.apply());
-  assert.equal(assembler.brainModel, undefined);
-  assert.equal(assembler.prefetchModel, undefined);
-  assert.equal(wrapped.length, 2);
-});
-
-test("live sessions stand only where a socket seam was handed; the brain stands without one", async () => {
+test("live sessions stand only where a socket seam was handed", async () => {
   const withoutSeam = new VoiceCapabilityAssembler(seamsFor({}));
   await Effect.runPromise(withoutSeam.apply());
-  assert.ok(withoutSeam.brainModel);
   assert.equal(withoutSeam.liveSessions, undefined);
 });

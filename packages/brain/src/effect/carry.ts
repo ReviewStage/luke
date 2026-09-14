@@ -62,9 +62,9 @@
  * already was.
  *
  * What keeps this file on the run allowlist, permanent in root AGENTS.md's
- * "Effect idioms" section, is `runtimeExit`, whose two callers are permanent
- * rows there because the `ModelAdapter` each answers is a promise, not a
- * fiber; the detach door is named permanent on the same list.
+ * "Effect idioms" section, is `runtimeExit`, whose one caller is a permanent
+ * row there because the `ModelAdapter` it answers is a promise, not a fiber;
+ * the detach door is named permanent on the same list.
  */
 import type { ExecutionRuntime } from "@sidecar/runtime/vocabulary";
 import { Effect, type Exit, Fiber, ManagedRuntime, type Scope } from "effect";
@@ -108,9 +108,9 @@ export type Detach = <Value, Failure>(
  * `ManagedRuntime` and a plain `Context` once rather than at each caller. The
  * one thing an effect itself cannot state — a caller's own `AbortSignal`,
  * joined to the run so an aborted call ends as this fiber's own interruption
- * — is this function's second, optional argument; `BrainTransport#send` and
- * `tracedModelAdapter` are the two callers that still read a signal this way,
- * because the `ModelAdapter` they answer is a promise, not a fiber.
+ * — is this function's second, optional argument, kept for
+ * `tracedModelAdapter`, the one caller that still runs through this door,
+ * because the `ModelAdapter` it answers is a promise, not a fiber.
  */
 export const runtimeExit =
   (execution: ExecutionRuntime) =>

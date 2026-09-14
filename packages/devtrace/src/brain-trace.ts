@@ -56,12 +56,11 @@ function answeredSummary(answer: Extract<ModelResponse, { outcome: "answered" }>
  *
  * @deprecated The span is run to the promise `ModelAdapter#respond` answers
  * here, on the runtime the caller handed in, through `@sidecar/brain`'s
- * shared `runtimeExit` — the same door `BrainTransport#send`'s `runCall`
- * runs through — a permanent adaptor, named in root AGENTS.md's "Effect
- * idioms" section: the turn that calls
- * this adapter still holds a promise, not a fiber, because the
- * `ModelAdapter` it wraps answers `compaction.ts` — an OpenClaw port that
- * imports nothing from `effect` — and that port awaits a promise.
+ * shared `runtimeExit` — a permanent adaptor, named in root AGENTS.md's
+ * "Effect idioms" section: the turn that calls this adapter still holds a
+ * promise, not a fiber, because the `ModelAdapter` it wraps answers
+ * `compaction.ts` — an OpenClaw port that imports nothing from `effect` —
+ * and that port awaits a promise.
  */
 export function tracedModelAdapter(
   adapter: ModelAdapter,

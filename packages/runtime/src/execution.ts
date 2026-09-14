@@ -258,7 +258,7 @@ export type ModelResponse =
       readonly reason: string;
     };
 
-export type ModelTokenCount =
+type ModelTokenCount =
   | { readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED; readonly inputTokens: number }
   | { readonly outcome: typeof MODEL_RESPONSE_OUTCOME.THROTTLED; readonly until: number }
   | {
@@ -290,7 +290,7 @@ export interface ModelCapabilities {
   readonly maximumRequestBytes?: number;
 }
 
-export type ModelCapabilitiesAnswer =
+type ModelCapabilitiesAnswer =
   | {
       readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
       readonly capabilities: ModelCapabilities;

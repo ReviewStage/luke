@@ -1,4 +1,4 @@
-import { ASK_BOUNDS, HOSTED_SERVICE_PATH, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { ASK_BOUNDS, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "./hosted/observation-bounds.js";
 import { TURN_EVENT_STREAM_BOUNDS, TURN_EVENT_STREAM_PATH } from "./hosted/turn-event-stream.js";
 
@@ -9,13 +9,10 @@ import { TURN_EVENT_STREAM_BOUNDS, TURN_EVENT_STREAM_PATH } from "./hosted/turn-
  */
 export const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
-const BRAIN_INFERENCE_MAX_DURATION_SECONDS = 120;
-
 /** The per-turn read as its function is called: `brainTurnPath` rewritten onto its own function. */
 const BRAIN_TURN_READ_PATH = "/api/brain/turns/turn";
 /** A held turn read waits up to `ASK_BOUNDS.MAX_WAIT_MS`, with room for the standing reads either side of the wait. */
 const BRAIN_TURN_READ_MAX_DURATION_SECONDS = Math.ceil(ASK_BOUNDS.MAX_WAIT_MS / 1000) + 15;
-const BRAIN_EMBED_MAX_DURATION_SECONDS = 60;
 
 const API_PREFIX = "/api/";
 
@@ -40,8 +37,6 @@ export function routeKeyOf(path: string): string {
  */
 export const FUNCTION_GROUP = {
   DEFAULT: "default",
-  BRAIN_EMBED: "brain-embed",
-  BRAIN_INFERENCE: "brain-inference",
   OBSERVATION_TICK: "observation-tick",
   TURN_EVENTS: "turn-events",
   TURN_READ: "turn-read",
@@ -71,20 +66,6 @@ interface GroupDefinition {
 }
 
 const GROUPS: readonly GroupDefinition[] = [
-  {
-    file: FUNCTION_GROUP.BRAIN_EMBED,
-    maxDuration: BRAIN_EMBED_MAX_DURATION_SECONDS,
-    routes: [routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_EMBED)],
-  },
-  {
-    file: FUNCTION_GROUP.BRAIN_INFERENCE,
-    maxDuration: BRAIN_INFERENCE_MAX_DURATION_SECONDS,
-    routes: [
-      routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_RESPOND_V2),
-      routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_COUNT_TOKENS),
-      routeKeyOf(HOSTED_SERVICE_PATH.BRAIN_PREFETCH),
-    ],
-  },
   {
     file: FUNCTION_GROUP.OBSERVATION_TICK,
     maxDuration: OBSERVATION_TICK.MAX_DURATION_SECONDS,

@@ -40,41 +40,7 @@ export {
   hostedBrainTurnAnswerSchema,
   TURN_WAIT_QUERY,
 } from "./ask-wire.js";
-export {
-  HOSTED_BRAIN_CONTRACT_VERSION,
-  HOSTED_BRAIN_EMBED_BOUNDS,
-  HOSTED_BRAIN_LISTED_OPERATIONS,
-  HOSTED_BRAIN_OPERATION,
-  HOSTED_BRAIN_OPTION_BOUNDS,
-  HOSTED_BRAIN_PREFETCH_BOUNDS,
-  HOSTED_BRAIN_PREFETCH_KIND,
-  HOSTED_BRAIN_PROMPT_BOUNDS,
-  HOSTED_BRAIN_REQUEST_REFUSAL,
-  HOSTED_BRAIN_TOOL_BOUNDS,
-  type HostedBrainBounds,
-  type HostedBrainCapabilities,
-  type HostedBrainCountTokensAnswer,
-  type HostedBrainCountTokensRequest,
-  type HostedBrainEmbedAnswer,
-  type HostedBrainEmbedRequest,
-  type HostedBrainOperation,
-  type HostedBrainPrefetchCapability,
-  type HostedBrainPrefetchKind,
-  type HostedBrainPrefetchRequest,
-  type HostedBrainRequestOptions,
-  type HostedBrainRequestRead,
-  type HostedBrainRequestRefusal,
-  type HostedBrainRespondRequest,
-  hostedBrainBounds,
-  hostedBrainCapabilitiesFromWire,
-  hostedBrainCountTokensAnswerFromWire,
-  hostedBrainCountTokensRequestFromWire,
-  hostedBrainEmbedAnswerFromWire,
-  hostedBrainEmbedRequestFromWire,
-  hostedBrainPrefetchRequestFromWire,
-  hostedBrainPrefetchRequestSchema,
-  hostedBrainRespondRequestFromWire,
-} from "./brain-contract.js";
+export { HOSTED_BRAIN_OPTION_BOUNDS } from "./brain-contract.js";
 export { HostedChangesClient, type HostedChangesClientOptions } from "./changes-client.js";
 export {
   type ConversationClearAnswer,
@@ -244,18 +210,12 @@ export {
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
 export {
-  admitBrainInput,
-  admitBrainInputItem,
-  brainOutputReplayable,
-  maximumHostedBrainInputItems,
-  maximumHostedBrainRequestBytes,
   RESPONSES_CALLER_TYPE,
   RESPONSES_CONTENT_PART_TYPE,
   RESPONSES_INPUT_ITEM_TYPE,
   RESPONSES_ITEM_STATUS,
   RESPONSES_MESSAGE_PHASE,
   RESPONSES_MESSAGE_ROLE,
-  serializedRequestBytes,
 } from "./responses-input.js";
 export {
   HostedRosterClient,

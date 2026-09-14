@@ -31,8 +31,6 @@ export function devicesVaultAnswer(call: DevicesVaultCall): Promise<Response> {
       HttpRouter.provideRequest(
         Layer.succeed(HostedEnvironment, {
           openAiKey: undefined,
-          brainModel: undefined,
-          prefetchModel: undefined,
           realtimeModel: undefined,
           posthogPersonalApiKey: undefined,
           posthogProjectId: undefined,

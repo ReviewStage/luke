@@ -2,17 +2,9 @@ import assert from "node:assert/strict";
 import { it, test } from "@effect/vitest";
 import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import {
-  ACTION_RESULT_STATUS,
-  HTTP_METHOD,
-  isWireString,
-  unparsedWire,
-  wireRecord,
-} from "@sidecar/wire";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { ACTION_RESULT_STATUS, isWireString, unparsedWire, wireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { LOOK_SUBJECT } from "./agent.js";
-import { hostedBrainTransport } from "./client.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -47,7 +39,6 @@ import {
   session,
   settle,
   submit,
-  TRANSCRIPT_SECRET,
   UNKNOWN,
 } from "./harness.js";
 import { INBOX_CAPACITY } from "./observation-inbox.js";
@@ -543,33 +534,3 @@ it.effect("an ask's reply is its final text, and announce is refused inside one"
     );
   }),
 );
-
-/**
- * "The brain's own turns are the first … through Luke's own service." —
- * `client.ts`: a call is addressed to the one origin its transport was built
- * with, never to the provider, and what a quiet reports names the transport
- * and the wait alone.
- */
-test("a brain call is addressed to Luke's own service alone, and reports nothing of what it carried", async () => {
-  const addressed: string[] = [];
-  const fetch = (url: string) => {
-    addressed.push(url);
-    return Promise.resolve(Response.json({}));
-  };
-  const service = hostedBrainTransport({
-    baseUrl: "https://luke.test",
-    readAccessToken: () => Effect.succeed("account-secret"),
-    refreshAccount: () => Effect.void,
-    httpClient: fakeHttpClientLayer(fetch),
-    now: () => NOW,
-  });
-  await service.send("/api/brain/v2/respond", HTTP_METHOD.POST, TRANSCRIPT_SECRET);
-  assert.deepEqual(addressed, ["https://luke.test/api/brain/v2/respond"]);
-  const quiet = service.quietUntil(
-    new Response("", { status: 429, headers: { "retry-after": "7" } }),
-  );
-  assert.deepEqual(quiet, {
-    until: NOW + 7_000,
-    message: "Hosted brain turns are rate limited; pausing for 7s",
-  });
-});

@@ -3,15 +3,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect, Result, Schema, SchemaGetter, SchemaIssue, SchemaTransformation } from "effect";
 import { test } from "vitest";
-import type { WireRecord } from "../json.js";
-import { type JsonSchemaNode, SCHEMA_REFUSAL } from "../schema-vocabulary.js";
+import { SCHEMA_REFUSAL } from "../schema-vocabulary.js";
 import { matchJsonSchemaGolden } from "../testing/json-schema-golden.js";
 import {
   describeWire,
   emitJsonSchema,
   readEither,
   type SchemaRefusalError,
-  verbatimJsonSchema,
   WIRE_DESCRIPTION_ANNOTATION,
   wireRefusal,
 } from "./json-schema.js";
@@ -30,17 +28,6 @@ const GOLDEN_ROOT = {
   ACTIONS: path.join(PACKAGES, "actions/fixtures/json-schema"),
 } as const;
 
-const HOSTED_BRAIN_CONTRACT_VERSION = 2;
-const HOSTED_BRAIN_OPERATION = ["respond", "count-tokens", "embed", "prefetch"] as const;
-const REASONING_EFFORT = ["low", "medium", "high"] as const;
-const HOSTED_BRAIN_PROMPT_CHARS = 200_000;
-const HOSTED_BRAIN_TOOL_BOUNDS = { MAXIMUM_TOOLS: 64, MAXIMUM_NAME_CHARS: 64 } as const;
-const HOSTED_BRAIN_OPTION_BOUNDS = {
-  MAXIMUM_OUTPUT_TOKENS: 16_000,
-  PROMPT_CACHE_KEY_CHARS: 64,
-} as const;
-const HOSTED_BRAIN_EMBED_BOUNDS = { MAXIMUM_TEXTS: 64, MAXIMUM_TEXT_CHARS: 8_000 } as const;
-
 /** A non-empty string, bounded where a `max` is declared, as a wire declaration reads one. */
 const text = (max?: number) =>
   max === undefined
@@ -49,94 +36,6 @@ const text = (max?: number) =>
 
 /** An integer at or above its minimum, as a wire declaration reads one. */
 const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
-
-const contract = Schema.Literal(HOSTED_BRAIN_CONTRACT_VERSION);
-
-const hostedBrainCapabilities = Schema.Struct({
-  contract,
-  model: text(),
-  operations: Schema.Array(Schema.Literals(HOSTED_BRAIN_OPERATION)).check(
-    Schema.isMaxLength(HOSTED_BRAIN_OPERATION.length),
-  ),
-  tools: Schema.Array(text()).check(Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS)),
-  bounds: Schema.Struct({
-    promptChars: wholeNumber(1),
-    inputItems: wholeNumber(1),
-    requestBytes: wholeNumber(1),
-    maximumOutputTokens: wholeNumber(1),
-  }),
-  reasoningEfforts: Schema.Array(Schema.Literals(REASONING_EFFORT)).check(
-    Schema.isMaxLength(REASONING_EFFORT.length),
-  ),
-  prefetch: Schema.optionalKey(Schema.Struct({ model: text() })),
-});
-
-const hostedBrainEmbedRequest = Schema.Struct({
-  contract,
-  texts: Schema.Array(text(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
-  ),
-});
-
-/** A rule the node cannot say, so the node beneath it is emitted. */
-const hostedBrainEmbedAnswer = Schema.Struct({
-  model: text(),
-  dimensions: wholeNumber(1),
-  vectors: Schema.Array(Schema.Array(Schema.Number).check(Schema.isMinLength(1))),
-}).check(
-  Schema.makeFilter((answer) =>
-    answer.vectors.every((vector) => vector.length === answer.dimensions),
-  ),
-);
-
-const hostedBrainCountTokensAnswer = Schema.Struct({ inputTokens: wholeNumber(0) });
-
-/** A text admitting an empty value and kept as written: no `minLength`. */
-const prompt = Schema.String.check(Schema.isMaxLength(HOSTED_BRAIN_PROMPT_CHARS));
-
-const FIXTURE_TOOL_CATALOG: ReadonlySet<string> = new Set(["fixture_tool"]);
-
-/** A value admitted only by a registry, over a bounded text, and a uniqueness rule over the array. */
-const tools = Schema.Array(
-  text(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).check(
-    Schema.makeFilter(
-      (name) => FIXTURE_TOOL_CATALOG.has(name),
-      wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED),
-    ),
-  ),
-).check(
-  Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
-  Schema.makeFilter((names) => new Set(names).size === names.length),
-);
-
-const options = Schema.Struct({
-  maximumOutputTokens: Schema.optionalKey(
-    Schema.Int.check(
-      Schema.isGreaterThanOrEqualTo(1),
-      Schema.isLessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
-    ),
-  ),
-  reasoningEffort: Schema.optionalKey(Schema.Literals(REASONING_EFFORT)),
-  promptCacheKey: Schema.optionalKey(text(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS)),
-});
-
-/** A declared reader: the node is declared beside the reader, in the reader's own key order. */
-const INPUT_NODE: JsonSchemaNode = {
-  type: "array",
-  description:
-    "Responses input items, admitted by this build's own allowlist rather than by this declaration.",
-  items: { type: "object", properties: {}, required: [], additionalProperties: false },
-};
-
-const input = verbatimJsonSchema(
-  Schema.declare((value): value is readonly WireRecord[] => Array.isArray(value)),
-  INPUT_NODE,
-);
-
-const hostedBrainRespondRequest = Schema.Struct({ contract, prompt, tools, options, input });
-
-const hostedBrainCountTokensRequest = Schema.Struct({ contract, prompt, tools, input });
 
 /** A union of a bounded whole number and a null literal, under `optional`. */
 const presenceInstant = Schema.Union([wholeNumber(0), Schema.Null]);
@@ -148,12 +47,6 @@ const changesRequest = Schema.Struct({
 });
 
 const HOSTED_GOLDENS = [
-  ["brain-contract-hostedBrainCapabilitiesSchema", hostedBrainCapabilities],
-  ["brain-contract-hostedBrainEmbedRequestSchema", hostedBrainEmbedRequest],
-  ["brain-contract-hostedBrainEmbedAnswerSchema", hostedBrainEmbedAnswer],
-  ["brain-contract-hostedBrainCountTokensAnswerSchema", hostedBrainCountTokensAnswer],
-  ["brain-contract-hostedBrainRespondRequestSchema", hostedBrainRespondRequest],
-  ["brain-contract-hostedBrainCountTokensRequestSchema", hostedBrainCountTokensRequest],
   ["reads-wire-changesRequestSchema", changesRequest],
 ] as const satisfies readonly (readonly [string, Schema.Top])[];
 

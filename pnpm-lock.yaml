@@ -723,9 +723,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session
@@ -987,9 +984,6 @@ importers:
 
   packages/voice:
     dependencies:
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../brain
       '@sidecar/gateway':
         specifier: workspace:*
         version: link:../gateway
@@ -999,9 +993,6 @@ importers:
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@sidecar/session':
         specifier: workspace:*
         version: link:../session

@@ -20,22 +20,6 @@
     "dest": "/api/turn-read.js?route=brain/turns/turn&id=$1"
   },
   {
-    "src": "/api/brain/v2/embed",
-    "dest": "/api/brain-embed.js?route=brain/v2/embed"
-  },
-  {
-    "src": "/api/brain/v2/respond",
-    "dest": "/api/brain-inference.js?route=brain/v2/respond"
-  },
-  {
-    "src": "/api/brain/v2/count-tokens",
-    "dest": "/api/brain-inference.js?route=brain/v2/count-tokens"
-  },
-  {
-    "src": "/api/brain/v2/prefetch",
-    "dest": "/api/brain-inference.js?route=brain/v2/prefetch"
-  },
-  {
     "src": "/api/account/delete",
     "dest": "/api/default.js?route=account/delete"
   },
@@ -90,10 +74,6 @@
   {
     "src": "/api/brain/ask",
     "dest": "/api/default.js?route=brain/ask"
-  },
-  {
-    "src": "/api/brain/capabilities",
-    "dest": "/api/default.js?route=brain/capabilities"
   },
   {
     "src": "/api/brain/turns",

@@ -28,7 +28,7 @@ const SSO =
   "https://vercel.com/sso-api?url=https%3A%2F%2Fluke-abc123-stage-review.vercel.app%2F&nonce=1";
 const SECRET = Redacted.make("bypass-secret-value");
 const PATHS = {
-  callers: ["/api/brain/capabilities", "/api/devices", "/api/auth/", "/api/brain/turns/probe"],
+  callers: ["/api/observe", "/api/devices", "/api/auth/", "/api/brain/turns/probe"],
   crons: ["/api/observation/tick", "/api/devices"],
 };
 
@@ -52,8 +52,8 @@ test("whose answer it is decides the verdict: the platform's header, the SSO red
     judge(get("/"), answer(302, { location: "https://tryluke.dev/sign-in" })),
     judge(get("/api/brain/ask"), answer(500, { "x-vercel-error": "FUNCTION_INVOCATION_FAILED" })),
     judge(get("/api/brain/ask"), answer(500)),
-    judge(get("/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED), answer(401)),
-    judge(get("/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED), answer(405)),
+    judge(get("/api/observe", PROBE_STATUS.UNAUTHORIZED), answer(401)),
+    judge(get("/api/observe", PROBE_STATUS.UNAUTHORIZED), answer(405)),
     judge(get("/api/brain/turns/probe"), answer(401)),
   ];
   assert.deepEqual(verdicts, [
@@ -76,10 +76,10 @@ test("the bypass door plans a GET for the page, every caller and cron path once,
     [
       [PROBE_METHOD.GET, SITE_ROOT_PATH, PROBE_STATUS.OK],
       [PROBE_METHOD.GET, "/api/auth/", undefined],
-      [PROBE_METHOD.GET, "/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED],
       [PROBE_METHOD.GET, "/api/brain/turns/probe", undefined],
       [PROBE_METHOD.GET, "/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
       [PROBE_METHOD.GET, "/api/observation/tick", PROBE_STATUS.UNAUTHORIZED],
+      [PROBE_METHOD.GET, "/api/observe", PROBE_STATUS.UNAUTHORIZED],
       [PROBE_METHOD.GET, EVE_HEALTH_PATH, PROBE_STATUS.OK],
     ],
   );
@@ -96,10 +96,10 @@ test("the OPTIONS door plans an OPTIONS for the same paths without the page, eve
     plan.map((request) => [request.path, request.expected]),
     [
       ["/api/auth/", undefined],
-      ["/api/brain/capabilities", PROBE_STATUS.METHOD_NOT_ALLOWED],
       ["/api/brain/turns/probe", undefined],
       ["/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
       ["/api/observation/tick", PROBE_STATUS.METHOD_NOT_ALLOWED],
+      ["/api/observe", PROBE_STATUS.METHOD_NOT_ALLOWED],
       [EVE_HEALTH_PATH, undefined],
     ],
   );
@@ -145,7 +145,7 @@ function deployment(seen: Seen[], protectedFrom: (init: RequestInit) => boolean 
     switch (request.pathname) {
       case "/":
         return new Response("<html></html>", { status: 200 });
-      case "/api/brain/capabilities":
+      case "/api/observe":
       case "/api/observation/tick":
         return new Response("{}", { status: 401, headers: { "x-vercel-cache": "MISS" } });
       case "/api/devices":
@@ -179,10 +179,10 @@ it.effect(
         [
           [SITE_ROOT_PATH, 200, undefined, VERDICT.OK],
           ["/api/auth/", 404, undefined, VERDICT.OK],
-          ["/api/brain/capabilities", 401, undefined, VERDICT.OK],
           ["/api/brain/turns/probe", 404, "NOT_FOUND", VERDICT.PLATFORM_ERROR],
           ["/api/devices", 405, undefined, VERDICT.OK],
           ["/api/observation/tick", 401, undefined, VERDICT.OK],
+          ["/api/observe", 401, undefined, VERDICT.OK],
           [EVE_HEALTH_PATH, 200, undefined, VERDICT.OK],
         ],
       );
@@ -236,7 +236,7 @@ it.effect("a dropped connection is retried and an answer is not", () =>
     });
     const fiber = yield* Effect.forkChild(
       probeDeployment({ address: PREVIEW, bypassSecret: Option.none() }, [
-        get("/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED),
+        get("/api/observe", PROBE_STATUS.UNAUTHORIZED),
       ]).pipe(Effect.provide(layer)),
     );
     yield* TestClock.adjust("1 second");
