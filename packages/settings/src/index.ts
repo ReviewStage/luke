@@ -1,7 +1,4 @@
-export {
-  SETTINGS_VIEW_COUNTED_AS,
-  VOICE_SOURCE_COUNTED_AS,
-} from "./counted.js";
+export { SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,

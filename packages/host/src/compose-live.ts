@@ -1,4 +1,4 @@
-import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
+import { PRODUCT_EVENT, PRODUCT_VOICE_SESSION_SOURCE, productSignInAge } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
@@ -15,12 +15,7 @@ import {
 import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { SESSION_STATUS } from "@sidecar/session";
-import {
-  APP_SETTING_SCHEMA,
-  VOICE_SOURCE_COUNTED_AS,
-  voiceHotkeyCandidates,
-  voiceHotkeyLabel,
-} from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
@@ -145,7 +140,8 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     report: kernel.report,
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
-        session_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
+        // Every session this Mac opens is the service's, on the account.
+        session_source: PRODUCT_VOICE_SESSION_SOURCE.HOSTED,
       });
     },
     // The service's word that a turn was spoken to its end, by kind: the

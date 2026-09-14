@@ -1,10 +1,7 @@
 export {
-  resolveVoiceCapability,
   type VoiceCapabilityApplication,
   VoiceCapabilityAssembler,
   type VoiceCapabilityAssemblerOptions,
-  type VoiceCapabilityInput,
-  type VoiceCapabilityPolicy,
   type VoiceSettings,
 } from "./capability-assembler.js";
 export { HELD_SOCKET, type HeldSocket, holdSocket, type SocketHold } from "./held-socket.js";

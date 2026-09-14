@@ -23,7 +23,6 @@
   },
   "dependencies": {
     "@sidecar/brain": "workspace:*",
-    "@sidecar/credentials": "workspace:*",
     "@sidecar/gateway": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/live": "workspace:*",

@@ -25,7 +25,6 @@ import {
   type SettingsResetScope,
   type SettingsUpdateResult,
   VOICE_SOURCE,
-  type VoiceSource,
 } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
@@ -70,7 +69,6 @@ import {
   type StoredAppSettings,
   sameSettingEntry,
 } from "@sidecar/settings";
-import { resolveVoiceCapability } from "@sidecar/voice";
 
 const SETTINGS_FILE_VERSION = 2;
 
@@ -690,7 +688,7 @@ export class SettingsStore {
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
     return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
-      const voiceCapability = yield* this.#voiceCapability(persisted);
+      const voiceAvailable = yield* this.#voiceAvailable();
       const sources = yield* Effect.forEach(
         CREDENTIAL_PROVIDER_LIST,
         (
@@ -720,7 +718,12 @@ export class SettingsStore {
           // Resolved the way the session source resolves it, so the panel marks
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
-          voiceSource: voiceCapability.source,
+          // Every session runs on the account: a stored choice of the
+          // developer's own key runs nothing, so the panel is told what
+          // actually answers. The setting itself is deleted by LUKE-205's
+          // next PR; until then a file that still carries the choice is read
+          // and not honoured.
+          voiceSource: VOICE_SOURCE.ACCOUNT,
           formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
         },
         status: {
@@ -733,12 +736,13 @@ export class SettingsStore {
           // its own: a snapshot is taken on every launch, and most of them are for
           // a user with no key to protect.
           secretStorage: this.#secretStorage,
-          // Whether a spoken turn could actually be minted: a key resolved, and this
-          // run will use it. Resolved here rather than left to the panel because it
-          // is the same question the voice and the pace are answered by — what would
-          // actually happen — and it travels with every settings reply, so storing a
-          // key is what turns voice on and deleting one is what turns it off.
-          voiceAvailable: voiceCapability.available,
+          // Whether a spoken turn could actually be opened: an account signed in,
+          // and this run will use it. Resolved here rather than left to the panel
+          // because it is the same question the voice and the pace are answered
+          // by — what would actually happen — and it travels with every settings
+          // reply, so signing in is what turns voice on and signing out is what
+          // turns it off.
+          voiceAvailable,
           // Whether this build can offer the Google Calendar sign-in at all: a
           // registered OAuth client resolved, and this run would use what it
           // grants. Without one the integration is not drawn at all.
@@ -857,30 +861,17 @@ export class SettingsStore {
     );
   }
 
-  /** Main-process only: the source the minter and the reviewer are built for. */
-  readVoiceSource(): Effect.Effect<VoiceSource, PlatformError> {
-    return Effect.map(
-      Effect.flatMap(this.#load(), (persisted) => this.#voiceCapability(persisted)),
-      (capability) => capability.source,
-    );
-  }
-
   /**
-   * What a spoken turn would actually run on: the stored choice read against
-   * what this run holds. One resolution, so the panel's snapshot and the
-   * minter's own read can never answer the question differently.
+   * Whether a spoken turn has anything to run on: a signed-in account, in a
+   * run that may use credentials. The assembler decides the same way from
+   * the same reads, so the panel's snapshot and the host's own build never
+   * answer the question differently.
    */
-  #voiceCapability(persisted: PersistedSettings) {
-    return Effect.gen({ self: this }, function* () {
-      const key = yield* this.readApiKey(VOICE_CREDENTIAL_PROVIDER_ID);
-      const account = yield* this.readAccount();
-      return resolveVoiceCapability({
-        credentialsUsable: this.#credentialsUsable,
-        keyConfigured: this.#credentialsUsable && key !== undefined,
-        accountSignedIn: this.#credentialsUsable && account !== undefined,
-        chosenSource: persisted.voiceSource,
-      });
-    });
+  #voiceAvailable(): Effect.Effect<boolean, PlatformError> {
+    return Effect.map(
+      this.readAccount(),
+      (account) => this.#credentialsUsable && account !== undefined,
+    );
   }
 
   /**
