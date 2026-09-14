@@ -174,8 +174,11 @@
   row-gap: 4px;
 }
 
-.conversation-message[data-bubble-actions] .conversation-bubble {
+.conversation-bubble-stack {
   grid-area: bubble;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .conversation-message[data-bubble-actions="luke"] {
@@ -196,7 +199,7 @@
   grid-area: rail;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 /* Copy stays hover-revealed because it is an occasional utility, not a
@@ -555,14 +558,78 @@ button.conversation-action-chip:focus-visible {
   padding: 1px 6px 0;
 }
 
+.conversation-rating-menu {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .conversation-rating-buttons {
   display: inline-flex;
   align-items: center;
   gap: 2px;
 }
 
-.conversation-rating-inline {
-  padding: 0;
+.conversation-rating-toggle {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  opacity: 0;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease;
+}
+
+.conversation-entry:hover .conversation-rating-toggle,
+.conversation-bubble-actions:focus-within .conversation-rating-toggle,
+.conversation-rating:focus-within .conversation-rating-toggle,
+.conversation-rating-toggle:focus-visible,
+.conversation-rating-toggle[data-open] {
+  opacity: 1;
+}
+
+.conversation-rating-toggle:hover,
+.conversation-rating-toggle:focus-visible,
+.conversation-rating-toggle[data-open] {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.conversation-rating-toggle[data-rating] {
+  color: var(--text-primary);
+}
+
+.conversation-rating-toggle:disabled {
+  color: var(--text-secondary);
+}
+
+.conversation-rating-toggle-glyph {
+  transform: translateY(-1px);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
+.conversation-rating-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 1;
+  padding: 4px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-overlay);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.55);
 }
 
 .conversation-rating-details {

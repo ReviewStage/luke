@@ -11,12 +11,7 @@ import { CONVERSATION_EVENT_KIND, MESSAGE_RATING, TURN_ORIGIN, TURN_STATUS } fro
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import {
-  DRAFT_QUOTE_MAX_LENGTH,
-  DRAFT_SPEAKER,
-  RATING_LABEL,
-  ratingFeedbackDraft,
-} from "./conversation-rating";
+import { DRAFT_QUOTE_MAX_LENGTH, DRAFT_SPEAKER, ratingFeedbackDraft } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import {
@@ -383,14 +378,7 @@ test("a turn that followed a long silence is dated over it, and the caller's row
 
 /** The rating controls a rendering draws, each on one of Luke's messages. */
 function ratingControls(markup: string): number {
-  return (markup.match(/class="conversation-rating(?: conversation-rating-inline)?"/g) ?? [])
-    .length;
-}
-
-function pressed(markup: string, label: string): readonly boolean[] {
-  return [...markup.matchAll(/<button[^>]*aria-label="([^"]+)"[^>]*aria-pressed="([^"]+)"/g)]
-    .filter((match) => match[1] === label)
-    .map((match) => match[2] === "true");
+  return (markup.match(/class="conversation-rating-toggle"/g) ?? []).length;
 }
 
 test("each of Luke's messages carries one rating control on its last words, and the developer's ask and the brain's note carry none", () => {
@@ -399,8 +387,7 @@ test("each of Luke's messages carries one rating control on its last words, and 
   const lukes = 7;
   const markup = render(groups, OPEN);
   assert.equal(ratingControls(markup), lukes);
-  assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.UP]).length, lukes);
-  assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.DOWN]).length, lukes);
+  assert.equal(count(markup, "class", "conversation-rating-thumb"), 0);
   // No control on a sent bubble or a note: every one stands on Luke's side.
   for (const entry of markup.split('<li class="conversation-entry"').slice(1)) {
     if (ratingControls(entry) === 0) continue;
@@ -425,30 +412,30 @@ test("the thumbs show the message's newest rating, and a thumbs down stands the 
       onOfferRatingFeedback: () => undefined,
     }),
   );
-  assert.deepEqual(pressed(offered, RATING_LABEL[MESSAGE_RATING.UP]), [false]);
-  assert.deepEqual(pressed(offered, RATING_LABEL[MESSAGE_RATING.DOWN]), [true]);
   assert.equal(count(offered, "data-rating", MESSAGE_RATING.DOWN), 1);
+  assert.equal(count(offered, "class", "conversation-rating-thumb"), 0);
   assert.equal(count(offered, "class", "conversation-rating-offer"), 1);
 
   // The same thread with nowhere to offer a composer: the verdict shows, the offer does not.
   const unoffered = render([rated], OPEN);
-  assert.deepEqual(pressed(unoffered, RATING_LABEL[MESSAGE_RATING.DOWN]), [true]);
+  assert.equal(count(unoffered, "data-rating", MESSAGE_RATING.DOWN), 1);
   assert.equal(count(unoffered, "class", "conversation-rating-offer"), 0);
 
   // An unrated message: neither thumb pressed, no offer.
   const unrated = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
-  assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.UP]), [false]);
-  assert.deepEqual(pressed(unrated, RATING_LABEL[MESSAGE_RATING.DOWN]), [false]);
+  assert.equal(count(unrated, "data-rating", MESSAGE_RATING.UP), 0);
+  assert.equal(count(unrated, "data-rating", MESSAGE_RATING.DOWN), 0);
   assert.equal(count(unrated, "class", "conversation-rating-offer"), 0);
 });
 
-test("Luke's reply keeps copy and the thumbs in one side rail, and the thumbs-down follow-up stays on its own line", () => {
+test("Luke's reply keeps copy and an ellipsis menu in one side rail, and the thumbs stay inside that menu until opened", () => {
   const reply = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
   const luke = reply.slice(reply.indexOf('data-bubble-actions="luke"'));
   assert.ok(luke);
   assert.equal(count(luke, "class", "conversation-bubble-actions"), 1);
   assert.equal(count(luke, "class", "conversation-copy"), 1);
-  assert.equal(count(luke, "class", "conversation-rating conversation-rating-inline"), 1);
+  assert.equal(count(luke, "class", "conversation-rating-toggle"), 1);
+  assert.equal(count(luke, "class", "conversation-rating-thumb"), 0);
   assert.equal(count(luke, "class", "conversation-rating-details"), 0);
   assert.ok(
     luke.indexOf('class="conversation-bubble-actions"') < luke.indexOf('class="conversation-time"'),
@@ -465,19 +452,16 @@ test("Luke's reply keeps copy and the thumbs in one side rail, and the thumbs-do
   const ratedLuke = offered.slice(offered.lastIndexOf('data-bubble-actions="luke"'));
   assert.ok(ratedLuke);
   assert.equal(count(ratedLuke, "class", "conversation-bubble-actions"), 1);
-  assert.equal(count(ratedLuke, "class", "conversation-rating conversation-rating-inline"), 1);
+  assert.equal(count(ratedLuke, "class", "conversation-rating-toggle"), 1);
   assert.equal(count(ratedLuke, "class", "conversation-rating-details"), 1);
+  assert.equal(count(ratedLuke, "class", "conversation-rating-thumb"), 0);
   assert.ok(
     ratedLuke.indexOf('class="conversation-bubble-actions"') <
       ratedLuke.indexOf('class="conversation-rating-details"'),
   );
   assert.equal(
-    count(
-      render([groupOf(FIXTURE_TURN.OWN)], OPEN),
-      "class",
-      "conversation-rating conversation-rating-inline",
-    ),
-    0,
+    count(render([groupOf(FIXTURE_TURN.OWN)], OPEN), "class", "conversation-rating-toggle"),
+    1,
   );
 });
 

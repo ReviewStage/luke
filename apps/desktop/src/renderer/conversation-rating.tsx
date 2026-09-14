@@ -2,7 +2,7 @@ import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CONVERSATION_RATE_STATUS, type ConversationRateStatus } from "@sidecar/gateway";
 import { ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
 import { MESSAGE_RATING, type MessageRating } from "@sidecar/wire";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 
@@ -28,7 +28,7 @@ export interface RatedMessageDraft {
 }
 
 /** What each thumb is called for a reader; the glyph alone speaks to the sighted. */
-export const RATING_LABEL = {
+const RATING_LABEL = {
   [MESSAGE_RATING.UP]: "Thumbs up",
   [MESSAGE_RATING.DOWN]: "Thumbs down",
 } as const satisfies Record<MessageRating, string>;
@@ -42,6 +42,12 @@ const RATE_REFUSAL_COPY = {
 } as const satisfies Record<ConversationRateStatus, string | undefined>;
 
 const OFFER_LABEL = "Say what went wrong";
+const MENU_LABEL = "Rate message";
+const RATED_MENU_LABEL = {
+  [MESSAGE_RATING.UP]: "Message rated thumbs up. Change rating",
+  [MESSAGE_RATING.DOWN]: "Message rated thumbs down. Change rating",
+} as const satisfies Record<MessageRating, string>;
+const MENU_GLYPH = "...";
 
 /**
  * The most characters each quoted line of the offered draft carries. The
@@ -96,20 +102,25 @@ export function ConversationRatingControl({
   children?: (parts: {
     readonly rating: MessageRating | undefined;
     readonly busy: boolean;
-    readonly buttons: React.JSX.Element;
+    readonly toggle: React.JSX.Element;
     readonly details: React.JSX.Element | null;
   }) => React.JSX.Element;
 }): React.JSX.Element {
   const { act } = useAct();
   const [pending, setPending] = useState<MessageRating | undefined>(undefined);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuId = useId();
+  const toggle = useRef<HTMLButtonElement | null>(null);
   // A verdict that moved — this press landing, or another device's read back — is the refusal's answer.
   useEffect(() => setRefusal(undefined), [rating]);
+  useEffect(() => setMenuOpen(false), [rating]);
 
   const rate = (verdict: MessageRating) => {
     if (pending !== undefined) return;
     setPending(verdict);
     setRefusal(undefined);
+    setMenuOpen(false);
     void act(ACT_KIND.CONVERSATION_RATE_MESSAGE, { messageId: rated.messageId, rating: verdict })
       .then((result) => setRefusal(RATE_REFUSAL_COPY[result.status]))
       // The act's own rejection carries the refusal sentence the build fixed.
@@ -130,11 +141,46 @@ export function ConversationRatingControl({
     </button>
   );
 
-  const buttons = (
-    <span className="conversation-rating-buttons">
-      {thumb(MESSAGE_RATING.UP, ThumbsUpIcon)}
-      {thumb(MESSAGE_RATING.DOWN, ThumbsDownIcon)}
-    </span>
+  const menu = (
+    <fieldset
+      className="conversation-rating-menu"
+      aria-label={MENU_LABEL}
+      onBlur={(event) => {
+        const next = event.relatedTarget;
+        if (next instanceof Node && event.currentTarget.contains(next)) return;
+        setMenuOpen(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        setMenuOpen(false);
+        toggle.current?.focus();
+      }}
+    >
+      <button
+        ref={toggle}
+        type="button"
+        className="conversation-rating-toggle"
+        aria-label={rating === undefined ? MENU_LABEL : RATED_MENU_LABEL[rating]}
+        aria-expanded={menuOpen}
+        aria-controls={menuId}
+        data-open={menuOpen ? "true" : undefined}
+        data-rating={rating}
+        disabled={pending !== undefined}
+        onClick={() => setMenuOpen((open) => !open)}
+      >
+        <span className="conversation-rating-toggle-glyph" aria-hidden="true">
+          {MENU_GLYPH}
+        </span>
+      </button>
+      {menuOpen ? (
+        <span className="conversation-rating-popover" id={menuId}>
+          <span className="conversation-rating-buttons">
+            {thumb(MESSAGE_RATING.UP, ThumbsUpIcon)}
+            {thumb(MESSAGE_RATING.DOWN, ThumbsDownIcon)}
+          </span>
+        </span>
+      ) : null}
+    </fieldset>
   );
   const details =
     rating === MESSAGE_RATING.DOWN && onOfferFeedback !== undefined ? (
@@ -164,7 +210,7 @@ export function ConversationRatingControl({
     return children({
       rating,
       busy: pending !== undefined,
-      buttons,
+      toggle: menu,
       details,
     });
   }
@@ -175,7 +221,7 @@ export function ConversationRatingControl({
       data-rating={rating}
       aria-busy={pending === undefined ? undefined : "true"}
     >
-      {buttons}
+      {menu}
       {details}
     </span>
   );

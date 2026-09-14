@@ -234,17 +234,11 @@ function BubbleRow({
         rating={rating.rating}
         {...(rating.onOfferFeedback ? { onOfferFeedback: rating.onOfferFeedback } : undefined)}
       >
-        {({ rating: currentRating, busy, buttons, details }) => (
+        {({ toggle, details }) => (
           <>
             <span className="conversation-bubble-actions">
               {copy ? <ConversationCopyButton words={words} /> : null}
-              <span
-                className="conversation-rating conversation-rating-inline"
-                data-rating={currentRating}
-                aria-busy={busy ? "true" : undefined}
-              >
-                {buttons}
-              </span>
+              {toggle}
             </span>
             {details}
           </>
@@ -262,9 +256,11 @@ function BubbleRow({
         className="conversation-message"
         data-bubble-actions={controls === null ? undefined : voice.speaker}
       >
-        <span className="conversation-bubble">
-          <MarkdownMessage words={words} className="conversation-words" />
-          {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
+        <span className="conversation-bubble-stack">
+          <span className="conversation-bubble">
+            <MarkdownMessage words={words} className="conversation-words" />
+            {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
+          </span>
         </span>
         {controls}
       </div>
