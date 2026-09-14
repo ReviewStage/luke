@@ -115,6 +115,17 @@ interface HeldSession {
   readonly released: Deferred.Deferred<void>;
 }
 
+/**
+ * How long the word `wanted` stands unanswered before it is spent: the
+ * renderer opens within a second when it can, and one that cannot (voice
+ * unavailable to it, no window) answers nothing, so a bound is what keeps
+ * one unanswered word from silencing every later ask for the run. Well
+ * inside the phone's two-minute grace on a briefing.
+ */
+export const WANTED_WORD = {
+  STANDS_MS: 30_000,
+} as const;
+
 export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
@@ -127,6 +138,16 @@ export class LiveSessionHolder {
    * withdrawn, or lost with its session.
    */
   readonly #beats = new Map<BeatKind, { readonly beat: SessionBeatFrame; sent: boolean }>();
+  /**
+   * When the peer was last told a session is wanted and has not yet offered
+   * one: one word, however many reasons stand behind it, since the peer
+   * reads a repeated `wanted` as a fresh ask and would open twice. Spent
+   * when the peer answers with an offer, when the caller drops it, or when
+   * it has stood unanswered for `WANTED_WORD.STANDS_MS`, since a peer that
+   * opens nothing (voice unavailable to it, or gone) must not hold every
+   * later ask silent for the run.
+   */
+  #wantedAt: number | undefined;
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
@@ -187,6 +208,8 @@ export class LiveSessionHolder {
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
     return Effect.gen(this, function* () {
       if (this.#held) yield* this.endSession();
+      // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
+      this.#wantedAt = undefined;
       const source = this.#options.source();
       if (!source) {
         this.#beats.clear();
@@ -429,11 +452,49 @@ export class LiveSessionHolder {
     this.#beats.set(beat.kind, { beat, sent: false });
     const session = this.#held;
     if (session === undefined || session.ended) {
-      this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
+      this.#askWanted();
       return true;
     }
     if (session.started) this.#sendBeats(session);
     return true;
+  }
+
+  /** Whether the peer has been told a session is wanted, within the word's own standing, and has not yet offered one. */
+  sessionWanted(): boolean {
+    return (
+      this.#wantedAt !== undefined &&
+      this.#clock.unsafeCurrentTimeMillis() - this.#wantedAt < WANTED_WORD.STANDS_MS
+    );
+  }
+
+  /**
+   * Takes the word back before the peer has answered: the reasons for the
+   * session have gone (a hold began, the account signed out), so the next
+   * reason asks afresh. A session already offered is not touched.
+   */
+  dropWant(): void {
+    this.#wantedAt = undefined;
+  }
+
+  /**
+   * The caller wants a session and has nothing to send into it: a briefing
+   * stands on offer to the account, and the service's exchange will claim
+   * and speak it once a session stands. The peer is told the session is
+   * wanted so it opens one muted, exactly as for a beat; a session already
+   * standing is left to its own exchange's look, and a `wanted` already out
+   * for a beat is the same word. Answers whether the peer was told.
+   */
+  wantSession(): boolean {
+    if (this.sessionStands() || this.sessionWanted()) return false;
+    this.#askWanted();
+    return true;
+  }
+
+  /** One `wanted` to the peer for however many reasons stand, until it answers with an offer or the word lapses. */
+  #askWanted(): void {
+    if (this.sessionWanted()) return;
+    this.#wantedAt = this.#clock.unsafeCurrentTimeMillis();
+    this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
   }
 
   /**
