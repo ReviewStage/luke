@@ -13,7 +13,8 @@
         "briefing",
         "arrival",
         "calendar-onboarding",
-        "launch"
+        "launch",
+        "voice-preview"
       ]
     }
   },

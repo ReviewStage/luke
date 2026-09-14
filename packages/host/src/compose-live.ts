@@ -67,6 +67,14 @@ export interface LiveComposer extends Composer {
   seedArrivalOnFirstSignIn: () => void;
   /** Every beat not yet sent is dropped; a sign-out is no reason to keep one waiting for a session. */
   withdrawBeats: () => void;
+  /**
+   * The developer has just chosen a voice in settings and is listening for
+   * it. Asked on this composer's own queue like every other decision, and
+   * behind the same hold the beats stand behind: an audition is a line Luke
+   * says out loud on this Mac, and a meeting or the pause silences those
+   * whoever asked for them.
+   */
+  previewVoice: () => void;
 }
 
 export interface LiveDependencies {
@@ -76,11 +84,12 @@ export interface LiveDependencies {
   calendars: CalendarsComposer;
 }
 
-/** The three beats this side decides, each withdrawn together at a sign-out. */
+/** The beats this side decides, each withdrawn together at a sign-out or under a hold. */
 const BEAT_KINDS: readonly BeatKind[] = [
   PROACTIVE_SPEECH_KIND.ARRIVAL,
   PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
   PROACTIVE_SPEECH_KIND.LAUNCH,
+  PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
 ];
 
 /**
@@ -310,6 +319,21 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     service.speakBeat(launchGreeting());
   });
 
+  /**
+   * The voice picker's audition, decided here on the same terms as a beat:
+   * an account with voice on it, no introduction standing in front of it,
+   * and speech free. It is asked for and not held for later — what the
+   * developer is listening for is the voice they just chose, and a line
+   * released when a meeting ends is a line about nothing.
+   */
+  const auditionVoice = Effect.gen(function* () {
+    if (!runMode.requiresAccount || !account.signedIn()) return;
+    if (!account.voiceCapabilities.liveSessions) return;
+    if (calendars.introductionOwed()) return;
+    if (yield* speechHeld) return;
+    service.previewVoice();
+  });
+
   /** When this Mac last asked for a session on a briefing's account, for the debounce. */
   let briefingSessionAskedAt: number | undefined;
   /** The offer count as last told, and whether a hold kept a briefing back, so the hold's lift re-decides it. */
@@ -432,6 +456,12 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
       service.reportActivity(report.idle);
       return Effect.succeed({});
     },
+    // The developer's microphone going live on the standing session: an
+    // audition's session becomes a conversation and its clock leaves it alone.
+    [GATEWAY_METHOD.VOICE_REPORT_LIVE_TALK]: () => {
+      service.reportTalk();
+      return Effect.succeed({});
+    },
     // The stop key alone: the mute the peer sends on its own says nothing
     // about Luke's output, so this is the one ask that tells him to stop.
     [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
@@ -475,6 +505,9 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
       calendars.writeOnboarding({
         arrivalSignedInAt: new Date(now()).toISOString(),
       });
+    },
+    previewVoice: () => {
+      Queue.offerUnsafe(asks, auditionVoice);
     },
     withdrawBeats: () => {
       for (const kind of BEAT_KINDS) service.withdrawBeat(kind);

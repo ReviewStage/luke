@@ -95,6 +95,8 @@ const GATEWAY_METHODS = {
   VOICE_END_LIVE_SESSION: { name: "voice.endLiveSession", mutates: true },
   VOICE_REPORT_LIVE_TRANSPORT: { name: "voice.reportLiveTransport", mutates: true },
   VOICE_REPORT_LIVE_ACTIVITY: { name: "voice.reportLiveActivity", mutates: true },
+  /** The peer's microphone went live on the standing session, by the developer's own press; it carries nothing else. */
+  VOICE_REPORT_LIVE_TALK: { name: "voice.reportLiveTalk", mutates: true },
   VOICE_STOP_SPEAKING: { name: "voice.stopSpeaking", mutates: true },
   /** One live event the renderer's tap saw cross the data channel, for the host's development trace; a no-op where no writer stands. */
   VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },

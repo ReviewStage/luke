@@ -11,8 +11,10 @@ import { trimmedText } from "./trimmed-text.js";
  * it, so Luke phrases them in his own voice; the launch greeting is the
  * Live conversations guide's greeting before the caller speaks, an
  * instructions append carrying the welcome and the cue that has the model
- * begin. This is the contract between the host that decides a turn and the
- * session that speaks it; the appends are built here and nowhere else.
+ * begin. The voice picker's audition is a beat like the onboarding ones: a
+ * fixed line, said into the session its chosen voice opened. This is the
+ * contract between the host that decides a turn and the session that speaks
+ * it; the appends are built here and nowhere else.
  */
 
 export const PROACTIVE_SPEECH_KIND = {
@@ -24,6 +26,13 @@ export const PROACTIVE_SPEECH_KIND = {
   CALENDAR_ONBOARDING: "calendar-onboarding",
   /** The greeting of every signed-in launch, spoken before the developer says a word. */
   LAUNCH: "launch",
+  /**
+   * The line the voice picker auditions a voice with: GPT Live fixes a
+   * session's voice at creation and documents no preview of its own, so the
+   * one way to hear a voice is a session created with it saying something,
+   * and this is the something. Its words carry nothing observed.
+   */
+  VOICE_PREVIEW: "voice-preview",
 } as const;
 
 export type ProactiveSpeechKind =
@@ -68,11 +77,18 @@ export interface LaunchSpeech {
   decidedAt: number;
 }
 
+/** The picker's audition: nothing of the developer's own enters it, so it carries only its instant. */
+export interface VoicePreviewSpeech {
+  kind: typeof PROACTIVE_SPEECH_KIND.VOICE_PREVIEW;
+  decidedAt: number;
+}
+
 export type ProactiveSpeechTurn =
   | BriefingSpeech
   | ArrivalSpeech
   | CalendarOnboardingSpeech
-  | LaunchSpeech;
+  | LaunchSpeech
+  | VoicePreviewSpeech;
 
 /**
  * A greeting spoken the way the Live conversations guide has it: the
@@ -127,6 +143,17 @@ function arrivalContent(speech: ArrivalSpeech): string {
   ].join(" ");
 }
 
+/**
+ * The audition's script: the sentence is the build's, said once and closed on,
+ * because what the developer is listening for is the voice and not the words.
+ * A picker that heard a different sentence each time would be comparing
+ * sentences.
+ */
+const VOICE_PREVIEW_CONTENT =
+  "The developer has just chosen this voice in settings and is listening to hear it. Say exactly " +
+  'these words and nothing else: "Hi, what can I help you with?" Do not greet them by name, do ' +
+  "not add a sentence of your own, and do not wait for an answer.";
+
 const CALENDAR_ONBOARDING_CONTENT =
   "The panel is asking the developer to connect a calendar. Say one short sentence, warmly, to the " +
   "effect of: connect your calendar so I don't talk during your meetings. Nothing more.";
@@ -147,6 +174,8 @@ export function speechAppends(turn: ProactiveSpeechTurn): readonly string[] {
       return chunkForAppend(arrivalContent(turn));
     case PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING:
       return chunkForAppend(CALENDAR_ONBOARDING_CONTENT);
+    case PROACTIVE_SPEECH_KIND.VOICE_PREVIEW:
+      return chunkForAppend(VOICE_PREVIEW_CONTENT);
     case PROACTIVE_SPEECH_KIND.LAUNCH:
       return [];
   }

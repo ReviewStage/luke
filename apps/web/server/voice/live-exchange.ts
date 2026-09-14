@@ -338,6 +338,7 @@ function beatTurn(beat: SessionBeatFrame, decidedAt: number): BeatTurn {
         ...(beat.talkKeyLabel === undefined ? undefined : { talkKeyLabel: beat.talkKeyLabel }),
       };
     case PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING:
+    case PROACTIVE_SPEECH_KIND.VOICE_PREVIEW:
       return { kind: beat.kind, decidedAt };
     case PROACTIVE_SPEECH_KIND.LAUNCH:
       return {
