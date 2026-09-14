@@ -23,6 +23,7 @@ import {
   type ToolContext,
   type ValidatedAction,
   type WireRecord,
+  type WorkspaceAgentSelection,
   workspaceAgentModels,
 } from "../../core.js";
 import {
@@ -66,6 +67,8 @@ export type CloudActionExecutor = (input: {
   apiKey: string;
   /** The provider's slice of the stored roster, which the execution admits the action against again. */
   roster: ActionRoster;
+  /** The developer's stored agent pairing for the provider, riding a creation or a spawn that named no model. */
+  agentSelection?: WorkspaceAgentSelection;
 }) => Effect.Effect<ActionExecutionAnswer>;
 
 export interface HostedCarrierDependencies {
@@ -144,6 +147,12 @@ function storedRosterOf(roster: HostedRoster): { roster?: ObservedRoster } {
   return roster.stored !== undefined ? { roster: roster.stored } : {};
 }
 
+/** The two actions that start an agent, and so the two a stored agent pairing has anything to say to. */
+const AGENT_STARTING_KINDS: ReadonlySet<HostedSessionActionKind> = new Set([
+  ACTION_KIND.CREATE_WORKSPACE,
+  ACTION_KIND.ADD_AGENT,
+]);
+
 export function hostedActionCarrier(dependencies: HostedCarrierDependencies): HostedActionCarrier {
   const carrySessionAction = (
     action: ValidatedAction<SessionActionKind>,
@@ -161,6 +170,12 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
       const apiKey = yield* dependencies.apiKey(providerId);
       if (standing.isRevoked()) return refusedActionOutput(ACTION_REFUSAL.TURN_OVER, target);
       if (!apiKey) return refusedActionOutput(REFUSAL.NO_KEY, target);
+      // The developer's stored agent pairing is read only for an action that
+      // starts an agent, and the execution lets it ride only where the ask
+      // named no model: a preference rides with an ask, never against it.
+      const agentSelection = AGENT_STARTING_KINDS.has(kind)
+        ? (yield* dependencies.defaults()).agentDefaults?.[providerId]
+        : undefined;
       const stored = yield* dependencies.roster();
       const executed = yield* dependencies.execute({
         kind,
@@ -168,6 +183,7 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
         fields,
         apiKey,
         roster: actionRosterFor(providerId, storedRosterOf(stored)),
+        ...(agentSelection === undefined ? undefined : { agentSelection }),
       });
       return actionOutputFromResult(carriedResult(action, executed), target);
     });
