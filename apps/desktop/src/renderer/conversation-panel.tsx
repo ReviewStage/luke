@@ -1,4 +1,3 @@
-import { type BrainRequestSnapshot, brainRequestPending } from "@sidecar/brain/requests-wire";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -11,7 +10,6 @@ import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
   ConversationListeningRow,
-  ConversationThinkingRow,
 } from "./conversation-rows";
 import { ConversationTurns } from "./conversation-turns";
 import { MarkdownMessage } from "./markdown-message";
@@ -123,7 +121,6 @@ export function ConversationPanel({
   onOpenChat,
   onOfferRatingFeedback,
   live = [],
-  requests = [],
   spokenAskPending = false,
   now,
 }: {
@@ -142,12 +139,6 @@ export function ConversationPanel({
    */
   now: number;
   /**
-   * The brain's runs, so a run still going draws Luke's turn at the thread's
-   * tail. Read here from the records alone; the reply's own line is the
-   * transcript of what Luke says, written as each utterance settles.
-   */
-  requests?: readonly BrainRequestSnapshot[];
-  /**
    * The lines still being said, drawn under the settled thread as the same
    * bubbles they will settle into — words growing, no timestamp, no copy.
    */
@@ -162,20 +153,13 @@ export function ConversationPanel({
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = messageCount(view);
   const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
-  // One wait however many runs are going: a second ask joins the turn under
-  // way, and two waits for one turn would say otherwise. Its age is the
-  // oldest run's.
-  const pending = requests.filter(brainRequestPending);
-  const thinkingSince =
-    pending.length > 0 ? Math.min(...pending.map((snapshot) => snapshot.acceptedAt)) : undefined;
-
   useEffect(() => {
-    // Reading the count binds the scroll to an append, a clear, or a wait
-    // arriving, not to an unrelated render of the same conversation.
-    if (entryCount === 0 && thinkingSince === undefined && !spokenAskPending) return;
+    // Reading the count binds the scroll to an append, a clear, or a spoken
+    // turn's place arriving, not to an unrelated render of the same conversation.
+    if (entryCount === 0 && !spokenAskPending) return;
     const element = list.current;
     if (element) element.scrollTop = element.scrollHeight;
-  }, [entryCount, thinkingSince, spokenAskPending]);
+  }, [entryCount, spokenAskPending]);
 
   useEffect(() => {
     // A streaming line only carries the reader along; unlike an append, it
@@ -187,8 +171,7 @@ export function ConversationPanel({
     if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
   }, [liveLength]);
 
-  const thread =
-    view.groups.length > 0 || live.length > 0 || thinkingSince !== undefined || spokenAskPending;
+  const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
 
   return (
     <section
@@ -226,11 +209,6 @@ export function ConversationPanel({
                   place, held while its first words are still on the service's
                   clock. */}
               {spokenAskPending ? <ConversationListeningRow /> : null}
-              {/* And then the wait for the answer: a spoken ask's own words
-                  stream in above it. */}
-              {thinkingSince !== undefined ? (
-                <ConversationThinkingRow since={thinkingSince} now={now} />
-              ) : null}
             </ConversationTurns>
           </div>
         </div>

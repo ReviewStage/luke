@@ -762,9 +762,6 @@ function IntroductionFlight({
           speakers={speakers}
           fixtureSpeaking={false}
           voiceOpening={beat === INTRODUCTION_BEAT.CONNECT}
-          // Every run and briefing of Luke's is held while the introduction
-          // is owed, so nothing is under way behind its strip.
-          thinking={false}
           announcementsHeld={false}
           sessionsSettled={true}
           presentation={presentation}

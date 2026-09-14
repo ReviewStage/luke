@@ -200,23 +200,6 @@
   /* Growing one side moves the shape's centre half the growth away from it, so
      the right edge stays exactly where it was and only the left one travels. */
   --capsule-voice-shift: calc(var(--capsule-voice-growth) / 2);
-  /* The same growth for the wait: a run of Luke's still going needs the face
-     and the dots beside it, and the capsule's side holds one thing. 31px to
-     the meter's 26px because the dots' strip is 23px to the meter's 18px,
-     keeping the meter's own 9px to the shape's turning corner. */
-  --capsule-thinking-growth: 31px;
-  --capsule-thinking-width: calc(var(--capsule-width) + var(--capsule-thinking-growth));
-  --capsule-thinking-shift: calc(var(--capsule-thinking-growth) / 2);
-  /* A run answered aloud is three things on the one side — the face, the dots,
-     and the meter — so the two growths are spent together rather than the
-     wider of them winning: the dots and the meter each need their own room,
-     and either drawn past the black is drawn on the desktop. */
-  --capsule-voice-thinking-growth: calc(
-    var(--capsule-voice-growth) +
-    var(--capsule-thinking-growth)
-  );
-  --capsule-voice-thinking-width: calc(var(--capsule-width) + var(--capsule-voice-thinking-growth));
-  --capsule-voice-thinking-shift: calc(var(--capsule-voice-thinking-growth) / 2);
   /* Luke's words under the housing, wrapping as they stream in and shown
      whole. `--caption-max` arrives from the shared surface tokens, the
      same number the compact window already holds below the capsule, so growing
@@ -545,68 +528,6 @@ button:disabled {
     calc(var(--duration-shape) - var(--duration-quick)) backwards;
 }
 
-/* Luke thinking, with nothing said aloud and no words open: the reply's growth
-   for the wait that precedes it. The wing draws the dots from the run alone,
-   and the shape reads that same run off the stage's own facts, so the two
-   cannot grow apart. The microphone being heard needs nothing more of this
-   side: the developer's meter takes the resting mark's room on the other one
-   and grows nothing, so a run under a held talk key grows exactly here. The
-   caption gate is not a tie to win but a disjoint state: the speaker attribute
-   lifts this rule's specificity past the caption rule below, which must take
-   the peek's width whenever words stand under the shape, so the wait may only
-   grow a capsule with no words to cover — a captioned one is already wide
-   enough for the dots. */
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"]
-.panel-surface {
-  width: var(--capsule-thinking-width);
-  transform: translate(calc(-50% - var(--capsule-thinking-shift)), var(--shape-top, 0px));
-  /* Growing leads, exactly as the voice growth above: the base rule's delay is
-     for leaving, and the wait's dots arrive behind this edge. */
-  transition-duration: var(--duration-shape);
-  transition-delay: 0s;
-}
-
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="false"]
-  .compact-hover-target {
-  width: var(--capsule-thinking-width);
-  transform: translateX(calc(-50% - var(--capsule-thinking-shift)));
-}
-
-/* A run Luke is already answering aloud, with no words drawn yet: the side
-   holds his face, the dots, and his meter, so the shape spends both growths
-   rather than the wider of them. Written after the voice rule above and one
-   attribute wider than it, so the pair wins that tie — the meter's growth
-   alone would leave the dots drawn on the desktop. */
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="true"]
-.panel-surface {
-  width: var(--capsule-voice-thinking-width);
-  transform: translate(calc(-50% - var(--capsule-voice-thinking-shift)), var(--shape-top, 0px));
-  transition-duration: var(--duration-shape);
-  transition-delay: 0s;
-}
-
-.app-stage[data-presentation="capsule"][data-thinking="true"][data-caption="false"][data-luke-speaking="true"]
-  .compact-hover-target {
-  width: var(--capsule-voice-thinking-width);
-  transform: translateX(calc(-50% - var(--capsule-voice-thinking-shift)));
-}
-
-/* Dots standing in the capsule at all mean a run is going, and every capsule
-   state a run can stand in has already made room for them — one of the two
-   growths above, both of them together, or the caption's peek width, which
-   they yield to. So the pose needs no gate of its own: the element's presence
-   is the gate, and the base rule's delayed mount pair is the arrival, crossing
-   over the last of the shape's travel the way the meter crosses into the same
-   growth. Ungated also means a caption coming or going mid-wait re-matches
-   nothing here, so nothing replays. */
-.app-stage[data-presentation="capsule"] .wing-thinking {
-  opacity: 1;
-  transform: none;
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-  transition-delay: calc(var(--duration-shape) - var(--duration-quick));
-}
-
 @keyframes wing-mount-fade {
   from {
     opacity: 0;
@@ -885,42 +806,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   transition-duration: var(--duration-quick), var(--duration-shape);
   transition-timing-function: var(--motion-exit), var(--spring);
   transition-delay: calc(var(--duration-shape) - var(--duration-quick));
-}
-
-/* The wait's dots in the wing: a slot that unfolds outward from the housing
-   on the marks' spring, because the dots trail the face the way the marks
-   trail the notch. The capsule's own 36px side holds the face and nothing
-   beside it, so the resting pose is folded; the peek and the panel unfold the
-   dots into the room they already have, and the capsule grows its own room
-   for them below, the way it grows for Luke's reply meter. The mount
-   animation is Luke's meter's own delayed pair — the dots may mount on the
-   very frame that growth starts, and an undelayed arrival would draw them
-   ahead of an edge still most of its travel away — and it is stated here,
-   once, in every state alike: the states that re-match this element's rules
-   (a caption clearing mid-wait, the pointer opening the peek) would replay
-   any animation they changed, so none of them may carry one. */
-.wing-thinking {
-  display: flex;
-  align-items: center;
-  opacity: 0;
-  transform: translateX(8px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring);
-  animation:
-    wing-mount-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards,
-    wing-mount-travel var(--duration-shape) var(--spring)
-    calc(var(--duration-shape) - var(--duration-quick)) backwards;
-}
-
-.app-stage[data-presentation="peek"] .wing-thinking,
-.app-stage[data-presentation="panel"] .wing-thinking {
-  opacity: 1;
-  transform: none;
-  transition-duration: var(--duration-quick), var(--duration-shape);
-  transition-timing-function: var(--motion-exit), var(--spring);
-  transition-delay: var(--peek-delay);
 }
 
 .provider-mark {
@@ -2760,7 +2645,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
   .feedback-stage,
   .key-slot-confirm,
   .wing-mark,
-  .wing-thinking,
   .sign-in-label,
   .session-row {
     transition-duration: 1ms;

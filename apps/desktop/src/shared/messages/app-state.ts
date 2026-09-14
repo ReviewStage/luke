@@ -1,4 +1,3 @@
-import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
@@ -153,7 +152,6 @@ export interface AppState {
   audio: AppAudioSlice;
   hotkeys: AppHotkeysSlice;
   voice: AppVoiceSlice;
-  brain: { runs: readonly BrainRequestSnapshot[] };
   conversation: AppConversationSlice;
   announcements: { held: boolean };
   /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */

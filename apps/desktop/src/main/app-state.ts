@@ -164,7 +164,6 @@ export function initialAppState(
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
     voice: {},
-    brain: { runs: [] },
     // A run that sends nothing reads no Conversation, so its empty thread is settled from the start.
     conversation: { groups: [], settled: !runMode.sendsNetwork },
     announcements: { held: false },

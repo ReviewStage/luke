@@ -15,14 +15,12 @@ import {
   noticedMotion,
   restingMotion,
   speechFaceInputs,
-  thinkingDotsShown,
 } from "./luke-face-mood";
 
 function context(overrides: Partial<FaceContext> = {}): FaceContext {
   return {
     speaking: false,
     microphoneLive: false,
-    thinking: false,
     announcementsHeld: false,
     settled: true,
     attention: [],
@@ -58,44 +56,6 @@ test("nothing about the session list holds the face at all", () => {
   assert.equal(restingMotion(context({ attention: ["a"], total: 1 })), undefined);
   assert.equal(restingMotion(context({ working: 4, total: 4 })), undefined);
   assert.equal(restingMotion(context({ complete: 2, total: 2 })), undefined);
-});
-
-test("a run still going holds the face in the conversation wait's own hop", () => {
-  // The same success hop, on repeat, that the Conversation tab's wait plays.
-  assert.equal(restingMotion(context({ thinking: true })), FACE_MOTION.SUCCESS);
-  // Speech outranks it: a spoken exchange already reads on the face turn by
-  // turn, and the wait resumes when the turn ends.
-  assert.equal(
-    restingMotion(context({ thinking: true, microphoneLive: true })),
-    FACE_MOTION.LISTENING,
-  );
-  assert.equal(restingMotion(context({ thinking: true, speaking: true })), FACE_MOTION.TALKING);
-  // It outranks the sleeps: a meeting holds announcements, never the
-  // developer's own ask, and an empty roster says nothing about a run.
-  assert.equal(
-    restingMotion(context({ thinking: true, announcementsHeld: true })),
-    FACE_MOTION.SUCCESS,
-  );
-  assert.equal(restingMotion(context({ thinking: true, total: 0 })), FACE_MOTION.SUCCESS);
-});
-
-test("the wait's dots stand beside a drawn face whenever a run is going", () => {
-  assert.equal(thinkingDotsShown(context({ thinking: true }), true), true);
-  // No run, no dots — the hop alone is a completion's one-shot gesture.
-  assert.equal(thinkingDotsShown(context(), true), false);
-  // The exchange has the face and the wait still has the dots: a run under a
-  // held talk key is the case the panel otherwise reported not at all.
-  assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), true), true);
-  assert.equal(thinkingDotsShown(context({ thinking: true, speaking: true }), true), true);
-  assert.equal(
-    thinkingDotsShown(context({ thinking: true, speaking: true, microphoneLive: true }), true),
-    true,
-  );
-  // The listening face without a run of its own still draws none.
-  assert.equal(thinkingDotsShown(context({ microphoneLive: true }), true), false);
-  // The gate displaced the face; dots without one would be orphaned.
-  assert.equal(thinkingDotsShown(context({ thinking: true }), false), false);
-  assert.equal(thinkingDotsShown(context({ thinking: true, microphoneLive: true }), false), false);
 });
 
 test("the fidget answers a session that has just started asking", () => {
@@ -299,7 +259,6 @@ test("the speakers drive the resting motion the face plays", () => {
     working: 2,
     complete: 0,
     total: 3,
-    thinking: false,
     announcementsHeld: false,
   };
 

@@ -1,4 +1,3 @@
-import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
   ACCOUNT_STATUS,
   type AccountProvider,
@@ -218,8 +217,6 @@ export interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
-  /** The brain's runs, so Conversation draws Luke's turn while one is going. */
-  brainRequests: readonly BrainRequestSnapshot[];
   /** Reports someone being part-way through the session search, so the panel holds for them. */
   onFieldEngaged: (engaged: boolean) => void;
   /**
@@ -274,7 +271,6 @@ export function PanelBody({
   onOfferRatingFeedback,
   spokenAskPending,
   onClearConversationConversation,
-  brainRequests,
   onFieldEngaged,
   offerOptions,
   optionsOpen,
@@ -405,7 +401,6 @@ export function PanelBody({
           onOfferRatingFeedback={onOfferRatingFeedback}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
-          requests={brainRequests}
           now={now}
         />
       ) : (
