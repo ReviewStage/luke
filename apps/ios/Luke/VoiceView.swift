@@ -54,6 +54,10 @@ struct VoiceView: View {
     @State private var pressBeganAt: TimeInterval?
     @State private var settingsShown = false
     @State private var microphoneNote: String?
+    /// Whether the system's microphone dialog stands over a press. It takes
+    /// the touch with it, so the gesture's end under it is the dialog's, not
+    /// a tap to latch on.
+    @State private var askingForMicrophone = false
 
     var body: some View {
         ZStack {
@@ -119,8 +123,10 @@ struct VoiceView: View {
 
     /// The talk button going down. The system's microphone grant is asked for
     /// first, at the press, which is the user action the WebRTC guide asks it
-    /// be requested from; a press let go of while the dialog stood opens
-    /// nothing, as the desktop's does.
+    /// be requested from. The dialog takes the press with it: a press that
+    /// raised it is over whatever the touch reports, and a grant opens
+    /// nothing until the next press, as a hold let go of under the Mac's
+    /// dialog opens nothing there.
     private func beginPress() {
         guard let call else { return }
         microphoneNote = nil
@@ -151,9 +157,13 @@ struct VoiceView: View {
             microphoneNote = Self.microphoneRefusedNote
             return false
         case .undetermined:
+            askingForMicrophone = true
+            isLatched = false
             let granted = await AVAudioApplication.requestRecordPermission()
+            askingForMicrophone = false
+            isLatched = false
             if !granted { microphoneNote = Self.microphoneRefusedNote }
-            return granted
+            return false
         @unknown default:
             return true
         }
@@ -400,6 +410,8 @@ struct VoiceView: View {
                 )
                 pressBeganAt = nil
                 isPressing = false
+                // The end the system's dialog forced is nobody's tap.
+                guard !askingForMicrophone else { return }
                 switch release {
                 case .latch:
                     isLatched = true
