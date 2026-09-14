@@ -11,6 +11,7 @@
       "**",
       "!!**/pnpm-lock.yaml",
       "!!**/.agents",
+      "!.claude/settings.json",
       "!apps/ios",
       "apps/ios/*.test.mjs",
       "!apps/web/fixtures",
