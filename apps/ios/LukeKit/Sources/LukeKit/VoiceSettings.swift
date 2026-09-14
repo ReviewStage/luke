@@ -1,9 +1,10 @@
 import Foundation
 
 /// Transcribed from `LIVE_VOICE` in `packages/live/src/voices.ts`: every
-/// voice the desktop may sync as the account's preference. The phone reads
-/// one of these and speaks the `RealtimeVoice` it maps to.
-public enum LiveVoice: String, CaseIterable, Sendable {
+/// voice a GPT Live session speaks. The phone's picker offers all of them,
+/// the sessions socket carries the one chosen in `session.create`, and the
+/// account syncs it with the desktop. The default is `LIVE_DEFAULTS.VOICE`.
+public enum LiveVoice: String, CaseIterable, Sendable, Identifiable {
     case alloy
     case ash
     case ballad
@@ -27,14 +28,21 @@ public enum LiveVoice: String, CaseIterable, Sendable {
     case vesper
     case willow
 
+    public static let `default`: LiveVoice = .marin
+
+    public var id: String { rawValue }
+
+    public var displayName: String { rawValue.capitalized }
 }
 
 /// Transcribed from `REALTIME_VOICE` in
 /// `packages/actions/src/remote-mint-legacy.ts`, the Live voices the Realtime
-/// API the phone still mints also speaks: the picker offers these, the mint
-/// refuses a voice outside them, and a synced Live voice outside them falls
-/// to the default here rather than reaching the mint. The default is
-/// `REALTIME_DEFAULTS.VOICE`, the same voice the desktop's Live default is.
+/// API also speaks. The watch still mints a Realtime session until it moves
+/// onto the hosted exchange (LUKE-224): its picker offers these, the mint
+/// refuses a voice outside them, and a synced Live voice outside them reads
+/// as the default from the watch's own store rather than reaching the mint.
+/// The phone no longer reads this set. The default is
+/// `REALTIME_DEFAULTS.VOICE`, the same voice the Live default is.
 public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
     case alloy
     case ash
@@ -49,25 +57,17 @@ public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
 
     public static let `default`: RealtimeVoice = .marin
 
-    /// The voice the phone speaks for a synced Live voice.
-    public init(spoken voice: LiveVoice) {
-        self = RealtimeVoice(rawValue: voice.rawValue) ?? .default
-    }
-
-    /// A stored or synced name: a Live voice the phone cannot speak falls to
-    /// the default, and a name that is no voice at all is nil.
-    public init?(syncedName name: String) {
-        guard let live = LiveVoice(rawValue: name) else { return nil }
-        self.init(spoken: live)
-    }
-
     public var id: String { rawValue }
 
     public var displayName: String { rawValue.capitalized }
 }
 
-/// Transcribed from `REALTIME_VOICE_SPEED` in the same file. Stored by name so
-/// an unknown stored value falls to the default rather than reaching the mint.
+/// Transcribed from `REALTIME_VOICE_SPEED` in the same file. The Live model
+/// has no speed, so the phone dropped its slider and its sync with the move
+/// onto the hosted exchange (LUKE-216); the watch keeps the pace for its own
+/// Realtime mint until LUKE-224, stored under `VoiceSettingsKey.speed` on the
+/// watch alone and synced nowhere. Stored by name so an unknown stored value
+/// falls to the default rather than reaching the mint.
 public enum RealtimeVoiceSpeed: String, CaseIterable, Sendable, Identifiable {
     case slow
     case normal
@@ -105,6 +105,8 @@ public enum RealtimeVoiceSpeed: String, CaseIterable, Sendable, Identifiable {
 }
 
 public enum VoiceSettingsKey {
+    /// The voice both apps read and the sync carries, a `LiveVoice` name.
     public static let voice = "voiceSettings.voice"
+    /// The watch's own pace for its Realtime mint; the phone neither reads nor syncs it.
     public static let speed = "voiceSettings.speed"
 }

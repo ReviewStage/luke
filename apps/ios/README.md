@@ -218,37 +218,71 @@ creator) are injected, so `LivePeerTests` drive offer, answer, track
 toggling, and close through fakes with no device and no binary, on Linux as
 on a Mac; `WebRTCPeerFactory` answers the same seams from the framework on a
 phone. `tools/ios-parity` holds the event types, close reasons, statuses, and
-transport states the peer transcribes equal to the TypeScript sets. Nothing
-calls the peer yet: the sessions socket that creates the session and the
-screen that drives the peer follow it.
+transport states the peer transcribes equal to the TypeScript sets. The voice
+screen drives the peer through `LiveCall`, described under Voice screen.
+
+## Voice screen
+
+The phone's voice screen (`Luke/VoiceView.swift`) is a WebRTC peer with
+captions, on the desktop's terms, driven by `LukeKit`'s `LiveCall`: the
+policy `live-call.ts` and `LiveVoiceOrchestrator` keep between them on the
+Mac, over `LivePeer` and `HostedVoiceSessionClient`. A press mints nothing:
+it opens the peer, sends `session.create` over the sessions socket with the
+account's synced voice and an empty seed, applies the answer, and unmutes for
+exactly as long as the press lasts, or until the next tap after a quick first
+one. The service's exchange attaches by build and the hosted brain answers
+every ask; the phone sends no context and no instruction text, and no tool
+call reaches it. Both speakers' lines are written by the voice writer and
+arrive through the Conversation reads the phone already runs, so a spoken
+exchange on the phone appears in the Conversation on the phone and on a Mac
+signed into the same account. What the screen draws is both speakers'
+captions off the data channel's transcript deltas, grouped and settled on the
+desktop's bounds (`LiveCaptions`, the ledger's `UTTERANCE_GAP_MS` and
+`UTTERANCE_SETTLE_MARGIN_MS`, held equal by `tools/ios-parity`), rows stable
+from the moment they open; they stand only while the call does.
+
+- **Stop and idle.** The stop control, drawn while Luke speaks, sends the
+  service's `session.stop` and mutes; the service intercepts the frame and
+  turns it into the instruction on its own sideband. Idle is the peer's own
+  five-minute window, reported as `session.activity` and taken back on the
+  next word; the service decides the close.
+- **Speaking.** Luke counts as speaking from his own words arriving on the
+  channel, held through his pauses for the desktop's hangover; the phone reads
+  no level off his track yet, so the status follows the captions rather than
+  the audio.
+- **The hang-up.** Leaving the screen or changing the voice sends
+  `session.close` over the sessions socket, the one Live client event the
+  route forwards from a device, and the peer tears itself down on the
+  `session.closed` the session answers on the data channel. The channel
+  carries only the microphone switch, and the peer's own close where the
+  service's never came back inside the guide's bound or no socket stands to
+  carry it.
+- **Refusals.** A 401 renews the bearer once through `AuthorizedCall`'s
+  rule. No account behind the bearer, a spent allowance, and an unavailable
+  service show the desktop's own lines ("Voice is off: sign in to turn it
+  on."; "Voice is temporarily unavailable. Try again later."), a quota
+  refusal with the allowance where the service said it; every other refusal
+  shows the peer's word, "Luke could not open a voice session."
+- **Counted.** `voice:call_start` with `session_source: hosted` when
+  `session.created` lands, as the desktop counts it.
+- **Settings.** The voice, chosen from every Live voice (`LIVE_VOICE`) and
+  synced with the account and the watch as before, and a reset. The Live model
+  has no speed, so the slider went with the move, and the Debug tool list
+  went with the tools.
+
+Gone with the move, by ruling (LUKE-212) or by the route's rule: the
+composer and the keyboard button (Luke is voice only on every device), the
+phone-side tool dispatch (`dispatchVoiceToolCall`, `VoiceAsks`'s roster
+validation, and the armed-turn discipline stay in `LukeKit` for the watch
+alone), and the two device-local tools the phone had, `open_session` and
+`show_panel`, which have no service counterpart: Luke can no longer open a
+session's screen or narrow the list from a spoken ask on the phone. The
+legacy path's files (`RealtimeSession`, `VoiceMintClient`,
+`VoiceConversationThread`, `ConversationContext`, `WorkspaceProjectsContext`,
+`VoiceToolAvailability`) stay in `LukeKit` for the watch until it moves
+(LUKE-224) and are the phone's to delete then (LUKE-219).
 
 ## Voice actions
-
-The voice screen carries the same actions the desktop's conversation does,
-minus the ones that have no surface on a phone. A turn is opened by the talk
-button or by the keyboard button beside it, which stands a composer up in the
-controls' place: a typed ask is the same explicitly opened, tool-armed turn a
-press is, with no microphone anywhere in it, mirroring the desktop's Ask Luke
-field. The tool list is minted
-server-side from `remoteRealtimeToolDefinitions()` in `packages/actions`, and
-each call is validated on the phone in `LukeKit`'s `VoiceAsks` against the
-roster and projects the conversation was shown before anything is sent:
-
-| Tool | What happens on the phone |
-| --- | --- |
-| `send_session_message`, `run_session_control`, `add_workspace_agent`, `rename_session`, `rename_workspace`, `create_workspace` | Validated against the observed roster or projects answer, then sent to the hosted action endpoint, which re-observes and validates again |
-| `open_session` | Switches to the Sessions tab and pushes the session's own screen once Luke's reply has finished |
-| `show_panel` | Switches to the Sessions tab and applies the filters, sort, or search the ask named, as the filter sheet and search field would |
-
-The voice settings sheet ends in a Debug section listing every tool the
-desktop's conversation carries, marked available or not, with the reason:
-read from the tool list the service minted the current call with and from
-what the observed roster and projects answer offer right now.
-
-Absent on purpose: `read_session_transcript` (no local sessions on a phone),
-the issue actions (no tracker is connected here), `remember_fact` and
-`forget_fact` (the phone keeps no memory; Luke's durable facts live on the
-Mac), `change_app_setting`, the feedback composer, and the Updates row.
 
 The watch app's hold-to-talk screen carries the same eight tools. The
 dispatcher they run through, `dispatchVoiceToolCall` in `LukeKit`, is shared
@@ -261,17 +295,18 @@ sorts, or searches the watch list the same way, drawing a Show All row above
 the rows a narrowing leaves so a list Luke narrowed never hides a session
 without saying so. The watch voice page also has the phone's Settings pattern:
 a gear button opens voice and speed controls, plus the Debug tool list read
-from the watch call and roster. The voice and speed chosen there are the
-phone's own, kept equal through the settings sync described under Watch below,
-so the wrist is a quick way to change them and never a second copy.
+from the watch call and roster. The voice chosen there is the phone's own,
+kept equal through the settings sync described under Watch below, so the
+wrist is a quick way to change it and never a second copy; the speed is the
+watch's alone, since the phone's Live sessions have none.
 
 ## Voice service socket
 
-The phone's half of the desktop's hosted voice architecture (LUKE-210) is
-being built in `LukeKit`, one piece at a time, with nothing yet calling it
-from the voice screen: `RealtimeSession` still runs the phone's calls on the
-legacy Realtime mint until the cutover lands. The piece here is the sessions
-socket client, the phone's `HostedLiveSessionSource`
+The phone's half of the desktop's hosted voice architecture (LUKE-210) lives
+in `LukeKit`; the voice screen runs on it through `LiveCall`, and
+`RealtimeSession` runs only the watch's calls on the legacy Realtime mint
+until the watch moves. The piece here is the sessions socket client, the
+phone's `HostedLiveSessionSource`
 (`packages/voice/src/live-session-source.ts`), speaking the vocabulary
 `packages/hosted/src/live-contract.ts` declares:
 
@@ -313,10 +348,10 @@ socket client, the phone's `HostedLiveSessionSource`
   `LivePeerSeams.createSession` answers with, so the peer and the socket
   client wire together without an adaptor.
 
-The idle report is the peer's to make on `LIVE_IDLE_WINDOW_MS`, five minutes,
-which replaces the phone's own 180-second idle close once the peer lands; the
-client only carries it. Nothing on the phone sends `session.beat`, which is
-the desktop's, and no frame of the phone's composing carries instruction text.
+The idle report is the call's to make on `LIVE_IDLE_WINDOW_MS`, five minutes,
+which replaced the phone's own 180-second idle close; the client only carries
+it. Nothing on the phone sends `session.beat`, which is the desktop's, and no
+frame of the phone's composing carries instruction text.
 
 ## Conversation
 
@@ -445,8 +480,8 @@ tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
 kept in step by a "change both" comment is a copy that eventually is not, so
 each of those was one file with two callers rather than two files.
 
-The settings the two apps both hold — the voice and speed the next mint asks
-for, and the New Workspace choices remembered per provider — are kept equal
+The settings the two apps both hold — the voice the next session speaks in,
+and the New Workspace choices remembered per provider — are kept equal
 through WatchConnectivity's application context, in `DeviceSettingsSync` in
 `LukeKit` with `PhoneSessionRelay` and `WatchConnectivityReceiver` as its two
 ends. Each app keeps reading and writing its own UserDefaults keys; the sync
@@ -460,7 +495,9 @@ syncing. The application
 context is the right channel because it holds only the latest snapshot,
 delivers it whenever the pair next connects, and keeps the last one received
 across a relaunch. Nothing in it is account data: no token, key, or anything
-a provider wrote travels this way, and it leaves neither device.
+a provider wrote travels this way, and it leaves neither device. The pace the
+watch's Realtime mint still takes is the watch's own and travels nowhere: the
+Live model the phone speaks through has no speed.
 
 watchOS draws one line through that traffic. HTTP over `URLSession` is open
 to every app, and every hosted read and act on the watch travels that way,

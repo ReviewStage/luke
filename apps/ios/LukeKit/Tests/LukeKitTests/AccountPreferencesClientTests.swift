@@ -21,7 +21,6 @@ final class AccountPreferencesClientTests: XCTestCase {
     func testAccountPreferencesWireOmitsDefaultValuesAndIncludesWorkspaceDefaults() async {
         let snapshot = DeviceSettingsSnapshot(
             voice: .coral,
-            speed: .default,
             workspaceProviderId: "conductor",
             workspaceProjectIds: ["conductor": "project-1"],
             workspaceAgentDefaults: [
@@ -52,7 +51,7 @@ final class AccountPreferencesClientTests: XCTestCase {
     @MainActor
     func testAccountPreferencesWireParsesHostedSnapshot() async {
         let snapshot = DeviceSettingsSnapshot(accountPreferencesWire: [
-            "voice": "coral",
+            "voice": "beacon",
             "voiceSpeed": 1.5,
             "defaultWorkspaceProvider": "conductor",
             "workspaceProjectDefaults": ["conductor": "project-1"],
@@ -62,8 +61,7 @@ final class AccountPreferencesClientTests: XCTestCase {
             ],
         ])
 
-        XCTAssertEqual(snapshot?.voice, .coral)
-        XCTAssertEqual(snapshot?.speed, .fast)
+        XCTAssertEqual(snapshot?.voice, .beacon, "every Live voice is the phone's to speak")
         XCTAssertEqual(snapshot?.workspaceProviderId, "conductor")
         XCTAssertEqual(snapshot?.workspaceProjectIds, ["conductor": "project-1"])
         XCTAssertEqual(snapshot?.workspaceAgentDefaults, [
@@ -76,7 +74,11 @@ final class AccountPreferencesClientTests: XCTestCase {
     func testAccountPreferencesWireRejectsUnknownAndInvalidHostedValues() async {
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["futureSetting": "ignored"]))
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voice": "baritone"]))
-        XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voiceSpeed": true]))
+        XCTAssertEqual(
+            DeviceSettingsSnapshot(accountPreferencesWire: ["voiceSpeed": true]),
+            DeviceSettingsSnapshot(),
+            "the retired pace is read past, whatever an old account stored under it"
+        )
         XCTAssertNil(
             DeviceSettingsSnapshot(accountPreferencesWire: [
                 "workspaceProjectDefaults": ["unknown": "project-1"],
@@ -111,7 +113,6 @@ final class AccountPreferencesClientTests: XCTestCase {
         let answer = try await client.readPreferences(accessToken: "at-1")
 
         XCTAssertEqual(answer.preferences.voice, .coral)
-        XCTAssertEqual(answer.preferences.speed, .quick)
         XCTAssertTrue(answer.hasStoredSnapshot)
     }
 
@@ -126,11 +127,11 @@ final class AccountPreferencesClientTests: XCTestCase {
                 with: request.httpBody ?? Data()
             ) as! [String: Any]
             let preferences = body["preferences"] as? [String: Any]
-            XCTAssertEqual(preferences?["voiceSpeed"] as? Double, 0.75)
-            XCTAssertNil(preferences?["voice"])
+            XCTAssertEqual(preferences?["voice"] as? String, "willow")
+            XCTAssertNil(preferences?["voiceSpeed"], "the phone writes no pace")
             return (
                 preferencesJSONData([
-                    "preferences": ["voiceSpeed": 0.75],
+                    "preferences": ["voice": "willow"],
                     "updatedAt": 1_800_000_000_000,
                 ]),
                 preferencesResponse(url: request.url!, status: 200)
@@ -138,11 +139,11 @@ final class AccountPreferencesClientTests: XCTestCase {
         }
         let client = AccountPreferencesClient(baseURL: base, http: stub)
         let answer = try await client.writePreferences(
-            DeviceSettingsSnapshot(speed: .slow),
+            DeviceSettingsSnapshot(voice: .willow),
             accessToken: "at-1"
         )
 
-        XCTAssertEqual(answer.preferences.speed, .slow)
+        XCTAssertEqual(answer.preferences.voice, .willow)
     }
 
     @MainActor
