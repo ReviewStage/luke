@@ -459,7 +459,7 @@ decision nobody has taken, not a migration owed.
   would otherwise exit. The one keep-alive interval Effect arms for itself is
   inside `Runtime.makeRunMain`, which is why a `runMain` process stays up for
   its root fiber's whole life and exits when that fiber ends.
-- Four v4 behaviours the suites caught, each of which reads as a bug rather
+- Five v4 behaviours the suites caught, each of which reads as a bug rather
   than a difference:
   - `Queue.takeAll` **waits** on an empty queue rather than answering empty.
     `Queue.clear` is what drains one.
@@ -474,6 +474,19 @@ decision nobody has taken, not a migration owed.
     async resume continues synchronously, so `fork(x)` followed by `release()`
     no longer runs `x`'s head first. `{ startImmediately: true }` is the
     remedy where the old ordering was the point.
+  - The same inversion the other way round, and it bites a fork nobody wrote as
+    one: `FiberSet.runtime`'s forker is `Effect.runForkWith`, which evaluates on
+    the calling stack, where v3's `Runtime.runFork` scheduled the first step as
+    a task. A fiber begun through such a set therefore runs its head *inside*
+    whoever asked for it, ahead of wakes already queued on the scheduler — which
+    is how `apps/web/server/voice/service.ts`'s `#begin` came to write a
+    session's word to the desktop from within the exchange's own reading fiber,
+    ahead of the very frame the relay was queued to forward and that the word
+    was about. `Effect.andThen(Effect.yieldNow, …)` at the fork door puts the
+    first step back behind those wakes; the scheduler's buckets are FIFO within
+    a priority, so the order is stated rather than raced for. Reach for it when
+    a fiber's first step must *not* stand in the step that made it — the mirror
+    of `startImmediately: true` above.
 - `packages/devtrace/src/trace-writer.ts` formats a trace line with a plain
   `traceLine(entry, now)` rather than a `Logger`: v4's `Logger.Options.fiber`
   is a live `Fiber` rather than the identifier and annotation maps the old
