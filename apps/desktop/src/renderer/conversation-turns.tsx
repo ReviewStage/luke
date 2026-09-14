@@ -784,6 +784,14 @@ export function ConversationTurns({
   children?: React.ReactNode;
 }): React.JSX.Element {
   let previousAt: number | undefined;
+  // The wait is the thread's last object or nothing: a turn still running is
+  // the newest one, since eve runs a conversation's turns one at a time and
+  // in order, so a pending row above a settled reply is a record eve never
+  // finished writing (an interrupted run), not a run still going. Drawing a
+  // wait there would tell the developer Luke is thinking about words he
+  // already answered, or never will.
+  const last = groups.at(-1);
+  const waiting = turnPending(last?.turn) ? last?.turn : undefined;
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
@@ -827,17 +835,15 @@ export function ConversationTurns({
               ]
             : []),
           ...drawn,
-          ...(pending && group.turn !== undefined
-            ? [
-                <ConversationThinkingRow
-                  key={`${group.turnId}:thinking`}
-                  since={group.turn.startedAt ?? group.turn.queuedAt}
-                  now={now}
-                />,
-              ]
-            : []),
         ];
       })}
+      {waiting !== undefined && last !== undefined ? (
+        <ConversationThinkingRow
+          key={`${last.turnId}:thinking`}
+          since={waiting.startedAt ?? waiting.queuedAt}
+          now={now}
+        />
+      ) : null}
       {children}
     </ol>
   );
