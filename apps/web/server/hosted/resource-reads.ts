@@ -414,16 +414,16 @@ export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConve
           );
         },
         { seqOf: (record) => record.seq, revisionOf: (record) => record.revision },
-      ),
+      ).pipe(Effect.map(Result.succeed)),
       "UnreadableRow",
-      (unreadable) => Effect.succeed(unreadable),
+      (unreadable) => Effect.succeed(Result.fail(unreadable)),
     );
-    if (walked instanceof UnreadableRow) {
+    if (Result.isFailure(walked)) {
       return errorResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, HOSTED_API_ERROR.UNREADABLE_ROW, {
-        unreadableRow: walked.row,
+        unreadableRow: walked.failure.row,
       });
     }
-    const walk: SequenceWalk<StoredMessageRecord> = walked;
+    const walk: SequenceWalk<StoredMessageRecord> = walked.success;
 
     const main: ConversationViewStoredMessage[] = [];
     const observed: ConversationViewObservedConversation[] = [];

@@ -1,5 +1,5 @@
 import {
-  ACTION_RESULT_STATUS,
+  type ACTION_RESULT_STATUS,
   type ActionResult,
   isActionResult,
   isRecord,
@@ -106,30 +106,6 @@ export type ProviderConversationResult =
     }
   | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string };
-
-export async function providerTranscriptResult(
-  rendering: Promise<string | undefined>,
-): Promise<ProviderTranscriptResult> {
-  const transcript = await rendering;
-  return transcript
-    ? { status: ACTION_RESULT_STATUS.ACCEPTED, transcript }
-    : {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "That session's transcript could not be found.",
-      };
-}
-
-export async function providerTranscriptSinceResult(
-  reading: Promise<ProviderTranscriptSinceReading | undefined>,
-): Promise<ProviderTranscriptSinceResult> {
-  const read = await reading;
-  return read
-    ? { status: ACTION_RESULT_STATUS.ACCEPTED, ...read }
-    : {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: "That session's transcript could not be found.",
-      };
-}
 
 /**
  * What became of a creation ask — the same three answers a message gets, for
