@@ -11,7 +11,6 @@ import {
   WingFace,
 } from "@sidecar/panel";
 import {
-  CONVERSATION_VIEW_ACTION_OUTCOME,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
   type ConversationViewToolPart,
@@ -58,24 +57,20 @@ import { ThinkingDots } from "./thinking-dots";
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
  * that opens on its summary; an announcement is Luke's briefing in his own
- * bubble, marked when nobody heard it; and an action is a row composed from
- * the call's arguments and the envelope it answered with, the session it
- * reached a chip that is the row's own press by another hand. What the view
- * classed as a detail — a read, a workspace write, a delegation — and an
- * action whose tool failed outright draw only inside the turn, folded under
- * a count, so the thread reads as what was said and done and the turn's
- * working stays a level down. A turn that carried more than one action folds
- * them under a line that counts them, open while the turn still runs and
- * closed once it has settled, a press holding whichever the reader chose;
- * a turn of one action draws the row itself. A turn the developer did not
- * open — a roster look, a hold's release, a child's end — is Luke's own
- * judgment, and everything it did leads with his face under that name and
+ * bubble, marked when nobody heard it. Every stored tool call of one
+ * assistant message — reads, announcements, actions, even one whose tool
+ * failed — draws inside one fold ahead of that message's words, in the call
+ * order the message stored them. A session action keeps its richer row, built
+ * from the call's arguments and the envelope it answered with; every other
+ * tool call keeps the quieter tool-name-and-state row. A turn the developer
+ * did not open — a roster look, a hold's release, a child's end — is Luke's
+ * own judgment, and everything it did leads with his face under that name and
  * never wears a reply's bubble, so what he decided for himself is never read
  * as something the developer asked. Each of Luke's messages — a reply, a
- * briefing, words on his own judgment: the assistant rows the service takes
- * a verdict on — carries the rating control on its last words, so one
- * message takes one control; the developer's own ask and the brain's note to
- * itself carry none, since the service would refuse a rating on either.
+ * briefing, words on his own judgment: the assistant rows the service takes a
+ * verdict on — carries the rating control on its last words, so one message
+ * takes one control; the developer's own ask and the brain's note to itself
+ * carry none, since the service would refuse a rating on either.
  *
  * Everything here is drawn inside the Conversation subtree, which the session
  * recording blocks whole: a session's title on a chip, a briefing's words, a
@@ -422,62 +417,6 @@ function DetailRow({ part }: { part: StoredToolPart }): React.JSX.Element {
   );
 }
 
-/** What the turn folds a level down: its details, and the actions whose tools failed outright. */
-type FoldedRow =
-  | { readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.DETAIL; readonly part: StoredToolPart }
-  | {
-      readonly kind: typeof CONVERSATION_VIEW_TOOL_KIND.ACTION;
-      readonly row: ToolRow;
-      readonly part: StoredToolPart;
-    };
-
-function foldedLabel(count: number): string {
-  return count === 1 ? "1 detail" : `${count} details`;
-}
-
-/**
- * The turn's working, folded under a count: closed by default, opened on the
- * summary's press, and a native disclosure rather than a control of Luke's
- * own, so a reader opens and closes it with nothing else moving.
- */
-function FoldedRows({
-  rows,
-  judgment,
-  onOpenChat,
-}: {
-  rows: readonly FoldedRow[];
-  judgment: Judgment;
-  onOpenChat?: (identity: SessionIdentity) => void;
-}): React.JSX.Element {
-  return (
-    <li
-      className="conversation-entry"
-      data-speaker={CONVERSATION_ENTRY_SPEAKER.EVENT}
-      data-folded="true"
-    >
-      <div className="conversation-message">
-        <details className="conversation-turn-details">
-          <summary className="conversation-turn-summary">{foldedLabel(rows.length)}</summary>
-          <ol className="conversation-turn-rows">
-            {rows.map((folded) =>
-              folded.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL ? (
-                <DetailRow key={folded.part.toolCallId} part={folded.part} />
-              ) : (
-                <ActionRow
-                  key={folded.part.toolCallId}
-                  row={folded.row}
-                  judgment={judgment}
-                  {...(onOpenChat ? { onOpenChat } : undefined)}
-                />
-              ),
-            )}
-          </ol>
-        </details>
-      </div>
-    </li>
-  );
-}
-
 /** The reader's press on a fold, remembered with the turn state it was made under. */
 export interface FoldChoice {
   readonly pending: boolean;
@@ -496,17 +435,18 @@ export function foldOpen(choice: FoldChoice | undefined, pending: boolean): bool
 }
 
 /**
- * The actions one turn carried, folded under a line that counts them. The
- * fold follows the turn: open while the turn still runs, so what it is doing
- * is watched as it happens, and closed once it has settled, so a finished
- * turn reads as one line; a press holds whichever the reader chose until the
- * turn's own state next changes. The element's toggle fires for the state the
- * turn sets as well as for a press, so a toggle is read as the reader's only
- * when it leaves the element in a state the turn did not ask for; a fold that
- * mistook the turn's word for the reader's would never close. Under Luke's
- * own judgment the line leads with his face, as each row inside it does.
+ * The tool calls one assistant message carried, folded under a line that
+ * counts them. The fold follows the turn: open while the turn still runs, so
+ * what it is doing is watched as it happens, and closed once it has settled,
+ * so a finished message reads as one line; a press holds whichever the reader
+ * chose until the turn's own state next changes. The element's toggle fires
+ * for the state the turn set as well as for a press, so a toggle is read as
+ * the reader's only when it leaves the element in a state the turn did not
+ * ask for; a fold that mistook the turn's word for the reader's would never
+ * close. Under Luke's own judgment the line leads with his face, as each row
+ * inside it does.
  */
-function ActionsFold({
+function ToolCallsFold({
   rows,
   pending,
   judgment,
@@ -527,7 +467,7 @@ function ActionsFold({
       className="conversation-entry"
       data-speaker={voice.speaker}
       data-judgment={judgment}
-      data-actions-fold={pending ? "running" : "settled"}
+      data-tool-calls-fold={pending ? "running" : "settled"}
     >
       <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
@@ -548,7 +488,7 @@ function ActionsFold({
                 <WingFace />
               </span>
             ) : null}
-            {`${rows.length} actions`}
+            {rows.length === 1 ? "1 tool call" : `${rows.length} tool calls`}
           </summary>
           <ol className="conversation-turn-rows">{rows}</ol>
         </details>
@@ -604,26 +544,6 @@ function userVoice(
 }
 
 /**
- * One row as a message hands it to its turn: drawn already, or an action the
- * turn decides the place of — a stamped row of its own, or a row inside the
- * fold, whose line carries the stamp for all of them.
- */
-type DrawnRow =
-  | { readonly element: React.JSX.Element; readonly action?: undefined }
-  | { readonly element?: undefined; readonly action: DrawnAction };
-
-interface DrawnAction {
-  readonly key: string;
-  readonly row: ToolRow;
-  readonly at: number;
-}
-
-interface MessageRows {
-  readonly rows: readonly DrawnRow[];
-  readonly folded: readonly FoldedRow[];
-}
-
-/**
  * What the rating control on a message is handed beside the message itself:
  * the developer's ask the turn answered, where the turn had one, for the
  * draft a thumbs down offers, and the composer that offer opens.
@@ -673,45 +593,40 @@ function ratingControl(
 }
 
 /**
- * One message's rows: a user row is one bubble; an assistant row is its parts
- * in order, each drawn as what it is, with the turn's working set aside for
- * the fold, and the rating control on its last words. Which tool calls are
- * announcements, actions, or details is the view's decision, read back by
- * call id; a call the view did not describe is a detail.
+ * One message's rows: a user row is one bubble; an assistant row is one fold
+ * of its tool calls ahead of the words those calls produced, then its visible
+ * parts in order, with the rating control on its last words. Which tool calls
+ * are announcements, actions, or details is the view's decision, read back by
+ * call id; a call the view did not describe still joins the fold as one of the
+ * message's tool calls.
  */
 function messageRows(
   view: ConversationViewMessage,
   judgment: Judgment,
+  pending: boolean,
   roster: readonly SessionView[],
   rating: RatingContext,
-): MessageRows {
+  onOpenChat?: (identity: SessionIdentity) => void,
+): readonly React.JSX.Element[] {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
-    return {
-      rows: [
-        {
-          element: (
-            <BubbleRow
-              key={message.id}
-              voice={voice}
-              words={userWords(message)}
-              at={view.createdAt}
-              copy={voice === VOICE.YOU}
-            />
-          ),
-        },
-      ],
-      folded: [],
-    };
+    return [
+      <BubbleRow
+        key={message.id}
+        voice={voice}
+        words={userWords(message)}
+        at={view.createdAt}
+        copy={voice === VOICE.YOU}
+      />,
+    ];
   }
-  if (message.role === MESSAGE_ROLE.SYSTEM) return { rows: [], folded: [] };
-  const folded: FoldedRow[] = [];
+  if (message.role === MESSAGE_ROLE.SYSTEM) return [];
   const described = new Map<string, ConversationViewToolPart>(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
-  const rows: DrawnRow[] = [];
-  const draw = (element: React.JSX.Element) => rows.push({ element });
+  const rows: React.JSX.Element[] = [];
+  const toolCalls: React.JSX.Element[] = [];
   // The control stands on the message's last words, so one message takes one.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
     drawsWords(part, described),
@@ -724,7 +639,7 @@ function messageRows(
     const key = `${message.id}:${index}`;
     const placed = index === lastWordsAt ? control : undefined;
     if (isTextPart(part)) {
-      draw(
+      rows.push(
         judgment === JUDGMENT.OWN ? (
           <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={placed} />
         ) : (
@@ -740,16 +655,29 @@ function messageRows(
       return;
     }
     if (isReasoningPart(part)) {
-      draw(<ReasoningRow key={key} text={part.text} />);
+      rows.push(<ReasoningRow key={key} text={part.text} />);
       return;
     }
     if (!isStoredToolPart(part)) return;
     const tool = described.get(part.toolCallId);
+    const row = toolRow(part, roster);
+    toolCalls.push(
+      row !== undefined ? (
+        <ActionRow
+          key={`${key}:tool`}
+          row={row}
+          judgment={judgment}
+          {...(onOpenChat ? { onOpenChat } : undefined)}
+        />
+      ) : (
+        <DetailRow key={`${key}:tool`} part={part} />
+      ),
+    );
     switch (tool?.kind) {
       case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
         const words = announcedWords(part);
         if (words !== undefined) {
-          draw(
+          rows.push(
             <BubbleRow
               key={key}
               voice={VOICE.LUKE}
@@ -762,72 +690,22 @@ function messageRows(
         }
         return;
       }
-      case CONVERSATION_VIEW_TOOL_KIND.ACTION: {
-        const row = toolRow(part, roster);
-        if (row === undefined) {
-          folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.DETAIL, part });
-        } else if (tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED) {
-          folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.ACTION, row, part });
-        } else {
-          rows.push({ action: { key, row, at: view.createdAt } });
-        }
-        return;
-      }
       default:
-        folded.push({ kind: CONVERSATION_VIEW_TOOL_KIND.DETAIL, part });
+        return;
     }
   });
-  return { rows, folded };
-}
-
-/** How many actions a turn carries before they fold under a count rather than standing as rows. */
-const FOLD_FROM_ACTIONS = 2;
-
-/**
- * One turn's rows in order, its actions placed: each a stamped row of its own
- * while there are too few to fold, or all of them inside one fold standing
- * where the first stood, unstamped, under the fold's own stamp. The rows
- * between actions keep their places around it.
- */
-function turnRows(
-  drawn: readonly DrawnRow[],
-  pending: boolean,
-  judgment: Judgment,
-  turnId: string,
-  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
-): readonly React.JSX.Element[] {
-  const open = onOpenChat ? { onOpenChat } : undefined;
-  const actions = drawn.flatMap((row) => (row.action ? [row.action] : []));
-  const first = actions[0];
-  if (first === undefined || actions.length < FOLD_FROM_ACTIONS) {
-    return drawn.map((row) =>
-      row.action ? (
-        <ActionRow
-          key={row.action.key}
-          row={row.action.row}
+  return toolCalls.length === 0
+    ? rows
+    : [
+        <ToolCallsFold
+          key={`${message.id}:tools`}
+          rows={toolCalls}
+          pending={pending}
           judgment={judgment}
-          at={row.action.at}
-          {...open}
-        />
-      ) : (
-        row.element
-      ),
-    );
-  }
-  const fold = (
-    <ActionsFold
-      key={`${turnId}:actions`}
-      rows={actions.map((action) => (
-        <ActionRow key={action.key} row={action.row} judgment={judgment} {...open} />
-      ))}
-      pending={pending}
-      judgment={judgment}
-      at={first.at}
-    />
-  );
-  return drawn.flatMap((row) =>
-    row.action ? (row.action === first ? [fold] : []) : [row.element],
-  );
+          at={view.createdAt}
+        />,
+        ...rows,
+      ];
 }
 
 /** When a turn's rows begin and end: its earliest and latest message, which is what dates the silence around it. */
@@ -837,15 +715,14 @@ function groupSpan(group: ConversationViewTurnGroup) {
 }
 
 /**
- * The thread as turns. Each group's messages draw in sequence, its actions
- * fold under a count once there are two, and the group's working — its
- * details and its failed actions — closes the group under one fold, so a
- * refusal is read inside the turn that tried it and never as a row of its
- * own. A turn still running ends in Luke's wait, driven by the turn row's
- * own status and nothing else. A turn that followed a long silence is dated
- * over it, and whatever the caller hands in as children — the lines still
- * being said, the developer's place, a wait no stored turn carries yet —
- * closes the list, so the thread is one list under one snap point.
+ * The thread as turns. Each group's messages draw in sequence, and every
+ * assistant message that carried tool calls opens with one fold of them
+ * before the words that followed. A turn still running ends in Luke's wait,
+ * driven by the turn row's own status and nothing else. A turn that followed
+ * a long silence is dated over it, and whatever the caller hands in as
+ * children — the lines still being said, the developer's place, a wait no
+ * stored turn carries yet — closes the list, so the thread is one list under
+ * one snap point.
  */
 export function ConversationTurns({
   groups,
@@ -884,11 +761,18 @@ export function ConversationTurns({
         // The ask a rated reply answered is the developer's latest words in
         // the same turn before it; a turn Luke opened himself answered none.
         let ask: string | undefined;
-        const drawn = group.messages.map((message) => {
-          const rows = messageRows(message, judgment, roster, {
-            ask,
-            onOfferFeedback: onOfferRatingFeedback,
-          });
+        const drawn = group.messages.flatMap((message) => {
+          const rows = messageRows(
+            message,
+            judgment,
+            pending,
+            roster,
+            {
+              ask,
+              onOfferFeedback: onOfferRatingFeedback,
+            },
+            onOpenChat,
+          );
           if (
             judgment === JUDGMENT.ASK &&
             message.message.role === MESSAGE_ROLE.USER &&
@@ -898,14 +782,6 @@ export function ConversationTurns({
           }
           return rows;
         });
-        const rows = turnRows(
-          drawn.flatMap((message) => message.rows),
-          pending,
-          judgment,
-          group.turnId,
-          onOpenChat,
-        );
-        const folded = drawn.flatMap((message) => message.folded);
         return [
           ...(dated
             ? [
@@ -916,17 +792,7 @@ export function ConversationTurns({
                 />,
               ]
             : []),
-          ...rows,
-          ...(folded.length === 0
-            ? []
-            : [
-                <FoldedRows
-                  key={`${group.turnId}:folded`}
-                  rows={folded}
-                  judgment={judgment}
-                  {...(onOpenChat ? { onOpenChat } : undefined)}
-                />,
-              ]),
+          ...drawn,
           ...(pending && group.turn !== undefined
             ? [
                 <ConversationThinkingRow
