@@ -232,7 +232,7 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.VOICE,
     label: "Voice",
     description:
-      "Which voice Luke speaks with. Choosing one has Luke say a line in it so you can hear it. A conversation already open keeps the voice it opened with, so a change reaches it from the next conversation on.",
+      "Which voice Luke speaks with. A conversation keeps the voice it opened with, so a change is heard from the next conversation on.",
     values: OFFERED_VOICE_LIST,
     say: (voice) => voice,
     optionLabel: voiceOptionLabel,
