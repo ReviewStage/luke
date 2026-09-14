@@ -1,0 +1,25 @@
+{
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "session.spoken"
+      ]
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "briefing",
+        "arrival",
+        "calendar-onboarding",
+        "launch"
+      ]
+    }
+  },
+  "required": [
+    "type",
+    "kind"
+  ],
+  "additionalProperties": false
+}

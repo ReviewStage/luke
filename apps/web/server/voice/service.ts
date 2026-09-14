@@ -17,6 +17,7 @@ import {
   type SessionCreatedFrame,
   type SessionCreateFrame,
   type SessionOpeningFrame,
+  type SessionSpokenFrame,
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
@@ -564,6 +565,16 @@ export class VoiceService {
               deviceId: opened.deviceId,
               started: opened.started,
               sideband,
+              // The service's one frame to the desktop after the handshake, sent
+              // on a fiber of the service's own set since the exchange reports
+              // it from inside its own; a desktop gone by then takes it nowhere.
+              onSpoken: (kind) => {
+                const frame: SessionSpokenFrame = {
+                  type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+                  kind,
+                };
+                this.#begin(Effect.ignore(desktop.send({ text: JSON.stringify(frame) })));
+              },
             });
       if ("refused" in standing) {
         yield* refuse(HOSTED_API_ERROR.UNAVAILABLE);
@@ -626,9 +637,10 @@ export class VoiceService {
                   }),
                 ),
         // The desktop's reports reach the exchange: its idle, which the
-        // exchange decides the idle close on, and its stop, which the exchange
-        // answers with the one instruction it appends itself. With no exchange
-        // standing a report is read and goes nowhere.
+        // exchange decides the idle close on; its stop, which the exchange
+        // answers with the one instruction it appends itself; and a beat it
+        // decided is owed, which the exchange speaks from the build's script.
+        // With no exchange standing a report is read and goes nowhere.
         onDesktopReport:
           exchange === undefined
             ? undefined
@@ -639,6 +651,9 @@ export class VoiceService {
                     return;
                   case VOICE_SERVICE_FRAME.SESSION_STOP:
                     exchange.service.stopSpeaking();
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_BEAT:
+                    exchange.speakBeat(report);
                     return;
                   default:
                     return;

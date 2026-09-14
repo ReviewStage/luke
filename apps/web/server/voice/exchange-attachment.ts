@@ -81,6 +81,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         createId: deps.createId,
         report: deps.report,
         ...(deps.trace ? { trace: deps.trace } : undefined),
+        ...(session.onSpoken ? { onProactiveSpoken: session.onSpoken } : undefined),
       });
       const adopted = yield* exchange.adopt({
         sessionId: session.sessionId,
