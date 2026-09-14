@@ -700,7 +700,8 @@ button.conversation-action-chip:focus-visible {
   gap: 7px;
 }
 
-.conversation-entry[data-actions-fold] .conversation-message {
+.conversation-entry[data-actions-fold] .conversation-message,
+.conversation-entry[data-tool-calls-fold] .conversation-message {
   justify-content: flex-start;
   padding: 2px 12px;
   text-align: left;

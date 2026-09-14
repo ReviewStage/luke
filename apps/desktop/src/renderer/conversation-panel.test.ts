@@ -81,7 +81,7 @@ test("a line still being said joins the same list as the stored turns, without a
   const streaming = render(SINGLE_TURN, {
     live: [{ kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Checkout is" }],
   });
-  assert.equal(count(streaming, "<ol class="), 1);
+  assert.equal(count(streaming, '<ol class="conversation-list">'), 1);
   assert.equal(count(streaming, 'data-streaming="true"'), 1);
   // The stored turn keeps its stamps and copies; the streaming line adds none.
   assert.equal(
@@ -97,7 +97,7 @@ test("a line still being said joins the same list as the stored turns, without a
     streaming.lastIndexOf('data-streaming="true"') >
       streaming.lastIndexOf('class="conversation-time"'),
   );
-  assert.ok(streaming.lastIndexOf('data-streaming="true"') < streaming.indexOf("</ol>"));
+  assert.ok(streaming.lastIndexOf('data-streaming="true"') < streaming.lastIndexOf("</ol>"));
 });
 
 test("the thread draws no text input, empty or not: Luke is voice only", () => {
@@ -133,7 +133,7 @@ test("a row the service could not read back is said once, under the thread as it
   assert.equal(count(markup, 'class="conversation-notice"'), 1);
   assert.equal(count(render(SINGLE_TURN), 'class="conversation-notice"'), 0);
   // The thread still draws the turn it last read.
-  assert.equal(count(markup, "<ol class="), 1);
+  assert.equal(count(markup, '<ol class="conversation-list">'), 1);
 });
 
 test("the wait's age is worded once it is worth a word", () => {

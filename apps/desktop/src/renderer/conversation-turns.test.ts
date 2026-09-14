@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import {
-  CONVERSATION_VIEW_ACTION_OUTCOME,
-  CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewTurnGroup,
   isStoredToolPart,
   MESSAGE_ROLE,
@@ -59,9 +57,9 @@ function count(markup: string, attribute: string, value: string): number {
   return markup.split(`${attribute}="${value}"`).length - 1;
 }
 
-const FOLD_OPENING = '<details class="conversation-turn-details"';
+const TOOL_FOLD_OPENING = '<details class="conversation-actions-fold"';
 
-test("the fixture scenarios draw every session action kind as a row", () => {
+test("the fixture scenarios draw every session action kind inside tool-call folds", () => {
   const markup = render(fixtureConversationTurns(), OPEN);
   const kinds = new Set<string>();
   for (const match of markup.matchAll(/data-action-kind="([^"]+)"/g)) {
@@ -76,11 +74,13 @@ test("the fixture scenarios draw every session action kind as a row", () => {
     "rename-session",
     "rename-workspace",
   ]);
-  // Both the accepted actions and the three other outcomes stand in the thread.
+  assert.ok(count(markup, "data-tool-calls-fold", "settled") >= 1);
+  assert.ok(count(markup, "data-tool-calls-fold", "running") >= 1);
+  // Both the accepted actions and the other outcomes stand in the tool-call folds.
   assert.ok(count(markup, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED) >= 7);
-  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.UNKNOWN), 1);
-  // One pending call in the refused turn, and one in the turn still running.
+  assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.FAILED), 1);
+  // One pending call in the observed running turn, and one in the main running turn.
   assert.equal(count(markup, "data-tool-status", TOOL_ROW_STATUS.PENDING), 2);
 });
 
@@ -120,44 +120,6 @@ test("a chip is a press exactly where the composition says the session opens, an
   assert.equal(count(withoutPress, "class", "conversation-action-chip"), chips.length);
 });
 
-test("a refused action and the turn's details draw only inside the turn's fold", () => {
-  const groups = fixtureConversationTurns();
-  const folded = groups.filter((group) =>
-    group.messages.some((view) =>
-      view.tools.some(
-        (tool) =>
-          tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL ||
-          (tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION &&
-            tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED),
-      ),
-    ),
-  );
-  assert.equal(folded.length, 2);
-  for (const group of folded) {
-    const markup = render([group], OPEN);
-    assert.equal(count(markup, "data-folded", "true"), 1);
-    const [aboveFold, insideFold] = markup.split(FOLD_OPENING);
-    assert.ok(aboveFold !== undefined && insideFold !== undefined);
-    assert.equal(count(aboveFold, "data-tool-status", TOOL_ROW_STATUS.FAILED), 0);
-    assert.equal(count(aboveFold, "class", "conversation-detail"), 0);
-    const failedActions = group.messages
-      .flatMap((view) => view.tools)
-      .filter(
-        (tool) =>
-          tool.kind === CONVERSATION_VIEW_TOOL_KIND.ACTION &&
-          tool.outcome === CONVERSATION_VIEW_ACTION_OUTCOME.REFUSED,
-      ).length;
-    const details = group.messages
-      .flatMap((view) => view.tools)
-      .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.DETAIL).length;
-    assert.equal(count(insideFold, "data-tool-status", TOOL_ROW_STATUS.FAILED), failedActions);
-    assert.equal(count(insideFold, "class", "conversation-detail"), details);
-  }
-  const unfolded = groups.filter((group) => !folded.includes(group));
-  assert.ok(unfolded.length > 0);
-  assert.equal(count(render(unfolded, OPEN), "data-folded", "true"), 0);
-});
-
 function groupOf(turnId: string): ConversationViewTurnGroup {
   const group = fixtureConversationTurns().find((candidate) => candidate.turnId === turnId);
   assert.ok(group);
@@ -169,28 +131,29 @@ function actionRows(markup: string): number {
   return (markup.match(/data-action-kind="/g) ?? []).length;
 }
 
-test("a turn's actions fold under a count once there are two: open while it runs, closed once settled", () => {
+test("a message's tool calls fold under a count, open while it runs and closed once settled", () => {
   const running = render([groupOf(FIXTURE_TURN.RUNNING)], OPEN);
-  assert.equal(count(running, "data-actions-fold", "running"), 1);
-  assert.equal(count(running, "data-actions-fold", "settled"), 0);
+  assert.equal(count(running, "data-tool-calls-fold", "running"), 1);
+  assert.equal(count(running, "data-tool-calls-fold", "settled"), 0);
   assert.equal((running.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 1);
   assert.equal(actionRows(running), 3);
 
-  // Inside the fold the rows carry no stamp of their own; the fold's line carries the turn's.
-  const [, insideRunning] = running.split('<details class="conversation-actions-fold"');
-  assert.ok(insideRunning !== undefined);
+  // Inside the fold the rows carry no stamp of their own; the fold's line carries the message's.
+  const [runningBefore, insideRunning] = running.split(TOOL_FOLD_OPENING);
+  assert.ok(runningBefore !== undefined && insideRunning !== undefined);
   const [foldBody] = insideRunning.split("</details>");
   assert.ok(foldBody !== undefined);
   assert.equal(count(foldBody, "class", "conversation-time"), 0);
   assert.equal(count(running, "class", "conversation-time"), 2);
+  assert.ok(runningBefore.indexOf('data-speaker="you"') !== -1);
 
   const settled = render([groupOf(FIXTURE_TURN.EVERY_KIND)], OPEN);
-  assert.equal(count(settled, "data-actions-fold", "settled"), 1);
+  assert.equal(count(settled, "data-tool-calls-fold", "settled"), 1);
   assert.equal((settled.match(/<details class="conversation-actions-fold" open/g) ?? []).length, 0);
   assert.equal((settled.match(/<details class="conversation-actions-fold"/g) ?? []).length, 1);
   assert.equal(actionRows(settled), 9);
-  // The fold stands where the first action stood: after the ask and before the reply.
-  const [beforeFold, afterFold] = settled.split('<details class="conversation-actions-fold"');
+  // The fold stands ahead of the reply it explains: after the ask and before Luke's words.
+  const [beforeFold, afterFold] = settled.split(TOOL_FOLD_OPENING);
   assert.ok(beforeFold !== undefined && afterFold !== undefined);
   assert.equal(count(beforeFold, "data-speaker", "you"), 1);
   assert.equal(actionRows(beforeFold), 0);
@@ -211,12 +174,12 @@ test("a fold follows the turn's state, and a press holds only until that state n
   assert.equal(foldOpen({ pending: false, open: false }, true), true);
 });
 
-test("a turn of one action draws the row itself, with no fold and no wait", () => {
+test("even one action is shown inside the tool-call fold, with no wait once settled", () => {
   const markup = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
-  assert.equal((markup.match(/data-actions-fold=/g) ?? []).length, 0);
+  assert.equal(count(markup, "data-tool-calls-fold", "settled"), 1);
   assert.equal(actionRows(markup), 1);
   assert.equal(count(markup, "data-thinking", "true"), 0);
-  assert.equal(count(markup, "data-judgment", "ask"), 1);
+  assert.equal(count(markup, "data-judgment", "ask"), 2);
 });
 
 test("a running turn ends in Luke's wait, driven by the turn row's status alone", () => {
@@ -236,11 +199,11 @@ test("a running turn ends in Luke's wait, driven by the turn row's status alone"
 
 test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
   const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
-  assert.equal(count(own, "data-judgment", "own"), 2);
+  assert.equal(count(own, "data-judgment", "own"), 3);
   assert.equal(count(own, "data-judgment", "ask"), 0);
   assert.equal(count(own, "data-own-words", "true"), 1);
   assert.equal(count(own, "data-speaker", "luke"), 0);
-  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 2);
+  assert.equal((own.match(/class="luke-face"/g) ?? []).length, 3);
 
   const asked = render([groupOf(FIXTURE_TURN.SINGLE)], OPEN);
   assert.equal(count(asked, "data-judgment", "own"), 0);
@@ -294,6 +257,10 @@ test("the words an announce call carries are its briefing, and a detail's label 
   assert.equal(announcedWords(announce), "The fixture session is waiting on a permission prompt.");
   assert.equal(announcedWords({ ...announce, input: { text: "not a briefing" } }), undefined);
   assert.equal(detailToolLabel("read_transcript"), "read transcript");
+  const markup = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
+  const foldAt = markup.indexOf(TOOL_FOLD_OPENING);
+  const bubbleAt = markup.indexOf('data-speaker="luke"');
+  assert.ok(foldAt !== -1 && bubbleAt !== -1 && foldAt < bubbleAt);
 });
 
 test("a developer's row is a sent bubble with a copy control, and a note the brain wrote is a quiet row", () => {
