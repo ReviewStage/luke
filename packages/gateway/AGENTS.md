@@ -16,7 +16,9 @@ host that answers it and the client that sends it read the same words from the
 contract rather than from each other.
 
 A retired method is removed from the table rather than kept as a name no handler
-answers — it is then refused as unknown exactly like one that never existed.
+answers — it is then refused as unknown exactly like one that never existed. An
+event kind no host emits leaves `GATEWAY_EVENT` the same way, and the tests speak
+names the host answers rather than a vocabulary kept for them.
 
 ## The goldens are the envelope
 

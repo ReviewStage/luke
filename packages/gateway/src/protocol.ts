@@ -53,18 +53,10 @@ const GATEWAY_METHODS = {
   HELLO: { name: "gateway.hello", mutates: false },
   RECONNECT: { name: "gateway.reconnect", mutates: false },
   SHUTDOWN: { name: "gateway.shutdown", mutates: true },
-  CONVERSATION_DELETE: { name: "conversation.delete", mutates: true },
   /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
   CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
   /** The developer's thumb on one of Luke's messages, carried to the service as a rating event beside it. */
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
-  RUN_SUBMIT: { name: "run.submit", mutates: true },
-  RUN_CANCEL: { name: "run.cancel", mutates: true },
-  RUN_WAIT: { name: "run.wait", mutates: false },
-  RUN_LIST: { name: "run.list", mutates: false },
-  CHILD_LIST: { name: "child.list", mutates: false },
-  MEMORY_STATUS: { name: "memory.status", mutates: false },
-  CONFIGURATION_UPDATE: { name: "configuration.update", mutates: true },
   NODE_REGISTER: { name: "node.register", mutates: true },
   NODE_UNREGISTER: { name: "node.unregister", mutates: true },
   NODE_INVOKE: { name: "node.invoke", mutates: true },
@@ -611,13 +603,8 @@ export const GatewayResponseSchema = Schema.Union([
 export type GatewayResponse = typeof GatewayResponseSchema.Type;
 
 export const GATEWAY_EVENT = {
-  RUNS_CHANGED: "runs.changed",
   /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
   CONVERSATION_VIEW_CHANGED: "conversationView.changed",
-  DIRECTORY_CHANGED: "directory.changed",
-  CHILD_CHANGED: "child.changed",
-  CONFIGURATION_CHANGED: "configuration.changed",
-  OBSERVATION_CHANGED: "observation.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",
