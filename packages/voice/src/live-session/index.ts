@@ -21,4 +21,4 @@ export {
   type LiveSessionServiceOptions,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
-export type { BeatTurn } from "./proactive-queue.js";
+export type { BeatKind, BeatTurn } from "./proactive-queue.js";

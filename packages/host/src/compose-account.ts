@@ -46,6 +46,8 @@ interface AccountLinks {
   readonly stopCapabilities: Effect.Effect<void>;
   /** The calendar step of onboarding, raised before the account event so the gate already stands when the renderer learns of the sign-in. */
   onFirstSignIn: () => void;
+  /** The arrival beat's own moment, recorded after the account event. */
+  onFirstSignInArrival: () => void;
   retireBrain: () => Effect.Effect<void>;
   rebuildBrain: () => Effect.Effect<void>;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
@@ -176,7 +178,10 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
     kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
     yield* settings.emitSettings();
     yield* emitSessionReplay;
-    if (signedIn && !wasSignedIn) settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+    if (signedIn && !wasSignedIn) {
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+      links.onFirstSignInArrival();
+    }
   });
 
   /**

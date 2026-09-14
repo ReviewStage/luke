@@ -108,6 +108,21 @@ export interface CalendarsComposer extends Composer {
 export interface CalendarsDependencies {
   settings: SettingsComposer;
   observationGate: () => boolean;
+  /**
+   * Told after every onboarding write, once the record this run reads holds
+   * the moment: the live composer re-decides the onboarding beats on it, since
+   * the introduction's completion, the key gate, and the calendar step each
+   * change which beat is owed. Composed after this composer, so it is handed
+   * in as a hand rather than a link.
+   */
+  onOnboardingWritten?: () => void;
+  /**
+   * Told each time the announcement hold is read again for the panel: the
+   * live composer asks for a beat the hold was keeping when it finds the hold
+   * lifted, since a beat is not asked of the service while a meeting or the
+   * pause holds speech.
+   */
+  onAnnouncementHoldRead?: () => void;
 }
 
 /** What the calendars concern reaches in a concern built after it. */
@@ -128,7 +143,7 @@ interface CalendarsLinks {
 export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(function* (
   dependencies: CalendarsDependencies,
 ): Effect.fn.Return<CalendarsComposer, never, HostKernelTag | FileSystem.FileSystem | Scope.Scope> {
-  const { settings, observationGate } = dependencies;
+  const { settings, observationGate, onOnboardingWritten, onAnnouncementHoldRead } = dependencies;
   const kernel = yield* HostKernelTag;
   const { runMode, report, now } = kernel;
   const settingsStore = settings.store;
@@ -262,6 +277,7 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
         // offered while this write was out stands in memory already and is
         // not on the disk the merge above read from.
         onboardingState = { ...persisted, ...onboardingState, ...moment };
+        onOnboardingWritten?.();
         const owed = calendarOnboardingGateOwed();
         const introduction = spokenIntroductionOwed();
         if (introduction !== announcedIntroductionOwed) {
@@ -368,7 +384,10 @@ export const composeCalendars = /* @__PURE__ */ Effect.fn("composeCalendars")(fu
    * completion still owe.
    */
   const refreshAnnouncementHold: Effect.Effect<void> = Effect.suspend(() =>
-    Effect.asVoid(announcementsQuietNow(now())),
+    Effect.andThen(
+      announcementsQuietNow(now()),
+      Effect.sync(() => onAnnouncementHoldRead?.()),
+    ),
   );
 
   /**

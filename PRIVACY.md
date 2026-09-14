@@ -468,7 +468,17 @@ Send.
   devices opened it (the Mac names its own device row on the handshake, and
   the service accepts that name only for a row your account holds), so a
   briefing that device claims is spoken into that session and no other. With your own OpenAI key the Mac
-  reaches OpenAI directly and our service sees nothing of the session. Luke's judgment is a separate call
+  reaches OpenAI directly and our service sees nothing of the session. One
+  such session opens on its own at every signed-in launch, after the first
+  sign-in's arrival beat has played, so Luke can greet you: your Mac decides
+  the greeting is owed and asks our service to speak it, and the service
+  speaks a fixed script into which travels only the first word of the name
+  your account provider reported, never a session's title or anything else
+  about your work; the two onboarding lines (that you are all set, and the
+  ask to connect a calendar) reach the service the same way, carrying at most
+  the title of one working session and the name of your talk key, and each
+  waits like an announcement while a meeting or the Announce switch holds it.
+  Luke's judgment is a separate call
   to OpenAI's Responses API, made when his periodic look
   wakes the conversation following that session and when
   you ask him something: it carries that conversation's working memory —

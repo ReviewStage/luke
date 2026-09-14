@@ -1,4 +1,5 @@
-import { PRODUCT_EVENT } from "@sidecar/analytics";
+import { PRODUCT_EVENT, productSignInAge } from "@sidecar/analytics";
+import { ACCOUNT_STATUS } from "@sidecar/credentials";
 import { isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import {
   carried,
@@ -11,12 +12,27 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import { VOICE_SOURCE_COUNTED_AS } from "@sidecar/settings";
+import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
+import { SESSION_STATUS } from "@sidecar/session";
+import {
+  APP_SETTING_SCHEMA,
+  VOICE_SOURCE_COUNTED_AS,
+  voiceHotkeyCandidates,
+  voiceHotkeyLabel,
+} from "@sidecar/settings";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
-import { LiveSessionHolder } from "@sidecar/voice/live-session";
+import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, type Scope } from "effect";
+import { Effect, Queue, Result, type Scope } from "effect";
+import {
+  arrivalBeatOwed,
+  countsFirstAnnouncement,
+  firstNameOf,
+  launchGreetingOwed,
+} from "./arrival-flow.js";
 import type { AccountComposer } from "./compose-account.js";
+import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
@@ -25,13 +41,38 @@ import { voiceRoster } from "./voice-roster.js";
 
 export interface LiveComposer extends Composer {
   readonly service: LiveSessionHolder;
+  /**
+   * The onboarding beats and the launch greeting, asked for when their
+   * deterministic reason stands. Every caller asks and waits for nothing — the
+   * account gate, the launch, the onboarding record's writes, and the hold's
+   * reads are all synchronous or fire-and-forget — so the ask offers the
+   * decision's own effect to this composer's queue and answers at once. A
+   * decision runs one at a time on a fiber of this composer's scope: a quit
+   * ends one in flight, and one that fails takes no caller and no later ask
+   * with it.
+   */
+  requestOnboardingBeat: () => void;
+  /** Asked when the announcement hold was read again: the beat the hold kept is asked for once it has lifted. */
+  onAnnouncementHoldRead: () => void;
+  /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
+  seedArrivalOnFirstSignIn: () => void;
+  /** Every beat not yet sent is dropped; a sign-out is no reason to keep one waiting for a session. */
+  withdrawBeats: () => void;
 }
 
 export interface LiveDependencies {
   settings: SettingsComposer;
   account: AccountComposer;
   observation: ObservationComposer;
+  calendars: CalendarsComposer;
 }
+
+/** The three beats this side decides, each withdrawn together at a sign-out. */
+const BEAT_KINDS: readonly BeatKind[] = [
+  PROACTIVE_SPEECH_KIND.ARRIVAL,
+  PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+  PROACTIVE_SPEECH_KIND.LAUNCH,
+];
 
 /**
  * The GPT Live session as one concern of the host: the `voice.*` methods the
@@ -41,20 +82,56 @@ export interface LiveDependencies {
  * and briefing is appended by the service's own exchange over the same
  * socket, and the record is the account's on the service. What this side
  * still does is create the session for the peer's offer, seeded from the
- * desk as this Mac sees it; end it on the peer's hang-up or the drain; send
- * the stop key's one instruction; and carry the peer's idle to the service,
- * which decides the idle close. It reaches no brain and writes no record, so
- * it needs no seam for either. The holder stands for this composition's own
- * scope, which is the host's, and its graceful close stays a drain step of
- * `compose-host.ts` rather than a finalizer, so a quit ends the session
- * inside its own deadline.
+ * desk as this Mac sees it; end it on the peer's hang-up or the drain; carry
+ * the peer's idle and the stop key to the service; and decide the three
+ * beats Luke says unprompted on this Mac's own reasons — the arrival beat
+ * once per install, the calendar line while the gate shows, the launch
+ * greeting once per run — asking the service to speak each from the build's
+ * script with the bounded values the script may mention, and opening a muted
+ * session for one when none stands. The words are the service's; what the
+ * service tells back, by kind, is that a turn was spoken to its end, which
+ * is what settles the arrival's moment and the first-announcement count
+ * here. It reaches no brain and writes no record, so it needs no seam for
+ * either. The holder stands for this composition's own scope, which is the
+ * host's, and its graceful close stays a drain step of `compose-host.ts`
+ * rather than a finalizer, so a quit ends the session inside its own
+ * deadline.
  */
 export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   dependencies: LiveDependencies,
 ): Effect.fn.Return<LiveComposer, never, HostKernelTag | Scope.Scope> {
-  const { settings, account, observation } = dependencies;
+  const { settings, account, observation, calendars } = dependencies;
   const kernel = yield* HostKernelTag;
-  const { runMode } = kernel;
+  const { now, runMode } = kernel;
+
+  // What a caller asked for and nothing waits on: each decision is taken in
+  // turn by a fiber of this composer's scope, and one that dies is written
+  // down rather than left to end the fiber every later ask needs.
+  const asks = yield* Queue.unbounded<Effect.Effect<void>>();
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.flatMap(Queue.take(asks), (ask) =>
+        Effect.catchDefect(ask, (defect) => Effect.logError("an onboarding beat failed", defect)),
+      ),
+    ),
+  );
+
+  function markFirstAnnouncementSpoken(): void {
+    const onboardingState = calendars.onboarding();
+    if (!countsFirstAnnouncement(onboardingState)) return;
+    const signedInAt = onboardingState?.arrivalSignedInAt;
+    const at = now();
+    const signedInAtMs = signedInAt !== undefined ? Date.parse(signedInAt) : Number.NaN;
+    if (Number.isFinite(signedInAtMs)) {
+      settings.recordProductEvent(PRODUCT_EVENT.VOICE_FIRST_ANNOUNCEMENT, {
+        sign_in_age: productSignInAge(at - signedInAtMs),
+      });
+    }
+    calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
+  }
+
+  /** The beats spoken to the end this run: each is one line, said once per run whatever re-asks it. */
+  const spokenThisRun = new Set<BeatKind>();
 
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
@@ -71,6 +148,159 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
         session_source: VOICE_SOURCE_COUNTED_AS[account.voiceCapabilities.voiceSource],
       });
     },
+    // The service's word that a turn was spoken to its end, by kind: the
+    // counts and the arrival's moment are this side's record, kept here as
+    // they were when the queue that spoke them stood on this Mac.
+    onSpoken: (kind) => {
+      if (kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+        settings.recordProductEvent(PRODUCT_EVENT.VOICE_ANNOUNCEMENT_SPEAK, {});
+        markFirstAnnouncementSpoken();
+        return;
+      }
+      spokenThisRun.add(kind);
+      if (kind === PROACTIVE_SPEECH_KIND.ARRIVAL && arrivalBeatOwed(calendars.onboarding())) {
+        calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
+      }
+    },
+  });
+
+  /**
+   * The arrival beat's observed values: one working session's title, read
+   * from the same roster the rows draw, and the talk key worded for a
+   * sentence, read from the stored choice the desktop registers first. The
+   * key is suggested only while voice could actually take it.
+   */
+  const arrivalBeat = Effect.gen(function* () {
+    const working = observation
+      .rosterForClients()
+      .find((session) => session.status === SESSION_STATUS.WORKING);
+    const talkKey = voiceHotkeyCandidates(
+      yield* Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.voiceHotkey.field)),
+    )[0];
+    const beat: SessionBeatFrame = {
+      type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+      kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+      ...(working ? { sessionTitle: working.title } : undefined),
+      ...(talkKey === undefined ? undefined : { talkKeyLabel: voiceHotkeyLabel(talkKey) }),
+    };
+    return beat;
+  });
+
+  /**
+   * The launch greeting's one observed value is the signed-in account's
+   * first name, read from the snapshot the host already holds and never
+   * from a session. Once per run means spoken once per run: an ask a hold
+   * took back or a session lost before speaking it stands again, and the
+   * holder refuses a second ask while one is still waiting or with the
+   * service.
+   */
+  function launchGreeting(): SessionBeatFrame {
+    const snapshot = account.snapshot();
+    const name = snapshot.status === ACCOUNT_STATUS.SIGNED_IN ? snapshot.name : undefined;
+    const firstName = firstNameOf(name);
+    return {
+      type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+      kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+      ...(firstName === undefined ? undefined : { firstName }),
+    };
+  }
+
+  /**
+   * Whether a beat was owed and kept back by the hold, so the hold's next
+   * read that finds it lifted asks again, and a read that finds it lifted
+   * with nothing kept asks for nothing.
+   */
+  let beatHeld = false;
+
+  /**
+   * Whether speech is held right now, or cannot yet be known to be free: a
+   * meeting or the pause, as the hold reads them, and, while meetings are to
+   * be kept quiet through, the moment before the first calendar pass has
+   * said whether one stands, since a launch into a meeting must not speak
+   * before the pass that would have held it.
+   */
+  const speechHeld = Effect.gen(function* () {
+    const at = now();
+    if (yield* calendars.announcementsQuietNow(at)) return true;
+    const quietDuringMeetings = yield* Effect.orDie(
+      settings.store.get(APP_SETTING_SCHEMA.quietDuringMeetings.field),
+    );
+    return quietDuringMeetings && (yield* calendars.meetingQuietUntil(at)) === undefined;
+  });
+
+  /**
+   * Which beat is owed, decided from this Mac's own record and nothing the
+   * service knows: one ask at a time, in the order the onboarding runs. A
+   * hold — a meeting, the pause, the first pass not yet in — keeps a beat
+   * from being asked at all rather than sending it to a service that would
+   * speak it through the hold; the hold's next read that finds it lifted
+   * asks again.
+   */
+  const onboardingBeat = Effect.gen(function* () {
+    if (!runMode.requiresAccount || !account.signedIn()) return;
+    if (!account.voiceCapabilities.liveSessions) return;
+    // The greeting comes first and speaks in its own session; the beats are
+    // asked for again by the completion that takes the introduction down.
+    if (calendars.introductionOwed()) return;
+    // The key step has no beat of its own: the gate says on screen what it
+    // asks, and the calendar beat waits its turn behind it.
+    if (calendars.keyGateOwed()) return;
+    if (yield* speechHeld) {
+      beatHeld = true;
+      return;
+    }
+    beatHeld = false;
+    if (yield* calendars.gateOfferable()) {
+      if (spokenThisRun.has(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING)) return;
+      service.speakBeat({
+        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+        kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+      });
+      return;
+    }
+    // The gate settled with the calendar line still waiting for a session: its reason has gone.
+    service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
+    if (arrivalBeatOwed(calendars.onboarding())) {
+      // The beat's own decision waits on the pass, so the pass is yielded
+      // here rather than run: a link that cannot wait for it offers this
+      // whole effect to the queue above instead.
+      yield* observation.loop.refresh;
+      if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
+      // The pass took time, and the hold's reads wait behind this decision
+      // on the same queue: a hold that began during the pass is read here.
+      if (yield* speechHeld) {
+        beatHeld = true;
+        return;
+      }
+      service.speakBeat(yield* arrivalBeat);
+      return;
+    }
+    service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
+    // The launch that heard the arrival has been greeted by it: the arrival's
+    // own write asks again here, and must not find the greeting owed.
+    if (spokenThisRun.has(PROACTIVE_SPEECH_KIND.ARRIVAL)) return;
+    if (
+      !launchGreetingOwed(calendars.onboarding(), spokenThisRun.has(PROACTIVE_SPEECH_KIND.LAUNCH))
+    )
+      return;
+    service.speakBeat(launchGreeting());
+  });
+
+  /**
+   * The hold read again. A hold that has begun takes back every beat still
+   * waiting for a session (one the service already has is the service's to
+   * speak) and keeps it as held; a read that finds speech free asks again
+   * for what was kept, and for nothing otherwise.
+   */
+  const holdRead = Effect.gen(function* () {
+    if (yield* speechHeld) {
+      for (const kind of BEAT_KINDS) {
+        if (service.withdrawBeat(kind)) beatHeld = true;
+      }
+      return;
+    }
+    if (!beatHeld) return;
+    yield* onboardingBeat;
   });
 
   const methods: GatewayMethodTable = {
@@ -141,6 +371,19 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   return {
     methods,
     service,
+    requestOnboardingBeat: () => {
+      Queue.offerUnsafe(asks, onboardingBeat);
+    },
+    onAnnouncementHoldRead: () => {
+      Queue.offerUnsafe(asks, holdRead);
+    },
+    seedArrivalOnFirstSignIn: () => {
+      if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
+      calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
+    },
+    withdrawBeats: () => {
+      for (const kind of BEAT_KINDS) service.withdrawBeat(kind);
+    },
     // The session itself is closed by the drain, inside the quit's deadline,
     // before any composer stops; nothing is left here to give back.
     lifetime: Effect.void,
