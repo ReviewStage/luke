@@ -63,14 +63,21 @@ exchange stands on the voice service: every spoken ask is admitted through
 socket the relay pipes, and the account's record is the service's. What this
 package keeps is `LiveSessionHolder`, which creates the session for the peer's
 offer (seeded from the desk and the recent Conversation as this Mac sees them),
-ends it on the peer's hang-up or the drain, and carries the peer's idle and the
-stop key to the service as `session.activity` and `session.stop`, since the
-idle decision is made against appends only the service made and the stop's
-instruction is the service's to append. It appends nothing at all and wants no
-session of its own: the `wanted` phase is never announced from here, and nothing on this
-side speaks unprompted. The sessions route closes a desktop socket that sends
-any other frame, so a re-wired local exchange is refused at the relay rather
-than heard twice.
+ends it on the peer's hang-up or the drain, and carries the peer's idle, the
+stop key, and the onboarding beats to the service as `session.activity`,
+`session.stop`, and `session.beat`, since the idle decision is made against
+appends only the service made, the stop's instruction is the service's to
+append, and every beat's words are the build's script the service speaks. It
+appends nothing at all. What it decides is which beat is owed (`compose-live.ts`
+over `arrival-flow.ts` and the onboarding record: the arrival beat once per
+install, the calendar line while the gate shows, the launch greeting once per
+run after the arrival has played, none of them under a hold), and it announces
+`wanted` for one so the peer opens a muted session to say it into; the
+service's `session.spoken` frame is what settles `arrivalSpokenAt` and the
+first-announcement count, which stay this side's. Nothing on this side speaks
+unprompted. The sessions route closes a desktop socket that sends any other
+frame, so a re-wired local exchange is refused at the relay rather than heard
+twice.
 
 The stop is asked for only while Luke is speaking, since the instruction the
 service appends for it is standing text a silent model would read as a rule for
