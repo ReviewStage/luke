@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Fiber, Option, Redacted, TestClock } from "effect";
+import { Effect, Fiber, Option, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   EVE_HEALTH_PATH,
@@ -39,8 +40,8 @@ const get = (path: string, expected?: number): PlannedRequest => ({
 
 const answer = (status: number, headers: Readonly<Record<string, string>> = {}) => ({
   status,
-  vercelError: Option.fromNullable(headers["x-vercel-error"]),
-  location: Option.fromNullable(headers.location),
+  vercelError: Option.fromNullishOr(headers["x-vercel-error"]),
+  location: Option.fromNullishOr(headers.location),
 });
 
 test("whose answer it is decides the verdict: the platform's header, the SSO redirect, a 5xx, or the table", () => {
@@ -233,7 +234,7 @@ it.effect("a dropped connection is retried and an answer is not", () =>
       if (calls === 1) throw new Error("connection reset");
       return new Response("{}", { status: 401, headers: { "x-vercel-cache": "MISS" } });
     });
-    const fiber = yield* Effect.fork(
+    const fiber = yield* Effect.forkChild(
       probeDeployment({ address: PREVIEW, bypassSecret: Option.none() }, [
         get("/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED),
       ]).pipe(Effect.provide(layer)),

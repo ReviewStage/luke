@@ -1,22 +1,22 @@
 {
   "type": "object",
   "properties": {
-    "code": {
-      "type": "string",
-      "enum": [
-        "network-error"
-      ]
-    },
     "_tag": {
       "type": "string",
       "enum": [
         "NetworkErrorRefusal"
       ]
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "network-error"
+      ]
     }
   },
   "required": [
-    "code",
-    "_tag"
+    "_tag",
+    "code"
   ],
   "additionalProperties": false
 }

@@ -1,12 +1,11 @@
+import { Effect, Layer, Redacted } from "effect";
 import {
-  type HttpApp,
   type HttpMethod,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect, Redacted } from "effect";
+} from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   type HostedActionEffect,
   handleAgentAction,
@@ -17,8 +16,9 @@ import {
   handleWorkspaceAction,
 } from "./hosted/action-session.js";
 import { HostedEnvironment } from "./hosted/environment.js";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { type HostedVaultRoute, hostedVaultSeams } from "./hosted/vault-route.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The actions surface as one route group: the six endpoints through which the
@@ -100,44 +100,49 @@ const actionEncryptionSecret: Effect.Effect<string | undefined, never, HostedEnv
  * runs on this group's fiber and reads the connection the edge already
  * opened; a failed statement is a defect here, as a rejected promise was.
  */
-function actionPassthrough(handle: HostedActionHandler): HttpApp.Default<never, ActionsServices> {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const encryptionSecret = yield* actionEncryptionSecret;
-    const answer = yield* Effect.orDie(handle({ ...hostedVaultSeams, encryptionSecret, request }));
-    return incoming.method === BODYLESS_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+const actionPassthrough = /* @__PURE__ */ Effect.fn("actionPassthrough")(function* (
+  handle: HostedActionHandler,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  ActionsServices | HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const encryptionSecret = yield* actionEncryptionSecret;
+  const answer = yield* Effect.orDie(handle({ ...hostedVaultSeams, encryptionSecret, request }));
+  return incoming.method === BODYLESS_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /**
  * The group, built from the handlers named. A path outside the six answers
  * the hosted vocabulary's own `not-found`, since nothing routes another path
  * to one of these functions.
  */
-export function buildActionsApp(
-  handlers: ActionsGroupHandlers,
-): HttpApp.Default<never, ActionsServices> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.AGENT, actionPassthrough(handlers.agent)),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.RENAME_SESSION, actionPassthrough(handlers.renameSession)),
-    HttpRouter.all(
+export function buildActionsApp(handlers: ActionsGroupHandlers): WebRoutes<ActionsServices> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.MESSAGE, actionPassthrough(handlers.message)),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.CONTROL, actionPassthrough(handlers.control)),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.AGENT, actionPassthrough(handlers.agent)),
+    HttpRouter.add(
+      ANY_METHOD,
+      ACTIONS_ROUTE_PATH.RENAME_SESSION,
+      actionPassthrough(handlers.renameSession),
+    ),
+    HttpRouter.add(
+      ANY_METHOD,
       ACTIONS_ROUTE_PATH.RENAME_WORKSPACE,
       actionPassthrough(handlers.renameWorkspace),
     ),
-    HttpRouter.all(ACTIONS_ROUTE_PATH.WORKSPACE, actionPassthrough(handlers.workspace)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+    HttpRouter.add(ANY_METHOD, ACTIONS_ROUTE_PATH.WORKSPACE, actionPassthrough(handlers.workspace)),
+    hostedNotFoundRoute,
   );
 }
 
 /** The deployment's own group, wired to the real endpoints every route file answered with before. */
-export function actionsApp(): HttpApp.Default<never, ActionsServices> {
+export function actionsApp(): WebRoutes<ActionsServices> {
   return buildActionsApp({
     message: handleMessageAction,
     control: handleControlAction,

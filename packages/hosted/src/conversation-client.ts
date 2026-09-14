@@ -1,8 +1,8 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { UnreadableRow } from "@sidecar/session";
 import { HTTP_METHOD, type UnparsedWireValue, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -144,7 +144,7 @@ export class HostedConversationClient {
     HttpClient.HttpClient
   > {
     return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
-      Either.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
+      Result.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
     );
   }
 
@@ -152,7 +152,7 @@ export class HostedConversationClient {
     page: ReadPageQuery = {},
   ): Effect.Effect<ConversationReadResult<ConversationEventsAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
-      Either.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
+      Result.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
     );
   }
 
@@ -160,7 +160,7 @@ export class HostedConversationClient {
     page: ReadPageQuery = {},
   ): Effect.Effect<ConversationReadResult<BrainTurnsAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
-      Either.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
+      Result.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
     );
   }
 
@@ -192,7 +192,7 @@ export class HostedConversationClient {
     messageId: string,
     request: HostedMessageRatingRequest,
   ): Effect.Effect<ConversationRateResult, never, HttpClient.HttpClient> {
-    const admitted = Either.getOrUndefined(
+    const admitted = Result.getOrUndefined(
       readEither(hostedMessageRatingRequestSchema)(ratingRecord(request)),
     );
     if (admitted === undefined) return Effect.succeed(RATE_UNANSWERED);
@@ -208,10 +208,10 @@ export class HostedConversationClient {
       if (payload === undefined) return RATE_UNANSWERED;
       const wire = unparsedWire(payload);
       if (answer.response.ok) {
-        const recorded = Either.getOrUndefined(readEither(hostedMessageRatingAnswerSchema)(wire));
+        const recorded = Result.getOrUndefined(readEither(hostedMessageRatingAnswerSchema)(wire));
         return recorded === undefined ? RATE_UNANSWERED : { ok: true, answer: recorded };
       }
-      switch (Either.getOrUndefined(readEither(hostedErrorSchema)(wire))) {
+      switch (Result.getOrUndefined(readEither(hostedErrorSchema)(wire))) {
         case HOSTED_API_ERROR.NOT_FOUND:
           return { ok: false, refusal: CONVERSATION_RATE_REFUSAL.NOT_FOUND };
         case HOSTED_API_ERROR.NOT_RATEABLE:
@@ -238,7 +238,7 @@ export class HostedConversationClient {
         const value = read(wire);
         return value === undefined ? UNANSWERED : { ok: true, answer: value };
       }
-      const row = Either.getOrUndefined(readEither(unreadableRowRefusalSchema)(wire));
+      const row = Result.getOrUndefined(readEither(unreadableRowRefusalSchema)(wire));
       return row === undefined
         ? UNANSWERED
         : { ok: false, failure: CONVERSATION_READ_FAILURE.UNREADABLE_ROW, row };

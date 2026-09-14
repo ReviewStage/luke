@@ -402,9 +402,7 @@ function memoryDefinition() {
       tools: Object.values(NOTEBOOK_MEMORY_TOOL).map((name) => ({
         name,
         description: name,
-        inputSchema: EffectSchema.make(
-          EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
-        ),
+        inputSchema: EffectSchema.make(EffectSchema.Struct({}).ast),
         effect: TOOL_EFFECT.READ,
         execute: (input, context) =>
           Effect.sync(() => {

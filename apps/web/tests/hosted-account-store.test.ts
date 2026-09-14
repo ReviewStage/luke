@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
   deleteAccount,
   readAccountPreferences,
@@ -49,7 +49,7 @@ const countRows = (userId: string) =>
     };
   });
 
-it.layer(testSqlClient)("the account group's seams over @effect/sql", (it) => {
+it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (it) => {
   it.effect("an account that stored nothing reads as nothing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

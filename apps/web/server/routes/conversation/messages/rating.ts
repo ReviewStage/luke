@@ -1,4 +1,4 @@
 import { ratingApp } from "../../../rating-app.js";
-import { routeFromHttpApp } from "../../../route-effect.js";
+import { routeFromHttpRouter } from "../../../route-effect.js";
 
-export default routeFromHttpApp(ratingApp());
+export default routeFromHttpRouter(ratingApp());

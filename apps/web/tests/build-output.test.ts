@@ -44,7 +44,7 @@ const FunctionConfigSchema = Schema.Struct({
   shouldAddHelpers: Schema.Boolean,
   maxDuration: Schema.optional(Schema.Number),
 });
-const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.parseJson(FunctionConfigSchema));
+const decodeFunctionConfig = Schema.decodeUnknownSync(Schema.fromJsonString(FunctionConfigSchema));
 
 const LOAD_MODULE = "await import(process.argv[1]);";
 

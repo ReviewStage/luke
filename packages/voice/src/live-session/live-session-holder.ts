@@ -22,18 +22,7 @@ import {
   seedItemTokens,
 } from "@sidecar/live";
 import type { ConversationEntry } from "@sidecar/session";
-import {
-  type Clock,
-  Deferred,
-  Effect,
-  ExecutionStrategy,
-  Exit,
-  Fiber,
-  FiberSet,
-  Queue,
-  Scope,
-  Stream,
-} from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Queue, Scope, Stream } from "effect";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import {
@@ -101,7 +90,7 @@ interface HeldSession {
   readonly sideband: LiveSideband;
   readonly opened: LiveSessionOpened;
   /** The scope this one session stands in, closed by the fiber that reads it once the end is decided. */
-  readonly scope: Scope.CloseableScope;
+  readonly scope: Scope.Closeable;
   started: boolean;
   ended: boolean;
   /** The graceful close under way, so a second ask to end the session waits on the first. */
@@ -154,8 +143,8 @@ export class LiveSessionHolder {
       const holder = new LiveSessionHolder(
         options,
         tasks,
-        yield* Effect.clock,
-        yield* Scope.fork(scope, ExecutionStrategy.sequential),
+        yield* Clock.Clock,
+        yield* Scope.fork(scope, "sequential"),
       );
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
@@ -166,7 +155,7 @@ export class LiveSessionHolder {
 
   /** Begins what nothing waits for, on the holder's own fiber. */
   #start(effect: Effect.Effect<void>): void {
-    Queue.unsafeOffer(this.#tasks, effect);
+    Queue.offerUnsafe(this.#tasks, effect);
   }
 
   /** Whether a session stands that the stop and the reports can reach. */
@@ -185,7 +174,7 @@ export class LiveSessionHolder {
   createSession(
     sdpOffer: string,
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#held) yield* this.endSession();
       const source = this.#options.source();
       if (!source) {
@@ -194,9 +183,9 @@ export class LiveSessionHolder {
       }
       const seeded = rosterSeed(
         this.#options.roster?.() ?? [],
-        this.#clock.unsafeCurrentTimeMillis(),
+        this.#clock.currentTimeMillisUnsafe(),
       );
-      const scope = yield* Scope.fork(this.#sessions, ExecutionStrategy.sequential);
+      const scope = yield* Scope.fork(this.#sessions, "sequential");
       const created = yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
         Exit.isSuccess(exit) && exit.value !== undefined
           ? Effect.void
@@ -214,17 +203,17 @@ export class LiveSessionHolder {
     source: LiveSessionSource,
     sdpOffer: string,
     seeded: RosterSummary | undefined,
-    scope: Scope.CloseableScope,
+    scope: Scope.Closeable,
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
-    return Effect.gen(this, function* () {
-      const opened = yield* Scope.extend(
+    return Effect.gen({ self: this }, function* () {
+      const opened = yield* Scope.provide(
         source.create({ sdpOffer, input: this.#seedInput(seeded) }),
         scope,
       );
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-      const sideband = yield* Scope.extend(
-        Effect.catchAll(opened.attach(), (failure) =>
+      const sideband = yield* Scope.provide(
+        Effect.catch(opened.attach(), (failure) =>
           Effect.sync(() => {
             this.#options.report(`Live sideband could not attach: ${failure.message}`);
             this.#options.emit({
@@ -271,14 +260,14 @@ export class LiveSessionHolder {
    */
   #read(session: HeldSession): Effect.Effect<void> {
     return Effect.ensuring(
-      Effect.gen(this, function* () {
-        const arrivals = yield* Effect.fork(this.#arrivals(session));
+      Effect.gen({ self: this }, function* () {
+        const arrivals = yield* Effect.forkChild(this.#arrivals(session));
         yield* Deferred.await(session.torn);
         yield* Fiber.interrupt(arrivals);
         yield* Scope.close(session.scope, Exit.void);
       }),
       Effect.sync(() => {
-        Deferred.unsafeDone(session.released, Exit.void);
+        Deferred.doneUnsafe(session.released, Exit.void);
         if (this.#releasing === session.released) this.#releasing = undefined;
       }),
     );
@@ -288,7 +277,7 @@ export class LiveSessionHolder {
   #arrivals(session: HeldSession): Effect.Effect<void> {
     return Stream.runForEach(session.sideband.arrivals, (arrival) => {
       if ("close" in arrival) {
-        Deferred.unsafeDone(
+        Deferred.doneUnsafe(
           session.settled,
           Exit.succeed({ outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST, close: arrival.close }),
         );
@@ -297,7 +286,7 @@ export class LiveSessionHolder {
           : this.#lost(session, LIVE_CLOSE_REASON.CONNECTION_LOST);
       }
       if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
-        Deferred.unsafeDone(
+        Deferred.doneUnsafe(
           session.settled,
           Exit.succeed({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: arrival.event }),
         );
@@ -340,7 +329,7 @@ export class LiveSessionHolder {
   }
 
   #end(session: HeldSession): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (session.ended) return yield* Deferred.await(session.released);
       const standing = session.closing;
       if (standing !== undefined) return yield* Deferred.await(standing);
@@ -351,7 +340,7 @@ export class LiveSessionHolder {
   }
 
   #close(session: HeldSession): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
       const result = yield* closeGracefully(session.sideband, {
         eventId: this.#options.createId(),
@@ -518,7 +507,7 @@ export class LiveSessionHolder {
     // was spoken settled itself before this.
     this.#beats.clear();
     this.#releasing = session.released;
-    Deferred.unsafeDone(session.torn, Exit.void);
+    Deferred.doneUnsafe(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
     return Deferred.await(session.released);
   }

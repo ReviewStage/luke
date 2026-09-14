@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { describe, it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import {
   parsePersistedSettingsEither,
   readSettingsFileText,
@@ -91,24 +91,24 @@ describe("parsePersistedSettingsEither", () => {
     const parsed = parsePersistedSettingsEither(
       JSON.stringify({ version: 2, apiKeys: {}, showInDock: true }),
     );
-    assert.equal(Either.isRight(parsed), true);
-    assert.equal(Either.getOrThrow(parsed).showInDock, true);
+    assert.equal(Result.isSuccess(parsed), true);
+    assert.equal(Result.getOrThrow(parsed).showInDock, true);
   });
 
   it("refuses a file whose top level is not an object, with the legacy reason", () => {
     const parsed = parsePersistedSettingsEither(JSON.stringify([1, 2, 3]));
-    assert.equal(Either.isLeft(parsed), true);
+    assert.equal(Result.isFailure(parsed), true);
     assert.deepEqual(
-      Either.getLeft(parsed),
-      Either.getLeft(
-        Either.left(new SettingsParseRefusal({ reason: "Settings file is not an object" })),
+      Result.getFailure(parsed),
+      Result.getFailure(
+        Result.fail(new SettingsParseRefusal({ reason: "Settings file is not an object" })),
       ),
     );
   });
 
   it("refuses text that is not JSON at all", () => {
     const parsed = parsePersistedSettingsEither("{ not json");
-    assert.equal(Either.isLeft(parsed), true);
-    assert.equal(Either.isLeft(parsed) && parsed.left._tag, "SettingsParseRefusal");
+    assert.equal(Result.isFailure(parsed), true);
+    assert.equal(Result.isFailure(parsed) && parsed.failure._tag, "SettingsParseRefusal");
   });
 });

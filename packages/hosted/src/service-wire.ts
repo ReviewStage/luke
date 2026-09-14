@@ -1,5 +1,5 @@
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
 
 /**
  * The vocabulary every hosted endpoint shares: how a refusal is worded, what
@@ -78,8 +78,8 @@ const HOSTED_API_ERROR_NAMES = Object.values(HOSTED_API_ERROR);
  * provider wrote, where trimming would be a display decision a wire reader
  * has no business making.
  */
-export const writtenText = EffectSchema.String.pipe(
-  EffectSchema.filter((value) => value.length > 0),
+export const writtenText = EffectSchema.String.check(
+  EffectSchema.makeFilter((value) => value.length > 0),
 );
 
 /**
@@ -88,20 +88,15 @@ export const writtenText = EffectSchema.String.pipe(
  * and a fractional one is the service miscounting rather than the wire
  * carrying something else.
  */
-export const countedNumber = EffectSchema.Number.pipe(
-  EffectSchema.finite(),
-  EffectSchema.greaterThanOrEqualTo(0),
-);
+export const countedNumber = EffectSchema.Finite.check(EffectSchema.isGreaterThanOrEqualTo(0));
 
 /**
- * A record that ignores a key a newer service added, which is what an answer
- * does. Each record states its own rule, because Effect hands a struct's
- * parse options down to the structs inside it.
+ * An answer's records are plain structs: whether a key a newer service added
+ * is dropped or refused is no longer the declaration's to state, so a reader
+ * of one of these asks for it — `readEither(schema, { excess: EXCESS_KEYS.DROP })`
+ * — and the option it passes reaches every struct nested inside.
  */
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-export const hostedQuotaSchema = tolerantRecord({
+export const hostedQuotaSchema = EffectSchema.Struct({
   used: countedNumber,
   limit: countedNumber,
   resetsAt: countedNumber,
@@ -110,22 +105,27 @@ export const hostedQuotaSchema = tolerantRecord({
 /** A member set read with its ends trimmed, the way an enum reads one. */
 function trimmedEnum<const Member extends string>(members: readonly Member[]) {
   return verbatimJsonSchema(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.Literal(...members), {
-      strict: false,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }),
+    EffectSchema.Trim.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.Literals(members),
+        SchemaTransformation.passthroughSupertype(),
+      ),
+    ),
     { type: "string", enum: members },
   );
 }
 
-const hostedErrorRecord = tolerantRecord({ error: trimmedEnum(HOSTED_API_ERROR_NAMES) });
+const hostedErrorRecord = EffectSchema.Struct({ error: trimmedEnum(HOSTED_API_ERROR_NAMES) });
 
 /** The error reason out of a refused hosted answer, or nothing. */
-export const hostedErrorSchema = EffectSchema.transform(
-  hostedErrorRecord,
-  EffectSchema.Literal(...HOSTED_API_ERROR_NAMES),
-  { strict: false, decode: (answer) => answer.error, encode: (error) => ({ error }) },
+export const hostedErrorSchema = hostedErrorRecord.pipe(
+  EffectSchema.decodeTo(
+    EffectSchema.Literals(HOSTED_API_ERROR_NAMES),
+    SchemaTransformation.transform({
+      decode: (answer) => answer.error,
+      encode: (error) => ({ error }),
+    }),
+  ),
 );
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -137,16 +137,9 @@ export function isWireUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-const trimmedUuidText = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  EffectSchema.filter((value) => value.trim().length > 0, {
-    schemaId: EffectSchema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-  EffectSchema.maxLength(WIRE_UUID_LENGTH),
+const trimmedUuidText = EffectSchema.Trim.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(WIRE_UUID_LENGTH),
 );
 
 /**
@@ -155,8 +148,6 @@ const trimmedUuidText = EffectSchema.transform(EffectSchema.String, EffectSchema
  * `uuid`, and Postgres refuses any other text bound to it, so an id is held
  * to this shape at the boundary rather than met as a failed query.
  */
-export const wireUuidSchema = EffectSchema.transform(trimmedUuidText, EffectSchema.String, {
-  strict: false,
-  decode: (value) => value.toLowerCase(),
-  encode: (value) => value,
-}).pipe(EffectSchema.filter(isWireUuid));
+export const wireUuidSchema = trimmedUuidText
+  .pipe(EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.toLowerCase()))
+  .check(EffectSchema.makeFilter(isWireUuid));

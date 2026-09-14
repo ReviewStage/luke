@@ -22,7 +22,8 @@ import {
   SESSION_STATUS,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Fiber, type Scope, TestClock } from "effect";
+import { Clock, Effect, Fiber, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { detachOn } from "./effect/carry.js";
 import { advanceHarness, effectHarness, effectReviewing } from "./effect/harness.js";
 import { type BrainPersistedState, freshBrainState } from "./envelope.js";
@@ -96,8 +97,8 @@ const generationClockOn = (
   Effect.gen(function* () {
     const clock = new BrainGenerationClock({
       store,
-      clock: yield* Effect.clock,
-      detach: detachOn(yield* Effect.runtime<never>()),
+      clock: yield* Clock.Clock,
+      detach: detachOn(yield* Effect.context<never>()),
       scope: yield* Effect.scope,
     });
     yield* clock.start();
@@ -214,14 +215,14 @@ it.effect(
       yield* Effect.promise(() => settle());
       // The transport retries the same submission: the same run, no second turn.
       assert.deepEqual(yield* submit(h, "anything?", "sub-1"), accepted);
-      const firstWait = yield* Effect.fork(h.agent.waitAsk(runId, 30_000));
+      const firstWait = yield* Effect.forkChild(h.agent.waitAsk(runId, 30_000));
       yield* Effect.promise(() => settle());
       yield* advanceHarness(NOW + 30_000);
       const pending = yield* Fiber.join(firstWait);
       assert.equal(pending?.status, BRAIN_REQUEST_STATUS.RUNNING);
       assert.equal(pending?.runId, runId);
       // A second wait, well past the old 45-second deadline: still the one run.
-      const secondWait = yield* Effect.fork(h.agent.waitAsk(runId, 30_000));
+      const secondWait = yield* Effect.forkChild(h.agent.waitAsk(runId, 30_000));
       yield* Effect.promise(() => settle());
       yield* advanceHarness(NOW + 60_000);
       assert.equal((yield* Fiber.join(secondWait))?.status, BRAIN_REQUEST_STATUS.RUNNING);
@@ -562,7 +563,7 @@ it.effect(
       const [messageAction] = OBSERVATION_ACTIONS;
       assert.ok(messageAction);
       h.client.answers.push(answered([messageAction]), answered([message("Done.")]));
-      const asked = yield* Effect.fork(ask(h, "send it"));
+      const asked = yield* Effect.forkChild(ask(h, "send it"));
       yield* Effect.promise(() => settle());
       assert.equal(performedLate.length, 1);
       const [late] = performedLate;
@@ -571,10 +572,10 @@ it.effect(
       assert.equal(late.execution.isRevoked(), false);
       // The host stops the agent while the action is still preparing: the standing
       // is withdrawn before the effect, and the performer refuses on it.
-      const stopping = yield* Effect.fork(h.agent.stop());
+      const stopping = yield* Effect.forkChild(h.agent.stop());
       // Revoking is the stop's own first step: the fork's first slice runs it,
       // before the held action is released and before the stop suspends at all.
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       assert.equal(late.execution.isRevoked(), true);
       release?.();
       yield* Fiber.join(stopping);
@@ -757,7 +758,7 @@ it.effect("actions run one at a time in the order the model emitted them", () =>
       answered([messageAction("c1", "a"), messageAction("c2", "b"), messageAction("c3", "c")]),
       answered([message("Three sent.")]),
     );
-    const asked = yield* Effect.fork(ask(h, "send three"));
+    const asked = yield* Effect.forkChild(ask(h, "send three"));
     yield* Effect.promise(() => settle());
     assert.deepEqual(order, ["start a"]);
     held.releases[0]?.();
@@ -928,14 +929,14 @@ it.effect(
       let releaseRead: ((result: ProviderTranscriptSinceResult) => void) | undefined;
       const h = yield* effectHarness({
         readTranscriptSince: () =>
-          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+          Effect.callback<ProviderTranscriptSinceResult>((resume) => {
             releaseRead = (result) => {
               resume(Effect.succeed(result));
             };
           }),
       });
       h.client.answers.push(answered([message("seen")]));
-      const capture = yield* Effect.fork(h.agent.wake([edge(ABC)]));
+      const capture = yield* Effect.forkChild(h.agent.wake([edge(ABC)]));
       yield* Effect.promise(() => settle());
       assert.ok(releaseRead);
       assert.equal(yield* Effect.promise(() => h.store.clear()), true);
@@ -981,13 +982,13 @@ it.effect(
       const h = yield* effectHarness({
         executionDeadlineMs: 60_000,
         readTranscript: () =>
-          Effect.async<ProviderTranscriptResult>((resume) => {
+          Effect.callback<ProviderTranscriptResult>((resume) => {
             reads.push((result) => {
               resume(Effect.succeed(result));
             });
           }),
         readTranscriptSince: () =>
-          Effect.async<ProviderTranscriptSinceResult>((resume) => {
+          Effect.callback<ProviderTranscriptSinceResult>((resume) => {
             deltas.push((result) => {
               resume(Effect.succeed(result));
             });
@@ -1012,7 +1013,9 @@ it.effect(
 
       // A capture whose delta read is held blocks no ask: the capture is not the
       // run's, so the ask opens on the inbox as it stands and answers.
-      const capture = yield* Effect.fork(h.agent.wake([edge(DEF)]));
+      const capture = yield* Effect.forkChild(h.agent.wake([edge(DEF)]), {
+        startImmediately: true,
+      });
       h.client.answers.push(answered([message("proceeding")]));
       const second = acceptedRunId(yield* submit(h, "and this?"));
       assert.equal(deltas.length, 1);
@@ -1039,7 +1042,7 @@ it.effect(
       assert.equal(h.repository.state?.inbox.length, 0);
 
       // A stop settles a held capture read too: nothing is captured, and the queue drains behind it.
-      const held = yield* Effect.fork(h.agent.wake([edge(ABC)]));
+      const held = yield* Effect.forkChild(h.agent.wake([edge(ABC)]));
       yield* Effect.promise(() => settle());
       assert.equal(deltas.length, 2);
       yield* h.agent.stop();
@@ -1127,7 +1130,7 @@ it.effect(
       const releasing = h.repository.hold();
       yield* advanceHarness(NOW + 3_000);
       assert.ok(h.repository.holding, "the turn is in its final write");
-      const stopping = yield* Effect.fork(h.agent.stop());
+      const stopping = yield* Effect.forkChild(h.agent.stop(), { startImmediately: true });
       releasing(true);
       yield* Fiber.join(stopping);
       yield* Effect.promise(() => settle());
@@ -1156,7 +1159,7 @@ it.effect(
     }),
 );
 
-it.scoped(
+it.effect(
   "a generation dies exactly one lifetime after its birth, on the host's clock, revoking the turn it dies under",
   () =>
     Effect.gen(function* () {
@@ -1243,13 +1246,13 @@ it.effect(
       yield* TestClock.setTime(born.expiresAt);
       idle.client.answers.push(answered([message("")]));
       yield* idle.agent.wake([edge(ABC)]);
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       assert.notEqual(idle.store.generationId(), born.generationId);
       assert.equal(idle.store.current()?.requests.length, 0);
     }),
 );
 
-it.scoped("a fortnight of writes never extends a generation's life", () =>
+it.effect("a fortnight of writes never extends a generation's life", () =>
   Effect.gen(function* () {
     const h = yield* effectHarness();
     const generationClock = yield* generationClockOn(h.store);
@@ -1271,7 +1274,7 @@ it.scoped("a fortnight of writes never extends a generation's life", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a Clear or expiry asked for while a write is out on disk revokes a held action's preparation before the disk answers, and no effect dispatches",
   () =>
     Effect.gen(function* () {
@@ -1302,7 +1305,7 @@ it.scoped(
         assert.equal(h.repository.state?.journal.length, 1);
         // A metadata write of another run is out on disk when the end is asked for.
         const release = h.repository.hold();
-        const marking = yield* Effect.fork(h.agent.markConversationRecorded(runId, NOW));
+        const marking = yield* Effect.forkChild(h.agent.markConversationRecorded(runId, NOW));
         yield* Effect.promise(() => settle());
         assert.ok(h.repository.holding, "a write is on disk");
         if (ending === "clear") {
@@ -1340,7 +1343,7 @@ it.effect(
       // Only the load's read is held; the Clear's own look at the file answers at once.
       const releaseRead = repository.holdRead();
       const h = yield* effectHarness({}, repository);
-      const readying = yield* Effect.fork(h.agent.ready());
+      const readying = yield* Effect.forkChild(h.agent.ready());
       yield* Effect.promise(() => settle());
       assert.ok(repository.holding, "the load is reading the file");
       const clearing = h.store.clear(NOW);
@@ -1440,8 +1443,8 @@ it.effect(
         const held = heldOpenRuntime(model, disposeHangs);
         const h = yield* effectHarness();
         const agent = yield* agentOn(held.runtime, h);
-        const ready = yield* Effect.fork(agent.ready());
-        const pending = yield* Effect.fork(
+        const ready = yield* Effect.forkChild(agent.ready());
+        const pending = yield* Effect.forkChild(
           agent.submitAsk({
             submissionId: "held-boot",
             question: "hello",
@@ -1450,7 +1453,7 @@ it.effect(
         );
         yield* Effect.promise(() => settle());
         let stopped = false;
-        const stopping = yield* Effect.fork(
+        const stopping = yield* Effect.forkChild(
           Effect.flatMap(agent.stop(), () =>
             Effect.sync(() => {
               stopped = true;
@@ -1529,7 +1532,7 @@ it.effect(
             // The reopen's value is ready, but it is handed over only after the
             // test has stopped the agent, so the claim lands before the signal and
             // the host's continuation after it.
-            return Effect.async<typeof opened>((resume) => {
+            return Effect.callback<typeof opened>((resume) => {
               releaseReopen = () => resume(Effect.succeed(opened));
             });
           }),
@@ -1539,7 +1542,7 @@ it.effect(
       assert.ok(accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
       yield* Effect.promise(() => settle());
       assert.ok(releaseReopen, "the failed turn is reopening its context");
-      const stopping = yield* Effect.fork(h.agent.stop());
+      const stopping = yield* Effect.forkChild(h.agent.stop(), { startImmediately: true });
       releaseReopen?.();
       yield* Fiber.join(stopping);
       yield* Effect.promise(() => settle());
@@ -2075,7 +2078,7 @@ it.effect(
       // Nothing is left standing to open a turn later: every cancelled ask's
       // own debounce is gone too, not merely quiet until the next one arrives.
       const cancelledInputsBefore = inner.inputs.length;
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 60_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 60_000);
       assert.equal(inner.inputs.length, cancelledInputsBefore);
       // Stale summary metadata does not hold the conversation: the next ask opens its own turn at once.
       const next = acceptedRunId(yield* submit(h, "after all of them"));
@@ -2125,7 +2128,7 @@ it.effect(
       assert.equal(inner.inputs.length, 1);
       assert.equal(h.agent.request(queued), undefined);
       const clearedInputsBefore = inner.inputs.length;
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 60_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 60_000);
       assert.equal(inner.inputs.length, clearedInputsBefore);
     }),
 );
@@ -2135,7 +2138,7 @@ it.effect("a stop with an ask still queued records it interrupted and opens noth
     const { h, inner, release } = yield* effectReviewing();
     const queued = acceptedRunId(yield* submit(h, "queued?"));
     yield* Effect.promise(() => settle());
-    const stopping = yield* Effect.fork(h.agent.stop());
+    const stopping = yield* Effect.forkChild(h.agent.stop());
     yield* release();
     yield* Fiber.join(stopping);
     yield* Effect.promise(() => settle());

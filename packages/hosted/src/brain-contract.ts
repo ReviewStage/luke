@@ -1,5 +1,6 @@
 import { REASONING_EFFORT, type ReasoningEffort } from "@sidecar/runtime/vocabulary";
 import {
+  EXCESS_KEYS,
   isWireString,
   type JsonSchemaNode,
   SCHEMA_REFUSAL,
@@ -9,7 +10,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import {
   admitBrainInput,
   maximumHostedBrainInputItems,
@@ -165,52 +166,50 @@ export function hostedBrainBounds(): HostedBrainBounds {
  * holds and the node omits would be drift in the direction that misleads a
  * model.
  */
-const writtenText = Schema.String.pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    schemaId: Schema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
+const writtenText = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.makeFilter((value) => value.trim().length > 0),
 );
 
 /** The same text under a bound, past which it is too large rather than cut. */
-const boundedText = (maximumChars: number) => writtenText.pipe(Schema.maxLength(maximumChars));
+const boundedText = (maximumChars: number) => writtenText.check(Schema.isMaxLength(maximumChars));
 
 /**
  * An integer at or above its minimum. Below it is malformed rather than too
  * large: a count of minus three is not a count that overflowed.
  */
-const wholeNumber = (minimum: number) => Schema.Int.pipe(Schema.greaterThanOrEqualTo(minimum));
+const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
 /**
- * A record that ignores a key a newer service added, which is what an answer
- * does and a request never does. Each record states its own rule, because
- * Effect hands a struct's parse options down to the structs inside it and a
- * read is strict wherever nothing says otherwise. The emitted node says
+ * Every record here is a plain struct. Whether a key a newer service added is
+ * dropped or refused is no longer the declaration's to state: an answer is
+ * read through {@link admitted}, which drops one, and a request through
+ * {@link hostedBrainRequestRead}, which refuses one, and the option each
+ * passes reaches every record nested inside. The emitted node says
  * `additionalProperties: false` either way: that is the contract a model is
  * held to, and tolerating a key on the way in never invites one.
  */
-const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
 const contract = Schema.Literal(HOSTED_BRAIN_CONTRACT_VERSION);
 
-export const hostedBrainCapabilitiesSchema = tolerantRecord({
+export const hostedBrainCapabilitiesSchema = Schema.Struct({
   contract,
   model: writtenText,
-  operations: Schema.Array(Schema.Literal(...HOSTED_BRAIN_OPERATION_NAMES)).pipe(
-    Schema.maxItems(HOSTED_BRAIN_OPERATION_NAMES.length),
+  operations: Schema.Array(Schema.Literals(HOSTED_BRAIN_OPERATION_NAMES)).check(
+    Schema.isMaxLength(HOSTED_BRAIN_OPERATION_NAMES.length),
   ),
-  tools: Schema.Array(writtenText).pipe(Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS)),
-  bounds: tolerantRecord({
+  tools: Schema.Array(writtenText).check(
+    Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
+  ),
+  bounds: Schema.Struct({
     promptChars: wholeNumber(1),
     inputItems: wholeNumber(1),
     requestBytes: wholeNumber(1),
     maximumOutputTokens: wholeNumber(1),
   }),
-  reasoningEfforts: Schema.Array(Schema.Literal(...REASONING_EFFORT_NAMES)).pipe(
-    Schema.maxItems(REASONING_EFFORT_NAMES.length),
+  reasoningEfforts: Schema.Array(Schema.Literals(REASONING_EFFORT_NAMES)).check(
+    Schema.isMaxLength(REASONING_EFFORT_NAMES.length),
   ),
-  prefetch: Schema.optionalWith(tolerantRecord({ model: writtenText }), { exact: true }),
+  prefetch: Schema.optionalKey(Schema.Struct({ model: writtenText })),
 });
 
 /**
@@ -224,10 +223,10 @@ export const hostedBrainCapabilitiesSchema = tolerantRecord({
  * merely agrees with as an annotation.
  */
 function admitted<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 export function hostedBrainCapabilitiesFromWire(
@@ -338,12 +337,12 @@ function requestRefusal(refusal: SchemaRefusal, path: SchemaPath): HostedBrainRe
 
 /** One request read for the whole contract: the schema's answer in this contract's words. */
 function hostedBrainRequestRead<Request, Encoded>(
-  schema: Schema.Schema<Request, Encoded>,
+  schema: Schema.Codec<Request, Encoded>,
   value: UnparsedWireValue,
 ): HostedBrainRequestRead<Request> {
-  return Either.match(readEither(schema)(value), {
-    onLeft: ({ refusal, path }) => ({ ok: false, refusal: requestRefusal(refusal, path) }),
-    onRight: (request) => ({ ok: true, request }),
+  return Result.match(readEither(schema)(value), {
+    onFailure: ({ refusal, path }) => ({ ok: false, refusal: requestRefusal(refusal, path) }),
+    onSuccess: (request) => ({ ok: true, request }),
   });
 }
 
@@ -352,29 +351,29 @@ function hostedBrainRequestRead<Request, Encoded>(
  * past its bound rather than cut, because the desktop composes it and the
  * service replays it.
  */
-const prompt = Schema.String.pipe(Schema.maxLength(HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS));
+const prompt = Schema.String.check(Schema.isMaxLength(HOSTED_BRAIN_PROMPT_BOUNDS.MAXIMUM_CHARS));
 
 /** Registered names only: each within its length, unique, and known to the catalog given. */
 function toolNames(catalog: ReadonlySet<string>) {
   return Schema.Array(
-    boundedText(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).pipe(
-      Schema.filter((name) => catalog.has(name), wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED)),
+    boundedText(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_NAME_CHARS).check(
+      Schema.makeFilter((name) => catalog.has(name), wireRefusal(SCHEMA_REFUSAL.NOT_REGISTERED)),
     ),
-  ).pipe(
-    Schema.maxItems(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
-    Schema.filter((names) => new Set(names).size === names.length),
+  ).check(
+    Schema.isMaxLength(HOSTED_BRAIN_TOOL_BOUNDS.MAXIMUM_TOOLS),
+    Schema.makeFilter((names) => new Set(names).size === names.length),
   );
 }
 
 const options = Schema.Struct({
-  maximumOutputTokens: Schema.optionalWith(
-    wholeNumber(1).pipe(Schema.lessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS)),
-    { exact: true },
+  maximumOutputTokens: Schema.optionalKey(
+    wholeNumber(1).check(
+      Schema.isLessThanOrEqualTo(HOSTED_BRAIN_OPTION_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
+    ),
   ),
-  reasoningEffort: Schema.optionalWith(Schema.Literal(...REASONING_EFFORT_NAMES), { exact: true }),
-  promptCacheKey: Schema.optionalWith(
+  reasoningEffort: Schema.optionalKey(Schema.Literals(REASONING_EFFORT_NAMES)),
+  promptCacheKey: Schema.optionalKey(
     boundedText(HOSTED_BRAIN_OPTION_BOUNDS.PROMPT_CACHE_KEY_CHARS),
-    { exact: true },
   ),
 });
 
@@ -400,16 +399,15 @@ const input = declareReader<readonly WireRecord[]>((value) => {
 }, INPUT_NODE);
 
 /** The prefetch's prompt: the same rule as a turn's, under the prefetch's own far smaller envelope. */
-const prefetchPrompt = Schema.String.pipe(
-  Schema.maxLength(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_PROMPT_CHARS),
+const prefetchPrompt = Schema.String.check(
+  Schema.isMaxLength(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_PROMPT_CHARS),
 );
 
 const prefetchOptions = Schema.Struct({
-  maximumOutputTokens: Schema.optionalWith(
-    wholeNumber(1).pipe(
-      Schema.lessThanOrEqualTo(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
+  maximumOutputTokens: Schema.optionalKey(
+    wholeNumber(1).check(
+      Schema.isLessThanOrEqualTo(HOSTED_BRAIN_PREFETCH_BOUNDS.MAXIMUM_OUTPUT_TOKENS),
     ),
-    { exact: true },
   ),
 });
 
@@ -427,9 +425,9 @@ const prefetchInput = declareReader<readonly WireRecord[]>((value) => {
 }, INPUT_NODE);
 
 /** The texts to embed: each non-blank and within its bound, the batch within its count. */
-const texts = Schema.Array(boundedText(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).pipe(
-  Schema.minItems(1),
-  Schema.maxItems(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
+const texts = Schema.Array(boundedText(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXT_CHARS)).check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(HOSTED_BRAIN_EMBED_BOUNDS.MAXIMUM_TEXTS),
 );
 
 /**
@@ -450,7 +448,7 @@ export const hostedBrainEmbedRequestSchema = Schema.Struct({ contract, texts });
 
 export const hostedBrainPrefetchRequestSchema = Schema.Struct({
   contract,
-  kind: Schema.Literal(...HOSTED_BRAIN_PREFETCH_KIND_NAMES),
+  kind: Schema.Literals(HOSTED_BRAIN_PREFETCH_KIND_NAMES),
   prompt: prefetchPrompt,
   options: prefetchOptions,
   input: prefetchInput,
@@ -483,12 +481,14 @@ export function hostedBrainPrefetchRequestFromWire(
 }
 
 /** The vectors are one width, and the width is the one the answer names. */
-export const hostedBrainEmbedAnswerSchema = tolerantRecord({
+export const hostedBrainEmbedAnswerSchema = Schema.Struct({
   model: writtenText,
   dimensions: wholeNumber(1),
-  vectors: Schema.Array(Schema.Array(Schema.Number.pipe(Schema.finite())).pipe(Schema.minItems(1))),
-}).pipe(
-  Schema.filter((answer) => answer.vectors.every((vector) => vector.length === answer.dimensions)),
+  vectors: Schema.Array(Schema.Array(Schema.Finite).check(Schema.isMinLength(1))),
+}).check(
+  Schema.makeFilter((answer) =>
+    answer.vectors.every((vector) => vector.length === answer.dimensions),
+  ),
 );
 
 export function hostedBrainEmbedAnswerFromWire(
@@ -501,7 +501,7 @@ export interface HostedBrainCountTokensAnswer {
   inputTokens: number;
 }
 
-export const hostedBrainCountTokensAnswerSchema = tolerantRecord({
+export const hostedBrainCountTokensAnswerSchema = Schema.Struct({
   inputTokens: wholeNumber(0),
 });
 

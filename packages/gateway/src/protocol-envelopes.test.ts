@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type Scope } from "effect";
+import { Effect, Result, type Scope } from "effect";
 import { test } from "vitest";
 import type { GatewayMethodTable } from "./methods.js";
 import {
@@ -213,7 +213,7 @@ function answeringTable(): GatewayMethodTable {
 
 test("the declared parameters the fixtures carry are the shapes the protocol admits", () => {
   assert.deepEqual(
-    Either.getOrUndefined(
+    Result.getOrUndefined(
       readEither(voiceCreateLiveSessionParamsSchema)(
         paramsFor(GATEWAY_METHOD.VOICE_CREATE_LIVE_SESSION),
       ),
@@ -221,7 +221,7 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
     { sdp: FIXTURE_SDP },
   );
   assert.deepEqual(
-    Either.getOrUndefined(
+    Result.getOrUndefined(
       readEither(voiceReportLiveTransportParamsSchema)(
         paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT),
       ),
@@ -229,7 +229,7 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
     { state: LIVE_TRANSPORT_STATE.CONNECTED },
   );
   assert.deepEqual(
-    Either.getOrUndefined(
+    Result.getOrUndefined(
       readEither(voiceReportLiveActivityParamsSchema)(
         paramsFor(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY),
       ),
@@ -238,7 +238,7 @@ test("the declared parameters the fixtures carry are the shapes the protocol adm
   );
 });
 
-it.scopedLive("every method's request and answer cross as the recorded envelopes", () =>
+it.live("every method's request and answer cross as the recorded envelopes", () =>
   Effect.gen(function* () {
     const host = yield* goldenHost(answeringTable());
     const transport = new TextLoopbackTransport(host, OPERATOR);
@@ -253,7 +253,7 @@ it.scopedLive("every method's request and answer cross as the recorded envelopes
   }),
 );
 
-it.scopedLive("every error code crosses as the recorded envelope", () =>
+it.live("every error code crosses as the recorded envelope", () =>
   Effect.gen(function* () {
     const throwing = new Error("the handler failed");
     const unanswered = answeringTable();
@@ -385,45 +385,43 @@ it.scopedLive("every error code crosses as the recorded envelope", () =>
   }),
 );
 
-it.scopedLive(
-  "a reconnection inside the window replays, and one past it is handed a snapshot",
-  () =>
-    Effect.gen(function* () {
-      const host = yield* goldenHost(answeringTable(), { replayWindow: 3 });
-      const transport = new TextLoopbackTransport(host, OPERATOR);
-      host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
-      host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
-      host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
-      host.log.publish(
-        GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
-        { lines: 1 },
-        { sessionKey: FIXTURE_SESSION_KEY },
-      );
-      host.log.publish(
-        GATEWAY_EVENT.RUNS_CHANGED,
-        { runs: 1 },
-        { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
-      );
+it.live("a reconnection inside the window replays, and one past it is handed a snapshot", () =>
+  Effect.gen(function* () {
+    const host = yield* goldenHost(answeringTable(), { replayWindow: 3 });
+    const transport = new TextLoopbackTransport(host, OPERATOR);
+    host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { setting: "first" });
+    host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
+    host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+    host.log.publish(
+      GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
+      { lines: 1 },
+      { sessionKey: FIXTURE_SESSION_KEY },
+    );
+    host.log.publish(
+      GATEWAY_EVENT.RUNS_CHANGED,
+      { runs: 1 },
+      { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
+    );
 
-      const inside = yield* settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "request-reconnect-inside-window",
-        method: GATEWAY_METHOD.RECONNECT,
-        params: { lastSequence: 2 },
-      });
-      assert.equal(inside.ok, true);
+    const inside = yield* settleExchange(REPLAY_GOLDEN_NAME.INSIDE_WINDOW, transport, {
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      id: "request-reconnect-inside-window",
+      method: GATEWAY_METHOD.RECONNECT,
+      params: { lastSequence: 2 },
+    });
+    assert.equal(inside.ok, true);
 
-      const past = yield* settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id: "request-reconnect-past-window",
-        method: GATEWAY_METHOD.RECONNECT,
-        params: { lastSequence: 1 },
-      });
-      assert.equal(past.ok, true);
-    }),
+    const past = yield* settleExchange(REPLAY_GOLDEN_NAME.PAST_WINDOW, transport, {
+      protocolVersion: GATEWAY_PROTOCOL_VERSION,
+      id: "request-reconnect-past-window",
+      method: GATEWAY_METHOD.RECONNECT,
+      params: { lastSequence: 1 },
+    });
+    assert.equal(past.ok, true);
+  }),
 );
 
-it.scopedLive("a named revision and an empty answer cross as the recorded envelopes", () =>
+it.live("a named revision and an empty answer cross as the recorded envelopes", () =>
   Effect.gen(function* () {
     const host = yield* goldenHost({
       ...answeringTable(),

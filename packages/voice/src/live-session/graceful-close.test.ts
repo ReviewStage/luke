@@ -6,7 +6,8 @@ import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
 } from "@sidecar/live";
-import { Deferred, Duration, Effect, Exit, Fiber, type Scope, Stream, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, type Scope, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import type { LiveSideband } from "../live-socket.js";
 import { sidebandOverSocket } from "../live-socket.js";
 import { FakeLiveSocket } from "../testing.js";
@@ -31,7 +32,7 @@ function reading(
       Stream.runForEach(sideband.arrivals, (arrival) =>
         Effect.sync(() => {
           if ("close" in arrival) {
-            Deferred.unsafeDone(
+            Deferred.doneUnsafe(
               settled,
               Exit.succeed({
                 outcome: SIDEBAND_CLOSE_OUTCOME.CONNECTION_LOST,
@@ -42,7 +43,7 @@ function reading(
           }
           heard.push(arrival.event);
           if (arrival.event.type === LIVE_SERVER_EVENT.SESSION_CLOSED) {
-            Deferred.unsafeDone(
+            Deferred.doneUnsafe(
               settled,
               Exit.succeed({ outcome: SIDEBAND_CLOSE_OUTCOME.CLOSED, closed: arrival.event }),
             );
@@ -66,7 +67,7 @@ function closedEvent(reason: string, seconds: number) {
 /** Lets the forked close reach its wait, and whatever a received event started run its course. */
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 
@@ -79,7 +80,7 @@ it.effect(
         const sideband = sidebandOverSocket(socket);
         const heard: LiveServerEvent[] = [];
         const settled = yield* reading(sideband, heard);
-        const closing = yield* Effect.fork(
+        const closing = yield* Effect.forkChild(
           closeGracefully(sideband, { eventId: "close-1", settled }),
         );
         yield* settle();
@@ -112,7 +113,7 @@ it.effect(
       Effect.gen(function* () {
         const lost = new FakeLiveSocket();
         const lostSideband = sidebandOverSocket(lost);
-        const losing = yield* Effect.fork(
+        const losing = yield* Effect.forkChild(
           closeGracefully(lostSideband, { eventId: "c", settled: yield* reading(lostSideband) }),
         );
         yield* settle();
@@ -124,7 +125,7 @@ it.effect(
 
         const silent = new FakeLiveSocket();
         const silentSideband = sidebandOverSocket(silent);
-        const timing = yield* Effect.fork(
+        const timing = yield* Effect.forkChild(
           closeGracefully(silentSideband, {
             eventId: "c",
             timeoutMs: 50,

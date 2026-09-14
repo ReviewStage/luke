@@ -1,11 +1,7 @@
 // The one consent trip every provider Luke asks consent of runs: the loopback,
 // the PKCE, and the landing page are all its, so no two of Luke's sign-ins can
 // drift into different servers, weaker verifiers, or differently dressed tabs.
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
+
 import {
   LOOPBACK_CONNECTION_SOURCE,
   type LoopbackConsent,
@@ -15,6 +11,11 @@ import {
 } from "@sidecar/credentials";
 import { isWireString, type UnparsedWireValue, WireValueSchema, wireRecord } from "@sidecar/wire";
 import { Data, Duration, Effect, type Layer } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 /**
  * The sign-in behind the Google Calendar row: Google's OAuth flow for an
@@ -204,13 +205,13 @@ function exchangeEffect(
 
   return Effect.gen(function* () {
     const response = yield* HttpClient.execute(request).pipe(
-      Effect.catchAll(() => Effect.fail(networkFault())),
+      Effect.catch(() => Effect.fail(networkFault())),
     );
     if (!answeredOk(response.status)) {
       return yield* Effect.fail(new GoogleCalendarExchangeError({ fault: EXCHANGE_FAULT.REFUSED }));
     }
     const payload = yield* HttpClientResponse.schemaBodyJson(WireValueSchema)(response).pipe(
-      Effect.catchAll(() => Effect.fail(networkFault())),
+      Effect.catch(() => Effect.fail(networkFault())),
     );
     const tokens = tokensFrom(payload);
     if (!tokens)
@@ -219,9 +220,9 @@ function exchangeEffect(
       );
     return tokens;
   }).pipe(
-    Effect.timeoutFail({
+    Effect.timeoutOrElse({
       duration: Duration.millis(TOKEN_REQUEST_TIMEOUT_MS),
-      onTimeout: networkFault,
+      orElse: () => Effect.fail(networkFault()),
     }),
   );
 }

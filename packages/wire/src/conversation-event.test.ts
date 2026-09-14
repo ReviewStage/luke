@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import {
   CONVERSATION_EVENT_KIND,
@@ -24,7 +24,7 @@ test("the speech kinds are every event kind but the rating", () => {
 test("a rating payload is a verdict with an optional bounded note, and nothing else", () => {
   const read = readEither(RATING_EVENT_PAYLOAD);
   const parse = (value: Parameters<typeof unparsedWire>[0]) =>
-    Either.getOrUndefined(read(unparsedWire(value)));
+    Result.getOrUndefined(read(unparsedWire(value)));
   assert.deepEqual(parse({ rating: MESSAGE_RATING.DOWN, note: "too long" }), {
     rating: MESSAGE_RATING.DOWN,
     note: "too long",
@@ -33,9 +33,9 @@ test("a rating payload is a verdict with an optional bounded note, and nothing e
     rating: MESSAGE_RATING.UP,
   });
   const refusalOf = (value: Parameters<typeof unparsedWire>[0]) =>
-    Either.match(read(unparsedWire(value)), {
-      onLeft: (refused) => [refused.refusal, refused.path],
-      onRight: () => "admitted",
+    Result.match(read(unparsedWire(value)), {
+      onFailure: (refused) => [refused.refusal, refused.path],
+      onSuccess: () => "admitted",
     });
   assert.deepEqual(refusalOf({ rating: "sideways" }), [SCHEMA_REFUSAL.MALFORMED, ["rating"]]);
   assert.deepEqual(

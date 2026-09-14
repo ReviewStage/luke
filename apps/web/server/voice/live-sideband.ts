@@ -24,34 +24,32 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
  * registering here rather than at the socket's own open lose nothing.
  */
 
-export function upstreamSideband(
+export const upstreamSideband = /* @__PURE__ */ Effect.fn("upstreamSideband")(function* (
   socket: WebSocket,
-): Effect.Effect<LiveSideband, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const hold = holdSocket({
-      send: (data) => socket.send(data),
-      close: () => socket.close(SOCKET_CLOSE_CODE.NORMAL),
-    });
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const onMessage = (data: RawData, isBinary: boolean) => {
-          if (isBinary) return;
-          hold.hear({ frame: data.toString() });
-        };
-        const onClose = (code: number) => hold.hear({ close: { code } });
-        socket.on("message", onMessage);
-        socket.on("close", onClose);
-        return { onMessage, onClose };
-      }),
-      ({ onMessage, onClose }) =>
-        Effect.sync(() => {
-          socket.off("message", onMessage);
-          socket.off("close", onClose);
-        }),
-    );
-    return sidebandOverSocket(hold.socket);
+): Effect.fn.Return<LiveSideband, never, Scope.Scope> {
+  const hold = holdSocket({
+    send: (data) => socket.send(data),
+    close: () => socket.close(SOCKET_CLOSE_CODE.NORMAL),
   });
-}
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const onMessage = (data: RawData, isBinary: boolean) => {
+        if (isBinary) return;
+        hold.hear({ frame: data.toString() });
+      };
+      const onClose = (code: number) => hold.hear({ close: { code } });
+      socket.on("message", onMessage);
+      socket.on("close", onClose);
+      return { onMessage, onClose };
+    }),
+    ({ onMessage, onClose }) =>
+      Effect.sync(() => {
+        socket.off("message", onMessage);
+        socket.off("close", onClose);
+      }),
+  );
+  return sidebandOverSocket(hold.socket);
+});
 
 /**
  * A sideband whose every event is observed once on its way past: the record's

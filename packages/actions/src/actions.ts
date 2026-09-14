@@ -43,7 +43,7 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
   readonly kind: Kind;
   readonly description: string;
   /** The action's own field vocabulary: what admission reads and what the model is shown. */
-  readonly request: Schema.Schema<unknown, UnparsedWireValue>;
+  readonly request: Schema.Codec<unknown, UnparsedWireValue>;
   /**
    * The same action as the phone offers it, where the phone's surface gives the
    * action a different shape: an open lands on the app's own screen rather than
@@ -52,7 +52,7 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
    */
   readonly remote?: {
     readonly description: string;
-    readonly request: Schema.Schema<unknown, UnparsedWireValue>;
+    readonly request: Schema.Codec<unknown, UnparsedWireValue>;
   };
 }
 
@@ -63,8 +63,8 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
  * itself assignable there, and this is the one cast — through `Schema.make`
  * over the same AST, never `as` — that states it.
  */
-function erase<A, I>(request: Schema.Schema<A, I>): Schema.Schema<unknown, UnparsedWireValue> {
-  return Schema.make(request.ast);
+function erase(request: Schema.Top): Schema.Codec<unknown, UnparsedWireValue> {
+  return Schema.make<Schema.Codec<unknown, UnparsedWireValue>>(request.ast);
 }
 
 /**

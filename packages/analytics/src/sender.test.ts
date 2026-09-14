@@ -7,7 +7,8 @@ import {
   recordedRequest,
   recordingHttpClient,
 } from "@sidecar/wire/testing";
-import { Effect, TestClock } from "effect";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import {
   HELD_PRODUCT_EVENTS_VERSION,
   type HeldProductEvents,
@@ -65,7 +66,7 @@ function sharingSender(
   );
 }
 
-it.scoped("a run that sends no network queues nothing and asks for nothing", () =>
+it.effect("a run that sends no network queues nothing and asks for nothing", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender({ sends: false });
     sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -76,7 +77,7 @@ it.scoped("a run that sends no network queues nothing and asks for nothing", () 
   }),
 );
 
-it.scoped("nothing is queued before the settings file has answered", () =>
+it.effect("nothing is queued before the settings file has answered", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* senderWith();
     sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -85,7 +86,7 @@ it.scoped("nothing is queued before the settings file has answered", () =>
   }),
 );
 
-it.scoped("a flush posts one bearer-authenticated batch and empties the queue", () =>
+it.effect("a flush posts one bearer-authenticated batch and empties the queue", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender();
     sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -110,7 +111,7 @@ it.scoped("a flush posts one bearer-authenticated batch and empties the queue", 
   }),
 );
 
-it.scoped("a sender that was never armed sends nothing", () =>
+it.effect("a sender that was never armed sends nothing", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* senderWith();
     sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -120,7 +121,7 @@ it.scoped("a sender that was never armed sends nothing", () =>
   }),
 );
 
-it.scoped("a batch queued under one account is never posted under another's bearer", () =>
+it.effect("a batch queued under one account is never posted under another's bearer", () =>
   Effect.gen(function* () {
     let account = "ada@luke.test";
     let token = "stale";
@@ -153,7 +154,7 @@ it.scoped("a batch queued under one account is never posted under another's bear
   }),
 );
 
-it.scoped("a failed send drops its batch rather than retrying it behind the next one", () =>
+it.effect("a failed send drops its batch rather than retrying it behind the next one", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender({}, () => {
       throw new Error("network down");
@@ -171,7 +172,7 @@ it.scoped("a failed send drops its batch rather than retrying it behind the next
   }),
 );
 
-it.scoped("signed out the queue waits rather than being spent", () =>
+it.effect("signed out the queue waits rather than being spent", () =>
   Effect.gen(function* () {
     let token: string | undefined;
     const { sender, requests } = yield* sharingSender({
@@ -189,7 +190,7 @@ it.scoped("signed out the queue waits rather than being spent", () =>
   }),
 );
 
-it.scoped("a token the settings file could not answer leaves the batch queued", () =>
+it.effect("a token the settings file could not answer leaves the batch queued", () =>
   Effect.gen(function* () {
     let readable = false;
     const { sender, requests } = yield* sharingSender({
@@ -209,7 +210,7 @@ it.scoped("a token the settings file could not answer leaves the batch queued", 
   }),
 );
 
-it.scoped("past the queue limit the oldest go and the newest stay", () =>
+it.effect("past the queue limit the oldest go and the newest stay", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender({ queueLimit: 3 });
     for (const providerId of ["claude-code", "codex", "conductor", "omp"] as const) {
@@ -227,7 +228,7 @@ it.scoped("past the queue limit the oldest go and the newest stay", () =>
   }),
 );
 
-it.scoped("a batch past the wire limit is left for the next flush rather than refused", () =>
+it.effect("a batch past the wire limit is left for the next flush rather than refused", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender();
     for (let index = 0; index < 60; index += 1) {
@@ -240,7 +241,7 @@ it.scoped("a batch past the wire limit is left for the next flush rather than re
   }),
 );
 
-it.scoped("the day marker records once a day, and again once the day has turned", () =>
+it.effect("the day marker records once a day, and again once the day has turned", () =>
   Effect.gen(function* () {
     let now = NOON;
     const { sender, requests } = yield* sharingSender({ now: () => now });
@@ -264,7 +265,7 @@ it.scoped("the day marker records once a day, and again once the day has turned"
   }),
 );
 
-it.scoped("an observation is counted once per provider per day, in buckets", () =>
+it.effect("an observation is counted once per provider per day, in buckets", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender();
     for (const providerId of ["codex", "codex", "claude-code"] as const) {
@@ -285,7 +286,7 @@ it.scoped("an observation is counted once per provider per day, in buckets", () 
   }),
 );
 
-it.scoped("a call site handing a value outside the allowlist queues nothing", () =>
+it.effect("a call site handing a value outside the allowlist queues nothing", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender();
     // SAFETY: the point of the test is the runtime guard, so the compile-time
@@ -303,7 +304,7 @@ it.scoped("a call site handing a value outside the allowlist queues nothing", ()
   }),
 );
 
-it.scoped("a run left open marks each day it crosses, not only its launch day", () =>
+it.effect("a run left open marks each day it crosses, not only its launch day", () =>
   Effect.gen(function* () {
     let now = NOON;
     const { sender, requests } = yield* sharingSender({ now: () => now, flushIntervalMs: 10 });
@@ -334,7 +335,7 @@ it.scoped("a run left open marks each day it crosses, not only its launch day", 
   }),
 );
 
-it.scoped("dropping the queue leaves nothing to post rather than holding the quit open", () =>
+it.effect("dropping the queue leaves nothing to post rather than holding the quit open", () =>
   Effect.gen(function* () {
     const { sender, requests } = yield* sharingSender();
     sender.record(PRODUCT_EVENT.APP_LAUNCH, { app_version: APP_VERSION });
@@ -366,7 +367,7 @@ function heldRecord(events: readonly ProductEvent[]): HeldProductEventsRecord {
   return { version: HELD_PRODUCT_EVENTS_VERSION, events };
 }
 
-it.scoped("a flush that found no credential writes its batch to the hold", () =>
+it.effect("a flush that found no credential writes its batch to the hold", () =>
   Effect.gen(function* () {
     const hold = memoryHold();
     const { sender, requests } = yield* sharingSender({
@@ -395,7 +396,7 @@ it.scoped("a flush that found no credential writes its batch to the hold", () =>
   }),
 );
 
-it.scoped("a later run posts the hold ahead of its own events and then clears it", () =>
+it.effect("a later run posts the hold ahead of its own events and then clears it", () =>
   Effect.gen(function* () {
     const hold = memoryHold(
       heldRecord([
@@ -427,7 +428,7 @@ it.scoped("a later run posts the hold ahead of its own events and then clears it
   }),
 );
 
-it.scoped(
+it.effect(
   "a hold waits through a run that never signs in, emptied ahead of each attempt and refilled by its refusal",
   () =>
     Effect.gen(function* () {
@@ -455,7 +456,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the hold is emptied before the request leaves, so a quit after the post cannot replay it",
   () =>
     Effect.gen(function* () {
@@ -475,7 +476,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a held event older than the service's age window is dropped, one inside it stays", () =>
+it.effect("a held event older than the service's age window is dropped, one inside it stays", () =>
   Effect.gen(function* () {
     const hold = memoryHold(
       heldRecord([
@@ -493,7 +494,7 @@ it.scoped("a held event older than the service's age window is dropped, one insi
   }),
 );
 
-it.scoped("a hold past the queue limit keeps the newest, and this run's events after them", () =>
+it.effect("a hold past the queue limit keeps the newest, and this run's events after them", () =>
   Effect.gen(function* () {
     const hold = memoryHold(
       heldRecord(
@@ -519,7 +520,7 @@ it.scoped("a hold past the queue limit keeps the newest, and this run's events a
   }),
 );
 
-it.scoped("a held event the allowlist no longer reads is dropped rather than posted", () =>
+it.effect("a held event the allowlist no longer reads is dropped rather than posted", () =>
   Effect.gen(function* () {
     const hold = memoryHold({
       version: HELD_PRODUCT_EVENTS_VERSION,
@@ -543,7 +544,7 @@ it.scoped("a held event the allowlist no longer reads is dropped rather than pos
   }),
 );
 
-it.scoped("a held day marker for the day this run already marked is one day, not two", () =>
+it.effect("a held day marker for the day this run already marked is one day, not two", () =>
   Effect.gen(function* () {
     const hold = memoryHold(
       heldRecord([
@@ -570,7 +571,7 @@ it.scoped("a held day marker for the day this run already marked is one day, not
   }),
 );
 
-it.scoped("a run that sends no network neither reads nor writes the hold", () =>
+it.effect("a run that sends no network neither reads nor writes the hold", () =>
   Effect.gen(function* () {
     let reads = 0;
     const hold = memoryHold(
@@ -594,7 +595,7 @@ it.scoped("a run that sends no network neither reads nor writes the hold", () =>
   }),
 );
 
-it.scoped("a sender not yet armed leaves the hold unread", () =>
+it.effect("a sender not yet armed leaves the hold unread", () =>
   Effect.gen(function* () {
     let reads = 0;
     const hold = memoryHold(
@@ -618,7 +619,7 @@ it.scoped("a sender not yet armed leaves the hold unread", () =>
   }),
 );
 
-it.scoped("dropping before the first flush leaves the earlier hold as it was", () =>
+it.effect("dropping before the first flush leaves the earlier hold as it was", () =>
   Effect.gen(function* () {
     const hold = memoryHold(
       heldRecord([{ name: PRODUCT_EVENT.INTRODUCTION_COMPLETE, at: HELD_AT, properties: {} }]),

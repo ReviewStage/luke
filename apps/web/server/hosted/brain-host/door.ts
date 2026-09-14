@@ -1,9 +1,9 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { type AuthFn, ForbiddenError, routeAuth } from "eve/channels/auth";
 import type { EveMessageContext } from "eve/channels/eve";
 import type { SessionAuthContext } from "eve/context";
-import { unparsedWire, type WireBoundaryInput } from "../../core.js";
+import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "../../core.js";
 import { actedForAccount, conversationIdOf, sessionAuthFor, turnKindOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL } from "./bounds.js";
 
@@ -41,26 +41,18 @@ const SESSION_ROUTE = /^\/eve\/v1\/session\/([^/]+)(?:\/|$)/;
 
 const FORBIDDEN_STATUS = 403;
 
-const trimmedText = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  EffectSchema.filter((value) => value.trim().length > 0, {
-    schemaId: EffectSchema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
+const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
-const refusalBody = EffectSchema.Struct({ error: trimmedText }).annotations({
-  parseOptions: { onExcessProperty: "ignore" },
-});
+/** eve may name more than the reason in a refusal body, so the read drops what it does not name. */
+const refusalBody = EffectSchema.Struct({ error: trimmedText });
 
 /** The reason a refusal response carries, as eve writes one; the refusal itself where the body cannot be read. */
 async function refusalMessageOf(response: Response): Promise<string> {
   // SAFETY: eve's own JSON refusal body; the schema read that follows is what holds it to a shape.
-  const body = readEither(refusalBody)(unparsedWire((await response.json()) as WireBoundaryInput));
-  return Either.isRight(body) ? body.right.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
+  const body = readEither(refusalBody, { excess: EXCESS_KEYS.DROP })(
+    unparsedWire((await response.json()) as WireBoundaryInput),
+  );
+  return Result.isSuccess(body) ? body.success.error : BRAIN_HOST_REFUSAL.NOT_OWNER;
 }
 const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 

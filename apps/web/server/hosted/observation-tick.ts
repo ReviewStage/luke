@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Duration, Effect, Fiber } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { NOTHING_OPENED, type TurnOpeningOutcome } from "./brain-host/opener.js";
 import {
   bearerMatchesSecret,
@@ -152,8 +152,8 @@ function withFallback<A, E>(
   effect: Effect.Effect<A, E, SqlClient.SqlClient>,
   fallback: A,
 ): Effect.Effect<A, never, SqlClient.SqlClient> {
-  return Effect.catchAllDefect(
-    Effect.catchAll(effect, () => Effect.succeed(fallback)),
+  return Effect.catchDefect(
+    Effect.catch(effect, () => Effect.succeed(fallback)),
     () => Effect.succeed(fallback),
   );
 }
@@ -166,98 +166,92 @@ function withFallback<A, E>(
  * exactly as the promise race this replaces never cancelled the pass it
  * raced either.
  */
-function accountWithin(
+const accountWithin = /* @__PURE__ */ Effect.fn("accountWithin")(function* (
   account: Effect.Effect<AccountOutcome, never, SqlClient.SqlClient>,
   deadlineMs: number,
-): Effect.Effect<AccountOutcome, never, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const fiber = yield* Effect.forkDaemon(account);
-    return yield* Effect.race(
-      Fiber.join(fiber),
-      Effect.as(Effect.sleep(Duration.millis(deadlineMs)), TIMED_OUT_ACCOUNT),
-    );
-  });
-}
+): Effect.fn.Return<AccountOutcome, never, SqlClient.SqlClient> {
+  const fiber = yield* Effect.forkDetach(account);
+  return yield* Effect.race(
+    Fiber.join(fiber),
+    Effect.as(Effect.sleep(Duration.millis(deadlineMs)), TIMED_OUT_ACCOUNT),
+  );
+});
 
 /** The pass, then the opening over what it and earlier passes left pending; a pass that throws is failed and still followed by the opening. */
-function accountTurn(
+const accountTurn = /* @__PURE__ */ Effect.fn("accountTurn")(function* (
   options: ObservationTickReads,
   userId: string,
-): Effect.Effect<AccountOutcome, never, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const pass = yield* withFallback(options.observe(userId), FAILED_PASS);
-    const turns = yield* withFallback(options.openTurns(userId), FAILED_OPENING);
-    return { pass, turns };
-  });
-}
+): Effect.fn.Return<AccountOutcome, never, SqlClient.SqlClient> {
+  const pass = yield* withFallback(options.observe(userId), FAILED_PASS);
+  const turns = yield* withFallback(options.openTurns(userId), FAILED_OPENING);
+  return { pass, turns };
+});
 
-export function handleObservationTick(
+export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservationTick")(function* (
   options: ObservationTickOptions,
-): Effect.Effect<Response, unknown, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { request } = options;
-    if (request.method !== "GET") {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
+): Effect.fn.Return<Response, unknown, SqlClient.SqlClient> {
+  const { request } = options;
+  if (request.method !== "GET") {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    );
+  }
+
+  const secret = options.cronSecret?.trim();
+  if (!secret || !options.encryptionSecret?.trim()) {
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+  if (!bearerMatchesSecret(request, secret)) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+
+  const now = options.now ?? Date.now;
+  const startedAt = now();
+  const budgetMs = options.budgetMs ?? OBSERVATION_TICK.BUDGET_MS;
+  const passDeadlineMs = options.passDeadlineMs ?? OBSERVATION_TICK.PASS_DEADLINE_MS;
+  const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
+
+  yield* options.forgetIneligible(seenAfter);
+  const purged = yield* options.purgeCleared(startedAt);
+  const speech = yield* options.sweepSpeech(startedAt);
+  const push = yield* options.pushSpeech(startedAt);
+  const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
+
+  const answer: ObservationTickAnswer = {
+    accounts: 0,
+    observed: 0,
+    failed: 0,
+    changed: 0,
+    exhausted: false,
+    purged,
+    speech,
+    push,
+    turns: NOTHING_OPENED,
+  };
+  for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
+    if (now() - startedAt + passDeadlineMs > budgetMs) {
+      answer.exhausted = true;
+      break;
     }
-
-    const secret = options.cronSecret?.trim();
-    if (!secret || !options.encryptionSecret?.trim()) {
-      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+    const batch = accounts.slice(index, index + OBSERVATION_TICK.CONCURRENCY);
+    const outcomes = yield* Effect.all(
+      batch.map((account) => accountWithin(accountTurn(options, account.userId), passDeadlineMs)),
+      { concurrency: "unbounded" },
+    );
+    for (const { pass, turns } of outcomes) {
+      answer.accounts += 1;
+      if (pass.complete) answer.observed += 1;
+      else answer.failed += 1;
+      if (pass.changed) answer.changed += 1;
+      answer.turns = {
+        observation: answer.turns.observation + turns.observation,
+        holdRelease: answer.turns.holdRelease + turns.holdRelease,
+        failed: answer.turns.failed + turns.failed,
+        reseeded: answer.turns.reseeded + turns.reseeded,
+      };
     }
-    if (!bearerMatchesSecret(request, secret)) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
+  }
 
-    const now = options.now ?? Date.now;
-    const startedAt = now();
-    const budgetMs = options.budgetMs ?? OBSERVATION_TICK.BUDGET_MS;
-    const passDeadlineMs = options.passDeadlineMs ?? OBSERVATION_TICK.PASS_DEADLINE_MS;
-    const seenAfter = startedAt - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
-
-    yield* options.forgetIneligible(seenAfter);
-    const purged = yield* options.purgeCleared(startedAt);
-    const speech = yield* options.sweepSpeech(startedAt);
-    const push = yield* options.pushSpeech(startedAt);
-    const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
-
-    const answer: ObservationTickAnswer = {
-      accounts: 0,
-      observed: 0,
-      failed: 0,
-      changed: 0,
-      exhausted: false,
-      purged,
-      speech,
-      push,
-      turns: NOTHING_OPENED,
-    };
-    for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
-      if (now() - startedAt + passDeadlineMs > budgetMs) {
-        answer.exhausted = true;
-        break;
-      }
-      const batch = accounts.slice(index, index + OBSERVATION_TICK.CONCURRENCY);
-      const outcomes = yield* Effect.all(
-        batch.map((account) => accountWithin(accountTurn(options, account.userId), passDeadlineMs)),
-        { concurrency: "unbounded" },
-      );
-      for (const { pass, turns } of outcomes) {
-        answer.accounts += 1;
-        if (pass.complete) answer.observed += 1;
-        else answer.failed += 1;
-        if (pass.changed) answer.changed += 1;
-        answer.turns = {
-          observation: answer.turns.observation + turns.observation,
-          holdRelease: answer.turns.holdRelease + turns.holdRelease,
-          failed: answer.turns.failed + turns.failed,
-          reseeded: answer.turns.reseeded + turns.reseeded,
-        };
-      }
-    }
-
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});

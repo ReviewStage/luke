@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { Deferred, Effect, Fiber, type Scope, Stream } from "effect";
+import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
 import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import {
   closeEvent,
@@ -144,7 +144,7 @@ export function relaySession<R = never>(
     let closed: LiveSessionClosed | undefined;
     /** The `event_id` the opening command was sent with, until its acknowledgment settles it. */
     let openingEventId: string | undefined;
-    let openingWait: Fiber.RuntimeFiber<void> | undefined;
+    let openingWait: Fiber.Fiber<void> | undefined;
 
     const settled = yield* Deferred.make<Finalization>();
     const settle = (finalization: Finalization): Effect.Effect<void> =>
@@ -171,7 +171,10 @@ export function relaySession<R = never>(
         const sending = next === undefined ? Effect.void : sendUpstream(next);
         return waiting === undefined
           ? sending
-          : Effect.zipRight(Fiber.interruptFork(waiting), sending);
+          : Effect.andThen(
+              Effect.sync(() => waiting.interruptUnsafe()),
+              sending,
+            );
       });
 
     /** How a server event answers the opening command, or nothing when it is about something else. */
@@ -192,22 +195,23 @@ export function relaySession<R = never>(
         : undefined;
     };
 
-    const armOpening = (opening: LiveClientEvent): Effect.Effect<void, never, Scope.Scope> =>
-      Effect.gen(function* () {
-        openingEventId = opening.event_id;
-        openingWait = yield* Effect.forkScoped(
-          Effect.sleep(openingTimeoutMs).pipe(
-            // Cleared before the settle it runs, so the settle interrupts no
-            // fiber: the one it would interrupt is this one.
-            Effect.zipRight(
-              Effect.sync(() => {
-                openingWait = undefined;
-              }),
-            ),
-            Effect.zipRight(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
+    const armOpening = Effect.fnUntraced(function* (
+      opening: LiveClientEvent,
+    ): Effect.fn.Return<void, never, Scope.Scope> {
+      openingEventId = opening.event_id;
+      openingWait = yield* Effect.forkScoped(
+        Effect.sleep(openingTimeoutMs).pipe(
+          // Cleared before the settle it runs, so the settle interrupts no
+          // fiber: the one it would interrupt is this one.
+          Effect.andThen(
+            Effect.sync(() => {
+              openingWait = undefined;
+            }),
           ),
-        );
-      });
+          Effect.andThen(settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED })),
+        ),
+      );
+    });
 
     /**
      * The finalization, which settles whatever the caller's own close write
@@ -218,67 +222,66 @@ export function relaySession<R = never>(
      */
     const finalize: Effect.Effect<void, never, R> = Effect.suspend(() =>
       closed !== undefined && options.onSessionClosed
-        ? Effect.zipRight(
+        ? Effect.andThen(
             Effect.exit(options.onSessionClosed(closed)),
             settle(FINALIZATION.CONFIRMED),
           )
         : settle(FINALIZATION.CONFIRMED),
     );
 
-    const onUpstreamFrame = (frame: VoiceFrame) =>
-      Effect.gen(function* () {
-        const text = frameText(frame);
-        const type = frameType(text);
-        const decision = upstreamFrameDecision(type, route);
-        if (decision === FRAME_DECISION.DROP_AUDIO) {
-          counts.droppedAudio += 1;
-        } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
-          counts.droppedUnpermitted += 1;
-        } else if (yield* desktop.isOpen) {
-          yield* desktop.send(frame);
-          counts.framesToDesktop += 1;
-          counts.bytesToDesktop += frameBytes(frame);
+    const onUpstreamFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
+      const text = frameText(frame);
+      const type = frameType(text);
+      const decision = upstreamFrameDecision(type, route);
+      if (decision === FRAME_DECISION.DROP_AUDIO) {
+        counts.droppedAudio += 1;
+      } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
+        counts.droppedUnpermitted += 1;
+      } else if (yield* desktop.isOpen) {
+        yield* desktop.send(frame);
+        counts.framesToDesktop += 1;
+        counts.bytesToDesktop += frameBytes(frame);
+      }
+      if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
+        startedSeen = true;
+        const opening = hungUp ? undefined : options.onSessionStarted?.();
+        if (opening !== undefined && (yield* upstream.isOpen)) {
+          yield* upstream.send({ text: JSON.stringify(opening) });
+          yield* armOpening(opening);
+          // The caller may have gone while the command was going up, on the
+          // fiber reading their own socket: an opening armed behind a hangup
+          // is settled here rather than left to cue a session on its way out,
+          // which is what the hangup itself would have done had it run first.
+          if (hungUp) yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
         }
-        if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
-          startedSeen = true;
-          const opening = hungUp ? undefined : options.onSessionStarted?.();
-          if (opening !== undefined && (yield* upstream.isOpen)) {
-            yield* upstream.send({ text: JSON.stringify(opening) });
-            yield* armOpening(opening);
-            // The caller may have gone while the command was going up, on the
-            // fiber reading their own socket: an opening armed behind a hangup
-            // is settled here rather than left to cue a session on its way out,
-            // which is what the hangup itself would have done had it run first.
-            if (hungUp) yield* settleOpening({ outcome: OPENING_OUTCOME.UNACKNOWLEDGED });
-          }
+      }
+      if (
+        openingEventId !== undefined &&
+        (type === LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED || type === LIVE_SERVER_EVENT.ERROR)
+      ) {
+        const event = parseLiveServerEvent(text);
+        const answer = event === undefined ? undefined : openingAnswer(event);
+        if (answer !== undefined) yield* settleOpening(answer);
+      }
+      if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
+        const updated = parseLiveServerEvent(text);
+        if (updated?.type === LIVE_SERVER_EVENT.USAGE_UPDATED) {
+          // On its own fiber, since a snapshot is not what the pipe waits
+          // on, and uninterruptible, since the scope closing on a session
+          // that ended unconfirmed would otherwise cut the last snapshot
+          // the row will ever hold.
+          yield* Effect.forkScoped(
+            Effect.uninterruptible(options.onUsageUpdated(updated.usage.seconds)),
+          );
         }
-        if (
-          openingEventId !== undefined &&
-          (type === LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED || type === LIVE_SERVER_EVENT.ERROR)
-        ) {
-          const event = parseLiveServerEvent(text);
-          const answer = event === undefined ? undefined : openingAnswer(event);
-          if (answer !== undefined) yield* settleOpening(answer);
-        }
-        if (type === LIVE_SERVER_EVENT.USAGE_UPDATED && options.onUsageUpdated) {
-          const updated = parseLiveServerEvent(text);
-          if (updated?.type === LIVE_SERVER_EVENT.USAGE_UPDATED) {
-            // On its own fiber, since a snapshot is not what the pipe waits
-            // on, and uninterruptible, since the scope closing on a session
-            // that ended unconfirmed would otherwise cut the last snapshot
-            // the row will ever hold.
-            yield* Effect.forkScoped(
-              Effect.uninterruptible(options.onUsageUpdated(updated.usage.seconds)),
-            );
-          }
-        }
-        if (type === LIVE_SERVER_EVENT.SESSION_CLOSED && !closedSeen) {
-          closedSeen = true;
-          const event = parseLiveServerEvent(text);
-          if (event?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) closed = event;
-          yield* Effect.forkScoped(finalize);
-        }
-      });
+      }
+      if (type === LIVE_SERVER_EVENT.SESSION_CLOSED && !closedSeen) {
+        closedSeen = true;
+        const event = parseLiveServerEvent(text);
+        if (event?.type === LIVE_SERVER_EVENT.SESSION_CLOSED) closed = event;
+        yield* Effect.forkScoped(finalize);
+      }
+    });
 
     const onUpstreamGone = Effect.suspend(() =>
       closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED),
@@ -293,45 +296,43 @@ export function relaySession<R = never>(
      * is the desktop gone, and the graceful close upstream records its
      * seconds.
      */
-    const refuse = (type: string | undefined): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        counts.refusedUnpermitted += 1;
-        options.onFrameRefused?.(type);
-        if (yield* desktop.isOpen) {
-          yield* desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
-        }
-      });
+    const refuse = Effect.fnUntraced(function* (type: string | undefined) {
+      counts.refusedUnpermitted += 1;
+      options.onFrameRefused?.(type);
+      if (yield* desktop.isOpen) {
+        yield* desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
+      }
+    });
 
-    const onDesktopFrame = (frame: VoiceFrame) =>
-      Effect.gen(function* () {
-        const text = frameText(frame);
-        const type = frameType(text);
-        const decision = desktopFrameDecision(type, route);
-        if (decision === FRAME_DECISION.REFUSE) {
+    const onDesktopFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
+      const text = frameText(frame);
+      const type = frameType(text);
+      const decision = desktopFrameDecision(type, route);
+      if (decision === FRAME_DECISION.REFUSE) {
+        yield* refuse(type);
+        return;
+      }
+      if (decision === FRAME_DECISION.REPORT) {
+        // The one frame read past its type: a report in the service's own
+        // vocabulary that is not one is a frame the route does not admit.
+        const report = sessionReportFrameFromWire(decodeLivePayload(text));
+        if (report === undefined) {
           yield* refuse(type);
           return;
         }
-        if (decision === FRAME_DECISION.REPORT) {
-          // The one frame read past its type: a report in the service's own
-          // vocabulary that is not one is a frame the route does not admit.
-          const report = sessionReportFrameFromWire(decodeLivePayload(text));
-          if (report === undefined) {
-            yield* refuse(type);
-            return;
-          }
-          counts.reportsRead += 1;
-          options.onDesktopReport?.(report);
-          return;
-        }
-        if (decision !== FRAME_DECISION.FORWARD) {
-          counts.droppedUnpermitted += 1;
-          return;
-        }
-        if (!(yield* upstream.isOpen)) return;
-        yield* upstream.send(frame);
-        counts.framesToUpstream += 1;
-        counts.bytesToUpstream += frameBytes(frame);
-      });
+        counts.reportsRead += 1;
+        options.onDesktopReport?.(report);
+        return;
+      }
+      if (decision !== FRAME_DECISION.FORWARD) {
+        counts.droppedUnpermitted += 1;
+        return;
+      }
+      if (!(yield* upstream.isOpen)) return;
+      yield* upstream.send(frame);
+      counts.framesToUpstream += 1;
+      counts.bytesToUpstream += frameBytes(frame);
+    });
 
     /**
      * The desktop went first. The docs' graceful close on its behalf: the
@@ -354,7 +355,7 @@ export function relaySession<R = never>(
       yield* upstream.send({ text: JSON.stringify(closeEvent(randomUUID())) });
       yield* Effect.forkScoped(
         Effect.sleep(closeTimeoutMs).pipe(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.suspend(() => (closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED))),
           ),
         ),
@@ -362,10 +363,10 @@ export function relaySession<R = never>(
     });
 
     yield* Effect.forkScoped(
-      Effect.zipRight(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
+      Effect.andThen(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
     );
     yield* Effect.forkScoped(
-      Effect.zipRight(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
+      Effect.andThen(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
     );
 
     const finalization = yield* Deferred.await(settled);

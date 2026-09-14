@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -34,7 +34,7 @@ import { findHeldDevice } from "../hosted/device-store.js";
  */
 type VoiceSessionRecordEffect<A> = Effect.Effect<
   A,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 >;
 
@@ -82,7 +82,7 @@ export interface VoiceSessionRecord {
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
-const VoiceCloseReasonSchema = Schema.Literal(...Object.values(VOICE_CLOSE_REASON));
+const VoiceCloseReasonSchema = Schema.Literals(Object.values(VOICE_CLOSE_REASON));
 
 /** The usage column: the session's seconds and whether they are the API's own confirmed count. */
 const VoiceUsageColumnSchema = Schema.Struct({
@@ -115,7 +115,7 @@ const registerSession = SqlSchema.void({
 const OwnedKeySchema = Schema.Struct({ userId: Schema.String, liveSessionId: Schema.String });
 const OwnedRowSchema = Schema.Struct({ id: Schema.String });
 
-const findOwnedSession = SqlSchema.findOne({
+const findOwnedSession = SqlSchema.findOneOption({
   Request: OwnedKeySchema,
   Result: OwnedRowSchema,
   execute: (key) =>
@@ -129,7 +129,7 @@ const findOwnedSession = SqlSchema.findOne({
 
 const NoteUsageRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
-  usage: Schema.parseJson(VoiceUsageColumnSchema),
+  usage: Schema.fromJsonString(VoiceUsageColumnSchema),
 });
 
 const noteSessionUsage = SqlSchema.void({
@@ -146,9 +146,9 @@ const noteSessionUsage = SqlSchema.void({
 
 const CloseRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
-  closedAt: Schema.DateFromSelf,
+  closedAt: Schema.Date,
   closeReason: VoiceCloseReasonSchema,
-  usage: Schema.parseJson(VoiceUsageColumnSchema),
+  usage: Schema.fromJsonString(VoiceUsageColumnSchema),
 });
 
 const closeSession = SqlSchema.void({

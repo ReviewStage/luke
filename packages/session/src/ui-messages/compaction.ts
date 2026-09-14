@@ -8,7 +8,7 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import type { TextUIPart } from "ai";
-import { Either } from "effect";
+import { Result } from "effect";
 import type { StoredUIMessage } from "./validate.js";
 
 /**
@@ -70,12 +70,12 @@ export function compactionSummaryMessage(
       },
     }),
   );
-  if (Either.isLeft(read) || read.right.compaction === undefined) return undefined;
+  if (Result.isFailure(read) || read.success.compaction === undefined) return undefined;
   const part: TextUIPart = { type: "text", text, state: TEXT_PART_STATE_DONE };
   return {
     id,
     role: MESSAGE_ROLE.ASSISTANT,
-    metadata: { author: read.right.author, compaction: read.right.compaction },
+    metadata: { author: read.success.author, compaction: read.success.compaction },
     parts: [part],
   };
 }

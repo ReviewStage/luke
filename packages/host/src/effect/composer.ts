@@ -24,7 +24,7 @@ export const startedAndStopped = (
   stop: Effect.Effect<void>,
 ): Effect.Effect<void, never, Scope.Scope> =>
   Effect.uninterruptible(
-    Effect.zipRight(
+    Effect.andThen(
       Effect.addFinalizer(() => stop),
       start,
     ),
@@ -48,4 +48,4 @@ export const layersInOrder = <E, R>(
 export const mergedMethods = (
   composers: readonly Composer[],
 ): Effect.Effect<GatewayMethodTable, DuplicateGatewayMethod> =>
-  Effect.suspend(() => foldMethods(composers));
+  Effect.suspend(() => Effect.fromResult(foldMethods(composers)));

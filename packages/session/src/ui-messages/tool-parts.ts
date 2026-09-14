@@ -19,7 +19,7 @@ export const TOOL_PART_STATE = {
 
 export type ToolPartState = (typeof TOOL_PART_STATE)[keyof typeof TOOL_PART_STATE];
 
-export const ToolPartStateSchema = Schema.Literal(...Object.values(TOOL_PART_STATE));
+export const ToolPartStateSchema = Schema.Literals(Object.values(TOOL_PART_STATE));
 
 const readsToolPartState = Schema.is(ToolPartStateSchema);
 

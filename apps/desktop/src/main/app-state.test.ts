@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { LIVE_SESSION_PHASE } from "@sidecar/gateway";
 import { runModeFor } from "@sidecar/host";
-import { Chunk, Effect, Fiber, Runtime, Stream } from "effect";
+import { Context, Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -34,7 +34,7 @@ const RUN = {
 } as const;
 
 function store(): AppStateStore {
-  return new AppStateStore(initialAppState(RUN, true), Runtime.defaultRuntime);
+  return new AppStateStore(initialAppState(RUN, true), Context.empty());
 }
 
 /**
@@ -49,10 +49,10 @@ function store(): AppStateStore {
 function watchChanges(app: AppStateStore, count: number, act: () => void): Promise<AppState[]> {
   return Effect.runPromise(
     Effect.gen(function* () {
-      const fiber = yield* Effect.fork(Stream.runCollect(Stream.take(app.changes, count)));
-      yield* Effect.yieldNow();
+      const fiber = yield* Effect.forkChild(Stream.runCollect(Stream.take(app.changes, count)));
+      yield* Effect.yieldNow;
       act();
-      return Chunk.toArray(yield* Fiber.join(fiber));
+      return yield* Fiber.join(fiber);
     }),
   );
 }
@@ -157,7 +157,7 @@ test("the version climbs once per applied patch", () => {
 });
 
 test("the live session's phase is a slice of the voice document beside the view, and a window going away keeps it", () => {
-  const app = new AppStateStore(initialAppState(RUN, false), Runtime.defaultRuntime);
+  const app = new AppStateStore(initialAppState(RUN, false), Context.empty());
   app.update({ voice: { view: IDLE_VOICE_VIEW } });
   app.update({
     voice: { ...app.snapshot().voice, liveSession: { phase: LIVE_SESSION_PHASE.WANTED } },
@@ -225,7 +225,7 @@ test("a halt outlives every host read until the host's own event stands it down"
 test("a run that observes nothing is settled whatever the host answered", () => {
   const quiet = new AppStateStore(
     initialAppState({ ...RUN, runMode: runModeFor({ capture: false, fixture: true }) }, false),
-    Runtime.defaultRuntime,
+    Context.empty(),
   );
   quiet.update(bootstrapPatch(quiet.snapshot(), BOOT));
   assert.equal(quiet.snapshot().sessions.settled, true);

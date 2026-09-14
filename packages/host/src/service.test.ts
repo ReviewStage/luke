@@ -150,7 +150,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
 }
 
 for (const kind of ["in-process", "loopback"] as const) {
-  it.scoped(`[${kind}] a duplicate submission finds the one run`, () =>
+  it.effect(`[${kind}] a duplicate submission finds the one run`, () =>
     Effect.gen(function* () {
       const f = yield* fixture(kind);
       const submission = {
@@ -169,7 +169,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     }),
   );
 
-  it.scoped(
+  it.effect(
     `[${kind}] the Clear crosses the boundary as Delete conversation on main and answers whether it landed`,
     () =>
       Effect.gen(function* () {
@@ -179,7 +179,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scoped(
+  it.effect(
     `[${kind}] the run list reaches the client as a numbered event it can reconcile against`,
     () =>
       Effect.gen(function* () {
@@ -199,7 +199,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scoped(
+  it.effect(
     `[${kind}] a node the host needs that is not connected answers unavailable through the protocol`,
     () =>
       Effect.gen(function* () {

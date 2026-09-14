@@ -2,7 +2,7 @@
  * What the launch environment overrides about the settings the store answers,
  * each value read by its variable's own name out of the `Environment` seam's
  * `ConfigProvider` rather than off a record the store holds. A composition
- * handed a provider that holds none — `ConfigProvider.fromMap(new Map())` —
+ * handed a provider that holds none — `ConfigProvider.fromEnvRecord({})` —
  * resolves every override absent, and the store answers from its own file and
  * this build's defaults alone.
  *
@@ -107,17 +107,17 @@ function usableApiKey(
 }
 
 const optional = (name: string): Config.Config<Option.Option<string>> =>
-  Config.option(Config.string(name));
+  Config.option(Config.String(name));
 
 const optionalSecret = (name: string): Config.Config<Option.Option<Redacted.Redacted<string>>> =>
-  Config.option(Config.redacted(name));
+  Config.option(Config.Redacted(name));
 
 /** Every override, read out of the provider the `Environment` seam holds. */
 export const settingsOverrides: Effect.Effect<SettingsEnvironmentOverrides, never, Environment> =
   Effect.gen(function* () {
     const environment = yield* Environment;
     const load = <A>(config: Config.Config<A>): Effect.Effect<A> =>
-      Effect.orDie(environment.load(config));
+      Effect.orDie(config.parse(environment));
 
     const apiKeys = new Map<CredentialProviderId, Redacted.Redacted<string>>();
     for (const provider of CREDENTIAL_PROVIDER_LIST) {

@@ -1,15 +1,10 @@
-import { type HttpApp, type HttpClient, HttpRouter } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
+import { type HttpClient, HttpRouter } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_SERVICE_PATH } from "./core.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./hosted/http.js";
-import {
-  HOSTED_REFUSAL,
-  hostedJsonResponse,
-  hostedMethod,
-  hostedRefusalResponse,
-} from "./hosted/http-effect.js";
+import { hostedJsonResponse, hostedMethod, hostedNotFoundRoute } from "./hosted/http-effect.js";
 import {
   INTRODUCTION_MINT_FIELDS,
   introductionClientSecretRequest,
@@ -24,6 +19,7 @@ import {
   refusingMint,
 } from "./hosted/mint-effect.js";
 import type { IntroductionSpend, QuotaEffect } from "./hosted/quota.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The accountless introduction's mint as its own route group. It stands apart
@@ -44,35 +40,37 @@ export interface IntroductionMintSeams extends MintSeams {
  * introduction is not an allowance the desktop tracks, only a cap it may run
  * into.
  */
-function introductionMint(seams: IntroductionMintSeams) {
-  return Effect.gen(function* () {
-    yield* refusingMint(hostedMethod(MINT_METHOD));
-    const apiKey = yield* hostedKey();
-    const environment = yield* HostedEnvironment;
-    const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
-    const spend = yield* Effect.orDie(seams.spendIntroduction());
-    if (!spend.allowed) {
-      return yield* Effect.fail(
-        hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
-          error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-        }),
-      );
-    }
-    const connection = yield* mintedConnection(
-      mintOptions(seams, apiKey, environment.realtimeModel, read, introductionClientSecretRequest),
+const introductionMint = /* @__PURE__ */ Effect.fn("introductionMint")(function* (
+  seams: IntroductionMintSeams,
+) {
+  yield* refusingMint(hostedMethod(MINT_METHOD));
+  const apiKey = yield* hostedKey();
+  const environment = yield* HostedEnvironment;
+  const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
+  const spend = yield* Effect.orDie(seams.spendIntroduction());
+  if (!spend.allowed) {
+    return yield* Effect.fail(
+      hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
+        error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+      }),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection });
-  });
-}
+  }
+  const connection = yield* mintedConnection(
+    mintOptions(seams, apiKey, environment.realtimeModel, read, introductionClientSecretRequest),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection });
+});
 
 /** The group, which is the introduction's own mint and the refusal anywhere else. */
 export function introductionMintApp(
   seams: IntroductionMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(HOSTED_SERVICE_PATH.INTRODUCTION_MINT, Effect.merge(introductionMint(seams))),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.INTRODUCTION_MINT,
+      Effect.catch(introductionMint(seams), Effect.succeed),
     ),
+    hostedNotFoundRoute,
   );
 }

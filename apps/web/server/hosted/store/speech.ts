@@ -1,12 +1,13 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Result, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRAIN_INPUT_MARKER,
   BRAIN_TOOL,
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
+  EXCESS_KEYS,
   isRecord,
   isSpeechEventKind,
   isWireString,
@@ -26,7 +27,7 @@ import {
   type WireBoundaryInput,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 import {
   ConversationEventKindSchema,
   type ConversationTarget,
@@ -97,7 +98,7 @@ import {
  * rule out. `markSpeechSpoken` therefore admits the mark only from the
  * device that claimed, and a speaker with no claim has nothing to say.
  *
- * Every read below is an `Effect<A, SqlError | ParseError, SqlClient>` whose
+ * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` whose
  * rows a `Schema` decodes rather than trusts; the transitions stay promises,
  * because their writes are the store writer's, and each runs its reads
  * through the runner its caller's edge composed.
@@ -205,7 +206,7 @@ export interface SpeechStore {
 type SpeechEffect<A> = Effect.Effect<A, SpeechReadFailure, SqlClient.SqlClient>;
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type SpeechReadFailure = SqlError | ParseResult.ParseError;
+type SpeechReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -237,21 +238,21 @@ export interface SpeechOffer extends SpeechStanding {
  * so a row naming anything else is refused rather than folded.
  */
 const SpeechEventRowSchema = Schema.Struct({
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  messageId: Schema.String,
   kind: ConversationEventKindSchema,
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
+  deviceId: Schema.NullOr(Schema.String),
   payload: WireValueSchema,
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({ messageId: "message_id", deviceId: "device_id", createdAt: "created_at" }),
+);
 
 type SpeechEventRow = Schema.Schema.Type<typeof SpeechEventRowSchema>;
 
 /** The conversation a message belongs to, where the message is the account's and its conversation stands. */
 const MessageConversationSchema = Schema.Struct({
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-});
+  conversationId: Schema.String,
+}).pipe(Schema.encodeKeys({ conversationId: "conversation_id" }));
 
 const MessageKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -264,7 +265,7 @@ const EventPositionSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
 });
 
-const findMessageConversation = SqlSchema.findOne({
+const findMessageConversation = SqlSchema.findOneOption({
   Request: MessageKeySchema,
   Result: MessageConversationSchema,
   execute: (key) =>
@@ -293,7 +294,7 @@ const findSpeechEvents = SqlSchema.findAll({
     ),
 });
 
-const findOfferedEvent = SqlSchema.findOne({
+const findOfferedEvent = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: EventPositionSchema,
   execute: (messageId) =>
@@ -315,7 +316,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
     if (standing === undefined) {
       if (row.kind !== CONVERSATION_EVENT_KIND.SPEECH_OFFERED) continue;
       const offeredAt = row.createdAt.getTime();
-      const payload = Either.getOrUndefined(readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(row.payload));
+      const payload = Result.getOrUndefined(readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(row.payload));
       standing = {
         state: SPEECH_STATE.OFFERED,
         offeredAt,
@@ -330,7 +331,7 @@ function speechStandingOf(rows: readonly SpeechEventRow[]): SpeechStanding | und
       standing = { ...standing, claimedByDeviceId: row.deviceId };
     }
     if (row.kind === CONVERSATION_EVENT_KIND.SPEECH_HELD) {
-      const held = Either.getOrUndefined(readEither(SPEECH_HELD_EVENT_PAYLOAD)(row.payload));
+      const held = Result.getOrUndefined(readEither(SPEECH_HELD_EVENT_PAYLOAD)(row.payload));
       standing = held === undefined ? standing : { ...standing, quietUntil: held.quietUntil };
     }
   }
@@ -361,19 +362,17 @@ type Located =
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
 /** The offer on one of the account's messages as it stands now, or why there is none to move. */
-function locate(
+const locate = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   messageId: string,
-): Effect.Effect<Located, SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const conversation = yield* findMessageConversation({ userId, messageId });
-    if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    const events = yield* speechEventsOf([messageId]);
-    const standing = speechStandingOf(events.get(messageId) ?? []);
-    if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
-    return { ok: true, conversationId: conversation.value.conversationId, standing };
-  });
-}
+): Effect.fn.Return<Located, SpeechReadFailure, SqlClient.SqlClient> {
+  const conversation = yield* findMessageConversation({ userId, messageId });
+  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  const events = yield* speechEventsOf([messageId]);
+  const standing = speechStandingOf(events.get(messageId) ?? []);
+  if (standing === undefined) return { ok: false, refusal: SPEECH_REFUSAL.NOT_OFFERED };
+  return { ok: true, conversationId: conversation.value.conversationId, standing };
+});
 
 /**
  * One transition an offer may take: the event it writes, the states it may
@@ -457,46 +456,44 @@ type Moved =
     }
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
-function move(
+const move = /* @__PURE__ */ Effect.fnUntraced(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   { transition, deviceId, payload, guard }: Move,
-): SpeechEffect<Moved> {
-  return Effect.gen(function* () {
-    const located = yield* locate(userId, messageId);
-    if (!located.ok) return located;
-    const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
-    if (refusal !== undefined) return { ok: false, refusal };
-    const written = yield* store.writer.recordEvent(
-      { userId, conversationId: located.conversationId },
-      {
-        messageId,
-        kind: transition.kind,
-        ...(deviceId !== undefined ? { deviceId } : undefined),
-        ...(payload !== undefined ? { payload: unparsedWire(payload) } : undefined),
-        unless: transition.unless,
-      },
-    );
-    if (written.ok) return { ...written, conversationId: located.conversationId };
-    switch (written.refusal) {
-      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-        return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
-      case STORE_WRITE_REFUSAL.SUPERSEDED: {
-        const now = yield* locate(userId, messageId);
-        return {
-          ok: false,
-          refusal: now.ok
-            ? (transition.refusals[now.standing.state] ?? SPEECH_REFUSAL.SETTLED)
-            : now.refusal,
-        };
-      }
-      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-      case STORE_WRITE_REFUSAL.NO_MESSAGE:
-        return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+): Effect.fn.Return<Moved, SpeechReadFailure, SqlClient.SqlClient> {
+  const located = yield* locate(userId, messageId);
+  if (!located.ok) return located;
+  const refusal = transition.refusals[located.standing.state] ?? guard?.(located.standing);
+  if (refusal !== undefined) return { ok: false, refusal };
+  const written = yield* store.writer.recordEvent(
+    { userId, conversationId: located.conversationId },
+    {
+      messageId,
+      kind: transition.kind,
+      ...(deviceId !== undefined ? { deviceId } : undefined),
+      ...(payload !== undefined ? { payload: unparsedWire(payload) } : undefined),
+      unless: transition.unless,
+    },
+  );
+  if (written.ok) return { ...written, conversationId: located.conversationId };
+  switch (written.refusal) {
+    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+      return { ok: false, refusal: SPEECH_REFUSAL.ALREADY_CLAIMED };
+    case STORE_WRITE_REFUSAL.SUPERSEDED: {
+      const now = yield* locate(userId, messageId);
+      return {
+        ok: false,
+        refusal: now.ok
+          ? (transition.refusals[now.standing.state] ?? SPEECH_REFUSAL.SETTLED)
+          : now.refusal,
+      };
     }
-  });
-}
+    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+    case STORE_WRITE_REFUSAL.NO_MESSAGE:
+      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  }
+});
 
 /**
  * Puts a briefing on offer on the message that announced it, expiring
@@ -504,44 +501,42 @@ function move(
  * is answered as it stands: the relay tells a settled call once, but the
  * event eve re-emits may reach it again.
  */
-export function offerSpeech(
+export const offerSpeech = /* @__PURE__ */ Effect.fn("offerSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   now: number,
-): SpeechEffect<SpeechWriteResult> {
-  return Effect.gen(function* () {
-    const conversation = yield* findMessageConversation({ userId, messageId });
-    if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    const standing = yield* findOfferedEvent(messageId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, seq: standing.value.seq };
+): Effect.fn.Return<SpeechWriteResult, SpeechReadFailure, SqlClient.SqlClient> {
+  const conversation = yield* findMessageConversation({ userId, messageId });
+  if (Option.isNone(conversation)) return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  const standing = yield* findOfferedEvent(messageId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, seq: standing.value.seq };
+  }
+  const written = yield* store.writer.recordEvent(
+    { userId, conversationId: conversation.value.conversationId },
+    {
+      messageId,
+      kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
+      payload: unparsedWire({ expiresAt: now + SPEECH_OFFER.TTL_MS }),
+      unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
+    },
+  );
+  if (written.ok) return written;
+  switch (written.refusal) {
+    case STORE_WRITE_REFUSAL.SUPERSEDED: {
+      // The same offer landed from another caller between the read and the lock; it is the one to answer.
+      const landed = yield* findOfferedEvent(messageId);
+      return Option.isNone(landed)
+        ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
+        : { ok: true, id: landed.value.id, seq: landed.value.seq };
     }
-    const written = yield* store.writer.recordEvent(
-      { userId, conversationId: conversation.value.conversationId },
-      {
-        messageId,
-        kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED,
-        payload: unparsedWire({ expiresAt: now + SPEECH_OFFER.TTL_MS }),
-        unless: [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
-      },
-    );
-    if (written.ok) return written;
-    switch (written.refusal) {
-      case STORE_WRITE_REFUSAL.SUPERSEDED: {
-        // The same offer landed from another caller between the read and the lock; it is the one to answer.
-        const landed = yield* findOfferedEvent(messageId);
-        return Option.isNone(landed)
-          ? { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND }
-          : { ok: true, id: landed.value.id, seq: landed.value.seq };
-      }
-      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-      case STORE_WRITE_REFUSAL.NO_MESSAGE:
-        return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
-    }
-  });
-}
+    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+    case STORE_WRITE_REFUSAL.NO_MESSAGE:
+      return { ok: false, refusal: SPEECH_REFUSAL.NOT_FOUND };
+  }
+});
 
 /**
  * One device takes the offer, while it is offered, not yet due, and not
@@ -549,30 +544,28 @@ export function offerSpeech(
  * re-reads the claim under the conversation's lock and answers the second
  * by name; the partial unique index stands behind that as the backstop.
  */
-export function claimSpeech(
+export const claimSpeech = /* @__PURE__ */ Effect.fn("claimSpeech")(function* (
   store: SpeechStore,
   userId: string,
   messageId: string,
   deviceId: string,
   now: number,
-): SpeechEffect<SpeechClaimResult> {
-  return Effect.gen(function* () {
-    const moved = yield* move(store, userId, messageId, {
-      transition: CLAIM,
-      deviceId,
-      guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
-    });
-    if (!moved.ok) return moved;
-    // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
-    const claim = {
-      userId,
-      conversationId: moved.conversationId,
-      messageId,
-      deviceId,
-    } as SpeechClaim;
-    return { ok: true, id: moved.id, seq: moved.seq, claim };
+): Effect.fn.Return<SpeechClaimResult, SpeechReadFailure, SqlClient.SqlClient> {
+  const moved = yield* move(store, userId, messageId, {
+    transition: CLAIM,
+    deviceId,
+    guard: (standing) => (standing.expiresAt <= now ? SPEECH_REFUSAL.EXPIRED : undefined),
   });
-}
+  if (!moved.ok) return moved;
+  // SAFETY: the claim event is on the record under this device; this is the one place the brand is minted.
+  const claim = {
+    userId,
+    conversationId: moved.conversationId,
+    messageId,
+    deviceId,
+  } as SpeechClaim;
+  return { ok: true, id: moved.id, seq: moved.seq, claim };
+});
 
 /**
  * The device that claimed the offer reports it said, with the voice session
@@ -641,10 +634,16 @@ const OpenOffersRequestSchema = Schema.Struct({
 
 /** An offer's rows before its standing is folded: the account, the conversation, and the message announcing it. */
 const OfferedMessageSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
-});
+  userId: Schema.String,
+  conversationId: Schema.String,
+  messageId: Schema.String,
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    messageId: "message_id",
+  }),
+);
 
 const findOfferedMessages = SqlSchema.findAll({
   Request: OpenOffersRequestSchema,
@@ -680,25 +679,23 @@ const findOfferedMessages = SqlSchema.findAll({
  * message — over standing conversations, oldest offer first, each folded to
  * how it stands now.
  */
-export function openSpeechOffers(
+export const openSpeechOffers = /* @__PURE__ */ Effect.fn("openSpeechOffers")(function* (
   query: OpenSpeechOffersQuery = {},
-): Effect.Effect<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const offered = yield* findOfferedMessages({
-      userId: query.userId ?? null,
-      userIds: query.userIds ?? null,
-      notUserIds: query.notUserIds ?? [],
-      limit: query.limit ?? OPEN_OFFERS.MAX,
-    });
-    // A message told its offer twice is one offer; the first row keeps its place.
-    const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
-    const speech = yield* speechEventsOf(distinct.map((row) => row.messageId));
-    return distinct.flatMap((row) => {
-      const standing = speechStandingOf(speech.get(row.messageId) ?? []);
-      return standing === undefined ? [] : [{ ...row, ...standing }];
-    });
+): Effect.fn.Return<readonly SpeechOffer[], SpeechReadFailure, SqlClient.SqlClient> {
+  const offered = yield* findOfferedMessages({
+    userId: query.userId ?? null,
+    userIds: query.userIds ?? null,
+    notUserIds: query.notUserIds ?? [],
+    limit: query.limit ?? OPEN_OFFERS.MAX,
   });
-}
+  // A message told its offer twice is one offer; the first row keeps its place.
+  const distinct = [...new Map(offered.map((row) => [row.messageId, row])).values()];
+  const speech = yield* speechEventsOf(distinct.map((row) => row.messageId));
+  return distinct.flatMap((row) => {
+    const standing = speechStandingOf(speech.get(row.messageId) ?? []);
+    return standing === undefined ? [] : [{ ...row, ...standing }];
+  });
+});
 
 /** What one sweep did, as counts. */
 export interface SpeechSweepOutcome {
@@ -731,12 +728,12 @@ export interface SpeechSweepOptions {
 
 /** The latest quiet instant of one account's devices still ahead of the read. */
 const QuietAccountSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  quietUntil: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("quiet_until")),
-});
+  userId: Schema.String,
+  quietUntil: InstantColumnSchema,
+}).pipe(Schema.encodeKeys({ userId: "user_id", quietUntil: "quiet_until" }));
 
 const QuietRequestSchema = Schema.Struct({
-  now: Schema.DateFromSelf,
+  now: Schema.Date,
   userIds: Schema.NullOr(Schema.Array(Schema.String)),
 });
 
@@ -806,54 +803,52 @@ function sweepWrite(
  * one read over every other account, held offers of quiet accounts left
  * out, releases and expires.
  */
-export function sweepSpeech(
+export const sweepSpeech = /* @__PURE__ */ Effect.fn("sweepSpeech")(function* (
   store: SpeechSweepStore,
   options: SpeechSweepOptions,
-): SpeechEffect<SpeechSweepOutcome> {
-  return Effect.gen(function* () {
-    const { now, limit, userIds } = options;
-    const quiet = yield* quietUntilByAccount(now, userIds);
-    const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
-    for (const [userId, quietUntil] of quiet) {
-      for (const offer of yield* openSpeechOffers({ userId, limit })) {
-        if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
-        if (yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
-          outcome.held += 1;
-        }
+): Effect.fn.Return<SpeechSweepOutcome, SpeechReadFailure, SqlClient.SqlClient> {
+  const { now, limit, userIds } = options;
+  const quiet = yield* quietUntilByAccount(now, userIds);
+  const outcome = { held: 0, released: 0, expired: 0, turns: 0 };
+  for (const [userId, quietUntil] of quiet) {
+    for (const offer of yield* openSpeechOffers({ userId, limit })) {
+      if (offer.state === SPEECH_STATE.HELD && (offer.quietUntil ?? 0) >= quietUntil) continue;
+      if (yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_HELD, { quietUntil })) {
+        outcome.held += 1;
       }
     }
-    const released = new Set<string>();
-    const unheld = yield* openSpeechOffers({
-      userIds,
-      notUserIds: [...quiet.keys()],
-      limit,
-    });
-    for (const offer of unheld) {
-      if (offer.state === SPEECH_STATE.HELD) {
-        const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
-          reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED,
-        });
-        if (!ended) continue;
-        outcome.released += 1;
-        if (released.has(offer.conversationId)) continue;
-        released.add(offer.conversationId);
-        const queued = yield* store.writer.enqueueTurn(
-          { userId: offer.userId, conversationId: offer.conversationId },
-          { origin: TURN_ORIGIN.HOLD_RELEASE },
-        );
-        if (queued.ok) outcome.turns += 1;
-        continue;
-      }
-      if (offer.expiresAt <= now) {
-        const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
-          reason: SPEECH_EXPIRY_REASON.DUE,
-        });
-        if (ended) outcome.expired += 1;
-      }
-    }
-    return outcome;
+  }
+  const released = new Set<string>();
+  const unheld = yield* openSpeechOffers({
+    userIds,
+    notUserIds: [...quiet.keys()],
+    limit,
   });
-}
+  for (const offer of unheld) {
+    if (offer.state === SPEECH_STATE.HELD) {
+      const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.HOLD_RELEASED,
+      });
+      if (!ended) continue;
+      outcome.released += 1;
+      if (released.has(offer.conversationId)) continue;
+      released.add(offer.conversationId);
+      const queued = yield* store.writer.enqueueTurn(
+        { userId: offer.userId, conversationId: offer.conversationId },
+        { origin: TURN_ORIGIN.HOLD_RELEASE },
+      );
+      if (queued.ok) outcome.turns += 1;
+      continue;
+    }
+    if (offer.expiresAt <= now) {
+      const ended = yield* sweepWrite(store, offer, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED, {
+        reason: SPEECH_EXPIRY_REASON.DUE,
+      });
+      if (ended) outcome.expired += 1;
+    }
+  }
+  return outcome;
+});
 
 /** One briefing a hold released unspoken: the words the announce call carried, and when the brain decided them. */
 export interface ReleasedBriefing {
@@ -915,26 +910,16 @@ function briefingOf(parts: ReadParts): string | undefined {
  * own input item spells them: the marker line, then the JSON the host
  * wrote. A message this build cannot read as one names nothing.
  */
-const ignoringExtraKeys = { parseOptions: { onExcessProperty: "ignore" } } as const;
+const trimmedText = Schema.Trim.check(Schema.isNonEmpty());
 
-const trimmedText = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    schemaId: Schema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
-
+/**
+ * The words are read with excess keys dropped, so an item the host later
+ * widens still names what it named here; the tolerance stands at the read
+ * because v4 settles parse options there and a declaration carries none.
+ */
 const heldBriefingsWords = Schema.Struct({
-  held_briefings: Schema.Array(
-    Schema.Struct({ briefing: trimmedText, decided_at: trimmedText }).annotations(
-      ignoringExtraKeys,
-    ),
-  ),
-}).annotations(ignoringExtraKeys);
+  held_briefings: Schema.Array(Schema.Struct({ briefing: trimmedText, decided_at: trimmedText })),
+});
 
 /** One briefing as a hold-release item names it: what it said and, in epoch milliseconds, when the brain decided it. */
 export interface NamedBriefing {
@@ -992,9 +977,11 @@ export function heldBriefingsNamed(text: string): readonly NamedBriefing[] {
     } catch {
       continue;
     }
-    const words = readEither(heldBriefingsWords)(unparsedWire(parsed));
-    if (Either.isLeft(words)) continue;
-    for (const held of words.right.held_briefings) {
+    const words = readEither(heldBriefingsWords, { excess: EXCESS_KEYS.DROP })(
+      unparsedWire(parsed),
+    );
+    if (Result.isFailure(words)) continue;
+    for (const held of words.success.held_briefings) {
       const decidedAt = Date.parse(held.decided_at);
       if (Number.isNaN(decidedAt)) continue;
       named.push({ briefing: held.briefing, decidedAt });
@@ -1078,11 +1065,17 @@ const ReleasesRequestSchema = Schema.Struct({
 
 const ReleaseRowSchema = Schema.Struct({
   seq: EpochMillisColumnSchema,
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  messageId: Schema.String,
   parts: ReadPartsColumnSchema,
-  decidedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("decided_at")),
-  releasedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("released_at")),
-});
+  decidedAt: InstantColumnSchema,
+  releasedAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    messageId: "message_id",
+    decidedAt: "decided_at",
+    releasedAt: "released_at",
+  }),
+);
 
 const findReleases = SqlSchema.findAll({
   Request: ReleasesRequestSchema,
@@ -1118,37 +1111,35 @@ const findReleases = SqlSchema.findAll({
  * message since a settled offer takes no second transition — and never from
  * the words of anything else.
  */
-export function releasedBriefings(
+export const releasedBriefings = /* @__PURE__ */ Effect.fn("releasedBriefings")(function* (
   target: ConversationTarget,
   query: ReleasedBriefingsQuery,
-): Effect.Effect<readonly ReleasedBriefing[], SpeechReadFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const carried = yield* carriedBriefings(target);
-    const uncarried: ReleasedBriefing[] = [];
-    let afterSeq = 0;
-    while (uncarried.length < query.limit) {
-      const rows = yield* findReleases({
-        userId: target.userId,
-        conversationId: target.conversationId,
-        afterSeq,
-        limit: RELEASE_PAGE,
+): Effect.fn.Return<readonly ReleasedBriefing[], SpeechReadFailure, SqlClient.SqlClient> {
+  const carried = yield* carriedBriefings(target);
+  const uncarried: ReleasedBriefing[] = [];
+  let afterSeq = 0;
+  while (uncarried.length < query.limit) {
+    const rows = yield* findReleases({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      afterSeq,
+      limit: RELEASE_PAGE,
+    });
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      afterSeq = row.seq;
+      const briefing = briefingOf(row.parts);
+      if (briefing === undefined) continue;
+      if (carried.has(carriedKey(row.decidedAt.getTime(), briefing))) continue;
+      uncarried.push({
+        messageId: row.messageId,
+        briefing,
+        decidedAt: row.decidedAt.getTime(),
+        releasedAt: row.releasedAt.getTime(),
       });
-      if (rows.length === 0) break;
-      for (const row of rows) {
-        afterSeq = row.seq;
-        const briefing = briefingOf(row.parts);
-        if (briefing === undefined) continue;
-        if (carried.has(carriedKey(row.decidedAt.getTime(), briefing))) continue;
-        uncarried.push({
-          messageId: row.messageId,
-          briefing,
-          decidedAt: row.decidedAt.getTime(),
-          releasedAt: row.releasedAt.getTime(),
-        });
-        if (uncarried.length >= query.limit) break;
-      }
-      if (rows.length < RELEASE_PAGE) break;
+      if (uncarried.length >= query.limit) break;
     }
-    return uncarried;
-  });
-}
+    if (rows.length < RELEASE_PAGE) break;
+  }
+  return uncarried;
+});

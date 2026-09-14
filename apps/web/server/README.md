@@ -6,7 +6,7 @@ Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
 migrations; the connection strings live nowhere in this repository. There is
 no ORM and no generated schema module: every query is a statement the
-`@effect/sql` `SqlClient` runs, and a table's shape lives in its migration
+`effect/unstable/sql` `SqlClient` runs, and a table's shape lives in its migration
 alone. Better Auth reaches its tables through its Drizzle adapter over
 `server/db/auth-schema.ts` (see below), the one schema module the app keeps,
 so a migration that changes an auth column's type changes that declaration
@@ -30,7 +30,7 @@ connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `@effect/sql`'s own migrator: `server/db/effect-migrator.ts`
+What applies them is `effect/unstable/sql`'s own migrator: `server/db/effect-migrator.ts`
 reads `drizzle/meta/_journal.json` and the `.sql` file each entry names, in
 order, and records what it applied in its own `effect_sql_migrations` table
 rather than `drizzle.__drizzle_migrations`, which a database an older
@@ -227,14 +227,14 @@ module scope, and `runWeb(effect)` is the only place `apps/web` runs an effect.
 Vercel keeps a warm instance's module registry between invocations, so the
 first invocation of a cold start builds the layer and every later one on that
 instance reuses the services it built; a runtime built where the work lives
-would be a second copy of every service a `Context.Tag` was supposed to
+would be a second copy of every service a `Context.Service` was supposed to
 identify. Root AGENTS.md's "Effect idioms" section names this edge with the
 process's others.
 
 The layer carries what a Vercel function's own platform already offers: an
 `HttpClient` over `fetch`, and the `SqlClient` of `server/db/sql-client.ts` over
 the database `DATABASE_URL` names. `@effect/platform-node` is not on it, and
-`repository-checks.sh` refuses that specifier and `@effect/sql*` in the
+`repository-checks.sh` refuses that specifier and `effect/unstable/sql` in the
 renderer, where there is no Node; a function inlines its whole graph and the
 isolation guard proves it loads. The layer itself is behind
 `server/`, which is what the builder traces. A function is handed no shutdown
@@ -287,10 +287,9 @@ client's own transaction. What the layer does need at build
 time is the connection string, so an instance configured without `DATABASE_URL`
 is refused at the edge rather than at whichever query ran first.
 
-`effect`, `@effect/platform`, `@effect/experimental`, `@effect/sql`, and
-`@effect/sql-pg` are declared dependencies of this app, which is what leaves
-them external to the bundles rather than inlined into each of them, so Vercel's
-builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
+`effect` and `@effect/sql-pg` are declared dependencies of this app, which is
+what leaves them external to the bundles rather than inlined into each of them,
+so Vercel's builder traces one copy from `apps/web/node_modules`. `@effect/sql-pg` reaches
 `pg`, which is external on the same terms and already was.
 
 A test reads the same client through `tests/support/sql-client.ts`, which
@@ -329,14 +328,19 @@ door beside the effect under `server/hosted/`. `lukeAccount` takes the
 resolved account as a `BearerAccount` promise and reaches no userinfo
 endpoint of its own.
 
-## A route built from an HttpApp
+## A route built from a route layer
 
-`server/route-effect.ts` holds `routeFromHttpApp(app)`, which turns the
-`HttpApp` an endpoint or an `HttpApi` group composes into the one fetch handler
-a function default-exports. It reads the runtime through `runWeb` and then
-holds the handler for the instance's life, so it is a caller of the edge rather
-than a second one, and a warm invocation reaches the services the cold one
-built. The brain group's four routes, the three mint routes, the auth group,
+`server/route-effect.ts` holds `routeFromHttpRouter(routes)`, which turns the
+route layer a group registers its paths with — `WebRoutes<R>`, the same file's
+own name for it — into the one fetch handler a function default-exports. It
+reads the runtime through `runWeb` and then holds the handler for the
+instance's life, so it is a caller of the edge rather than a second one, and a
+warm invocation reaches the services the cold one built. A group's routes are
+a layer rather than a value because that is what an `HttpRouter` registration
+is: the router is a service the layer writes each path into, and the
+requirements a route's own handler has travel as request markers the handler
+provides per request from the context `runWeb` read. The brain group's four
+routes, the three mint routes, the auth group,
 the actions group, the five routes behind the observation group below, the
 account group's `server/routes/account/delete.ts` and
 `server/routes/account/preferences.ts`, the devices and vault group's three
@@ -402,11 +406,12 @@ functions on five paths — `server/routes/sessions/messages.ts`,
 `server/routes/observe.ts`, and `server/routes/observation/tick.ts` — each
 mounting the same `observationApp()`, which is organization rather than
 dispatch, since `vercel.json` already sends each function only the requests
-for its own path. Every path is declared with `HttpRouter.all` rather than a
-method-specific builder, because each handler still enforces its own method
-and answers its own 405 exactly as it did before conversion; only a path none
-of the five declares reaches the group's own `HttpRouter.empty` and the hosted
-vocabulary's `not-found`. Each handler's own logic is carried unchanged —
+for its own path. Every path is declared with `HttpRouter.add` under `ANY_METHOD`
+rather than a method-specific builder, because each handler still enforces its
+own method and answers its own 405 exactly as it did before conversion; only a
+path none of the five declares reaches the group's own wildcard route,
+`hostedNotFoundRoute`, and the hosted vocabulary's `not-found`. Each handler's
+own logic is carried unchanged —
 `server/hosted/conversation-read.ts`, `server/hosted/projects.ts`,
 `server/hosted/events.ts`, `server/hosted/observe.ts`, and
 `server/hosted/observation-tick.ts` — behind a passthrough shaped like the
@@ -430,9 +435,9 @@ this file still owns directly.
 ## The account group
 
 `server/account-app.ts` is the account route group: the signed-in desktop's
-own delete and preferences endpoints, described as an `HttpRouter` rather
-than carried as a passthrough, because both answer from this deployment's own
-database and neither owns a contract of its own the way Better Auth does.
+own delete and preferences endpoints, described as routes of the group's own
+rather than carried as a passthrough, because both answer from this
+deployment's own database and neither owns a contract of its own the way Better Auth does.
 Each endpoint resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
@@ -480,7 +485,7 @@ down to the seams' vocabulary (`DeviceSeams`, `DeviceRegistration`,
 gone outright. `server/hosted/vault-route.ts`'s `productionDevicesVaultSeams`
 is the deployment's real wiring — the same account store `hostedVaultSeams`
 carries for the other hosted routes — so each of the three route files is one line
-handing it to `routeFromHttpApp(devicesVaultApp(...))`.
+handing it to `routeFromHttpRouter(devicesVaultApp(...))`.
 `HOSTED_API_ERROR.QUOTA_EXHAUSTED` gained a row in `HOSTED_REFUSAL_STATUS`
 (429), for the device brake's own refusal. Reading a body through
 `readJsonBodyEffect` needed a byte bound neither route held before; both take
@@ -745,7 +750,7 @@ with.
 One upgrade is one `Scope` and one effect run on the `WebStoreRun` the
 function hands the service. Both sockets are the platform's:
 `server/voice/socket.ts` reads a `ws` socket through
-`@effect/platform`'s `Socket`, a fiber of that scope filling a mailbox with
+`effect/unstable/socket`'s `Socket`, a fiber of that scope filling a mailbox with
 every frame in arrival order, so the opening frame is taken from the same
 reader the relay then streams the rest from and nothing between the two lands
 nowhere. `server/voice/relay.ts` pipes the two streams, settles on a

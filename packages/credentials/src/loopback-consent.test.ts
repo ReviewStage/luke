@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { it } from "@effect/vitest";
-import { Deferred, Duration, Effect, Either, Exit, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber, Result } from "effect";
+import { TestClock } from "effect/testing";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackAuthorization,
@@ -45,7 +46,7 @@ function harness(
     reasons: { refused: REASON.REFUSED, timedOut: REASON.TIMED_OUT },
     authorizationUrl: (input) => {
       authorizations.push(input);
-      Deferred.unsafeDone(armed, Exit.succeed(input));
+      Deferred.doneUnsafe(armed, Exit.succeed(input));
       return `https://example.test/consent?state=${encodeURIComponent(input.state)}`;
     },
     exchange: (input) =>
@@ -63,7 +64,25 @@ function harness(
 
 /** One trip in a scope of its own, the way a press runs one. */
 function trip(consent: ReturnType<typeof harness>["consent"]) {
-  return Effect.fork(Effect.scoped(consent.signInEffect()));
+  return Effect.forkChild(Effect.scoped(consent.signInEffect()));
+}
+
+/**
+ * The authorization the trip composed, read once the trip has armed itself on
+ * it: the tab opened and the page held for reopening. Composing the page is
+ * what settles `armed`, and a fiber that completes a Deferred resumes its
+ * waiters on its own stack, so a read of `armed` alone lands inside the trip's
+ * own compose, a statement ahead of the browser. The scheduler turn is what
+ * stands between the two.
+ */
+function armedTrip(
+  armed: Deferred.Deferred<LoopbackAuthorization>,
+): Effect.Effect<LoopbackAuthorization> {
+  return Effect.gen(function* () {
+    const authorization = yield* Deferred.await(armed);
+    yield* Effect.yieldNow;
+    return authorization;
+  });
 }
 
 /**
@@ -131,9 +150,7 @@ function untilDeadline(
 ): Effect.Effect<LoopbackConsentOutcome<Grant>> {
   return Effect.raceFirst(
     Fiber.join(waiting),
-    Effect.forever(
-      Effect.zipRight(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow()),
-    ),
+    Effect.forever(Effect.andThen(TestClock.adjust(Duration.millis(timeoutMs)), Effect.yieldNow)),
   );
 }
 
@@ -143,7 +160,7 @@ it.effect("one trip runs press to grant, with the PKCE pair the exchange answers
     const { consent, opened, exchanges } = harness(armed);
 
     const waiting = yield* trip(consent);
-    const authorization = yield* Deferred.await(armed);
+    const authorization = yield* armedTrip(armed);
     assert.deepEqual(opened, [
       `https://example.test/consent?state=${encodeURIComponent(authorization.state)}`,
     ]);
@@ -312,14 +329,14 @@ it.effect("the first valid callback claims the one-time code; a second is spent"
       exchange: (input) =>
         Effect.suspend(() => {
           exchanges.push(input);
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const first = yield* Effect.fork(
+    const first = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -377,14 +394,14 @@ it.effect("the deadline leaves a claimed callback alone", () =>
       timeoutMs: 20,
       exchange: (input) =>
         Effect.suspend(() => {
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const answering = yield* Effect.fork(
+    const answering = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -425,12 +442,12 @@ it.effect("cancelling ends the wait; a grant given after lands nowhere", () =>
     assert.deepEqual(yield* Fiber.join(waiting), { reason: LOOPBACK_CONSENT_CANCELLED });
 
     // The trip's scope closed with it, so the loopback is no longer listening.
-    const late = yield* Effect.either(
+    const late = yield* Effect.result(
       Effect.tryPromise(() =>
         answerCallback(authorization.redirectUri, { state: authorization.state, code: "late" }),
       ),
     );
-    assert.ok(Either.isLeft(late));
+    assert.ok(Result.isFailure(late));
     assert.deepEqual(exchanges, []);
   }),
 );
@@ -445,14 +462,14 @@ it.effect("a callback already claimed is left to finish when the trip is cancell
       exchange: (input) =>
         Effect.suspend(() => {
           exchanges.push(input);
-          Deferred.unsafeDone(running, Exit.succeed(input));
+          Deferred.doneUnsafe(running, Exit.succeed(input));
           return Deferred.await(finishExchange);
         }),
     });
 
     const waiting = yield* trip(consent);
     const authorization = yield* Deferred.await(armed);
-    const answering = yield* Effect.fork(
+    const answering = yield* Effect.forkChild(
       callback(authorization.redirectUri, { state: authorization.state, code: "auth-code" }),
     );
     yield* Deferred.await(running);
@@ -472,7 +489,7 @@ it.effect("a cancel while the port is still binding is not lost", () =>
 
     // The cancel runs the moment the trip suspends, which it first does while
     // the loopback is binding.
-    yield* Effect.fork(Effect.sync(() => consent.cancel()));
+    yield* Effect.forkChild(Effect.sync(() => consent.cancel()));
     assert.deepEqual(yield* Effect.scoped(consent.signInEffect()), {
       reason: LOOPBACK_CONSENT_CANCELLED,
     });
@@ -491,7 +508,7 @@ it.effect("a lost tab reopens the very page the trip is listening for", () =>
     assert.deepEqual(opened, []);
 
     const waiting = yield* trip(consent);
-    yield* Deferred.await(armed);
+    yield* armedTrip(armed);
     consent.reopen();
     assert.equal(opened.length, 2);
     // The same URL exactly: same state, same challenge, same loopback port.

@@ -11,11 +11,11 @@
  * arrive unnoticed.
  */
 
-import * as Atom from "@effect-atom/atom/Atom";
-import * as Registry from "@effect-atom/atom/Registry";
-import * as Result from "@effect-atom/atom/Result";
-import { scheduleTask } from "@effect-atom/atom-react/RegistryContext";
-import { Layer, type Runtime } from "effect";
+import { scheduleTask } from "@effect/atom-react/RegistryContext";
+import { type Context, Layer } from "effect";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 
 /**
  * No service stands yet: what the runtime is for is holding the fibers the
@@ -31,15 +31,15 @@ export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
  * Its `scheduleTask` is the React binding's own, which is what batches a
  * delivery's redraws into one.
  */
-export const rendererRegistry = Registry.make({ scheduleTask });
+export const rendererRegistry = AtomRegistry.make({ scheduleTask });
 
 /**
- * The same runtime, for work that is a fiber of its own rather than an atom's:
- * the voice window's call forks its session's life and every bound of it
- * here, and `LiveVoiceOrchestrator` forks the standing call's own lifecycle
- * on it too, so a fiber outside the atoms still runs on the one runtime this
- * bundle has. The layer is built synchronously, so there is nothing to wait
- * for.
+ * The services that runtime was built over, for work that is a fiber of its
+ * own rather than an atom's: the voice window's call runs its session's life
+ * and every bound of it under these, and `LiveVoiceOrchestrator` runs the
+ * standing call's own lifecycle under them too, so a fiber outside the atoms
+ * still stands on the one set of services this bundle has. The layer is built
+ * synchronously, so there is nothing to wait for.
  */
-export const rendererRuntimeNow = (): Runtime.Runtime<never> =>
-  Result.getOrThrow(rendererRegistry.get(rendererRuntime));
+export const rendererServicesNow = (): Context.Context<never> =>
+  AsyncResult.getOrThrow(rendererRegistry.get(rendererRuntime));

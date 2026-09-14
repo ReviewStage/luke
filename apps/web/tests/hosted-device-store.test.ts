@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { forgetDevice, registerDevice, touchDevice } from "../server/hosted/device-store";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -32,33 +33,36 @@ const openUser = Effect.gen(function* () {
 
 const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  installationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("installation_id")),
+  userId: Schema.String,
+  installationId: Schema.String,
   platform: Schema.String,
-  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("active_until"),
-  ),
-  quietUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("quiet_until"),
-  ),
-  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_token"),
-  ),
-  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_environment"),
-  ),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  updatedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("updated_at")),
-});
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  quietUntil: Schema.NullOr(InstantColumnSchema),
+  pushToken: Schema.NullOr(Schema.String),
+  pushEnvironment: Schema.NullOr(Schema.String),
+  createdAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    installationId: "installation_id",
+    activeUntil: "active_until",
+    quietUntil: "quiet_until",
+    pushToken: "push_token",
+    pushEnvironment: "push_environment",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+  }),
+);
 
 const readDeviceByInstallation = (installationId: string) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const rows = yield* sql`select * from devices where installation_id = ${installationId}`;
-    return yield* Schema.decodeUnknown(DeviceRowSchema)(rows[0]);
+    return yield* Schema.decodeUnknownEffect(DeviceRowSchema)(rows[0]);
   });
 
-it.layer(testSqlClient)("the device seams over @effect/sql", (it) => {
+it.layer(testSqlClient)("the device seams over effect/unstable/sql", (it) => {
   it.effect("a first registration inserts the row under the account with the minted id", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

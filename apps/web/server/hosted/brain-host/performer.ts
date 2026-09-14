@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema, Semaphore } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_KIND,
   ACTION_REFUSAL,
@@ -219,10 +219,10 @@ export function hostedActionCarrier(dependencies: HostedCarrierDependencies): Ho
  * where concurrent calls of one turn run, and a write that fails or is
  * interrupted releases it like any other.
  */
-const FACT_WRITE_PERMITS = new Map<string, Effect.Semaphore>();
+const FACT_WRITE_PERMITS = new Map<string, Semaphore.Semaphore>();
 
 function serially<A, E, R>(userId: string, write: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  const held = FACT_WRITE_PERMITS.get(userId) ?? Effect.unsafeMakeSemaphore(1);
+  const held = FACT_WRITE_PERMITS.get(userId) ?? Semaphore.makeUnsafe(1);
   FACT_WRITE_PERMITS.set(userId, held);
   return held.withPermits(1)(write);
 }
@@ -241,7 +241,7 @@ export function hostedFactsWriter(
   now: () => number,
 ): HostedFactsWriter {
   const run = <A>(
-    effect: Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>,
+    effect: Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>,
   ): Effect.Effect<A> => Effect.orDie(Effect.provideService(effect, SqlClient.SqlClient, client));
   const list = () => run(store.facts.list(userId));
   return {

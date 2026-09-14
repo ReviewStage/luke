@@ -87,40 +87,43 @@ function messagesPage(
  * The poll: everything newer than the cursor the last answer handed back,
  * walked forward behind the endpoint's own `after` to the fixed bounds.
  */
-function readNewerMessages(
+const readNewerMessages = /* @__PURE__ */ Effect.fnUntraced(function* (
   pass: CloudPass,
   providerSessionId: string,
   afterMessageId: string,
-): Effect.Effect<ProviderConversationResult, AdapterFailure> {
-  return Effect.gen(function* () {
-    const messages: ProviderConversationMessage[] = [];
-    let cursor = afterMessageId;
-    let hasMore = false;
-    for (let page = 0; page < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_PAGES; page += 1) {
-      const body = yield* messagesPage(pass, providerSessionId, {
-        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
-        [CONDUCTOR_QUERY.AFTER]: cursor,
-      });
-      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
-      // An empty page that still claims more would walk in place forever, so
-      // the claim is only believed of a page that moved the cursor.
-      if (records.length === 0) {
-        hasMore = false;
-        break;
-      }
-      for (const record of records) {
-        const message = conversationMessageFromRecord(record);
-        if (message) messages.push(message);
-      }
-      const lastId = newestStoredId(records);
-      hasMore = body[CONDUCTOR_FIELD.HAS_MORE] === true;
-      if (!lastId) break;
-      cursor = lastId;
-      if (!hasMore || messages.length >= CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_MESSAGES) break;
+): Effect.fn.Return<ProviderConversationResult, AdapterFailure> {
+  const messages: ProviderConversationMessage[] = [];
+  let cursor = afterMessageId;
+  let hasMore = false;
+  for (let page = 0; page < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_PAGES; page += 1) {
+    const body = yield* messagesPage(pass, providerSessionId, {
+      [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
+      [CONDUCTOR_QUERY.AFTER]: cursor,
+    });
+    const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+    // An empty page that still claims more would walk in place forever, so
+    // the claim is only believed of a page that moved the cursor.
+    if (records.length === 0) {
+      hasMore = false;
+      break;
     }
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, messages, lastMessageId: cursor, hasMore };
-  });
-}
+    for (const record of records) {
+      const message = conversationMessageFromRecord(record);
+      if (message) messages.push(message);
+    }
+    const lastId = newestStoredId(records);
+    hasMore = body[CONDUCTOR_FIELD.HAS_MORE] === true;
+    if (!lastId) break;
+    cursor = lastId;
+    if (!hasMore || messages.length >= CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_MESSAGES) break;
+  }
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    messages,
+    lastMessageId: cursor,
+    hasMore,
+  };
+});
 
 /** One page the tail walk read, as the two things the answer is built from. */
 interface WalkedPage {
@@ -145,42 +148,40 @@ function newestStoredId(records: readonly WireRecord[]): string | undefined {
  * with where the page began so the next scroll can continue. It never names a
  * poll cursor, because history must not move a poll backward.
  */
-function readConversationPage(
+const readConversationPage = /* @__PURE__ */ Effect.fnUntraced(function* (
   pass: CloudPass,
   providerSessionId: string,
   endOffset: number,
-): Effect.Effect<ProviderConversationResult, AdapterFailure> {
-  return Effect.gen(function* () {
-    const messages: ProviderConversationMessage[] = [];
-    let chunkEnd = endOffset;
-    for (
-      let window = 0;
-      window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS &&
-      chunkEnd > 0 &&
-      messages.length < CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES;
-      window += 1
-    ) {
-      const chunkStart = Math.max(0, chunkEnd - CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE);
-      const body = yield* messagesPage(pass, providerSessionId, {
-        [CONDUCTOR_QUERY.LIMIT]: String(chunkEnd - chunkStart),
-        [CONDUCTOR_QUERY.OFFSET]: String(chunkStart),
-      });
-      messages.unshift(
-        ...recordsFromPage(body, CONDUCTOR_FIELD.DATA)
-          .map(conversationMessageFromRecord)
-          .filter(isDefined),
-      );
-      chunkEnd = chunkStart;
-    }
-    return {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      messages,
-      hasMore: false,
-      firstOffset: chunkEnd,
-      hasOlder: chunkEnd > 0,
-    };
-  });
-}
+): Effect.fn.Return<ProviderConversationResult, AdapterFailure> {
+  const messages: ProviderConversationMessage[] = [];
+  let chunkEnd = endOffset;
+  for (
+    let window = 0;
+    window < CONDUCTOR_CONVERSATION_BOUNDS.MAXIMUM_HISTORY_WINDOWS &&
+    chunkEnd > 0 &&
+    messages.length < CONDUCTOR_CONVERSATION_BOUNDS.HISTORY_TARGET_MESSAGES;
+    window += 1
+  ) {
+    const chunkStart = Math.max(0, chunkEnd - CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE);
+    const body = yield* messagesPage(pass, providerSessionId, {
+      [CONDUCTOR_QUERY.LIMIT]: String(chunkEnd - chunkStart),
+      [CONDUCTOR_QUERY.OFFSET]: String(chunkStart),
+    });
+    messages.unshift(
+      ...recordsFromPage(body, CONDUCTOR_FIELD.DATA)
+        .map(conversationMessageFromRecord)
+        .filter(isDefined),
+    );
+    chunkEnd = chunkStart;
+  }
+  return {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    messages,
+    hasMore: false,
+    firstOffset: chunkEnd,
+    hasOlder: chunkEnd > 0,
+  };
+});
 
 /**
  * The newest page of a chat, and where its stored transcript currently ends.
@@ -202,27 +203,28 @@ function readTailPage(
   ends: ConductorConversationEnds,
   providerSessionId: string,
 ): Effect.Effect<ProviderConversationResult, AdapterFailure> {
-  const walk = (from: number) =>
-    Effect.gen(function* () {
-      const pages: WalkedPage[] = [];
-      let offset = from;
-      for (;;) {
-        const body = yield* messagesPage(pass, providerSessionId, {
-          [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
-          [CONDUCTOR_QUERY.OFFSET]: String(offset),
-        });
-        const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
-        pages.push({
-          offset,
-          newestStoredId: newestStoredId(records),
-          messages: records.map(conversationMessageFromRecord).filter(isDefined),
-          length: records.length,
-        });
-        offset += records.length;
-        if (records.length === 0 || body[CONDUCTOR_FIELD.HAS_MORE] !== true) break;
-      }
-      return { pages, end: offset };
-    });
+  const walk = /* @__PURE__ */ Effect.fnUntraced(function* (
+    from: number,
+  ): Effect.fn.Return<{ pages: WalkedPage[]; end: number }, AdapterFailure> {
+    const pages: WalkedPage[] = [];
+    let offset = from;
+    for (;;) {
+      const body = yield* messagesPage(pass, providerSessionId, {
+        [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_CONVERSATION_BOUNDS.PAGE_SIZE),
+        [CONDUCTOR_QUERY.OFFSET]: String(offset),
+      });
+      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+      pages.push({
+        offset,
+        newestStoredId: newestStoredId(records),
+        messages: records.map(conversationMessageFromRecord).filter(isDefined),
+        length: records.length,
+      });
+      offset += records.length;
+      if (records.length === 0 || body[CONDUCTOR_FIELD.HAS_MORE] !== true) break;
+    }
+    return { pages, end: offset };
+  });
 
   return Effect.gen(function* () {
     // One page back from the end the last read of this session reached, so a
@@ -333,13 +335,13 @@ function transcriptLines(
  * not begin there; a chat with no attributed message yet is not found rather
  * than rendered empty.
  */
-export function readConductorTranscript(
-  pass: CloudPass,
-  ends: ConductorConversationEnds,
-  reported: ReportedSessions,
-  providerSessionId: string,
-): Effect.Effect<ProviderTranscriptResult> {
-  return Effect.gen(function* () {
+export const readConductorTranscript = /* @__PURE__ */ Effect.fn("readConductorTranscript")(
+  function* (
+    pass: CloudPass,
+    ends: ConductorConversationEnds,
+    reported: ReportedSessions,
+    providerSessionId: string,
+  ): Effect.fn.Return<ProviderTranscriptResult, AdapterFailure> {
     const observation = reportedSession(reported, providerSessionId);
     if (!observation) return NOT_REPORTED;
     const tail = yield* readTailPage(pass, ends, providerSessionId);
@@ -355,8 +357,12 @@ export function readConductorTranscript(
       status: ACTION_RESULT_STATUS.ACCEPTED,
       transcript: tail.hasOlder ? `${OMISSION_MARKER}\n${rendered}` : rendered,
     };
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
-}
+  },
+  Effect.catch(
+    (failure: AdapterFailure): Effect.Effect<ProviderTranscriptResult> =>
+      Effect.succeed(readRefusal(failure, "transcript")),
+  ),
+);
 
 /**
  * The brain's incremental read of one cloud chat, for an observation turn:
@@ -372,14 +378,16 @@ export function readConductorTranscript(
  * the latest pass reported, and only behind a cursor Conductor itself handed
  * back.
  */
-export function readConductorTranscriptSince(
-  pass: CloudPass,
-  ends: ConductorConversationEnds,
-  reported: ReportedSessions,
-  providerSessionId: string,
-  cursor: string | undefined,
-): Effect.Effect<ProviderTranscriptSinceResult> {
-  return Effect.gen(function* () {
+export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
+  "readConductorTranscriptSince",
+)(
+  function* (
+    pass: CloudPass,
+    ends: ConductorConversationEnds,
+    reported: ReportedSessions,
+    providerSessionId: string,
+    cursor: string | undefined,
+  ): Effect.fn.Return<ProviderTranscriptSinceResult, AdapterFailure> {
     const observation = reportedSession(reported, providerSessionId);
     if (!observation) return NOT_REPORTED;
     if (cursor !== undefined && !UUID_PATTERN.test(cursor)) {
@@ -410,8 +418,12 @@ export function readConductorTranscriptSince(
           ? page.hasOlder === true || kept.length < page.messages.length
           : page.hasMore,
     };
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "transcript"))));
-}
+  },
+  Effect.catch(
+    (failure: AdapterFailure): Effect.Effect<ProviderTranscriptSinceResult> =>
+      Effect.succeed(readRefusal(failure, "transcript")),
+  ),
+);
 
 export function readConductorConversation(
   pass: CloudPass,
@@ -459,5 +471,5 @@ export function readConductorConversation(
       return readConversationPage(pass, providerSessionId, page.beforeOffset);
     }
     return readTailPage(pass, ends, providerSessionId);
-  }).pipe(Effect.catchAll((failure) => Effect.succeed(readRefusal(failure, "conversation"))));
+  }).pipe(Effect.catch((failure) => Effect.succeed(readRefusal(failure, "conversation"))));
 }

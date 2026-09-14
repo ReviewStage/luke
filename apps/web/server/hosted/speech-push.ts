@@ -1,7 +1,7 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRIEFING_PUSH_PAYLOAD_KEY,
   DEVICE_PLATFORM,
@@ -18,6 +18,7 @@ import {
 } from "./apns.js";
 import { briefingWordsOf } from "./briefing-words.js";
 import type { DeviceSeams } from "./devices.js";
+import { InstantColumnSchema } from "./store/database.js";
 import {
   markSpeechPushed,
   openSpeechOffers,
@@ -208,7 +209,7 @@ export interface SpeechPushOptions {
 }
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type DeviceReadFailure = SqlError | ParseResult.ParseError;
+type DeviceReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -216,18 +217,19 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
+  userId: Schema.String,
   platform: Schema.String,
-  activeUntil: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("active_until"),
-  ),
-  pushToken: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_token"),
-  ),
-  pushEnvironment: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("push_environment"),
-  ),
-});
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  pushToken: Schema.NullOr(Schema.String),
+  pushEnvironment: Schema.NullOr(Schema.String),
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    activeUntil: "active_until",
+    pushToken: "push_token",
+    pushEnvironment: "push_environment",
+  }),
+);
 
 const findDevicesByAccount = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
@@ -282,61 +284,56 @@ function devicesByAccount(
  * Apple says its token is gone. Nothing here decides whether a briefing is
  * worth saying, rewords it, or reads anything of it but the words.
  */
-export function pushSpeech(
+export const pushSpeech = /* @__PURE__ */ Effect.fn("pushSpeech")(function* (
   seams: SpeechPushSeams,
   options: SpeechPushOptions,
-): Effect.Effect<SpeechPushOutcome, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { now, limit, userIds, clock = Date.now } = options;
-    const until = clock() + SPEECH_PUSH.BUDGET_MS;
-    const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
-    const quiet = yield* quietUntilByAccount(now, userIds);
-    const offers = yield* openSpeechOffers({
-      userIds,
-      notUserIds: [...quiet.keys()],
-      limit,
-    });
-    const reported = yield* devicesByAccount(
-      [...new Set(offers.map((offer) => offer.userId))],
-      now,
-    );
-    for (const offer of offers) {
-      const account = reported.get(offer.userId) ?? { active: false, target: undefined };
-      const decision = speechPushDecision(offer, account.active, now);
-      if (decision === SPEECH_PUSH_DECISION.WAIT) outcome.waiting += 1;
-      if (decision !== SPEECH_PUSH_DECISION.PUSH) continue;
-      const target = account.target;
-      if (target === undefined) {
-        outcome.unaddressed += 1;
-        continue;
-      }
-      const briefing = yield* briefingWordsOf(seams.tools, offer);
-      if (briefing === undefined) {
-        outcome.unreadable += 1;
-        continue;
-      }
-      // Checked before the mark, so an offer the budget leaves for the next tick is never settled unsent.
-      if (clock() >= until) break;
-      const marked = yield* markSpeechPushed(
-        seams.store,
-        offer.userId,
-        offer.messageId,
-        now,
-        target.deviceId,
-      );
-      if (!marked.ok) continue;
-      const delivery = yield* Effect.promise(() =>
-        seams.send(briefingNotification(briefing, offer.messageId, target)),
-      );
-      if (delivery === APNS_DELIVERY.DELIVERED) {
-        outcome.pushed += 1;
-        continue;
-      }
-      outcome.undelivered += 1;
-      if (delivery !== APNS_DELIVERY.TOKEN_GONE) break;
-      yield* seams.forgetDevice(offer.userId, target.deviceId);
-      reported.set(offer.userId, { active: account.active, target: undefined });
-    }
-    return outcome;
+): Effect.fn.Return<SpeechPushOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const { now, limit, userIds, clock = Date.now } = options;
+  const until = clock() + SPEECH_PUSH.BUDGET_MS;
+  const outcome = { pushed: 0, undelivered: 0, unaddressed: 0, unreadable: 0, waiting: 0 };
+  const quiet = yield* quietUntilByAccount(now, userIds);
+  const offers = yield* openSpeechOffers({
+    userIds,
+    notUserIds: [...quiet.keys()],
+    limit,
   });
-}
+  const reported = yield* devicesByAccount([...new Set(offers.map((offer) => offer.userId))], now);
+  for (const offer of offers) {
+    const account = reported.get(offer.userId) ?? { active: false, target: undefined };
+    const decision = speechPushDecision(offer, account.active, now);
+    if (decision === SPEECH_PUSH_DECISION.WAIT) outcome.waiting += 1;
+    if (decision !== SPEECH_PUSH_DECISION.PUSH) continue;
+    const target = account.target;
+    if (target === undefined) {
+      outcome.unaddressed += 1;
+      continue;
+    }
+    const briefing = yield* briefingWordsOf(seams.tools, offer);
+    if (briefing === undefined) {
+      outcome.unreadable += 1;
+      continue;
+    }
+    // Checked before the mark, so an offer the budget leaves for the next tick is never settled unsent.
+    if (clock() >= until) break;
+    const marked = yield* markSpeechPushed(
+      seams.store,
+      offer.userId,
+      offer.messageId,
+      now,
+      target.deviceId,
+    );
+    if (!marked.ok) continue;
+    const delivery = yield* Effect.promise(() =>
+      seams.send(briefingNotification(briefing, offer.messageId, target)),
+    );
+    if (delivery === APNS_DELIVERY.DELIVERED) {
+      outcome.pushed += 1;
+      continue;
+    }
+    outcome.undelivered += 1;
+    if (delivery !== APNS_DELIVERY.TOKEN_GONE) break;
+    yield* seams.forgetDevice(offer.userId, target.deviceId);
+    reported.set(offer.userId, { active: account.active, target: undefined });
+  }
+  return outcome;
+});

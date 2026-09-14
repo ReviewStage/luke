@@ -1,5 +1,5 @@
-import { type HttpClient, HttpServerRequest, type HttpServerResponse } from "@effect/platform";
 import { Effect, Redacted } from "effect";
+import { type HttpClient, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
 import type { RealtimeConnection } from "../core.js";
 import { HostedEnvironment } from "./environment.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
@@ -61,16 +61,14 @@ export function hostedKey(): Effect.Effect<string, MintAnswer, HostedEnvironment
  * be read at all and one that names something outside the build's sets are
  * the same refusal, and neither has spent anything.
  */
-export function mintPreferences(
+export const mintPreferences = /* @__PURE__ */ Effect.fn("mintPreferences")(function* (
   strictFields?: readonly string[],
-): Effect.Effect<VoiceMintPreferences, MintAnswer, HttpServerRequest.HttpServerRequest> {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const raw = yield* Effect.orElseSucceed(request.text, () => undefined);
-    const read = raw === undefined ? undefined : voiceMintPreferences(raw, strictFields);
-    return read ?? (yield* refuseMint(HOSTED_REFUSAL.INVALID_REQUEST));
-  });
-}
+): Effect.fn.Return<VoiceMintPreferences, MintAnswer, HttpServerRequest.HttpServerRequest> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const raw = yield* Effect.orElseSucceed(request.text, () => undefined);
+  const read = raw === undefined ? undefined : voiceMintPreferences(raw, strictFields);
+  return read ?? (yield* refuseMint(HOSTED_REFUSAL.INVALID_REQUEST));
+});
 
 /** The upstream mint, with the refusal it answers with in the hosted vocabulary. */
 export function mintedConnection(

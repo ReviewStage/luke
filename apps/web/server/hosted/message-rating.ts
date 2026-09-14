@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, type ParseResult } from "effect";
+import { Effect, Result, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type HostedMessageRatingRequest,
   hostedMessageRatingRequestSchema,
@@ -44,12 +44,12 @@ export interface MessageRatingOptions {
     userId: string,
     messageId: string,
     rating: HostedMessageRatingRequest,
-  ) => Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+  ) => Effect.Effect<RatingWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 }
 
 export function handleMessageRating(
   options: MessageRatingOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, rate } = options;
   return Effect.gen(function* () {
     if (request.method !== "PUT") {
@@ -64,7 +64,7 @@ export function handleMessageRating(
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
     const messageId = readEither(wireUuidSchema)(unparsedWire(id));
-    if (Either.isLeft(messageId)) {
+    if (Result.isFailure(messageId)) {
       return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
     }
 
@@ -76,11 +76,11 @@ export function handleMessageRating(
     const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_RATING_BODY_BYTES));
     if (parsed instanceof Response) return parsed;
     const rating = readEither(hostedMessageRatingRequestSchema)(parsed);
-    if (Either.isLeft(rating)) {
+    if (Result.isFailure(rating)) {
       return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
     }
 
-    const written = yield* rate(userId, messageId.right, rating.right);
+    const written = yield* rate(userId, messageId.success, rating.success);
     if (written.ok) {
       return jsonResponse(HOSTED_HTTP_STATUS.OK, { id: written.id, seq: written.seq });
     }

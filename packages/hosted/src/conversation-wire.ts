@@ -1,12 +1,12 @@
 import { CONVERSATION_MESSAGE_AUTHOR, type ConversationMessageAuthor } from "@sidecar/session";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import {
   declareReader,
   emitJsonSchema,
   readEither,
   verbatimJsonSchema,
 } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result, SchemaTransformation } from "effect";
 import { countedNumber, writtenText } from "./service-wire.js";
 
 /**
@@ -15,7 +15,10 @@ import { countedNumber, writtenText } from "./service-wire.js";
  * wire, is the owning package's own set rather than a copy of it.
  *
  * Every shape below is composed directly with Effect's `Schema.Struct` and
- * exported under its own name.
+ * exported under its own name. The answer is read through
+ * `readEither(schema, { excess: EXCESS_KEYS.DROP })`: a key a newer service
+ * added is dropped rather than refused, and that grain is the read's now
+ * rather than the declaration's.
  */
 
 /**
@@ -62,30 +65,22 @@ export interface HostedConversationAnswer {
 }
 
 /** A text trimmed and refused when left with nothing. */
-function trimmedText(maximumChars?: number): EffectSchema.Schema<string, string> {
-  const core = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.trim().length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-  );
-  return maximumChars === undefined ? core : core.pipe(EffectSchema.maxLength(maximumChars));
+function trimmedText(maximumChars?: number): EffectSchema.Codec<string, string> {
+  const core = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
+  return maximumChars === undefined ? core : core.check(EffectSchema.isMaxLength(maximumChars));
 }
 
 /** A member set admitted with its ends trimmed, as an answer's own enum always is. */
 function trimmedEnum<const Member extends string>(
   members: readonly Member[],
-): EffectSchema.Schema<Member, string> {
+): EffectSchema.Codec<Member, string> {
   return verbatimJsonSchema(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.Literal(...members), {
-      strict: false,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }),
+    EffectSchema.Trim.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.Literals(members),
+        SchemaTransformation.passthroughSupertype(),
+      ),
+    ),
     { type: "string", enum: members },
   );
 }
@@ -97,11 +92,11 @@ function trimmedEnum<const Member extends string>(
  * reader everything else it carried.
  */
 function dropped<Value, Encoded>(
-  inner: EffectSchema.Schema<Value, Encoded>,
-): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
-  const read = readEither(inner);
+  inner: EffectSchema.Codec<Value, Encoded>,
+): EffectSchema.Codec<Value | undefined, UnparsedWireValue> {
+  const read = readEither(inner, { excess: EXCESS_KEYS.DROP });
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }
@@ -114,16 +109,16 @@ function dropped<Value, Encoded>(
  * nothing `emitJsonSchema` reads, only the type a caller sees.
  */
 function keptEntries<Value, Encoded>(
-  item: EffectSchema.Schema<Value, Encoded>,
-): EffectSchema.Schema<Value[], readonly UnparsedWireValue[]> {
-  return EffectSchema.transform(
-    EffectSchema.Array(dropped(item)),
-    EffectSchema.mutable(EffectSchema.Array(item)),
-    {
-      strict: false,
-      decode: (entries) => entries.filter((entry) => entry !== undefined),
-      encode: (entries) => entries,
-    },
+  item: EffectSchema.Codec<Value, Encoded>,
+): EffectSchema.Codec<Value[], readonly UnparsedWireValue[]> {
+  return EffectSchema.Array(dropped(item)).pipe(
+    EffectSchema.decodeTo(
+      EffectSchema.toType(EffectSchema.mutable(EffectSchema.Array(item))),
+      SchemaTransformation.transform<Value[], readonly (Value | undefined)[]>({
+        decode: (entries) => entries.filter((entry) => entry !== undefined),
+        encode: (entries) => entries,
+      }),
+    ),
   );
 }
 
@@ -134,61 +129,76 @@ const conversationMessageFieldsFrom = EffectSchema.Struct({
   // wrote it, and trimming is a display decision this wire reader has no
   // business making. Only an empty message is no message.
   text: writtenText,
-  receivedAt: EffectSchema.optionalWith(dropped(countedNumber), { exact: true }),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-const conversationMessageFieldsTo = EffectSchema.Struct({
-  id: trimmedText(),
-  author: trimmedEnum(Object.values(CONVERSATION_MESSAGE_AUTHOR)),
-  text: writtenText,
-  receivedAt: EffectSchema.optionalWith(EffectSchema.Number, { exact: true }),
+  receivedAt: EffectSchema.optionalKey(dropped(countedNumber)),
 });
 
+/**
+ * The shape a message decodes to. Each `to` side below is a `toType`, since
+ * what a transform hands its target is that target's encoded value and these
+ * targets decode nothing further: the answer's own shape is both.
+ */
+const conversationMessageFieldsTo = EffectSchema.toType(
+  EffectSchema.Struct({
+    id: trimmedText(),
+    author: trimmedEnum(Object.values(CONVERSATION_MESSAGE_AUTHOR)),
+    text: writtenText,
+    receivedAt: EffectSchema.optionalKey(EffectSchema.Number),
+  }),
+);
+
 /** A record leaves a dropped field's key out entirely rather than carrying it as `undefined`. */
-const conversationMessageCore = EffectSchema.transform(
-  conversationMessageFieldsFrom,
-  conversationMessageFieldsTo,
-  {
-    strict: false,
-    decode: (value) =>
-      value.receivedAt === undefined
-        ? { id: value.id, author: value.author, text: value.text }
-        : { id: value.id, author: value.author, text: value.text, receivedAt: value.receivedAt },
-    encode: (value) => value,
-  },
+const conversationMessageCore = conversationMessageFieldsFrom.pipe(
+  EffectSchema.decodeTo(
+    conversationMessageFieldsTo,
+    SchemaTransformation.transform<
+      (typeof conversationMessageFieldsTo)["Encoded"],
+      (typeof conversationMessageFieldsFrom)["Type"]
+    >({
+      decode: (value) =>
+        value.receivedAt === undefined
+          ? { id: value.id, author: value.author, text: value.text }
+          : { id: value.id, author: value.author, text: value.text, receivedAt: value.receivedAt },
+      encode: (value) => value,
+    }),
+  ),
 );
 
 const conversationAnswerFieldsFrom = EffectSchema.Struct({
   messages: keptEntries(conversationMessageCore),
-  lastMessageId: EffectSchema.optionalWith(dropped(trimmedText()), { exact: true }),
+  lastMessageId: EffectSchema.optionalKey(dropped(trimmedText())),
   hasMore: EffectSchema.Boolean,
-  firstOffset: EffectSchema.optionalWith(dropped(countedNumber), { exact: true }),
-  hasOlder: EffectSchema.optionalWith(dropped(EffectSchema.Boolean), { exact: true }),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-const conversationAnswerFieldsTo = EffectSchema.Struct({
-  messages: EffectSchema.mutable(EffectSchema.Array(conversationMessageFieldsTo)),
-  lastMessageId: EffectSchema.optionalWith(EffectSchema.String, { exact: true }),
-  hasMore: EffectSchema.Boolean,
-  firstOffset: EffectSchema.optionalWith(EffectSchema.Number, { exact: true }),
-  hasOlder: EffectSchema.optionalWith(EffectSchema.Boolean, { exact: true }),
+  firstOffset: EffectSchema.optionalKey(dropped(countedNumber)),
+  hasOlder: EffectSchema.optionalKey(dropped(EffectSchema.Boolean)),
 });
 
+const conversationAnswerFieldsTo = EffectSchema.toType(
+  EffectSchema.Struct({
+    messages: EffectSchema.mutable(EffectSchema.Array(conversationMessageFieldsTo)),
+    lastMessageId: EffectSchema.optionalKey(EffectSchema.String),
+    hasMore: EffectSchema.Boolean,
+    firstOffset: EffectSchema.optionalKey(EffectSchema.Number),
+    hasOlder: EffectSchema.optionalKey(EffectSchema.Boolean),
+  }),
+);
+
 /** A malformed message is skipped, not fatal; a dropped position leaves its key out entirely. */
-const hostedConversationAnswerCore = EffectSchema.transform(
-  conversationAnswerFieldsFrom,
-  conversationAnswerFieldsTo,
-  {
-    strict: false,
-    decode: (value) => ({
-      messages: value.messages,
-      ...(value.lastMessageId === undefined ? undefined : { lastMessageId: value.lastMessageId }),
-      hasMore: value.hasMore,
-      ...(value.firstOffset === undefined ? undefined : { firstOffset: value.firstOffset }),
-      ...(value.hasOlder === undefined ? undefined : { hasOlder: value.hasOlder }),
+const hostedConversationAnswerCore = conversationAnswerFieldsFrom.pipe(
+  EffectSchema.decodeTo(
+    conversationAnswerFieldsTo,
+    SchemaTransformation.transform<
+      (typeof conversationAnswerFieldsTo)["Encoded"],
+      (typeof conversationAnswerFieldsFrom)["Type"]
+    >({
+      decode: (value) => ({
+        messages: value.messages,
+        ...(value.lastMessageId === undefined ? undefined : { lastMessageId: value.lastMessageId }),
+        hasMore: value.hasMore,
+        ...(value.firstOffset === undefined ? undefined : { firstOffset: value.firstOffset }),
+        ...(value.hasOlder === undefined ? undefined : { hasOlder: value.hasOlder }),
+      }),
+      encode: (value) => value,
     }),
-    encode: (value) => value,
-  },
+  ),
 );
 
 export const hostedConversationAnswerSchema = hostedConversationAnswerCore;

@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type CloudAgentProviderId,
   type HostedConversationAnswer,
@@ -73,7 +73,7 @@ function parseBeforeOffset(value: string): number | undefined {
  */
 export function handleConversationRead(
   options: ConversationReadOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const { request, resolveUserId, encryptionSecret, readKey } = options;
 
   return Effect.gen(function* () {

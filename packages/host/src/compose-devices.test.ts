@@ -3,10 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { it } from "@effect/vitest";
 import { type ChangesAnswer, DEVICE_PLATFORM, type DeviceRegisterAnswer } from "@sidecar/hosted";
-
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Duration, Effect, TestClock } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   DEVICE_STATE_FILE,
@@ -88,7 +88,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -98,7 +98,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
 function settle(rounds = 20): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
   });
 }
@@ -125,7 +125,7 @@ function storedState(directory: string): DeviceState | undefined {
   return isRecord(parsed) ? deviceStateFrom(parsed) : undefined;
 }
 
-it.scoped(
+it.effect(
   "a first start mints the installation id once, registers as a Mac, polls at once with the presence read, and keeps the row's id",
   (t) =>
     Effect.gen(function* () {
@@ -163,7 +163,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the installation id outlives a sign-out and a relaunch, so a re-sign-in re-keys the one row",
   (t) =>
     Effect.gen(function* () {
@@ -201,7 +201,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a stop without a departing account ends the cadence and forgets nothing", (t) =>
+it.effect("a stop without a departing account ends the cadence and forgets nothing", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
     const { client, calls } = fakeClient({});
@@ -222,7 +222,7 @@ it.scoped("a stop without a departing account ends the cadence and forgets nothi
   }),
 );
 
-it.scoped(
+it.effect(
   "each poll moves last seen and carries the presence read at that poll, and a row the service no longer holds is registered again",
   (t) =>
     Effect.gen(function* () {
@@ -266,7 +266,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a registration that did not land is tried again by the next beat, and a late answer installs nothing",
   (t) =>
     Effect.gen(function* () {
@@ -321,7 +321,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t) =>
+it.effect("a beat that fails is reported and the cadence keeps its own beat", (t) =>
   Effect.gen(function* () {
     const directory = yield* Effect.promise(() => temporaryDirectory(t));
     const reported: string[] = [];
@@ -356,7 +356,7 @@ it.scoped("a beat that fails is reported and the cadence keeps its own beat", (t
   }),
 );
 
-it.scoped(
+it.effect(
   "a registration still on the wire at sign-out lands before the next account registers",
   (t) =>
     Effect.gen(function* () {
@@ -404,7 +404,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a sign-out that interrupts a beat's own wait hands the slot on rather than opening it",
   (t) =>
     Effect.gen(function* () {
@@ -457,7 +457,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a restate beats at once with the presence read then, waits for a call already out, and beats nothing once stopped",
   (t) =>
     Effect.gen(function* () {
@@ -491,7 +491,7 @@ it.scoped(
       report = PRESENT;
       yield* TestClock.adjust(Duration.millis(DEVICE_POLL_INTERVAL_MS));
       yield* waitFor(() => calls.length === 3);
-      yield* Effect.fork(subject.restate);
+      yield* Effect.forkChild(subject.restate);
       yield* settle();
       assert.equal(calls.length, 3, "a restate waits for the poll already on the wire");
       release?.();
@@ -505,7 +505,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a restate whose wait outlives a sign-out sends nothing, so no registration follows the account that left",
   (t) =>
     Effect.gen(function* () {
@@ -536,7 +536,7 @@ it.scoped(
 
       // The restate waits on the poll out on the wire; the sign-out lands
       // while it waits and forgets the row, so the state names no device.
-      yield* Effect.fork(subject.restate);
+      yield* Effect.forkChild(subject.restate);
       yield* settle();
       yield* subject.stop({ forget: { accessToken: "leaving" } });
       yield* waitFor(() => calls.some((call) => call.kind === "forget"));

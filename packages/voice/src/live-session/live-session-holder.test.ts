@@ -22,7 +22,8 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Duration, Effect, Exit, Scope, type Stream, TestClock } from "effect";
+import { Clock, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
 import {
   type LiveSessionOpened,
@@ -97,7 +98,7 @@ class FakeSideband implements LiveSideband {
 
 function settle() {
   return Effect.gen(function* () {
-    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow();
+    for (let turn = 0; turn < 20; turn += 1) yield* Effect.yieldNow;
   });
 }
 
@@ -251,7 +252,7 @@ function phases(changes: readonly VoiceLiveSessionChanged[]) {
   return changes.map((change) => change.phase);
 }
 
-it.scoped(
+it.effect(
   "a created session is seeded from the desk and the record, attached before the answer, and its phases are announced",
   () =>
     Effect.gen(function* () {
@@ -260,7 +261,7 @@ it.scoped(
         { kind: CONVERSATION_ENTRY_KIND.ASK, words: "What needs me?", eventId: "e1" },
         { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet.", eventId: "e2" },
       );
-      const now = yield* TestClock.currentTimeMillis;
+      const now = yield* Clock.currentTimeMillis;
       f.roster.push({
         identity: { providerId: "conductor", providerSessionId: "chat-1" },
         title: "api on main",
@@ -293,7 +294,7 @@ it.scoped(
     }),
 );
 
-it.scoped("no source means no session and nothing announced", () =>
+it.effect("no source means no session and nothing announced", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     f.sourceAvailable = false;
@@ -303,7 +304,7 @@ it.scoped("no source means no session and nothing announced", () =>
   }),
 );
 
-it.scoped(
+it.effect(
   "a sideband that cannot attach answers no session and announces it closed as sideband-failed",
   () =>
     Effect.gen(function* () {
@@ -319,7 +320,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the session's delegations, transcript, and acknowledgments are read by nobody here: the holder sends nothing on them",
   () =>
     Effect.gen(function* () {
@@ -358,7 +359,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the stop key asks the source's door once the session has started, appends nothing on the sideband itself, and answers false before, after, or with no door",
   () =>
     Effect.gen(function* () {
@@ -397,7 +398,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the idle report is carried through the source's door as the peer reported it, and goes nowhere on a source with no door or no session",
   () =>
     Effect.gen(function* () {
@@ -422,18 +423,18 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "the peer's hang-up closes gracefully: session.close goes up, and session.closed ends the session with its reason and releases its scope",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
-      const fiber = yield* Effect.fork(f.holder.endSession());
+      const fiber = yield* Effect.forkChild(f.holder.endSession());
       yield* settle();
       assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
       assert.deepEqual(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSING);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 42);
-      yield* fiber;
+      yield* Fiber.join(fiber);
       assert.equal(sideband.closed, true);
       assert.deepEqual(f.changes.at(-1), {
         sessionId: "sess-1",
@@ -447,14 +448,14 @@ it.scoped(
     }),
 );
 
-it.scoped("a graceful close nobody answers is released at the timeout as a lost connection", () =>
+it.effect("a graceful close nobody answers is released at the timeout as a lost connection", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const sideband = yield* f.open();
-    const fiber = yield* Effect.fork(f.holder.endSession());
+    const fiber = yield* Effect.forkChild(f.holder.endSession());
     yield* settle();
     yield* TestClock.adjust(Duration.millis(SIDEBAND_CLOSE_TIMEOUT_MS));
-    yield* fiber;
+    yield* Fiber.join(fiber);
     assert.equal(sideband.closed, true);
     assert.deepEqual(f.changes.at(-1), {
       sessionId: "sess-1",
@@ -464,7 +465,7 @@ it.scoped("a graceful close nobody answers is released at the timeout as a lost 
   }),
 );
 
-it.scoped(
+it.effect(
   "the peer's transport is acted on here: a failed transport is the session lost, a closed one is the graceful end, and the rest are nothing",
   () =>
     Effect.gen(function* () {
@@ -498,7 +499,7 @@ it.scoped(
     }),
 );
 
-it.scoped("a sideband that drops is the session lost, and the drain closes what stands", () =>
+it.effect("a sideband that drops is the session lost, and the drain closes what stands", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const first = yield* f.open();
@@ -511,42 +512,42 @@ it.scoped("a sideband that drops is the session lost, and the drain closes what 
     });
     assert.equal(f.holder.sessionStands(), false);
     const second = yield* f.open();
-    const fiber = yield* Effect.fork(f.holder.stop());
+    const fiber = yield* Effect.forkChild(f.holder.stop());
     yield* settle();
     assert.deepEqual(
       second.sent.map((event) => event.type),
       [LIVE_CLIENT_EVENT.CLOSE],
     );
     second.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
-    yield* fiber;
+    yield* Fiber.join(fiber);
     assert.equal(f.holder.sessionStands(), false);
     // The wanted phase is nobody's here: nothing on this side asks for a session.
     assert.equal(phases(f.changes).includes(LIVE_SESSION_PHASE.WANTED), false);
   }),
 );
 
-it.scoped("creating a session while one stands closes the standing one first", () =>
+it.effect("creating a session while one stands closes the standing one first", () =>
   Effect.gen(function* () {
     const f = yield* fixture();
     const first = yield* f.open();
-    const fiber = yield* Effect.fork(f.holder.createSession("second"));
+    const fiber = yield* Effect.forkChild(f.holder.createSession("second"));
     yield* settle();
     assert.deepEqual(
       first.sent.map((event) => event.type),
       [LIVE_CLIENT_EVENT.CLOSE],
     );
     first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
-    const created = yield* fiber;
+    const created = yield* Fiber.join(fiber);
     assert.deepEqual(created, { sessionId: "sess-2", sdpAnswer: "answer-for-second" });
     assert.equal(f.created, 2);
     assert.equal(first.closed, true);
   }),
 );
 
-it.scoped("the holder's scope closing releases a session still standing", () =>
+it.effect("the holder's scope closing releases a session still standing", () =>
   Effect.gen(function* () {
     const scope = yield* Scope.make();
-    const f = yield* Scope.extend(fixture(), scope);
+    const f = yield* Scope.provide(fixture(), scope);
     const sideband = yield* f.open();
     yield* Scope.close(scope, Exit.void);
     yield* settle();
@@ -569,7 +570,7 @@ const LAUNCH: SessionBeatFrame = {
   firstName: "Ada",
 };
 
-it.scoped(
+it.effect(
   "a beat asked for with no session announces wanted, goes through the source's door once the session starts, is settled by the service's word, and may then be asked again",
   () =>
     Effect.gen(function* () {
@@ -607,7 +608,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a waiting beat is withdrawn; one the service already has is the service's to speak; every beat goes with the session that ended",
   () =>
     Effect.gen(function* () {
@@ -643,7 +644,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a session that could not be stood leaves no beat waiting for it, so the kind may be asked again and wanted announced again",
   () =>
     Effect.gen(function* () {
@@ -667,7 +668,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a beat is dropped on a source with no door, since a session with no service between will never speak it",
   () =>
     Effect.gen(function* () {

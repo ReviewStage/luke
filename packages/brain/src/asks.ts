@@ -7,7 +7,7 @@ import {
   type ScheduledTimer,
 } from "@sidecar/runtime";
 import { CONTEXT_INPUT_KIND } from "@sidecar/runtime/vocabulary";
-import { Deferred, Effect, FiberId, MutableRef } from "effect";
+import { Deferred, Effect, MutableRef } from "effect";
 import { CONTEXT_OPENING, type Generation } from "./generation.js";
 import { askInputText } from "./input-items.js";
 import {
@@ -224,7 +224,7 @@ export class AskLedger {
    * conflict rather than guessed at. Pending wakes ride in the run's turn.
    */
   submit(submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#seam.expireIfDue();
       const generation = this.#seam.generation();
       if (this.#seam.stopped() || !generation) {
@@ -552,12 +552,12 @@ export class AskLedger {
       return Effect.succeed(record);
     }
     return Effect.suspend(() => {
-      const settled = Deferred.unsafeMake<BrainRequestRecord | undefined>(FiberId.none);
+      const settled = Deferred.makeUnsafe<BrainRequestRecord | undefined>();
       let disarm: (() => void) | undefined;
       const finish = () => {
         unsubscribe();
         disarm?.();
-        Deferred.unsafeDone(settled, Effect.succeed(this.record(runId)));
+        Deferred.doneUnsafe(settled, Effect.succeed(this.record(runId)));
       };
       const unsubscribe = this.subscribe(() => {
         const current = this.record(runId);

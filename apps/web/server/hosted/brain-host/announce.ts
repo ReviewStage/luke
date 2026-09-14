@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type StoreWriter as ComposedStoreWriter,
   type ConversationTarget,
@@ -28,20 +28,18 @@ export interface BriefingOfferSeams {
 }
 
 /** Offers the turn's briefing on its journal row; answers whether the offer landed or already stood. */
-export function offerBriefing(
+export const offerBriefing = /* @__PURE__ */ Effect.fn("offerBriefing")(function* (
   seams: BriefingOfferSeams,
   target: ConversationTarget,
   turnId: string,
-): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const journal = yield* findMessageByClientId(target.userId, target.conversationId, turnId);
-    if (!journal) return false;
-    const offered = yield* offerSpeech(
-      { writer: seams.writer },
-      target.userId,
-      journal.id,
-      seams.now(),
-    );
-    return offered.ok;
-  });
-}
+): Effect.fn.Return<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const journal = yield* findMessageByClientId(target.userId, target.conversationId, turnId);
+  if (!journal) return false;
+  const offered = yield* offerSpeech(
+    { writer: seams.writer },
+    target.userId,
+    journal.id,
+    seams.now(),
+  );
+  return offered.ok;
+});

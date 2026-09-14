@@ -17,7 +17,8 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Effect, Schema as EffectSchema, Fiber, TestClock } from "effect";
+import { Clock, Effect, Schema as EffectSchema, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import {
   ABC,
   answered,
@@ -119,9 +120,9 @@ function anticipation(partialAsk: string, id = "1"): BrainAnticipation {
   return { id, partialAsk, recentTurns: `Developer: ${partialAsk}` };
 }
 
-/** A record of any fields, as a fake tool's declared input. */
-const ANY_RECORD: EffectSchema.Schema<unknown, UnparsedWireValue> = EffectSchema.make(
-  EffectSchema.Struct({}).annotations({ parseOptions: { onExcessProperty: "ignore" } }).ast,
+/** A record naming no field, as a fake tool's declared input; what a call carries is read nowhere here. */
+const ANY_RECORD: EffectSchema.Codec<unknown, UnparsedWireValue> = EffectSchema.make(
+  EffectSchema.Struct({}).ast,
 );
 
 /** A notebook whose search answers, standing in for an index that holds something. */
@@ -174,7 +175,7 @@ const rig = (
 ): Effect.Effect<Rig> =>
   Effect.gen(function* () {
     yield* TestClock.setTime(NOW);
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const model = new DeferredModel();
     const transcriptReads: SessionIdentity[] = [];
     const searches: WireRecord[] = [];
@@ -200,7 +201,7 @@ const rig = (
           }),
         memory: options.memory ?? answeringMemory(searches),
         policy: async () => options.policy ?? ASK_POLICY,
-        now: () => clock.unsafeCurrentTimeMillis(),
+        now: () => clock.currentTimeMillisUnsafe(),
         createId: () => `id-${++ids}`,
         report: () => undefined,
         trace: (record) => traces.push(record),
@@ -312,7 +313,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS - 1);
       r.model.answer(plan(TRANSCRIPT_OF_ABC));
       yield* drained;
@@ -330,7 +333,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* TestClock.adjust(PREFETCH_BOUNDS.TAKE_WAIT_MS);
       const taken = yield* Fiber.join(taking);
       yield* drained;
@@ -381,7 +386,9 @@ it.effect(
       const r = yield* rig();
       yield* r.prefetch.anticipate(anticipation("what is"));
       yield* drained;
-      const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, new AbortController().signal));
+      const taking = yield* Effect.forkChild(
+        r.prefetch.take(ASK_POLICY, new AbortController().signal),
+      );
       yield* drained;
       yield* r.prefetch.anticipate(anticipation("what is abc doing"));
       yield* drained;
@@ -433,7 +440,7 @@ it.effect("a take under a signal already fired, or fired while it waits, is a re
     const atOnce = yield* r.prefetch.take(ASK_POLICY, fired.signal);
     assert.equal(atOnce.take, BRAIN_PREFETCH_TAKE.MISS_REVOKED);
     const later = new AbortController();
-    const taking = yield* Effect.fork(r.prefetch.take(ASK_POLICY, later.signal));
+    const taking = yield* Effect.forkChild(r.prefetch.take(ASK_POLICY, later.signal));
     yield* drained;
     later.abort();
     const revoked = yield* Fiber.join(taking);

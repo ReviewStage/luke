@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationClearAnswer } from "../core.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { makeRateBrake } from "./rate-brake.js";
@@ -40,10 +40,10 @@ export interface ConversationClearOptions {
   now?: () => number;
 }
 
-export function handleConversationClear(
-  options: ConversationClearOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
+export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversationClear")(
+  function* (
+    options: ConversationClearOptions,
+  ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
     const { request, resolveUserId, store } = options;
     const now = options.now ?? Date.now;
     if (request.method !== CLEAR_METHOD) {
@@ -67,5 +67,5 @@ export function handleConversationClear(
       cleared: outcome.cleared.length,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  },
+);

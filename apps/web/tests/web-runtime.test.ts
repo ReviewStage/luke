@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { HttpClient } from "@effect/platform";
 import type { Effect } from "effect";
+import { HttpClient } from "effect/unstable/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { disposeWebRuntime, runWeb, type WebServices, webRuntime } from "../server/runtime.js";
 

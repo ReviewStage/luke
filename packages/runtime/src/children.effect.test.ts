@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Chunk, Clock, Deferred, Duration, Effect, Schedule, TestClock } from "effect";
+import { Clock, Deferred, Duration, Effect, Pull, Schedule } from "effect";
+import { TestClock } from "effect/testing";
 import {
   CHILD_RUN_STATUS,
   type ChildCompletionRecord,
@@ -322,15 +323,34 @@ describe("childLines", () => {
   );
 });
 
+/**
+ * Drives a schedule to exhaustion the way v4 states one: `Schedule.toStep`
+ * hands back a step, and the step is pulled with each attempt's own instant
+ * until it ends with `Cause.done`. v3's `Schedule.run` collected this for a
+ * caller; v4 has no such collector, so the walk stands here.
+ */
+const stepsOf = <Output>(
+  schedule: Schedule.Schedule<Output, undefined>,
+  attempts: number,
+): Effect.Effect<ReadonlyArray<readonly [Output, Duration.Duration]>> =>
+  Effect.gen(function* () {
+    const step = yield* Schedule.toStep(schedule);
+    const taken: Array<readonly [Output, Duration.Duration]> = [];
+    let now = 0;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const pulled = yield* Pull.catchDone(step(now, undefined), () => Effect.succeed(undefined));
+      if (pulled === undefined) break;
+      taken.push(pulled);
+      now += Duration.toMillis(pulled[1]);
+    }
+    return taken;
+  });
+
 describe("childDeliveryBackoffSchedule", () => {
   it.effect("doubles the port's own initial delay to its own cap", () =>
     Effect.gen(function* () {
-      const delays = yield* Schedule.run(
-        childDeliveryBackoffSchedule(),
-        0,
-        Array.from({ length: 8 }, () => undefined),
-      );
-      const millis = Chunk.toReadonlyArray(delays).map(Duration.toMillis);
+      const taken = yield* stepsOf(childDeliveryBackoffSchedule(), 8);
+      const millis = taken.map(([, delay]) => Duration.toMillis(delay));
       assert.deepEqual(
         millis,
         Array.from({ length: 8 }, (_, index) => deliveryBackoffMs(index + 1)),
@@ -354,7 +374,7 @@ class EffectExecutor implements EffectChildExecutor {
   /** What the `start` seam read of the clock it ran on, in the order the children were started. */
   readonly observed: number[] = [];
   start(record: ChildRunRecord) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.observed.push(yield* Clock.currentTimeMillis);
       const end = yield* Deferred.make<ChildEnd>();
       this.started.push({ record, end });
@@ -365,7 +385,7 @@ class EffectExecutor implements EffectChildExecutor {
     return this.start(record);
   }
   cancel(record: ChildRunRecord) {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.cancelled.push(record.childId);
       const held = this.started.find((one) => one.record.childId === record.childId);
       if (held) yield* Deferred.succeed(held.end, { status: CHILD_RUN_STATUS.CANCELLED });
@@ -400,14 +420,14 @@ const effectHarness = () =>
       store,
       createId: () => `id-${++ids}`,
       now: () => 0,
-      ...childSeamsOnRuntime(yield* Effect.runtime<never>(), { executor, deliverer }),
+      ...childSeamsOnRuntime(yield* Effect.context<never>(), { executor, deliverer }),
     });
     yield* Effect.addFinalizer(() => Effect.sync(() => service.stop()));
     return { service, store, executor, deliverer };
   });
 
 describe("childSeamsOnRuntime", () => {
-  it.effect("runs a start seam on the runtime it was handed", () =>
+  it.effect("runs a start seam on the services it was handed", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { service, executor } = yield* effectHarness();

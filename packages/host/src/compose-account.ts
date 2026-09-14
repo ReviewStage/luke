@@ -1,4 +1,3 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { PRODUCT_ACCOUNT_ACTION, PRODUCT_EVENT } from "@sidecar/analytics";
 import {
   AccountClient,
@@ -26,6 +25,7 @@ import {
 } from "@sidecar/hosted";
 import { VoiceCapabilityAssembler } from "@sidecar/voice";
 import { Config, Effect, MutableRef, Option, type Scope, Stream } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
@@ -88,296 +88,296 @@ export interface AccountDependencies {
  * suspends rather than throwing; the one synchronous reader takes a value the
  * link mirrors.
  */
-export const composeAccount = (
+export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(function* (
   dependencies: AccountDependencies,
-): Effect.Effect<
+): Effect.fn.Return<
   AccountComposer,
   never,
   HostKernelTag | Environment | AppIdentity | FileSystem.FileSystem | Scope.Scope
-> =>
-  Effect.gen(function* () {
-    const { settings } = dependencies;
-    const kernel = yield* HostKernelTag;
-    const environment = yield* Environment;
-    const identity = yield* AppIdentity;
-    const { runMode, report } = kernel;
-    // The runtime the host is being built on, threaded through
-    // `VoiceCapabilityAssembler` to every model adapter it builds, so the
-    // promise each of those still answers is run on the host's own runtime
-    // rather than on an ambient default one.
-    const runtime = yield* Effect.runtime<never>();
-    const late = yield* lateService<AccountLinks>();
-    /**
-     * The device row's id, mirrored for the one link a caller reads from a
-     * synchronous statement: the voice capability assembler asks for it while
-     * building a handshake and holds no fiber to await the links on. The link
-     * writes the reader the devices composer owns, so a read before the merge
-     * answers the no device an unregistered installation answers anyway rather
-     * than throwing.
-     */
-    const deviceIdReader = MutableRef.make<() => string | undefined>(() => undefined);
+> {
+  const { settings } = dependencies;
+  const kernel = yield* HostKernelTag;
+  const environment = yield* Environment;
+  const identity = yield* AppIdentity;
+  const { runMode, report } = kernel;
+  // The services the host is being built on, threaded through
+  // `VoiceCapabilityAssembler` to every model adapter it builds, so the
+  // promise each of those still answers is run under the host's own
+  // services rather than under an ambient empty set.
+  const execution = yield* Effect.context<never>();
+  const late = yield* lateService<AccountLinks>();
+  /**
+   * The device row's id, mirrored for the one link a caller reads from a
+   * synchronous statement: the voice capability assembler asks for it while
+   * building a handshake and holds no fiber to await the links on. The link
+   * writes the reader the devices composer owns, so a read before the merge
+   * answers the no device an unregistered installation answers anyway rather
+   * than throwing.
+   */
+  const deviceIdReader = MutableRef.make<() => string | undefined>(() => undefined);
 
-    const client = new AccountClient({
-      baseUrl: kernel.accountBaseUrl,
-      clientId: ACCOUNT_CLIENT_ID,
-    });
+  const client = new AccountClient({
+    baseUrl: kernel.accountBaseUrl,
+    clientId: ACCOUNT_CLIENT_ID,
+  });
 
-    const session = yield* AccountSessionManager.make({
-      client,
-      // The store's own effects, with an I/O failure read as the defect the
-      // rejected promise behind each of these already was. Each link below is
-      // awaited rather than read, because a link read at construction would be
-      // read before `link()` has run.
-      store: {
-        readAccount: () => Effect.orDie(settings.store.readAccount()),
-        setAccount: (stored) => Effect.orDie(settings.store.setAccount(stored)),
-        clearAccount: () => Effect.orDie(settings.store.clearAccount()),
-      },
-      hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-      requiresAccount: runMode.requiresAccount,
-      openExternal: (url) => kernel.openExternalThroughNode(url),
-      startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
-      stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
-      onSignOut: (stored) => Effect.flatMap(late.value, (links) => links.releaseDevice(stored)),
-    });
+  const session = yield* AccountSessionManager.make({
+    client,
+    // The store's own effects, with an I/O failure read as the defect the
+    // rejected promise behind each of these already was. Each link below is
+    // awaited rather than read, because a link read at construction would be
+    // read before `link()` has run.
+    store: {
+      readAccount: () => Effect.orDie(settings.store.readAccount()),
+      setAccount: (stored) => Effect.orDie(settings.store.setAccount(stored)),
+      clearAccount: () => Effect.orDie(settings.store.clearAccount()),
+    },
+    hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
+    requiresAccount: runMode.requiresAccount,
+    openExternal: (url) => kernel.openExternalThroughNode(url),
+    startCapabilities: Effect.flatMap(late.value, (links) => links.startCapabilities),
+    stopCapabilities: Effect.flatMap(late.value, (links) => links.stopCapabilities),
+    onSignOut: (stored) => Effect.flatMap(late.value, (links) => links.releaseDevice(stored)),
+  });
 
-    /**
-     * The previous snapshot, read by the subscriber alone: `session.snapshot`
-     * is always the manager's own current answer, so every other reader in
-     * this file reads that directly rather than a mirror that would only
-     * catch up once the subscription's fiber had run.
-     */
-    let previousAccount: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
+  /**
+   * The previous snapshot, read by the subscriber alone: `session.snapshot`
+   * is always the manager's own current answer, so every other reader in
+   * this file reads that directly rather than a mirror that would only
+   * catch up once the subscription's fiber had run.
+   */
+  let previousAccount: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
 
-    /**
-     * What a session change means to the rest of the host, as the subscriber
-     * a fiber in this composer's own lifetime pumps from `session.changes`
-     * rather than a callback `AccountSessionManager` held and ran. The order
-     * within one turn is what the comments below still guarantee — the
-     * calendar step of onboarding lands before the account event a renderer
-     * reads it against — never that a turn lands before the fiber that
-     * changed it moves on, which is the same eventual guarantee the two
-     * forks this replaces already gave `emitSessionReplay` and
-     * `settings.emitSettings()`.
-     */
-    const onAccountChange = (next: AccountSnapshot): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        const links = yield* late.value;
-        const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
-        const wasSignedIn = previousAccount.status === ACCOUNT_STATUS.SIGNED_IN;
-        const previousAccountKey =
-          previousAccount.status === ACCOUNT_STATUS.SIGNED_IN ? previousAccount.email : undefined;
-        const nextAccountKey = signedIn ? next.email : undefined;
-        previousAccount = next;
-        if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
-        // The vault's list is the departing account's: emptied here, ahead of
-        // the departure's own emit, so the very snapshot that reports the
-        // sign-out reads every cloud provider as not connected.
-        if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
-        if (signedIn && !wasSignedIn) links.onFirstSignIn();
-        kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
-        yield* settings.emitSettings();
-        yield* emitSessionReplay;
-        if (signedIn && !wasSignedIn) {
-          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
-          links.onFirstSignInArrival();
-        }
-      });
-
-    /**
-     * The development trace, gated so it cannot exist for a user: a packaged
-     * build never reads the variable, a fixture or evidence run has no traffic to
-     * tap and constructs no writer.
-     */
-    const traceDirectory =
-      identity.packaged || !runMode.sendsNetwork
-        ? Option.none<string>()
-        : yield* Effect.orDie(environment.load(agentTraceDirectory));
-    const agentTrace = Option.isSome(traceDirectory)
-      ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
-      : undefined;
-    if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
-
-    const voiceServiceOrigin = yield* Effect.orDie(
-      environment.load(Config.option(Config.string(VOICE_SERVICE_ORIGIN_VARIABLE))),
-    );
-
-    function capabilitiesActive(): boolean {
-      return accountGateOpen(runMode, session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN);
+  /**
+   * What a session change means to the rest of the host, as the subscriber
+   * a fiber in this composer's own lifetime pumps from `session.changes`
+   * rather than a callback `AccountSessionManager` held and ran. The order
+   * within one turn is what the comments below still guarantee — the
+   * calendar step of onboarding lands before the account event a renderer
+   * reads it against — never that a turn lands before the fiber that
+   * changed it moves on, which is the same eventual guarantee the two
+   * forks this replaces already gave `emitSessionReplay` and
+   * `settings.emitSettings()`.
+   */
+  const onAccountChange = /* @__PURE__ */ Effect.fnUntraced(function* (
+    next: AccountSnapshot,
+  ): Effect.fn.Return<void> {
+    const links = yield* late.value;
+    const signedIn = next.status === ACCOUNT_STATUS.SIGNED_IN;
+    const wasSignedIn = previousAccount.status === ACCOUNT_STATUS.SIGNED_IN;
+    const previousAccountKey =
+      previousAccount.status === ACCOUNT_STATUS.SIGNED_IN ? previousAccount.email : undefined;
+    const nextAccountKey = signedIn ? next.email : undefined;
+    previousAccount = next;
+    if (previousAccountKey !== nextAccountKey) settings.forgetAccountPreferenceHydration();
+    // The vault's list is the departing account's: emptied here, ahead of
+    // the departure's own emit, so the very snapshot that reports the
+    // sign-out reads every cloud provider as not connected.
+    if (wasSignedIn && !signedIn) settings.forgetVaultKeys();
+    if (signedIn && !wasSignedIn) links.onFirstSignIn();
+    kernel.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, carried(next));
+    yield* settings.emitSettings();
+    yield* emitSessionReplay;
+    if (signedIn && !wasSignedIn) {
+      settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_SIGN_IN, {});
+      links.onFirstSignInArrival();
     }
+  });
 
-    /**
-     * One account read: a store that could not be read is an account this
-     * attempt cannot name, exactly as a rejected read already was here.
-     */
-    const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
-      settings.store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
+  /**
+   * The development trace, gated so it cannot exist for a user: a packaged
+   * build never reads the variable, a fixture or evidence run has no traffic to
+   * tap and constructs no writer.
+   */
+  const traceDirectory =
+    identity.packaged || !runMode.sendsNetwork
+      ? Option.none<string>()
+      : yield* Effect.orDie(agentTraceDirectory.parse(environment));
+  const agentTrace = Option.isSome(traceDirectory)
+    ? yield* AgentTraceWriter.make({ directory: traceDirectory.value })
+    : undefined;
+  if (agentTrace) report(`Agent trace: ${agentTrace.file}`);
 
-    // The holder is the account's own address, so a call's one retry after a
-    // 401 can tell a renewed token from a different person's: a sign-out and
-    // sign-in between the attempt and its retry reads as the caller's account
-    // gone, never as a fresh bearer to carry the old account's payload under.
-    const token: AccountToken = {
-      readAccessToken: () =>
-        runMode.sendsNetwork
-          ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
-          : Effect.succeed(undefined),
-      refreshAccount: session.refreshOnce,
-      readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
-    };
+  const voiceServiceOrigin = yield* Effect.orDie(
+    Config.option(Config.String(VOICE_SERVICE_ORIGIN_VARIABLE)).parse(environment),
+  );
 
-    const voiceCapabilities = new VoiceCapabilityAssembler({
-      settings: settings.store,
-      credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
-      fixtureRun: () => !runMode.sendsNetwork,
-      accountSignedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
-      hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
-      // The voice functions live on the account service's origin, so its
-      // development override reaches them too; a voice override of its own stands
-      // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
-      hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
-        packaged: identity.packaged,
-        override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
+  function capabilitiesActive(): boolean {
+    return accountGateOpen(runMode, session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN);
+  }
+
+  /**
+   * One account read: a store that could not be read is an account this
+   * attempt cannot name, exactly as a rejected read already was here.
+   */
+  const readStoredAccount = (): Effect.Effect<StoredAccount | undefined> =>
+    settings.store.readAccount().pipe(Effect.orElseSucceed(() => undefined));
+
+  // The holder is the account's own address, so a call's one retry after a
+  // 401 can tell a renewed token from a different person's: a sign-out and
+  // sign-in between the attempt and its retry reads as the caller's account
+  // gone, never as a fresh bearer to carry the old account's payload under.
+  const token: AccountToken = {
+    readAccessToken: () =>
+      runMode.sendsNetwork
+        ? Effect.map(readStoredAccount(), (account) => account?.accessToken)
+        : Effect.succeed(undefined),
+    refreshAccount: session.refreshOnce,
+    readAccountKey: () => Effect.map(readStoredAccount(), (account) => account?.email),
+  };
+
+  const voiceCapabilities = new VoiceCapabilityAssembler({
+    settings: settings.store,
+    credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
+    fixtureRun: () => !runMode.sendsNetwork,
+    accountSignedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
+    hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
+    // The voice functions live on the account service's origin, so its
+    // development override reaches them too; a voice override of its own stands
+    // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
+    hostedVoiceServiceOrigin: hostedVoiceServiceOrigin({
+      packaged: identity.packaged,
+      override: Option.getOrUndefined(voiceServiceOrigin) ?? kernel.hostedServiceBaseUrl,
+    }),
+    openSocket: openSocketOverWs,
+    refreshAccount: session.refreshOnce,
+    deviceId: () => MutableRef.get(deviceIdReader)(),
+    execution,
+    ...(agentTrace
+      ? {
+          wrapBrainModel: (model) =>
+            tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record), execution),
+        }
+      : undefined),
+  });
+
+  /**
+   * Whether an account was deleted in this run, which stands recording down
+   * for the rest of it; the client relays the answer to its renderers.
+   */
+  let sessionReplayEndedByDeletion = false;
+
+  const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> = Effect.gen(
+    function* () {
+      const signedIn = session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN;
+      const accountId = signedIn
+        ? (yield* Effect.orDie(settings.store.readAccount()))?.id
+        : undefined;
+      return {
+        permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
+        ...(accountId ? { accountId } : undefined),
+      };
+    },
+  );
+
+  let sessionReplayGeneration = 0;
+  // The account is read asynchronously, and a sign-out reports the transition
+  // before it clears the stored account, so a late answer must not restart
+  // recording under the person who just left.
+  const emitSessionReplay: Effect.Effect<void> = Effect.gen(function* () {
+    const generation = ++sessionReplayGeneration;
+    const replay = yield* sessionReplayState;
+    if (generation !== sessionReplayGeneration) return;
+    kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
+  });
+
+  // The transition's own `PlatformError` reads as a defect, exactly as the
+  // promise this replaced rejected on the same failure.
+  const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
+    Effect.asVoid(
+      transitionVoiceSource({
+        retire: () => Effect.flatMap(late.value, (links) => links.retireBrain()),
+        apply: () => voiceCapabilities.apply(),
+        rebuild: () =>
+          Effect.gen(function* () {
+            const links = yield* late.value;
+            yield* links.rebuildBrain();
+          }),
       }),
-      openSocket: openSocketOverWs,
-      refreshAccount: session.refreshOnce,
-      deviceId: () => MutableRef.get(deviceIdReader)(),
-      execution: runtime,
-      ...(agentTrace
-        ? {
-            wrapBrainModel: (model) =>
-              tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record), runtime),
-          }
-        : undefined),
-    });
+    ),
+  );
 
-    /**
-     * Whether an account was deleted in this run, which stands recording down
-     * for the rest of it; the client relays the answer to its renderers.
-     */
-    let sessionReplayEndedByDeletion = false;
-
-    const sessionReplayState: Effect.Effect<{ permitted: boolean; accountId?: string }> =
+  const methods: GatewayMethodTable = {
+    [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () => Effect.succeed({ account: carried(session.snapshot) }),
+    [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
       Effect.gen(function* () {
-        const signedIn = session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN;
-        const accountId = signedIn
-          ? (yield* Effect.orDie(settings.store.readAccount()))?.id
-          : undefined;
-        return {
-          permitted: runMode.sendsNetwork && !sessionReplayEndedByDeletion,
-          ...(accountId ? { accountId } : undefined),
-        };
-      });
+        const provider = params.provider;
+        if (!isAccountProvider(provider))
+          return yield* invalid("provider is not one this build knows");
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
+        });
+        const snapshot = yield* Effect.orDie(session.beginSignIn(provider));
+        return { account: carried(snapshot) };
+      }),
+    [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
+      Effect.sync(() => {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
+        });
+        session.cancelSignIn();
+        return {};
+      }),
+    [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: () =>
+      Effect.gen(function* () {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
+        });
+        // The count of the action leaves before the action ends the account it is
+        // authenticated with; queued behind the sign-out it would wait for the
+        // next sign-in.
+        yield* settings.flushProductEvents;
+        const snapshot = yield* session.signOut({ revokeRemote: true });
+        return { account: carried(snapshot) };
+      }),
+    [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
+      Effect.gen(function* () {
+        settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
+          account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
+        });
+        yield* settings.flushProductEvents;
+        const snapshot = yield* Effect.orDie(session.deleteEverywhere());
+        // Only a deletion that landed stands recording down for the run.
+        sessionReplayEndedByDeletion = true;
+        // Forked as a daemon rather than a plain fork: the handler's own
+        // fiber ends the moment this returns, and a fork supervised by it
+        // would be interrupted with it, dropping the very reply that is
+        // supposed to stand recording down.
+        yield* Effect.forkDetach(emitSessionReplay);
+        return { account: carried(snapshot) };
+      }),
+  };
 
-    let sessionReplayGeneration = 0;
-    // The account is read asynchronously, and a sign-out reports the transition
-    // before it clears the stored account, so a late answer must not restart
-    // recording under the person who just left.
-    const emitSessionReplay: Effect.Effect<void> = Effect.gen(function* () {
-      const generation = ++sessionReplayGeneration;
-      const replay = yield* sessionReplayState;
-      if (generation !== sessionReplayGeneration) return;
-      kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
-    });
-
-    // The transition's own `PlatformError` reads as a defect, exactly as the
-    // promise this replaced rejected on the same failure.
-    const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
-      Effect.asVoid(
-        transitionVoiceSource({
-          retire: () => Effect.flatMap(late.value, (links) => links.retireBrain()),
-          apply: () => voiceCapabilities.apply(),
-          rebuild: () =>
-            Effect.gen(function* () {
-              const links = yield* late.value;
-              yield* links.rebuildBrain();
-            }),
+  return {
+    methods,
+    session,
+    voiceCapabilities,
+    agentTrace,
+    snapshot: () => session.snapshot,
+    signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
+    capabilitiesActive,
+    token,
+    applyVoiceCredential,
+    sessionReplayState,
+    link: (next) =>
+      Effect.flatMap(late.set(next), (supplied) =>
+        Effect.sync(() => {
+          if (supplied) MutableRef.set(deviceIdReader, next.deviceId);
         }),
       ),
-    );
-
-    const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.ACCOUNT_SNAPSHOT]: () =>
-        Effect.succeed({ account: carried(session.snapshot) }),
-      [GATEWAY_METHOD.ACCOUNT_BEGIN_SIGN_IN]: (params) =>
-        Effect.gen(function* () {
-          const provider = params.provider;
-          if (!isAccountProvider(provider))
-            return yield* invalid("provider is not one this build knows");
-          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_START,
-          });
-          const snapshot = yield* Effect.orDie(session.beginSignIn(provider));
-          return { account: carried(snapshot) };
-        }),
-      [GATEWAY_METHOD.ACCOUNT_CANCEL_SIGN_IN]: () =>
-        Effect.sync(() => {
-          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_IN_CANCEL,
-          });
-          session.cancelSignIn();
-          return {};
-        }),
-      [GATEWAY_METHOD.ACCOUNT_SIGN_OUT]: () =>
-        Effect.gen(function* () {
-          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-            account_action: PRODUCT_ACCOUNT_ACTION.SIGN_OUT,
-          });
-          // The count of the action leaves before the action ends the account it is
-          // authenticated with; queued behind the sign-out it would wait for the
-          // next sign-in.
-          yield* settings.flushProductEvents;
-          const snapshot = yield* session.signOut({ revokeRemote: true });
-          return { account: carried(snapshot) };
-        }),
-      [GATEWAY_METHOD.ACCOUNT_DELETE]: () =>
-        Effect.gen(function* () {
-          settings.recordProductEvent(PRODUCT_EVENT.ACCOUNT_ACTION, {
-            account_action: PRODUCT_ACCOUNT_ACTION.DELETE,
-          });
-          yield* settings.flushProductEvents;
-          const snapshot = yield* Effect.orDie(session.deleteEverywhere());
-          // Only a deletion that landed stands recording down for the run.
-          sessionReplayEndedByDeletion = true;
-          // Forked as a daemon rather than a plain fork: the handler's own
-          // fiber ends the moment this returns, and a fork supervised by it
-          // would be interrupted with it, dropping the very reply that is
-          // supposed to stand recording down.
-          yield* Effect.forkDaemon(emitSessionReplay);
-          return { account: carried(snapshot) };
-        }),
-    };
-
-    return {
-      methods,
-      session,
-      voiceCapabilities,
-      agentTrace,
-      snapshot: () => session.snapshot,
-      signedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
-      capabilitiesActive,
-      token,
-      applyVoiceCredential,
-      sessionReplayState,
-      link: (next) =>
-        Effect.flatMap(late.set(next), (supplied) =>
-          Effect.sync(() => {
-            if (supplied) MutableRef.set(deviceIdReader, next.deviceId);
-          }),
-        ),
-      // The session manager holds no timer this host started beyond its own
-      // subscription: what a sign-in began is stopped by the capabilities it
-      // started, and the subscription is forked into this same scope, so
-      // closing it is the whole of the stop and there is nothing else to give
-      // back.
-      lifetime: Effect.gen(function* () {
-        const initial = runMode.requiresAccount
-          ? yield* Effect.orDie(settings.store.accountSnapshot())
-          : { status: ACCOUNT_STATUS.SIGNED_OUT };
-        previousAccount = initial;
-        session.initialize(initial);
-        const changes = yield* session.changes;
-        yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
-      }),
-    };
-  });
+    // The session manager holds no timer this host started beyond its own
+    // subscription: what a sign-in began is stopped by the capabilities it
+    // started, and the subscription is forked into this same scope, so
+    // closing it is the whole of the stop and there is nothing else to give
+    // back.
+    lifetime: Effect.gen(function* () {
+      const initial = runMode.requiresAccount
+        ? yield* Effect.orDie(settings.store.accountSnapshot())
+        : { status: ACCOUNT_STATUS.SIGNED_OUT };
+      previousAccount = initial;
+      session.initialize(initial);
+      const changes = yield* session.changes;
+      yield* Effect.forkScoped(Stream.runForEach(changes, onAccountChange));
+    }),
+  };
+});

@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { oauthProvider } from "@better-auth/oauth-provider";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { betterAuth } from "better-auth";
 import { jwt } from "better-auth/plugins";
 import { drizzle } from "drizzle-orm/pglite";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { test } from "vitest";
 import { authDatabaseAdapter } from "../server/auth-database";
 import {
@@ -150,8 +150,8 @@ const ISSUED_SCOPES = ["openid", "profile", "email", "offline_access"] as const;
 /** What the adapter answers for the row: its scopes as an array and its instants as `Date`s. */
 const StoredAccessTokenSchema = Schema.Struct({
   scopes: Schema.Array(Schema.String),
-  createdAt: Schema.DateFromSelf,
-  expiresAt: Schema.DateFromSelf,
+  createdAt: Schema.Date,
+  expiresAt: Schema.Date,
 });
 
 /**

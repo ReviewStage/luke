@@ -22,7 +22,7 @@ import {
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Either, Fiber } from "effect";
+import { Effect, Fiber, Result } from "effect";
 import { test } from "vitest";
 import { COMPACTION_POLICY } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
@@ -146,11 +146,11 @@ function runtime(model: FakeModel, loopGuard?: { enabled: boolean }) {
       lostResult: Parameters<typeof inner.resume>[2],
     ): Promise<RuntimeRun | { readonly refused: string }> =>
       Effect.runPromise(
-        Effect.either(
+        Effect.result(
           inner.resume(checkpoint, { ...request, onEvent: listener(request.onEvent) }, lostResult),
         ),
       ).then((resumed) =>
-        Either.isLeft(resumed) ? { refused: resumed.left.reason } : started(resumed.right),
+        Result.isFailure(resumed) ? { refused: resumed.failure.reason } : started(resumed.success),
       ),
   };
 }
@@ -818,7 +818,7 @@ it.effect(
       const run = toolLoop(h.model).start(
         effectRequest(h.request({ context: held.engine }), events),
       );
-      const running = yield* Effect.fork(run.done);
+      const running = yield* Effect.forkChild(run.done);
       yield* Effect.promise(() => held.entered);
 
       run.cancel();
@@ -845,7 +845,7 @@ it.effect(
       h.model.hold = true;
       const events: RuntimeEvent[] = [];
       const run = toolLoop(h.model).start(effectRequest(h.request(), events));
-      const carrying = yield* Effect.fork(run.done);
+      const carrying = yield* Effect.forkChild(run.done);
       while (h.model.requests.length === 0) {
         yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
       }

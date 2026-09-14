@@ -264,7 +264,7 @@ async function stand(offer: Offer): Promise<Stand> {
   const voice = voiceServer();
   const scope = await database.run(Scope.make());
   const port = await database.run(
-    Scope.extend(
+    Scope.provide(
       Effect.gen(function* () {
         const listener = yield* listening(voice, 0, "127.0.0.1");
         yield* VoiceService.make({

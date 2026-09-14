@@ -83,29 +83,28 @@ export function hostedTranscriptReads(
    * wear, or the refusal both reads share: a local identity before any call,
    * an unanswered page after it.
    */
-  const page = (
+  const page = /* @__PURE__ */ Effect.fnUntraced(function* (
     identity: SessionIdentity,
     cursor: string | undefined,
-  ): Effect.Effect<
+  ): Effect.fn.Return<
     | { speaker: string; answer: HostedConversationAnswer }
     | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string }
     | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
-  > =>
-    Effect.gen(function* () {
-      const { providerId, providerSessionId } = identity;
-      if (!isCloudAgentProviderId(providerId)) {
-        return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
-      }
-      const answer = yield* client.read({
-        providerId,
-        providerSessionId,
-        ...(cursor === undefined ? undefined : { afterMessageId: cursor }),
-      });
-      if (!answer) return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_READ };
-      const speaker =
-        session(identity)?.agent?.displayName ?? PROVIDER_IDENTITY_BY_ID[providerId].displayName;
-      return { speaker, answer };
+  > {
+    const { providerId, providerSessionId } = identity;
+    if (!isCloudAgentProviderId(providerId)) {
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+    }
+    const answer = yield* client.read({
+      providerId,
+      providerSessionId,
+      ...(cursor === undefined ? undefined : { afterMessageId: cursor }),
     });
+    if (!answer) return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.NOT_READ };
+    const speaker =
+      session(identity)?.agent?.displayName ?? PROVIDER_IDENTITY_BY_ID[providerId].displayName;
+    return { speaker, answer };
+  });
 
   return {
     readTranscript: (identity) =>

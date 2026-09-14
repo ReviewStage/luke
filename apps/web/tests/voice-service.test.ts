@@ -10,9 +10,9 @@ import {
 } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
-import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
+import { EXCESS_KEYS, isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Exit, Scope } from "effect";
+import { Effect, Exit, Result, Scope } from "effect";
 import { onTestFinished, test } from "vitest";
 import { VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import {
@@ -108,7 +108,9 @@ function record(text: string): WireRecord {
 }
 
 function hostedError(text: WireRecord): string | undefined {
-  return Either.getOrUndefined(readEither(hostedErrorSchema)(text));
+  // The hosted error record was declared tolerant, so the read drops a key a
+  // newer service may have added.
+  return Result.getOrUndefined(readEither(hostedErrorSchema, { excess: EXCESS_KEYS.DROP })(text));
 }
 
 interface Stand {
@@ -138,7 +140,7 @@ async function stand(overrides: Partial<VoiceServiceOptions> = {}): Promise<Stan
   const voice = voiceServer();
   const scope = await runWithoutDatabase(Scope.make());
   const standing = await runWithoutDatabase(
-    Scope.extend(
+    Scope.provide(
       Effect.gen(function* () {
         const port = yield* listening(voice, 0, "127.0.0.1");
         const service = yield* VoiceService.make({
@@ -541,7 +543,7 @@ test("a socket past its byte budget before it ever opened a session is closed an
 test("a server with no service standing on it refuses every upgrade with 503", async () => {
   const voice = voiceServer();
   const scope = await runWithoutDatabase(Scope.make());
-  const port = await runWithoutDatabase(Scope.extend(listening(voice, 0, "127.0.0.1"), scope));
+  const port = await runWithoutDatabase(Scope.provide(listening(voice, 0, "127.0.0.1"), scope));
   onTestFinished(() => runWithoutDatabase(Scope.close(scope, Exit.void)));
 
   assert.deepEqual(await connect(`ws://127.0.0.1:${port}${VOICE_SERVICE_PATH.INTRODUCTION}`), {

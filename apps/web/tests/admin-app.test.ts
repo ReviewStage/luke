@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { HttpApp } from "@effect/platform";
 import { Effect } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import type { AdminViewer } from "../server/admin/admin-access";
 import { handleAdminFavorite } from "../server/admin/admin-favorite";
@@ -49,9 +49,11 @@ function recordingSeams(reached: ReadName[]): AdminSeams {
 }
 
 function answer(seams: AdminSeams, url: string, method = "GET"): Promise<Response> {
-  return HttpApp.toWebHandler(Effect.provide(adminApp(seams), noDatabase))(
-    new Request(`https://luke.test${url}`, { method }),
+  const { handler } = HttpRouter.toWebHandler(
+    adminApp(seams).pipe(HttpRouter.provideRequest(noDatabase)),
+    { disableLogger: true },
   );
+  return handler(new Request(`https://luke.test${url}`, { method }));
 }
 
 const ADDRESSES = [

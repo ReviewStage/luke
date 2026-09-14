@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Context, Effect, Either, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
 import { test } from "vitest";
 
 const SESSION_STATE = {
@@ -9,17 +9,17 @@ const SESSION_STATE = {
 
 const SessionRow = Schema.Struct({
   id: Schema.String,
-  state: Schema.Literal(SESSION_STATE.WORKING, SESSION_STATE.WAITING),
+  state: Schema.Literals([SESSION_STATE.WORKING, SESSION_STATE.WAITING]),
   turns: Schema.Int,
-  branch: Schema.optionalWith(Schema.String, { exact: true }),
+  branch: Schema.optionalKey(Schema.String),
 });
 
-const readSessionRow = Schema.decodeUnknownEither(SessionRow);
+const readSessionRow = Schema.decodeUnknownResult(SessionRow);
 
 test("Schema.Struct decodes a well-formed record to the declared shape", () => {
   const decoded = readSessionRow({ id: "session-1", state: "working", turns: 3 });
 
-  assert.deepEqual(Either.getOrThrow(decoded), {
+  assert.deepEqual(Result.getOrThrow(decoded), {
     id: "session-1",
     state: SESSION_STATE.WORKING,
     turns: 3,
@@ -29,24 +29,23 @@ test("Schema.Struct decodes a well-formed record to the declared shape", () => {
 test("Schema.Struct refuses a record whose field misses its refinement", () => {
   const refused = readSessionRow({ id: "session-1", state: "working", turns: 2.5 });
 
-  assert.equal(Either.isLeft(refused), true);
+  assert.equal(Result.isFailure(refused), true);
 });
 
 test("Schema.Struct refuses a literal outside the declared set", () => {
   const refused = readSessionRow({ id: "session-1", state: "settled", turns: 1 });
 
-  assert.equal(Either.isLeft(refused), true);
+  assert.equal(Result.isFailure(refused), true);
 });
 
-class Clock extends Context.Tag("@sidecar/wire/effect-spike/Clock")<
-  Clock,
-  { readonly now: () => number }
->() {}
+class Clock extends Context.Service<Clock, { readonly now: () => number }>()(
+  "@sidecar/wire/effect-spike/Clock",
+) {}
 
-class Roster extends Context.Tag("@sidecar/wire/effect-spike/Roster")<
+class Roster extends Context.Service<
   Roster,
   { readonly stamp: (id: string) => Effect.Effect<{ readonly id: string; readonly at: number }> }
->() {}
+>()("@sidecar/wire/effect-spike/Roster") {}
 
 const FIXED_INSTANT = 1_700_000_000_000;
 
@@ -69,7 +68,7 @@ const stampBoth = Effect.gen(function* () {
   return [first, second];
 });
 
-test("Layer resolves a Context.Tag through the layer it depends on", () => {
+test("Layer resolves a Context.Service through the layer it depends on", () => {
   const stamped = Effect.runSync(Effect.provide(stampBoth, Layer.provide(rosterLayer, clockLayer)));
 
   assert.deepEqual(stamped, [
@@ -92,12 +91,12 @@ test("Effect.gen carries a typed failure to the caller as an Either", async () =
     });
 
   const [accepted, refused] = await Effect.runPromise(
-    Effect.all([Effect.either(refuse("session-1")), Effect.either(refuse(""))]),
+    Effect.all([Effect.result(refuse("session-1")), Effect.result(refuse(""))]),
   );
 
-  assert.deepEqual(accepted, Either.right("session-1"));
-  assert.equal(Either.isLeft(refused), true);
-  assert.equal(Either.isLeft(refused) ? refused.left._tag : null, "Refused");
+  assert.deepEqual(accepted, Result.succeed("session-1"));
+  assert.equal(Result.isFailure(refused), true);
+  assert.equal(Result.isFailure(refused) ? refused.failure._tag : null, "Refused");
 });
 
 test("two tags with different identifiers are different services", () => {

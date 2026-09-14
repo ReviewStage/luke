@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
-import { Deferred, Effect, Exit, Fiber, Option, type Scope, Stream } from "effect";
+import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
 import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
@@ -89,7 +89,7 @@ function manager(options: {
   });
 }
 
-it.scoped("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
+it.effect("sign out closes capabilities, clears storage, broadcasts, then revokes", () =>
   Effect.gen(function* () {
     const calls: string[] = [];
     const subject = yield* manager({
@@ -103,7 +103,7 @@ it.scoped("sign out closes capabilities, clears storage, broadcasts, then revoke
     yield* subject.instance.signOut({ revokeRemote: true });
     // The subscriber is a separate fiber pumping the published snapshots, so
     // enough turns are given for it to have drained both before they are read.
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     assert.deepEqual(subject.events, ["stop"]);
     assert.deepEqual(subject.changes, [ACCOUNT_STATUS.SIGNED_OUT, ACCOUNT_STATUS.SIGNED_OUT]);
     assert.deepEqual(calls, ["revoke"]);
@@ -111,7 +111,7 @@ it.scoped("sign out closes capabilities, clears storage, broadcasts, then revoke
   }),
 );
 
-it.scoped(
+it.effect(
   "sign out releases the departing account while its token still stands, and a failed release never holds it up",
   () =>
     Effect.gen(function* () {
@@ -140,21 +140,21 @@ it.scoped(
     }),
 );
 
-it.scoped("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
+it.effect("a sign-out interrupted mid-way runs to the cleared account rather than tearing", () =>
   Effect.gen(function* () {
     const holding = yield* Deferred.make<void>();
     const subject = yield* manager({ stored: STORED, beforeClear: Deferred.await(holding) });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
 
-    const signingOut = yield* Effect.fork(subject.instance.signOut());
-    yield* Effect.yieldNow();
-    yield* Effect.fork(Fiber.interrupt(signingOut));
+    const signingOut = yield* Effect.forkChild(subject.instance.signOut());
+    yield* Effect.yieldNow;
+    yield* Effect.forkChild(Fiber.interrupt(signingOut));
     // Enough turns for the interruption to have been delivered wherever the
     // sign-out could take it. The departure is reported before the credential
     // is cleared, so it must not be taken anywhere: the fiber is still
     // running on the held clear.
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
-    assert.equal(Option.isNone(yield* Fiber.poll(signingOut)), true);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
+    assert.equal(signingOut.pollUnsafe(), undefined);
 
     yield* Deferred.succeed(holding, undefined);
     yield* Fiber.await(signingOut);
@@ -163,7 +163,7 @@ it.scoped("a sign-out interrupted mid-way runs to the cleared account rather tha
   }),
 );
 
-it.scoped("refresh keeps a valid stored account signed in without rewriting it", () =>
+it.effect("refresh keeps a valid stored account signed in without rewriting it", () =>
   Effect.gen(function* () {
     const subject = yield* manager({ stored: STORED });
     subject.instance.initialize({ status: ACCOUNT_STATUS.SIGNED_IN, ...STORED });
@@ -195,7 +195,7 @@ function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>
   });
 }
 
-it.scoped(
+it.effect(
   "a renewal a network cannot carry keeps the stored account standing, never a sign-out",
   () =>
     Effect.gen(function* () {
@@ -214,7 +214,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a renewal the service refuses with invalid_grant is the one path that signs the account out",
   () =>
     Effect.gen(function* () {
@@ -243,10 +243,10 @@ async function armed(authorizations: readonly unknown[]): Promise<void> {
   while (authorizations.length === 0) await new Promise((resolve) => setImmediate(resolve));
 }
 
-it.scoped("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
+it.effect("a withdrawn sign-in settles signed out rather than reporting a failure", () =>
   Effect.gen(function* () {
     const subject = yield* manager({});
-    const pending = yield* Effect.fork(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
+    const pending = yield* Effect.forkChild(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB));
     yield* Effect.promise(() => armed(subject.authorizations));
 
     subject.instance.cancelSignIn();
@@ -254,12 +254,12 @@ it.scoped("a withdrawn sign-in settles signed out rather than reporting a failur
   }),
 );
 
-it.scoped("an exchange the account refuses is a failure the panel can report", () =>
+it.effect("an exchange the account refuses is a failure the panel can report", () =>
   Effect.gen(function* () {
     const subject = yield* manager({
       exchangeCode: () => Effect.fail(new Error("Account refused the exchange")),
     });
-    const refused = yield* Effect.fork(
+    const refused = yield* Effect.forkChild(
       Effect.exit(subject.instance.beginSignIn(ACCOUNT_PROVIDER.GITHUB)),
     );
     yield* Effect.promise(() => armed(subject.authorizations));

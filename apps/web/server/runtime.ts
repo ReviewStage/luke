@@ -1,9 +1,19 @@
-import { FetchHttpClient } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import type { Effect } from "effect";
-import { Layer, ManagedRuntime } from "effect";
+import { ConfigProvider, Effect, Layer, ManagedRuntime } from "effect";
+import { FetchHttpClient } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./hosted/environment.js";
+
+/**
+ * The deployment's own environment, read as these services are built rather
+ * than once for the process. The default `ConfigProvider` is a
+ * `Context.Reference` whose default value is computed once and then kept on
+ * the reference itself, so the record `ConfigProvider.fromEnv()` copies out of
+ * `process.env` would be the record every later instance still read. An
+ * instance builds its services from the environment it was started with, and
+ * a test that sets one and disposes the runtime gets the environment it set.
+ */
+const webConfigProvider = ConfigProvider.layer(Effect.sync(() => ConfigProvider.fromEnv()));
 
 /**
  * The services every web function's effects run against. A function reaches
@@ -22,10 +32,12 @@ import { hostedEnvironment } from "./hosted/environment.js";
  * `repository-checks.sh` keeps that specifier out of `api/`, where the stubs
  * that re-export a bundle stand, rather than out of the bundle itself.
  */
-const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment);
+const webServices = Layer.mergeAll(FetchHttpClient.layer, webSqlClient, hostedEnvironment).pipe(
+  Layer.provide(webConfigProvider),
+);
 
 /** What an effect run at this edge may require. */
-export type WebServices = Layer.Layer.Success<typeof webServices>;
+export type WebServices = Layer.Success<typeof webServices>;
 
 /**
  * How building those services can fail, which is a missing `DATABASE_URL`: the
@@ -33,14 +45,14 @@ export type WebServices = Layer.Layer.Success<typeof webServices>;
  * on an instance configured without one is refused at the edge rather than at
  * whichever query ran first.
  */
-type WebServicesError = Layer.Layer.Error<typeof webServices>;
+type WebServicesError = Layer.Error<typeof webServices>;
 
 /**
  * Module scope is the memoization: Vercel keeps a warm instance's module
  * registry between invocations, so the first invocation of a cold start builds
  * the layer and every later one on that instance reuses the same services.
  * Nothing builds a second runtime — a second one would be a second copy of
- * every service a `Context.Tag` was supposed to identify.
+ * every service a `Context.Service` was supposed to identify.
  */
 let standing: ManagedRuntime.ManagedRuntime<WebServices, WebServicesError> | undefined;
 

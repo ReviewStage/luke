@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
 import { it } from "@effect/vitest";
 import type { HostedProjectsAnswer, ObserveAnswer } from "@sidecar/hosted";
 import {
@@ -10,6 +9,7 @@ import {
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
 import { Effect } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { test } from "vitest";
 import { drawSnapshotProjects, drawSnapshotRoster, snapshotProjects } from "./snapshot-roster.js";
 

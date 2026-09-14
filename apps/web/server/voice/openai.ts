@@ -1,11 +1,12 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, Either, type Layer, type Scope } from "effect";
+import { Data, Effect, type Layer, Result, type Scope } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { WebSocket } from "ws";
 import {
   accountCall,
   callAnswered,
+  EXCESS_KEYS,
   fixedBearer,
   HTTP_METHOD,
   withoutTrailingSlash,
@@ -107,7 +108,11 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
           Effect.tryPromise(() => answer.response.json()),
           () => undefined,
         );
-        const created = Either.getOrUndefined(readEither(liveCreateAnswerSchema)(payload));
+        // The provider names more of a created session than the two fields
+        // this build reads, so the read drops what it does not name.
+        const created = Result.getOrUndefined(
+          readEither(liveCreateAnswerSchema, { excess: EXCESS_KEYS.DROP })(payload),
+        );
         return created
           ? { outcome: LIVE_SESSION_OUTCOME.SUCCEEDED, answer: created }
           : { outcome: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE };
@@ -131,7 +136,7 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
               open.close(SOCKET_CLOSE_CODE.GOING_AWAY);
             }),
         );
-        yield* Effect.async<void, SidebandNotAttached>((resume) => {
+        yield* Effect.callback<void, SidebandNotAttached>((resume) => {
           socket.once("open", () => {
             // Paused here, inside the open handler, and not by the caller: the
             // bytes that followed the handshake response are re-queued on the
@@ -144,9 +149,9 @@ export function createLiveUpstream(options: LiveUpstreamOptions): LiveUpstream {
           socket.once("error", () => resume(Effect.fail(new SidebandNotAttached())));
           socket.once("unexpected-response", () => resume(Effect.fail(new SidebandNotAttached())));
         }).pipe(
-          Effect.timeoutFail({
+          Effect.timeoutOrElse({
             duration: attachTimeoutMs,
-            onTimeout: () => new SidebandNotAttached(),
+            orElse: () => Effect.fail(new SidebandNotAttached()),
           }),
         );
         return socket;

@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   ADMIN_TREND_DAYS,
   type AdminDailyUsage,
@@ -209,6 +209,6 @@ export function handleAdminUser(
         ? errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND)
         : jsonResponse(ADMIN_HTTP_STATUS.OK, detail),
     ),
-    Effect.catchAllCause((cause) => unavailableSeam("admin user read failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin user read failed", cause)),
   );
 }

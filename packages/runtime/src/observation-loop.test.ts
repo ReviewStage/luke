@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Scope, TestClock } from "effect";
+import { Clock, Deferred, Effect, Exit, Fiber, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { cadenceGate } from "./effect/cadence.js";
 import { ObservationLoop, observationSupervisor } from "./observation-loop.js";
 
@@ -18,21 +19,21 @@ it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
         }),
     });
 
-    const running = yield* Effect.fork(loop.refresh);
-    yield* Effect.yieldNow();
+    const running = yield* Effect.forkChild(loop.refresh);
+    yield* Effect.yieldNow;
     yield* loop.refresh;
     yield* loop.refresh;
     assert.deepEqual(generations, [0]);
     yield* Deferred.succeed(first, undefined);
-    yield* running.await;
+    yield* Fiber.await(running);
     // The follow-up the coalesced pokes earned is a daemon, so it begins on
     // the scheduler's next turn rather than inside the pass that queued it.
-    yield* Effect.yieldNow();
+    yield* Effect.yieldNow;
     assert.deepEqual(generations, [0, 0]);
   }),
 );
 
-it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
+it.effect("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;
     const pending = yield* Deferred.make<void>();
@@ -45,18 +46,18 @@ it.scoped("a disarm invalidates work already in flight and prevents gated work",
     yield* gate.arm;
 
     const generation = loop.generation;
-    const running = yield* Effect.fork(loop.refresh);
+    const running = yield* Effect.forkChild(loop.refresh);
     yield* gate.disarm;
     enabled = false;
     assert.equal(loop.isCurrent(generation), false);
     yield* Deferred.succeed(pending, undefined);
-    yield* running.await;
+    yield* Fiber.await(running);
     yield* loop.refresh;
     assert.equal(loop.generation, generation + 1);
   }),
 );
 
-it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
+it.effect("the supervisor arms and disarms every loop as one lifecycle", () =>
   Effect.gen(function* () {
     const events: string[] = [];
     const loops = ["sessions", "calendars"].map(
@@ -76,7 +77,7 @@ it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
     yield* supervisor.arm;
     // The cadences are fibers the arming forked, so their first pass is the
     // scheduler's next turn rather than the arming's own.
-    yield* Effect.yieldNow();
+    yield* Effect.yieldNow;
     yield* supervisor.disarm;
     assert.deepEqual(events, ["sessions", "calendars"]);
     assert.deepEqual(
@@ -86,7 +87,7 @@ it.scoped("the supervisor arms and disarms every loop as one lifecycle", () =>
   }),
 );
 
-it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same", () =>
+it.effect("a loop behind a closed gate arms nothing and is disarmed all the same", () =>
   Effect.gen(function* () {
     const events: string[] = [];
     const loop = new ObservationLoop({
@@ -106,7 +107,7 @@ it.scoped("a loop behind a closed gate arms nothing and is disarmed all the same
   }),
 );
 
-it.scoped("a pass that outlives its disarm does not run the after-run hook", () =>
+it.effect("a pass that outlives its disarm does not run the after-run hook", () =>
   Effect.gen(function* () {
     let enabled = true;
     const pending = yield* Deferred.make<void>();
@@ -123,11 +124,11 @@ it.scoped("a pass that outlives its disarm does not run the after-run hook", () 
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;
 
-    const running = yield* Effect.fork(loop.refresh);
+    const running = yield* Effect.forkChild(loop.refresh);
     yield* gate.disarm;
     enabled = false;
     yield* Deferred.succeed(pending, undefined);
-    yield* running.await;
+    yield* Fiber.await(running);
     assert.deepEqual(hooks, []);
 
     enabled = true;
@@ -137,22 +138,22 @@ it.scoped("a pass that outlives its disarm does not run the after-run hook", () 
 );
 
 describe("the cadence", () => {
-  it.scoped("runs a pass at every spaced instant until the loop is disarmed", () =>
+  it.effect("runs a pass at every spaced instant until the loop is disarmed", () =>
     Effect.gen(function* () {
-      const clock = yield* Effect.clock;
+      const clock = yield* Clock.Clock;
       const passes: number[] = [];
       const loop = new ObservationLoop({
         gate: () => true,
         intervalMs: 30_000,
         run: () =>
           Effect.sync(() => {
-            passes.push(clock.unsafeCurrentTimeMillis());
+            passes.push(clock.currentTimeMillisUnsafe());
           }),
       });
       const gate = yield* cadenceGate(loop.cadence);
 
       yield* gate.arm;
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       assert.equal(passes.length, 1);
 
       yield* TestClock.adjust("30 seconds");
@@ -165,7 +166,7 @@ describe("the cadence", () => {
     }),
   );
 
-  it.scoped("keeps its cadence over a pass that failed and reports it", () =>
+  it.effect("keeps its cadence over a pass that failed and reports it", () =>
     Effect.gen(function* () {
       const reports: string[] = [];
       const passes: number[] = [];

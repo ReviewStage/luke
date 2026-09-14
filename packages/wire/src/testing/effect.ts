@@ -6,16 +6,16 @@ import { Context, Effect, type Layer } from "effect";
  * same collection either way, but reached through `Effect.gen` rather than
  * threaded as a constructor argument.
  */
-export class TestReporter extends Context.Tag("@sidecar/wire/testing/TestReporter")<
+export class TestReporter extends Context.Service<
   TestReporter,
   {
     readonly report: (message: string) => Effect.Effect<void>;
     readonly messages: () => readonly string[];
   }
->() {}
+>()("@sidecar/wire/testing/TestReporter") {}
 
 /** A `TestReporter` whose `messages()` answers every `report()` call, in order. */
-export const testReporter: Effect.Effect<Context.Tag.Service<typeof TestReporter>> = Effect.sync(
+export const testReporter: Effect.Effect<Context.Service.Shape<typeof TestReporter>> = Effect.sync(
   () => {
     const messages: string[] = [];
     return {

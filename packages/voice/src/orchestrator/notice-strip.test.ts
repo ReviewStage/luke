@@ -1,31 +1,31 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Runtime, TestClock } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { NoticeStrip, VOICE_ERROR_NOTICE_MS } from "./notice-strip.js";
 
 /** Lets a fiber the strip forked on this test's runtime run what fell due, with no time passing. */
-const settle = Effect.repeatN(
-  Effect.andThen(Effect.yieldNow(), TestClock.adjust(Duration.zero)),
-  5,
-);
+const settle = Effect.repeat(Effect.andThen(Effect.yieldNow, TestClock.adjust(Duration.zero)), {
+  times: 5,
+});
 
 /** Advances the clock the strip's own bounds are forked against, then lets what fell due settle. */
 function advance(delayMs: number): Effect.Effect<void> {
   return Effect.andThen(TestClock.adjust(Duration.millis(delayMs)), settle);
 }
 
-/** One strip on this test's own runtime, so its clocks are this test's `TestClock`. */
+/** One strip under this test's own services, so its clocks are this test's `TestClock`. */
 function strip(): Effect.Effect<{
   subject: NoticeStrip;
   changes: () => number;
 }> {
-  return Effect.map(Effect.runtime<never>(), (runtime) => {
+  return Effect.map(Effect.context<never>(), (services) => {
     let changes = 0;
     const subject = new NoticeStrip({
       onChanged: () => {
         changes += 1;
       },
-      fork: (effect) => Runtime.runFork(runtime)(effect),
+      fork: (effect) => Effect.runForkWith(services)(effect),
     });
     return { subject, changes: () => changes };
   });

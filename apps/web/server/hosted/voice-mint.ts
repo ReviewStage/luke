@@ -1,6 +1,6 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { isLiveVoice } from "@sidecar/live";
 import { Effect } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   HOSTED_WS_BASE_URL,
   isRealtimeVoiceSpeed,

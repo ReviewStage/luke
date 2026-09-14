@@ -1,7 +1,7 @@
 /**
  * The settings store's body: the bytes on disk and the shape parsed out of
- * them, stated as an `Effect` over `@effect/platform`'s `FileSystem` and as an
- * `Either` rather than a throw. `readSettingsFileText` and
+ * them, stated as an `Effect` over `effect`'s `FileSystem` and as an
+ * `Result` rather than a throw. `readSettingsFileText` and
  * `writeSettingsFileAtomic` never construct a `FileSystem` layer themselves —
  * a caller with a runtime edge hands one in, the way the host's own
  * composition eventually will — and `parsePersistedSettingsEither` answers the
@@ -10,9 +10,9 @@
  * text a caller already discards into `defaultPersistedSettings()`.
  */
 import path from "node:path";
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
-import { Data, Effect, Either } from "effect";
+import { Data, Effect, Result } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 import { type PersistedSettings, parsePersistedSettingsThrowing } from "../settings-store.js";
 
 const SETTINGS_FILE_NAME = "settings.json";
@@ -37,8 +37,8 @@ export class SettingsParseRefusal extends Data.TaggedError("SettingsParseRefusal
  */
 export function parsePersistedSettingsEither(
   source: string,
-): Either.Either<PersistedSettings, SettingsParseRefusal> {
-  return Either.try({
+): Result.Result<PersistedSettings, SettingsParseRefusal> {
+  return Result.try({
     try: () => parsePersistedSettingsThrowing(source),
     catch: (error) =>
       new SettingsParseRefusal({
@@ -48,8 +48,13 @@ export function parsePersistedSettingsEither(
 }
 
 function isIgnorableReadFailure(error: PlatformError): boolean {
-  if (error._tag !== "SystemError") return false;
-  const cause = error.cause;
+  // v4 wraps the reason rather than tagging the error itself, and normalizes
+  // only some of the host's codes onto its own tags — `EPERM` lands on
+  // `Unknown` — so the errno the platform keeps on the reason's own cause is
+  // still what names these four. A rejected argument is none of them.
+  const reason = error.reason;
+  if (reason._tag === "BadArgument") return false;
+  const cause = reason.cause;
   return (
     cause instanceof Error &&
     "code" in cause &&
@@ -66,15 +71,14 @@ function isIgnorableReadFailure(error: PlatformError): boolean {
  * store already treated as "no file yet" rather than an I/O error worth
  * surfacing.
  */
-export const readSettingsFileText = (
+export const readSettingsFileText = /* @__PURE__ */ Effect.fn("readSettingsFileText")(function* (
   directory: string,
-): Effect.Effect<string | undefined, PlatformError, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
-    const fileSystem = yield* FileSystem.FileSystem;
-    return yield* fileSystem
-      .readFileString(path.join(directory, SETTINGS_FILE_NAME))
-      .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
-  });
+): Effect.fn.Return<string | undefined, PlatformError, FileSystem.FileSystem> {
+  const fileSystem = yield* FileSystem.FileSystem;
+  return yield* fileSystem
+    .readFileString(path.join(directory, SETTINGS_FILE_NAME))
+    .pipe(Effect.catchIf(isIgnorableReadFailure, () => Effect.succeed(undefined)));
+});
 
 /**
  * Writes the settings file atomically: the new contents land in a temporary
@@ -84,11 +88,11 @@ export const readSettingsFileText = (
  * effect when the file is created — a temporary file left behind by an
  * earlier interrupted write would otherwise keep whatever mode it already had.
  */
-export const writeSettingsFileAtomic = (
-  directory: string,
-  contents: string,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> =>
-  Effect.gen(function* () {
+export const writeSettingsFileAtomic = /* @__PURE__ */ Effect.fn("writeSettingsFileAtomic")(
+  function* (
+    directory: string,
+    contents: string,
+  ): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
     const fileSystem = yield* FileSystem.FileSystem;
     const settingsPath = path.join(directory, SETTINGS_FILE_NAME);
     const temporaryPath = path.join(directory, SETTINGS_TEMPORARY_FILE_NAME);
@@ -96,4 +100,5 @@ export const writeSettingsFileAtomic = (
     yield* fileSystem.writeFileString(temporaryPath, contents, { mode: SETTINGS_FILE_MODE });
     yield* fileSystem.chmod(temporaryPath, SETTINGS_FILE_MODE);
     yield* fileSystem.rename(temporaryPath, settingsPath);
-  });
+  },
+);

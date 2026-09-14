@@ -7,7 +7,7 @@
 
 import { UNKNOWN_WORKSPACE_LABEL } from "@sidecar/session";
 import { isRecord, positiveInteger, text, type WireRecord } from "@sidecar/wire";
-import { Data, Duration, type Effect, Schedule } from "effect";
+import { Data, Duration, Effect, Schedule } from "effect";
 import type { AdapterFailure } from "./adapter-failure.js";
 
 const GIT_SUFFIX = ".git";
@@ -84,10 +84,10 @@ export class RateLimitedRead extends Data.TaggedError("RateLimitedRead")<{
 
 /**
  * The 429 cadence as a `Schedule`, so the wait is the fiber's own clock
- * rather than a loop around a timer: the recurrence count is the attempt
- * number {@link rateLimitDelayMs} decides against, the failure carries the
- * header it reads, and the schedule stops the moment that decision says the
- * request should give up — past the retry count, past a single wait's
+ * rather than a loop around a timer: the step's own attempt number is what
+ * {@link rateLimitDelayMs} decides against, the failure it carries is the
+ * step's input and holds the header it reads, and the schedule stops the
+ * moment that decision says the request should give up — past the retry count, past a single wait's
  * maximum, or past what the pass's shared ceiling still allows — which is
  * what leaves the read's own rate-limited failure standing.
  *
@@ -99,10 +99,12 @@ export function rateLimitSchedule(
   budget: BackoffBudget,
   now: () => number,
 ): Schedule.Schedule<number | undefined, RateLimitedRead> {
-  return Schedule.intersect(Schedule.identity<RateLimitedRead>(), Schedule.forever).pipe(
-    Schedule.map(([limited, attempt]) => {
+  return Schedule.identity<RateLimitedRead>().pipe(
+    Schedule.map(({ input: limited, attempt }) => {
       const delay = rateLimitDelayMs({
-        attempt,
+        // The step's own attempt counts from one; the decision below counts
+        // the retries already made, so the first attempt decides against zero.
+        attempt: attempt - 1,
         retryAfter: limited.retryAfter,
         budget,
         now: now(),
@@ -110,8 +112,8 @@ export function rateLimitSchedule(
       if (delay !== undefined) budget.spentMs += delay;
       return delay;
     }),
-    Schedule.whileOutput(isDefined),
-    Schedule.modifyDelay((delay) => Duration.millis(delay ?? 0)),
+    Schedule.while(({ output }) => isDefined(output)),
+    Schedule.modifyDelay(({ output }) => Effect.succeed(Duration.millis(output ?? 0))),
   );
 }
 

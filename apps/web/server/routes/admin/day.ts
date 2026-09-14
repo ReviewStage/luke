@@ -1,6 +1,6 @@
 import { hostedAdminSeams } from "../../admin/admin-route.js";
 import { adminApp } from "../../admin-app.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
  * One day of the overview's usage chart, opened into its accounts. It lives
@@ -9,4 +9,4 @@ import { routeFromHttpApp } from "../../route-effect.js";
  * key and lands in one equality against the usage table's day column — it is
  * never rendered back and never reaches a write.
  */
-export default routeFromHttpApp(adminApp(hostedAdminSeams()));
+export default routeFromHttpRouter(adminApp(hostedAdminSeams()));

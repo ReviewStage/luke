@@ -10,8 +10,8 @@
 import { Schema } from "effect";
 import { CHILD_CLEANUP, CHILD_CONTEXT_MODE, CHILD_RUN_STATUS } from "./child-records.js";
 
-export const ChildContextModeSchema = Schema.Literal(...Object.values(CHILD_CONTEXT_MODE));
+export const ChildContextModeSchema = Schema.Literals(Object.values(CHILD_CONTEXT_MODE));
 
-export const ChildCleanupSchema = Schema.Literal(...Object.values(CHILD_CLEANUP));
+export const ChildCleanupSchema = Schema.Literals(Object.values(CHILD_CLEANUP));
 
-export const ChildRunStatusSchema = Schema.Literal(...Object.values(CHILD_RUN_STATUS));
+export const ChildRunStatusSchema = Schema.Literals(Object.values(CHILD_RUN_STATUS));

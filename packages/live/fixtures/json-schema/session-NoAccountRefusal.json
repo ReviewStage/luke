@@ -1,22 +1,22 @@
 {
   "type": "object",
   "properties": {
-    "code": {
-      "type": "string",
-      "enum": [
-        "no-account"
-      ]
-    },
     "_tag": {
       "type": "string",
       "enum": [
         "NoAccountRefusal"
       ]
+    },
+    "code": {
+      "type": "string",
+      "enum": [
+        "no-account"
+      ]
     }
   },
   "required": [
-    "code",
-    "_tag"
+    "_tag",
+    "code"
   ],
   "additionalProperties": false
 }

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Exit, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   ACCOUNT_FAILURE_ACTION,
@@ -219,12 +220,12 @@ it.effect("a request that outlives its deadline ends as a timeout, never a hang"
       clientId: "luke-desktop",
       timeoutMs: 1_000,
       httpClient: fakeHttpClientLayer(() => {
-        Deferred.unsafeDone(asked, Effect.void);
+        Deferred.doneUnsafe(asked, Effect.void);
         return new Promise<Response>(() => undefined);
       }),
     });
 
-    const refreshing = yield* Effect.fork(Effect.flip(client.refresh("stale")));
+    const refreshing = yield* Effect.forkChild(Effect.flip(client.refresh("stale")));
     yield* Deferred.await(asked);
     yield* TestClock.adjust(Duration.millis(1_000));
     const error = yield* Fiber.join(refreshing);
@@ -240,16 +241,16 @@ it.effect("a fiber cut under a request is an interruption, never a request that 
       baseUrl: "https://tryluke.dev/api/auth",
       clientId: "luke-desktop",
       httpClient: fakeHttpClientLayer(() => {
-        Deferred.unsafeDone(asked, Effect.void);
+        Deferred.doneUnsafe(asked, Effect.void);
         return new Promise<Response>(() => undefined);
       }),
     });
 
-    const refreshing = yield* Effect.fork(client.refresh("stale"));
+    const refreshing = yield* Effect.forkChild(client.refresh("stale"));
     yield* Deferred.await(asked);
-    const ended = yield* Fiber.interrupt(refreshing);
+    yield* Fiber.interrupt(refreshing);
 
-    assert.equal(Exit.isInterrupted(ended), true);
+    assert.equal(Exit.hasInterrupts(yield* Fiber.await(refreshing)), true);
   }),
 );
 
@@ -450,21 +451,21 @@ it.effect("a revocation the service never answers ends on its own deadline", () 
     const failure = new Error("identity failed");
     // The revocation runs as the failed attempt unwinds, where the cleanup is
     // uninterruptible: its own deadline has to win there all the same.
-    const outcome = yield* Effect.fork(
+    const outcome = yield* Effect.forkChild(
       Effect.exit(
         withIssuedAccountTokens({
           issue: Effect.succeed(ISSUED_TOKENS),
           use: () => Effect.fail(failure),
           revoke: () =>
-            Effect.timeoutFail({
+            Effect.timeoutOrElse({
               duration: Duration.seconds(10),
-              onTimeout: () => new Error("revocation timed out"),
+              orElse: () => Effect.fail(new Error("revocation timed out")),
             })(Effect.never),
           onRevokeFailure: (error) => revokeFailures.push(error),
         }),
       ),
     );
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     yield* TestClock.adjust(Duration.seconds(10));
 
     assert.deepEqual(yield* Fiber.join(outcome), Exit.fail(failure));

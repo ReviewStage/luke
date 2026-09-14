@@ -123,7 +123,7 @@ const gatherIce = (connection: LivePeerConnection): Effect.Effect<void> =>
   connection.iceGatheringState === ICE_GATHERING_COMPLETE
     ? Effect.void
     : Effect.race(
-        Effect.async<void>((resume) => {
+        Effect.callback<void>((resume) => {
           connection.onicegatheringstatechange = () => {
             if (connection.iceGatheringState !== ICE_GATHERING_COMPLETE) return;
             resume(Effect.void);
@@ -168,10 +168,8 @@ const acquireDevice = (
  * and releases nothing by hand: whatever was acquired goes when the scope
  * does.
  */
-export const acquireLivePeer = (
-  seams: LivePeerSeams,
-): Effect.Effect<LivePeerOpening, never, Scope.Scope> =>
-  Effect.gen(function* () {
+export const acquireLivePeer = /* @__PURE__ */ Effect.fn("acquireLivePeer")(
+  function* (seams: LivePeerSeams): Effect.fn.Return<LivePeerOpening, string, Scope.Scope> {
     const connection = yield* Effect.acquireRelease(
       Effect.try({ try: () => seams.createPeerConnection(), catch: messageOf }),
       (connection) => Effect.sync(() => connection.close()),
@@ -232,11 +230,11 @@ export const acquireLivePeer = (
         sender,
       },
     } satisfies LivePeerOpening;
-  }).pipe(
-    Effect.catchAll((message) =>
-      Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED, message } satisfies LivePeerOpening),
-    ),
-  );
+  },
+  Effect.catch((message) =>
+    Effect.succeed({ outcome: LIVE_PEER_OUTCOME.FAILED, message } satisfies LivePeerOpening),
+  ),
+);
 
 /** Stops every track of a capture device, so the system's indicator goes with it. */
 export function stopDevice(stream: MediaStream | undefined): void {

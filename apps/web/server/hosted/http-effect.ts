@@ -1,6 +1,8 @@
-import { HttpApiSchema, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { Effect, Schema, Stream } from "effect";
+import { Effect, type Layer, Schema, Stream } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
+import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
 
 /**
@@ -32,8 +34,8 @@ const HOSTED_REFUSAL_STATUS = {
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
 
 function refusalSchema<Slug extends HostedRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).annotations(
-    HttpApiSchema.annotations({ status: HOSTED_REFUSAL_STATUS[slug] }),
+  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
+    HttpApiSchema.status(HOSTED_REFUSAL_STATUS[slug]),
   );
 }
 
@@ -69,17 +71,32 @@ export const HOSTED_REFUSAL = {
 export function hostedRefusalResponse(
   refusal: HostedRefusal,
 ): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(refusal, {
+  return HttpServerResponse.jsonUnsafe(refusal, {
     status: HOSTED_REFUSAL_STATUS[refusal.error],
   });
 }
+
+/**
+ * The route every hosted group registers last: the hosted vocabulary's own
+ * `not-found` for a path the group declares no route of its own for. The
+ * router reaches a wildcard only once every declared path has failed to
+ * match, so this answers exactly what the router's own `RouteNotFound` stood
+ * for before the routes became a layer — and, since it is a route like any
+ * other, it answers it as the group's own refusal rather than as the empty
+ * 404 an unhandled `RouteNotFound` would become.
+ */
+export const hostedNotFoundRoute: Layer.Layer<never, never, HttpRouter.HttpRouter> = HttpRouter.add(
+  ANY_METHOD,
+  ANY_PATH,
+  hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND),
+);
 
 /** An answer as the response, the way `jsonResponse` answers one today. */
 export function hostedJsonResponse<Body extends object>(
   status: number,
   body: Body,
 ): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(body, { status });
+  return HttpServerResponse.jsonUnsafe(body, { status });
 }
 
 /**
@@ -113,35 +130,31 @@ export function hostedMethod(
  * the sender may omit or misstate, and is left the moment the bound is
  * passed, so an oversized request is never held whole.
  */
-export function readJsonBodyEffect(
+export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("readJsonBodyEffect")(function* (
   maximumBytes: number,
-): Effect.Effect<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const chunks: Uint8Array[] = [];
-    const received = yield* request.stream.pipe(
-      Stream.runFoldWhile(
-        0,
-        (bytes) => bytes <= maximumBytes,
-        (bytes, chunk) => {
-          chunks.push(chunk);
-          return bytes + chunk.byteLength;
-        },
-      ),
-      Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST),
-    );
-    if (received > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
-    const joined = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return yield* Effect.try({
-      // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
-      try: () =>
-        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
-      catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
-    });
+): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const chunks: Uint8Array[] = [];
+  let counted = 0;
+  const received = yield* Stream.runForEachWhile(request.stream, (chunk) => {
+    chunks.push(chunk);
+    counted += chunk.byteLength;
+    return Effect.succeed(counted <= maximumBytes);
+  }).pipe(
+    Effect.map(() => counted),
+    Effect.mapError((): HostedRefusal => HOSTED_REFUSAL.INVALID_REQUEST),
+  );
+  if (received > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
+  const joined = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return yield* Effect.try({
+    // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
+    try: () =>
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
+    catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
-}
+});

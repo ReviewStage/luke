@@ -6,28 +6,34 @@ packages:
 
 catalog:
   typescript: 7.0.2
-  effect: 3.22.2
-  "@effect-atom/atom": 0.7.0
-  "@effect-atom/atom-react": 0.7.0
-  "@effect/platform": 0.97.2
-  "@effect/platform-node": 0.108.0
-  "@effect/rpc": 0.76.2
-  "@effect/experimental": 0.61.1
-  "@effect/sql": 0.52.1
-  "@effect/sql-pg": 0.52.1
+  effect: 4.0.0-rc.115
+  "@effect/atom-react": 4.0.0-rc.115
+  "@effect/platform-node": 4.0.0-rc.115
+  "@effect/sql-pg": 4.0.0-rc.115
   "@types/node": 26.2.0
   tsx: 4.23.12
   react: 19.2.8
   react-dom: 19.2.8
   ws: 8.21.3
   ai: 7.0.97
-  vitest: 3.2.7
-  "@effect/vitest": 0.30.0
+  vitest: 5.0.0
+  "@effect/vitest": 4.0.0-rc.115
 
+# The one workspace that resolves a dependency away from the catalog above, and
+# it is the compiler alone. `@types/node` used to be pinned here too, at 22.x,
+# on the stated ground that it matched Vercel's own runtime; it did not, because
+# `apps/web`'s `engines.node` says 24.x and that is what Vercel takes the
+# runtime from. The pin bought no safety either, since every `@sidecar/*`
+# package the functions import is already checked against the catalog's types,
+# so the deployed graph was never held to 22.x. What it did buy was a second
+# `vitest`: `@types/node` is a peer of `vitest`, so pnpm stood one copy up per
+# version, `@effect/vitest` read the collector out of whichever copy it resolved
+# itself, and `apps/web/vitest.config.ts` had to inline `@effect/vitest` to force
+# the two back together. One `@types/node` is one `vitest`, and that workaround
+# is gone with it.
 catalogs:
   web:
     typescript: 6.0.3
-    "@types/node": 22.20.1
 
 # Every dependency here builds nothing this repository needs: esbuild runs from
 # its platform package, @sentry/cli is only reached with an auth token no check

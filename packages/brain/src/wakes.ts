@@ -1,6 +1,6 @@
 import type { ProviderTranscriptSinceResult, Session, SessionIdentity } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Option } from "effect";
+import { Effect, Option, Semaphore } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { settledUnlessAborted } from "./effect/settled.js";
 import type { Generation } from "./generation.js";
@@ -78,7 +78,7 @@ export class WakeCapture {
    */
   readonly #lastLook = new NestedMap<string>();
   /** Captures run one after another, so two reads of one session never race each other's cursor. */
-  readonly #captures = Effect.unsafeMakeSemaphore(1);
+  readonly #captures = Semaphore.makeUnsafe(1);
   #capturesInFlight = 0;
 
   constructor(options: WakeCaptureOptions) {
@@ -125,7 +125,7 @@ export class WakeCapture {
    * Ends once the capture has landed or been refused.
    */
   wake(events: readonly BrainWakeEvent[]): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#seam.stopped() || events.length === 0) return;
       const captured = yield* this.#capture(events);
       if (this.#seam.stopped()) return;
@@ -148,7 +148,7 @@ export class WakeCapture {
    * wakes ride along rather than waiting for their own.
    */
   rosterLook(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#seam.stopped()) return;
       const generation = this.#seam.generation();
       if (!generation) {
@@ -215,7 +215,7 @@ export class WakeCapture {
    * otherwise never be interrupted at all.
    */
   #capture(events: readonly BrainWakeEvent[]): Effect.Effect<number> {
-    const work = Effect.gen(this, function* () {
+    const work = Effect.gen({ self: this }, function* () {
       yield* this.#seam.ready();
       const generation = this.#seam.generation();
       if (!generation || this.#seam.stopped() || generation.abort.signal.aborted) return 0;
@@ -358,7 +358,7 @@ export class WakeCapture {
     this.#seam.detach(
       this.#seam.queueTurn(
         BRAIN_TURN_TRIGGER.WAKE,
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           // The turn opens with the inbox as it stands, not the wakes that armed
           // the window: a capture that landed since rides along, and one a
           // failed turn left standing is tried again.

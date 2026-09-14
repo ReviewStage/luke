@@ -18,7 +18,7 @@ import {
 } from "@sidecar/brain/testing";
 import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Effect, Runtime, type Scope } from "effect";
+import { Context, Effect, type Scope } from "effect";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
 import type { GatewayOperator } from "../operator.js";
@@ -59,8 +59,8 @@ export function heldModel(): BareResponsesModel & { release: (answer: ModelRespo
  * The real agent, store, host, follower, and submission path composed as the
  * main process composes them, with only the model synthetic.
  */
-export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> {
-  return Effect.gen(function* () {
+export const brainHarness = /* @__PURE__ */ Effect.fn("brainHarness")(
+  function* (): Effect.fn.Return<BrainHarness, never, Scope.Scope> {
     const repository = fakeBrainStateRepository();
     let ids = 0;
     const store = new BrainStateStore({
@@ -70,9 +70,10 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
     });
     const broadcasts: (readonly BrainRequestSnapshot[])[] = [];
     // The agents this harness builds take no execution of their own, so the
-    // detach here is over the same default runtime they run their turns on.
+    // detach here carries the same empty set of services they run their turns
+    // under.
     const host = new BrainHost({
-      detach: detachOn(Runtime.defaultRuntime),
+      detach: detachOn(Context.empty()),
       follow: (agent) =>
         followBrainRequests(agent, {
           broadcastRequests: (snapshots) => {
@@ -83,20 +84,19 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
     });
     /** Submits as a client does, through the operator over the standing brain. */
     const { submit } = yield* operatorOverBrain({ current: () => host.current() });
-    const submitMany = (count: number, from = 0) =>
-      Effect.gen(function* () {
-        const runIds: string[] = [];
-        for (let index = from; index < from + count; index += 1) {
-          const result = yield* submit({
-            submissionId: `sub-${index}`,
-            question: `ask ${index}`,
-            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-          });
-          assert.equal(result.outcome, "accepted");
-          if (result.outcome === "accepted") runIds.push(result.runId);
-        }
-        return runIds;
-      });
+    const submitMany = /* @__PURE__ */ Effect.fnUntraced(function* (count: number, from = 0) {
+      const runIds: string[] = [];
+      for (let index = from; index < from + count; index += 1) {
+        const result = yield* submit({
+          submissionId: `sub-${index}`,
+          question: `ask ${index}`,
+          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+        });
+        assert.equal(result.outcome, "accepted");
+        if (result.outcome === "accepted") runIds.push(result.runId);
+      }
+      return runIds;
+    });
     const build = (
       client: BareResponsesModel,
       options: Partial<BrainAgentOptions> = {},
@@ -133,8 +133,8 @@ export function brainHarness(): Effect.Effect<BrainHarness, never, Scope.Scope> 
       submitMany,
       broadcasts,
     };
-  });
-}
+  },
+);
 
 /** A raw Responses payload as the adapter would normalize it. */
 export function answerOf(payload: WireRecord): ModelResponse {

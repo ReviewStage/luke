@@ -86,7 +86,7 @@ export function readTranscriptDelta(
   options: TranscriptDeltaRead,
 ): Effect.Effect<BrainTranscriptDelta> {
   const { cursors } = options;
-  return Effect.catchAllDefect(
+  return Effect.catchDefect(
     Effect.map(
       Effect.suspend(() => options.read(identity, cursors.cursor(identity))),
       (result) => {
@@ -129,7 +129,7 @@ export function readWholeTranscript(
   identity: SessionIdentity,
   options: WholeTranscriptRead,
 ): Effect.Effect<WireRecord> {
-  return Effect.catchAllDefect(
+  return Effect.catchDefect(
     Effect.map(
       Effect.interruptible(
         settledUnlessAborted(

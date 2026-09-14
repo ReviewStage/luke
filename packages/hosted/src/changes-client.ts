@@ -1,7 +1,7 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import {
@@ -58,7 +58,7 @@ export class HostedChangesClient {
   poll(
     request: ChangesRequest,
   ): Effect.Effect<ChangesAnswer | undefined, never, HttpClient.HttpClient> {
-    const admitted = Either.getOrUndefined(
+    const admitted = Result.getOrUndefined(
       readEither(changesRequestSchema)(changesRecord(request)),
     );
     if (admitted === undefined) return Effect.succeed(undefined);

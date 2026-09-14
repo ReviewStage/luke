@@ -1,9 +1,8 @@
-import * as HttpClient from "@effect/platform/HttpClient";
-import type * as HttpClientError from "@effect/platform/HttpClientError";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { Duration, Effect, type Redacted, Schedule, Schema } from "effect";
-import type { ParseError } from "effect/ParseResult";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { TRANSPORT_RETRY } from "./preview-probe.js";
 
 /**
@@ -58,7 +57,7 @@ export type DeploymentRecord = typeof DeploymentRecord.Type;
 const DeploymentRecords = Schema.Array(DeploymentRecord);
 
 export const DeploymentStatus = Schema.Struct({
-  state: Schema.Literal(...Object.values(DEPLOYMENT_STATE)),
+  state: Schema.Literals(Object.values(DEPLOYMENT_STATE)),
   description: Schema.optional(Schema.NullOr(Schema.String)),
   environment_url: Schema.optional(Schema.NullOr(Schema.String)),
   target_url: Schema.optional(Schema.NullOr(Schema.String)),
@@ -147,14 +146,14 @@ function githubRead(
 }
 
 /** One read of the head's preview from the deployment records, a dropped connection or a refused read retried a few times. */
-function readPreview(
-  source: PreviewSource,
-): Effect.Effect<
-  PreviewReading,
-  HttpClientError.HttpClientError | ParseError,
-  HttpClient.HttpClient
-> {
-  return Effect.gen(function* () {
+const readPreview = /* @__PURE__ */ Effect.fn("readPreview")(
+  function* (
+    source: PreviewSource,
+  ): Effect.fn.Return<
+    PreviewReading,
+    HttpClientError.HttpClientError | Schema.SchemaError,
+    HttpClient.HttpClient
+  > {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     const records = yield* client
       .execute(
@@ -175,13 +174,16 @@ function readPreview(
       )
       .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(DeploymentStatuses)), Effect.scoped);
     return decidePreview([newest], () => statuses);
-  }).pipe(
-    Effect.retry({
-      schedule: TRANSPORT_RETRY,
-      while: (error) => error._tag === "RequestError" || error._tag === "ResponseError",
-    }),
-  );
-}
+  },
+  Effect.retry({
+    schedule: TRANSPORT_RETRY,
+    // Every transport-level refusal and every response the status filter
+    // turned down is one `HttpClientError` in v4, whichever reason it
+    // carries; a body that failed to decode is not retried, since a second
+    // read of the same records would decode no better.
+    while: (error) => error._tag === "HttpClientError",
+  }),
+);
 
 export interface PreviewWait {
   readonly intervalMs: number;
@@ -214,18 +216,20 @@ export function waitForPreview(
   } = {},
 ): Effect.Effect<
   Exclude<PreviewReading, { readonly kind: typeof PREVIEW_STATE.WAITING }>,
-  PreviewNotReady | HttpClientError.HttpClientError | ParseError,
+  PreviewNotReady | HttpClientError.HttpClientError | Schema.SchemaError,
   HttpClient.HttpClient
 > {
   const wait = options.wait ?? DEFAULT_PREVIEW_WAIT;
   const onReading = options.onReading ?? (() => Effect.void);
   return Effect.gen(function* () {
     const reading = yield* Effect.repeat(readPreview(source).pipe(Effect.tap(onReading)), {
-      schedule: Schedule.identity<PreviewReading>().pipe(
-        Schedule.zipLeft(Schedule.spaced(Duration.millis(wait.intervalMs))),
-        Schedule.zipLeft(Schedule.recurs(wait.attempts)),
+      schedule: Schedule.spaced(Duration.millis(wait.intervalMs)).pipe(
+        Schedule.upTo({ times: wait.attempts }),
       ),
-      until: (reading) => reading.kind !== PREVIEW_STATE.WAITING,
+      // Annotated as a plain boolean rather than left to inference: a budget
+      // spent before the record settles answers with a waiting reading, which
+      // a refinement would have read out of the type.
+      until: (reading: PreviewReading): boolean => reading.kind !== PREVIEW_STATE.WAITING,
     });
     if (reading.kind === PREVIEW_STATE.WAITING) {
       return yield* new PreviewNotReady({

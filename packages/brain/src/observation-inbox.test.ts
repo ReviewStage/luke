@@ -12,7 +12,7 @@ import {
   type SessionStatus,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, unparsedWire, wireRecord } from "@sidecar/wire";
-import { Effect, Fiber, TestClock } from "effect";
+import { Clock, Effect, Fiber } from "effect";
 import { type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
@@ -284,7 +284,7 @@ it.effect("a roster look is skipped while the client is quiet or a turn is in fl
       await slow;
       return respond(input, options);
     };
-    const asked = yield* Effect.fork(ask(h, "what's up?"));
+    const asked = yield* Effect.forkChild(ask(h, "what's up?"));
     yield* Effect.promise(() => settle());
     yield* h.agent.rosterLook();
     yield* Effect.promise(() => settle());
@@ -381,7 +381,7 @@ it.effect(
       const relaunched = yield* effectHarness(reading(), quiet.repository);
       relaunched.client.answers.push(answered([message("")]), answered([message("")]));
       yield* relaunched.agent.ready();
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.sinceReads.length, 0);
       assert.equal(relaunched.client.inputs.length, 1);
@@ -390,7 +390,7 @@ it.effect(
       // The next look finds nothing new in the transcript and still opens the
       // turn the standing captures are owed.
       yield* relaunched.agent.rosterLook();
-      yield* advanceHarness((yield* TestClock.currentTimeMillis) + 3_000);
+      yield* advanceHarness((yield* Clock.currentTimeMillis) + 3_000);
       yield* Effect.promise(() => settle());
       assert.equal(relaunched.client.inputs.length, 2);
       assert.equal(relaunched.agent.pendingWakes(), 0);

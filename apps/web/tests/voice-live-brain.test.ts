@@ -141,7 +141,7 @@ async function stand(
   const reports: string[] = [];
   const scope = await database.run(Scope.make());
   const brain = await database.run(
-    Scope.extend(
+    Scope.provide(
       hostedLiveBrain({
         userId: target.userId,
         asks: { asks: askEffects, eve, now: () => NOW },

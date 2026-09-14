@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Exit, Schema, Scope } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
@@ -163,7 +163,7 @@ async function stand(
   const reports: string[] = [];
   const scope = await database.run(Scope.make());
   const briefings = await database.run(
-    Scope.extend(
+    Scope.provide(
       hostedBriefings({
         userId: target.userId,
         speech,

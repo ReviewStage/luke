@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   CONVERSATION_EVENT_KIND,
   type HostedMessageRatingRequest,
@@ -49,43 +49,41 @@ export interface RatingStore {
   readonly writer: StoreWriter;
 }
 
-export function rateMessage(
+export const rateMessage = /* @__PURE__ */ Effect.fn("rateMessage")(function* (
   { writer }: RatingStore,
   userId: string,
   messageId: string,
   rating: HostedMessageRatingRequest,
-): Effect.Effect<RatingWriteResult, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const authorship = yield* messageAuthorship(userId, messageId);
-    if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
-    if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
-      return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };
-    }
-    const { deviceId, ...payload } = rating;
-    const written = yield* writer.recordEvent(
-      { userId, conversationId: authorship.conversationId },
-      {
-        messageId,
-        kind: CONVERSATION_EVENT_KIND.RATING,
-        deviceId,
-        payload: unparsedWire(payload),
-      },
-    );
-    if (written.ok) return { ok: true, id: written.id, seq: written.seq };
-    switch (written.refusal) {
-      case STORE_WRITE_REFUSAL.NO_CONVERSATION:
-      case STORE_WRITE_REFUSAL.NO_MESSAGE:
-        return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
-      case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
-        return yield* Effect.die(
-          new Error("a rating was refused as a claim, which only a speech.claimed event can be"),
-        );
-      case STORE_WRITE_REFUSAL.SUPERSEDED:
-        return yield* Effect.die(
-          new Error(
-            "a rating was refused as superseded, and a rating names nothing that excludes it",
-          ),
-        );
-    }
-  });
-}
+): Effect.fn.Return<RatingWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const authorship = yield* messageAuthorship(userId, messageId);
+  if (authorship === undefined) return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+  if (authorship.role !== MESSAGE_ROLE.ASSISTANT || authorship.compaction) {
+    return { ok: false, refusal: RATING_REFUSAL.NOT_LUKES };
+  }
+  const { deviceId, ...payload } = rating;
+  const written = yield* writer.recordEvent(
+    { userId, conversationId: authorship.conversationId },
+    {
+      messageId,
+      kind: CONVERSATION_EVENT_KIND.RATING,
+      deviceId,
+      payload: unparsedWire(payload),
+    },
+  );
+  if (written.ok) return { ok: true, id: written.id, seq: written.seq };
+  switch (written.refusal) {
+    case STORE_WRITE_REFUSAL.NO_CONVERSATION:
+    case STORE_WRITE_REFUSAL.NO_MESSAGE:
+      return { ok: false, refusal: RATING_REFUSAL.NOT_FOUND };
+    case STORE_WRITE_REFUSAL.ALREADY_CLAIMED:
+      return yield* Effect.die(
+        new Error("a rating was refused as a claim, which only a speech.claimed event can be"),
+      );
+    case STORE_WRITE_REFUSAL.SUPERSEDED:
+      return yield* Effect.die(
+        new Error(
+          "a rating was refused as superseded, and a rating names nothing that excludes it",
+        ),
+      );
+  }
+});

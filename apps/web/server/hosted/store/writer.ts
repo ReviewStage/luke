@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import {
   asSchema,
   type ReasoningUIPart,
@@ -10,7 +8,10 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import type * as Statement from "effect/unstable/sql/Statement";
 import {
   type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,
@@ -50,7 +51,7 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
-import { EpochMillisColumnSchema, nullable } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
  * The store writer: the one path by which a `messages`, `turns`, or `events`
@@ -477,7 +478,7 @@ type Parts = StoredUIMessage["parts"];
 const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
 
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type WriteFailure = SqlError | ParseResult.ParseError;
+type WriteFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -490,10 +491,10 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
  * caller could act on, so it dies with the same words it threw before.
  */
 function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
-  return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
+  return Option.match(row, { onNone: () => Effect.die(new Error(absent)), onSome: Effect.succeed });
 }
 
-const readsJsonObject = Schema.is(Schema.Record({ key: Schema.String, value: Schema.Unknown }));
+const readsJsonObject = Schema.is(Schema.Record(Schema.String, Schema.Unknown));
 
 const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.String })));
 
@@ -511,11 +512,11 @@ const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.Stri
  * names `Schema.parseJson` over these and a read names them directly,
  * because a `jsonb` column answers a parsed value.
  */
-const StoredPartsColumnSchema: Schema.Schema<Parts> = Schema.declare((input): input is Parts =>
+const StoredPartsColumnSchema: Schema.Codec<Parts> = Schema.declare((input): input is Parts =>
   readsPartsShape(input),
 );
 
-const MessageMetadataColumnSchema: Schema.Schema<StoredMessageMetadata> = Schema.declare(
+const MessageMetadataColumnSchema: Schema.Codec<StoredMessageMetadata> = Schema.declare(
   (input): input is StoredMessageMetadata => readsJsonObject(input),
 );
 
@@ -527,15 +528,13 @@ const TurnUsageColumnSchema = Schema.Struct({
   reasoningTokens: Schema.Number,
 });
 
-export const ConversationEventKindSchema = Schema.Literal(
-  ...Object.values(CONVERSATION_EVENT_KIND),
-);
+export const ConversationEventKindSchema = Schema.Literals(Object.values(CONVERSATION_EVENT_KIND));
 
-const MessageRoleSchema = Schema.Literal(...Object.values(MESSAGE_ROLE));
+const MessageRoleSchema = Schema.Literals(Object.values(MESSAGE_ROLE));
 
-const TurnStatusSchema = Schema.Literal(...Object.values(TURN_STATUS));
+const TurnStatusSchema = Schema.Literals(Object.values(TURN_STATUS));
 
-const TurnOriginSchema = Schema.Literal(...Object.values(TURN_ORIGIN));
+const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
 
 const RowIdSchema = Schema.Struct({ id: Schema.String });
 
@@ -547,9 +546,10 @@ const ConversationTargetSchema = Schema.Struct({
 /**
  * The counter's value after an allocation moved it, which is one past the
  * position handed out. It is a 64-bit column like every instant here, so it
- * is read through the same schema they are: `pg` hands an `int8` back as a
- * string and PGlite as a number, and a sequence position is as far inside the
- * safe integer range as a millisecond is.
+ * is read through the same schema they are: `@effect/sql-pg` hands an `int8`
+ * back as a JS `bigint`, the `pg` driver before it as a string, PGlite as a
+ * number, and a sequence position is as far inside the safe integer range as
+ * a millisecond is.
  */
 const SequenceSchema = Schema.Struct({ next: EpochMillisColumnSchema });
 
@@ -558,10 +558,8 @@ const MessageRowSchema = Schema.Struct({
   id: Schema.String,
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(MessageMetadataColumnSchema),
-  finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("finished_at"),
-  ),
-});
+  finishedAt: Schema.NullOr(InstantColumnSchema),
+}).pipe(Schema.encodeKeys({ finishedAt: "finished_at" }));
 
 type MessageRow = Schema.Schema.Type<typeof MessageRowSchema>;
 
@@ -574,13 +572,13 @@ const MessageInsertSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   clientId: Schema.String,
   role: MessageRoleSchema,
-  parts: Schema.parseJson(StoredPartsColumnSchema),
-  metadata: Schema.NullOr(Schema.parseJson(MessageMetadataColumnSchema)),
-  createdAt: Schema.DateFromSelf,
-  finishedAt: Schema.NullOr(Schema.DateFromSelf),
+  parts: Schema.fromJsonString(StoredPartsColumnSchema),
+  metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+  createdAt: Schema.Date,
+  finishedAt: Schema.NullOr(Schema.Date),
 });
 
-const lockConversation = SqlSchema.findOne({
+const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: RowIdSchema,
   execute: (target) =>
@@ -596,8 +594,8 @@ const lockConversation = SqlSchema.findOne({
     ),
 });
 
-const allocateMessageSequence = SqlSchema.findOne({
-  Request: Schema.Struct({ conversationId: Schema.String, now: Schema.DateFromSelf }),
+const allocateMessageSequence = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, now: Schema.Date }),
   Result: SequenceSchema,
   execute: (request) =>
     statement(
@@ -614,7 +612,7 @@ const allocateMessageSequence = SqlSchema.findOne({
     ),
 });
 
-const allocateEventSequence = SqlSchema.findOne({
+const allocateEventSequence = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: SequenceSchema,
   execute: (conversationId) =>
@@ -631,7 +629,7 @@ const allocateEventSequence = SqlSchema.findOne({
     ),
 });
 
-const findTurn = SqlSchema.findOne({
+const findTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
   Result: TurnRowSchema,
   execute: (request) =>
@@ -644,7 +642,7 @@ const findTurn = SqlSchema.findOne({
     ),
 });
 
-const findMessageByClientId = SqlSchema.findOne({
+const findMessageByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: MessageRowSchema,
   execute: (request) =>
@@ -657,7 +655,7 @@ const findMessageByClientId = SqlSchema.findOne({
     ),
 });
 
-const insertMessageRow = SqlSchema.findOne({
+const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
   Result: RowIdSchema,
   execute: (row) =>
@@ -697,7 +695,7 @@ const updateMessageParts = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
   }),
   execute: (row) =>
     statement(
@@ -714,8 +712,8 @@ const finishMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    finishedAt: Schema.DateFromSelf,
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    finishedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -734,9 +732,9 @@ const completeMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    metadata: Schema.NullOr(Schema.parseJson(MessageMetadataColumnSchema)),
-    finishedAt: Schema.DateFromSelf,
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+    finishedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -758,7 +756,7 @@ const insertStartedTurn = SqlSchema.void({
     userId: Schema.String,
     conversationId: Schema.String,
     origin: TurnOriginSchema,
-    startedAt: Schema.DateFromSelf,
+    startedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -783,7 +781,7 @@ const insertQueuedTurn = SqlSchema.void({
     reasoningEffort: Schema.NullOr(Schema.String),
     promptHash: Schema.NullOr(Schema.String),
     toolSetHash: Schema.NullOr(Schema.String),
-    queuedAt: Schema.DateFromSelf,
+    queuedAt: Schema.Date,
   }),
   execute: (row) =>
     statement(
@@ -802,7 +800,7 @@ const insertQueuedTurn = SqlSchema.void({
 });
 
 const startTurn = SqlSchema.void({
-  Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.DateFromSelf }),
+  Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.Date }),
   execute: (row) =>
     statement(
       (sql) => sql`
@@ -813,13 +811,27 @@ const startTurn = SqlSchema.void({
     ),
 });
 
+/**
+ * A `text[]` column's value, as the two drivers will take it. A driver infers
+ * a parameter's Postgres type from the value it is handed, and an empty array
+ * offers no element to infer one from, so the empty case is written as the
+ * literal it is rather than bound. A turn that called nothing settles with no
+ * response ids, which is why this is the ordinary case and not an edge.
+ */
+function emptyTextArray(
+  sql: SqlClient.SqlClient,
+  values: readonly string[],
+): Statement.Fragment | readonly string[] {
+  return values.length === 0 ? sql.literal("'{}'::text[]") : values;
+}
+
 const settleTurn = SqlSchema.void({
   Request: Schema.Struct({
     turnId: Schema.String,
     status: TurnStatusSchema,
-    settledAt: Schema.DateFromSelf,
+    settledAt: Schema.Date,
     failure: Schema.NullOr(Schema.String),
-    usage: Schema.NullOr(Schema.parseJson(TurnUsageColumnSchema)),
+    usage: Schema.NullOr(Schema.fromJsonString(TurnUsageColumnSchema)),
     responseIds: Schema.Array(Schema.String),
   }),
   execute: (row) =>
@@ -830,7 +842,7 @@ const settleTurn = SqlSchema.void({
             settled_at = ${row.settledAt},
             failure = ${row.failure},
             usage = ${row.usage}::jsonb,
-            response_ids = ${row.responseIds}
+            response_ids = ${emptyTextArray(sql, row.responseIds)}
         where id = ${row.turnId}
       `,
     ),
@@ -841,7 +853,7 @@ const settleTurn = SqlSchema.void({
  * session's clock: the metadata's own `to_ms`, read out of the `jsonb`
  * column, over every ask of that session but the one being cut.
  */
-const findSpokenAskEnd = SqlSchema.findOne({
+const findSpokenAskEnd = SqlSchema.findOneOption({
   Request: Schema.Struct({
     conversationId: Schema.String,
     delegationId: Schema.String,
@@ -849,8 +861,8 @@ const findSpokenAskEnd = SqlSchema.findOne({
     voiceSessionId: Schema.String,
   }),
   Result: Schema.Struct({
-    toMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("to_ms")),
-  }),
+    toMs: Schema.Number,
+  }).pipe(Schema.encodeKeys({ toMs: "to_ms" })),
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -878,16 +890,21 @@ const SpokenLineRequestSchema = Schema.Struct({
 
 const SpokenLineRowSchema = Schema.Struct({
   id: Schema.String,
-  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
-  delegationId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("delegation_id"),
-  ),
-  fromMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("from_ms")),
-  toMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("to_ms")),
-});
+  clientId: Schema.String,
+  delegationId: Schema.NullOr(Schema.String),
+  fromMs: Schema.Number,
+  toMs: Schema.Number,
+}).pipe(
+  Schema.encodeKeys({
+    clientId: "client_id",
+    delegationId: "delegation_id",
+    fromMs: "from_ms",
+    toMs: "to_ms",
+  }),
+);
 
 /** The latest line whose end is at or before the instant: the line Luke's words could be answering. */
-const findLatestSpokenLineEndingBy = SqlSchema.findOne({
+const findLatestSpokenLineEndingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
@@ -907,7 +924,7 @@ const findLatestSpokenLineEndingBy = SqlSchema.findOne({
 });
 
 /** The latest line whose start is at or before the instant: the line a delegation at that offset is about, its end past the offset or not. */
-const findLatestSpokenLineStartingBy = SqlSchema.findOne({
+const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
@@ -932,12 +949,12 @@ const FIND_LATEST_SPOKEN_LINE = {
 } as const;
 
 /** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, its words and span the ask's cut, while no turn owns it. */
-const rekeySpokenLine = SqlSchema.findOne({
+const rekeySpokenLine = SqlSchema.findOneOption({
   Request: Schema.Struct({
     id: Schema.String,
     delegationId: Schema.String,
-    parts: Schema.parseJson(StoredPartsColumnSchema),
-    metadata: Schema.parseJson(MessageMetadataColumnSchema),
+    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    metadata: Schema.fromJsonString(MessageMetadataColumnSchema),
   }),
   Result: RowIdSchema,
   execute: (row) =>
@@ -953,7 +970,7 @@ const rekeySpokenLine = SqlSchema.findOne({
     ),
 });
 
-const findMessageInConversation = SqlSchema.findOne({
+const findMessageInConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ messageId: Schema.String, conversationId: Schema.String }),
   Result: RowIdSchema,
   execute: (request) =>
@@ -982,7 +999,7 @@ const findEventKinds = SqlSchema.findAll({
     ),
 });
 
-const insertEvent = SqlSchema.findOne({
+const insertEvent = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
     conversationId: Schema.String,
@@ -990,8 +1007,8 @@ const insertEvent = SqlSchema.findOne({
     messageId: Schema.String,
     kind: ConversationEventKindSchema,
     deviceId: Schema.NullOr(Schema.String),
-    payload: Schema.NullOr(Schema.parseJson(WireValueSchema)),
-    createdAt: Schema.DateFromSelf,
+    payload: Schema.NullOr(Schema.fromJsonString(WireValueSchema)),
+    createdAt: Schema.Date,
   }),
   Result: RowIdSchema,
   execute: (row) =>
@@ -1095,7 +1112,7 @@ function admitted(
       }
       const [stored] = read.value;
       return stored === undefined
-        ? Effect.dieMessage("the reader answered no row for one message")
+        ? Effect.die(new Error("the reader answered no row for one message"))
         : Effect.succeed({ ok: true, message: stored } as const);
     },
   );
@@ -1107,24 +1124,24 @@ function admitted(
  * counter fell behind it, and the counter moved past whichever was handed
  * out. The read of `max(seq)` is served by the unique index over the pair.
  */
-function allocateMessageSeq(context: WriterContext): Write<number> {
-  return Effect.gen(function* () {
-    const row = yield* allocateMessageSequence({
-      conversationId: context.target.conversationId,
-      now: context.now(),
-    });
-    const allocated = yield* required(row, "the conversation vanished under its own lock");
-    return allocated.next - 1;
+const allocateMessageSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
+  const row = yield* allocateMessageSequence({
+    conversationId: context.target.conversationId,
+    now: context.now(),
   });
-}
+  const allocated = yield* required(row, "the conversation vanished under its own lock");
+  return allocated.next - 1;
+});
 
-function allocateEventSeq(context: WriterContext): Write<number> {
-  return Effect.gen(function* () {
-    const row = yield* allocateEventSequence(context.target.conversationId);
-    const allocated = yield* required(row, "the conversation vanished under its own lock");
-    return allocated.next - 1;
-  });
-}
+const allocateEventSeq = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+): Effect.fn.Return<number, WriteFailure, SqlClient.SqlClient> {
+  const row = yield* allocateEventSequence(context.target.conversationId);
+  const allocated = yield* required(row, "the conversation vanished under its own lock");
+  return allocated.next - 1;
+});
 
 function turnRow(
   context: WriterContext,
@@ -1149,7 +1166,7 @@ interface InsertedMessage {
   readonly seq: number;
 }
 
-function insertMessage(
+const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: {
     clientId: string;
@@ -1157,27 +1174,25 @@ function insertMessage(
     message: StoredUIMessage;
     finishedAt: Date | undefined;
   },
-): Write<InsertedMessage> {
-  return Effect.gen(function* () {
-    const seq = yield* allocateMessageSeq(context);
-    const metadata: StoredMessageMetadata | undefined =
-      row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
-    const inserted = yield* insertMessageRow({
-      userId: context.target.userId,
-      conversationId: context.target.conversationId,
-      seq,
-      turnId: nullable(row.turnId),
-      clientId: row.clientId,
-      role: row.message.role,
-      parts: row.message.parts,
-      metadata: nullable(metadata),
-      createdAt: context.now(),
-      finishedAt: nullable(row.finishedAt),
-    });
-    const written = yield* required(inserted, "the message insert answered no row");
-    return { id: written.id, seq };
+): Effect.fn.Return<InsertedMessage, WriteFailure, SqlClient.SqlClient> {
+  const seq = yield* allocateMessageSeq(context);
+  const metadata: StoredMessageMetadata | undefined =
+    row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
+  const inserted = yield* insertMessageRow({
+    userId: context.target.userId,
+    conversationId: context.target.conversationId,
+    seq,
+    turnId: nullable(row.turnId),
+    clientId: row.clientId,
+    role: row.message.role,
+    parts: row.message.parts,
+    metadata: nullable(metadata),
+    createdAt: context.now(),
+    finishedAt: nullable(row.finishedAt),
   });
-}
+  const written = yield* required(inserted, "the message insert answered no row");
+  return { id: written.id, seq };
+});
 
 type Journal =
   | { readonly ok: true; readonly row: MessageRow }
@@ -1205,110 +1220,105 @@ function openTurn(
  * reports while the turn still runs, and closed by the turn's answer or its
  * end. A turn that has ended opens no journal after the fact.
  */
-function journal(context: WriterContext, turnId: string): Write<Journal> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, turnId);
-    if (Option.isSome(standing)) return { ok: true, row: standing.value };
-    const closed = yield* openTurn(context, turnId);
-    if (closed !== undefined) return closed;
-    const { id } = yield* insertMessage(context, {
-      clientId: turnId,
-      turnId,
-      message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
-      finishedAt: undefined,
-    });
-    return { ok: true, row: { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null } };
+const journal = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<Journal, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, turnId);
+  if (Option.isSome(standing)) return { ok: true, row: standing.value };
+  const closed = yield* openTurn(context, turnId);
+  if (closed !== undefined) return closed;
+  const { id } = yield* insertMessage(context, {
+    clientId: turnId,
+    turnId,
+    message: { id: turnId, role: MESSAGE_ROLE.ASSISTANT, metadata: BRAIN_AUTHORED, parts: [] },
+    finishedAt: undefined,
   });
-}
+  return { ok: true, row: { id, parts: [], metadata: BRAIN_AUTHORED, finishedAt: null } };
+});
 
 /** Writes the journal's parts as they now stand, held to the vocabulary first. */
-function amendJournal(
+const amendJournal = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: MessageRow,
   parts: Parts,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const read = yield* admitted(context, {
-      id: row.id,
-      role: MESSAGE_ROLE.ASSISTANT,
-      metadata: BRAIN_AUTHORED,
-      parts,
-    });
-    if (!read.ok) return read;
-    yield* updateMessageParts({
-      id: row.id,
-      conversationId: context.target.conversationId,
-      parts: read.message.parts,
-    });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const read = yield* admitted(context, {
+    id: row.id,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: BRAIN_AUTHORED,
+    parts,
   });
-}
+  if (!read.ok) return read;
+  yield* updateMessageParts({
+    id: row.id,
+    conversationId: context.target.conversationId,
+    parts: read.message.parts,
+  });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function turnStarted(
+const turnStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, event.turnId);
-    const startedAt = new Date(event.at);
-    if (Option.isNone(standing)) {
-      yield* insertStartedTurn({
-        turnId: event.turnId,
-        userId: context.target.userId,
-        conversationId: context.target.conversationId,
-        origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
-        startedAt,
-      });
-      return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-    }
-    if (standing.value.status !== TURN_STATUS.QUEUED) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    yield* startTurn({ turnId: event.turnId, startedAt });
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, event.turnId);
+  const startedAt = new Date(event.at);
+  if (Option.isNone(standing)) {
+    yield* insertStartedTurn({
+      turnId: event.turnId,
+      userId: context.target.userId,
+      conversationId: context.target.conversationId,
+      origin: TURN_ORIGIN_OF_BRAIN_ORIGIN[event.origin],
+      startedAt,
+    });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-  });
-}
+  }
+  if (standing.value.status !== TURN_STATUS.QUEUED) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  yield* startTurn({ turnId: event.turnId, startedAt });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function turnEnded(
+const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TURN_ENDED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, event.turnId);
-    if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const settledAt = new Date(event.at);
-    const status = turnStatusOf(event.status);
-    // A failed turn names its failure word where the run had one, and the status
-    // it ended in otherwise, so a timed-out or interrupted turn still says which.
-    const failure = event.failure ?? (status === TURN_STATUS.FAILED ? event.status : undefined);
-    yield* settleTurn({
-      turnId: event.turnId,
-      status,
-      settledAt,
-      failure: nullable(failure),
-      usage: nullable(event.usage),
-      responseIds: event.responseIds,
-    });
-    const open = yield* messageByClientId(context, event.turnId);
-    if (Option.isSome(open) && open.value.finishedAt === null) {
-      const parts = open.value.parts.map((part) =>
-        isStoredToolPart(part) && !isSettledToolPartState(part.state)
-          ? unansweredToolPart(part, event.status)
-          : part,
-      );
-      yield* finishMessage({
-        id: open.value.id,
-        conversationId: context.target.conversationId,
-        parts,
-        finishedAt: settledAt,
-      });
-    }
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, event.turnId);
+  if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  if (TERMINAL_TURN_STATUSES.has(standing.value.status)) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const settledAt = new Date(event.at);
+  const status = turnStatusOf(event.status);
+  // A failed turn names its failure word where the run had one, and the status
+  // it ended in otherwise, so a timed-out or interrupted turn still says which.
+  const failure = event.failure ?? (status === TURN_STATUS.FAILED ? event.status : undefined);
+  yield* settleTurn({
+    turnId: event.turnId,
+    status,
+    settledAt,
+    failure: nullable(failure),
+    usage: nullable(event.usage),
+    responseIds: event.responseIds,
   });
-}
+  const open = yield* messageByClientId(context, event.turnId);
+  if (Option.isSome(open) && open.value.finishedAt === null) {
+    const parts = open.value.parts.map((part) =>
+      isStoredToolPart(part) && !isSettledToolPartState(part.state)
+        ? unansweredToolPart(part, event.status)
+        : part,
+    );
+    yield* finishMessage({
+      id: open.value.id,
+      conversationId: context.target.conversationId,
+      parts,
+      finishedAt: settledAt,
+    });
+  }
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * A step joins the journal as the boundary before its parts. Steps are
@@ -1318,70 +1328,64 @@ function turnEnded(
  * dropped between. The turn's completed projection replaces the journal
  * whole, boundaries and all, when the turn answers.
  */
-function stepStarted(
+const stepStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.STEP_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
-    if (held >= event.step) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  const held = row.parts.filter((part) => part.type === UI_PART_TYPE.STEP_START).length;
+  if (held >= event.step) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [...row.parts, STEP_START_PART]);
+});
 
-function toolCallStarted(
+const toolCallStarted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_STARTED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (toolPartOf(row.parts, event.callId) !== undefined) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [
-      ...row.parts,
-      pendingToolPart(event.name, event.callId, event.input),
-    ]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (toolPartOf(row.parts, event.callId) !== undefined) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [
+    ...row.parts,
+    pendingToolPart(event.name, event.callId, event.input),
+  ]);
+});
 
-function toolCallSettled(
+const toolCallSettled = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.TOOL_CALL_SETTLED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, event.turnId);
-    if (Option.isNone(standing)) {
-      const turn = yield* turnRow(context, event.turnId);
-      return {
-        ok: false,
-        refusal: Option.isNone(turn) ? STORE_WRITE_REFUSAL.NO_TURN : STORE_WRITE_REFUSAL.NO_CALL,
-      };
-    }
-    const row = standing.value;
-    const found = toolPartOf(row.parts, event.callId);
-    if (found === undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL };
-    // A call settles once. The same settlement told again is a repeat; a
-    // different one, after the turn's end already settled the call as
-    // unanswered, finds the call closed and is refused rather than rewritten.
-    if (isSettledToolPartState(found.part.state)) {
-      return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
-        ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
-        : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    const parts = [...row.parts];
-    parts[found.index] = settledToolPart(found.part, event.settlement);
-    return yield* amendJournal(context, row, parts);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, event.turnId);
+  if (Option.isNone(standing)) {
+    const turn = yield* turnRow(context, event.turnId);
+    return {
+      ok: false,
+      refusal: Option.isNone(turn) ? STORE_WRITE_REFUSAL.NO_TURN : STORE_WRITE_REFUSAL.NO_CALL,
+    };
+  }
+  const row = standing.value;
+  const found = toolPartOf(row.parts, event.callId);
+  if (found === undefined) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_CALL };
+  // A call settles once. The same settlement told again is a repeat; a
+  // different one, after the turn's end already settled the call as
+  // unanswered, finds the call closed and is refused rather than rewritten.
+  if (isSettledToolPartState(found.part.state)) {
+    return isDeepStrictEqual(settledToolPart(found.part, event.settlement), found.part)
+      ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
+      : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  const parts = [...row.parts];
+  parts[found.index] = settledToolPart(found.part, event.settlement);
+  return yield* amendJournal(context, row, parts);
+});
 
 /**
  * A reasoning summary joins the journal under its item's id. An item that
@@ -1389,23 +1393,21 @@ function toolCallSettled(
  * a second item, and the turn's completed projection carries every summary
  * under the id the adapter lifted for it.
  */
-function reasoningCompleted(
+const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.REASONING_COMPLETED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const { id } = event.item;
-    if (!isWireString(id)) return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (row.parts.some((part) => part.type === UI_PART_TYPE.REASONING && part.id === id)) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    return yield* amendJournal(context, row, [...row.parts, reasoningPart(event.summary, id)]);
-  });
-}
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const { id } = event.item;
+  if (!isWireString(id)) return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (row.parts.some((part) => part.type === UI_PART_TYPE.REASONING && part.id === id)) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (row.finishedAt !== null) return { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  return yield* amendJournal(context, row, [...row.parts, reasoningPart(event.summary, id)]);
+});
 
 /**
  * A completed message: a user message lands as its own row by its id; the
@@ -1415,45 +1417,43 @@ function reasoningCompleted(
  * A closed journal takes the same projection again as a repeat and a
  * different one as the late write it is.
  */
-function messageCompleted(
+const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   event: Extract<BrainRunEvent, { kind: typeof BRAIN_RUN_EVENT.MESSAGE_COMPLETED }>,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const read = yield* admitted(context, event.message);
-    if (!read.ok) return read;
-    const { message } = read;
-    if (message.role !== MESSAGE_ROLE.ASSISTANT) {
-      const standing = yield* messageByClientId(context, message.id);
-      if (Option.isSome(standing)) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-      const closed = yield* openTurn(context, event.turnId);
-      if (closed !== undefined) return closed;
-      yield* insertMessage(context, {
-        clientId: message.id,
-        turnId: event.turnId,
-        message,
-        finishedAt: context.now(),
-      });
-      return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-    }
-    const opened = yield* journal(context, event.turnId);
-    if (!opened.ok) return opened;
-    const { row } = opened;
-    if (row.finishedAt !== null) {
-      return isDeepStrictEqual(row.parts, message.parts)
-        ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
-        : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
-    }
-    yield* completeMessage({
-      id: row.id,
-      conversationId: context.target.conversationId,
-      parts: message.parts,
-      metadata: nullable(message.metadata),
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const read = yield* admitted(context, event.message);
+  if (!read.ok) return read;
+  const { message } = read;
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) {
+    const standing = yield* messageByClientId(context, message.id);
+    if (Option.isSome(standing)) return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+    const closed = yield* openTurn(context, event.turnId);
+    if (closed !== undefined) return closed;
+    yield* insertMessage(context, {
+      clientId: message.id,
+      turnId: event.turnId,
+      message,
       finishedAt: context.now(),
     });
     return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+  }
+  const opened = yield* journal(context, event.turnId);
+  if (!opened.ok) return opened;
+  const { row } = opened;
+  if (row.finishedAt !== null) {
+    return isDeepStrictEqual(row.parts, message.parts)
+      ? { ok: true, effect: STORE_WRITE_EFFECT.REPEATED }
+      : { ok: false, refusal: STORE_WRITE_REFUSAL.FINISHED };
+  }
+  yield* completeMessage({
+    id: row.id,
+    conversationId: context.target.conversationId,
+    parts: message.parts,
+    metadata: nullable(message.metadata),
+    finishedAt: context.now(),
   });
-}
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWriteResult> {
   switch (event.kind) {
@@ -1484,27 +1484,28 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
   }
 }
 
-function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEnqueueResult> {
-  return Effect.gen(function* () {
-    const turnId = enqueue.turnId ?? randomUUID();
-    if (Option.isSome(yield* turnRow(context, turnId))) {
-      return { ok: true, turnId, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    yield* insertQueuedTurn({
-      turnId,
-      userId: context.target.userId,
-      conversationId: context.target.conversationId,
-      origin: enqueue.origin,
-      eveTurnId: nullable(enqueue.eveTurnId),
-      model: nullable(enqueue.model),
-      reasoningEffort: nullable(enqueue.reasoningEffort),
-      promptHash: nullable(enqueue.promptHash),
-      toolSetHash: nullable(enqueue.toolSetHash),
-      queuedAt: context.now(),
-    });
-    return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
+const enqueueTurn = /* @__PURE__ */ Effect.fn("enqueueTurn")(function* (
+  context: WriterContext,
+  enqueue: TurnEnqueue,
+): Effect.fn.Return<TurnEnqueueResult, WriteFailure, SqlClient.SqlClient> {
+  const turnId = enqueue.turnId ?? randomUUID();
+  if (Option.isSome(yield* turnRow(context, turnId))) {
+    return { ok: true, turnId, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  yield* insertQueuedTurn({
+    turnId,
+    userId: context.target.userId,
+    conversationId: context.target.conversationId,
+    origin: enqueue.origin,
+    eveTurnId: nullable(enqueue.eveTurnId),
+    model: nullable(enqueue.model),
+    reasoningEffort: nullable(enqueue.reasoningEffort),
+    promptHash: nullable(enqueue.promptHash),
+    toolSetHash: nullable(enqueue.toolSetHash),
+    queuedAt: context.now(),
   });
-}
+  return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * A queued row is the opener's inbox, never the run's record: the turn eve
@@ -1514,7 +1515,7 @@ function enqueueTurn(context: WriterContext, enqueue: TurnEnqueue): Write<TurnEn
  * and is not the opener's to remove, and a row a message names is a record
  * whatever its status; both are left as they stand.
  */
-const findMessageNamingTurn = SqlSchema.findOne({
+const findMessageNamingTurn = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RowIdSchema,
   execute: (turnId) =>
@@ -1538,7 +1539,7 @@ const stampTurnCancel = SqlSchema.findAll({
   Request: Schema.Struct({
     turnId: Schema.String,
     conversationId: Schema.String,
-    at: Schema.DateFromSelf,
+    at: Schema.Date,
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
@@ -1553,20 +1554,21 @@ const stampTurnCancel = SqlSchema.findAll({
     ),
 });
 
-function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* turnRow(context, turnId);
-    if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    if (standing.value.status !== TURN_STATUS.QUEUED) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    }
-    if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
-      return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-    }
-    yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
-  });
-}
+const dequeueTurn = /* @__PURE__ */ Effect.fn("dequeueTurn")(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* turnRow(context, turnId);
+  if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  if (standing.value.status !== TURN_STATUS.QUEUED) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  }
+  if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
+    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
+  }
+  yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * The Stop on a turn's row: the instant it was asked, written once, so the
@@ -1574,23 +1576,21 @@ function dequeueTurn(context: WriterContext, turnId: string): Write<StoreWriteRe
  * the first instant standing and writes nothing; a turn the conversation does
  * not hold is refused.
  */
-function requestTurnCancel(
+const requestTurnCancel = /* @__PURE__ */ Effect.fn("requestTurnCancel")(function* (
   context: WriterContext,
   cancel: TurnCancelRequest,
-): Write<TurnCancelResult> {
-  return Effect.gen(function* () {
-    if (Option.isNone(yield* turnRow(context, cancel.turnId))) return NO_TURN;
-    const stamped = yield* stampTurnCancel({
-      turnId: cancel.turnId,
-      conversationId: context.target.conversationId,
-      at: cancel.at,
-    });
-    return {
-      ok: true,
-      effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
-    };
+): Effect.fn.Return<TurnCancelResult, WriteFailure, SqlClient.SqlClient> {
+  if (Option.isNone(yield* turnRow(context, cancel.turnId))) return NO_TURN;
+  const stamped = yield* stampTurnCancel({
+    turnId: cancel.turnId,
+    conversationId: context.target.conversationId,
+    at: cancel.at,
   });
-}
+  return {
+    ok: true,
+    effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
+  };
+});
 
 /** Whether a stored row is a compaction: an assistant row whose metadata names what it folded. */
 function isCompactionRow(row: MessageRow): boolean {
@@ -1606,50 +1606,48 @@ function isCompactionRow(row: MessageRow): boolean {
  * owner's id names one of its own folds: a row of another kind under it is
  * the owner's mistake, not a repeat.
  */
-function recordCompaction(
+const recordCompaction = /* @__PURE__ */ Effect.fn("recordCompaction")(function* (
   context: WriterContext,
   compaction: CompactionWrite,
-): Write<StoreWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, compaction.clientId);
-    if (Option.isSome(standing)) {
-      if (!isCompactionRow(standing.value)) {
-        return yield* Effect.dieMessage(
-          "a compaction's client id names a message that is not a compaction",
-        );
-      }
-      return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, compaction.clientId);
+  if (Option.isSome(standing)) {
+    if (!isCompactionRow(standing.value)) {
+      return yield* Effect.die(
+        new Error("a compaction's client id names a message that is not a compaction"),
+      );
     }
-    if (compaction.turnId !== undefined) {
-      const turn = yield* turnRow(context, compaction.turnId);
-      if (Option.isNone(turn)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-    }
-    const built = compactionSummaryMessage(compaction.clientId, {
-      text: compaction.text,
-      firstKeptMessageId: compaction.firstKeptMessageId,
-      ...(compaction.tokensBefore !== undefined
-        ? { tokensBefore: compaction.tokensBefore }
-        : undefined),
-    });
-    if (built === undefined) {
-      return {
-        ok: false,
-        refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
-        reason: SCHEMA_REFUSAL.MALFORMED,
-        path: [],
-      };
-    }
-    const read = yield* admitted(context, built);
-    if (!read.ok) return read;
-    yield* insertMessage(context, {
-      clientId: compaction.clientId,
-      turnId: compaction.turnId,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  if (compaction.turnId !== undefined) {
+    const turn = yield* turnRow(context, compaction.turnId);
+    if (Option.isNone(turn)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
+  }
+  const built = compactionSummaryMessage(compaction.clientId, {
+    text: compaction.text,
+    firstKeptMessageId: compaction.firstKeptMessageId,
+    ...(compaction.tokensBefore !== undefined
+      ? { tokensBefore: compaction.tokensBefore }
+      : undefined),
   });
-}
+  if (built === undefined) {
+    return {
+      ok: false,
+      refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
+      reason: SCHEMA_REFUSAL.MALFORMED,
+      path: [],
+    };
+  }
+  const read = yield* admitted(context, built);
+  if (!read.ok) return read;
+  yield* insertMessage(context, {
+    clientId: compaction.clientId,
+    turnId: compaction.turnId,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAskEndResult> {
   return Effect.map(
@@ -1663,66 +1661,62 @@ function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAs
   );
 }
 
-function recordUserMessage(
+const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(function* (
   context: WriterContext,
   write: UserMessageWrite,
-): Write<UserMessageWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, write.clientId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const read = yield* admitted(context, {
-      id: write.clientId,
-      role: MESSAGE_ROLE.USER,
-      metadata: write.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return read;
-    const turnId =
-      write.turnId ??
-      (write.turnOfAsk
-        ? yield* askTurnOf({
-            conversationId: context.target.conversationId,
-            clientId: write.clientId,
-          })
-        : undefined);
-    const { id, seq } = yield* insertMessage(context, {
-      clientId: write.clientId,
-      turnId,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
-    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, write.clientId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const read = yield* admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.USER,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return read;
+  const turnId =
+    write.turnId ??
+    (write.turnOfAsk
+      ? yield* askTurnOf({
+          conversationId: context.target.conversationId,
+          clientId: write.clientId,
+        })
+      : undefined);
+  const { id, seq } = yield* insertMessage(context, {
+    clientId: write.clientId,
+    turnId,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
+  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
-function recordSpokenReply(
+const recordSpokenReply = /* @__PURE__ */ Effect.fn("recordSpokenReply")(function* (
   context: WriterContext,
   write: SpokenReplyWrite,
-): Write<UserMessageWriteResult> {
-  return Effect.gen(function* () {
-    const standing = yield* messageByClientId(context, write.clientId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const read = yield* admitted(context, {
-      id: write.clientId,
-      role: MESSAGE_ROLE.ASSISTANT,
-      metadata: write.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return read;
-    const { id } = yield* insertMessage(context, {
-      clientId: write.clientId,
-      turnId: undefined,
-      message: read.message,
-      finishedAt: context.now(),
-    });
-    return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<UserMessageWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* messageByClientId(context, write.clientId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const read = yield* admitted(context, {
+    id: write.clientId,
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: write.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return read;
+  const { id } = yield* insertMessage(context, {
+    clientId: write.clientId,
+    turnId: undefined,
+    message: read.message,
+    finishedAt: context.now(),
+  });
+  return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write<SpokenLineResult> {
   return Effect.map(
@@ -1747,43 +1741,41 @@ function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write
   );
 }
 
-function adoptSpokenLine(
+const adoptSpokenLine = /* @__PURE__ */ Effect.fn("adoptSpokenLine")(function* (
   context: WriterContext,
   adoption: SpokenLineAdoption,
-): Write<SpokenLineAdoptionResult> {
-  return Effect.gen(function* () {
-    // A delegation told twice adopts once: the second telling finds its row standing.
-    const standing = yield* messageByClientId(context, adoption.delegationId);
-    if (Option.isSome(standing)) {
-      return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
-    }
-    const line = yield* messageByClientId(context, adoption.lineClientId);
-    if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const read = yield* admitted(context, {
-      id: adoption.delegationId,
-      role: MESSAGE_ROLE.USER,
-      metadata: adoption.metadata,
-      parts: [{ type: UI_PART_TYPE.TEXT, text: adoption.text, state: UI_PART_STATE.DONE }],
-    });
-    if (!read.ok) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const rekeyed = yield* rekeySpokenLine({
-      id: line.value.id,
-      delegationId: adoption.delegationId,
-      parts: read.message.parts,
-      metadata: adoption.metadata,
-    });
-    if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const turnId = yield* askTurnOf({
-      conversationId: context.target.conversationId,
-      clientId: adoption.delegationId,
-    });
-    if (turnId !== undefined) {
-      const seq = yield* takeLineIntoTurn(context, turnId, line.value.id);
-      yield* moveTurnWorkAfter(context, turnId, seq);
-    }
-    return { ok: true, id: line.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
+): Effect.fn.Return<SpokenLineAdoptionResult, WriteFailure, SqlClient.SqlClient> {
+  // A delegation told twice adopts once: the second telling finds its row standing.
+  const standing = yield* messageByClientId(context, adoption.delegationId);
+  if (Option.isSome(standing)) {
+    return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
+  }
+  const line = yield* messageByClientId(context, adoption.lineClientId);
+  if (Option.isNone(line)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const read = yield* admitted(context, {
+    id: adoption.delegationId,
+    role: MESSAGE_ROLE.USER,
+    metadata: adoption.metadata,
+    parts: [{ type: UI_PART_TYPE.TEXT, text: adoption.text, state: UI_PART_STATE.DONE }],
   });
-}
+  if (!read.ok) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const rekeyed = yield* rekeySpokenLine({
+    id: line.value.id,
+    delegationId: adoption.delegationId,
+    parts: read.message.parts,
+    metadata: adoption.metadata,
+  });
+  if (Option.isNone(rekeyed)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const turnId = yield* askTurnOf({
+    conversationId: context.target.conversationId,
+    clientId: adoption.delegationId,
+  });
+  if (turnId !== undefined) {
+    const seq = yield* takeLineIntoTurn(context, turnId, line.value.id);
+    yield* moveTurnWorkAfter(context, turnId, seq);
+  }
+  return { ok: true, id: line.value.id, effect: STORE_WRITE_EFFECT.WRITTEN };
+});
 
 /**
  * The turn an ask of the conversation has learned, by the ask's client id,
@@ -1795,17 +1787,17 @@ function adoptSpokenLine(
 function askTurnOf(key: {
   readonly conversationId: string;
   readonly clientId: string;
-}): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+}): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(findAskTurn(key), (found) =>
     Option.match(found, { onNone: () => undefined, onSome: (row) => row.turnId ?? undefined }),
   );
 }
 
-const findAskTurn = SqlSchema.findOne({
+const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: Schema.Struct({
-    turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
-  }),
+    turnId: Schema.NullOr(Schema.String),
+  }).pipe(Schema.encodeKeys({ turnId: "turn_id" })),
   execute: (key) =>
     statement(
       (sql) => sql`
@@ -1909,26 +1901,27 @@ function moveTurnWorkAfter(context: WriterContext, turnId: string, seq: number):
   });
 }
 
-function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesAttached> {
-  return Effect.gen(function* () {
-    const standing = yield* findUnattachedAskLines({
-      conversationId: context.target.conversationId,
-      turnId,
-    });
-    const attached: string[] = [];
-    for (const row of standing) {
-      const seq = yield* takeLineIntoTurn(context, turnId, row.id);
-      // The received message ordinarily precedes the first step, so nothing of
-      // the turn's stands yet; where one does — a received message eve told
-      // again after the step, an attach refused the first time — the work moves
-      // behind the line all the same, so the order holds by the store's own
-      // sequence on every path a line enters a turn by.
-      yield* moveTurnWorkAfter(context, turnId, seq);
-      attached.push(row.id);
-    }
-    return { ok: true, attached };
+const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
+  context: WriterContext,
+  turnId: string,
+): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
+  const standing = yield* findUnattachedAskLines({
+    conversationId: context.target.conversationId,
+    turnId,
   });
-}
+  const attached: string[] = [];
+  for (const row of standing) {
+    const seq = yield* takeLineIntoTurn(context, turnId, row.id);
+    // The received message ordinarily precedes the first step, so nothing of
+    // the turn's stands yet; where one does — a received message eve told
+    // again after the step, an attach refused the first time — the work moves
+    // behind the line all the same, so the order holds by the store's own
+    // sequence on every path a line enters a turn by.
+    yield* moveTurnWorkAfter(context, turnId, seq);
+    attached.push(row.id);
+  }
+  return { ok: true, attached };
+});
 
 /**
  * One event about a message. A claim is the one kind the schema makes
@@ -1940,44 +1933,42 @@ function attachAskLines(context: WriterContext, turnId: string): Write<AskLinesA
  * landed between the read and the lock, rather than re-opening a settled
  * offer by landing after it.
  */
-function recordEvent(
+const recordEvent = /* @__PURE__ */ Effect.fn("recordEvent")(function* (
   context: WriterContext,
   event: EventWrite | SpeechEventWrite,
-): Write<EventWriteResult> {
-  return Effect.gen(function* () {
-    const { conversationId, userId } = context.target;
-    const message = yield* findMessageInConversation({
-      messageId: event.messageId,
-      conversationId,
-    });
-    if (Option.isNone(message)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
-    const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
-    const excluding: ConversationEventKind[] = [
-      ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
-      ...("unless" in event ? event.unless : []),
-    ];
-    if (excluding.length > 0) {
-      const standing = yield* findEventKinds({ messageId: event.messageId, kinds: excluding });
-      if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
-        return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
-      }
-      if (standing.length > 0) return { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED };
-    }
-    const seq = yield* allocateEventSeq(context);
-    const inserted = yield* insertEvent({
-      userId,
-      conversationId,
-      seq,
-      messageId: event.messageId,
-      kind: event.kind,
-      deviceId: nullable(event.deviceId),
-      payload: nullable(event.payload),
-      createdAt: context.now(),
-    });
-    const written = yield* required(inserted, "the event insert answered no row");
-    return { ok: true, id: written.id, seq };
+): Effect.fn.Return<EventWriteResult, WriteFailure, SqlClient.SqlClient> {
+  const { conversationId, userId } = context.target;
+  const message = yield* findMessageInConversation({
+    messageId: event.messageId,
+    conversationId,
   });
-}
+  if (Option.isNone(message)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_MESSAGE };
+  const claiming = event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED;
+  const excluding: ConversationEventKind[] = [
+    ...(claiming ? [CONVERSATION_EVENT_KIND.SPEECH_CLAIMED] : []),
+    ...("unless" in event ? event.unless : []),
+  ];
+  if (excluding.length > 0) {
+    const standing = yield* findEventKinds({ messageId: event.messageId, kinds: excluding });
+    if (standing.some((row) => claiming && row.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)) {
+      return { ok: false, refusal: STORE_WRITE_REFUSAL.ALREADY_CLAIMED };
+    }
+    if (standing.length > 0) return { ok: false, refusal: STORE_WRITE_REFUSAL.SUPERSEDED };
+  }
+  const seq = yield* allocateEventSeq(context);
+  const inserted = yield* insertEvent({
+    userId,
+    conversationId,
+    seq,
+    messageId: event.messageId,
+    kind: event.kind,
+    deviceId: nullable(event.deviceId),
+    payload: nullable(event.payload),
+    createdAt: context.now(),
+  });
+  const written = yield* required(inserted, "the event insert answered no row");
+  return { ok: true, id: written.id, seq };
+});
 
 /**
  * Composes the writer over one catalog, which is where the catalog is held to

@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationTarget } from "../store/index.js";
 
 /**
@@ -14,12 +14,10 @@ import type { ConversationTarget } from "../store/index.js";
  */
 
 const StandingSessionSchema = Schema.Struct({
-  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("runtime_session_id"),
-  ),
-});
+  runtimeSessionId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ runtimeSessionId: "runtime_session_id" }));
 
-const findStandingSession = SqlSchema.findOne({
+const findStandingSession = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
   Result: StandingSessionSchema,
   execute: (target) =>
@@ -36,17 +34,17 @@ const findStandingSession = SqlSchema.findOne({
 /** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
 export function recordedRuntimeSession(
   target: ConversationTarget,
-): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(findStandingSession(target), (row) =>
     Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
   );
 }
 
 const OwnerRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
-const findConversationOwner = SqlSchema.findOne({
+const findConversationOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
   execute: (conversationId) =>
@@ -64,7 +62,7 @@ const findConversationOwner = SqlSchema.findOne({
 export function conversationOwnedBy(
   userId: string,
   conversationId: string,
-): Effect.Effect<boolean, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(
     findConversationOwner(conversationId),
     (found) => Option.isSome(found) && found.value.userId === userId,

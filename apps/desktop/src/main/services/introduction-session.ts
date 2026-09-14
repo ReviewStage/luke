@@ -44,7 +44,7 @@ export class IntroductionSession {
     /** The account's display name; the seed keeps its first word under its own bound. */
     name?: string | undefined;
   }): Effect.Effect<VoiceCreateLiveSessionResult | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.end();
       const opened = yield* this.#dependencies.source.create({
         sdpOffer: input.sdp,

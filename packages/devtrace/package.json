@@ -13,7 +13,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
     "@sidecar/brain": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/runtime": "workspace:*",

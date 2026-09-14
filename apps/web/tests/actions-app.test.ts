@@ -4,7 +4,7 @@ import { Effect } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import type { ActionsGroupHandlers, HostedActionHandler } from "../server/actions-app.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
-import { routeFromHttpApp } from "../server/route-effect.js";
+import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import {
   recordedGoldenNames,
@@ -139,9 +139,9 @@ test("the group answers what the named endpoint's handler answered", async () =>
   for (const exchange of EXCHANGES) {
     const stub = stubbedHandler(exchange.answer);
     const request = exchange.request();
-    const answered = await routeFromHttpApp(buildActionsApp(exchange.handlers(stub.handle))).fetch(
-      request,
-    );
+    const answered = await routeFromHttpRouter(
+      buildActionsApp(exchange.handlers(stub.handle)),
+    ).fetch(request);
     const carried = await recordedResponse(answered);
     const direct = await recordedResponse(exchange.answer());
 
@@ -155,7 +155,7 @@ test("the group answers what the named endpoint's handler answered", async () =>
 test("a HEAD request keeps the handler's status line and headers and carries no body", async () => {
   const stub = stubbedHandler(rejectedAnswer);
   const handlers = handlersWith("message", stub.handle);
-  const answered = await routeFromHttpApp(buildActionsApp(handlers)).fetch(
+  const answered = await routeFromHttpRouter(buildActionsApp(handlers)).fetch(
     new Request(`${ACTIONS_ORIGIN}/api/actions/message`, { method: "HEAD" }),
   );
   const carried = await recordedResponse(answered);
@@ -169,7 +169,7 @@ test("a HEAD request keeps the handler's status line and headers and carries no 
 test("a path the group declares no route for is refused without reaching any handler", async () => {
   const stub = stubbedHandler(acceptedAnswer);
   const handlers = handlersWith("message", stub.handle);
-  const answered = await routeFromHttpApp(buildActionsApp(handlers)).fetch(
+  const answered = await routeFromHttpRouter(buildActionsApp(handlers)).fetch(
     new Request(`${ACTIONS_ORIGIN}/api/not-the-actions-group`),
   );
   const carried = await recordedResponse(answered);

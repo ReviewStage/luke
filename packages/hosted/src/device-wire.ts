@@ -1,6 +1,6 @@
 import { isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -11,7 +11,10 @@ import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js"
  *
  * Every request and answer below is composed directly with Effect's
  * `Schema.Struct` and exported under its own name; a caller reads one
- * through `readEither` and shows it through `emitJsonSchema`.
+ * through `readEither` and shows it through `emitJsonSchema`. A request is
+ * read as declared, refusing a key it does not name; an answer is read with
+ * `{ excess: EXCESS_KEYS.DROP }`, which is where the tolerance for a key a
+ * newer service added now lives.
  */
 
 /** The platforms a device row may name. Shared on the wire with the Swift `DevicePlatform`. */
@@ -85,32 +88,16 @@ export function deviceTokenIsStorable(token: string): boolean {
 }
 
 /** A text trimmed and refused when left with nothing. */
-function trimmedText(maximumChars: number): EffectSchema.Schema<string, string> {
-  return EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.trim().length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-    EffectSchema.maxLength(maximumChars),
-  );
+function trimmedText(maximumChars: number): EffectSchema.Codec<string, string> {
+  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
 
 /** A push token as it travels: lowercased so one device never stands twice under two spellings. */
-const pushToken = EffectSchema.transform(
-  trimmedText(DEVICE_TOKEN_BOUNDS.MAX_LENGTH),
-  EffectSchema.String,
-  {
-    strict: true,
-    decode: (value) => value.toLowerCase(),
-    encode: (value) => value,
-  },
-).pipe(EffectSchema.filter(deviceTokenIsStorable));
+const pushToken = trimmedText(DEVICE_TOKEN_BOUNDS.MAX_LENGTH)
+  .pipe(EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.toLowerCase()))
+  .check(EffectSchema.makeFilter(deviceTokenIsStorable));
 
-const pushEnvironment = EffectSchema.Literal(...PUSH_ENVIRONMENT_LIST);
+const pushEnvironment = EffectSchema.Literals(PUSH_ENVIRONMENT_LIST);
 
 /**
  * Every id on this wire is a UUID: the installation id a client mints once
@@ -153,11 +140,11 @@ export interface DeviceRegisterRequest {
 }
 
 const deviceRegisterRequestCore = EffectSchema.Struct({
-  platform: EffectSchema.Literal(...DEVICE_PLATFORM_LIST),
+  platform: EffectSchema.Literals(DEVICE_PLATFORM_LIST),
   installationId: deviceId,
-  pushToken: EffectSchema.optionalWith(pushToken, { exact: true }),
-  pushEnvironment: EffectSchema.optionalWith(pushEnvironment, { exact: true }),
-}).pipe(EffectSchema.filter(pushFieldsPaired));
+  pushToken: EffectSchema.optionalKey(pushToken),
+  pushEnvironment: EffectSchema.optionalKey(pushEnvironment),
+}).check(EffectSchema.makeFilter(pushFieldsPaired));
 
 export const deviceRegisterRequestSchema = deviceRegisterRequestCore;
 
@@ -166,9 +153,7 @@ export interface DeviceRegisterAnswer {
   deviceId: string;
 }
 
-const deviceRegisterAnswerCore = EffectSchema.Struct({ deviceId }).annotations({
-  parseOptions: { onExcessProperty: "ignore" },
-});
+const deviceRegisterAnswerCore = EffectSchema.Struct({ deviceId });
 
 export const deviceRegisterAnswerSchema = deviceRegisterAnswerCore;
 
@@ -189,20 +174,16 @@ export interface DeviceHeartbeatRequest {
 
 const deviceHeartbeatRequestCore = EffectSchema.Struct({
   deviceId,
-  activeUntil: EffectSchema.optionalWith(
-    EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(0)),
-    {
-      exact: true,
-    },
+  activeUntil: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
   ),
-  pushToken: EffectSchema.optionalWith(
-    EffectSchema.Union(pushToken, EffectSchema.Literal(null)).annotations(
+  pushToken: EffectSchema.optionalKey(
+    EffectSchema.Union([pushToken, EffectSchema.Null]).annotate(
       wireRefusal(SCHEMA_REFUSAL.MALFORMED),
     ),
-    { exact: true },
   ),
-  pushEnvironment: EffectSchema.optionalWith(pushEnvironment, { exact: true }),
-}).pipe(EffectSchema.filter(pushFieldsPaired));
+  pushEnvironment: EffectSchema.optionalKey(pushEnvironment),
+}).check(EffectSchema.makeFilter(pushFieldsPaired));
 
 export const deviceHeartbeatRequestSchema = deviceHeartbeatRequestCore;
 
@@ -211,9 +192,7 @@ export interface DeviceHeartbeatAnswer {
   seen: boolean;
 }
 
-const deviceHeartbeatAnswerCore = EffectSchema.Struct({ seen: EffectSchema.Boolean }).annotations({
-  parseOptions: { onExcessProperty: "ignore" },
-});
+const deviceHeartbeatAnswerCore = EffectSchema.Struct({ seen: EffectSchema.Boolean });
 
 export const deviceHeartbeatAnswerSchema = deviceHeartbeatAnswerCore;
 
@@ -231,8 +210,6 @@ export interface DeviceForgetAnswer {
   deleted: boolean;
 }
 
-const deviceForgetAnswerCore = EffectSchema.Struct({ deleted: EffectSchema.Boolean }).annotations({
-  parseOptions: { onExcessProperty: "ignore" },
-});
+const deviceForgetAnswerCore = EffectSchema.Struct({ deleted: EffectSchema.Boolean });
 
 export const deviceForgetAnswerSchema = deviceForgetAnswerCore;

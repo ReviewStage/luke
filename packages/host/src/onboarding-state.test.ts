@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { type Context, Effect } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { test } from "vitest";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { introductionOwed } from "./introduction-flow.js";

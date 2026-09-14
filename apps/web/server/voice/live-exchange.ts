@@ -1,5 +1,3 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { SessionBeatFrame } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
@@ -12,7 +10,9 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
-import { Effect, Layer, Option, type ParseResult, Queue, Schema, type Scope } from "effect";
+import { Effect, Layer, Option, Queue, Schema, type Scope } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
@@ -157,12 +157,10 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
   Effect.flatMap(SqlClient.SqlClient, build);
 
 const VoiceSessionDeviceIdRowSchema = Schema.Struct({
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
-});
+  deviceId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ deviceId: "device_id" }));
 
-const findVoiceSessionDeviceId = SqlSchema.findOne({
+const findVoiceSessionDeviceId = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: VoiceSessionDeviceIdRowSchema,
   execute: (liveSessionId) =>
@@ -177,16 +175,16 @@ const findVoiceSessionDeviceId = SqlSchema.findOne({
  * the write landed.
  */
 function writeReport(
-  write: Effect.Effect<VoiceWriteResult, SqlError | ParseResult.ParseError>,
+  write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>,
 ): Effect.Effect<string | undefined> {
   return write.pipe(
     Effect.map((result) =>
       result.ok ? undefined : `The record refused a live event: ${result.refusal}`,
     ),
-    Effect.catchAll((error) =>
+    Effect.catch((error) =>
       Effect.succeed(`The record could not take a live event: ${error.message}`),
     ),
-    Effect.catchAllDefect((defect) =>
+    Effect.catchDefect((defect) =>
       Effect.succeed(
         `The record could not take a live event: ${defect instanceof Error ? defect.message : String(defect)}`,
       ),
@@ -194,131 +192,127 @@ function writeReport(
   );
 }
 
-export function hostedLiveExchange(
+export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
-): Effect.Effect<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { userId, liveSessionId, conversationId, context, writer, report } = options;
-    const store = hostedStore(context);
-    const target: VoiceTarget = {
-      userId,
-      liveSessionId,
-      conversation: { userId, conversationId },
-    };
-    const voice = voiceWriter({ store: writer });
-    const record = yield* hostedLiveRecord({ writer: voice, target });
-    yield* Effect.addFinalizer(() => record.drained());
-    /**
-     * Every event the record was handed, in arrival order, as what it had to
-     * report of it. The observation itself stays where the event arrives, so a
-     * delta's place in the record's own sequence is still its arrival and the
-     * ask written under a delegation still follows every delta ahead of it;
-     * what this fiber carries is the reporting, on the socket's own scope,
-     * rather than a promise left to settle wherever the session has gone.
-     */
-    const written = yield* Queue.unbounded<Effect.Effect<string | undefined>>();
-    yield* Effect.forkScoped(
-      Effect.forever(
-        Effect.flatMap(Effect.flatten(Queue.take(written)), (message) =>
-          message === undefined ? Effect.void : Effect.sync(() => report(message)),
-        ),
+): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
+  const { userId, liveSessionId, conversationId, context, writer, report } = options;
+  const store = hostedStore(context);
+  const target: VoiceTarget = {
+    userId,
+    liveSessionId,
+    conversation: { userId, conversationId },
+  };
+  const voice = voiceWriter({ store: writer });
+  const record = yield* hostedLiveRecord({ writer: voice, target });
+  yield* Effect.addFinalizer(() => record.drained());
+  /**
+   * Every event the record was handed, in arrival order, as what it had to
+   * report of it. The observation itself stays where the event arrives, so a
+   * delta's place in the record's own sequence is still its arrival and the
+   * ask written under a delegation still follows every delta ahead of it;
+   * what this fiber carries is the reporting, on the socket's own scope,
+   * rather than a promise left to settle wherever the session has gone.
+   */
+  const written = yield* Queue.unbounded<Effect.Effect<string | undefined>>();
+  yield* Effect.forkScoped(
+    Effect.forever(
+      Effect.flatMap(Effect.flatten(Queue.take(written)), (message) =>
+        message === undefined ? Effect.void : Effect.sync(() => report(message)),
       ),
-    );
-    const brain = yield* hostedLiveBrain({
-      userId,
-      conversationId,
-      asks: {
-        asks: askRecord(),
-        eve: options.eve,
-        now: options.now,
-      },
-      store,
-      report,
-    });
-
-    /** The device the session's row names now, read at each look so a row completed after creation is seen. */
-    const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
-      Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullable(found.deviceId))),
-    );
-
-    const briefings = yield* hostedBriefings({
-      userId,
-      speech: { writer },
-      offers: store.speech,
-      tools: CATALOG_TOOL_SET,
-      deviceId,
-      deliver: (delivery) => service.deliverBriefing(delivery),
+    ),
+  );
+  const brain = yield* hostedLiveBrain({
+    userId,
+    conversationId,
+    asks: {
+      asks: askRecord(),
+      eve: options.eve,
       now: options.now,
-      report,
-    });
-
-    /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
-    const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
-      return () =>
-        Effect.map(attach(), (sideband) =>
-          observedSideband(sideband, (event) => {
-            Queue.unsafeOffer(written, writeReport(record.observe(event)));
-          }),
-        );
-    };
-
-    const source = (): LiveSessionSource | undefined => {
-      const inner = options.source?.();
-      if (!inner) return undefined;
-      return {
-        ...inner,
-        create: (input) =>
-          Effect.map(inner.create(input), (opened) => {
-            if (!opened) return undefined;
-            const observed: LiveSessionOpened = {
-              ...opened,
-              attach: observing(() => opened.attach()),
-            };
-            return observed;
-          }),
-      };
-    };
-
-    // The brain and the record are built beside the service here rather than
-    // by a caller, so the layers that name them are provided on the spot.
-    const service = yield* Effect.provide(
-      LiveSessionService.make<HostedBriefingDelivery>({
-        source,
-        conversationEntries: options.conversationEntries,
-        quietNow: () => Effect.succeed(false),
-        releaseHeldBriefings: () => Effect.void,
-        emit: options.emit,
-        createId: options.createId,
-        report,
-        ...(options.trace ? { trace: options.trace } : undefined),
-        onBriefingAppend: (delivery, eventId) =>
-          voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
-        ...(options.onProactiveSpoken
-          ? { onProactiveSpoken: options.onProactiveSpoken }
-          : undefined),
-      }),
-      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
-    );
-
-    yield* Effect.addFinalizer(() => service.stop());
-
-    return {
-      service,
-      brain,
-      briefings,
-      store,
-      adopt: (opened) =>
-        service.adoptSession({
-          sessionId: opened.sessionId,
-          attach: observing(() => opened.attach()),
-          started: opened.started,
-        }),
-      speakBeat: (beat) => {
-        service.speakBeat(beatTurn(beat, options.now()));
-      },
-    };
+    },
+    store,
+    report,
   });
-}
+
+  /** The device the session's row names now, read at each look so a row completed after creation is seen. */
+  const deviceId = Effect.map(findVoiceSessionDeviceId(liveSessionId), (row) =>
+    Option.getOrUndefined(Option.flatMap(row, (found) => Option.fromNullishOr(found.deviceId))),
+  );
+
+  const briefings = yield* hostedBriefings({
+    userId,
+    speech: { writer },
+    offers: store.speech,
+    tools: CATALOG_TOOL_SET,
+    deviceId,
+    deliver: (delivery) => service.deliverBriefing(delivery),
+    now: options.now,
+    report,
+  });
+
+  /** The sideband with the record listening ahead of the service, on every session, created or adopted. */
+  const observing = (attach: AdoptableSession["attach"]): AdoptableSession["attach"] => {
+    return () =>
+      Effect.map(attach(), (sideband) =>
+        observedSideband(sideband, (event) => {
+          Queue.offerUnsafe(written, writeReport(record.observe(event)));
+        }),
+      );
+  };
+
+  const source = (): LiveSessionSource | undefined => {
+    const inner = options.source?.();
+    if (!inner) return undefined;
+    return {
+      ...inner,
+      create: (input) =>
+        Effect.map(inner.create(input), (opened) => {
+          if (!opened) return undefined;
+          const observed: LiveSessionOpened = {
+            ...opened,
+            attach: observing(() => opened.attach()),
+          };
+          return observed;
+        }),
+    };
+  };
+
+  // The brain and the record are built beside the service here rather than
+  // by a caller, so the layers that name them are provided on the spot.
+  const service = yield* Effect.provide(
+    LiveSessionService.make<HostedBriefingDelivery>({
+      source,
+      conversationEntries: options.conversationEntries,
+      quietNow: () => Effect.succeed(false),
+      releaseHeldBriefings: () => Effect.void,
+      emit: options.emit,
+      createId: options.createId,
+      report,
+      ...(options.trace ? { trace: options.trace } : undefined),
+      onBriefingAppend: (delivery, eventId) =>
+        voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
+      ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
+    }),
+    Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
+  );
+
+  yield* Effect.addFinalizer(() => service.stop());
+
+  return {
+    service,
+    brain,
+    briefings,
+    store,
+    adopt: (opened) =>
+      service.adoptSession({
+        sessionId: opened.sessionId,
+        attach: observing(() => opened.attach()),
+        started: opened.started,
+      }),
+    speakBeat: (beat) => {
+      service.speakBeat(beatTurn(beat, options.now()));
+    },
+  };
+});
 
 /** The turn a beat frame asks for: the frame's own values, and the instant it was read as its decision. */
 function beatTurn(beat: SessionBeatFrame, decidedAt: number): BeatTurn {

@@ -8,9 +8,9 @@
  * this repository's own default prefix, the same one the vitest helper uses.
  */
 
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { Effect, type Scope } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 
 export const temporaryDirectoryScoped = (
   prefix = "luke-",

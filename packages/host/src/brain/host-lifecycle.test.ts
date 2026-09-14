@@ -24,13 +24,13 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
 }
 
-it.scoped(
+it.effect(
   "removing the capability under five outstanding runs leaves every run interrupted and marked, with no line written",
   () =>
     Effect.gen(function* () {
@@ -77,7 +77,7 @@ it.scoped(
           ],
         }),
       );
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
       assert.equal(
         c.repository.state?.requests.every((r) => r.status === BRAIN_REQUEST_STATUS.INTERRUPTED),
         true,
@@ -85,7 +85,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a successor replacing the agent under outstanding runs inherits every end marked, and owns the store alone",
   () =>
     Effect.gen(function* () {
@@ -146,7 +146,7 @@ it.scoped(
             BRAIN_REQUEST_STATUS.SUCCEEDED
           )
             return;
-          for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+          for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
         }
         assert.fail("the successor's run never succeeded");
       });
@@ -169,7 +169,7 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a reset under outstanding runs discards them without publishing, and the successor starts clean",
   () =>
     Effect.gen(function* () {

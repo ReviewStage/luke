@@ -56,7 +56,7 @@ import {
   text as wireText,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Effect, Either, type Schema } from "effect";
+import { Data, Effect, Result, type Schema } from "effect";
 import {
   ACTION_KIND,
   type ActionKind,
@@ -233,7 +233,7 @@ export class AdmitRefusal extends Data.TaggedError("AdmitRefusal")<{
 
 /** The guard's revocation as an effect: it answers nothing, the moment the signal fires. */
 function revocation(signal: AbortSignal): Effect.Effect<undefined> {
-  return Effect.async<undefined>((resume) => {
+  return Effect.callback<undefined>((resume) => {
     if (signal.aborted) {
       resume(Effect.succeed(undefined));
       return;
@@ -311,8 +311,11 @@ function textArgument(fields: WireRecord, key: string): string | undefined {
 }
 
 /** A field schema read the way the old `.parse()` did: the value, or nothing it refused. */
-function wireParse<A, I>(schema: Schema.Schema<A, I>, value: UnparsedWireValue): A | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+function wireParse<Value, Encoded>(
+  schema: Schema.Codec<Value, Encoded>,
+  value: UnparsedWireValue,
+): Value | undefined {
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 function sessionFrom(
@@ -855,13 +858,13 @@ const admitPanel: Admitter<typeof ACTION_KIND.PANEL> = (fields, _context, reads)
     const query = textArgument(fields, "query");
     if (query !== undefined && sessions.length < 2) return refuse(ACTION_REFUSAL.NO_SEARCH);
     const asked = readEither(PANEL_FILTERS)(fields.filters);
-    if (Either.isLeft(asked)) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
+    if (Result.isFailure(asked)) return refuse(ACTION_REFUSAL.FILTERS_SHAPE);
     const action: { kind: typeof ACTION_KIND.PANEL } & ActionPayloads[typeof ACTION_KIND.PANEL] = {
       kind: ACTION_KIND.PANEL,
       tab,
     };
-    if (asked.right !== undefined) {
-      const outcome = admittedFilters(asked.right, sessions);
+    if (asked.success !== undefined) {
+      const outcome = admittedFilters(asked.success, sessions);
       if ("status" in outcome) return outcome;
       action.filters = outcome.filters;
     }

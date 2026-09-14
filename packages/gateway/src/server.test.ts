@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { Headers } from "@effect/platform";
 import { it } from "@effect/vitest";
 import {
   isRecord,
@@ -11,7 +10,9 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Chunk, Context, Deferred, Effect, Either, Fiber, Layer, Option, Stream } from "effect";
+import { Context, Deferred, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
+import { Headers } from "effect/unstable/http";
+import { Rpc, RpcMessage } from "effect/unstable/rpc";
 import { test } from "vitest";
 import type { GatewayMethodContext, GatewayMethodTable } from "./methods.js";
 import {
@@ -24,6 +25,7 @@ import {
   type GatewayClientIdentity,
   type GatewayErrorCode,
   type GatewayMethod,
+  GatewayRefusalSchema,
   type GatewayRequest,
   gatewayRequestToWire,
   gatewayResponseFromWire,
@@ -166,7 +168,7 @@ function serverLayer(harness: Harness = {}) {
     layerGatewayClients,
     layerGatewayAdmissions,
   );
-  const serialization = Layer.unwrapEffect(
+  const serialization = Layer.unwrap(
     Effect.map(GatewayEventLog, (log) =>
       layerGatewayEnvelopeSerialization({ revision: log.revision }),
     ),
@@ -213,9 +215,11 @@ test("the server's group is the protocol's group under the three middlewares, le
       Option.some(isMutatingGatewayMethod(rpc._tag)),
     );
   }
-  assert.equal(GatewayLedger.wrap, true);
-  assert.equal(GatewayRevisionCheck.wrap, false);
-  assert.equal(GatewayAdmission.wrap, false);
+  // Every middleware wraps the handler's own effect now, so what each one is
+  // is read from the refusal family it may answer with rather than a flag.
+  for (const middleware of [GatewayLedger, GatewayRevisionCheck, GatewayAdmission]) {
+    assert.equal(middleware.error, GatewayRefusalSchema);
+  }
 });
 
 it.effect(
@@ -391,7 +395,7 @@ it.effect(
             [GATEWAY_METHOD.RUN_SUBMIT]: () =>
               Effect.gen(function* () {
                 runs.push("submit");
-                yield* Effect.yieldNow();
+                yield* Effect.yieldNow;
                 return { outcome: "accepted" };
               }),
           },
@@ -491,7 +495,7 @@ it.effect("the log's stream delivers every emitted event in sequence", () =>
     yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
     yield* log.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
     yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] }, { runId: "run-1" });
-    const taken = Chunk.toReadonlyArray(yield* Stream.runCollect(Stream.take(events, 3)));
+    const taken = yield* Stream.runCollect(Stream.take(events, 3));
     assert.deepEqual(
       taken.map((event) => [event.sequence, event.kind, event.runId]),
       [
@@ -511,29 +515,27 @@ it.effect(
       const rpc = GatewayRpcs.requests.get(GATEWAY_METHOD.RUN_SUBMIT);
       assert.ok(rpc !== undefined);
       const asked = {
-        clientId: 1,
+        client: new Rpc.ServerClient(1),
+        requestId: RpcMessage.RequestId(1),
         rpc,
         payload: { submissionId: "s" },
         headers: Headers.fromInput({ [GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY]: "k" }),
       };
       const started = yield* Deferred.make<void>();
-      const first = yield* Effect.fork(
-        ledger({
-          ...asked,
-          next: Effect.zipRight(Deferred.succeed(started, undefined), Effect.never),
-        }),
+      const first = yield* Effect.forkChild(
+        ledger(Effect.andThen(Deferred.succeed(started, undefined), Effect.never), asked),
       );
       yield* Deferred.await(started);
       yield* Fiber.interrupt(first);
-      const retried = yield* Effect.either(
-        ledger({ ...asked, next: Effect.fail(new NotFoundRefusal({ message: "ran" })) }),
+      const retried = yield* Effect.result(
+        ledger(Effect.fail(new NotFoundRefusal({ message: "ran" })), asked),
       );
-      assert.ok(Either.isLeft(retried));
-      assert.ok(retried.left instanceof NotFoundRefusal);
+      assert.ok(Result.isFailure(retried));
+      assert.ok(retried.failure instanceof NotFoundRefusal);
       // The refusal is an answer, and the same key finds it again without running anything.
-      const again = yield* Effect.either(ledger({ ...asked, next: Effect.never }));
-      assert.ok(Either.isLeft(again));
-      assert.equal(again.left, retried.left);
+      const again = yield* Effect.result(ledger(Effect.never, asked));
+      assert.ok(Result.isFailure(again));
+      assert.equal(again.failure, retried.failure);
     }).pipe(
       Effect.provide(
         layerGatewayLedger({

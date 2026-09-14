@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -10,8 +10,8 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * contents are sealed whole and rewritten whole, the way the desktop's
  * workspace files land through a rename.
  *
- * The first module here on `@effect/sql`: every read and write below is an
- * `Effect<A, SqlError | ParseError, SqlClient>`, the statement is the client's
+ * The first module here on `effect/unstable/sql`: every read and write below is an
+ * `Effect<A, SqlError | SchemaError, SqlClient>`, the statement is the client's
  * own tagged template, and the row a statement answers is decoded by a
  * `Schema` rather than trusted. The rule about a path is that schema too, so
  * one declaration both refuses the path and names the refusal.
@@ -22,7 +22,7 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * schema refused, which is what puts the path rule in the same channel as the
  * database's own answer.
  */
-type WorkspaceFileFailure = SqlError | ParseResult.ParseError;
+type WorkspaceFileFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -35,16 +35,16 @@ const PATH_SEPARATOR = "/";
  * workspace. Every statement below takes its path through this schema, so the
  * refusal is the same wherever a path arrives and no query is prepared for one.
  */
-const WorkspacePathSchema = Schema.String.pipe(
-  Schema.filter(
-    (path) =>
-      path.length > 0 &&
-      !path.startsWith(PATH_SEPARATOR) &&
-      !path.includes("\\") &&
-      path
-        .split(PATH_SEPARATOR)
-        .every((segment) => segment.length > 0 && segment !== "." && segment !== ".."),
-    { message: () => "a workspace path is relative and names no parent" },
+const WorkspacePathSchema = Schema.String.check(
+  Schema.makeFilter((path) =>
+    path.length > 0 &&
+    !path.startsWith(PATH_SEPARATOR) &&
+    !path.includes("\\") &&
+    path
+      .split(PATH_SEPARATOR)
+      .every((segment) => segment.length > 0 && segment !== "." && segment !== "..")
+      ? undefined
+      : "a workspace path is relative and names no parent",
   ),
 );
 
@@ -63,16 +63,22 @@ const FileWriteSchema = Schema.Struct({
 /** The row as `workspace_file` holds it, contents still sealed. */
 const SealedWorkspaceFileSchema = Schema.Struct({
   path: Schema.String,
-  sealedContent: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_content")),
-  createdAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("created_at")),
-  updatedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("updated_at")),
-});
+  sealedContent: Schema.String,
+  createdAt: EpochMillisColumnSchema,
+  updatedAt: EpochMillisColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    sealedContent: "sealed_content",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+  }),
+);
 
 /** What a listing row carries: the path and when it last changed, never a word of the file. */
 const WorkspaceFileListingSchema = Schema.Struct({
   path: Schema.String,
-  updatedAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("updated_at")),
-});
+  updatedAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ updatedAt: "updated_at" }));
 
 /** The path a write landed on, which is how a conditional write answers whether it did. */
 const WrittenPathSchema = Schema.Struct({ path: Schema.String });
@@ -86,7 +92,7 @@ export interface WorkspaceFileRecord {
   readonly updatedAt: number;
 }
 
-const findFile = SqlSchema.findOne({
+const findFile = SqlSchema.findOneOption({
   Request: FileKeySchema,
   Result: SealedWorkspaceFileSchema,
   execute: (key) =>

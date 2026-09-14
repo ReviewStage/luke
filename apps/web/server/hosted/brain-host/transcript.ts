@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_RESULT_STATUS,
   type BrainTranscriptDelta,
@@ -51,7 +51,7 @@ export interface HostedTranscriptReads {
   /** What the session gained since the cursor kept for it; nothing for a session no observation turn reads. Keeps no bookmark. */
   since(
     identity: SessionIdentity,
-  ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | ParseResult.ParseError>;
+  ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | Schema.SchemaError>;
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -66,7 +66,7 @@ const CursorKeySchema = Schema.Struct({
 
 const CursorRowSchema = Schema.Struct({ cursor: Schema.String });
 
-const findCursor = SqlSchema.findOne({
+const findCursor = SqlSchema.findOneOption({
   Request: CursorKeySchema,
   Result: CursorRowSchema,
   execute: (key) =>
@@ -139,7 +139,7 @@ export function keepTranscriptCursor(
   cursor: string,
   from: string | undefined,
   now: Date,
-): Effect.Effect<void, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return keepCursorRow({
     userId,
     providerId: identity.providerId,
@@ -156,7 +156,7 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
 
   const cursorFor = (
     identity: SessionIdentity,
-  ): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError> =>
+  ): Effect.Effect<string | undefined, SqlError | Schema.SchemaError> =>
     onClient(
       Effect.map(
         findCursor({

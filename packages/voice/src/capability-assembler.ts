@@ -1,5 +1,3 @@
-import type { PlatformError } from "@effect/platform/Error";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { HostedModelAdapter, RESPONSES_OPERATION } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
@@ -13,6 +11,8 @@ import {
   type VoiceSource,
 } from "@sidecar/settings";
 import { Effect, type Layer } from "effect";
+import type { PlatformError } from "effect/PlatformError";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   HostedLiveSessionSource,
   type LiveSessionSource,
@@ -94,7 +94,7 @@ export interface VoiceCapabilityAssemblerOptions {
   deviceId?: () => string | undefined;
   /** The `HttpClient` the brain's own request effects run over; the platform's own when absent. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The runtime a brain model's own request effects are run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  /** What a brain model's own request effects are run on; `Context.empty()` for a caller that gave none. */
   execution?: ExecutionRuntime;
   report?: (message: string) => void;
   /**
@@ -199,7 +199,7 @@ export class VoiceCapabilityAssembler {
    * after its last, and one that has been overtaken installs nothing.
    */
   apply(): Effect.Effect<VoiceCapabilityApplication, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const application = ++this.#applications;
       const isCurrent = () => application === this.#applications;
       const credentialsUsable = this.#options.credentialsUsable();

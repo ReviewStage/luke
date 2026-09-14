@@ -314,7 +314,7 @@ describe("flushBrainState", () => {
       void store.write(lease, state.generationId, (mutable) => mutable);
       assert.equal(repository.saves, 0);
 
-      const fiber = yield* Effect.fork(flushBrainState(store));
+      const fiber = yield* Effect.forkChild(flushBrainState(store));
       release(true);
       yield* Fiber.join(fiber);
 

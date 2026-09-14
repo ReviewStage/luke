@@ -133,7 +133,7 @@ interface Listening {
  * holds.
  */
 const listen = (
-  service: Effect.Effect.Success<ReturnType<typeof fakeHost>>["service"],
+  service: Effect.Success<ReturnType<typeof fakeHost>>["service"],
 ): Effect.Effect<Listening, never, Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Layer.build(

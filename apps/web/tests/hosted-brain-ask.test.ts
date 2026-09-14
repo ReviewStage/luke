@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   ASK_ORIGIN,
   HOSTED_API_ERROR,
@@ -9,6 +8,7 @@ import {
   TURN_WAIT_QUERY,
 } from "@sidecar/hosted";
 import {
+  EXCESS_KEYS,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnStatus,
@@ -16,7 +16,8 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Runtime, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
@@ -122,8 +123,8 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       Effect.sync(() => latestSession(userId, conversationId)),
     dispatchOnce: (target, id, dispatch) =>
       // One dispatch at a time per conversation, as the conversation lock serialises them on the real record.
-      Effect.flatMap(Effect.runtime<SqlClient.SqlClient>(), (runtime) => {
-        const run = Runtime.runPromise(runtime);
+      Effect.flatMap(Effect.context<SqlClient.SqlClient>(), (context) => {
+        const run = Effect.runPromiseWith(context);
         const turn = (inFlight.get(target.conversationId) ?? Promise.resolve()).then(async () => {
           if (!(await run(conversationOwnedBy(target.userId, target.conversationId)))) {
             return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
@@ -167,8 +168,16 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
 
 type EveCall =
   | { readonly kind: "open"; readonly message: EveMessage }
-  | { readonly kind: "send"; readonly sessionId: string; readonly message: EveMessage }
-  | { readonly kind: "cancel"; readonly sessionId: string; readonly eveTurnId: string | undefined };
+  | {
+      readonly kind: "send";
+      readonly sessionId: string;
+      readonly message: EveMessage;
+    }
+  | {
+      readonly kind: "cancel";
+      readonly sessionId: string;
+      readonly eveTurnId: string | undefined;
+    };
 
 interface FakeEve extends EveSessions {
   readonly calls: EveCall[];
@@ -275,7 +284,10 @@ function bearer(userId: string): string {
 function askRequest(userId: string, body: WireBoundaryInput): Request {
   return new Request(`${ORIGIN}/api/brain/ask`, {
     method: "POST",
-    headers: { authorization: bearer(userId), "content-type": "application/json" },
+    headers: {
+      authorization: bearer(userId),
+      "content-type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 }
@@ -297,7 +309,10 @@ function turnRequest(
   const url = new URL(`${ORIGIN}/api/brain/turns/turn.ts`);
   if (id !== undefined) url.searchParams.set("id", id);
   for (const [name, value] of Object.entries(query)) url.searchParams.set(name, value);
-  return new Request(url, { method, headers: { authorization: bearer(userId) } });
+  return new Request(url, {
+    method,
+    headers: { authorization: bearer(userId) },
+  });
 }
 
 async function body(response: Response): Promise<UnparsedWireValue> {
@@ -306,10 +321,12 @@ async function body(response: Response): Promise<UnparsedWireValue> {
 }
 
 function parse<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  // Every answer read here belongs to a family declared tolerant, so the read
+  // drops a key a newer service may have added.
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 async function errorOf(response: Response): Promise<[number, string]> {
@@ -340,7 +357,7 @@ async function conversation(
         )
         returning id
       `;
-      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+      return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;
@@ -374,7 +391,7 @@ async function turnRow(
         )
         returning id
       `;
-      return yield* Schema.decodeUnknown(IdRowSchema)(rows[0]);
+      return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
   return row.id;
@@ -414,7 +431,11 @@ function settleTurn(turnId: string, settledAt: Date) {
   );
 }
 
-const ASK = { question: "what changed?", origin: ASK_ORIGIN.TYPED, clientId: CLIENT_ID };
+const ASK = {
+  question: "what changed?",
+  origin: ASK_ORIGIN.TYPED,
+  clientId: CLIENT_ID,
+};
 
 test("eve's origin is the environment's where it names one and the caller's own otherwise, a blank name counting as none", async () => {
   const before = process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
@@ -551,7 +572,11 @@ test("the first ask opens the conversation's session under the caller's own bear
   const second = await database.run(
     handleBrainAsk(
       h.options(
-        askRequest(userId, { ...ASK, clientId: randomUUID(), origin: ASK_ORIGIN.SPOKEN }),
+        askRequest(userId, {
+          ...ASK,
+          clientId: randomUUID(),
+          origin: ASK_ORIGIN.SPOKEN,
+        }),
         userId,
       ),
     ),
@@ -592,7 +617,9 @@ test("a follow-up goes to the newest session the record knows of, by eve's own s
   const h = harness();
   const older = mintSession();
   const newer = mintSession();
-  const conversationId = await conversation(userId, { runtimeSessionId: older });
+  const conversationId = await conversation(userId, {
+    runtimeSessionId: older,
+  });
   const first = parse(
     hostedBrainAskAnswerSchema,
     await body(
@@ -620,7 +647,9 @@ test("a session eve has retired is opened again for the ask that found it so", a
   const userId = await database.createUser();
   const h = harness();
   const stale = mintSession();
-  const conversationId = await conversation(userId, { runtimeSessionId: stale });
+  const conversationId = await conversation(userId, {
+    runtimeSessionId: stale,
+  });
   h.eve.retired.add(stale);
   const response = await database.run(
     handleBrainAsk(h.options(askRequest(userId, { ...ASK, conversationId }), userId)),
@@ -735,7 +764,9 @@ test("the in-process standing read answers what the turn route answers: for a qu
   const other = await database.createUser();
   const h = harness();
   const conversationId = await conversation(owner);
-  const turnId = await turnRow(owner, conversationId, { cancelRequestedAt: new Date(NOW + 1) });
+  const turnId = await turnRow(owner, conversationId, {
+    cancelRequestedAt: new Date(NOW + 1),
+  });
   const asked = parse(
     hostedBrainAskAnswerSchema,
     await body(
@@ -778,7 +809,12 @@ test("the in-process ask answers what the ask route answers: the same record aga
   const other = await database.createUser();
   const h = harness();
   const conversationId = await conversation(owner);
-  const seams = { run: database.run, asks: h.asks, eve: h.eve, now: () => h.clock };
+  const seams = {
+    run: database.run,
+    asks: h.asks,
+    eve: h.eve,
+    now: () => h.clock,
+  };
   const routed = parse(
     hostedBrainAskAnswerSchema,
     await body(
@@ -823,7 +859,9 @@ test("a Stop on a running turn is eve's cancel of that turn in the conversation'
   const userId = await database.createUser();
   const h = harness();
   const sessionId = mintSession();
-  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
+  const conversationId = await conversation(userId, {
+    runtimeSessionId: sessionId,
+  });
   const turnId = await turnRow(userId, conversationId, { eveTurnId: "turn_1" });
   h.eve.activeTurn = "turn_1";
   const cancelled = await database.run(
@@ -865,7 +903,9 @@ test("the in-process Stop answers what the cancel route answers: for a running t
   const owner = await database.createUser();
   const other = await database.createUser();
   const h = harness();
-  const recorded = await conversation(owner, { runtimeSessionId: mintSession() });
+  const recorded = await conversation(owner, {
+    runtimeSessionId: mintSession(),
+  });
   const running = await turnRow(owner, recorded, { eveTurnId: "turn_1" });
   const unrecordedOwner = await database.createUser();
   const unrecorded = await conversation(unrecordedOwner);
@@ -899,7 +939,10 @@ test("the in-process Stop answers what the cancel route answers: for a running t
       ),
     );
     assert.ok(viaRoute);
-    assert.deepEqual(await database.run(stopAsk(seams, owner, id)), { ok: true, answer: viaRoute });
+    assert.deepEqual(await database.run(stopAsk(seams, owner, id)), {
+      ok: true,
+      answer: viaRoute,
+    });
     assert.deepEqual(
       await errorOf(
         await database.run(handleBrainTurnCancel(h.options(cancelRequest(other, id), other))),
@@ -931,8 +974,12 @@ test("a Stop cancels only the turn it was aimed at: the intended turn ending whi
   const userId = await database.createUser();
   const h = harness();
   const sessionId = mintSession();
-  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
-  const intended = await turnRow(userId, conversationId, { eveTurnId: "turn_1" });
+  const conversationId = await conversation(userId, {
+    runtimeSessionId: sessionId,
+  });
+  const intended = await turnRow(userId, conversationId, {
+    eveTurnId: "turn_1",
+  });
   h.eve.activeTurn = "turn_1";
   let next: string | undefined;
   h.eve.beforeCancel = async () => {
@@ -967,7 +1014,9 @@ test("a running row that names no eve turn takes the stamp alone: eve is asked n
   const userId = await database.createUser();
   const h = harness();
   const sessionId = mintSession();
-  const conversationId = await conversation(userId, { runtimeSessionId: sessionId });
+  const conversationId = await conversation(userId, {
+    runtimeSessionId: sessionId,
+  });
   const unnamed = await turnRow(userId, conversationId);
   h.eve.activeTurn = "turn_5";
   const seams = {
@@ -1008,7 +1057,10 @@ test("the writer stamps a Stop on a turn the conversation holds once, and refuse
   assert.equal(row?.cancelRequestedAt?.getTime(), NOW);
   assert.deepEqual(
     await database.run(
-      writer.requestTurnCancel(target, { turnId: randomUUID(), at: new Date(NOW) }),
+      writer.requestTurnCancel(target, {
+        turnId: randomUUID(),
+        at: new Date(NOW),
+      }),
     ),
     {
       ok: false,

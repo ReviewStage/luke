@@ -1,6 +1,6 @@
 import { hostedAdminSeams } from "../../admin/admin-route.js";
 import { adminApp } from "../../admin-app.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
  * The admin dashboard's read. The gate and the read live behind the group in
@@ -9,4 +9,4 @@ import { routeFromHttpApp } from "../../route-effect.js";
  * request, and no secret value crosses into the answer: only whether each key
  * is present.
  */
-export default routeFromHttpApp(adminApp(hostedAdminSeams()));
+export default routeFromHttpRouter(adminApp(hostedAdminSeams()));

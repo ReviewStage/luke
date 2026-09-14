@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { HttpApp } from "@effect/platform";
 import { PROVIDER_ID } from "@sidecar/session";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
+import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
 import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core.js";
@@ -116,12 +116,13 @@ function groupSeams(state: Backing): AccountAppSeams {
 
 /** The group's answer, with the deployment's environment handed in directly rather than read from `process.env`. */
 function groupAnswer(state: Backing, request: Request): Promise<Response> {
-  const handler = HttpApp.toWebHandler(
+  const { handler } = HttpRouter.toWebHandler(
     accountApp(groupSeams(state)).pipe(
-      Effect.provideService(HostedEnvironment, ENVIRONMENT),
-      Effect.provide(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
-      Effect.provide(noDatabase),
+      HttpRouter.provideRequest(Layer.succeed(HostedEnvironment, ENVIRONMENT)),
+      HttpRouter.provideRequest(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
+      HttpRouter.provideRequest(noDatabase),
     ),
+    { disableLogger: true },
   );
   return handler(request);
 }
@@ -168,7 +169,7 @@ const WRITE_BODY = { preferences: WRITTEN_PREFERENCES };
 const TRANSPORT_HEADER = { CONTENT_LENGTH: "content-length" } as const;
 
 /**
- * `HttpServerResponse.unsafeJson` states a body's length on the response the
+ * `HttpServerResponse.jsonUnsafe` states a body's length on the response the
  * platform hands back, which the wire transport would otherwise state for
  * itself; the value is checked against the body it frames before it is
  * dropped, so a byte the platform computed wrong would still fail.

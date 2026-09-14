@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Exit } from "effect";
+import { Deferred, Effect, Exit, Fiber } from "effect";
 import { singleFlightEffect } from "./single-flight.js";
 
 it.effect(
@@ -16,18 +16,18 @@ it.effect(
         }),
       );
 
-      const first = yield* Effect.fork(refresh());
-      const second = yield* Effect.fork(refresh());
+      const first = yield* Effect.forkChild(refresh());
+      const second = yield* Effect.forkChild(refresh());
       assert.equal(runs, 1);
 
       yield* Deferred.succeed(release, undefined);
-      yield* Effect.all([first, second].map((fiber) => fiber.await));
+      yield* Effect.all([first, second].map((fiber) => Fiber.await(fiber)));
 
       // A finished flight is over: the next ask holds the newly rotated token
       // and may start a refresh of its own.
-      const third = yield* Effect.fork(refresh());
+      const third = yield* Effect.forkChild(refresh());
       assert.equal(runs, 2);
-      yield* third.await;
+      yield* Fiber.await(third);
     }),
 );
 
@@ -40,15 +40,15 @@ it.effect("a failed flight fails every waiter and still ends, so the next ask ca
         // The flight suspends once before it fails, as every refresh that
         // reaches the token endpoint does: a body that fails without ever
         // suspending is over before a second ask can join it.
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         return yield* Effect.fail(new Error("token endpoint unreachable"));
       }),
     );
 
-    const first = yield* Effect.fork(refresh());
-    const second = yield* Effect.fork(refresh());
+    const first = yield* Effect.forkChild(refresh());
+    const second = yield* Effect.forkChild(refresh());
     for (const fiber of [first, second]) {
-      assert.equal(Exit.isFailure(yield* fiber.await), true);
+      assert.equal(Exit.isFailure(yield* Fiber.await(fiber)), true);
     }
     assert.equal(runs, 1);
 

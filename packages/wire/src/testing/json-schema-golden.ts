@@ -45,7 +45,7 @@ export interface JsonSchemaSource {
  * builder answers for, or the Effect declaration a module states directly and
  * wire's own emitter walks.
  */
-export type RecordedJsonSchemaSource = JsonSchemaSource | Schema.Schema.Any;
+export type RecordedJsonSchemaSource = JsonSchemaSource | Schema.Top;
 
 /** The node a source emits, whichever of the two it is. */
 export function jsonSchemaOf(source: RecordedJsonSchemaSource): JsonSchemaNode {
@@ -72,11 +72,11 @@ export type RecordedJsonSchemas<Module> = {
 };
 
 export type EffectJsonSchemaExportName<Module> = {
-  [Key in keyof Module]: Module[Key] extends Schema.Schema.Any ? Key : never;
+  [Key in keyof Module]: Module[Key] extends Schema.Top ? Key : never;
 }[keyof Module];
 
 export type RecordedEffectJsonSchemas<Module> = {
-  readonly [Key in EffectJsonSchemaExportName<Module>]: Schema.Schema.Any;
+  readonly [Key in EffectJsonSchemaExportName<Module>]: Schema.Top;
 };
 
 /** The `fixtures/json-schema` directory of the package a test file sits in. */

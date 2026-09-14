@@ -40,22 +40,20 @@ export type BrainPublicationAgent = Pick<BrainAgent, "request" | "markConversati
  * commentary, whose transcript is the record. The mark is still needed, since
  * only an ended run marked taken may be let go of when the envelope is full.
  */
-function publishEnd(
+const publishEnd = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: BrainPublicationAgent,
   runId: string,
-): Effect.Effect<BrainRequestRecord | undefined> {
-  return Effect.gen(function* () {
-    const current = agent.request(runId);
-    if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
-    if (current.conversationRecordedAt !== undefined) return current;
-    const at = current.settledAt ?? current.acceptedAt;
-    if (!(yield* agent.markConversationRecorded(runId, at))) return undefined;
-    // Re-read rather than patched: the mark landed on the live record, and a
-    // Clear or a replacement in the meantime has taken the record with it.
-    const marked = agent.request(runId);
-    return marked?.conversationRecordedAt !== undefined ? marked : undefined;
-  });
-}
+): Effect.fn.Return<BrainRequestRecord | undefined> {
+  const current = agent.request(runId);
+  if (!current || !isTerminalBrainRequestStatus(current.status)) return undefined;
+  if (current.conversationRecordedAt !== undefined) return current;
+  const at = current.settledAt ?? current.acceptedAt;
+  if (!(yield* agent.markConversationRecorded(runId, at))) return undefined;
+  // Re-read rather than patched: the mark landed on the live record, and a
+  // Clear or a replacement in the meantime has taken the record with it.
+  const marked = agent.request(runId);
+  return marked?.conversationRecordedAt !== undefined ? marked : undefined;
+});
 
 /**
  * The one place a run's end is taken. Every record the brain reports is read
@@ -65,18 +63,16 @@ function publishEnd(
  * report that prompted it, so an older report cannot mark what a newer one
  * already did, and a follower retired mid-way marks nothing more.
  */
-export function publishRuns(
+export const publishRuns = /* @__PURE__ */ Effect.fn("publishRuns")(function* (
   agent: BrainPublicationAgent,
   snapshots: readonly BrainRequestSnapshot[],
   stillFollowing: () => boolean = () => true,
-): Effect.Effect<void> {
-  return Effect.gen(function* () {
-    for (const snapshot of snapshots) {
-      if (!stillFollowing()) return;
-      yield* publishEnd(agent, snapshot.runId);
-    }
-  });
-}
+): Effect.fn.Return<void> {
+  for (const snapshot of snapshots) {
+    if (!stillFollowing()) return;
+    yield* publishEnd(agent, snapshot.runId);
+  }
+});
 
 /** What the publication fiber takes: a report to mark, or a barrier a caller is waiting behind. */
 const PUBLICATION_ITEM = {
@@ -112,55 +108,53 @@ type PublicationItem =
  * already taken, and then relays nothing more, so a replaced agent's records
  * are all marked once and its late ones reach no window.
  */
-export function followBrainRequests(
+export const followBrainRequests = /* @__PURE__ */ Effect.fn("followBrainRequests")(function* (
   agent: BrainAgent,
   dependencies: Pick<BrainPublicationDependencies, "broadcastRequests" | "onPublication">,
-): Effect.Effect<Effect.Effect<void>> {
-  return Effect.gen(function* () {
-    let accepting = true;
-    let following = true;
-    const reports = yield* Queue.unbounded<PublicationItem>();
-    const publication = yield* Effect.forkDaemon(
-      Effect.gen(function* () {
-        while (true) {
-          const item = yield* Queue.take(reports);
-          if (item.kind === PUBLICATION_ITEM.BARRIER) {
-            yield* Deferred.succeed(item.reached, undefined);
-            continue;
-          }
-          yield* publishRuns(agent, item.records, () => following);
+): Effect.fn.Return<Effect.Effect<void>> {
+  let accepting = true;
+  let following = true;
+  const reports = yield* Queue.unbounded<PublicationItem>();
+  const publication = yield* Effect.forkDetach(
+    Effect.gen(function* () {
+      while (true) {
+        const item = yield* Queue.take(reports);
+        if (item.kind === PUBLICATION_ITEM.BARRIER) {
+          yield* Deferred.succeed(item.reached, undefined);
+          continue;
         }
-      }),
-    );
-    // Everything the queue holds at the moment of asking, published. A
-    // follower already retired has no fiber to reach the barrier, and its
-    // ended publication answers instead.
-    const settled = Effect.gen(function* () {
-      const reached = yield* Deferred.make<void>();
-      yield* Queue.offer(reports, { kind: PUBLICATION_ITEM.BARRIER, reached });
-      yield* Effect.raceFirst(Deferred.await(reached), Effect.asVoid(Fiber.await(publication)));
-    });
-    dependencies.onPublication?.(settled);
-    const listener = (records: readonly BrainRequestRecord[]) => {
-      if (!accepting) return;
-      dependencies.broadcastRequests(records);
-      Queue.unsafeOffer(reports, { kind: PUBLICATION_ITEM.REPORT, records });
-    };
-    const unsubscribe = agent.subscribe(listener);
-    yield* Effect.forkDaemon(
-      Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
-    );
-    // Unfollowing takes no more reports at once, but lets the ones already
-    // taken finish: the stop that retires an agent reports every run it
-    // interrupted, and those ends belong marked before the follower goes. Each
-    // mark answers promptly — the store refuses rather than hangs — so the
-    // drain is bounded by the reports already queued.
-    return Effect.gen(function* () {
-      accepting = false;
-      unsubscribe();
-      yield* settled;
-      following = false;
-      yield* Fiber.interrupt(publication);
-    });
+        yield* publishRuns(agent, item.records, () => following);
+      }
+    }),
+  );
+  // Everything the queue holds at the moment of asking, published. A
+  // follower already retired has no fiber to reach the barrier, and its
+  // ended publication answers instead.
+  const settled = Effect.gen(function* () {
+    const reached = yield* Deferred.make<void>();
+    yield* Queue.offer(reports, { kind: PUBLICATION_ITEM.BARRIER, reached });
+    yield* Effect.raceFirst(Deferred.await(reached), Effect.asVoid(Fiber.await(publication)));
   });
-}
+  dependencies.onPublication?.(settled);
+  const listener = (records: readonly BrainRequestRecord[]) => {
+    if (!accepting) return;
+    dependencies.broadcastRequests(records);
+    Queue.offerUnsafe(reports, { kind: PUBLICATION_ITEM.REPORT, records });
+  };
+  const unsubscribe = agent.subscribe(listener);
+  yield* Effect.forkDetach(
+    Effect.flatMap(agent.ready(), () => Effect.sync(() => listener(agent.requests()))),
+  );
+  // Unfollowing takes no more reports at once, but lets the ones already
+  // taken finish: the stop that retires an agent reports every run it
+  // interrupted, and those ends belong marked before the follower goes. Each
+  // mark answers promptly — the store refuses rather than hangs — so the
+  // drain is bounded by the reports already queued.
+  return Effect.gen(function* () {
+    accepting = false;
+    unsubscribe();
+    yield* settled;
+    following = false;
+    yield* Fiber.interrupt(publication);
+  });
+});

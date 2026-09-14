@@ -1,6 +1,6 @@
 import { hostedIntroductionMintSeams } from "../../hosted/introduction-mint-route.js";
 import { introductionMintApp } from "../../introduction-mint-app.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
  * Mints the onboarding introduction's one short-lived Realtime credential for
@@ -8,4 +8,4 @@ import { routeFromHttpApp } from "../../route-effect.js";
  * lives behind the group in `server/introduction-mint-app.ts`; this file only
  * hands it the deployment's real seam.
  */
-export default routeFromHttpApp(introductionMintApp(hostedIntroductionMintSeams()));
+export default routeFromHttpRouter(introductionMintApp(hostedIntroductionMintSeams()));

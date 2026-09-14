@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import type { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import type { Route } from "../route.js";
 import { type BrainAskOptions, handleBrainAsk, handleBrainTurn } from "./brain-ask.js";
 import { eveOrigin } from "./brain-host/eve-origin.js";

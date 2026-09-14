@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import {
   type BrainTurnsAnswer,
@@ -24,6 +23,7 @@ import {
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  EXCESS_KEYS,
   isRecord,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -38,7 +38,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Either } from "effect";
+import { Effect, Schema as EffectSchema, Result } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, type StoredUIMessage } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -52,6 +53,7 @@ import {
 } from "../server/hosted/resource-reads";
 import { storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   amendMessageInPlace,
@@ -261,21 +263,24 @@ function options(userId: string, req: Request): ResourceReadOptions {
 
 async function answered<Value, Encoded>(
   response: Response,
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
 ): Promise<Value> {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
-  const read = readEither(schema)(body);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  // An answer's family was declared tolerant, so the read drops a key a newer
+  // service may have added rather than refusing the answer for it.
+  const read = readEither(schema, { excess: EXCESS_KEYS.DROP })(body);
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 /**
@@ -1215,9 +1220,9 @@ it.effect(
       );
       assert.equal(after.messages.length, 4);
       assert.equal(
-        EffectSchema.decodeUnknownSync(
-          EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
-        )(after.conversation[0]?.next_message_seq),
+        EffectSchema.decodeUnknownSync(EpochMillisColumnSchema)(
+          after.conversation[0]?.next_message_seq,
+        ),
         5,
       );
       const whole = await database.run(
@@ -1236,7 +1241,7 @@ it.effect(
       const { main, turns: ids } = await populate(userId);
       const MessageIdRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        seq: EpochMillisColumnSchema,
       });
       const sent = (await readMessagesByConversation(database.run, main))
         .map((row) => EffectSchema.decodeUnknownSync(MessageIdRowSchema)(row))
@@ -1269,7 +1274,7 @@ it.effect(
 
       const EventRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
-        seq: EffectSchema.Union(EffectSchema.Number, EffectSchema.NumberFromString),
+        seq: EpochMillisColumnSchema,
         kind: EffectSchema.String,
         payload: EffectSchema.Unknown,
       });

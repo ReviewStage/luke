@@ -4,22 +4,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /** A text trimmed and refused when left with nothing. */
 const text = (maximumChars?: number) => {
-  const core = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  }).pipe(
-    EffectSchema.filter((value) => value.trim().length > 0, {
-      schemaId: EffectSchema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
-    }),
-  );
-  return maximumChars === undefined ? core : core.pipe(EffectSchema.maxLength(maximumChars));
+  const core = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
+  return maximumChars === undefined ? core : core.check(EffectSchema.isMaxLength(maximumChars));
 };
-
-/** A record that ignores a key a newer service added, which is what an answer always does. */
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 /**
  * The ask routes' contract: a developer's question handed to Luke's judgment
@@ -33,7 +20,10 @@ const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Field
  * on the same conversation is the same ask, answered again and dispatched
  * once. The conversation is optional; an ask naming none is for the account's
  * standing main. The request refuses a key it did not name, as every request
- * frame on this wire does; the answers ignore one a newer service adds.
+ * frame on this wire does; the answers ignore one a newer service adds,
+ * which is the reader's own grain now — an answer is read through
+ * `readEither(schema, { excess: EXCESS_KEYS.DROP })` rather than declared
+ * tolerant.
  */
 
 export const ASK_BOUNDS = {
@@ -64,9 +54,9 @@ export interface HostedBrainAskRequest {
 
 export const hostedBrainAskRequestSchema = EffectSchema.Struct({
   question: text(ASK_BOUNDS.MAX_QUESTION_CHARS),
-  origin: EffectSchema.Literal(...ASK_ORIGIN_NAMES),
+  origin: EffectSchema.Literals(ASK_ORIGIN_NAMES),
   clientId: wireUuidSchema,
-  conversationId: EffectSchema.optionalWith(wireUuidSchema, { exact: true }),
+  conversationId: EffectSchema.optionalKey(wireUuidSchema),
 });
 
 /** What an accepted ask answers: the id the caller polls and stops this ask by, the conversation it runs in, and when it was taken. */
@@ -76,7 +66,7 @@ export interface HostedBrainAskAnswer {
   readonly queuedAt: number;
 }
 
-export const hostedBrainAskAnswerSchema = tolerantRecord({
+export const hostedBrainAskAnswerSchema = EffectSchema.Struct({
   id: wireUuidSchema,
   conversationId: wireUuidSchema,
   queuedAt: countedNumber,
@@ -105,15 +95,15 @@ export interface HostedBrainTurnAnswer {
   readonly cancelRequestedAt?: number;
 }
 
-export const hostedBrainTurnAnswerSchema = tolerantRecord({
+export const hostedBrainTurnAnswerSchema = EffectSchema.Struct({
   id: wireUuidSchema,
-  turnId: EffectSchema.optionalWith(wireUuidSchema, { exact: true }),
+  turnId: EffectSchema.optionalKey(wireUuidSchema),
   conversationId: wireUuidSchema,
-  origin: EffectSchema.Literal(...TURN_ORIGIN_NAMES),
-  status: EffectSchema.Literal(...TURN_STATUS_NAMES),
+  origin: EffectSchema.Literals(TURN_ORIGIN_NAMES),
+  status: EffectSchema.Literals(TURN_STATUS_NAMES),
   queuedAt: countedNumber,
-  startedAt: EffectSchema.optionalWith(countedNumber, { exact: true }),
-  settledAt: EffectSchema.optionalWith(countedNumber, { exact: true }),
-  failure: EffectSchema.optionalWith(text(), { exact: true }),
-  cancelRequestedAt: EffectSchema.optionalWith(countedNumber, { exact: true }),
+  startedAt: EffectSchema.optionalKey(countedNumber),
+  settledAt: EffectSchema.optionalKey(countedNumber),
+  failure: EffectSchema.optionalKey(text()),
+  cancelRequestedAt: EffectSchema.optionalKey(countedNumber),
 });

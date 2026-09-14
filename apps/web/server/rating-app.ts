@@ -1,10 +1,11 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect } from "effect";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { Effect, Layer } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { handleMessageRating } from "./hosted/message-rating.js";
 import { rateMessage, storeWriter } from "./hosted/store/index.js";
 import { hostedVaultSeams } from "./hosted/vault-route.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * `PUT /api/conversation/messages/{id}/rating` as the one route this
@@ -25,8 +26,12 @@ type RatingServices = SqlClient.SqlClient;
  * be read to settle. The write it names no tool, so its writer stands over no
  * registry.
  */
-function ratingPassthrough(): HttpApp.Default<never, RatingServices> {
-  return Effect.gen(function* () {
+const ratingPassthrough = /* @__PURE__ */ Effect.fn("ratingPassthrough")(
+  function* (): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    never,
+    RatingServices | HttpServerRequest.HttpServerRequest
+  > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
     const answer = yield* Effect.orDie(
@@ -41,15 +46,13 @@ function ratingPassthrough(): HttpApp.Default<never, RatingServices> {
       }),
     );
     return HttpServerResponse.raw(answer);
-  });
-}
+  },
+);
 
 /** The group, over the one path this function's rewrite ever sends here. */
-export function ratingApp(): HttpApp.Default<never, RatingServices> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(RATING_PATH, ratingPassthrough()),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+export function ratingApp(): WebRoutes<RatingServices> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, RATING_PATH, ratingPassthrough()),
+    hostedNotFoundRoute,
   );
 }

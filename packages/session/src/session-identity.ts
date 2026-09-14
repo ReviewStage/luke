@@ -34,7 +34,7 @@ export const SESSION_APPLICATION_ID = {
 export type SessionApplicationId =
   (typeof SESSION_APPLICATION_ID)[keyof typeof SESSION_APPLICATION_ID];
 
-export const SessionApplicationIdSchema = Schema.Literal(...Object.values(SESSION_APPLICATION_ID));
+export const SessionApplicationIdSchema = Schema.Literals(Object.values(SESSION_APPLICATION_ID));
 
 export const SESSION_APPLICATION_ID_LIST: readonly SessionApplicationId[] =
   Object.values(SESSION_APPLICATION_ID);
@@ -91,7 +91,7 @@ export const SESSION_LINK_SCHEME = {
   SUPERSET: "superset:",
 } as const;
 
-export const SessionLinkSchemeSchema = Schema.Literal(...Object.values(SESSION_LINK_SCHEME));
+export const SessionLinkSchemeSchema = Schema.Literals(Object.values(SESSION_LINK_SCHEME));
 
 const readsSessionLinkScheme = Schema.is(SessionLinkSchemeSchema);
 

@@ -44,14 +44,12 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import {
-  type Clock,
+  Clock,
   Deferred,
   Duration,
   Effect,
-  ExecutionStrategy,
   Exit,
   Fiber,
-  FiberId,
   FiberSet,
   Option,
   Queue,
@@ -256,7 +254,7 @@ interface StandingSession {
    * closed by the fiber that owns it, which is the reader below, and never
    * from inside it.
    */
-  readonly scope: Scope.CloseableScope;
+  readonly scope: Scope.Closeable;
   channel: AppendChannel;
   ledger: TranscriptLedger;
   started: boolean;
@@ -478,8 +476,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         options,
         collaborators,
         tasks,
-        yield* Effect.clock,
-        yield* Scope.fork(scope, ExecutionStrategy.sequential),
+        yield* Clock.Clock,
+        yield* Scope.fork(scope),
       );
       yield* Effect.forkScoped(
         Effect.forever(Effect.flatMap(Queue.take(tasks), (task) => FiberSet.run(fibers, task))),
@@ -490,12 +488,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** Begins what nothing waits for, on the service's own fiber. */
   #start(effect: Effect.Effect<void>): void {
-    Queue.unsafeOffer(this.#tasks, effect);
+    Queue.offerUnsafe(this.#tasks, effect);
   }
 
   /** The instant this session reads everything by: its scope's own clock, which a test drives. */
   #now(): number {
-    return this.#clock.unsafeCurrentTimeMillis();
+    return this.#clock.currentTimeMillisUnsafe();
   }
 
   /**
@@ -505,7 +503,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * reached its sleep still stops the body from ever running.
    */
   #after(delayMs: number, body: () => void): SessionDelay {
-    const delay = Deferred.unsafeMake<void>(FiberId.none);
+    const delay = Deferred.makeUnsafe<void>();
     this.#start(
       Effect.flatMap(
         Effect.timeoutOption(Deferred.await(delay), Duration.millis(delayMs)),
@@ -517,7 +515,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** Gives up a delay, whether or not it was ever armed. */
   #cancelDelay(delay: SessionDelay | undefined): void {
-    if (delay !== undefined) Deferred.unsafeDone(delay, Exit.void);
+    if (delay !== undefined) Deferred.doneUnsafe(delay, Exit.void);
   }
 
   status(): LiveSessionStatus {
@@ -548,15 +546,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   createSession(
     sdpOffer: string,
   ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#standing) yield* this.endSession();
       const source = this.#options.source();
       if (!source) return undefined;
       const seeded = rosterSeed(this.#options.roster?.() ?? [], this.#now());
       this.#dropPendingRoster();
       return yield* this.#opening((scope) =>
-        Effect.gen(this, function* () {
-          const opened = yield* Scope.extend(
+        Effect.gen({ self: this }, function* () {
+          const opened = yield* Scope.provide(
             source.create({ sdpOffer, input: this.#seedInput(seeded) }),
             scope,
           );
@@ -582,12 +580,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * on, the session is this service's exactly as one it created.
    */
   adoptSession(opened: AdoptableSession): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#standing) yield* this.endSession();
       this.#dropPendingRoster();
       this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
       const stood = yield* this.#opening((scope) =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const sideband = yield* this.#attach(opened, scope);
           if (!sideband) return undefined;
           const session = yield* this.#stand(opened.sessionId, sideband, scope);
@@ -611,10 +609,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * fiber behind them, and what does stand has one scope to be released by.
    */
   #opening<A>(
-    stand: (scope: Scope.CloseableScope) => Effect.Effect<A | undefined>,
+    stand: (scope: Scope.Closeable) => Effect.Effect<A | undefined>,
   ): Effect.Effect<A | undefined> {
-    return Effect.gen(this, function* () {
-      const scope = yield* Scope.fork(this.#sessions, ExecutionStrategy.sequential);
+    return Effect.gen({ self: this }, function* () {
+      const scope = yield* Scope.fork(this.#sessions);
       return yield* Effect.onExit(stand(scope), (exit) =>
         Exit.isSuccess(exit) && exit.value !== undefined
           ? Effect.void
@@ -658,7 +656,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * close that failed is failed for every waiter rather than read as an end.
    */
   #end(session: StandingSession): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (session.ended) return yield* Deferred.await(session.released);
       const standing = session.closing;
       if (standing !== undefined) return yield* Deferred.await(standing);
@@ -669,7 +667,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #close(session: StandingSession): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSING });
       const result = yield* closeGracefully(session.sideband, {
         eventId: this.#options.createId(),
@@ -749,7 +747,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   reconcile(): void {
     this.#start(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         const briefings = this.#queue.setQuiet(yield* this.#options.quietNow());
         if (briefings.length > 0) yield* this.#options.releaseHeldBriefings(briefings);
         this.#drain();
@@ -786,7 +784,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * runs it as a drain step or as its own scope's finalizer.
    */
   stop(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#stopped) return;
       this.#stopped = true;
       this.#stopRunEvents();
@@ -856,7 +854,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (!session) return;
     this.#rosterPending = undefined;
     session.channel.enqueue(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         // Decided here rather than when the change settled: the channel runs one
         // unit at a time, so any earlier refresh has landed and moved what the
         // session knows before this one works out what is still news.
@@ -912,11 +910,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
-    scope: Scope.CloseableScope,
+    scope: Scope.Closeable,
   ): Effect.Effect<LiveSideband | undefined> {
-    return Scope.extend(opened.attach(), scope).pipe(
+    return Scope.provide(opened.attach(), scope).pipe(
       Effect.tap((sideband) => Scope.addFinalizer(scope, sideband.close)),
-      Effect.catchAll((failure) =>
+      Effect.catch((failure) =>
         Effect.sync(() => {
           this.#options.report(`Live sideband could not attach: ${failure.message}`);
           this.#setPhase({
@@ -941,9 +939,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #stand(
     sessionId: string,
     sideband: LiveSideband,
-    scope: Scope.CloseableScope,
+    scope: Scope.Closeable,
   ): Effect.Effect<StandingSession> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { channel, serve } = yield* AppendChannel.make({
         sideband,
         report: this.#options.report,
@@ -997,14 +995,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #read(session: StandingSession): Effect.Effect<void> {
     return Effect.ensuring(
-      Effect.gen(this, function* () {
-        const arrivals = yield* Effect.fork(this.#arrivals(session));
+      Effect.gen({ self: this }, function* () {
+        const arrivals = yield* Effect.forkChild(this.#arrivals(session));
         yield* Deferred.await(session.torn);
         yield* Fiber.interrupt(arrivals);
         yield* this.#release(session);
       }),
       Effect.sync(() => {
-        Deferred.unsafeDone(session.released, Exit.void);
+        Deferred.doneUnsafe(session.released, Exit.void);
         if (this.#releasing === session.released) this.#releasing = undefined;
       }),
     );
@@ -1038,7 +1036,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** The session's last word, taken once: a socket closing after its own `session.closed` says nothing new. */
   #settle(session: StandingSession, result: SidebandCloseResult): void {
-    Deferred.unsafeDone(session.settled, Exit.succeed(result));
+    Deferred.doneUnsafe(session.settled, Exit.succeed(result));
   }
 
   #onEvent(session: StandingSession, event: LiveServerEvent): Effect.Effect<void> {
@@ -1213,7 +1211,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** Writes every utterance of one speaker not yet on record: no fragment has joined it inside the gap plus the margin. */
   #writeSettled(session: StandingSession, speaker: TranscriptSpeaker): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       for (const utterance of session.ledger.utterances(speaker)) {
         if (session.writtenRows.has(utterance.rowId)) continue;
         session.writtenRows.add(utterance.rowId);
@@ -1223,7 +1221,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #write(write: UtteranceWrite): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { session, utterance } = write;
       const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#now();
       const written =
@@ -1302,7 +1300,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       renderAskContext(context),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       // The delegation's id is the submission's: the record writes the developer's
       // utterance under it, so an ask and the line it leaves share one id and a
       // record that learns the ask's turn can attach the line to it.
@@ -1486,7 +1484,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   ): void {
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const taken = yield* session.channel.send(
             commentaryAppend(this.#input(delegationId, chunk)),
           );
@@ -1547,7 +1545,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     chunks.forEach((chunk, index) => {
       const last = index === chunks.length - 1;
       session.channel.enqueue(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const input = this.#input(null, chunk);
           if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
             this.#options.onBriefingAppend?.(request.delivery, input.eventId);
@@ -1581,7 +1579,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     opening: SpeechOpening,
   ): void {
     session.channel.enqueue(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         const instructed = yield* session.channel.send(
           instructionsAppend(this.#input(null, opening.instruction)),
         );
@@ -1672,7 +1670,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     }
     if (this.#standing === session) this.#standing = undefined;
     this.#releasing = session.released;
-    Deferred.unsafeDone(session.torn, Exit.void);
+    Deferred.doneUnsafe(session.torn, Exit.void);
     this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
     return Deferred.await(session.released);
   }
@@ -1685,7 +1683,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * last written down.
    */
   #release(session: StandingSession): Effect.Effect<void> {
-    return Effect.zipRight(
+    return Effect.andThen(
       Scope.close(session.scope, Exit.void),
       Effect.all(
         [

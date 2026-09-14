@@ -43,9 +43,15 @@ import {
   type SessionIdentity,
   type SessionProvider,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  isRecord,
+  isWireString,
+  type WireRecord,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either } from "effect";
+import { Effect, Result } from "effect";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { ResponsesContextEngine } from "./context-engine.js";
 import { type BrainPersistedState, MAXIMUM_TERMINAL_REQUESTS } from "./envelope.js";
@@ -73,7 +79,10 @@ import { BRAIN_TOOL, TOOL_GROUP } from "./tools.js";
 import type { BrainTurnTraceRecord } from "./trace.js";
 import { BRAIN_WAKE_KIND, type BrainDelivery, type BrainWakeEvent } from "./wake-events.js";
 
-const TOOL_LOOP_IDENTITY = { id: TOOL_LOOP_RUNTIME.ID, version: TOOL_LOOP_RUNTIME.VERSION };
+const TOOL_LOOP_IDENTITY = {
+  id: TOOL_LOOP_RUNTIME.ID,
+  version: TOOL_LOOP_RUNTIME.VERSION,
+};
 
 export const NOW = 1_800_000_000_000;
 export const { DELTA_PER_SESSION_CHARS, FULL_TRANSCRIPT_CHARS } = BRAIN_DEFAULTS;
@@ -98,10 +107,22 @@ export function seededRequests(count: number, published: boolean): BrainPersiste
   }));
 }
 
-export const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
-export const ABC: SessionIdentity = { providerId: claude.id, providerSessionId: "abc" };
-export const DEF: SessionIdentity = { providerId: claude.id, providerSessionId: "def" };
-export const UNKNOWN: SessionIdentity = { providerId: "codex", providerSessionId: "nope" };
+export const claude: SessionProvider = {
+  id: "claude-code",
+  displayName: "Claude Code",
+};
+export const ABC: SessionIdentity = {
+  providerId: claude.id,
+  providerSessionId: "abc",
+};
+export const DEF: SessionIdentity = {
+  providerId: claude.id,
+  providerSessionId: "def",
+};
+export const UNKNOWN: SessionIdentity = {
+  providerId: "codex",
+  providerSessionId: "nope",
+};
 export const TRANSCRIPT_SECRET = "SECRET_TRANSCRIPT_TEXT";
 
 export function session(id: string, overrides: Partial<ProviderSessionObservation> = {}): Session {
@@ -124,7 +145,11 @@ const HARNESS_SESSIONS: readonly Session[] = [
 
 /** A performer over the harness roster and guide whose carrier the test chooses. */
 export function performerWith(carry: FakeActionPerformerOptions["carry"]) {
-  return fakeActionPerformer({ sessions: HARNESS_SESSIONS, guide: CAPTIONS_GUIDE, carry });
+  return fakeActionPerformer({
+    sessions: HARNESS_SESSIONS,
+    guide: CAPTIONS_GUIDE,
+    carry,
+  });
 }
 
 export function edge(identity: SessionIdentity, atMs = NOW): BrainWakeEvent {
@@ -180,7 +205,10 @@ export interface BrainClient {
 }
 
 export function answered(output: readonly WireRecord[], inputTokens = 100): BrainClientAnswer {
-  const answer = responsesModelAnswer({ output, usage: { input_tokens: inputTokens } });
+  const answer = responsesModelAnswer({
+    output,
+    usage: { input_tokens: inputTokens },
+  });
   assert.ok(answer);
   return answer;
 }
@@ -210,7 +238,11 @@ export function quietAnswer(until: number): BrainClientAnswer {
 }
 
 export function failedAnswer(reason: string): BrainClientAnswer {
-  return { outcome: MODEL_RESPONSE_OUTCOME.FAILED, failure: MODEL_FAILURE.UPSTREAM, reason };
+  return {
+    outcome: MODEL_RESPONSE_OUTCOME.FAILED,
+    failure: MODEL_FAILURE.UPSTREAM,
+    reason,
+  };
 }
 
 /** Whether a request was offered any action at all, read off the toolset, as the adapters see it: a name the actions table holds, the notebook's two writes included. */
@@ -393,7 +425,10 @@ export function harness(
       readTranscript: (identity): Effect.Effect<ProviderTranscriptResult> =>
         Effect.sync(() => {
           wholeReads.push(identity);
-          return { status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "whole transcript" };
+          return {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            transcript: "whole transcript",
+          };
         }),
       deliver: (delivery) => {
         deliveries.push(delivery);
@@ -436,13 +471,14 @@ export function submissionsIssued(): number {
 }
 
 /** Submits an ask and waits as long as it takes, answering the terminal record. */
-export function ask(h: Harness, question: string): Effect.Effect<BrainRequestRecord | undefined> {
-  return Effect.gen(function* () {
-    const accepted = yield* submit(h, question);
-    if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
-    return yield* h.agent.waitAsk(accepted.runId, 10 * 24 * 60 * 60 * 1000);
-  });
-}
+export const ask = /* @__PURE__ */ Effect.fn("ask")(function* (
+  h: Harness,
+  question: string,
+): Effect.fn.Return<BrainRequestRecord | undefined> {
+  const accepted = yield* submit(h, question);
+  if (accepted.outcome !== BRAIN_SUBMISSION_OUTCOME.ACCEPTED) return undefined;
+  return yield* h.agent.waitAsk(accepted.runId, 10 * 24 * 60 * 60 * 1000);
+});
 
 export function submit(
   h: Harness,
@@ -524,7 +560,9 @@ export const OBSERVATION_ACTIONS: readonly WireRecord[] = [
     provider_id: ABC.providerId,
     provider_session_id: ABC.providerSessionId,
   }),
-  call("action_remember", ACTION_TOOL.REMEMBER_FACT, { words: "the developer likes tests" }),
+  call("action_remember", ACTION_TOOL.REMEMBER_FACT, {
+    words: "the developer likes tests",
+  }),
   call("action_setting", ACTION_TOOL.CHANGE_APP_SETTING, {
     setting_id: "voice_captions",
     value: "on",
@@ -554,7 +592,9 @@ export function assertNoActionReached(h: Harness): void {
   for (const forbidden of OBSERVATION_ACTIONS) {
     const output = outputs.find((entry) => entry.callId === forbidden.call_id);
     assert.ok(output, `${String(forbidden.call_id)} was answered`);
-    const envelope = Either.getOrUndefined(readEither(ACTION_OUTPUT)(parsedRecord(output.output)));
+    const envelope = Result.getOrUndefined(
+      readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(parsedRecord(output.output)),
+    );
     assert.equal(envelope?.status, ACTION_OUTPUT_STATUS.REFUSED);
     assert.equal(envelope?.reason, REFUSAL_REASON.NOT_ALLOWED);
   }
@@ -610,14 +650,15 @@ export function gatedClient(inner: FakeClient) {
 export const OLD_SECRET = "OLD_SECRET_FROM_PRIOR_GENERATION";
 
 /** A completed run on a harness whose repository never refuses, for the save-ordering regressions. */
-export function completedRun(h: Harness, question = "hello"): Effect.Effect<string> {
-  return Effect.gen(function* () {
-    h.client.answers.push(answered([message("Hi.")]));
-    const record = yield* ask(h, question);
-    assert.ok(record);
-    return record.runId;
-  });
-}
+export const completedRun = /* @__PURE__ */ Effect.fn("completedRun")(function* (
+  h: Harness,
+  question = "hello",
+): Effect.fn.Return<string> {
+  h.client.answers.push(answered([message("Hi.")]));
+  const record = yield* ask(h, question);
+  assert.ok(record);
+  return record.runId;
+});
 
 /** Holds the next save until released, answering true unless told otherwise; later saves pass through. */
 export function holdNextWrite(repository: FakeBrainStateRepository) {
@@ -674,9 +715,14 @@ export function heldOpenRuntime(model: ModelAdapter, disposeHangs = false) {
     value: (...args: Parameters<typeof inner.openContext>) => {
       opens += 1;
       if (opens > 1) return inner.openContext(...args);
-      return Effect.async<ContextOpening>((resume) => {
+      return Effect.callback<ContextOpening>((resume) => {
         release = () =>
-          resume(Effect.succeed({ context, bootstrap: { loaded: true, repaired: 0 } }));
+          resume(
+            Effect.succeed({
+              context,
+              bootstrap: { loaded: true, repaired: 0 },
+            }),
+          );
       });
     },
   });

@@ -52,7 +52,7 @@ export class ObservationLoop {
    */
   readonly #pass: Effect.Effect<void> = Effect.suspend(() =>
     this.#armed
-      ? Effect.catchAllDefect(this.refresh, (defect) =>
+      ? Effect.catchDefect(this.refresh, (defect) =>
           Effect.sync(() => {
             this.#report(
               `Observation pass failed: ${defect instanceof Error ? defect.message : String(defect)}`,
@@ -76,7 +76,7 @@ export class ObservationLoop {
       Schedule.spaced(Duration.millis(this.#options.intervalMs)),
       this.#pass,
     ).pipe(
-      Effect.zipRight(
+      Effect.andThen(
         Effect.addFinalizer(() =>
           Effect.sync(() => {
             this.#generation += 1;
@@ -121,10 +121,7 @@ export class ObservationLoop {
         const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
         if (!this.#queued) return after ?? Effect.void;
         this.#queued = false;
-        return Effect.zipRight(
-          after ?? Effect.void,
-          Effect.asVoid(Effect.forkDaemon(this.refresh)),
-        );
+        return Effect.andThen(after ?? Effect.void, Effect.asVoid(Effect.forkDetach(this.refresh)));
       }),
     );
   });

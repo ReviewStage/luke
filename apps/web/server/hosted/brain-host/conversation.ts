@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";
@@ -42,7 +42,7 @@ export type ConversationAdmission =
   | { readonly ok: false; readonly refusal: BrainHostRefusal };
 
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
-type ConversationFailure = SqlError | ParseResult.ParseError;
+type ConversationFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -57,24 +57,20 @@ export const SESSION_STANDING = {
 type SessionStanding = (typeof SESSION_STANDING)[keyof typeof SESSION_STANDING];
 
 const ConversationRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  kind: Schema.Literal(...Object.values(CONVERSATION_KIND)),
-  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("runtime_session_id"),
-  ),
-});
+  userId: Schema.String,
+  kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
+  runtimeSessionId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ userId: "user_id", runtimeSessionId: "runtime_session_id" }));
 
 const OwnerRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
 const RecordedSessionSchema = Schema.Struct({
-  runtimeSessionId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("runtime_session_id"),
-  ),
-});
+  runtimeSessionId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ runtimeSessionId: "runtime_session_id" }));
 
-const findConversation = SqlSchema.findOne({
+const findConversation = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRowSchema,
   execute: (conversationId) =>
@@ -87,7 +83,7 @@ const findConversation = SqlSchema.findOne({
     ),
 });
 
-const findRuntimeSessionOwner = SqlSchema.findOne({
+const findRuntimeSessionOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
   execute: (runtimeSessionId) =>
@@ -104,7 +100,7 @@ const ClaimSchema = Schema.Struct({
   userId: Schema.String,
   conversationId: Schema.String,
   runtimeSessionId: Schema.String,
-  now: Schema.DateFromSelf,
+  now: Schema.Date,
 });
 
 const claimSession = SqlSchema.void({
@@ -122,7 +118,7 @@ const claimSession = SqlSchema.void({
     ),
 });
 
-const findRecordedSession = SqlSchema.findOne({
+const findRecordedSession = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: RecordedSessionSchema,
   execute: (conversationId) =>
@@ -184,14 +180,12 @@ export function runtimeSessionOwner(
  * replayed for a session the conversation has since rotated away from
  * changes nothing. Answers whether the row now records this session.
  */
-export function claimRuntimeSession(
+export const claimRuntimeSession = /* @__PURE__ */ Effect.fn("claimRuntimeSession")(function* (
   target: ConversationTarget,
   runtimeSessionId: string,
   now: Date,
-): Effect.Effect<boolean, ConversationFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    yield* claimSession({ ...target, runtimeSessionId, now });
-    const recorded = yield* findRecordedSession(target.conversationId);
-    return Option.isSome(recorded) && recorded.value.runtimeSessionId === runtimeSessionId;
-  });
-}
+): Effect.fn.Return<boolean, ConversationFailure, SqlClient.SqlClient> {
+  yield* claimSession({ ...target, runtimeSessionId, now });
+  const recorded = yield* findRecordedSession(target.conversationId);
+  return Option.isSome(recorded) && recorded.value.runtimeSessionId === runtimeSessionId;
+});

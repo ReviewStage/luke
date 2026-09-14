@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import type { AdminViewer } from "./admin-access.js";
 import {
   ADMIN_ERROR,
@@ -57,6 +57,6 @@ export function handleAdminFavorite(
         ? jsonResponse(ADMIN_HTTP_STATUS.OK, { favorite })
         : errorResponse(ADMIN_HTTP_STATUS.NOT_FOUND, ADMIN_ERROR.USER_NOT_FOUND),
     ),
-    Effect.catchAllCause((cause) => unavailableSeam("admin favorite write failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin favorite write failed", cause)),
   );
 }

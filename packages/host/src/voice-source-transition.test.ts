@@ -23,12 +23,12 @@ import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/set
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { test } from "vitest";
 import { BrainHost } from "./brain/host.js";
 import { transitionVoiceSource } from "./voice-source-transition.js";
 
-/** The transitions and their settling run on the runtime the host detaches its drains onto. */
+/** The transitions and their settling run under the same services the host detaches its drains under. */
 const onDefault = <Value>(effect: Effect.Effect<Value>): Promise<Value> =>
   Effect.runPromise(effect);
 
@@ -37,7 +37,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -150,7 +150,7 @@ function composition() {
     },
   });
   const host = new BrainHost({
-    detach: detachOn(Runtime.defaultRuntime),
+    detach: detachOn(Context.empty()),
     follow: () => Effect.succeed(Effect.void),
     publishEmpty: () => undefined,
   });

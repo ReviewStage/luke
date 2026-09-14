@@ -80,31 +80,30 @@ export function wireMemoryMaintenance(
   const eligible = (sessionKey: SessionKey): boolean =>
     isMaintenanceEligibleConversation(sessionKey, dependencies.isTemporary(sessionKey));
 
-  const housekeeping = (
+  const housekeeping = /* @__PURE__ */ Effect.fnUntraced(function* (
     turn: MemoryCaptureTurn,
     prompt: HousekeepingPrompt,
     dateStamp: string,
     signal: AbortSignal,
-  ): Effect.Effect<MemoryCaptureResult> =>
-    Effect.gen(function* () {
-      const runtime = dependencies.createRuntime();
-      if (!runtime) {
-        return {
-          outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
-          writes: 0,
-          reason: "no brain stands to run it",
-        };
-      }
-      return yield* runMemoryHousekeeping({
-        runtime,
-        items: turn.items,
-        prompt,
-        dateStamp,
-        workspace: workspace(),
-        signal,
-        runId: dependencies.createId(),
-      });
+  ): Effect.fn.Return<MemoryCaptureResult> {
+    const runtime = dependencies.createRuntime();
+    if (!runtime) {
+      return {
+        outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
+        writes: 0,
+        reason: "no brain stands to run it",
+      };
+    }
+    return yield* runMemoryHousekeeping({
+      runtime,
+      items: turn.items,
+      prompt,
+      dateStamp,
+      workspace: workspace(),
+      signal,
+      runId: dependencies.createId(),
     });
+  });
 
   const flush: MemoryCapture = (turn) =>
     Effect.suspend(() => {

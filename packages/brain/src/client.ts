@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -27,7 +25,9 @@ import {
   wireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Cause, Effect, Either, Exit, type Layer, Runtime } from "effect";
+import { Cause, Context, Effect, Exit, type Layer, Result } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { runtimeExit } from "./effect/carry.js";
 import {
   BRAIN_REQUEST_TIMEOUT_MS,
@@ -47,7 +47,7 @@ export interface BrainTransportOptions {
   baseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  /** The services a request effect is run on; an empty `Context` for a caller that gave none. */
   execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;
@@ -83,7 +83,7 @@ async function runCall(
     ...(signal === undefined ? undefined : { signal }),
   });
   if (Exit.isSuccess(exit)) return exit.value;
-  if (signal?.aborted === true && Cause.isInterruptedOnly(exit.cause)) {
+  if (signal?.aborted === true && Cause.hasInterruptsOnly(exit.cause)) {
     const name = errorName(signal.reason);
     return { fault: CALL_FAULT.NETWORK, ...(name === undefined ? undefined : { errorName: name }) };
   }
@@ -121,7 +121,7 @@ export class BrainTransport {
       requestTimeoutMs: options.requestTimeoutMs ?? BRAIN_REQUEST_TIMEOUT_MS,
     });
     this.#client = options.httpClient ?? FetchHttpClient.layer;
-    this.#execution = options.execution ?? Runtime.defaultRuntime;
+    this.#execution = options.execution ?? Context.empty();
     this.#label = options.label;
     this.#now = options.now ?? Date.now;
   }
@@ -169,7 +169,7 @@ export class BrainTransport {
     const record = wireRecord(unparsedWire(body));
     const quota =
       record?.error === HOSTED_API_ERROR.QUOTA_EXHAUSTED
-        ? Either.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(record.quota)))
+        ? Result.getOrUndefined(readEither(hostedQuotaSchema)(unparsedWire(record.quota)))
         : undefined;
     const resetsAt = quota?.resetsAt;
     if (resetsAt !== undefined && resetsAt > this.#now()) {

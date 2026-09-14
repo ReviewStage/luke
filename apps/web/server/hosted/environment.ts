@@ -41,10 +41,10 @@ export interface HostedEnvironmentValues {
   readonly apnsCredentials: ApnsCredentials | undefined;
 }
 
-export class HostedEnvironment extends Context.Tag("HostedEnvironment")<
+export class HostedEnvironment extends Context.Service<
   HostedEnvironment,
   HostedEnvironmentValues
->() {}
+>()("HostedEnvironment") {}
 
 function present(value: Option.Option<string>): string | undefined {
   return text(Option.getOrUndefined(value));
@@ -73,30 +73,34 @@ function apnsRecord(
 /**
  * The values as this deployment's own environment holds them. The provider is
  * named rather than inherited so the read is the process environment wherever
- * the layer is built, and a key travels as a `Redacted` so a log line or an
- * error that folded a service into it still says nothing.
+ * the layer is built, and read inside an `Effect.sync` rather than beside the
+ * pipe so that "wherever" stays the build: `fromEnv` copies `process.env` out
+ * into a record of its own, so a provider constructed as this module loads
+ * would be this process's first environment forever. A key travels as a
+ * `Redacted` so a log line or an error that folded a service into it still
+ * says nothing.
  */
 export const hostedEnvironment = Layer.effect(
   HostedEnvironment,
   Effect.map(
     Config.all({
-      apiKey: Config.option(Config.redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
-      brainModel: Config.option(Config.string(HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL)),
-      prefetchModel: Config.option(Config.string(HOSTED_OPENAI_ENVIRONMENT.PREFETCH_MODEL)),
-      realtimeModel: Config.option(Config.string(HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL)),
-      posthogPersonalApiKey: Config.option(Config.redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
-      posthogProjectId: Config.option(Config.string(POSTHOG_ENVIRONMENT.PROJECT_ID)),
-      posthogApiHost: Config.option(Config.string(POSTHOG_ENVIRONMENT.API_HOST)),
+      apiKey: Config.option(Config.Redacted(HOSTED_OPENAI_ENVIRONMENT.API_KEY)),
+      brainModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL)),
+      prefetchModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.PREFETCH_MODEL)),
+      realtimeModel: Config.option(Config.String(HOSTED_OPENAI_ENVIRONMENT.REALTIME_MODEL)),
+      posthogPersonalApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY)),
+      posthogProjectId: Config.option(Config.String(POSTHOG_ENVIRONMENT.PROJECT_ID)),
+      posthogApiHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.API_HOST)),
       providerKeyEncryptionSecret: Config.option(
-        Config.redacted(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
+        Config.Redacted(VAULT_ENCRYPTION_ENVIRONMENT.SECRET),
       ),
-      posthogProjectApiKey: Config.option(Config.redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
-      posthogIngestHost: Config.option(Config.string(POSTHOG_ENVIRONMENT.HOST)),
-      cronSecret: Config.option(Config.redacted(OBSERVATION_ENVIRONMENT.CRON_SECRET)),
-      apnsTeamId: Config.option(Config.string(APNS_ENVIRONMENT.TEAM_ID)),
-      apnsKeyId: Config.option(Config.string(APNS_ENVIRONMENT.KEY_ID)),
-      apnsPrivateKey: Config.option(Config.string(APNS_ENVIRONMENT.PRIVATE_KEY)),
-      apnsBundleId: Config.option(Config.string(APNS_ENVIRONMENT.BUNDLE_ID)),
+      posthogProjectApiKey: Config.option(Config.Redacted(POSTHOG_ENVIRONMENT.PROJECT_API_KEY)),
+      posthogIngestHost: Config.option(Config.String(POSTHOG_ENVIRONMENT.HOST)),
+      cronSecret: Config.option(Config.Redacted(OBSERVATION_ENVIRONMENT.CRON_SECRET)),
+      apnsTeamId: Config.option(Config.String(APNS_ENVIRONMENT.TEAM_ID)),
+      apnsKeyId: Config.option(Config.String(APNS_ENVIRONMENT.KEY_ID)),
+      apnsPrivateKey: Config.option(Config.String(APNS_ENVIRONMENT.PRIVATE_KEY)),
+      apnsBundleId: Config.option(Config.String(APNS_ENVIRONMENT.BUNDLE_ID)),
     }),
     (read) => ({
       openAiKey: presentRedacted(read.apiKey),
@@ -112,5 +116,10 @@ export const hostedEnvironment = Layer.effect(
       cronSecret: presentRedacted(read.cronSecret),
       apnsCredentials: apnsCredentialsFromEnvironment(apnsRecord(read)),
     }),
-  ).pipe(Effect.withConfigProvider(ConfigProvider.fromEnv())),
+  ).pipe(
+    Effect.provideServiceEffect(
+      ConfigProvider.ConfigProvider,
+      Effect.sync(() => ConfigProvider.fromEnv()),
+    ),
+  ),
 );

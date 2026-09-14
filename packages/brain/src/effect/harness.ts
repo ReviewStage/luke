@@ -16,7 +16,8 @@
  * closure rather than a clock.
  */
 
-import { Chunk, Effect, TestClock } from "effect";
+import { Clock, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import {
   answered,
   type BrainClientAnswer,
@@ -36,73 +37,70 @@ import { type FakeBrainStateRepository, fakeBrainStateRepository } from "../test
  * sleeps on whichever `Clock` that fiber carries — the `TestClock` an
  * `it.effect` test already stands on — set to the same `NOW` every fixture in
  * this package's tests is written against, so a repository seeded with
- * timestamps relative to it needs no conversion. The runtime is handed over
- * beside it, so every turn of the harness's conversation is a fiber of the
- * test's own.
+ * timestamps relative to it needs no conversion. The test's own services are
+ * handed over beside it, so every turn of the harness's conversation is a
+ * fiber of the test's own.
  */
-export const effectHarness = (
+export const effectHarness = /* @__PURE__ */ Effect.fn("effectHarness")(function* (
   overrides: HarnessOverrides = {},
   repository: FakeBrainStateRepository = fakeBrainStateRepository(),
-): Effect.Effect<Harness> =>
-  Effect.gen(function* () {
-    yield* TestClock.setTime(NOW);
-    const clock = yield* Effect.clock;
-    const runtime = yield* Effect.runtime<never>();
-    return yield* plainHarness(
-      { execution: runtime, now: () => clock.unsafeCurrentTimeMillis(), ...overrides },
-      repository,
-    );
-  });
+): Effect.fn.Return<Harness> {
+  yield* TestClock.setTime(NOW);
+  const clock = yield* Clock.Clock;
+  const context = yield* Effect.context<never>();
+  return yield* plainHarness(
+    {
+      execution: context,
+      now: () => clock.currentTimeMillisUnsafe(),
+      ...overrides,
+    },
+    repository,
+  );
+});
 
 /**
- * Advances the ambient `TestClock` to `untilMs`, one due timer at a time
- * rather than jumping straight there, settling the harness's own microtask
- * chains between each. Jumping straight to `untilMs` in one `TestClock.setTime`
- * call would already read `now` as `untilMs` by the time a callback's own
- * promise chain settles far enough to reschedule, so a short requeue computed
- * from that already-jumped `now` would read as due only after the target and
- * never fire within this advance; holding `now` at each due instant in turn is
- * what keeps a requeue's own delay landing inside the same budget.
+ * Advances the ambient `TestClock` to `untilMs` and settles the harness's own
+ * microtask chains after it. The stepping itself is the clock's: `setTime`
+ * holds `now` at each due instant in turn, opens that sleeper, and yields
+ * before it reads its pending sleeps again, so a callback whose own promise
+ * chain reschedules a short wait from the instant it was woken at has its
+ * requeue registered in time to be fired by the same advance rather than
+ * being computed from a `now` already jumped to the target. What the yield
+ * does not do is drain the promise chains a turn leaves behind it, which is
+ * what the settle here is for.
  */
-export const advanceHarness = (untilMs: number): Effect.Effect<void> =>
-  Effect.gen(function* () {
-    for (;;) {
-      const due = Chunk.toReadonlyArray(yield* TestClock.sleeps())
-        .filter((instant) => instant <= untilMs)
-        .sort((a, b) => a - b)[0];
-      if (due === undefined) break;
-      yield* TestClock.setTime(due);
-      yield* Effect.promise(() => settle());
-    }
-    yield* TestClock.setTime(untilMs);
-  });
+export const advanceHarness = /* @__PURE__ */ Effect.fn("advanceHarness")(function* (
+  untilMs: number,
+): Effect.fn.Return<void> {
+  yield* TestClock.setTime(untilMs);
+  yield* Effect.promise(() => settle());
+});
 
 /**
  * `../harness.ts`'s `reviewing` over `effectHarness` instead of `harness`: a
  * conversation held busy by an observation turn, over the ambient `TestClock`.
  */
-export const effectReviewing = (
+export const effectReviewing = /* @__PURE__ */ Effect.fn("effectReviewing")(function* (
   ...replies: readonly BrainClientAnswer[]
-): Effect.Effect<{
+): Effect.fn.Return<{
   h: Harness;
   inner: FakeClient;
   release: () => Effect.Effect<void>;
-}> =>
-  Effect.gen(function* () {
-    const inner = new FakeClient();
-    const gated = gatedClient(inner);
-    const h = yield* effectHarness({ client: gated.client });
-    inner.answers.push(answered([message("nothing spoken")]), ...replies);
-    yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
-    yield* Effect.promise(() => settle());
-    return {
-      h,
-      inner,
-      release: () =>
-        Effect.gen(function* () {
-          gated.open();
-          yield* Effect.promise(() => settle());
-          while (h.agent.busy()) yield* Effect.promise(() => settle());
-        }),
-    };
-  });
+}> {
+  const inner = new FakeClient();
+  const gated = gatedClient(inner);
+  const h = yield* effectHarness({ client: gated.client });
+  inner.answers.push(answered([message("nothing spoken")]), ...replies);
+  yield* h.agent.releaseHeld([{ briefing: "held", decidedAt: NOW }]);
+  yield* Effect.promise(() => settle());
+  return {
+    h,
+    inner,
+    release: () =>
+      Effect.gen(function* () {
+        gated.open();
+        yield* Effect.promise(() => settle());
+        while (h.agent.busy()) yield* Effect.promise(() => settle());
+      }),
+  };
+});

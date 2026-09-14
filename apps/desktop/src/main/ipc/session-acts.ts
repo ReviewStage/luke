@@ -66,7 +66,7 @@ export function sessionActRows(
     open: Effect.Effect<SessionOpenResult>,
     refusal: string,
   ): Effect.Effect<SessionOpenResult> =>
-    Effect.catchAllDefect(open, () =>
+    Effect.catchDefect(open, () =>
       Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal }),
     );
   const fromRow = (sender: ActSender): void => {
@@ -76,7 +76,7 @@ export function sessionActRows(
     write: Effect.Effect<SessionWriteResult>,
     refusal: string,
   ): Effect.Effect<SessionWriteResult> =>
-    Effect.catchAllDefect(write, () =>
+    Effect.catchDefect(write, () =>
       Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal }),
     );
   return {

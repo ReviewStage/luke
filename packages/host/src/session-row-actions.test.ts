@@ -20,7 +20,8 @@ import {
   type Session,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
-import { Deferred, Duration, Effect, Fiber, TestClock } from "effect";
+import { Deferred, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { createSessionRowActions } from "./session-row-actions.js";
 
 /*
@@ -220,8 +221,8 @@ it.effect("the call's own deadline still ends a write the service never answers"
       },
     });
 
-    const writing = yield* Effect.fork(actions.sendMessage(identityOf(CLOUD), "ship it"));
-    yield* Effect.repeatN(Effect.yieldNow(), 20);
+    const writing = yield* Effect.forkChild(actions.sendMessage(identityOf(CLOUD), "ship it"));
+    yield* Effect.repeat(Effect.yieldNow, { times: 20 });
     yield* TestClock.adjust(Duration.seconds(10));
 
     assert.equal((yield* Fiber.join(writing)).status, UNKNOWN_ACTION_STATUS);
@@ -255,12 +256,12 @@ it.effect("a write the service already carried settles though its caller is inte
       },
     });
 
-    const writing = yield* Effect.fork(actions.sendMessage(identityOf(CLOUD), "ship it"));
-    for (let tick = 0; tick < 100 && !reached; tick += 1) yield* Effect.yieldNow();
+    const writing = yield* Effect.forkChild(actions.sendMessage(identityOf(CLOUD), "ship it"));
+    for (let tick = 0; tick < 100 && !reached; tick += 1) yield* Effect.yieldNow;
     assert.ok(reached, "the write reached the service");
     // The caller ends under the write; the answer the service is still
     // holding is read out all the same, and what it earns is not dropped.
-    const interrupting = yield* Effect.fork(Fiber.interrupt(writing));
+    const interrupting = yield* Effect.forkChild(Fiber.interrupt(writing));
     yield* Deferred.succeed(answering, { answer: { result: ACTION_RESULT_STATUS.ACCEPTED } });
     yield* Fiber.join(interrupting);
 

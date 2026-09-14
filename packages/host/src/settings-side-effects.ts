@@ -51,7 +51,7 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
     [SETTING_SIDE_EFFECT.VOICE_SOURCE]: () =>
-      Effect.zipRight(dependencies.applyVoiceCredential, dependencies.emitSettings()),
+      Effect.andThen(dependencies.applyVoiceCredential, dependencies.emitSettings()),
     // The hold is the service's to apply since E5-3: a briefing is spoken by
     // the service's own exchange against the quiet instant this device's
     // heartbeat reports, which folds the pause and the meeting hold both. So
@@ -59,6 +59,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     // the service, by a heartbeat sent now rather than at the next scheduled
     // beat, so a pause released frees the account's briefings at once.
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
-      Effect.zipRight(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
+      Effect.andThen(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
   } satisfies HostSettingSideEffects;
 }

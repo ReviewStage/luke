@@ -38,9 +38,7 @@ export const CONVERSATION_ENTRY_KIND = {
 export type ConversationEntryKind =
   (typeof CONVERSATION_ENTRY_KIND)[keyof typeof CONVERSATION_ENTRY_KIND];
 
-export const ConversationEntryKindSchema = Schema.Literal(
-  ...Object.values(CONVERSATION_ENTRY_KIND),
-);
+export const ConversationEntryKindSchema = Schema.Literals(Object.values(CONVERSATION_ENTRY_KIND));
 
 const readsConversationEntryKind = Schema.is(ConversationEntryKindSchema);
 
