@@ -7,7 +7,8 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 
 /**
- * Two thumbs under one of Luke's messages, the way a chat rates a reply: the
+ * Two thumbs on one of Luke's messages, behind the ellipsis in its margin,
+ * the way a chat rates a reply: the
  * one the developer chose is filled, a press on the other moves the verdict,
  * and a press on the filled one sends the same verdict again, since a rating
  * is a fact stated and never an edit. The press is one act, carried to the
@@ -41,7 +42,7 @@ const RATE_REFUSAL_COPY = {
   [CONVERSATION_RATE_STATUS.NOT_RATEABLE]: "That message cannot be rated.",
 } as const satisfies Record<ConversationRateStatus, string | undefined>;
 
-const OFFER_LABEL = "Say what went wrong";
+const OFFER_LABEL = "Explain";
 
 /**
  * The most characters each quoted line of the offered draft carries. The

@@ -359,6 +359,7 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
   assert.equal(count(note, "data-speaker", "you"), 0);
   assert.equal(count(note, "data-speaker", "event"), 1);
   assert.equal(count(note, "class", "conversation-copy"), 0);
+  assert.equal(count(note, "class", "conversation-more-button"), 0);
 });
 
 test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {
@@ -401,13 +402,23 @@ function ratingControls(markup: string): number {
   return count(markup, "class", "conversation-rating");
 }
 
+/** The ellipsis buttons a rendering draws, one in the margin of each of Luke's messages. */
+function menuButtons(markup: string): number {
+  return count(markup, "class", "conversation-more-button");
+}
+
+/** The popovers a rendering draws: the sheet each ellipsis opens, the platform's own. */
+function menus(markup: string): number {
+  return count(markup, "popover", "auto");
+}
+
 function pressed(markup: string, label: string): readonly boolean[] {
   return [...markup.matchAll(/<button[^>]*aria-label="([^"]+)"[^>]*aria-pressed="([^"]+)"/g)]
     .filter((match) => match[1] === label)
     .map((match) => match[2] === "true");
 }
 
-test("each of Luke's messages carries one rating control on its last words, and the developer's ask and the brain's note carry none", () => {
+test("each of Luke's messages carries one rating control on its last words, behind its ellipsis, and the developer's ask and the brain's note carry none", () => {
   const groups = fixtureConversationTurns();
   // The fixture's messages of Luke's with words: five replies, one briefing, one on his own judgment.
   const lukes = 7;
@@ -415,15 +426,34 @@ test("each of Luke's messages carries one rating control on its last words, and 
   assert.equal(ratingControls(markup), lukes);
   assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.UP]).length, lukes);
   assert.equal(pressed(markup, RATING_LABEL[MESSAGE_RATING.DOWN]).length, lukes);
-  // No control on a sent bubble or a note: every one stands on Luke's side.
+  // One ellipsis and one sheet per control: the thumbs stand behind the ellipsis, never under the words.
+  assert.equal(menuButtons(markup), lukes);
+  assert.equal(menus(markup), lukes);
   for (const entry of markup.split('<li class="conversation-entry"').slice(1)) {
-    if (ratingControls(entry) === 0) continue;
+    // No control on a sent bubble or a note: every one stands on Luke's side.
+    if (ratingControls(entry) === 0) {
+      assert.equal(menuButtons(entry), 0);
+      continue;
+    }
     assert.equal(count(entry, "data-speaker", CONVERSATION_ENTRY_SPEAKER.YOU), 0);
+    // The ellipsis follows the copy control in the bubble's margin, and the thumbs stand inside the sheet it opens.
+    const copyAt = entry.indexOf('class="conversation-copy"');
+    const moreAt = entry.indexOf('class="conversation-more-button"');
+    const menuAt = entry.indexOf('class="conversation-menu"');
+    const ratingAt = entry.indexOf('class="conversation-rating"');
+    if (copyAt !== -1) assert.ok(copyAt < moreAt);
+    assert.ok(moreAt < menuAt && menuAt < ratingAt);
   }
   // Words on Luke's own judgment take the control too: the service accepts a rating on them.
   const own = render([groupOf(FIXTURE_TURN.OWN)], OPEN);
   assert.equal(ratingControls(own), 1);
+  assert.equal(menuButtons(own), 1);
   assert.equal(count(own, "data-own-words", "true"), 1);
+  // The ellipsis names the sheet it opens, so the platform opens and anchors it: the button's target is the sheet's id.
+  const target = own.match(/class="conversation-more-button"[^>]*popoverTarget="([^"]+)"/)?.[1];
+  assert.ok(target);
+  assert.equal(count(own, "id", target), 1);
+  assert.ok(own.includes(`id="${target}" class="conversation-menu" popover="auto"`));
 });
 
 test("the thumbs show the message's newest rating, and a thumbs down stands the composer's offer beside them only where one can be offered", () => {

@@ -92,6 +92,10 @@ test("a line still being said joins the same list as the stored turns, without a
     count(streaming, 'class="conversation-copy"'),
     count(settled, 'class="conversation-copy"'),
   );
+  assert.equal(
+    count(streaming, 'class="conversation-more-button"'),
+    count(settled, 'class="conversation-more-button"'),
+  );
   // The streaming row stands after the last stored row and before the list closes.
   assert.ok(
     streaming.lastIndexOf('data-streaming="true"') >
