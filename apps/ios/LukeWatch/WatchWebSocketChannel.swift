@@ -54,11 +54,15 @@ final class WatchWebSocketChannel: VoiceSocket, @unchecked Sendable {
             case .failed, .cancelled:
                 settle(.failed)
             case .waiting:
-                // Waiting means no path will carry this flow now. A socket
-                // watchOS refused would wait forever rather than fail on its
-                // own, so it is ended here; a standing socket that starts
-                // waiting is read by its next receive.
-                close()
+                // No path carries the flow yet, or for the moment: watchOS
+                // brings the path up on demand, so a handshake waits here
+                // before it opens, and a standing socket waits here through a
+                // brief Bluetooth or Wi-Fi gap. Neither is ended: a socket
+                // watchOS refused the grant to would wait forever, and the
+                // client's handshake deadline is what ends that one, through
+                // the cancellation of `open()`; a standing socket that never
+                // recovers fails, and its next receive reads the close.
+                break
             default:
                 break
             }

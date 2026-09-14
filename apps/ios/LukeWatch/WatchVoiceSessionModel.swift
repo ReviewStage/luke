@@ -170,9 +170,10 @@ final class WatchVoiceSessionModel {
     /// grants the socket to an active audio session alone, and stays active
     /// until the call ends. The service's `session.created` is the session
     /// started: the door read `session.started` itself, so the call stands
-    /// from the answer.
+    /// from the answer. An attempt a hang-up disowned clears nothing on its
+    /// way out, since a newer press may hold an attempt of its own by then.
     private func open(client: HostedVoiceSessionClient, opening thisOpening: Int) async -> HostedAudioSession? {
-        defer { opening = nil }
+        defer { if thisOpening == openings { opening = nil } }
         do {
             try await WatchVoiceAudioSession.activate()
         } catch {
@@ -189,7 +190,7 @@ final class WatchVoiceSessionModel {
                     session.close()
                 }
             }
-            WatchVoiceAudioSession.deactivate()
+            if session == nil, opening == nil { WatchVoiceAudioSession.deactivate() }
             return nil
         }
         switch outcome {
@@ -414,6 +415,7 @@ final class WatchVoiceSessionModel {
         sessionReader = nil
         session?.close()
         session = nil
+        opening = nil
         closing = false
         sessionClosedAnnounced = false
         WatchVoiceAudioSession.deactivate()
