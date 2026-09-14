@@ -29,9 +29,12 @@ struct WatchVoiceView: View {
         }
         .onChange(of: voice) { _, newVoice in model.changeVoice(newVoice) }
         // A hang-up disables the talk control, which cancels a drag still held
-        // without its `onEnded`; the press is let go here so the next one is heard.
+        // without its `onEnded`; the press is let go here so the next one is
+        // heard. Only then: a call that ended or failed leaves the control live,
+        // and a hold still down would re-enter `beginTurn` on its next move if
+        // the press were forgotten.
         .onChange(of: model.status) { _, status in
-            if status == .closing || status == .idle || status == .failed { isPressing = false }
+            if status == .closing { isPressing = false }
         }
         .onDisappear {
             isPressing = false
