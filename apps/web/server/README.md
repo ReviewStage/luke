@@ -752,9 +752,11 @@ On `/api/voice/audio` a signed-in device with no WebRTC of its own — the
 watch, once it moves — makes the same handshake as on `/api/voice/sessions`,
 bearer and device header alike, and opens with a `session.create` that names
 a voice and one of the four `LIVE_AUDIO_FORMAT`s and carries no offer and no
-seed (`SessionAudioCreateFrame`). The service opens the session's primary
-WebSocket to OpenAI itself on the deployment's key (`openPrimary` in
-`server/voice/openai.ts`), sends the `livePrimarySessionConfig` document
+seed (`SessionAudioCreateFrame`). The service's opener (`server/voice/opening.ts`,
+which is where every route's first frame becomes a session or a refusal)
+opens the session's primary WebSocket to OpenAI itself on the deployment's
+key (`openPrimary` in `server/voice/openai.ts`), sends the
+`livePrimarySessionConfig` document
 under that format, and reads the session's id off `session.started`, which is
 the only place a session of this kind names itself; the `voice_sessions` row
 is written then, with the device's id, the exchange is stood on the same

@@ -133,6 +133,71 @@ const AUDIO_SERVER_EVENTS: readonly string[] = [
   ...INTRODUCTION_SERVER_EVENTS,
 ];
 
+/**
+ * What each route does with a frame OpenAI sent toward the device: the audio
+ * it drops by type, and what it shows — everything, or the events named. On
+ * the sessions and introduction routes the reflected audio is both
+ * directions of it, since the voice travels on the device's own WebRTC media
+ * and the reflection is for a sideband alone; on the audio route Luke's audio
+ * is what the socket carries to the device, so only the echo of the device's
+ * own appends is dropped. A signed-in WebRTC device is shown every frame; the
+ * introduction's caller and the audio route's device hold no sideband of
+ * their own and are shown what a renderer's data channel would be.
+ */
+interface TowardDevicePolicy {
+  readonly droppedAudio: readonly string[];
+  /** The event types shown, or nothing where every frame is. */
+  readonly shown: readonly string[] | undefined;
+}
+
+/** The echo of the device's own audio, the one reflection the audio route drops. */
+const ECHOED_AUDIO: readonly string[] = [LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND];
+
+const TOWARD_DEVICE = {
+  [VOICE_ROUTE.SESSIONS]: { droppedAudio: REFLECTED_AUDIO, shown: undefined },
+  [VOICE_ROUTE.INTRODUCTION]: { droppedAudio: REFLECTED_AUDIO, shown: INTRODUCTION_SERVER_EVENTS },
+  [VOICE_ROUTE.AUDIO]: { droppedAudio: ECHOED_AUDIO, shown: AUDIO_SERVER_EVENTS },
+} satisfies Record<VoiceRoute, TowardDevicePolicy>;
+
+/**
+ * What each route does with a frame the device sent toward OpenAI: what it
+ * forwards untouched, what it reads as a report in the service's own
+ * vocabulary, and what becomes of anything else, an unreadable frame
+ * included. A signed-in device, on either of its routes, is refused with the
+ * close, so an older build of any platform after the cutover is refused where
+ * it can be seen and never doubles the exchange standing here; an
+ * introduction caller, who may send only what a renderer's data channel may,
+ * has the rest dropped and counted, since nothing it says can append to a
+ * session running on Luke's key either way.
+ */
+interface FromDevicePolicy {
+  readonly forwarded: readonly string[];
+  readonly reports: readonly string[];
+  /** What becomes of any other frame, an unreadable one included. */
+  readonly otherwise: FrameDecision;
+}
+
+/** The introduction holds no exchange to report to, so it reads no report. */
+const NO_REPORTS: readonly string[] = [];
+
+const FROM_DEVICE = {
+  [VOICE_ROUTE.SESSIONS]: {
+    forwarded: SESSIONS_CLIENT_EVENTS,
+    reports: SESSIONS_REPORT_FRAMES,
+    otherwise: FRAME_DECISION.REFUSE,
+  },
+  [VOICE_ROUTE.INTRODUCTION]: {
+    forwarded: INTRODUCTION_CLIENT_EVENTS,
+    reports: NO_REPORTS,
+    otherwise: FRAME_DECISION.DROP_UNPERMITTED,
+  },
+  [VOICE_ROUTE.AUDIO]: {
+    forwarded: AUDIO_CLIENT_EVENTS,
+    reports: AUDIO_REPORT_FRAMES,
+    otherwise: FRAME_DECISION.REFUSE,
+  },
+} satisfies Record<VoiceRoute, FromDevicePolicy>;
+
 /** The `type` of one frame, or nothing when the frame is not a JSON record naming one. */
 export function frameType(text: UnparsedWireValue): string | undefined {
   const payload = decodeLivePayload(text);
@@ -141,56 +206,21 @@ export function frameType(text: UnparsedWireValue): string | undefined {
   return isWireString(type) ? type : undefined;
 }
 
-/**
- * What to do with a frame OpenAI sent toward the device. On the sessions and
- * introduction routes reflected audio is dropped, since the voice travels on
- * the device's own WebRTC media and the reflection is for a sideband alone.
- * On the audio route Luke's audio is forwarded, since the socket is what
- * carries it to the device, and only the echo of the device's own appends is
- * dropped. The introduction's caller and the audio route's device are shown
- * only what a renderer's own data channel would be shown, since neither holds
- * a sideband of its own; a signed-in WebRTC device is shown every frame.
- */
+/** What to do with a frame OpenAI sent toward the device, under the route's own policy above. */
 export function upstreamFrameDecision(type: string | undefined, route: VoiceRoute): FrameDecision {
-  if (route === VOICE_ROUTE.AUDIO) {
-    if (type === LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND) return FRAME_DECISION.DROP_AUDIO;
-    return type !== undefined && AUDIO_SERVER_EVENTS.includes(type)
-      ? FRAME_DECISION.FORWARD
-      : FRAME_DECISION.DROP_UNPERMITTED;
-  }
-  if (type !== undefined && REFLECTED_AUDIO.includes(type)) return FRAME_DECISION.DROP_AUDIO;
-  if (route === VOICE_ROUTE.SESSIONS) return FRAME_DECISION.FORWARD;
-  return type !== undefined && INTRODUCTION_SERVER_EVENTS.includes(type)
+  const policy = TOWARD_DEVICE[route];
+  if (type !== undefined && policy.droppedAudio.includes(type)) return FRAME_DECISION.DROP_AUDIO;
+  if (policy.shown === undefined) return FRAME_DECISION.FORWARD;
+  return type !== undefined && policy.shown.includes(type)
     ? FRAME_DECISION.FORWARD
     : FRAME_DECISION.DROP_UNPERMITTED;
 }
 
-/**
- * What to do with a frame the device sent toward OpenAI. A signed-in device
- * may send the hang-up, which passes untouched, and its idle report and its
- * stop, which the service reads for the exchange it holds; on the audio route
- * it may also send its own audio, which passes untouched; anything else, an
- * unreadable frame included, closes the socket rather than being dropped, so
- * an older build of any platform after the cutover is refused where it can be
- * seen and never doubles the exchange standing here. An introduction caller
- * may send only what a renderer's data channel may, the microphone switch and
- * the hang-up, so nothing it says can append to a session running on Luke's
- * key; what it sends beside those is dropped and counted.
- */
+/** What to do with a frame the device sent toward OpenAI, under the route's own policy above. */
 export function deviceFrameDecision(type: string | undefined, route: VoiceRoute): FrameDecision {
-  if (route === VOICE_ROUTE.SESSIONS) {
-    if (type === undefined) return FRAME_DECISION.REFUSE;
-    if (SESSIONS_CLIENT_EVENTS.includes(type)) return FRAME_DECISION.FORWARD;
-    if (SESSIONS_REPORT_FRAMES.includes(type)) return FRAME_DECISION.REPORT;
-    return FRAME_DECISION.REFUSE;
-  }
-  if (route === VOICE_ROUTE.AUDIO) {
-    if (type === undefined) return FRAME_DECISION.REFUSE;
-    if (AUDIO_CLIENT_EVENTS.includes(type)) return FRAME_DECISION.FORWARD;
-    if (AUDIO_REPORT_FRAMES.includes(type)) return FRAME_DECISION.REPORT;
-    return FRAME_DECISION.REFUSE;
-  }
-  return type !== undefined && INTRODUCTION_CLIENT_EVENTS.includes(type)
-    ? FRAME_DECISION.FORWARD
-    : FRAME_DECISION.DROP_UNPERMITTED;
+  const policy = FROM_DEVICE[route];
+  if (type === undefined) return policy.otherwise;
+  if (policy.forwarded.includes(type)) return FRAME_DECISION.FORWARD;
+  if (policy.reports.includes(type)) return FRAME_DECISION.REPORT;
+  return policy.otherwise;
 }

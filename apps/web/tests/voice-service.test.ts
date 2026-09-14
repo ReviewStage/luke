@@ -50,11 +50,10 @@ import {
 } from "../server/live";
 import { VOICE_ROUTE } from "../server/voice/frames";
 import { FINALIZATION, LOG_EVENT, type LogEntry } from "../server/voice/log";
+import { INTRODUCTION_INPUT_BOUNDS, SESSIONS_INPUT_BOUNDS } from "../server/voice/opening";
 import { UNPERMITTED_FRAME_REASON, UPSTREAM_CLOSED_REASON } from "../server/voice/relay";
 import {
-  INTRODUCTION_INPUT_BOUNDS,
   listening,
-  SESSIONS_INPUT_BOUNDS,
   SOCKET_BYTE_BUDGET,
   UPGRADE_STATUS,
   VoiceService,

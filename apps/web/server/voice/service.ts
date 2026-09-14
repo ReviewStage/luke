@@ -2,10 +2,9 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import { Effect, FiberSet, type Layer, Option, type Schema, type Scope } from "effect";
+import { Effect, FiberSet, type Layer, type Scope } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   type DevicePlatform,
@@ -13,52 +12,35 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   isDeviceWireId,
-  type SessionAttachedFrame,
-  type SessionAttachFrame,
-  type SessionAudioCreatedFrame,
-  type SessionAudioCreateFrame,
-  type SessionCreatedFrame,
-  type SessionCreateFrame,
   type SessionSpokenFrame,
-  sessionAudioCreateFrameFromWire,
-  sessionOpeningFrameFromWire,
-  type UnparsedWireValue,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
 } from "../core.js";
 import {
   commentaryAppend,
-  decodeLivePayload,
   greetingCue,
   greetingInstruction,
   instructionsAppend,
   LIVE_CLIENT_EVENT,
   LIVE_INPUT_AUDIO_APPEND,
-  LIVE_INPUT_BOUNDS,
-  LIVE_SCENE,
-  LIVE_SESSION_OUTCOME,
   type LiveClientEvent,
-  livePrimarySessionConfig,
-  liveSessionConfig,
-  RENDERER_CLIENT_EVENTS,
-  RENDERER_SERVER_EVENTS,
-  SEED_ROLE,
 } from "../live.js";
 import type { WebStoreRun } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
-import { routeForPath, type SignedInRoute, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
+import { routeForPath, VOICE_ROUTE, type VoiceRoute } from "./frames.js";
 import type { AttachedExchange, AttachedSession, ExchangeAttachment } from "./live-exchange.js";
 import { LOG_EVENT, type Log, standardOutputLog } from "./log.js";
 import { createLiveUpstream, type LiveUpstream } from "./openai.js";
+import {
+  type Admission,
+  type SessionEffect,
+  type SessionFailure,
+  type SessionOpener,
+  sessionOpener,
+} from "./opening.js";
 import { OPENING_OUTCOME, type OpeningSettled, RELAY_DEFAULTS, relaySession } from "./relay.js";
 import type { VoiceSessionRecord } from "./session-record.js";
-import {
-  frameText,
-  replayHeldFrames,
-  SOCKET_CLOSE_CODE,
-  type VoiceSocket,
-  voiceSocket,
-} from "./socket.js";
+import { replayHeldFrames, SOCKET_CLOSE_CODE, voiceSocket } from "./socket.js";
 
 /**
  * The hosted voice service: the part of Luke's own deployment that holds the
@@ -271,31 +253,6 @@ export function listening(
   );
 }
 
-/**
- * What an accountless introduction may put into a session running on Luke's
- * key: one developer message naming the detected sessions, bounded well
- * under what the takeover composes (at most eight titles of eighty
- * characters), because this is client text entering a prompt with no account
- * to answer for it.
- */
-export const INTRODUCTION_INPUT_BOUNDS = {
-  MESSAGES: 1,
-  CHARS: 1_024,
-} as const;
-
-/**
- * What a signed-in device may put into its session's `input`: the API's own
- * message bound, and a per-part bound wide enough for the roster summary a
- * session opens with and the Conversation lines beside it, each of which the
- * device composes under bounds of its own. It is admitted by shape rather
- * than trusted by route: an account behind a request says who is asking, not
- * how much of a prompt this service will pay OpenAI to read.
- */
-export const SESSIONS_INPUT_BOUNDS = {
-  MESSAGES: LIVE_INPUT_BOUNDS.MESSAGES,
-  CHARS: 4_096,
-} as const;
-
 const BEARER_SCHEME = "Bearer ";
 
 export interface VoiceServiceOptions {
@@ -329,71 +286,7 @@ export interface VoiceServiceOptions {
   firstFrameTimeoutMs?: number;
 }
 
-/**
- * Who an upgrade admitted: a signed-in device, on either of its two routes,
- * with the `Authorization` value it presented and the device row it claimed
- * to be, or an introduction with nothing. The claim is a well-formed id and
- * no more until the account is resolved; whether that account holds the row,
- * and which platform that row names, is asked then.
- */
-type Admission =
-  | { route: SignedInRoute; bearer: string; deviceId: string | undefined }
-  | { route: typeof VOICE_ROUTE.INTRODUCTION };
-
-type SignedInAdmission = Extract<Admission, { route: SignedInRoute }>;
-
-/** The account a device's handshake resolved to, its device claim admitted and a session spent, or the reason it is refused. */
-type AdmittedAccount =
-  | {
-      accountId: string;
-      deviceId: string | undefined;
-      platform: DevicePlatform | undefined;
-      quota: SessionCreatedFrame["quota"];
-    }
-  | { refusal: HostedApiError; platform: DevicePlatform | undefined };
-
 type UpgradeDecision = Admission | { status: number };
-
-/** A session standing behind a socket, with the frame that says so, or the reason it is not. */
-type Opened =
-  | {
-      sessionId: string;
-      /** The account the session is billed to; none for the introduction. */
-      accountId: string | undefined;
-      /** The device the handshake named and the account was shown to hold; none for the introduction, for a device that sent none, and on a re-attach, which checks the session's owner and not a device. */
-      deviceId: string | undefined;
-      /** The platform that device row named, which is what the log counts this caller by; none wherever no row was resolved. */
-      platform: DevicePlatform | undefined;
-      /**
-       * Whether the session is already running: false for one just created
-       * from a WebRTC offer, whose peer has yet to connect; true for one
-       * re-attached, which spoke its start to an earlier connection, and for
-       * one the audio route opened, whose start the door read itself.
-       */
-      started: boolean;
-      /** The service's socket to OpenAI, open and paused: the sideband it attached, or the primary socket that is the session. */
-      sideband: WebSocket;
-      /**
-       * The frames the door took off that socket before any consumer stood,
-       * in order: what a primary socket said beside `session.started`, and
-       * nothing on the routes whose socket the service resumes untouched.
-       * They reach both consumers ahead of the resume, through the socket's
-       * own event, so a frame that arrived with the handshake is heard once.
-       */
-      held: readonly string[];
-      answer: SessionCreatedFrame | SessionAttachedFrame | SessionAudioCreatedFrame;
-      logEvent: typeof LOG_EVENT.SESSION_CREATED | typeof LOG_EVENT.SESSION_ATTACHED;
-    }
-  | { refusal: HostedApiError; platform: DevicePlatform | undefined };
-
-/**
- * A refusal as both `Opened` and `AdmittedAccount` state one: the reason, and
- * the platform where a device row had been resolved by the time it was
- * reached — nothing everywhere else, which is every refusal ahead of that row.
- */
-function refused(reason: HostedApiError, platform?: DevicePlatform) {
-  return { refusal: reason, platform };
-}
 
 function headerValue(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -405,35 +298,6 @@ function presentedBearer(request: IncomingMessage): string | undefined {
   return authorization.slice(BEARER_SCHEME.length).trim().length > 0 ? authorization : undefined;
 }
 
-function introductionInputAdmitted(frame: SessionCreateFrame): boolean {
-  return (
-    frame.input.length <= INTRODUCTION_INPUT_BOUNDS.MESSAGES &&
-    frame.input.every(
-      (item) =>
-        item.role === SEED_ROLE.DEVELOPER &&
-        item.content.every((part) => part.text.length <= INTRODUCTION_INPUT_BOUNDS.CHARS),
-    )
-  );
-}
-
-function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
-  return (
-    frame.input.length <= SESSIONS_INPUT_BOUNDS.MESSAGES &&
-    frame.input.every((item) =>
-      item.content.every((part) => part.text.length <= SESSIONS_INPUT_BOUNDS.CHARS),
-    )
-  );
-}
-
-/**
- * What one session's own effect may fail with: the `voice_sessions` writes
- * the service makes on the session's behalf, and nothing else — every other
- * refusal is a frame the device is answered with.
- */
-type SessionFailure = SqlError | Schema.SchemaError;
-
-type SessionEffect<A> = Effect.Effect<A, SessionFailure, SqlClient.SqlClient | Scope.Scope>;
-
 export class VoiceService {
   readonly #options: VoiceServiceOptions;
   readonly #log: Log;
@@ -441,6 +305,8 @@ export class VoiceService {
   readonly #record: VoiceSessionRecord;
   readonly #run: WebStoreRun;
   readonly #upstream: LiveUpstream | undefined;
+  /** What a socket's first frame opens, by its route: the account admitted and spent, the session at OpenAI, the row registered. */
+  readonly #opener: SessionOpener;
   readonly #sockets: WebSocketServer;
   /** Every session under way, one fiber each, so a close can wait for each to finalize. */
   readonly #fibers: FiberSet.FiberSet<void>;
@@ -459,6 +325,12 @@ export class VoiceService {
     this.#record = options.record;
     this.#run = options.run;
     this.#upstream = upstream;
+    this.#opener = sessionOpener({
+      accounts: options.accounts,
+      record: options.record,
+      model: options.model,
+      firstFrameTimeoutMs: options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS,
+    });
     this.#sockets = sockets;
     this.#fibers = fibers;
     this.#begin = begin;
@@ -641,7 +513,7 @@ export class VoiceService {
           yield* device.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, reason);
         });
 
-      const opened = yield* this.#open(upstream, admission, device);
+      const opened = yield* this.#opener.open(upstream, admission, device);
       // A socket opened for a device that has gone is the scope's to
       // release, which it does on the way out of this effect.
       if (!(yield* device.isOpen)) return;
@@ -832,36 +704,6 @@ export class VoiceService {
   }
 
   /**
-   * The session behind a socket's first frame, by the route the socket
-   * opened on: the WebRTC routes take a `session.create` carrying an offer or,
-   * on the sessions route, a `session.attach`; the audio route takes the
-   * `session.create` that names a format and nothing else, so a
-   * `session.attach` there is a first frame the route does not admit and is
-   * refused as one, since a primary socket has no attach to offer. A frame
-   * that was late, unreadable, or neither shape is the same refusal; a device
-   * gone by the time its frame was read is refused the same way and answered
-   * nothing, since nothing is spent on a caller who is not there.
-   */
-  #open(upstream: LiveUpstream, admission: Admission, device: VoiceSocket): SessionEffect<Opened> {
-    return Effect.gen({ self: this }, function* () {
-      if (admission.route === VOICE_ROUTE.AUDIO) {
-        const frame = yield* this.#firstFrame(device, sessionAudioCreateFrameFromWire);
-        if (frame === undefined || !(yield* device.isOpen)) {
-          return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-        }
-        return yield* this.#openAudio(upstream, admission, frame);
-      }
-      const frame = yield* this.#firstFrame(device, sessionOpeningFrameFromWire);
-      if (frame === undefined || !(yield* device.isOpen)) {
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-      }
-      return frame.type === VOICE_SERVICE_FRAME.SESSION_ATTACH
-        ? yield* this.#openAttached(upstream, admission, frame)
-        : yield* this.#openCreated(upstream, admission, frame);
-    });
-  }
-
-  /**
    * What follows the greeting's append, in the order the Live conversations
    * guide fixes: the acknowledgment is what licenses the cue, because the
    * greeting depends on application instructions and a cue sent ahead of
@@ -893,236 +735,6 @@ export class VoiceService {
     });
   }
 
-  /**
-   * A new session: authorized and spent, created at OpenAI, registered to its
-   * account, and attached. The introduction spends the deployment's shared
-   * daily ceiling only once its frame has been admitted, as the mint spends
-   * only after reading a valid body, so an empty or malformed handshake costs
-   * the ceiling nothing.
-   */
-  #openCreated(
-    upstream: LiveUpstream,
-    admission: Admission,
-    frame: SessionCreateFrame,
-  ): SessionEffect<Opened> {
-    return Effect.gen({ self: this }, function* () {
-      const { route } = admission;
-      // The introduction holds no account and names no device, so every
-      // refusal on it counts no platform, here and below.
-      if (route === VOICE_ROUTE.INTRODUCTION) {
-        if (!introductionInputAdmitted(frame)) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-        const introduction = yield* this.#accounts.spendIntroduction();
-        if (!introduction.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-      } else if (!sessionsInputAdmitted(frame)) {
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-      }
-      const account =
-        admission.route === VOICE_ROUTE.INTRODUCTION
-          ? undefined
-          : yield* this.#admitAccount(admission);
-      if (account && "refusal" in account) return account;
-      const answer: SessionCreatedFrame = {
-        type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-        sessionId: "",
-        sdpAnswer: "",
-        ...(account?.quota === undefined ? undefined : { quota: account.quota }),
-      };
-
-      const config = liveSessionConfig({
-        scene: route === VOICE_ROUTE.SESSIONS ? LIVE_SCENE.DESKTOP : LIVE_SCENE.INTRODUCTION,
-        model: this.#options.model,
-        voice: frame.voice,
-        input: frame.input,
-        clientEvents: RENDERER_CLIENT_EVENTS,
-        serverEvents: RENDERER_SERVER_EVENTS,
-      });
-      const created = yield* upstream.create(config, frame.sdp);
-      if (created.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
-        return refused(
-          created.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
-            created.status === HTTP_STATUS.TOO_MANY_REQUESTS
-            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
-            : HOSTED_API_ERROR.UPSTREAM_ERROR,
-          account?.platform,
-        );
-      }
-      answer.sessionId = created.answer.session.id;
-      answer.sdpAnswer = created.answer.transport.sdp;
-      if (account) {
-        yield* this.#record.register({
-          userId: account.accountId,
-          sessionId: answer.sessionId,
-          deviceId: account.deviceId,
-        });
-      }
-      const sideband = yield* this.#attach(upstream, answer.sessionId);
-      if (sideband === undefined) {
-        return refused(HOSTED_API_ERROR.UPSTREAM_ERROR, account?.platform);
-      }
-      return {
-        sessionId: answer.sessionId,
-        accountId: account?.accountId,
-        deviceId: account?.deviceId,
-        platform: account?.platform,
-        started: false,
-        sideband,
-        held: [],
-        answer,
-        logEvent: LOG_EVENT.SESSION_CREATED,
-      };
-    });
-  }
-
-  /**
-   * A session of the service's own socket, for a device that streams its
-   * audio through the service: authorized and spent as a WebRTC session is,
-   * then started at OpenAI over a primary socket under the format the device
-   * named, and registered to its account under the id `session.started`
-   * carried, which is the only place such a session names itself. The door
-   * consumes that event, so the session is handed on as started, and what the
-   * socket said beside it is handed on with the socket for the consumers to
-   * hear first. Nothing is seeded, as the phone seeds nothing.
-   */
-  #openAudio(
-    upstream: LiveUpstream,
-    admission: SignedInAdmission,
-    frame: SessionAudioCreateFrame,
-  ): SessionEffect<Opened> {
-    return Effect.gen({ self: this }, function* () {
-      const account = yield* this.#admitAccount(admission);
-      if ("refusal" in account) return account;
-      const opened = yield* upstream.openPrimary(
-        livePrimarySessionConfig({
-          scene: LIVE_SCENE.DESKTOP,
-          model: this.#options.model,
-          voice: frame.voice,
-          format: frame.format,
-        }),
-      );
-      if (opened.outcome !== LIVE_SESSION_OUTCOME.SUCCEEDED) {
-        return refused(
-          opened.outcome === LIVE_SESSION_OUTCOME.HTTP_ERROR &&
-            opened.status === HTTP_STATUS.TOO_MANY_REQUESTS
-            ? HOSTED_API_ERROR.UPSTREAM_THROTTLED
-            : HOSTED_API_ERROR.UPSTREAM_ERROR,
-          account.platform,
-        );
-      }
-      const { sessionId, socket, held } = opened.session;
-      yield* this.#record.register({
-        userId: account.accountId,
-        sessionId,
-        deviceId: account.deviceId,
-      });
-      const answer: SessionAudioCreatedFrame = {
-        type: VOICE_SERVICE_FRAME.SESSION_CREATED,
-        sessionId,
-        ...(account.quota === undefined ? undefined : { quota: account.quota }),
-      };
-      return {
-        sessionId,
-        accountId: account.accountId,
-        deviceId: account.deviceId,
-        platform: account.platform,
-        started: true,
-        sideband: socket,
-        held,
-        answer,
-        logEvent: LOG_EVENT.SESSION_CREATED,
-      };
-    });
-  }
-
-  /**
-   * A device's handshake as an account, in the order the refusals are
-   * cheapest: the bearer resolved, the device it claimed to be read from the
-   * rows the account holds, and only then a session spent. A device the
-   * account does not hold is refused before the spend, so a claim on someone
-   * else's device — a phone naming a Mac's row, or either naming a row of an
-   * account that is not its own — costs the claimant nothing and creates
-   * nothing; the record's own write checks the same fact again, so a row gone
-   * between here and there names no device. The row that was found is also
-   * where the platform the log counts this caller by comes from: a claim
-   * refused read no row of the account's, so it counts none.
-   */
-  #admitAccount(
-    admission: SignedInAdmission,
-  ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> {
-    return Effect.gen({ self: this }, function* () {
-      const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
-      if (accountId === undefined) return refused(HOSTED_API_ERROR.INVALID_TOKEN);
-      const claimed =
-        admission.deviceId === undefined
-          ? undefined
-          : yield* this.#record.heldDevice({ userId: accountId, deviceId: admission.deviceId });
-      if (admission.deviceId !== undefined && claimed === undefined) {
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-      }
-      const platform = claimed?.platform;
-      const spend = yield* this.#accounts.spend(accountId);
-      if (!spend.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED, platform);
-      return { accountId, deviceId: admission.deviceId, platform, quota: spend.quota };
-    });
-  }
-
-  /**
-   * A fresh connection to a session that stands: the bearer's account, and
-   * only when the session named was created for that very account. A session
-   * this deployment never created, or another account's, is refused as the
-   * bearer's own failure rather than as a hint that the id exists. The
-   * introduction never re-attaches. What is proven here is the session's
-   * owner rather than a device, so no device row is read and nothing this
-   * connection logs counts a platform, exactly as its `deviceId` names none.
-   */
-  #openAttached(
-    upstream: LiveUpstream,
-    admission: Admission,
-    frame: SessionAttachFrame,
-  ): SessionEffect<Opened> {
-    return Effect.gen({ self: this }, function* () {
-      if (admission.route !== VOICE_ROUTE.SESSIONS)
-        return refused(HOSTED_API_ERROR.INVALID_REQUEST);
-      const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
-      if (
-        accountId === undefined ||
-        !(yield* this.#record.owned({ userId: accountId, sessionId: frame.sessionId }))
-      ) {
-        return refused(HOSTED_API_ERROR.INVALID_TOKEN);
-      }
-      const sideband = yield* this.#attach(upstream, frame.sessionId);
-      if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
-      const answer: SessionAttachedFrame = {
-        type: VOICE_SERVICE_FRAME.SESSION_ATTACHED,
-        sessionId: frame.sessionId,
-      };
-      return {
-        sessionId: frame.sessionId,
-        accountId,
-        deviceId: undefined,
-        platform: undefined,
-        started: true,
-        sideband,
-        held: [],
-        answer,
-        logEvent: LOG_EVENT.SESSION_ATTACHED,
-      };
-    });
-  }
-
-  /**
-   * The sideband as the upstream hands it over: open and paused, since no
-   * consumer listens yet and a frame the session speaks before the relay and
-   * the exchange register would otherwise be emitted to nobody. `#serve`
-   * resumes it once every listener stands, and what arrived meanwhile is read
-   * then, in order.
-   */
-  #attach(
-    upstream: LiveUpstream,
-    sessionId: string,
-  ): Effect.Effect<WebSocket | undefined, never, Scope.Scope> {
-    return Effect.catch(upstream.attach(sessionId), () => Effect.succeed(undefined));
-  }
-
   #recordUsage(
     route: VoiceRoute,
     userId: string,
@@ -1132,25 +744,5 @@ export class VoiceService {
     return Effect.map(this.#accounts.recordSeconds({ userId, sessionId, seconds }), (outcome) => {
       this.#log({ event: LOG_EVENT.USAGE_RECORDED, route, seconds, outcome });
     });
-  }
-
-  /** The socket's first frame as the route's reader admits it, or nothing when it was late, closed, or not that shape. */
-  #firstFrame<Frame>(
-    device: VoiceSocket,
-    read: (payload: UnparsedWireValue) => Frame | undefined,
-  ): Effect.Effect<Frame | undefined> {
-    const timeoutMs = this.#options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS;
-    return device.next.pipe(
-      Effect.map((frame) => {
-        const text = Option.flatMapNullishOr(frame, frameText);
-        if (Option.isNone(text)) return undefined;
-        const payload = decodeLivePayload(text.value);
-        return payload === undefined ? undefined : read(payload);
-      }),
-      Effect.timeoutOrElse({
-        duration: timeoutMs,
-        orElse: () => Effect.succeed(undefined),
-      }),
-    );
   }
 }
