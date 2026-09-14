@@ -15,8 +15,6 @@ import {
 /** A hosted diagnostics report with only what a test wants to vary. */
 function diagnostics(overrides: Partial<LiveDiagnostics>): LiveDiagnostics {
   return {
-    apiKeyConfigured: false,
-    hosted: true,
     fixtureMode: false,
     model: LIVE_DEFAULTS.MODEL,
     voice: LIVE_DEFAULTS.VOICE,
@@ -159,7 +157,7 @@ test("the emergency ceiling is surfaced only as temporary unavailability", () =>
   );
   assert.equal(hostedVoiceUnavailableNote(undefined), undefined);
   assert.equal(
-    hostedVoiceUnavailableNote(diagnostics({ lastOutcome: LIVE_SESSION_OUTCOME.NO_API_KEY })),
+    hostedVoiceUnavailableNote(diagnostics({ lastOutcome: LIVE_SESSION_OUTCOME.NO_ACCOUNT })),
     undefined,
   );
 });

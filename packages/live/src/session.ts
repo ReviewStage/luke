@@ -124,13 +124,14 @@ export type LiveCreateAnswer = typeof liveCreateAnswerSchema.Type;
 /**
  * Why the last attempt to open a session ended the way it did. "Voice is
  * off" has several distinct causes that look identical from the panel, and
- * the one that matters most, the key never reaching the process, is invisible
- * from inside the app without this.
+ * the one that matters most, no signed-in account for the service to open a
+ * session on, is invisible from inside the app without this.
  */
 export const LIVE_SESSION_OUTCOME = {
   NOT_ATTEMPTED: "not-attempted",
   SUCCEEDED: "succeeded",
-  NO_API_KEY: "no-api-key",
+  /** No signed-in account to open a session on; nothing was attempted. */
+  NO_ACCOUNT: "no-account",
   DISABLED_BY_FIXTURE: "disabled-by-fixture",
   HTTP_ERROR: "http-error",
   NETWORK_ERROR: "network-error",
@@ -154,8 +155,8 @@ export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE
  * names, so a caller still comparing that string with `===` and one that
  * throws or yields the class agree on the same wire value.
  */
-export class NoApiKeyRefusal extends Schema.TaggedError<NoApiKeyRefusal>()("NoApiKeyRefusal", {
-  code: Schema.Literal(LIVE_SESSION_OUTCOME.NO_API_KEY),
+export class NoAccountRefusal extends Schema.TaggedError<NoAccountRefusal>()("NoAccountRefusal", {
+  code: Schema.Literal(LIVE_SESSION_OUTCOME.NO_ACCOUNT),
 }) {}
 
 export class DisabledByFixtureRefusal extends Schema.TaggedError<DisabledByFixtureRefusal>()(
@@ -199,7 +200,7 @@ export class HostedUnavailableRefusal extends Schema.TaggedError<HostedUnavailab
 
 /** Every outcome-as-error class this module declares, for a test's own membership check. */
 export const LIVE_SESSION_REFUSALS = [
-  NoApiKeyRefusal,
+  NoAccountRefusal,
   DisabledByFixtureRefusal,
   HttpErrorRefusal,
   NetworkErrorRefusal,
@@ -212,16 +213,11 @@ export const LIVE_SESSION_REFUSALS = [
 
 /**
  * What the host knows about why voice is or is not available. It carries no
- * credential material: whether a key was found, never the key, and never a
- * session's SDP.
+ * credential material: never the account's token, and never a session's SDP.
  */
 export interface LiveDiagnostics {
-  /** Whether the host resolved an OpenAI key, from either place one can come from. */
-  apiKeyConfigured: boolean;
   /** A fixture or evidence run never opens a session, regardless of credentials. */
   fixtureMode: boolean;
-  /** Whether voice runs on the hosted service rather than the developer's own key. */
-  hosted?: boolean;
   model: string;
   voice: LiveVoice;
   lastOutcome: LiveSessionOutcome;
@@ -232,7 +228,7 @@ export interface LiveDiagnostics {
   lastSessionSeconds?: number;
   /** Whether the host's sideband stands on the current session. */
   sidebandAttached: boolean;
-  /** The hosted counter as the service last reported it; absent on a keyed run. */
+  /** The hosted counter as the service last reported it; absent until a session has been created. */
   quota?: {
     used: number;
     limit: number;

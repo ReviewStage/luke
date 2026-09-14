@@ -1,12 +1,5 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
-  accountCall,
-  CALL_FAULT,
-  type CallFailure,
-  callAnswered,
-  fixedBearer,
   HOSTED_API_ERROR,
   type HostedApiError,
   type HostedQuota,
@@ -32,27 +25,13 @@ import {
   type InitialItem,
   isLiveVoice,
   LIVE_DEFAULTS,
-  LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
-  LIVE_SESSIONS_PATH,
   type LiveDiagnostics,
   type LiveSessionOutcome,
   type LiveVoice,
-  liveAttachPath,
-  liveCreateAnswerSchema,
-  liveCreateRequest,
-  liveSessionConfig,
   type ProactiveSpeechKind,
 } from "@sidecar/live";
-import {
-  HTTP_METHOD,
-  HTTP_STATUS,
-  positiveInteger,
-  text,
-  unparsedWire,
-  type WireRecord,
-  withoutTrailingSlash,
-} from "@sidecar/wire";
+import { HTTP_STATUS, positiveInteger, text, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import {
   Data,
@@ -61,7 +40,6 @@ import {
   Effect,
   Either,
   Exit,
-  type Layer,
   Option,
   Schedule,
   type Scope,
@@ -81,24 +59,22 @@ import {
 } from "./live-socket.js";
 
 /**
- * Where a GPT Live session comes from — the developer's own OpenAI key, the
- * signed-in account through Luke's voice service, or the accountless
- * introduction endpoint — and what each answers with: the session's opaque id
- * and the SDP answer the renderer applies, never a credential. The trusted
+ * Where a GPT Live session comes from — the signed-in account through Luke's
+ * voice service, or the accountless introduction endpoint — and what each
+ * answers with: the session's opaque id and the SDP answer the renderer
+ * applies, never a credential. Every session has the service between it and
+ * OpenAI; nothing here opens one on a key of the developer's own. The trusted
  * side of the session (the sideband) is reached only through what a source
  * opened, so the renderer's peer connection and the host's sideband are one
  * session by construction.
  */
 
 export const LIVE_ENVIRONMENT = {
-  MODEL: "LUKE_LIVE_MODEL",
   VOICE: "LUKE_LIVE_VOICE",
 } as const;
 
-const OPENAI_LIVE_DEFAULTS = {
-  BASE_URL: "https://api.openai.com/v1",
-  REQUEST_TIMEOUT_MS: 10_000,
-} as const;
+/** How long a source waits on the service's handshake before recording the attempt as lost. */
+const SERVICE_REQUEST_TIMEOUT_MS = 10_000;
 
 const UNAVAILABLE_STATUS = 503;
 
@@ -131,31 +107,30 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   /**
    * Tells the service standing between this peer and the session whether
    * the peer has gone quiet, in the service's own vocabulary rather than as
-   * a Live event, since it is read by the service and never by OpenAI. A
-   * session with no service between (the keyed source, straight to OpenAI)
-   * has no one to tell and offers no door.
+   * a Live event, since it is read by the service and never by OpenAI.
+   * Optional on the interface for a session that offers no such door; every
+   * session this build opens is the service's and offers it.
    */
   reportActivity?(idle: boolean): void;
   /**
    * Asks the service standing between this peer and the session to tell the
    * model to stop and wait, in the service's own vocabulary: the instruction
    * that says so is the service's to append, so nothing on this side names
-   * it or appends it. A session with no service between has no one to ask
-   * and offers no door.
+   * it or appends it. Optional on the same terms as `reportActivity`.
    */
   stopSpeaking?(): void;
   /**
    * Asks the service to speak one of the build-fixed beats into this
    * session, in the service's own vocabulary: the kind and the bounded
    * observed values its script may mention, never a sentence composed here.
-   * A session with no service between has no one to ask and offers no door.
+   * Optional on the same terms as `reportActivity`.
    */
   speakBeat?(beat: SessionBeatFrame): void;
   /**
    * Tells the listener each proactive turn the service reports spoken to its
    * end, by kind, as the service's own frame on the same socket says it; the
-   * sideband never sees that frame. A session with no service between has
-   * nothing to report and offers no door.
+   * sideband never sees that frame. Optional on the same terms as
+   * `reportActivity`.
    */
   onSpoken?(listener: (kind: ProactiveSpeechKind) => void): void;
 }
@@ -293,176 +268,6 @@ function watchingClose(socket: LiveSocket, closed: () => void): LiveSocket {
   };
 }
 
-export interface KeyedLiveSessionOptions {
-  apiKey: string;
-  openSocket: OpenSocket;
-  model?: string;
-  voice?: string;
-  /** The API's `/v1` base; the attach address is derived from it by scheme alone. */
-  baseUrl?: string;
-  /** The `HttpClient` a test hands over in place of the ambient fetch client. */
-  httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  now?: () => number;
-  requestTimeoutMs?: number;
-}
-
-/**
- * Sessions created with the developer's own OpenAI key. The key never leaves
- * the main process: the renderer receives the id and the SDP answer, and the
- * sideband this source attaches carries the same key on its handshake, from
- * here. A failure resolves to nothing rather than an error, leaving voice
- * unavailable and the rest of Luke working.
- */
-export class KeyedLiveSessionSource implements LiveSessionSource {
-  readonly #apiKey: string;
-  readonly #openSocket: OpenSocket;
-  readonly #model: string;
-  /** The voice from construction, which a cleared setting falls back to. */
-  readonly #configuredVoice: LiveVoice;
-  #voice: LiveVoice;
-  readonly #baseUrl: string;
-  readonly #httpClient: Layer.Layer<HttpClient.HttpClient> | undefined;
-  readonly #requestTimeoutMs: number;
-  readonly #outcome: OutcomeRecord;
-  #sidebandAttached = false;
-
-  constructor(options: KeyedLiveSessionOptions) {
-    const apiKey = text(options.apiKey);
-    if (!apiKey) throw new Error("OpenAI API key must not be empty");
-    this.#apiKey = apiKey;
-    this.#openSocket = options.openSocket;
-    this.#model = text(options.model) ?? LIVE_DEFAULTS.MODEL;
-    this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
-    this.#voice = this.#configuredVoice;
-    this.#baseUrl = withoutTrailingSlash(text(options.baseUrl) ?? OPENAI_LIVE_DEFAULTS.BASE_URL);
-    this.#httpClient = options.httpClient;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      OPENAI_LIVE_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
-    this.#outcome = new OutcomeRecord("OpenAI live session", options.now ?? Date.now);
-  }
-
-  get model(): string {
-    return this.#model;
-  }
-
-  setVoice(voice: string | undefined): void {
-    this.#voice = chosenVoice(voice, this.#configuredVoice);
-  }
-
-  create(input: LiveSessionCreateInput): Effect.Effect<LiveSessionOpened | undefined> {
-    return Effect.gen(this, function* () {
-      this.#outcome.attempt();
-      this.#sidebandAttached = false;
-      const call = accountCall({
-        baseUrl: this.#baseUrl,
-        credential: fixedBearer(this.#apiKey),
-        requestTimeoutMs: this.#requestTimeoutMs,
-      });
-      const session = liveSessionConfig({
-        scene: LIVE_SCENE.DESKTOP,
-        model: this.#model,
-        voice: this.#voice,
-        input: input.input,
-      });
-      const answer = yield* Effect.provide(
-        call.send({
-          method: HTTP_METHOD.POST,
-          path: LIVE_SESSIONS_PATH,
-          body: JSON.stringify(liveCreateRequest(session, input.sdpOffer)),
-        }),
-        this.#httpClient ?? FetchHttpClient.layer,
-      );
-      if (!callAnswered(answer)) {
-        this.#refuseCall(answer);
-        return undefined;
-      }
-      const { response } = answer;
-      if (!response.ok) {
-        // Status alone diagnoses credentials or rate limits without writing the
-        // request or the key to the log.
-        this.#outcome.record(LIVE_SESSION_OUTCOME.HTTP_ERROR, `status ${response.status}`);
-        return undefined;
-      }
-      const payload = yield* Effect.orElseSucceed(
-        Effect.tryPromise(() => response.json()),
-        () => undefined,
-      );
-      const created =
-        payload === undefined
-          ? undefined
-          : Either.getOrUndefined(readEither(liveCreateAnswerSchema)(unparsedWire(payload)));
-      if (!created) {
-        this.#outcome.record(
-          LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE,
-          "no session id and SDP answer",
-        );
-        return undefined;
-      }
-      this.#outcome.record(LIVE_SESSION_OUTCOME.SUCCEEDED);
-      const sessionId = created.session.id;
-      return {
-        sessionId,
-        sdpAnswer: created.transport.sdp,
-        attach: () => this.#attach(sessionId),
-      };
-    });
-  }
-
-  diagnostics(): LiveDiagnostics {
-    return {
-      apiKeyConfigured: true,
-      fixtureMode: false,
-      model: this.#model,
-      voice: this.#voice,
-      sidebandAttached: this.#sidebandAttached,
-      ...this.#outcome.fields(),
-    };
-  }
-
-  /**
-   * The attach address is the sessions path under the API's socket scheme,
-   * with the id kept unchanged, and the handshake carries the same project
-   * key that created the session, as the server-controls guide requires.
-   */
-  #attach(sessionId: string): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope> {
-    return Effect.gen(this, function* () {
-      const address = new URL(`${this.#baseUrl}${liveAttachPath(sessionId)}`);
-      address.protocol = address.protocol === "http:" ? "ws:" : "wss:";
-      const opening = yield* this.#openSocket(address.toString(), {
-        authorization: `Bearer ${this.#apiKey}`,
-      });
-      if (!socketOpened(opening)) {
-        const { detail } = socketFaultOutcome(opening);
-        this.#outcome.record(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED, detail);
-        return yield* new SidebandAttachFailed({ detail });
-      }
-      this.#sidebandAttached = true;
-      return sidebandOverSocket(
-        watchingClose(opening.socket, () => {
-          this.#sidebandAttached = false;
-        }),
-      );
-    });
-  }
-
-  #refuseCall(failure: CallFailure): void {
-    switch (failure.fault) {
-      case CALL_FAULT.NETWORK:
-        this.#outcome.record(
-          LIVE_SESSION_OUTCOME.NETWORK_ERROR,
-          failure.errorName ?? "unknown error",
-        );
-        return;
-      case CALL_FAULT.NO_CREDENTIAL:
-      case CALL_FAULT.HOLDER_CHANGED:
-        this.#outcome.record(LIVE_SESSION_OUTCOME.NO_API_KEY);
-        return;
-    }
-  }
-}
-
 interface ServiceSessionOptions {
   /** The voice service origin, `wss://` scheme; a value that is not an origin is refused at construction. */
   serviceOrigin: string;
@@ -517,10 +322,7 @@ class ServiceLiveSessionSource {
     this.#deviceId = options.deviceId;
     this.#configuredVoice = chosenVoice(options.voice, LIVE_DEFAULTS.VOICE);
     this.#voice = this.#configuredVoice;
-    this.#requestTimeoutMs = positiveInteger(
-      options.requestTimeoutMs,
-      OPENAI_LIVE_DEFAULTS.REQUEST_TIMEOUT_MS,
-    );
+    this.#requestTimeoutMs = positiveInteger(options.requestTimeoutMs, SERVICE_REQUEST_TIMEOUT_MS);
     this.#outcome = new OutcomeRecord(options.logLabel, options.now ?? Date.now);
   }
 
@@ -530,8 +332,6 @@ class ServiceLiveSessionSource {
 
   diagnostics(): LiveDiagnostics {
     return {
-      apiKeyConfigured: false,
-      hosted: true,
       fixtureMode: false,
       model: LIVE_DEFAULTS.MODEL,
       voice: this.#voice,
@@ -1132,47 +932,17 @@ export class IntroductionLiveSessionSource
 
 /**
  * Explains why no source exists, which is the state the panel shows as voice
- * unavailable. A missing key and a fixture run look identical from the panel
- * and have completely different fixes.
+ * unavailable. A signed-out run and a fixture run look identical from the
+ * panel and have completely different fixes.
  */
-export function unavailableLiveDiagnostics(input: {
-  fixtureMode: boolean;
-  apiKeyConfigured: boolean;
-}): LiveDiagnostics {
+export function unavailableLiveDiagnostics(input: { fixtureMode: boolean }): LiveDiagnostics {
   return {
-    apiKeyConfigured: input.apiKeyConfigured,
     fixtureMode: input.fixtureMode,
-    model: text(process.env[LIVE_ENVIRONMENT.MODEL]) ?? LIVE_DEFAULTS.MODEL,
+    model: LIVE_DEFAULTS.MODEL,
     voice: environmentLiveVoice() ?? LIVE_DEFAULTS.VOICE,
     sidebandAttached: false,
     lastOutcome: input.fixtureMode
       ? LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE
-      : LIVE_SESSION_OUTCOME.NO_API_KEY,
+      : LIVE_SESSION_OUTCOME.NO_ACCOUNT,
   };
-}
-
-export type KeyedLiveSessionSourceOptions = Omit<KeyedLiveSessionOptions, "apiKey">;
-
-/**
- * Builds a keyed source only when there is a key to build one from. The key
- * is resolved by the settings store; the model and voice fall back to the
- * launch environment here. `OPENAI_BASE_URL` is deliberately not read: the
- * renderer's peer connection reaches OpenAI's own media servers whatever base
- * a redirect names, so a session created elsewhere would answer an SDP the
- * media path cannot honor.
- */
-export function keyedLiveSessions(
-  apiKey: string | undefined,
-  options: KeyedLiveSessionSourceOptions,
-): KeyedLiveSessionSource | undefined {
-  const resolved = text(apiKey);
-  if (!resolved) return undefined;
-  const model = text(options.model) ?? text(process.env[LIVE_ENVIRONMENT.MODEL]);
-  const voice = isLiveVoice(options.voice) ? options.voice : environmentLiveVoice();
-  return new KeyedLiveSessionSource({
-    ...options,
-    apiKey: resolved,
-    ...(model ? { model } : undefined),
-    ...(voice ? { voice } : undefined),
-  });
 }

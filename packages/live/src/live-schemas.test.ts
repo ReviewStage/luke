@@ -31,7 +31,7 @@ const MODULE_SCHEMAS = {
     LiveTransportTypeSchema: session.LiveTransportTypeSchema,
     LiveDelegationTypeSchema: session.LiveDelegationTypeSchema,
     liveCreateAnswerSchema: session.liveCreateAnswerSchema,
-    NoApiKeyRefusal: session.NoApiKeyRefusal,
+    NoAccountRefusal: session.NoAccountRefusal,
     DisabledByFixtureRefusal: session.DisabledByFixtureRefusal,
     HttpErrorRefusal: session.HttpErrorRefusal,
     NetworkErrorRefusal: session.NetworkErrorRefusal,

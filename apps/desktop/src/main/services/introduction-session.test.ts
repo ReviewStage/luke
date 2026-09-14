@@ -22,7 +22,6 @@ function fakeSource(answers: boolean[]) {
         return { sessionId, sdpAnswer: "v=0\r\nanswer\r\n", close: () => closes.push(sessionId) };
       }),
     diagnostics: () => ({
-      apiKeyConfigured: false,
       fixtureMode: false,
       model: "gpt-live-1",
       voice: "marin",
