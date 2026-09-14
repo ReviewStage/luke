@@ -122,10 +122,9 @@ export const PRODUCT_EVENT_PROPERTY = {
 export type ProductEventProperty =
   (typeof PRODUCT_EVENT_PROPERTY)[keyof typeof PRODUCT_EVENT_PROPERTY];
 
-/** Which source opened a live voice session — Luke's hosted voice service, the developer's own key, or the introduction's accountless endpoint — never a credential or a session id. */
+/** Which source opened a live voice session — Luke's hosted voice service on the account, or the introduction's accountless endpoint — never a credential or a session id. */
 export const PRODUCT_VOICE_SESSION_SOURCE = {
   HOSTED: "hosted",
-  KEYED: "keyed",
   /** The one-time onboarding introduction's own bounded, accountless session. */
   INTRODUCTION: "introduction",
 } as const;

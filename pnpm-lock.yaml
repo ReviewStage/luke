@@ -1068,9 +1068,6 @@ importers:
       '@sidecar/brain':
         specifier: workspace:*
         version: link:../brain
-      '@sidecar/credentials':
-        specifier: workspace:*
-        version: link:../credentials
       '@sidecar/gateway':
         specifier: workspace:*
         version: link:../gateway

@@ -18,8 +18,9 @@ import {
   HOSTED_SERVICE_PATH,
   hostedBrainBounds,
 } from "@sidecar/hosted";
+import { LIVE_VOICE, type LiveVoice } from "@sidecar/live";
 import { MAIN_SESSION_KEY, REASONING_EFFORT } from "@sidecar/runtime/vocabulary";
-import { APP_SETTING_SCHEMA, VOICE_SOURCE, type VoiceSource } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { VoiceCapabilityAssembler, type VoiceSettings } from "@sidecar/voice";
 import { scriptedOpenSocket } from "@sidecar/voice/testing";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
@@ -44,8 +45,6 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
 }
 
 const HELD_READ = {
-  SOURCE: "source",
-  KEY: "key",
   PREFERENCE: "preference",
 } as const;
 
@@ -55,10 +54,13 @@ type HeldRead = (typeof HELD_READ)[keyof typeof HELD_READ];
  * A settings store whose reads a test can hold: the next read of the named
  * kind waits on a gate the test releases, in whatever order the interleaving
  * under test needs. Each read answers the value as it stands when released.
+ * The voice preference is the one read the assembler makes, so it is what a
+ * transition can be caught on; the account gate itself is a synchronous
+ * callback the assembler snapshots before its first suspension.
  */
 class HeldSettings implements VoiceSettings {
-  source: VoiceSource = VOICE_SOURCE.KEY;
-  key: string | undefined = "personal-key";
+  /** The stored voice, which distinguishes two published live sources from each other. */
+  voice: LiveVoice = LIVE_VOICE.MARIN;
   holdNext: HeldRead | undefined;
   readonly #gates: (() => void)[] = [];
 
@@ -70,18 +72,16 @@ class HeldSettings implements VoiceSettings {
     });
   }
 
-  readVoiceSource(): Effect.Effect<VoiceSource, never> {
-    return Effect.promise(() => this.#maybeHold(HELD_READ.SOURCE, () => this.source));
-  }
-
-  readApiKey(): Effect.Effect<string | undefined, never> {
-    return Effect.promise(() => this.#maybeHold(HELD_READ.KEY, () => this.key));
-  }
-
   get<Field extends keyof typeof APP_SETTING_SCHEMA>(field: Field) {
-    // SAFETY: the schema's own default for the field being read.
+    // SAFETY: the voice field answers the stored voice; every other field its schema default.
     return Effect.promise(() =>
-      this.#maybeHold(HELD_READ.PREFERENCE, () => APP_SETTING_SCHEMA[field].default as never),
+      this.#maybeHold(
+        HELD_READ.PREFERENCE,
+        () =>
+          (field === APP_SETTING_SCHEMA.voice.field
+            ? this.voice
+            : APP_SETTING_SCHEMA[field].default) as never,
+      ),
     );
   }
 
@@ -217,21 +217,13 @@ function composition() {
   };
 }
 
-function assertHostedSet(c: ReturnType<typeof composition>) {
-  assert.equal(c.assembler.voiceSource, VOICE_SOURCE.ACCOUNT);
+function assertHostedSet(c: ReturnType<typeof composition>, voice: LiveVoice) {
   assert.ok(c.assembler.brainModel);
   // The hosted adapter knows no model until the service names one on its
-  // first turn; the developer's own key is never what it runs on.
+  // first turn; nothing of the developer's own is ever what it runs on.
   assert.ok([undefined, "gpt-hosted"].includes(c.assembler.brainModel.model));
   assert.ok(c.assembler.liveSessions);
-}
-
-/** The key source stands nothing: no session opens on the developer's key, and no brain. */
-function assertKeyedSet(c: ReturnType<typeof composition>) {
-  assert.equal(c.assembler.voiceSource, VOICE_SOURCE.KEY);
-  assert.equal(c.assembler.brainModel, undefined);
-  assert.equal(c.assembler.liveSessions, undefined);
-  assert.equal(c.host.current(), undefined);
+  assert.equal(c.assembler.liveSessions.diagnostics().voice, voice);
 }
 
 function assertAbsentSet(c: ReturnType<typeof composition>) {
@@ -244,11 +236,11 @@ test("a newer transition begun between publication and the caller's continuation
   const c = composition();
   let newer: Promise<boolean> | undefined;
   // At the boundary between A's publication and its caller resuming, another
-  // settings continuation chooses the account and begins B, whose source read
-  // is held: exactly the moment a copied "latest" would be wrong.
+  // settings continuation changes the voice and begins B, whose preference
+  // read is held: exactly the moment a copied "latest" would be wrong.
   c.atNextReport(() => {
-    c.settings.source = VOICE_SOURCE.ACCOUNT;
-    c.settings.holdNext = HELD_READ.SOURCE;
+    c.settings.voice = LIVE_VOICE.CEDAR;
+    c.settings.holdNext = HELD_READ.PREFERENCE;
     newer = c.transition();
   });
   const olderInstalled = await c.transition();
@@ -260,7 +252,7 @@ test("a newer transition begun between publication and the caller's continuation
 
   c.settings.release();
   assert.equal(await newer, true);
-  assertHostedSet(c);
+  assertHostedSet(c, LIVE_VOICE.CEDAR);
   assert.deepEqual(c.builds, ["hosted"]);
   const standing = c.host.current();
   assert.ok(standing);
@@ -271,9 +263,8 @@ test("a newer transition that removes every capability at that boundary leaves n
   const c = composition();
   let newer: Promise<boolean> | undefined;
   c.atNextReport(() => {
-    c.settings.key = undefined;
     c.gate.accountSignedIn = false;
-    c.settings.holdNext = HELD_READ.SOURCE;
+    c.settings.holdNext = HELD_READ.PREFERENCE;
     newer = c.transition();
   });
   const olderInstalled = await c.transition();
@@ -296,95 +287,90 @@ test("a newer transition that removes every capability at that boundary leaves n
   assert.equal(c.reports.length, reportsBefore + 2);
 });
 
-for (const held of Object.values(HELD_READ)) {
-  it.effect(
-    `an older transition whose ${held} read finishes late publishes nothing over the account the newer one chose, and the newer agent's run is not interrupted`,
-    () =>
-      Effect.gen(function* () {
-        const c = composition();
-        c.settings.holdNext = held;
-        const older = c.transition();
-        yield* waitFor(() => c.settings.pendingReads() > 0);
-        c.settings.source = VOICE_SOURCE.ACCOUNT;
-        assert.equal(yield* Effect.promise(() => c.transition()), true);
-        assertHostedSet(c);
-        const hostedAgent = c.host.current();
-        assert.ok(hostedAgent);
-        const reportsAfterNewer = c.reports.length;
-        const warmsAfterNewer = c.warms.length;
-        const live = c.assembler.liveSessions;
-
-        // A run stands on the correct successor, its model turn outstanding.
-        const accepted = yield* hostedAgent.submitAsk({
-          submissionId: "s-1",
-          question: "still there?",
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        });
-        assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
-        const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
-        yield* waitFor(() => hostedAgent.request(runId)?.status === BRAIN_REQUEST_STATUS.RUNNING);
-        assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
-
-        // The older read answers now, with the key source it was started under.
-        c.settings.source = VOICE_SOURCE.KEY;
-        c.settings.release();
-        assert.equal(yield* Effect.promise(() => older), false);
-        yield* Effect.promise(() => onDefault(c.host.settled()));
-        // Nothing of the older set was published, not even in part.
-        assertHostedSet(c);
-        assert.equal(c.assembler.liveSessions, live);
-        assert.equal(c.host.current(), hostedAgent);
-        assert.equal(c.reports.length, reportsAfterNewer);
-        assert.equal(c.warms.length, warmsAfterNewer);
-        assert.deepEqual(c.builds, ["hosted"]);
-        assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
-
-        c.releaseTurn();
-        const record = yield* hostedAgent.waitAsk(runId, 10_000);
-        assert.notEqual(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
-        assert.ok(record && record.status !== BRAIN_REQUEST_STATUS.RUNNING);
-        yield* hostedAgent.stop();
-      }),
-  );
-}
-
 it.effect(
-  "the reverse order holds too: a late account read never overrides a newer key selection",
+  "an older transition whose preference read finishes late publishes nothing over the set the newer one chose, and the newer agent's run is not interrupted",
   () =>
     Effect.gen(function* () {
       const c = composition();
-      c.settings.source = VOICE_SOURCE.ACCOUNT;
-      c.settings.holdNext = HELD_READ.SOURCE;
+      c.settings.holdNext = HELD_READ.PREFERENCE;
       const older = c.transition();
       yield* waitFor(() => c.settings.pendingReads() > 0);
-      c.settings.source = VOICE_SOURCE.KEY;
+      c.settings.voice = LIVE_VOICE.CEDAR;
       assert.equal(yield* Effect.promise(() => c.transition()), true);
-      assertKeyedSet(c);
+      assertHostedSet(c, LIVE_VOICE.CEDAR);
+      const hostedAgent = c.host.current();
+      assert.ok(hostedAgent);
+      const reportsAfterNewer = c.reports.length;
+      const warmsAfterNewer = c.warms.length;
       const live = c.assembler.liveSessions;
 
-      c.settings.source = VOICE_SOURCE.ACCOUNT;
+      // A run stands on the correct successor, its model turn outstanding.
+      const accepted = yield* hostedAgent.submitAsk({
+        submissionId: "s-1",
+        question: "still there?",
+        origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+      });
+      assert.equal(accepted.outcome, BRAIN_SUBMISSION_OUTCOME.ACCEPTED);
+      const runId = accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
+      yield* waitFor(() => hostedAgent.request(runId)?.status === BRAIN_REQUEST_STATUS.RUNNING);
+      assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+
+      // The older read answers now, with the voice it was started under.
+      c.settings.voice = LIVE_VOICE.MARIN;
       c.settings.release();
       assert.equal(yield* Effect.promise(() => older), false);
       yield* Effect.promise(() => onDefault(c.host.settled()));
-      // The late account read installed neither its brain nor its live source.
-      assertKeyedSet(c);
+      // Nothing of the older set was published, not even in part.
+      assertHostedSet(c, LIVE_VOICE.CEDAR);
       assert.equal(c.assembler.liveSessions, live);
-      assert.deepEqual(c.builds, []);
+      assert.equal(c.host.current(), hostedAgent);
+      assert.equal(c.reports.length, reportsAfterNewer);
+      assert.equal(c.warms.length, warmsAfterNewer);
+      assert.deepEqual(c.builds, ["hosted"]);
+      assert.equal(hostedAgent.request(runId)?.status, BRAIN_REQUEST_STATUS.RUNNING);
+
+      c.releaseTurn();
+      const record = yield* hostedAgent.waitAsk(runId, 10_000);
+      assert.notEqual(record?.status, BRAIN_REQUEST_STATUS.INTERRUPTED);
+      assert.ok(record && record.status !== BRAIN_REQUEST_STATUS.RUNNING);
+      yield* hostedAgent.stop();
+    }),
+);
+
+it.effect(
+  "the reverse order holds too: a late signed-out read never overrides a newer sign-in",
+  () =>
+    Effect.gen(function* () {
+      const c = composition();
+      c.gate.accountSignedIn = false;
+      c.settings.holdNext = HELD_READ.PREFERENCE;
+      const older = c.transition();
+      yield* waitFor(() => c.settings.pendingReads() > 0);
+      c.gate.accountSignedIn = true;
+      assert.equal(yield* Effect.promise(() => c.transition()), true);
+      assertHostedSet(c, LIVE_VOICE.MARIN);
+      const hostedAgent = c.host.current();
+      assert.ok(hostedAgent);
+
+      c.settings.release();
+      assert.equal(yield* Effect.promise(() => older), false);
+      yield* Effect.promise(() => onDefault(c.host.settled()));
+      assertHostedSet(c, LIVE_VOICE.MARIN);
+      assert.equal(c.host.current(), hostedAgent);
+      assert.deepEqual(c.builds, ["hosted"]);
+      yield* hostedAgent.stop();
     }),
 );
 
 it.effect("a late read cannot resurrect a capability the newer transition removed", () =>
   Effect.gen(function* () {
     const c = composition();
-    c.settings.source = VOICE_SOURCE.ACCOUNT;
     assert.equal(yield* Effect.promise(() => c.transition()), true);
     assert.ok(c.host.current());
-    c.settings.source = VOICE_SOURCE.KEY;
-    c.settings.holdNext = HELD_READ.SOURCE;
+    c.settings.holdNext = HELD_READ.PREFERENCE;
     const older = c.transition();
     yield* waitFor(() => c.settings.pendingReads() > 0);
-    // The key is removed and the account signed out: nothing may stand.
-    c.settings.key = undefined;
+    // The account signs out: nothing may stand.
     c.gate.accountSignedIn = false;
     assert.equal(yield* Effect.promise(() => c.transition()), true);
     yield* Effect.promise(() => onDefault(c.host.settled()));
@@ -392,8 +378,8 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     const reportsAfterRemoval = c.reports.length;
     const warmsAfterRemoval = c.warms.length;
 
-    // The older read answers as if the key were still there.
-    c.settings.key = "personal-key";
+    // The older read answers now; it began under a signed-in gate and would
+    // build the whole set, and it is overtaken.
     c.settings.release();
     assert.equal(yield* Effect.promise(() => older), false);
     yield* Effect.promise(() => onDefault(c.host.settled()));
@@ -403,7 +389,8 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
     assert.equal(c.warms.length, warmsAfterRemoval);
 
     // A closed gate is the same removal from the other side.
-    c.settings.holdNext = HELD_READ.SOURCE;
+    c.gate.accountSignedIn = true;
+    c.settings.holdNext = HELD_READ.PREFERENCE;
     const heldAgain = c.transition();
     yield* waitFor(() => c.settings.pendingReads() > 0);
     c.gate.credentialsUsable = false;
@@ -416,15 +403,19 @@ it.effect("a late read cannot resurrect a capability the newer transition remove
   }),
 );
 
-test("transitions that do not overlap each install in turn: a key stands nothing, the account stands the set", async () => {
+test("transitions that do not overlap each install in turn", async () => {
   const c = composition();
   assert.equal(await c.transition(), true);
-  assertKeyedSet(c);
-  c.settings.source = VOICE_SOURCE.ACCOUNT;
+  const first = c.host.current();
+  assert.ok(first);
+  const firstLive = c.assembler.liveSessions;
+  c.settings.voice = LIVE_VOICE.CEDAR;
   assert.equal(await c.transition(), true);
-  assertHostedSet(c);
+  assertHostedSet(c, LIVE_VOICE.CEDAR);
   const second = c.host.current();
   assert.ok(second);
-  assert.deepEqual(c.builds, ["hosted"]);
+  assert.notEqual(second, first);
+  assert.notEqual(c.assembler.liveSessions, firstLive);
+  assert.deepEqual(c.builds, ["hosted", "hosted"]);
   await Effect.runPromise(second.stop());
 });
