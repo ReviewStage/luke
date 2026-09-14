@@ -4,6 +4,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
+import type { SessionBeatFrame } from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -12,6 +13,8 @@ import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
   type LiveSessionClosed,
+  PROACTIVE_SPEECH_KIND,
+  type ProactiveSpeechKind,
   type RosterSeedSession,
   type RosterSummary,
   rosterSeed,
@@ -38,27 +41,32 @@ import {
   SIDEBAND_CLOSE_OUTCOME,
   type SidebandCloseResult,
 } from "./graceful-close.js";
+import type { BeatKind } from "./proactive-queue.js";
 
 /**
  * The peer's side of one hosted voice session, which is everything the Mac
  * still holds of a session once the exchange is the service's. It creates
  * the session for the renderer's offer, seeded from the recent Conversation
  * and the desk as the Mac sees them, and holds the sideband the service
- * answered on for exactly three things: the graceful close, which sends
+ * answered on for exactly four things: the graceful close, which sends
  * `session.close` and waits for `session.closed` as the conversations guide
- * prescribes; and the stop key and the idle report, each told to the service
- * in its own vocabulary through the door the source opened, because the
- * instruction the stop appends and the idle decision both belong to the
- * exchange the service holds. Nothing else leaves this side, and no append
- * at all: the desktop never appends to a session. Every delegation the session
+ * prescribes; and the stop key, the idle report, and the onboarding beats,
+ * each told to the service in its own vocabulary through the door the source
+ * opened, because the instruction the stop appends, the idle decision, and
+ * the words of every beat belong to the exchange the service holds. Nothing
+ * else leaves this side, and no append at all: the desktop never appends to
+ * a session. What comes back in that vocabulary is one thing, the service's
+ * word that a turn was spoken to its end, because the record of the beats
+ * and the counts that follow them are this side's. Every delegation the session
  * creates, every transcript delta, and every acknowledgment reaches the
  * service's exchange over the same socket ahead of this holder, and this
  * holder reads of them only what its phases need: the start, the usage, and
- * the close. It appends no thinking, no commentary, and no reply, decides no
- * briefing, and wants no session of its own, so the `wanted` phase is never
- * announced from here; the renderer's hang-up and the peer's transport are
- * the only reasons a session ends from this side, and the service's idle
- * close reaches it as the `session.closed` the relay forwards.
+ * the close. It appends no thinking, no commentary, and no reply, and decides
+ * no briefing; the one session it wants of its own is the muted one a beat
+ * needs, announced as the `wanted` phase when a beat is asked for and no
+ * session stands. The renderer's hang-up and the peer's transport are the
+ * only reasons a session ends from this side, and the service's idle close
+ * reaches it as the `session.closed` the relay forwards.
  *
  * Built by `make` for the scope of the composition that holds it, on the
  * same terms as `LiveSessionService`: each session stands in a scope of its
@@ -80,6 +88,12 @@ export interface LiveSessionHolderOptions {
   report: (message: string) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
+  /**
+   * The service reported a proactive turn spoken to its end, by kind: a beat
+   * this holder asked for, or a briefing the service's exchange decided. The
+   * record of what was spoken and the counts that follow it are the caller's.
+   */
+  onSpoken?: (kind: ProactiveSpeechKind) => void;
 }
 
 interface HeldSession {
@@ -106,6 +120,13 @@ export class LiveSessionHolder {
   #held: HeldSession | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
   #releasing: Deferred.Deferred<void> | undefined;
+  /**
+   * The beats asked for and not yet spoken, by kind: waiting for a session
+   * to start, or sent to the service and not yet reported spoken. One ask per
+   * kind stands at a time; a second is refused until the first is spoken,
+   * withdrawn, or lost with its session.
+   */
+  readonly #beats = new Map<BeatKind, { readonly beat: SessionBeatFrame; sent: boolean }>();
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
@@ -167,17 +188,25 @@ export class LiveSessionHolder {
     return Effect.gen(this, function* () {
       if (this.#held) yield* this.endSession();
       const source = this.#options.source();
-      if (!source) return undefined;
+      if (!source) {
+        this.#beats.clear();
+        return undefined;
+      }
       const seeded = rosterSeed(
         this.#options.roster?.() ?? [],
         this.#clock.unsafeCurrentTimeMillis(),
       );
       const scope = yield* Scope.fork(this.#sessions, ExecutionStrategy.sequential);
-      return yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
+      const created = yield* Effect.onExit(this.#stand(source, sdpOffer, seeded, scope), (exit) =>
         Exit.isSuccess(exit) && exit.value !== undefined
           ? Effect.void
           : Scope.close(scope, Exit.void),
       );
+      // A session that could not be stood leaves no beat waiting for it: the
+      // caller decides again at its next reason, and asks then stand rather
+      // than being refused for a kind still waiting on a session that never came.
+      if (created === undefined) this.#beats.clear();
+      return created;
     });
   }
 
@@ -226,6 +255,7 @@ export class LiveSessionHolder {
       // ends the session: the graceful close already closed it, and a session
       // lost or torn down with the holder's own scope closes it here.
       yield* Scope.addFinalizer(scope, sideband.close);
+      opened.onSpoken?.((kind) => this.#spoken(session, kind));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -282,6 +312,7 @@ export class LiveSessionHolder {
       case LIVE_SERVER_EVENT.SESSION_STARTED:
         session.started = true;
         this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.STARTED });
+        this.#sendBeats(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.USAGE_UPDATED:
         session.usageSeconds = event.usage.seconds;
@@ -384,9 +415,63 @@ export class LiveSessionHolder {
     return true;
   }
 
+  /**
+   * A beat the caller decided is owed: asked of the service through the
+   * source's door once a session has started, and held for one until then,
+   * with the peer told the session is wanted so it opens one muted for it.
+   * Answers whether the ask stands: a kind already asked for and not yet
+   * spoken is not asked twice. A session opened through no service has no
+   * door, and a beat that finds none is dropped rather than held for a
+   * service that will never stand.
+   */
+  speakBeat(beat: SessionBeatFrame): boolean {
+    if (this.#beats.has(beat.kind)) return false;
+    this.#beats.set(beat.kind, { beat, sent: false });
+    const session = this.#held;
+    if (session === undefined || session.ended) {
+      this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
+      return true;
+    }
+    if (session.started) this.#sendBeats(session);
+    return true;
+  }
+
+  /**
+   * Removes a beat whose reason has gone, or that a hold now keeps, before it
+   * was sent, and answers whether one was waiting; one the service already
+   * has is the service's to speak, and is not withdrawn.
+   */
+  withdrawBeat(kind: BeatKind): boolean {
+    const standing = this.#beats.get(kind);
+    if (standing === undefined || standing.sent) return false;
+    this.#beats.delete(kind);
+    return true;
+  }
+
   /** The drain: the session is closed gracefully inside the quit's own deadline, and nothing is opened after. */
   stop(): Effect.Effect<void> {
     return this.endSession();
+  }
+
+  /** Every beat still waiting goes to the service now, or nowhere on a session with no door. */
+  #sendBeats(session: HeldSession): void {
+    const speak = session.opened.speakBeat;
+    for (const [kind, standing] of [...this.#beats]) {
+      if (standing.sent) continue;
+      if (speak === undefined) {
+        this.#beats.delete(kind);
+        continue;
+      }
+      standing.sent = true;
+      speak(standing.beat);
+    }
+  }
+
+  /** The service's word that a turn was spoken to its end: a beat of this holder's is settled, and the caller is told whatever the kind. */
+  #spoken(session: HeldSession, kind: ProactiveSpeechKind): void {
+    if (session.ended) return;
+    if (kind !== PROACTIVE_SPEECH_KIND.BRIEFING) this.#beats.delete(kind);
+    this.#options.onSpoken?.(kind);
   }
 
   /**
@@ -428,6 +513,10 @@ export class LiveSessionHolder {
   #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
     session.ended = true;
     if (this.#held === session) this.#held = undefined;
+    // A beat the session ended on, sent or waiting, is not carried to the
+    // next: the caller decides again at its next reason to, and a beat that
+    // was spoken settled itself before this.
+    this.#beats.clear();
     this.#releasing = session.released;
     Deferred.unsafeDone(session.torn, Exit.void);
     this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
