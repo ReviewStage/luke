@@ -88,8 +88,8 @@ function hostWithNodes() {
   let invocations = 0;
   let events = 0;
   const methods: GatewayMethodTable = {
-    [GATEWAY_METHOD.RUN_LIST]: () => Effect.succeed({ runs: [] }),
-    [GATEWAY_METHOD.MEMORY_STATUS]: () =>
+    [GATEWAY_METHOD.SESSION_ROSTER]: () => Effect.succeed({ sessions: [] }),
+    [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () =>
       Effect.fail(new NotFoundRefusal({ message: "nothing stands" })),
     [GATEWAY_METHOD.NODE_REGISTER]: (params, context) => {
       const connection = context.connection;
@@ -189,10 +189,10 @@ it.live("the frames one socket exchange carries, in order", () =>
     const answered = (count: number, label: string) =>
       Effect.promise(() => until(() => frames(GATEWAY_FRAME.RESPONSE).length >= count, label));
 
-    yield* send("request-run-list", GATEWAY_METHOD.RUN_LIST, {});
+    yield* send("request-run-list", GATEWAY_METHOD.SESSION_ROSTER, {});
     yield* answered(1, "the read answered");
 
-    yield* send("request-memory-status", GATEWAY_METHOD.MEMORY_STATUS, {});
+    yield* send("request-memory-status", GATEWAY_METHOD.VOICE_DIAGNOSTICS, {});
     yield* answered(2, "the refusal answered");
 
     // A request the host cannot read at all: refused under the id the
@@ -204,7 +204,7 @@ it.live("the frames one socket exchange carries, in order", () =>
     );
     yield* answered(3, "the unreadable request answered");
 
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
     yield* Effect.promise(() =>
       until(() => frames(GATEWAY_FRAME.EVENT).length === 1, "the event reached the client"),
     );
@@ -241,8 +241,8 @@ it.live("the frames one socket exchange carries, in order", () =>
     // Two more events, so the window of two has moved past the first: a
     // reconnection from inside it is replayed and one from before it is
     // handed the snapshot instead.
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
     yield* Effect.promise(() =>
       until(() => frames(GATEWAY_FRAME.EVENT).length === 3, "both events reached the client"),
     );

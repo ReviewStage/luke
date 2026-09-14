@@ -1,10 +1,10 @@
 {
   "request": {
     "protocolVersion": 1,
-    "id": "request-run-cancel",
-    "method": "run.cancel",
+    "id": "request-session-executeControl",
+    "method": "session.executeControl",
     "params": {
-      "case": "run.cancel",
+      "case": "session.executeControl",
       "note": "synthetic",
       "detail": {
         "flag": true,
@@ -16,10 +16,10 @@
         ]
       }
     },
-    "idempotencyKey": "key-run-cancel"
+    "idempotencyKey": "key-session-executeControl"
   },
   "response": {
-    "id": "request-run-cancel",
+    "id": "request-session-executeControl",
     "ok": false,
     "error": {
       "code": "not_found",

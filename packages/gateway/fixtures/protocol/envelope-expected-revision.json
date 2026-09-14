@@ -2,9 +2,9 @@
   "request": {
     "protocolVersion": 1,
     "id": "request-with-expected-revision",
-    "method": "run.submit",
+    "method": "session.sendMessage",
     "params": {
-      "case": "run.submit",
+      "case": "session.sendMessage",
       "note": "synthetic",
       "detail": {
         "flag": true,
@@ -16,7 +16,7 @@
         ]
       }
     },
-    "idempotencyKey": "key-run-submit",
+    "idempotencyKey": "key-session-sendMessage",
     "expectedRevision": {
       "sessionKey": "agent:main:main",
       "sessionRevision": "generation-1",
@@ -27,7 +27,7 @@
     "id": "request-with-expected-revision",
     "ok": true,
     "result": {
-      "answered": "run.submit"
+      "answered": "session.sendMessage"
     },
     "revision": {
       "configuration": 7,

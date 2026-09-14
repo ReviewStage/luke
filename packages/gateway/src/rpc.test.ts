@@ -45,7 +45,7 @@ const REDACTED_MESSAGE = "<message>";
 const RECORDED_REVISION: GatewayRevision = { configuration: 7, sequence: 0 };
 
 const GOLDEN = {
-  RUN_SUBMIT: "method-run-submit",
+  GUIDE_REPORT: "method-guide-report",
   EXPECTED_REVISION: "envelope-expected-revision",
   EMPTY_RESULT: "envelope-empty-result",
   NOT_FOUND: "error-not-found",
@@ -140,19 +140,19 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const parser = parserWith();
-      const submit = yield* Effect.promise(() => golden(GOLDEN.RUN_SUBMIT));
-      const carried = onlyMessage(parser.decode(frame(submit.request)));
+      const report = yield* Effect.promise(() => golden(GOLDEN.GUIDE_REPORT));
+      const carried = onlyMessage(parser.decode(frame(report.request)));
       assert.deepEqual(carried, {
         _tag: "Request",
-        id: "request-run-submit",
-        tag: GATEWAY_METHOD.RUN_SUBMIT,
-        payload: submit.request.params,
+        id: "request-guide-report",
+        tag: GATEWAY_METHOD.GUIDE_REPORT,
+        payload: report.request.params,
         headers: [
           [GATEWAY_REQUEST_HEADER.PROTOCOL_VERSION, String(GATEWAY_PROTOCOL_VERSION)],
-          [GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY, "key-run-submit"],
+          [GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY, "key-guide-report"],
         ],
       });
-      assert.equal(parser.encode(carried), frame(submit.request));
+      assert.equal(parser.encode(carried), frame(report.request));
 
       const named = yield* Effect.promise(() => golden(GOLDEN.EXPECTED_REVISION));
       const namedMessage = onlyMessage(parser.decode(frame(named.request)));
@@ -171,7 +171,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const parser = parserWith();
-      for (const name of [GOLDEN.RUN_SUBMIT, GOLDEN.EMPTY_RESULT]) {
+      for (const name of [GOLDEN.GUIDE_REPORT, GOLDEN.EMPTY_RESULT]) {
         const held = yield* Effect.promise(() => golden(name));
         const carried = onlyMessage(parser.decode(frame(held.response)));
         assert.deepEqual(carried, {

@@ -1,10 +1,10 @@
 {
   "request": {
     "protocolVersion": 1,
-    "id": "request-run-submit",
-    "method": "run.submit",
+    "id": "request-guide-report",
+    "method": "guide.report",
     "params": {
-      "case": "run.submit",
+      "case": "guide.report",
       "note": "synthetic",
       "detail": {
         "flag": true,
@@ -16,10 +16,10 @@
         ]
       }
     },
-    "idempotencyKey": "key-run-submit"
+    "idempotencyKey": "key-guide-report"
   },
   "response": {
-    "id": "request-run-submit",
+    "id": "request-guide-report",
     "ok": false,
     "error": {
       "code": "shutting_down",
