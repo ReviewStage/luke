@@ -80,28 +80,6 @@
         "kind"
       ],
       "additionalProperties": false
-    },
-    {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string",
-          "enum": [
-            "session.beat"
-          ]
-        },
-        "kind": {
-          "type": "string",
-          "enum": [
-            "voice-preview"
-          ]
-        }
-      },
-      "required": [
-        "type",
-        "kind"
-      ],
-      "additionalProperties": false
     }
   ]
 }

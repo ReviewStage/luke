@@ -162,8 +162,6 @@ export interface HostOperator {
   reportLiveTransport(state: LiveTransportState): Effect.Effect<void>;
   /** The peer's own idle decision, from its local signals alone; the host decides the close. */
   reportLiveActivity(idle: boolean): Effect.Effect<void>;
-  /** The peer's microphone went live, by the developer's press; the host's audition, if one stands, leaves the session alone. */
-  reportLiveTalk(): Effect.Effect<void>;
   /** The stop key: the standing session is told to stop speaking; answers whether one stood to tell. */
   stopSpeaking(): Effect.Effect<boolean>;
   /** One tapped wire event for the host's development trace; the host drops it where no writer stands. */
@@ -442,7 +440,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT, { state })),
     reportLiveActivity: (idle) =>
       fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY, { idle })),
-    reportLiveTalk: () => fire(client.call(GATEWAY_METHOD.VOICE_REPORT_LIVE_TALK)),
     stopSpeaking: () =>
       Effect.map(client.call(GATEWAY_METHOD.VOICE_STOP_SPEAKING), (answer) =>
         answer.ok

@@ -433,7 +433,6 @@ function IntroductionFlight({
           }
         },
         reportActivity: () => undefined,
-        reportTalk: () => undefined,
       },
       createPeerConnection: () => new RTCPeerConnection(),
       createSilence: createBrowserSilence,

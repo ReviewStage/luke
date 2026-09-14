@@ -262,15 +262,6 @@ interface StandingSession {
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
   micLive: boolean;
-  /**
-   * The session is the voice picker's audition: a voice was chosen, this
-   * session was opened under it, and the one thing said into it is the
-   * build's own line. Nothing Luke says on such a session is written down —
-   * a demonstration of a voice is not a turn of the conversation, and a
-   * developer trying voices out would otherwise fill their record with the
-   * same sentence over and over.
-   */
-  auditioning: boolean;
   usageSeconds: number | undefined;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
@@ -966,7 +957,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         ended: false,
         closing: undefined,
         micLive: false,
-        auditioning: false,
         usageSeconds: undefined,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
@@ -1062,9 +1052,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         return Effect.void;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED:
         session.micLive = true;
-        // The developer opened the microphone on an audition's session: what
-        // Luke says from here is a reply to them, and is kept.
-        session.auditioning = false;
         return Effect.void;
       case LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED:
       case LIVE_SERVER_EVENT.THINKING_APPENDED:
@@ -1236,9 +1223,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #write(write: UtteranceWrite): Effect.Effect<boolean> {
     return Effect.gen({ self: this }, function* () {
       const { session, utterance } = write;
-      // An audition's session says the picker's own line and nothing the
-      // developer asked for; what Luke says on it is heard and not kept.
-      if (session.auditioning && utterance.speaker !== TRANSCRIPT_SPEAKER.USER) return true;
       const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#now();
       const written =
         utterance.speaker === TRANSCRIPT_SPEAKER.USER
@@ -1552,11 +1536,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
-    // Marked before the append leaves, so no transcript of the line can
-    // precede the mark that keeps it out of the record; and unmarked by any
-    // other turn, since a briefing spoken into the audition's session makes
-    // it a conversation again, whose words are written down.
-    session.auditioning = request.kind === PROACTIVE_SPEECH_KIND.VOICE_PREVIEW;
     const opening = speechOpening(request.turn);
     if (opening) {
       this.#speakOpening(session, request, opening);

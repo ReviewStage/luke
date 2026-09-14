@@ -82,10 +82,6 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
         Effect.sync(() => {
           liveCalls.push(`activity:${idle}`);
         }),
-      reportLiveTalk: () =>
-        Effect.sync(() => {
-          liveCalls.push("talk");
-        }),
       stopSpeaking: () =>
         Effect.sync(() => {
           liveCalls.push("stop");
@@ -136,7 +132,6 @@ test("the five live session acts reach the host from the voice window alone", as
     kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
     payload: { idle: true },
   });
-  await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_REPORT_LIVE_TALK });
   assert.deepEqual(await f.perform(f.voiceSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
     status: "done",
     value: true,
@@ -146,7 +141,6 @@ test("the five live session acts reach the host from the voice window alone", as
     `create:${offer}`,
     "transport:connected",
     "activity:true",
-    "talk",
     "stop",
     "end",
   ]);
@@ -162,13 +156,12 @@ test("the five live session acts reach the host from the voice window alone", as
     kind: ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY,
     payload: { idle: false },
   });
-  await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_REPORT_LIVE_TALK });
   assert.deepEqual(await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_STOP_SPEAKING }), {
     status: "done",
     value: false,
   });
   await f.perform(f.panelSender, { kind: ACT_KIND.VOICE_END_LIVE_SESSION });
-  assert.equal(f.liveCalls.length, 6);
+  assert.equal(f.liveCalls.length, 5);
 });
 
 test("the voice window is told to clear at the fence, before the disk answers, and the panel hears the disk's answer", async () => {

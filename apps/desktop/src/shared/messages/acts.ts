@@ -127,8 +127,6 @@ export const ACT_KIND = {
   VOICE_END_LIVE_SESSION: "voice.endLiveSession",
   VOICE_REPORT_LIVE_TRANSPORT: "voice.reportLiveTransport",
   VOICE_REPORT_LIVE_ACTIVITY: "voice.reportLiveActivity",
-  /** The microphone went live on the voice window's session, by the developer's press. */
-  VOICE_REPORT_LIVE_TALK: "voice.reportLiveTalk",
   VOICE_STOP_SPEAKING: "voice.stopSpeaking",
   VOICE_DIAGNOSTICS: "voice.diagnostics",
   MICROPHONE_REQUEST: "microphone.request",
@@ -567,11 +565,6 @@ export const ACT = {
     payload: actSchema(voiceReportLiveActivityParamsSchema),
     result: wireResult<undefined>((value) => value === undefined),
     refusal: "Could not report the voice activity on this system.",
-  },
-  [ACT_KIND.VOICE_REPORT_LIVE_TALK]: {
-    payload: noPayload,
-    result: wireResult<undefined>((value) => value === undefined),
-    refusal: "Could not report the microphone on this system.",
   },
   [ACT_KIND.VOICE_STOP_SPEAKING]: {
     payload: noPayload,
