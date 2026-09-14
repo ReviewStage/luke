@@ -87,7 +87,7 @@ export const HOSTED_BRAIN_DEFAULTS = {
   PREFETCH_MODEL: BRAIN_PREFETCH_MODEL,
   REASONING_EFFORT: BRAIN_OPENAI_DEFAULTS.REASONING_EFFORT,
   MAXIMUM_OUTPUT_TOKENS: BRAIN_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
-  /** The same ceiling the keyed client keeps: a turn that reasons over a transcript, not a runaway. */
+  /** The brain transport's own ceiling: a turn that reasons over a transcript, not a runaway. */
   UPSTREAM_TIMEOUT_MS: BRAIN_OPENAI_DEFAULTS.REQUEST_TIMEOUT_MS,
 } as const;
 
