@@ -59,9 +59,8 @@ enum SessionReplay {
         // where the desktop's autocapture names pressed controls and never an
         // input's value. An event stream that carries typed text has no place
         // under a disclosure that says typed text is withheld.
-        // The desktop's `capture_exceptions: true`: a crash is sent as an
-        // exception event on the next launch.
-        config.errorTrackingConfig.autoCapture = true
+        // Crash and error reporting moved to the shared Sentry setup, so this
+        // replay stream remains screenshots alone.
         // The desktop's `person_profiles: "always"`, so a launch that never
         // reaches a sign-in still files as a person a recording can hang off.
         config.personProfiles = .always

@@ -133,6 +133,7 @@ xcodebuild \
   -authenticationKeyIssuerID ISSUER_UUID \
   CURRENT_PROJECT_VERSION=42 \
   POSTHOG_PROJECT_API_KEY=phc_your_project_key \
+  SENTRY_DSN=https://public@example.ingest.sentry.io/1 \
   archive
 
 xcodebuild -exportArchive \
@@ -150,7 +151,10 @@ certificate and profiles through the API key if the team has none yet. The
 second signs it for App Store Connect and uploads it. Once App Store Connect
 finishes processing, the build is offered to internal testers at once and to
 external groups after Beta App Review. The Watch app installs on a paired
-watch with the iPhone build; it needs no record or upload of its own.
+watch with the iPhone build; it needs no record or upload of its own. The
+same archive is where the phone and watch dSYMs come from, and symbol upload
+to Sentry is still an operator step rather than a checked-in build phase,
+because the Sentry org, project, and auth token are deployment-specific.
 
 ## Notifications
 
@@ -397,31 +401,38 @@ Counted product events go to Luke's own service at `/api/events` through
 `packages/analytics/src/product-events.ts`; the service re-validates every
 batch against the TypeScript vocabulary, so the transcription must stay a
 subset of it. Session replay posts to PostHog directly from
-`Luke/SessionReplay.swift` under the `PostHog` SwiftPM package.
+`Luke/SessionReplay.swift` under the `PostHog` SwiftPM package. Crash and
+error reporting start from `LukeKit`'s shared `MobileSentry` helper, which
+links Sentry's Cocoa SDK with the desktop's posture: no Sentry Replay, no
+tracing, no screenshots, and no default PII collection.
 
 The watch app runs the counted stream alone, through the same sender with
-client `watchos` (stamped `luke-watchos` by the service). It does not link the
-PostHog SDK: `posthog-ios` builds session replay only for iOS and crash
-autocapture only for iOS, macOS, and tvOS, so there is no watch recording and
-no watch crash reporting. Account edges are not counted on the watch, because
-a sign-in there is the phone's relay and the phone already counted it.
+client `watchos` (stamped `luke-watchos` by the service). Replay stays phone
+only: the watch does not link PostHog at all. The shared Sentry client is
+linked for both apps; on iPhone it reports native crashes on the next launch,
+and on watchOS it leaves Sentry's crash handler off because the SDK does not
+support native watch crash capture. Account edges are not counted on the watch,
+because a sign-in there is the phone's relay and the phone already counted it.
 
 The PostHog project key rides the `POSTHOG_PROJECT_API_KEY` build setting into
 `Info.plist`, empty by default — and empty means the recording client is never
-configured. A distributing build injects it:
+configured. The Sentry DSN rides the `SENTRY_DSN` build setting into each app's
+`Info.plist`, also empty by default — and empty means `MobileSentry.start()`
+never configures the SDK. A distributing build injects both:
 
 ```sh
 xcodebuild \
   -project apps/ios/Luke.xcodeproj \
   -scheme Luke \
   POSTHOG_PROJECT_API_KEY=phc_your_project_key \
+  SENTRY_DSN=https://public@example.ingest.sentry.io/1 \
   build
 ```
 
-A DEBUG run may set `LUKE_POSTHOG_PROJECT_API_KEY` in the scheme's environment
-instead, the same door the service address overrides use. XCTest runs neither
-record nor count: the app detects its launch as a test host and stands both
-streams down.
+A DEBUG run may set `LUKE_POSTHOG_PROJECT_API_KEY` and `LUKE_SENTRY_DSN` in
+the scheme's environment instead, the same door the service address overrides
+use. XCTest runs neither record, replay, nor crash reporting: the app detects
+its launch as a test host and stands every outbound telemetry stream down.
 
 ## Watch
 

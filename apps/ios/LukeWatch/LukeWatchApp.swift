@@ -14,14 +14,20 @@ struct LukeWatchApp: App {
     private let devices: DeviceRegistrar
 
     init() {
+        let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        MobileSentry.start(
+            platform: .watchOS,
+            appVersion: Self.appVersion,
+            enabled: !testing
+        )
         let watchSession = WatchAccountSession()
         _watchSession = State(initialValue: watchSession)
         connectivity = WatchConnectivityReceiver(watchSession: watchSession)
         let events = ProductEventSender(
             serviceURL: AccountConstants.serviceURL,
-            appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0",
+            appVersion: Self.appVersion,
             client: .watchOS,
-            sends: true,
+            sends: !testing,
             session: WatchCountingTokens(session: watchSession)
         )
         _events = State(initialValue: events)
@@ -58,5 +64,9 @@ struct LukeWatchApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { events.flush() }
         }
+    }
+
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
     }
 }
