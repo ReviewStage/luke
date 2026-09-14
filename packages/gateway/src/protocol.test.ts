@@ -55,13 +55,13 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
   return Effect.map(
     gatewayInProcessHost({
       methods: {
-        [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
-          effects.push(`submit ${String(params.submissionId)}`);
+        [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
+          effects.push(`report ${String(params.reportId)}`);
           return Effect.succeed({ outcome: "accepted", runId: `run-${effects.length}` });
         },
-        [GATEWAY_METHOD.RUN_LIST]: () => Effect.succeed({ runs: [] }),
-        [GATEWAY_METHOD.CONVERSATION_DELETE]: () => {
-          effects.push("delete");
+        [GATEWAY_METHOD.SESSION_ROSTER]: () => Effect.succeed({ sessions: [] }),
+        [GATEWAY_METHOD.CONVERSATION_CLEAR]: () => {
+          effects.push("clear");
           return Effect.succeed({ outcome: "complete" });
         },
         [GATEWAY_METHOD.NODE_INVOKE]: (params) =>
@@ -72,17 +72,17 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
             }
             return { status: result.status, reason: result.reason };
           }),
-        [GATEWAY_METHOD.MEMORY_STATUS]: () => {
+        [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () => {
           throw new Error("the index fell over");
         },
-        [GATEWAY_METHOD.CONFIGURATION_UPDATE]: () =>
+        [GATEWAY_METHOD.SETTINGS_UPDATE]: () =>
           Effect.fail(new RefusedRefusal({ message: "nothing settable" })),
       },
       configurationRevision: () => configurationRevision.value,
       sessionRevision: (key) => sessionRevision.get(key),
       snapshot: () => {
         counters.snapshots += 1;
-        return { runs: [], snapshotOf: counters.snapshots };
+        return { sessions: [], snapshotOf: counters.snapshots };
       },
       now: () => 1_800_000_000_000,
       createEventId: () => `event-${++ids}`,
@@ -148,36 +148,36 @@ for (const kind of ["in-process", "loopback"] as const) {
         const h = yield* harness();
         const c = yield* client(transportFor(kind, h.host));
         const first = yield* c.call(
-          GATEWAY_METHOD.RUN_SUBMIT,
-          { submissionId: "sub-1", question: "hi" },
+          GATEWAY_METHOD.GUIDE_REPORT,
+          { reportId: "sub-1", question: "hi" },
           { idempotencyKey: "sub-1" },
         );
         const retry = yield* c.call(
-          GATEWAY_METHOD.RUN_SUBMIT,
-          { submissionId: "sub-1", question: "hi" },
+          GATEWAY_METHOD.GUIDE_REPORT,
+          { reportId: "sub-1", question: "hi" },
           { idempotencyKey: "sub-1" },
         );
         assert.deepEqual(first, retry);
-        assert.deepEqual(h.effects, ["submit sub-1"]);
+        assert.deepEqual(h.effects, ["report sub-1"]);
         // The same key with other words is a conflict, never a second effect.
         const other = yield* c.call(
-          GATEWAY_METHOD.RUN_SUBMIT,
-          { submissionId: "sub-1", question: "other" },
+          GATEWAY_METHOD.GUIDE_REPORT,
+          { reportId: "sub-1", question: "other" },
           { idempotencyKey: "sub-1" },
         );
         assert.equal(other.ok, false);
         if (!other.ok) assert.equal(other.error.code, GATEWAY_ERROR.IDEMPOTENCY_CONFLICT);
-        assert.deepEqual(h.effects, ["submit sub-1"]);
+        assert.deepEqual(h.effects, ["report sub-1"]);
         // A raw request with no key is refused before any handler runs.
         const bare = yield* transportFor(kind, h.host).request({
           protocolVersion: GATEWAY_PROTOCOL_VERSION,
           id: "raw-1",
-          method: GATEWAY_METHOD.CONVERSATION_DELETE,
+          method: GATEWAY_METHOD.CONVERSATION_CLEAR,
           params: {},
         });
         assert.equal(bare.ok, false);
         if (!bare.ok) assert.equal(bare.error.code, GATEWAY_ERROR.MISSING_IDEMPOTENCY_KEY);
-        assert.deepEqual(h.effects, ["submit sub-1"]);
+        assert.deepEqual(h.effects, ["report sub-1"]);
       }),
   );
 
@@ -187,13 +187,13 @@ for (const kind of ["in-process", "loopback"] as const) {
       const c = yield* client(transportFor(kind, h.host));
       const [a, b] = yield* Effect.all(
         [
-          c.call(GATEWAY_METHOD.RUN_SUBMIT, { submissionId: "s" }, { idempotencyKey: "k" }),
-          c.call(GATEWAY_METHOD.RUN_SUBMIT, { submissionId: "s" }, { idempotencyKey: "k" }),
+          c.call(GATEWAY_METHOD.GUIDE_REPORT, { reportId: "s" }, { idempotencyKey: "k" }),
+          c.call(GATEWAY_METHOD.GUIDE_REPORT, { reportId: "s" }, { idempotencyKey: "k" }),
         ],
         { concurrency: "unbounded" },
       );
       assert.deepEqual(a, b);
-      assert.deepEqual(h.effects, ["submit s"]);
+      assert.deepEqual(h.effects, ["report s"]);
     }),
   );
 
@@ -204,28 +204,28 @@ for (const kind of ["in-process", "loopback"] as const) {
         const h = yield* harness();
         const c = yield* client(transportFor(kind, h.host));
         const stale = yield* c.call(
-          GATEWAY_METHOD.CONVERSATION_DELETE,
+          GATEWAY_METHOD.CONVERSATION_CLEAR,
           {},
           { expectedRevision: { sessionKey: "agent:main:main", sessionRevision: "gen-0" } },
         );
         assert.equal(stale.ok, false);
         if (!stale.ok) assert.equal(stale.error.code, GATEWAY_ERROR.REVISION_MISMATCH);
         const current = yield* c.call(
-          GATEWAY_METHOD.CONVERSATION_DELETE,
+          GATEWAY_METHOD.CONVERSATION_CLEAR,
           {},
           { expectedRevision: { sessionKey: "agent:main:main", sessionRevision: "gen-1" } },
         );
         assert.equal(current.ok, true);
         h.configurationRevision.value = 2;
         const oldConfiguration = yield* c.call(
-          GATEWAY_METHOD.RUN_LIST,
+          GATEWAY_METHOD.SESSION_ROSTER,
           {},
           { expectedRevision: { configurationRevision: 1 } },
         );
         assert.equal(oldConfiguration.ok, false);
         if (!oldConfiguration.ok)
           assert.equal(oldConfiguration.error.code, GATEWAY_ERROR.REVISION_MISMATCH);
-        assert.deepEqual(h.effects, ["delete"]);
+        assert.deepEqual(h.effects, ["clear"]);
       }),
   );
 
@@ -235,19 +235,19 @@ for (const kind of ["in-process", "loopback"] as const) {
       Effect.gen(function* () {
         const h = yield* harness();
         const c = yield* client(transportFor(kind, h.host));
-        const unknown = yield* c.call(GATEWAY_METHOD.CHILD_LIST);
+        const unknown = yield* c.call(GATEWAY_METHOD.WORKSPACE_PROJECTS);
         assert.equal(unknown.ok, false);
         if (!unknown.ok) assert.equal(unknown.error.code, GATEWAY_ERROR.UNKNOWN_METHOD);
-        const thrown = yield* c.call(GATEWAY_METHOD.MEMORY_STATUS);
+        const thrown = yield* c.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS);
         assert.equal(thrown.ok, false);
         if (!thrown.ok) assert.equal(thrown.error.code, GATEWAY_ERROR.INTERNAL);
-        const refused = yield* c.call(GATEWAY_METHOD.CONFIGURATION_UPDATE, {});
+        const refused = yield* c.call(GATEWAY_METHOD.SETTINGS_UPDATE, {});
         assert.equal(refused.ok, false);
         if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.REFUSED);
         const version = yield* transportFor(kind, h.host).request({
           protocolVersion: GATEWAY_PROTOCOL_VERSION + 1,
           id: "v",
-          method: GATEWAY_METHOD.RUN_LIST,
+          method: GATEWAY_METHOD.SESSION_ROSTER,
           params: {},
         });
         assert.equal(version.ok, false);
@@ -259,7 +259,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     Effect.gen(function* () {
       const h = yield* harness();
       const node = yield* client(transportFor(kind, h.host, NODE));
-      const refused = yield* node.call(GATEWAY_METHOD.RUN_LIST);
+      const refused = yield* node.call(GATEWAY_METHOD.SESSION_ROSTER);
       assert.equal(refused.ok, false);
       if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
       const hello = yield* node.call(GATEWAY_METHOD.HELLO);
@@ -276,16 +276,16 @@ for (const kind of ["in-process", "loopback"] as const) {
         const c = yield* client(transport);
         const seen: number[] = [];
         c.onEvery((event) => seen.push(event.sequence));
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         assert.deepEqual(seen, [1, 2]);
         // The wire loses two events; the third to arrive shows the gap.
         if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(2);
         else transport.setConnected(false);
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-        h.host.log.publish(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+        h.host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { settings: {} });
         if (!(transport instanceof TextLoopbackTransport)) transport.setConnected(true);
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
         yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
         assert.deepEqual(seen, [1, 2, 3, 4, 5]);
@@ -310,17 +310,17 @@ for (const kind of ["in-process", "loopback"] as const) {
         const c = yield* client(transport);
         const seen: number[] = [];
         c.onEvery((event) => seen.push(event.sequence));
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         // The wire loses event 2; event 3 shows the gap and opens the reconnection.
         if (transport instanceof TextLoopbackTransport) transport.dropNextEvents(1);
         else inner.setConnected(false);
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         inner.setConnected(true);
-        h.host.log.publish(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
+        h.host.log.publish(GATEWAY_EVENT.SETTINGS_CHANGED, { settings: {} });
         yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
         assert.equal(timers.length, 1);
         // The host has answered from sequence 3; event 4 is emitted before the client adopts that answer.
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         assert.deepEqual(seen, [1]);
         for (const fire of timers.splice(0)) fire();
         yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
@@ -340,9 +340,10 @@ for (const kind of ["in-process", "loopback"] as const) {
         const c = yield* client(transport, (snapshot) => adopted.push(snapshot));
         const seen: GatewayEvent[] = [];
         c.onEvery((event) => seen.push(event));
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         transport.setConnected(false);
-        for (let i = 0; i < 5; i += 1) h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        for (let i = 0; i < 5; i += 1)
+          h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         transport.setConnected(true);
         yield* c.reconnect();
         assert.equal(seen.length, 1);
@@ -350,8 +351,8 @@ for (const kind of ["in-process", "loopback"] as const) {
         assert.equal(c.lastSequence(), 6);
         // Within the window, the replay carries every missed event instead.
         transport.setConnected(false);
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-        h.host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+        h.host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
         transport.setConnected(true);
         yield* c.reconnect();
         assert.deepEqual(
@@ -375,7 +376,7 @@ for (const kind of ["in-process", "loopback"] as const) {
         const transport = transportFor(kind, h.host);
         const c = yield* client(transport);
         transport.setConnected(false);
-        const answer = yield* c.call(GATEWAY_METHOD.RUN_LIST);
+        const answer = yield* c.call(GATEWAY_METHOD.SESSION_ROSTER);
         assert.equal(answer.ok, false);
         if (!answer.ok) assert.equal(answer.error.code, GATEWAY_ERROR.DISCONNECTED);
         assert.deepEqual(h.effects, []);
@@ -428,7 +429,7 @@ test("a method outside the vocabulary is refused by the writer before it reaches
   assert.throws(() =>
     gatewayRequestToWire({
       ...envelope,
-      method: envelope.method as typeof GATEWAY_METHOD.RUN_LIST,
+      method: envelope.method as typeof GATEWAY_METHOD.SESSION_ROSTER,
     }),
   );
   assert.equal(gatewayRequestFromWire(envelope), undefined);
@@ -449,7 +450,7 @@ it.live(
       const c = yield* client(transport);
       let answered = false;
       const pending = yield* Effect.forkChild(
-        Effect.tap(c.call(GATEWAY_METHOD.RUN_LIST), () =>
+        Effect.tap(c.call(GATEWAY_METHOD.SESSION_ROSTER), () =>
           Effect.sync(() => {
             answered = true;
           }),

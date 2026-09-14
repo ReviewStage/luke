@@ -35,12 +35,12 @@
         {
           "eventId": "event-5",
           "sequence": 5,
-          "kind": "runs.changed",
+          "kind": "sessions.changed",
           "at": 1700000005000,
           "sessionKey": "agent:main:main",
           "runId": "run-1",
           "payload": {
-            "runs": 1
+            "sessions": 1
           }
         }
       ]

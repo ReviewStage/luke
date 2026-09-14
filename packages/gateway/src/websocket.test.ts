@@ -57,9 +57,9 @@ const hosted = (
     const state = { shutdowns: 0 };
     let ids = 0;
     const methods: GatewayMethodTable = {
-      [GATEWAY_METHOD.RUN_LIST]: (_params, context) =>
-        Effect.succeed({ runs: [], client: context.client.clientId }),
-      [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
+      [GATEWAY_METHOD.SESSION_ROSTER]: (_params, context) =>
+        Effect.succeed({ sessions: [], client: context.client.clientId }),
+      [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
         effects.push(String(params.question));
         return Effect.succeed({ runId: `run-${effects.length}` });
       },
@@ -67,9 +67,9 @@ const hosted = (
         state.shutdowns += 1;
         return Effect.succeed({ accepted: true });
       },
-      [GATEWAY_METHOD.MEMORY_STATUS]: () => Effect.fail(new RefusedRefusal({ message: "no" })),
+      [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () => Effect.fail(new RefusedRefusal({ message: "no" })),
       // A read that never answers, so a socket can die with a request still out.
-      [GATEWAY_METHOD.RUN_WAIT]: () => Effect.never,
+      [GATEWAY_METHOD.ONBOARDING_STATE]: () => Effect.never,
     };
     const scope = yield* Scope.fork(yield* Effect.scope);
     const context = yield* Scope.provide(
@@ -78,7 +78,7 @@ const hosted = (
           methods: methods,
           configurationRevision: () => 1,
           sessionRevision: () => "gen-1",
-          snapshot: () => ({ runs: [] }),
+          snapshot: () => ({ sessions: [] }),
           now: () => 0,
           createEventId: () => {
             ids += 1;
@@ -135,17 +135,17 @@ it.live("the host binds an ephemeral port and carries requests, answers, and eve
         createId: () => crypto.randomUUID(),
       });
       const seen: GatewayEvent[] = [];
-      client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => seen.push(event));
-      const listed = yield* client.call(GATEWAY_METHOD.RUN_LIST);
-      assert.deepEqual(listed, { ok: true, result: { runs: [], client: "desktop" } });
-      const submitted = yield* client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "hello" });
-      assert.equal(submitted.ok, true);
+      client.on(GATEWAY_EVENT.SESSIONS_CHANGED, (event) => seen.push(event));
+      const listed = yield* client.call(GATEWAY_METHOD.SESSION_ROSTER);
+      assert.deepEqual(listed, { ok: true, result: { sessions: [], client: "desktop" } });
+      const reported = yield* client.call(GATEWAY_METHOD.GUIDE_REPORT, { question: "hello" });
+      assert.equal(reported.ok, true);
       assert.deepEqual(h.effects, ["hello"]);
-      yield* h.log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+      yield* h.log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
       yield* settle;
       assert.equal(seen.length, 1);
       assert.equal(seen[0]?.sequence, 1);
-      const refused = yield* client.call(GATEWAY_METHOD.MEMORY_STATUS);
+      const refused = yield* client.call(GATEWAY_METHOD.VOICE_DIAGNOSTICS);
       assert.equal(refused.ok, false);
       if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.REFUSED);
       yield* result.connection.close();
@@ -224,11 +224,11 @@ it.live(
           transport: attached.connection,
           createId: () => crypto.randomUUID(),
         });
-        const submit = yield* client.call(GATEWAY_METHOD.RUN_SUBMIT, { question: "late" });
-        assert.equal(submit.ok, false);
-        if (!submit.ok) assert.equal(submit.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
+        const report = yield* client.call(GATEWAY_METHOD.GUIDE_REPORT, { question: "late" });
+        assert.equal(report.ok, false);
+        if (!report.ok) assert.equal(report.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
         assert.deepEqual(h.effects, []);
-        assert.equal((yield* client.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
+        assert.equal((yield* client.call(GATEWAY_METHOD.SESSION_ROSTER)).ok, true);
         assert.equal((yield* client.call(GATEWAY_METHOD.SHUTDOWN)).ok, true);
         assert.equal(h.shutdowns(), 1);
         yield* attached.connection.close();
@@ -256,7 +256,7 @@ it.live(
         const answer = yield* result.connection.request({
           protocolVersion: GATEWAY_PROTOCOL_VERSION,
           id: "r",
-          method: GATEWAY_METHOD.RUN_LIST,
+          method: GATEWAY_METHOD.SESSION_ROSTER,
           params: {},
         });
         assert.equal(answer.ok, false);
@@ -283,9 +283,9 @@ it.live(
           createId: () => crypto.randomUUID(),
         });
         // What the client declared about itself is not what the host admitted it as.
-        assert.deepEqual(yield* client.call(GATEWAY_METHOD.RUN_LIST), {
+        assert.deepEqual(yield* client.call(GATEWAY_METHOD.SESSION_ROSTER), {
           ok: true,
-          result: { runs: [], client: "the-account" },
+          result: { sessions: [], client: "the-account" },
         });
         yield* result.connection.close();
         yield* minted.close;
@@ -392,7 +392,7 @@ it.live("a client that dies with a request still out leaves the host answering t
         createId: () => crypto.randomUUID(),
       });
       const waiting = yield* Effect.forkChild(
-        client.call(GATEWAY_METHOD.RUN_WAIT, { runId: "run-1" }),
+        client.call(GATEWAY_METHOD.ONBOARDING_STATE, { runId: "run-1" }),
       );
       yield* settle;
       assert.equal(yield* h.binding.connections, 1);
@@ -409,7 +409,7 @@ it.live("a client that dies with a request still out leaves the host answering t
         transport: second.connection,
         createId: () => crypto.randomUUID(),
       });
-      assert.equal((yield* after.call(GATEWAY_METHOD.RUN_LIST)).ok, true);
+      assert.equal((yield* after.call(GATEWAY_METHOD.SESSION_ROSTER)).ok, true);
       yield* second.connection.close();
     }),
   ),

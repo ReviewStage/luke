@@ -2,9 +2,9 @@
   "request": {
     "protocolVersion": 1,
     "id": "request-without-idempotency-key",
-    "method": "run.cancel",
+    "method": "session.executeControl",
     "params": {
-      "case": "run.cancel",
+      "case": "session.executeControl",
       "note": "synthetic",
       "detail": {
         "flag": true,

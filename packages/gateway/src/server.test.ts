@@ -240,7 +240,7 @@ it.effect("every error code's recorded request is answered with the recorded env
     const node = yield* connect(NODE);
     const admissions = yield* GatewayAdmissions;
     // The conflict golden was recorded against a key already spent under other words.
-    const spent = yield* methodGolden(GATEWAY_METHOD.CONFIGURATION_UPDATE);
+    const spent = yield* methodGolden(GATEWAY_METHOD.SETTINGS_UPDATE);
     assert.equal(yield* door.carry(frame(spent.request)), frame(spent.response));
 
     const answered: GatewayErrorCode[] = [];
@@ -273,10 +273,10 @@ it.effect("every error code's recorded request is answered with the recorded env
         methods: {
           ...Object.fromEntries(
             Object.entries(answeringTable()).filter(
-              ([method]) => method !== GATEWAY_METHOD.MEMORY_STATUS,
+              ([method]) => method !== GATEWAY_METHOD.VOICE_DIAGNOSTICS,
             ),
           ),
-          [GATEWAY_METHOD.RUN_CANCEL]: () =>
+          [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: () =>
             Effect.fail(new NotFoundRefusal({ message: "no run has that id" })),
           [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
             Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
@@ -288,7 +288,7 @@ it.effect("every error code's recorded request is answered with the recorded env
             Effect.fail(
               new UnknownCapabilityRefusal({ message: "that capability is not registered" }),
             ),
-          [GATEWAY_METHOD.RUN_SUBMIT]: () => {
+          [GATEWAY_METHOD.GUIDE_REPORT]: () => {
             throw new Error("the handler failed");
           },
         },
@@ -312,8 +312,8 @@ it.effect(
         { sessionKey: FIXTURE_SESSION_KEY },
       );
       yield* log.emit(
-        GATEWAY_EVENT.RUNS_CHANGED,
-        { runs: 1 },
+        GATEWAY_EVENT.SESSIONS_CHANGED,
+        { sessions: 1 },
         { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
       );
       assert.equal(yield* log.sequence, 5);
@@ -379,22 +379,22 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const door = yield* connect(OPERATOR);
-      const request = requestFor(GATEWAY_METHOD.RUN_SUBMIT, { submissionId: "s" }, "k");
+      const request = requestFor(GATEWAY_METHOD.GUIDE_REPORT, { reportId: "s" }, "k");
       const [first, second] = yield* Effect.all([carry(door, request), carry(door, request)], {
         concurrency: "unbounded",
       });
       assert.deepEqual(first, second);
-      assert.deepEqual(runs, ["submit"]);
+      assert.deepEqual(runs, ["report"]);
       const later = yield* carry(door, request);
       assert.deepEqual(later, first);
-      assert.deepEqual(runs, ["submit"]);
+      assert.deepEqual(runs, ["report"]);
     }).pipe(
       Effect.provide(
         serverLayer({
           methods: {
-            [GATEWAY_METHOD.RUN_SUBMIT]: () =>
+            [GATEWAY_METHOD.GUIDE_REPORT]: () =>
               Effect.gen(function* () {
-                runs.push("submit");
+                runs.push("report");
                 yield* Effect.yieldNow;
                 return { outcome: "accepted" };
               }),
@@ -411,21 +411,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const door = yield* connect(OPERATOR);
-      const submit = (key: string) =>
-        carry(door, requestFor(GATEWAY_METHOD.RUN_SUBMIT, { key }, key));
-      yield* submit("a");
-      yield* submit("b");
+      const report = (key: string) =>
+        carry(door, requestFor(GATEWAY_METHOD.GUIDE_REPORT, { key }, key));
+      yield* report("a");
+      yield* report("b");
       assert.equal(capped.length, 2);
-      yield* submit("b");
+      yield* report("b");
       assert.equal(capped.length, 2);
-      yield* submit("a");
+      yield* report("a");
       assert.deepEqual(capped, ["a", "b", "a"]);
     }).pipe(
       Effect.provide(
         serverLayer({
           idempotencyCapacity: 1,
           methods: {
-            [GATEWAY_METHOD.RUN_SUBMIT]: (params) => {
+            [GATEWAY_METHOD.GUIDE_REPORT]: (params) => {
               capped.push(String(params.key));
               return Effect.succeed(undefined);
             },
@@ -446,8 +446,8 @@ it.effect(
       const request: GatewayRequest = {
         protocolVersion: GATEWAY_PROTOCOL_VERSION,
         id: "request-1",
-        method: GATEWAY_METHOD.RUN_SUBMIT,
-        params: { submissionId: "s" },
+        method: GATEWAY_METHOD.GUIDE_REPORT,
+        params: { reportId: "s" },
         idempotencyKey: "k",
         expectedRevision: {
           sessionKey: FIXTURE_SESSION_KEY,
@@ -462,8 +462,8 @@ it.effect(
           client: OPERATOR,
           request: {
             protocolVersion: GATEWAY_PROTOCOL_VERSION,
-            method: GATEWAY_METHOD.RUN_SUBMIT,
-            params: { submissionId: "s" },
+            method: GATEWAY_METHOD.GUIDE_REPORT,
+            params: { reportId: "s" },
             idempotencyKey: "k",
             expectedRevision: request.expectedRevision,
           },
@@ -478,7 +478,7 @@ it.effect(
       Effect.provide(
         serverLayer({
           methods: {
-            [GATEWAY_METHOD.RUN_SUBMIT]: (_params, context) => {
+            [GATEWAY_METHOD.GUIDE_REPORT]: (_params, context) => {
               contexts.push(context);
               return Effect.succeed(undefined);
             },
@@ -492,16 +492,16 @@ it.effect("the log's stream delivers every emitted event in sequence", () =>
   Effect.gen(function* () {
     const log = yield* GatewayEventLog;
     const events = yield* log.events;
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    yield* log.emit(GATEWAY_EVENT.DIRECTORY_CHANGED, { entries: [] });
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] }, { runId: "run-1" });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+    yield* log.emit(GATEWAY_EVENT.SETTINGS_CHANGED, { settings: {} });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] }, { runId: "run-1" });
     const taken = yield* Stream.runCollect(Stream.take(events, 3));
     assert.deepEqual(
       taken.map((event) => [event.sequence, event.kind, event.runId]),
       [
-        [1, GATEWAY_EVENT.RUNS_CHANGED, undefined],
-        [2, GATEWAY_EVENT.DIRECTORY_CHANGED, undefined],
-        [3, GATEWAY_EVENT.RUNS_CHANGED, "run-1"],
+        [1, GATEWAY_EVENT.SESSIONS_CHANGED, undefined],
+        [2, GATEWAY_EVENT.SETTINGS_CHANGED, undefined],
+        [3, GATEWAY_EVENT.SESSIONS_CHANGED, "run-1"],
       ],
     );
   }).pipe(Effect.scoped, Effect.provide(serverLayer())),
@@ -512,13 +512,13 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const ledger = yield* GatewayLedger;
-      const rpc = GatewayRpcs.requests.get(GATEWAY_METHOD.RUN_SUBMIT);
+      const rpc = GatewayRpcs.requests.get(GATEWAY_METHOD.GUIDE_REPORT);
       assert.ok(rpc !== undefined);
       const asked = {
         client: new Rpc.ServerClient(1),
         requestId: RpcMessage.RequestId(1),
         rpc,
-        payload: { submissionId: "s" },
+        payload: { reportId: "s" },
         headers: Headers.fromInput({ [GATEWAY_REQUEST_HEADER.IDEMPOTENCY_KEY]: "k" }),
       };
       const started = yield* Deferred.make<void>();
@@ -553,8 +553,8 @@ it.effect(
 it.effect("a window of nothing still keeps the newest event, so the sequence never restarts", () =>
   Effect.gen(function* () {
     const log = yield* GatewayEventLog;
-    yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
-    const second = yield* log.emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: [] });
+    yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
+    const second = yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
     assert.equal(second.sequence, 2);
     assert.equal(yield* log.sequence, 2);
     assert.equal(log.revision().sequence, 2);

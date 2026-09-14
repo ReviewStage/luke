@@ -1,10 +1,10 @@
 {
   "request": {
     "protocolVersion": 1,
-    "id": "request-memory-status",
-    "method": "memory.status",
+    "id": "request-voice-diagnostics",
+    "method": "voice.diagnostics",
     "params": {
-      "case": "memory.status",
+      "case": "voice.diagnostics",
       "note": "synthetic",
       "detail": {
         "flag": true,
@@ -18,7 +18,7 @@
     }
   },
   "response": {
-    "id": "request-memory-status",
+    "id": "request-voice-diagnostics",
     "ok": false,
     "error": {
       "code": "unknown_method",

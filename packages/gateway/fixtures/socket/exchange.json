@@ -6,7 +6,7 @@
         "id": "request-run-list",
         "ok": true,
         "result": {
-          "runs": []
+          "sessions": []
         },
         "revision": {
           "configuration": 7,
@@ -49,10 +49,10 @@
       "envelope": {
         "eventId": "event-1",
         "sequence": 1,
-        "kind": "runs.changed",
+        "kind": "sessions.changed",
         "at": 1700000000000,
         "payload": {
-          "runs": []
+          "sessions": []
         }
       }
     },
@@ -86,10 +86,10 @@
       "envelope": {
         "eventId": "event-2",
         "sequence": 2,
-        "kind": "runs.changed",
+        "kind": "sessions.changed",
         "at": 1700000000000,
         "payload": {
-          "runs": []
+          "sessions": []
         }
       }
     },
@@ -98,10 +98,10 @@
       "envelope": {
         "eventId": "event-3",
         "sequence": 3,
-        "kind": "runs.changed",
+        "kind": "sessions.changed",
         "at": 1700000000000,
         "payload": {
-          "runs": []
+          "sessions": []
         }
       }
     },
@@ -116,10 +116,10 @@
             {
               "eventId": "event-3",
               "sequence": 3,
-              "kind": "runs.changed",
+              "kind": "sessions.changed",
               "at": 1700000000000,
               "payload": {
-                "runs": []
+                "sessions": []
               }
             }
           ]

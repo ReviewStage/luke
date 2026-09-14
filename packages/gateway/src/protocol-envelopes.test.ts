@@ -257,10 +257,10 @@ it.live("every error code crosses as the recorded envelope", () =>
   Effect.gen(function* () {
     const throwing = new Error("the handler failed");
     const unanswered = answeringTable();
-    delete unanswered[GATEWAY_METHOD.MEMORY_STATUS];
+    delete unanswered[GATEWAY_METHOD.VOICE_DIAGNOSTICS];
     const host = yield* goldenHost({
       ...unanswered,
-      [GATEWAY_METHOD.RUN_CANCEL]: () =>
+      [GATEWAY_METHOD.SESSION_EXECUTE_CONTROL]: () =>
         Effect.fail(new NotFoundRefusal({ message: "no run has that id" })),
       [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
         Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
@@ -270,14 +270,14 @@ it.live("every error code crosses as the recorded envelope", () =>
         ),
       [GATEWAY_METHOD.SESSION_OPEN]: () =>
         Effect.fail(new UnknownCapabilityRefusal({ message: "that capability is not registered" })),
-      [GATEWAY_METHOD.RUN_SUBMIT]: () => {
+      [GATEWAY_METHOD.GUIDE_REPORT]: () => {
         throw throwing;
       },
     });
     const transport = new TextLoopbackTransport(host, OPERATOR);
     const nodeTransport = new TextLoopbackTransport(host, NODE);
 
-    const conflicting = requestFor(GATEWAY_METHOD.CONFIGURATION_UPDATE);
+    const conflicting = requestFor(GATEWAY_METHOD.SETTINGS_UPDATE);
     yield* transport.request(conflicting);
 
     const shuttingDown = yield* goldenHost(answeringTable());
@@ -300,7 +300,7 @@ it.live("every error code crosses as the recorded envelope", () =>
       {
         code: GATEWAY_ERROR.UNKNOWN_METHOD,
         transport,
-        request: requestFor(GATEWAY_METHOD.MEMORY_STATUS),
+        request: requestFor(GATEWAY_METHOD.VOICE_DIAGNOSTICS),
       },
       {
         code: GATEWAY_ERROR.INVALID_PARAMS,
@@ -313,8 +313,8 @@ it.live("every error code crosses as the recorded envelope", () =>
         request: {
           protocolVersion: GATEWAY_PROTOCOL_VERSION,
           id: "request-without-idempotency-key",
-          method: GATEWAY_METHOD.RUN_CANCEL,
-          params: paramsFor(GATEWAY_METHOD.RUN_CANCEL),
+          method: GATEWAY_METHOD.SESSION_EXECUTE_CONTROL,
+          params: paramsFor(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL),
         },
       },
       {
@@ -333,7 +333,7 @@ it.live("every error code crosses as the recorded envelope", () =>
       {
         code: GATEWAY_ERROR.NOT_FOUND,
         transport,
-        request: requestFor(GATEWAY_METHOD.RUN_CANCEL),
+        request: requestFor(GATEWAY_METHOD.SESSION_EXECUTE_CONTROL),
       },
       {
         code: GATEWAY_ERROR.REFUSED,
@@ -363,12 +363,12 @@ it.live("every error code crosses as the recorded envelope", () =>
       {
         code: GATEWAY_ERROR.SHUTTING_DOWN,
         transport: shuttingDownTransport,
-        request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+        request: requestFor(GATEWAY_METHOD.GUIDE_REPORT),
       },
       {
         code: GATEWAY_ERROR.INTERNAL,
         transport,
-        request: requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+        request: requestFor(GATEWAY_METHOD.GUIDE_REPORT),
       },
     ];
 
@@ -398,8 +398,8 @@ it.live("a reconnection inside the window replays, and one past it is handed a s
       { sessionKey: FIXTURE_SESSION_KEY },
     );
     host.log.publish(
-      GATEWAY_EVENT.RUNS_CHANGED,
-      { runs: 1 },
+      GATEWAY_EVENT.SESSIONS_CHANGED,
+      { sessions: 1 },
       { sessionKey: FIXTURE_SESSION_KEY, runId: "run-1" },
     );
 
@@ -429,8 +429,11 @@ it.live("a named revision and an empty answer cross as the recorded envelopes", 
     });
     const transport = new TextLoopbackTransport(host, OPERATOR);
 
+    // A session write is what a caller builds over a session's revision, and
+    // it is not the method the empty answer is recorded on, so this exchange
+    // keeps the answering table's result.
     const named = yield* settleExchange(ENVELOPE_GOLDEN_NAME.EXPECTED_REVISION, transport, {
-      ...requestFor(GATEWAY_METHOD.RUN_SUBMIT),
+      ...requestFor(GATEWAY_METHOD.SESSION_SEND_MESSAGE),
       id: "request-with-expected-revision",
       expectedRevision: {
         sessionKey: FIXTURE_SESSION_KEY,

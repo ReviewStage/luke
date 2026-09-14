@@ -480,7 +480,7 @@ it.live(
           methods: {},
           configurationRevision: () => 1,
           sessionRevision: () => undefined,
-          snapshot: () => ({ runs: [run] }),
+          snapshot: () => ({ sessions: [run] }),
           now: () => 0,
           createEventId: () => `event-${++ids}`,
         });
@@ -513,18 +513,18 @@ it.live(
         },
         createId: () => `r-${++ids}`,
         onSnapshot: (snapshot) => {
-          if (isRecord(snapshot) && Array.isArray(snapshot.runs))
-            snapshots.push(String(snapshot.runs[0]));
+          if (isRecord(snapshot) && Array.isArray(snapshot.sessions))
+            snapshots.push(String(snapshot.sessions[0]));
         },
       });
-      client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
+      client.on(GATEWAY_EVENT.SESSIONS_CHANGED, (event) => heard.push(String(event.payload)));
       for (let i = 0; i < 5; i += 1)
-        oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
+        oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, `old-${i + 1}`);
       assert.equal(client.lastSequence(), 5);
       // The Gateway is replaced: a new host numbers from one again. Its first
       // event reads as already seen against the old count, and is lost.
       current = newHost;
-      newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-1");
+      newHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "new-1");
       assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5"]);
       // Adopting the host fences that: the cursor moves to the new host's
       // sequence, its snapshot stands in for what was numbered before, and
@@ -532,10 +532,10 @@ it.live(
       yield* client.adoptHost();
       assert.equal(client.lastSequence(), 1);
       assert.deepEqual(snapshots, ["new"]);
-      newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-2");
+      newHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "new-2");
       assert.deepEqual(heard, ["old-1", "old-2", "old-3", "old-4", "old-5", "new-2"]);
       // A late event of the old host reaches no sink: the transport dropped it.
-      oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-6");
+      oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "old-6");
       assert.equal(heard.length, 6);
     }),
 );
@@ -591,13 +591,13 @@ it.live(
         methods: {},
         configurationRevision: () => 1,
         sessionRevision: () => undefined,
-        snapshot: () => ({ runs: [] }),
+        snapshot: () => ({ sessions: [] }),
         now: () => 0,
         createEventId: () => `event-${++ids}`,
       });
       // The host spoke before this client existed: a session change for a renderer that is gone.
       host.log.publish(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, { phase: "closed" });
-      host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-runs");
+      host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "old-sessions");
       const transport = new InProcessTransport(host, OPERATOR);
       const heard: string[] = [];
       let snapshots = 0;
@@ -611,7 +611,7 @@ it.live(
       client.onEvery((event) => heard.push(event.kind));
       // The first thing it hears is not the host's first event: no baseline, so
       // the host is adopted, and the old change is never delivered.
-      host.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "current");
+      host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "current");
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
       assert.equal(snapshots, 1);
@@ -672,29 +672,29 @@ it.live(
         createId: () => `r-${++ids}`,
       });
       const heard: string[] = [];
-      client.on(GATEWAY_EVENT.RUNS_CHANGED, (event) => heard.push(String(event.payload)));
+      client.on(GATEWAY_EVENT.SESSIONS_CHANGED, (event) => heard.push(String(event.payload)));
       // The old host ran long: the cursor is high.
       for (let i = 0; i < 100; i += 1)
-        oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `old-${i + 1}`);
+        oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, `old-${i + 1}`);
       assert.equal(client.lastSequence(), 100);
       // A dropped event on the old host puts a reconnection out; its answer is delayed.
       wireUp = false;
-      oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-101-dropped");
+      oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "old-101-dropped");
       wireUp = true;
-      oldHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "old-102");
+      oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "old-102");
       assert.equal(pendingAnswers.length, 1);
       // Before that answers, the host is replaced and adopted. The new host had
       // emitted five events before this client arrived; its sixth lands while
       // the hello's answer is out, numbered far below the old cursor.
       current = newHost;
       for (let i = 0; i < 5; i += 1)
-        newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, `new-${i + 1}`);
+        newHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, `new-${i + 1}`);
       const adoption = Effect.runFork(client.adoptHost());
       assert.equal(pendingAnswers.length, 2);
       // The host handles the hello (capturing sequence 5) before the sixth event
       // is emitted; only the answer is still on its way.
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
-      newHost.log.publish(GATEWAY_EVENT.RUNS_CHANGED, "new-6");
+      newHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "new-6");
       // The old reconnection answers first and installs nothing; then the hello lands.
       pendingAnswers[0]?.();
       yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
