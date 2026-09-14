@@ -68,8 +68,8 @@ const FAILURE_RESULT = {
  * The service's answer to a session act as the write result it means: the
  * provider's own status and sentence where the call answered, and where it
  * did not, the one reading of that end that says whether the act may have
- * landed. A row's press and the brain's admitted act hear the same words,
- * because the same call carried both.
+ * landed. A row's press hears the service's own words, because the service's
+ * call is what carried it.
  */
 export function hostedActionResult(
   outcome: HostedActionOutcome | HostedActionWorkspaceOutcome,

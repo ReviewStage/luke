@@ -149,12 +149,6 @@ export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_E
 
 export const ReasoningEffortSchema = Schema.Literal(...Object.values(REASONING_EFFORT));
 
-const readsReasoningEffort = Schema.is(ReasoningEffortSchema);
-
-export function isReasoningEffort(value: UnparsedWireValue): value is ReasoningEffort {
-  return readsReasoningEffort(value);
-}
-
 /** What one inference is asked to do beyond the items it is shown. */
 export interface ModelRequestOptions {
   /** The standing instructions, prepared by the host. */

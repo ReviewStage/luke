@@ -40,12 +40,11 @@ export interface HostSeams {
 }
 
 /**
- * The agent's own directory under Luke's application data, one per agent,
- * holding its identity workspace and the skills beside it.
+ * The agent's own directory under Luke's application data, one per agent:
+ * where earlier builds kept the local brain's store and workspace, and what a
+ * launch still looks under to remove the retired store.
  */
 const AGENTS_DIRECTORY = "agents";
-const AGENT_WORKSPACE_DIRECTORY = "workspace";
-const AGENT_SKILLS_DIRECTORY = "skills";
 
 function agentRootPath(stateRoot: string, agentId: AgentId = DEFAULT_AGENT_ID): string {
   return path.join(stateRoot, AGENTS_DIRECTORY, agentId);
@@ -54,7 +53,7 @@ function agentRootPath(stateRoot: string, agentId: AgentId = DEFAULT_AGENT_ID): 
 /**
  * What every composer of the host is handed: the seams the host was given,
  * the two derived base URLs, the node registry, the one event door, and the
- * paths under the agent's own directory. It holds no concern of its own, so
+ * agent's own directory. It holds no concern of its own, so
  * nothing a composer owns can be reached through it by another.
  */
 export interface HostKernel {
@@ -85,10 +84,8 @@ export interface HostKernel {
    */
   openExternalThroughNode: (url: string, kind?: HostNodeOpenKind) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
-  /** The agent's own directory under the state root, which the workspace and skills sit under. */
+  /** The agent's own directory under the state root. */
   agentRootPath: () => string;
-  agentWorkspacePath: () => string;
-  agentSkillsPath: () => string;
 }
 
 /**
@@ -137,7 +134,6 @@ export interface HostKernelParts {
 export function hostKernelOver(parts: HostKernelParts): HostKernel {
   const { stateRoot, runMode, accountBaseUrl, now, createId, report, emit } = parts;
   const nodes = new NodeRegistry();
-  const agentWorkspacePath = () => path.join(agentRootPath(stateRoot), AGENT_WORKSPACE_DIRECTORY);
 
   return {
     runMode,
@@ -163,7 +159,5 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
       report(`An address could not be opened: ${error.message}`);
     },
     agentRootPath: () => agentRootPath(stateRoot),
-    agentWorkspacePath,
-    agentSkillsPath: () => path.join(agentWorkspacePath(), AGENT_SKILLS_DIRECTORY),
   };
 }

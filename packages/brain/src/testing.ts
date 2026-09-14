@@ -1,9 +1,6 @@
 import {
-  ACTION_REFUSAL,
-  type ActionFunctionCall,
   type ActionOutputEnvelope,
   acceptedActionOutput,
-  refusedActionOutput,
   type ValidatedAction,
 } from "@sidecar/actions";
 import { APP_SETTING_KIND, type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
@@ -22,8 +19,6 @@ import { Effect } from "effect";
 import type { BrainPersistedState, BrainStateLoad, BrainStateRepository } from "./envelope.js";
 import { BRAIN_MAXIMUM_OUTPUT_TOKENS, failed } from "./model-adapter-shared.js";
 import type { BrainActionExecution, BrainActionPerformer } from "./performer.js";
-import { actionToolNamed } from "./tools/action-tools.js";
-import { toolArguments } from "./tools/tool-module.js";
 
 /** The two things a bare transport answers: an inference, and when it is quiet. */
 export interface BareResponsesModel {
@@ -242,30 +237,4 @@ export function fakeActionPerformer(options: FakeActionPerformerOptions = {}): F
       }),
   };
   return { actions, performed, executions };
-}
-
-/**
- * A raw call run the way the executor runs one, for a test that speaks in
- * calls: the action tool's module the name selects, its admission inside,
- * over the performer's two halves. A name no module answers, or arguments
- * that are not a record, refuse before anything is admitted.
- */
-export function performCall(
-  actions: BrainActionPerformer,
-  call: ActionFunctionCall,
-  execution: BrainActionExecution,
-): Effect.Effect<ActionOutputEnvelope> {
-  return Effect.suspend(() => {
-    const tool = actionToolNamed(call.name);
-    if (!tool) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.NO_TOOL));
-    const input = toolArguments(call.argumentsJson);
-    if (input === undefined) return Effect.succeed(refusedActionOutput(ACTION_REFUSAL.UNREADABLE));
-    return Effect.gen(function* () {
-      return yield* tool.execute(input, {
-        ...execution,
-        admission: yield* actions.admission(execution),
-        carry: (action) => actions.carry(action, execution),
-      });
-    });
-  });
 }

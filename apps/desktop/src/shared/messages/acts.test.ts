@@ -199,8 +199,6 @@ test("an answer's guard is the kind's own, so a shape another kind would take is
   );
   assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result(undefined), true);
   assert.equal(ACT[ACT_KIND.VOICE_CREATE_LIVE_SESSION].result({ sessionId: "sess_1" }), false);
-  assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result(undefined), true);
-  assert.equal(ACT[ACT_KIND.BRAIN_CANCEL_ASK].result({ runId: "run-1" }), false);
   assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("accepted"), true);
   assert.equal(ACT[ACT_KIND.VOICE_COMMAND].result("sent"), false);
 });

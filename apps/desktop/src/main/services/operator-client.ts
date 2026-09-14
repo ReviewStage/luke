@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import { type AppGuideSnapshot, EMPTY_APP_GUIDE } from "@sidecar/guide";
+import type { AppGuideSnapshot } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { Effect, type Scope } from "effect";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
-import { type GatewayWiring, wireGateway } from "../gateway/wiring";
+import { wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNodeCapabilities } from "./native-node";
 
@@ -36,8 +36,6 @@ export interface OperatorClient {
   link: (links: OperatorClientLinks) => void;
   /** The host's own method vocabulary, as this client calls it. */
   readonly host: HostOperator;
-  /** The runs, deliveries, and history operations the brain's windows reach. */
-  readonly operator: GatewayWiring["operator"];
   settings: () => AppSettings | undefined;
   /** The settings this launch decides its windows from, read from the host once and written down. */
   ensureSettings: () => Effect.Effect<AppSettings | undefined>;
@@ -50,7 +48,8 @@ export interface OperatorClient {
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
-  reportGuide: (snapshot: AppGuideSnapshot) => Effect.Effect<void>;
+  /** The panel's description of itself, written to the document; no host reads it since the local brain went. */
+  reportGuide: (snapshot: AppGuideSnapshot) => void;
   /**
    * The introduction given to its end: the host writes the completion and
    * drops the hold it stood behind. Begun here rather than waited on, because
@@ -199,7 +198,6 @@ export function createOperatorClient(
         heldLinks = next;
       },
       host: gateway.host,
-      operator: gateway.operator,
       settings: () => state.snapshot().settings,
       ensureSettings: () =>
         Effect.gen(function* () {
@@ -222,23 +220,20 @@ export function createOperatorClient(
       resumeSessionReplay: () => setSessionReplayHalted(false),
       reportGuide: (guide) => {
         state.update({ guide });
-        return gateway.host.reportGuide(guide);
       },
       completeIntroduction: () => gateway.host.completeIntroduction(),
       /**
        * What every attachment owes the host: its stream adopted and this
-       * process's node registered on the connection that now stands, the guide
-       * the panel last reported, and a bootstrap read. A host composed in this
-       * process is attached once and never goes away; over a transport that can
-       * drop, a later attachment writes what the host now holds into the
-       * document, which is what tells the windows whatever of it moved.
+       * process's node registered on the connection that now stands, and a
+       * bootstrap read. A host composed in this process is attached once and
+       * never goes away; over a transport that can drop, a later attachment
+       * writes what the host now holds into the document, which is what tells
+       * the windows whatever of it moved.
        */
       start: () =>
         Effect.gen(function* () {
           attachments += 1;
           yield* gateway.attached();
-          const guide = state.snapshot().guide;
-          if (guide !== EMPTY_APP_GUIDE) yield* gateway.host.reportGuide(guide);
           const boot = yield* gateway.host.bootstrap();
           if (!boot) return yield* Effect.die(new Error("the host answered no bootstrap"));
           adoptBootstrap(boot);

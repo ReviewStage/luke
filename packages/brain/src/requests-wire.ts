@@ -1,60 +1,16 @@
 import type { CarriedAppAction } from "@sidecar/actions";
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
-import {
-  type BRAIN_REQUEST_ORIGIN,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_SUBMISSION_REJECTION,
-  type BrainRequestRecord,
-  type BrainSubmissionRejection,
-  brainRequestRecordFromWire,
-} from "./requests.js";
+import type { WireRecord } from "@sidecar/wire";
+import { BRAIN_REQUEST_STATUS, type BrainRequestRecord } from "./requests.js";
 
 /**
- * What crosses the bridge between the brain in the main process and the
- * windows. The brain decides and actions on its own side; what reaches a
- * renderer is the record of a run it submitted or is drawing, and the few app
- * actions only a renderer can perform. A briefing travels as a speech offer
- * instead, from the speech arbiter that decides when it may be said.
+ * What crosses between a brain and the windows that draw for it: the record
+ * of a run a renderer is drawing, and the few app actions only a renderer can
+ * perform. A briefing travels as a speech offer instead, from the speech
+ * arbiter that decides when it may be said.
  */
-
-/** One deliberate ask, as a renderer submits it: minted once per submission, so a retry finds the same run. */
-export interface BrainAskSubmission {
-  submissionId: string;
-  question: string;
-  origin: (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAIN_REQUEST_ORIGIN];
-}
-
-/** The answer to a submission, as the bridge carries the brain's own result. */
-export type BrainAskSubmissionResult =
-  | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.ACCEPTED; runId: string; acceptedAt: number }
-  | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.REJECTED; reason: BrainSubmissionRejection };
-
-export function isBrainAskSubmissionResult(
-  value: UnparsedWireValue,
-): value is BrainAskSubmissionResult {
-  if (!isRecord(value)) return false;
-  if (value.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-    return isWireString(value.runId) && isWireNumber(value.acceptedAt);
-  }
-  return (
-    value.outcome === BRAIN_SUBMISSION_OUTCOME.REJECTED &&
-    Object.values(BRAIN_SUBMISSION_REJECTION).some((reason) => reason === value.reason)
-  );
-}
 
 /** A run's record as a renderer draws it: the brain's own record, unchanged. */
 export type BrainRequestSnapshot = BrainRequestRecord;
-
-export function isBrainRequestSnapshot(value: UnparsedWireValue): boolean {
-  return brainRequestRecordFromWire(value) !== undefined;
-}
 
 /** A run the renderer may still cancel: accepted, not yet ended. */
 export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {
@@ -62,19 +18,6 @@ export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {
     snapshot.status === BRAIN_REQUEST_STATUS.QUEUED ||
     snapshot.status === BRAIN_REQUEST_STATUS.RUNNING
   );
-}
-
-/**
- * What a wait on a spoken ask comes back with: the record as it then stands,
- * or nothing for a run the brain does not know, and whether the call that
- * asked has been granted the words. `speak` is true only for an ended run
- * whose end already stands in Conversation and whose one grant this wait took; a
- * run still going, or one whose words another path holds, is not the
- * call's to say.
- */
-export interface BrainAskWait {
-  record: BrainRequestSnapshot | undefined;
-  speak: boolean;
 }
 
 /**

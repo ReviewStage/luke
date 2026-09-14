@@ -64,7 +64,7 @@ export type BrainRequestOrigin = (typeof BRAIN_REQUEST_ORIGIN)[keyof typeof BRAI
 const BRAIN_REQUEST_ORIGIN_LIST: readonly BrainRequestOrigin[] =
   Object.values(BRAIN_REQUEST_ORIGIN);
 
-export function isBrainRequestOrigin(value: UnparsedWireValue): value is BrainRequestOrigin {
+function isBrainRequestOrigin(value: UnparsedWireValue): value is BrainRequestOrigin {
   // SAFETY: value is a string; list membership is the vocabulary check.
   return isWireString(value) && BRAIN_REQUEST_ORIGIN_LIST.includes(value as BrainRequestOrigin);
 }

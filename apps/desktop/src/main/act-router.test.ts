@@ -119,14 +119,14 @@ test("an answer the kind's own guard refuses is a refusal rather than a value dr
   const router = createActRouter(
     rowsRecording([], {
       // SAFETY: this is the wrong-shaped answer under test.
-      [ACT_KIND.BRAIN_CANCEL_ASK]: () => ({ runId: "run-1" }) as never,
+      [ACT_KIND.SESSION_SEND_MESSAGE]: () => ({ runId: "run-1" }) as never,
     }),
   );
   assert.deepEqual(
-    await perform(router, { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } }, PANEL),
+    await perform(router, ONE_ACT_OF_EACH_KIND[ACT_KIND.SESSION_SEND_MESSAGE], PANEL),
     {
       status: ACT_OUTCOME_STATUS.REFUSED,
-      reason: ACT[ACT_KIND.BRAIN_CANCEL_ASK].refusal,
+      reason: ACT[ACT_KIND.SESSION_SEND_MESSAGE].refusal,
     },
   );
 });

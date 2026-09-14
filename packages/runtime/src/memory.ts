@@ -62,7 +62,7 @@ export const MEMORY_CAPTURE_PHASE = {
   RESET_REQUESTED: "reset.requested",
 } as const;
 
-export type MemoryCapturePhase = (typeof MEMORY_CAPTURE_PHASE)[keyof typeof MEMORY_CAPTURE_PHASE];
+type MemoryCapturePhase = (typeof MEMORY_CAPTURE_PHASE)[keyof typeof MEMORY_CAPTURE_PHASE];
 
 /**
  * How a capture ended. Only `completed` and `nothing-to-store` mean it ran

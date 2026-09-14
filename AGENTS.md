@@ -223,11 +223,12 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   `forkIn`, and `forkDaemon` hand the work to the scheduler instead, and only
   a run makes `BrainAgent#enqueue`'s acquisition (what `busy()` reads) stand in
   the step that detached. `packages/brain/src/agent.ts`'s `BrainAgent#enqueue`
-  and `packages/host/src/brain/wiring.ts`'s composition each hold `detachOn`'s
-  returned door on the runtime the caller handed them and start a turn on the
-  calling stack through it, which is why both are named on the run
-  allowlist's `runOnHandedRuntime` rows rather than left for a new file to
-  fork through unseen. The same file's `runtimeExit` is the shared door
+  holds `detachOn`'s returned door on the runtime the caller handed it and
+  starts a turn on the calling stack through it, which is why it is named on
+  the run allowlist's `runOnHandedRuntime` rows rather than left for a new
+  file to fork through unseen; the desktop composition that held the same
+  door beside it is deleted (LUKE-206), and nothing on a Mac composes an
+  agent now. The same file's `runtimeExit` is the shared door
   `packages/brain/src/client.ts`'s `BrainTransport#send` (`runCall`) and
   `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` both run
   through, because every caller of the brain's model transport still holds a
@@ -241,14 +242,15 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   because the ports beneath them do: `compaction.ts`'s adapters await
   `model.respond`, and `context-engine.ts`'s engines await their lifecycle
   hooks, both OpenClaw ports of `b7528507` that import nothing from `effect`.
-- **`BrainStateRepository` and `ChildStore`**, answered in memory by
-  **`packages/host/src/held-conversations.ts`** — two interfaces read by
+- **`BrainStateRepository` and `ChildStore`** — two interfaces read by
   OpenClaw ports (`packages/brain/src/state-store.ts`,
   `packages/runtime/src/children.ts`) that may not import `effect`, so
   neither can be stated as effects while its port stands. What would end this
   row is a decision about the ports themselves, not an implementation detail
   of this migration. The SQLite store that once answered them through a
-  worker's Rpc client is deleted (LUKE-143), and the notebook index with it.
+  worker's Rpc client is deleted (LUKE-143), the notebook index with it, and
+  the in-memory answer the desktop kept after it is deleted with the local
+  brain (LUKE-206); no production code answers either interface now.
 - **`packages/brain/src/ledger.ts`** — a promise face downstream of the ports
   above: it holds `Promise`s of its own over `BrainStateStore`
   (`state-store.ts`'s port), imports nothing from `effect`, and stays a

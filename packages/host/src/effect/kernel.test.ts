@@ -172,11 +172,7 @@ describe("the seam tags", () => {
 
       assert.equal(kernel.stateRoot, "/state");
       assert.equal(kernel.createId(), "id");
-      assert.equal(
-        kernel.agentWorkspacePath(),
-        path.join("/state", "agents", DEFAULT_AGENT_ID, "workspace"),
-      );
-      assert.equal(path.dirname(kernel.agentSkillsPath()), kernel.agentWorkspacePath());
+      assert.equal(kernel.agentRootPath(), path.join("/state", "agents", DEFAULT_AGENT_ID));
     }),
   );
 
