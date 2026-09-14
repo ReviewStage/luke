@@ -3,11 +3,9 @@ import { it } from "@effect/vitest";
 import {
   CONVERSATION_KIND,
   type ConversationRecord,
-  MAIN_SESSION_KEY,
   type SessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import { Effect } from "effect";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import {
@@ -28,15 +26,13 @@ function harness({ marks = true } = {}) {
     createdAt: NOW,
     lastActivityAt: NOW,
   });
-  const entries: readonly ConversationEntry[] = [];
   const dependencies: ConversationOperationsDependencies = {
     conversations: {
       directory: () => [record(THREAD)],
-      holds: (sessionKey) => sessionKey === THREAD || sessionKey === MAIN_SESSION_KEY,
-      // SAFETY: the operations reach the thread for its lines and its fence alone.
+      // SAFETY: the operations reach the thread for its fence alone.
       thread: (sessionKey) =>
         ({
-          entries: () => entries,
+          entries: () => [],
           fence: (deletedAt: number) => {
             calls.push(`fence:${sessionKey}:${deletedAt}`);
           },
@@ -83,8 +79,6 @@ it.effect(
         operations.directory().map((record) => record.sessionKey),
         [THREAD],
       );
-      assert.equal(operations.holds(THREAD), true);
-      assert.deepEqual(operations.lines(THREAD), []);
     }),
 );
 

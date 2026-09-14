@@ -20,18 +20,11 @@ import {
   CONVERSATION_KIND,
   conversationKindOf,
   DEFAULT_AGENT_ID,
-  isIdentifier,
   MAIN_SESSION_KEY,
   MEMORY_SCOPE_KIND,
   type SessionKey,
-  sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import {
-  type ConversationEntry,
-  conversationLinesText,
-  recentConversationEntries,
-  storedConversationEntry,
-} from "@sidecar/session";
+import { conversationLinesText, recentConversationEntries } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
@@ -53,7 +46,6 @@ import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { removeRetiredStore } from "./retired-store.js";
 import type { GatewayService } from "./service.js";
-import { reporterOf } from "./wire-helpers.js";
 
 type BrainWiring = Effect.Effect.Success<ReturnType<typeof wireBrain>>;
 
@@ -300,27 +292,6 @@ export const composeBrain = (
         appGuide = guide;
         return Effect.succeed({});
       },
-      [GATEWAY_METHOD.CONVERSATION_APPEND]: (params) =>
-        Effect.gen(function* () {
-          const sessionKey =
-            params.sessionKey === undefined
-              ? MAIN_SESSION_KEY
-              : isIdentifier(params.sessionKey)
-                ? toSessionKey(params.sessionKey)
-                : undefined;
-          if (!sessionKey) return yield* invalid("sessionKey must be a non-empty string");
-          if (!Array.isArray(params.entries)) return yield* invalid("entries must be a list");
-          const entries: ConversationEntry[] = [];
-          for (const entry of params.entries) {
-            const stored = storedConversationEntry(entry);
-            if (!stored) return yield* invalid("an entry is not the shape Conversation keeps");
-            entries.push(stored);
-          }
-          const accepted = yield* Effect.promise(() =>
-            conversations.thread(sessionKey).append(entries, reporterOf(params)),
-          );
-          return { accepted };
-        }),
     };
 
     return {
