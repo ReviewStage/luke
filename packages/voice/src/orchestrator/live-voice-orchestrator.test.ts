@@ -490,6 +490,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   const speaking = f.views.at(-1);
   assert.equal(speaking?.spokenAskPending, false);
   assert.deepEqual(speaking?.lukeCaptions, ["Two sessions"]);
+  assert.deepEqual(speaking?.developerCaptions, ["what needs me"]);
   assert.deepEqual(
     speaking?.liveConversationEntries.map((entry) => entry.kind),
     [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
@@ -504,6 +505,7 @@ test("the view reports each edge once, counts the exchange on its opening edge u
     f.views.at(-1)?.liveConversationEntries.map((entry) => entry.kind),
     [CONVERSATION_ENTRY_KIND.REPLY],
   );
+  assert.equal(f.views.at(-1)?.developerCaptions, undefined);
   // The count rose once for the whole exchange.
   assert.equal(f.openings.filter((opening) => opening !== undefined).length, 1);
 });
@@ -522,6 +524,26 @@ test("captions are withheld when neither the preference nor a silent output asks
   f.surround({ ...SURROUNDINGS, captionsEnabled: false, outputSilent: true });
   await settleFibers();
   assert.deepEqual(f.views.at(-1)?.lukeCaptions, ["Two sessions"]);
+});
+
+test("the developer's captions follow the captions preference alone, whatever the output", async () => {
+  const f = fixture({ captionsEnabled: false, outputSilent: true });
+  const pressed = f.beginTalk();
+  const call = f.latest();
+  assert.ok(call);
+  call.started();
+  await pressed;
+  call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me")]);
+  await settleFibers();
+  // A silent output is a reason to read Luke, not the developer, who said the words.
+  assert.equal(f.views.at(-1)?.developerCaptions, undefined);
+  f.surround({ ...SURROUNDINGS, captionsEnabled: true, outputSilent: false });
+  await settleFibers();
+  assert.deepEqual(f.views.at(-1)?.developerCaptions, ["what needs me"]);
+  // The row settling is what takes the words down, not the microphone closing.
+  call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true)]);
+  await settleFibers();
+  assert.equal(f.views.at(-1)?.developerCaptions, undefined);
 });
 
 test("voice turning off closes the standing session, and stop closes it and reports nothing after", async () => {

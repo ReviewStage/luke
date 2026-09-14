@@ -41,6 +41,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   talkOpening: boolean;
   /** Luke's rows while he speaks, when the captions preference or a silent output asks for them. */
   lukeCaptions: readonly string[] | undefined;
+  /** The developer's own rows while they are still being said, under the captions preference alone. */
+  developerCaptions: readonly string[] | undefined;
   /** Both speakers' rows still being spoken, ahead of the record the host writes once each settles. */
   liveConversationEntries: readonly ConversationEntry[];
   /** Whether the developer is being heard and has not been transcribed yet. */
@@ -84,6 +86,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.voiceNotice === right.voiceNotice &&
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
+    left.developerCaptions === right.developerCaptions &&
     left.liveConversationEntries === right.liveConversationEntries &&
     left.spokenAskPending === right.spokenAskPending &&
     left.listening === right.listening &&
@@ -133,6 +136,7 @@ export class LiveVoiceOrchestrator {
   #speakers: LiveVoiceSpeakers = SILENT;
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
+  #developerCaptions: readonly string[] | undefined;
   #liveEntries: readonly ConversationEntry[] = [];
   #talkOpening = false;
   /** Whether the microphone was last heard live, kept across the call's own end so a lost session knows what it was carrying. */
@@ -462,8 +466,15 @@ export class LiveVoiceOrchestrator {
 
   /**
    * The captions as the panel draws them: Luke's words under the housing
-   * while he speaks and there is a reason to read them, and every row still
-   * being spoken as a line the Conversation tab draws ahead of the record.
+   * while he speaks and there is a reason to read them, the developer's own
+   * words while they are still being said and the captions preference asks
+   * for them, and every row still being spoken as a line the Conversation
+   * tab draws ahead of the record. A silent output is a reason to read Luke,
+   * who could not otherwise be heard, and no reason to read the developer,
+   * who said the words themselves; so their captions follow the preference
+   * alone. A developer row is unsettled for the ledger's gap after its last
+   * fragment, which is what keeps a finished sentence on screen a moment
+   * after the transcript catches up with it.
    */
   #recomposeCaptions(): void {
     const unsettled = this.#rows.filter((row) => !row.settled);
@@ -475,6 +486,14 @@ export class LiveVoiceOrchestrator {
       this.#status === LIVE_STATUS.SPEAKING;
     const nextCaptions = wanted && lukeRows.length > 0 ? lukeRows : undefined;
     if (!sameWords(this.#lukeCaptions, nextCaptions)) this.#lukeCaptions = nextCaptions;
+    const developerRows = unsettled
+      .filter((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK)
+      .map((row) => row.entry.words);
+    const nextDeveloperCaptions =
+      this.#surroundings.captionsEnabled && developerRows.length > 0 ? developerRows : undefined;
+    if (!sameWords(this.#developerCaptions, nextDeveloperCaptions)) {
+      this.#developerCaptions = nextDeveloperCaptions;
+    }
     const nextEntries = unsettled.map((row) => row.entry);
     if (!sameEntries(this.#liveEntries, nextEntries)) this.#liveEntries = nextEntries;
   }
@@ -488,6 +507,7 @@ export class LiveVoiceOrchestrator {
       voiceNotice: this.#strip.notice,
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
+      developerCaptions: this.#developerCaptions,
       liveConversationEntries: this.#liveEntries,
       spokenAskPending:
         this.#status === LIVE_STATUS.LISTENING &&
