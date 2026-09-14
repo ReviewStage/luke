@@ -559,7 +559,6 @@ export type GatewayResponse = typeof GatewayResponseSchema.Type;
 
 export const GATEWAY_EVENT = {
   RUNS_CHANGED: "runs.changed",
-  CONVERSATION_CHANGED: "conversation.changed",
   /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
   CONVERSATION_VIEW_CHANGED: "conversationView.changed",
   DIRECTORY_CHANGED: "directory.changed",

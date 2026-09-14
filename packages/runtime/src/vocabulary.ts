@@ -125,7 +125,6 @@ export {
   ARCHIVE_REASON,
   COMPACTION_SOURCE,
   type CompactionSource,
-  type ConversationAppendOutcome,
   type ConversationRecord,
   conversationRecordToWire,
   TRANSCRIPT_EVENT_KIND,

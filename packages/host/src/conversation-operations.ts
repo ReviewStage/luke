@@ -19,7 +19,7 @@ export interface ConversationOperations {
 }
 
 export interface ConversationOperationsDependencies {
-  conversations: Pick<HeldConversations, "directory" | "thread" | "erase">;
+  conversations: Pick<HeldConversations, "directory">;
   brain: Pick<BrainWiring, "store">;
   now: () => number;
   report: (message: string) => void;
@@ -35,12 +35,7 @@ export function conversationOperations(
       const generations = brain.store(sessionKey);
       return deleteConversationFlow({
         now: dependencies.now,
-        // The voice window is told of main's Clear by the voice IPC that
-        // carried the press, in its own synchronous prefix; nothing here
-        // sends that command a second time.
-        fence: (deletedAt) => conversations.thread(sessionKey).fence(deletedAt),
         fenceBrain: (deletedAt) => generations.clear(deletedAt),
-        erase: (deletedAt) => conversations.erase(sessionKey, deletedAt),
         report: dependencies.report,
       });
     },

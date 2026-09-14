@@ -25,7 +25,7 @@
         {
           "eventId": "event-4",
           "sequence": 4,
-          "kind": "conversation.changed",
+          "kind": "conversationView.changed",
           "at": 1700000004000,
           "sessionKey": "agent:main:main",
           "payload": {
