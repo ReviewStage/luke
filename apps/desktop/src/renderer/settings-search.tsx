@@ -323,7 +323,12 @@ export function landOnSettingsRow(id: string): () => void {
     ready: drawnVisibly,
     act: (element) => {
       element.scrollIntoView({ block: "start" });
-      if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
+      // The anchor marks the row; the keyboard belongs on the control inside
+      // it, or on the anchored element itself where it is the control.
+      const control = element.matches(FOCUSABLE)
+        ? element
+        : element.querySelector<HTMLElement>(FOCUSABLE);
+      control?.focus({ preventScroll: true });
     },
   });
 }
