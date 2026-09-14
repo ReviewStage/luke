@@ -69,47 +69,6 @@ test("app state is read on one invoke and delivered on one subscription", () => 
   }
 });
 
-test("a reported guide is refused whole when any entry is malformed", () => {
-  const guard = BRIDGE.reportAppGuide.args;
-  const setting = {
-    id: "voice_captions",
-    label: "Captions",
-    description: "Luke's words on screen.",
-    kind: "toggle",
-    value: "off",
-    defaultValue: "off",
-    adjustable: true,
-    manual: "the Voice page",
-  };
-  assert.equal(guard([{ facts: [], settings: [] }]), true);
-  assert.equal(
-    guard([{ facts: [{ label: "Talk key", detail: "⌥Space" }], settings: [setting] }]),
-    true,
-  );
-  assert.equal(
-    guard([
-      { facts: [], settings: [], update: { version: "1", detail: "Up to date", button: "check" } },
-    ]),
-    true,
-  );
-  assert.equal(guard([{ facts: [], settings: [{ ...setting, adjustable: "yes" }] }]), false);
-  assert.equal(guard([{ facts: [{ label: "x" }], settings: [] }]), false);
-  assert.equal(
-    guard([{ facts: [], settings: [], update: { version: "1", detail: "", button: "eject" } }]),
-    false,
-  );
-  assert.equal(guard([{ facts: [] }]), false);
-});
-
-test("an app act pushed to the renderer never carries a memory write", () => {
-  const guard = BRIDGE.onBrainAppAction.result;
-  assert.ok(guard);
-  assert.equal(guard({ requestId: "r1", action: { kind: "panel", tab: "sessions" } }), true);
-  assert.equal(guard({ requestId: "r1", action: { kind: "remember", words: "x" } }), false);
-  assert.equal(guard({ requestId: "r1", action: { kind: "forget", id: "f" } }), false);
-  assert.equal(guard({ action: { kind: "panel", tab: "sessions" } }), false);
-});
-
 const VOICE_VIEW = {
   voiceStatus: "speaking",
   listening: true,

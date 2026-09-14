@@ -18,7 +18,6 @@ import { Fragment, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { drawnVisibly, focusSeek } from "./focus-seek";
-import { ERRAND_TARGET_ATTRIBUTE } from "./luke-errand";
 import { matchesTokens, searchTokens } from "./session-model";
 import { Highlighted } from "./session-search";
 import { type ConnectionVisibility, offeredConnections } from "./settings/connection-schema";
@@ -74,7 +73,7 @@ export interface SettingsSearchEntry {
   /**
    * The row's own id: a setting's schema id, a provider's, or a member of
    * `SETTINGS_SEARCH_ROW`. It is what the landing seeks — as the anchor the
-   * row wears, or the errand mark its control already carries.
+   * row wears.
    */
   id: string;
   /** The row's own name, which is what the result draws. */
@@ -311,8 +310,7 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
  * Takes the view to the row a pressed result named, waiting out the page swap
  * the press asked for — the same frame-by-frame seek the session search field
  * needs, because the row is not drawn until React has answered. The row is
- * found by the anchor it wears, or by the errand mark its control already
- * carries, and is scrolled to the top of the view — the scroller's own scroll
+ * found by the anchor it wears, and is scrolled to the top of the view — the scroller's own scroll
  * padding keeps it clear of a pinned header — with a control also taking the
  * keyboard, without a second scroll of its own. It lands after the page's own
  * header focus on purpose: the result named a row, so the row is where the
@@ -321,11 +319,13 @@ const FOCUSABLE = "button, select, input, textarea, [tabindex]";
 export function landOnSettingsRow(id: string): () => void {
   return focusSeek({
     find: () =>
-      document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`) ??
-      document.querySelector<HTMLElement>(`[${ERRAND_TARGET_ATTRIBUTE}="${id}"]`),
+      document.querySelector<HTMLElement>(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${id}"]`),
     ready: drawnVisibly,
     act: (element) => {
       element.scrollIntoView({ block: "start" });
+      // A row with one control anchors the control itself, which takes the
+      // keyboard; a row of several anchors the row and takes none, since
+      // choosing among its buttons is not the landing's to do.
       if (element.matches(FOCUSABLE)) element.focus({ preventScroll: true });
     },
   });

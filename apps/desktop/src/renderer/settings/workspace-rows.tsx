@@ -5,10 +5,9 @@ import {
   type WorkspaceAgentSelection,
   workspaceAgentModels,
 } from "@sidecar/session";
-import { APP_SETTING_SCHEMA } from "@sidecar/settings";
+import { APP_SETTING_ID, APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
-import { APP_SETTING_ID } from "../luke-guide";
 import { defaultProjectRowId } from "../settings-anchors";
 import type { WorkspaceProviderOption } from "./controls";
 import { SelectRow } from "./select-row";

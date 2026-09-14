@@ -1,5 +1,5 @@
 import type { ActionResult } from "@sidecar/wire";
-import { type ErrandTarget, errandTargetProps } from "../luke-errand";
+import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
 import { useSettingWrite } from "./use-setting-write";
 
@@ -13,7 +13,7 @@ export function SwitchRow({
   detail,
   checked,
   ariaLabel,
-  errand,
+  anchor,
   changed,
   onChange,
 }: {
@@ -22,8 +22,8 @@ export function SwitchRow({
   checked: boolean;
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
-  /** The id a spoken change names this switch by, so an errand lands on it. */
-  errand?: ErrandTarget;
+  /** The id a pressed search result lands on: marked on the switch itself, which then takes the keyboard. */
+  anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
   onChange: (enabled: boolean) => Promise<ActionResult>;
@@ -45,7 +45,7 @@ export function SwitchRow({
           aria-checked={checked}
           aria-label={ariaLabel ?? label}
           className="switch"
-          {...(errand ? errandTargetProps(errand) : undefined)}
+          {...(anchor ? searchAnchorProps(anchor) : undefined)}
           disabled={busy}
           onClick={() => run(!checked)}
         >

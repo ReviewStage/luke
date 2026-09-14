@@ -1,6 +1,5 @@
 import { APP_PANEL_TAB, type AppPanelTab } from "@sidecar/guide";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { errandTargetProps, tabErrandTarget } from "./luke-errand";
 
 /**
  * The panel's tabs, aliased from the core's set rather than declared here
@@ -74,9 +73,6 @@ export function TabBar({
           key={candidate.id}
           id={panelTabId(candidate.id)}
           className="tab"
-          // Where an errand lands when Luke was the one who brought this tab
-          // forward, so the press he made on your behalf is drawn as a press.
-          {...errandTargetProps(tabErrandTarget(candidate.id))}
           data-active={String(candidate.id === tab)}
           aria-selected={candidate.id === tab}
           aria-controls={panelPanelId(candidate.id)}

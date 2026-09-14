@@ -1,6 +1,5 @@
 import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
-  SETTING_PAGE,
   SETTINGS_PAGE as SETTINGS_VIEW,
   type SettingsPage as SettingsView,
 } from "@sidecar/settings";
@@ -24,21 +23,6 @@ export const SETTINGS_SUBVIEW_LIST = [
 ] as const;
 
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
-
-/**
- * Which page each setting is drawn on.
- *
- * A page that is not open is not rendered at all, so this is what anything
- * reaching for a control by hand has to consult first — an errand flying to a
- * switch on a closed page would find nothing there and quietly go nowhere. A
- * `Record` over every id on purpose: the same lever the guide uses, so a
- * setting added later does not build until someone says where it lives.
- *
- * The guide says the same thing in prose, in the by-hand path it offers for
- * each setting. Both come off the same schema entry now, and `schema.test.ts`
- * is what checks the sentence names the page.
- */
-export { SETTING_PAGE };
 
 /**
  * Which page draws a provider's credential row: every key lives under

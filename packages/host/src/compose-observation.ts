@@ -180,7 +180,7 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
 
   const sessionOpens = createSessionOpens({
     sessionRegistry,
-    openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
+    openExternal: (url) => kernel.openExternalThroughNode(url),
     recordProductEvent: settings.recordProductEvent,
   });
 

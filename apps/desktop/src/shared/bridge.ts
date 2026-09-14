@@ -1,4 +1,3 @@
-import { ACTION_KIND } from "@sidecar/actions";
 import {
   isProductExchangeKind,
   isProductSurfaceEventName,
@@ -7,10 +6,8 @@ import {
   type ProductSurfaceEventName,
   productEventFromWire,
 } from "@sidecar/analytics";
-import type { BrainAppActionAnswer, BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabulary";
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
-import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
 import {
   EXCESS_KEYS,
@@ -31,7 +28,7 @@ import {
   type VoiceLevels,
   type VoiceView,
 } from "./messages/voice-view";
-import { isWireValue, wireResult as result, type WireGuard } from "./messages/wire-guard";
+import { wireResult as result, type WireGuard } from "./messages/wire-guard";
 
 type BridgeArguments = readonly unknown[];
 type BridgeKind = "invoke" | "send" | "subscribe";
@@ -106,28 +103,6 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:set-pointer-interception",
     args: oneBoolean,
-  }),
-  /**
-   * The renderer's guide snapshot, pushed whenever it changes, so the main
-   * process can validate an app act against the settings the panel actually
-   * describes and hand the brain the same text.
-   */
-  reportAppGuide: entry({
-    kind: "send",
-    channel: "app:report-app-guide",
-    args: args<[AppGuideSnapshot]>((v) => v.length === 1 && isAppGuideSnapshot(v[0])),
-  }),
-  /**
-   * The renderer's answer to one app act the brain asked it to perform,
-   * matched to the request by id. The answer is the outcome record the brain
-   * reads, as the renderer's own carrier produced it.
-   */
-  answerBrainAppAction: entry({
-    kind: "send",
-    channel: "app:answer-brain-app-action",
-    args: args<[string, BrainAppActionAnswer]>(
-      (v) => v.length === 2 && isWireString(v[0]) && isRecord(v[1]) && isWireValue(v[1]),
-    ),
   }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
@@ -269,24 +244,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<{ command: VoiceCommand }>(
       (value) => isRecord(value) && isVoiceCommand(value.command),
-    ),
-  }),
-  /**
-   * An app act the brain decided that only the renderer can perform, already
-   * validated in the main process against the guide the renderer reported.
-   */
-  onBrainAppAction: entry({
-    kind: "subscribe",
-    channel: "app:brain-app-action",
-    args: noArgs,
-    result: result<BrainAppActionRequest>(
-      (v) =>
-        isRecord(v) &&
-        isWireString(v.requestId) &&
-        isRecord(v.action) &&
-        isWireString(v.action.kind) &&
-        v.action.kind !== ACTION_KIND.REMEMBER &&
-        v.action.kind !== ACTION_KIND.FORGET,
     ),
   }),
 } as const;

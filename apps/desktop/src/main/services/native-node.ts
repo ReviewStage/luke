@@ -1,9 +1,4 @@
-import { randomUUID } from "node:crypto";
-import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
-import type { HostNodeOpenKind } from "@sidecar/host";
-import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { systemPreferences } from "electron";
-import { channels } from "#shared/bridge";
 import type { AppAudioSlice } from "#shared/messages/app-state";
 import {
   MICROPHONE_STATUS,
@@ -23,32 +18,12 @@ import {
   type OutputVolumeWatch,
 } from "../native/output-volume";
 import type { DesktopConfig } from "./desktop-config";
-import { createNodeOpen } from "./node-open";
 import type { DesktopService } from "./service";
-
-/**
- * How long an app act waits for the panel that alone can carry it. A panel
- * that does not answer within the round trip refuses the action on a clock
- * rather than holding the brain's turn open in the host.
- */
-const BRAIN_APP_ACTION_TIMEOUT_MS = 10_000;
-
-/** What this machine's devices reach in the windows that draw for them. */
-interface NativeNodeLinks {
-  /** The one window an app act is carried to; none open is a refusal, not a wait. */
-  sendToPrimaryPanel: (channel: string, payload: BrainAppActionRequest) => boolean;
-  /**
-   * Every expanded panel back to its capsule, owed by a session opened at an
-   * ask of Luke: the press its row would have taken stood no panel down, and
-   * Luke floats above the very chat he was asked to bring forward.
-   */
-  standPanelsDown: () => void;
-}
 
 /** The capabilities this node offers the host by name; a capability no node offers is a typed refusal there. */
 export interface NativeNodeCapabilities {
-  openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
-  performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
+  /** Hands an address to the operating system; a throw is an open that did not land. */
+  openExternal: (url: string) => Promise<void>;
   runAppleCalendarHelper: (
     helperArguments: readonly string[],
     timeoutMs: number,
@@ -62,7 +37,6 @@ export interface NativeNodeDependencies {
 }
 
 export interface NativeNode extends DesktopService {
-  link: (links: NativeNodeLinks) => void;
   readonly capabilities: NativeNodeCapabilities;
   readonly mediaDuck: MediaDuckController;
   setMediaDuckEnabled: (enabled: boolean) => void;
@@ -74,16 +48,6 @@ export interface NativeNode extends DesktopService {
   refreshMicrophoneStatus: () => MicrophoneStatus;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRouteWatcher: () => MicrophoneRouteWatch | undefined;
-  /** The panel's answer to an action it was carried, matched to the ask that is waiting. */
-  answerAppAction: (requestId: string, answer: WireRecord) => void;
-  /**
-   * Refuses every action still waiting on a panel. Asked for at the top of the
-   * quit rather than left to this service's own stop: the panels are going,
-   * so nothing can answer one, and the host's drain runs first and would
-   * otherwise wait out the action's own clock for a promise that was never
-   * going to settle.
-   */
-  refusePendingActions: () => void;
 }
 
 /**
@@ -94,15 +58,7 @@ export interface NativeNode extends DesktopService {
  */
 export function createNativeNode(dependencies: NativeNodeDependencies): NativeNode {
   const { config, state } = dependencies;
-  let heldLinks: NativeNodeLinks | undefined;
-  const links = (): NativeNodeLinks => {
-    if (heldLinks === undefined) {
-      throw new Error("the native node's links are read before link() has run");
-    }
-    return heldLinks;
-  };
   const mediaDuck = new MediaDuckController();
-  const pendingAppActions = new Map<string, (answer: WireRecord) => void>();
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
@@ -136,50 +92,10 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     return status;
   }
 
-  function performAppAction(action: BrainAppActionRequest["action"]): Promise<WireRecord> {
-    const requestId = randomUUID();
-    return new Promise((resolve) => {
-      const timer = setTimeout(() => {
-        pendingAppActions.delete(requestId);
-        resolve({
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "The panel did not answer in time.",
-        });
-      }, BRAIN_APP_ACTION_TIMEOUT_MS);
-      const settle = (answer: WireRecord) => {
-        clearTimeout(timer);
-        pendingAppActions.delete(requestId);
-        resolve(answer);
-      };
-      pendingAppActions.set(requestId, settle);
-      if (!links().sendToPrimaryPanel(channels.onBrainAppAction, { requestId, action })) {
-        settle({
-          status: ACTION_RESULT_STATUS.REJECTED,
-          reason: "No panel is open to carry that.",
-        });
-      }
-    });
-  }
-
-  function refusePendingActions(): void {
-    for (const settle of pendingAppActions.values()) {
-      settle({ status: ACTION_RESULT_STATUS.REJECTED, reason: "Luke is quitting." });
-    }
-    pendingAppActions.clear();
-  }
-
   return {
     name: "native",
-    link: (next) => {
-      heldLinks = next;
-    },
     capabilities: {
-      openExternal: createNodeOpen({
-        openExternal: config.openExternal,
-        fixtureMode: config.launch.fixtureMode,
-        standPanelsDown: () => links().standPanelsDown(),
-      }),
-      performAppAction,
+      openExternal: config.openExternal,
       runAppleCalendarHelper,
     },
     mediaDuck,
@@ -193,8 +109,6 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
       return refreshMicrophoneStatus();
     },
     microphoneRouteWatcher: () => microphoneRouteWatcher,
-    answerAppAction: (requestId, answer) => pendingAppActions.get(requestId)?.(answer),
-    refusePendingActions,
     start: async () => {
       refreshMicrophoneStatus();
       if (!config.runMode.observesProviders) return;
@@ -222,9 +136,6 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
       microphoneRouteWatcher?.stop();
       microphoneRouteWatcher = undefined;
       mediaDuck.stop();
-      // Ordinarily the quit has already refused these; a stop reached any
-      // other way still leaves no action waiting on a window that is gone.
-      refusePendingActions();
     },
   };
 }

@@ -85,8 +85,6 @@ export interface WindowService extends DesktopService {
   reporterOf: (sender: WebContents) => string;
   /** Only this build's own renderer may reach a bridge entry. */
   trustedSender: (event: IpcMainEvent | IpcMainInvokeEvent) => boolean;
-  /** The one window an action only a renderer can perform is carried to; false when none is open. */
-  sendToPrimaryPanel: <Payload>(channel: string, payload: Payload) => boolean;
   applyLoginItem: (openAtLogin: boolean) => void;
   reapplyTalkHotkey: () => void;
   recycleVoiceWindow: () => void;
@@ -461,12 +459,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     trustedSender: (event) => {
       const url = event.senderFrame?.url ?? event.sender.getURL();
       return url === rendererUrl || url === voiceUrl;
-    },
-    sendToPrimaryPanel: (channel, payload) => {
-      const panel = panels.primaryPanel();
-      if (!panel) return false;
-      sendTo(panel.webContents, channel, payload);
-      return true;
     },
     applyLoginItem,
     reapplyTalkHotkey: () => void hotkeys.reapply(HOTKEY_RANK.TALK),

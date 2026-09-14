@@ -1,5 +1,3 @@
-import { ACTION_KIND } from "@sidecar/actions";
-import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_METHOD,
   type GatewayTransport,
@@ -12,16 +10,8 @@ import {
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
-  type HostNodeOpenKind,
-  isHostNodeOpenKind,
 } from "@sidecar/host";
-import {
-  isRecord,
-  isWireNumber,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
+import { isWireNumber, isWireString } from "@sidecar/wire";
 import { Effect, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
@@ -41,8 +31,7 @@ export interface GatewayWiringDependencies {
   state: AppStateStore;
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
-    openExternal: (url: string, kind: HostNodeOpenKind) => Promise<void>;
-    performAppAction: (action: BrainAppActionRequest["action"]) => Promise<WireRecord>;
+    openExternal: (url: string) => Promise<void>;
     runAppleCalendarHelper: (
       helperArguments: readonly string[],
       timeoutMs: number,
@@ -67,18 +56,6 @@ const APPLE_CALENDAR_HELPER_COMMANDS: ReadonlySet<string> = new Set([
   "request-access",
   "observe",
 ]);
-
-/** The same check the bridge applies before an app act reaches a renderer; the renderer's own guard is the rest. */
-function isCarriedAppAction(
-  value: UnparsedWireValue,
-): value is BrainAppActionRequest["action"] & WireRecord {
-  return (
-    isRecord(value) &&
-    isWireString(value.kind) &&
-    value.kind !== ACTION_KIND.REMEMBER &&
-    value.kind !== ACTION_KIND.FORGET
-  );
-}
 
 export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
   dependencies: GatewayWiringDependencies,
@@ -106,11 +83,10 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
 
   /**
    * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string and
-   * its kind one the build names, the act the shape the panel takes, the
-   * helper command one the build knows —
-   * and each answers the host's own result vocabulary, so a refusal is typed
-   * and never a throw that the wire would have to guess at.
+   * validated here before anything native runs — the address a string, the
+   * helper command one the build knows — and each answers the host's own
+   * result vocabulary, so a refusal is typed and never a throw that the wire
+   * would have to guess at.
    */
   const perform = (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
     Effect.suspend(() => {
@@ -122,22 +98,11 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("wireGateway")(function* (
         });
       switch (invocation.capability) {
         case HOST_NODE_CAPABILITY.OPEN_EXTERNAL: {
-          const { url, kind } = invocation.params;
+          const { url } = invocation.params;
           if (!isWireString(url)) return failed("open needs a url");
-          if (!isWireString(kind) || !isHostNodeOpenKind(kind)) {
-            return failed("open needs a kind this build names");
-          }
           return Effect.as(
-            Effect.promise(() => dependencies.node.openExternal(url, kind)),
+            Effect.promise(() => dependencies.node.openExternal(url)),
             { status: NODE_CAPABILITY_STATUS.OK, value: undefined },
-          );
-        }
-        case HOST_NODE_CAPABILITY.PANEL_APP_ACTION: {
-          const action = invocation.params.action;
-          if (!isCarriedAppAction(action)) return failed("the action is not one a panel performs");
-          return Effect.map(
-            Effect.promise(() => dependencies.node.performAppAction(action)),
-            (value) => ({ status: NODE_CAPABILITY_STATUS.OK, value }),
           );
         }
         case HOST_NODE_CAPABILITY.APPLE_CALENDAR_HELPER: {

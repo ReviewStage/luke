@@ -2,7 +2,6 @@ import { PopUpIcon } from "@sidecar/panel";
 import type { ActionResult } from "@sidecar/wire";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { type ErrandTarget, errandTargetProps } from "../luke-errand";
 import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
 import { useSettingWrite } from "./use-setting-write";
@@ -22,7 +21,6 @@ export function SelectRow<Value extends string | number>({
   options,
   parse,
   ariaLabel,
-  errand,
   anchor,
   changed,
   busy: restBusy,
@@ -35,17 +33,7 @@ export function SelectRow<Value extends string | number>({
   parse: (raw: string) => Value | undefined;
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
-  /**
-   * The id a spoken change names this pop-up by. Marked on the `select`
-   * rather than the box positioning it: an errand outlines what it lands on,
-   * and only the `select` is drawn with the corners that outline has to take.
-   */
-  errand?: ErrandTarget;
-  /**
-   * The id a pressed search result lands on, for a row whose control carries
-   * no errand mark of its own. Marked on the row rather than the `select`,
-   * because the landing scrolls to the whole line rather than outlining it.
-   */
+  /** The id a pressed search result lands on: marked on the pop-up itself, which then takes the keyboard. */
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
@@ -61,7 +49,7 @@ export function SelectRow<Value extends string | number>({
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <>
-      <div className="settings-row" {...(anchor ? searchAnchorProps(anchor) : undefined)}>
+      <div className="settings-row">
         <span className="settings-copy">
           <strong>
             {label}
@@ -71,7 +59,7 @@ export function SelectRow<Value extends string | number>({
         </span>
         <span className="voice-select">
           <select
-            {...(errand ? errandTargetProps(errand) : undefined)}
+            {...(anchor ? searchAnchorProps(anchor) : undefined)}
             aria-label={ariaLabel ?? label}
             value={value}
             disabled={busy || Boolean(restBusy)}

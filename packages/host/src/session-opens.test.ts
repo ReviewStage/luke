@@ -14,7 +14,6 @@ import {
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
-import { HOST_NODE_OPEN_KIND, type HostNodeOpenKind } from "./node-capabilities.js";
 import { createSessionOpens, NodeAnswerLostError } from "./session-opens.js";
 
 /*
@@ -64,10 +63,8 @@ function reasonOf(result: SessionOpenResult): string | undefined {
   return "reason" in result ? result.reason : undefined;
 }
 
-function fixture(
-  options: { openExternal?: (url: string, kind: HostNodeOpenKind) => Promise<void> } = {},
-) {
-  const opens: { url: string; kind: HostNodeOpenKind }[] = [];
+function fixture(options: { openExternal?: (url: string) => Promise<void> } = {}) {
+  const opens: string[] = [];
   const events: ProductEventName[] = [];
   const registry = new SessionRoster();
   registry.replaceProvider(CONDUCTOR, [
@@ -96,8 +93,8 @@ function fixture(
     sessionRegistry: registry,
     openExternal:
       options.openExternal ??
-      (async (url, kind) => {
-        opens.push({ url, kind });
+      (async (url) => {
+        opens.push(url);
       }),
     recordProductEvent: (name) => {
       events.push(name);
@@ -106,7 +103,7 @@ function fixture(
   return { performer, opens, events };
 }
 
-it.effect("a press opens the address the roster reported, as a plain address, and is counted", () =>
+it.effect("a press opens the address the roster reported, and is counted", () =>
   Effect.gen(function* () {
     const f = fixture();
     assert.deepEqual(yield* f.performer.openSession(WORKSPACE_IDENTITY), {
@@ -123,11 +120,7 @@ it.effect("a press opens the address the roster reported, as a plain address, an
     });
     // The row's own press follows the first linked mark in the roster's fixed
     // app order, which here is Claude's, not the workspace's detail link.
-    assert.deepEqual(f.opens, [
-      { url: APP_LINK, kind: HOST_NODE_OPEN_KIND.ADDRESS },
-      { url: APP_LINK, kind: HOST_NODE_OPEN_KIND.ADDRESS },
-      { url: CHANGE_LINK, kind: HOST_NODE_OPEN_KIND.ADDRESS },
-    ]);
+    assert.deepEqual(f.opens, [APP_LINK, APP_LINK, CHANGE_LINK]);
     assert.deepEqual(f.events, [
       PRODUCT_EVENT.SESSION_ACTION_SEND,
       PRODUCT_EVENT.SESSION_ACTION_SEND,

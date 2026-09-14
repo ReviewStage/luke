@@ -82,12 +82,10 @@ function performTell<Kind extends ActKind>(
 }
 
 /**
- * The two settings writes, generic in the field each names, for the callers
- * that take them as a seam: the spoken settings change carries them, and a
- * test hands the same shape a fixture. Both are the acts a row's own press
- * mints — there is no second way to write a setting.
+ * The two settings writes, generic in the field each names. Both are the acts
+ * a row's own press mints — there is no second way to write a setting.
  */
-export interface SettingWriteActs {
+interface SettingWriteActs {
   updateSetting<Field extends AppSettingField>(
     field: Field,
     value: AppSettingValue<Field>,

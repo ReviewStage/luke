@@ -1,7 +1,6 @@
 import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
-import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { ConversationViewSnapshot, ObservedWorkspaceProject } from "@sidecar/session";
 import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
@@ -168,7 +167,6 @@ export interface AppState {
    */
   introduction: { playing: boolean };
   sessionReplay: AppSessionReplaySlice;
-  guide: AppGuideSnapshot;
 }
 
 /**
