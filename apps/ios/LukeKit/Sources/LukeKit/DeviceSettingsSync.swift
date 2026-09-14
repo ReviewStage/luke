@@ -3,9 +3,8 @@ import Foundation
 /// Every setting the phone and the watch both hold, read from and written to
 /// the same UserDefaults keys each app's own controls use: the voice the next
 /// session speaks in, and the New Workspace choices remembered per provider.
-/// The watch's pace for its own Realtime mint is the watch's alone and is not
-/// carried, since the Live model the phone speaks through has no speed.
-/// Nothing here is account data, a credential, or anything a provider wrote;
+/// No pace is carried, since the Live model both devices speak through has no
+/// speed. Nothing here is account data, a credential, or anything a provider wrote;
 /// it is the developer's own choices about their own devices.
 public struct DeviceSettingsSnapshot: Equatable, Sendable {
     public var voice: LiveVoice

@@ -1,27 +1,20 @@
 import LukeKit
 import SwiftUI
 
-/// Hold-to-talk voice screen for Apple Watch. Drives WatchVoiceSessionModel,
-/// which in turn drives a RealtimeSession carrying the same tools the phone's
-/// conversation does: each call is validated through LukeKit's shared
-/// dispatcher against the roster the sessions page draws, and an open or a
-/// list ask lands on that page once Luke has finished speaking. The thread
-/// under the controls is the stored Conversation, read from the service the
-/// way the phone reads it; the in-memory thread the call records into is the
-/// call's own context and is drawn nowhere.
+/// Hold-to-talk voice screen for Apple Watch, on the hosted exchange: the
+/// controls drive `WatchVoiceSessionModel`, which speaks to Luke through the
+/// service's audio route, and the thread under them is the stored
+/// Conversation, read from the service the way the phone reads it. Both
+/// speakers' lines land there through the voice writer, so what the call
+/// draws of its own is one caption: Luke's words for the reply under way.
 struct WatchVoiceView: View {
     @Environment(WatchAccountSession.self) private var accountSession
     @Environment(WatchRosterStore.self) private var store
-    @Environment(WatchNavigation.self) private var navigation
-    @Environment(VoiceConversationThread.self) private var voiceThread
     @Environment(ConversationStore.self) private var stored
-    @Environment(ProductEventSender.self) private var events
-    @AppStorage(VoiceSettingsKey.voice) private var voice = RealtimeVoice.default
-    @AppStorage(VoiceSettingsKey.speed) private var speed = RealtimeVoiceSpeed.default
+    @AppStorage(VoiceSettingsKey.voice) private var voice = LiveVoice.default
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
     @State private var settingsShown = false
-    private let actionClient = ActionClient(baseURL: AccountConstants.serviceURL)
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -30,77 +23,20 @@ struct WatchVoiceView: View {
         }
         .task {
             model.voice = voice
-            model.speed = speed
-            model.prepare(
-                accountSession: accountSession, thread: voiceThread, actionContext: makeActionContext
-            )
-            // The roster the actions are validated against is the list's own,
-            // refreshed as this page opens so a session archived since the
-            // list last polled is not offered as somewhere to act.
+            model.prepare(accountSession: accountSession)
+            // The Conversation's action rows name sessions off the roster, refreshed as this page opens.
             await store.load()
         }
-        .onChange(of: model.status) { _, newStatus in
-            if newStatus == .ready || newStatus == .idle {
-                performPendingNavigation()
-            }
-        }
         .onChange(of: voice) { _, newVoice in model.changeVoice(newVoice) }
-        .onChange(of: speed) { _, newSpeed in model.changeSpeed(newSpeed) }
         .onDisappear {
-            model.stop()
+            model.hangUp()
         }
         .navigationTitle("Luke")
         .toolbar {
             ToolbarItem(placement: .topBarLeading) { settingsButton }
         }
         .sheet(isPresented: $settingsShown) {
-            WatchVoiceSettingsView(
-                toolReport: VoiceToolAvailability.report(
-                    mintedTools: model.mintedTools,
-                    sessions: store.sessions,
-                    projects: model.projects
-                )
-            )
-        }
-    }
-
-    /// What a tool call is carried against, read at the moment of the call.
-    /// An open or a list ask is held for the reply to finish rather than
-    /// performed at once: the page moving mid-sentence would close the call
-    /// still speaking the words that announce it.
-    private func makeActionContext() -> VoiceActionContext {
-        VoiceActionContext(
-            mintedTools: model.mintedTools,
-            sessions: store.sessions,
-            projects: model.projects,
-            defaults: model.defaults,
-            actionClient: actionClient,
-            accessToken: { [accountSession] in try await accountSession.validAccessToken() },
-            count: { [events] action, providerId in
-                // A provider id the shared vocabulary has not answered for is
-                // left uncounted rather than sent to be refused.
-                guard let provider = ProductProviderID(rawValue: providerId) else { return }
-                events.record(.sessionActionSend(provider: provider, action: action))
-            },
-            refreshRoster: { [store] in await store.load() },
-            // One page, so the last open a reply names is the one taken.
-            open: { [model] session in model.pendingNavigation = .open(session) },
-            showList: { [model] ask in model.pendingNavigation = .list(ask) }
-        )
-    }
-
-    /// Takes the developer where the settled reply said they were going. The
-    /// page changes either way, and this view's `onDisappear` closes the
-    /// call behind it.
-    private func performPendingNavigation() {
-        guard let pending = model.pendingNavigation else { return }
-        model.pendingNavigation = nil
-        switch pending {
-        case .open(let session):
-            navigation.open(session)
-        case .list(let ask):
-            store.showList(ask)
-            navigation.showList()
+            WatchVoiceSettingsView()
         }
     }
 
@@ -124,9 +60,24 @@ struct WatchVoiceView: View {
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .padding(.horizontal, 8)
+            } else if let caption = model.caption, !caption.isEmpty {
+                Text(caption)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .truncationMode(.head)
+                    .padding(.horizontal, 8)
+                    .accessibilityLabel("Luke: \(caption)")
             }
             statusLabel
-            talkButton
+            HStack(spacing: 12) {
+                talkButton
+                if model.status == .speaking {
+                    stopButton
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: model.status)
         }
         .padding(.bottom, 4)
     }
@@ -146,7 +97,7 @@ struct WatchVoiceView: View {
     @ViewBuilder
     private var statusGlyph: some View {
         switch model.status {
-        case .connecting:
+        case .connecting, .closing:
             ProgressView()
                 .scaleEffect(0.6)
                 .frame(width: 14, height: 14)
@@ -155,43 +106,31 @@ struct WatchVoiceView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.blue)
                 .symbolEffect(.variableColor.iterative, isActive: true)
-        case .thinking:
-            Image(systemName: "ellipsis")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.yellow)
-                .symbolEffect(.variableColor.iterative, isActive: true)
         case .speaking:
             Image(systemName: "speaker.wave.2")
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.green)
                 .symbolEffect(.variableColor.iterative, isActive: true)
-        default:
+        case .idle, .muted, .failed, .unavailable:
             EmptyView()
         }
     }
 
     private var statusText: String {
         switch model.status {
-        case .idle: model.errorMessage != nil ? "" : "Hold to talk"
+        case .idle, .failed, .unavailable: model.errorMessage != nil ? "" : "Hold to talk"
         case .connecting: "Connecting…"
-        case .ready: "Hold to talk"
+        case .muted: "Hold to talk"
         case .listening: "Listening…"
-        case .thinking: "Thinking…"
         case .speaking: "Speaking…"
+        case .closing: "Ending…"
         }
     }
 
-    // MARK: - Hold-to-talk button
+    // MARK: - Controls
 
     private var talkButton: some View {
-        let canTalk = model.status == .ready
-            || model.status == .idle
-            || model.status == .connecting
-            || model.status == .listening
-            || model.status == .speaking
-            || isPressing
-
-        return Circle()
+        Circle()
             .fill(buttonColor)
             .frame(width: 52, height: 52)
             .overlay {
@@ -213,16 +152,30 @@ struct WatchVoiceView: View {
                         model.endTurn()
                     }
             )
-            .disabled(!canTalk)
+            .disabled(model.status == .closing)
             .accessibilityLabel("Talk to Luke")
             .accessibilityHint("Hold to speak, release to send")
             .accessibilityAddTraits(.allowsDirectInteraction)
     }
 
+    /// Drawn while Luke speaks: ends his reply, on the wrist and at the service.
+    private var stopButton: some View {
+        Button {
+            model.stopSpeaking()
+        } label: {
+            Image(systemName: "stop.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(Color.secondary.opacity(0.35)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop Luke")
+    }
+
     private var buttonColor: Color {
         if isPressing { return Color(red: 0.25, green: 0.55, blue: 1.0) }
         switch model.status {
-        case .thinking: return Color(red: 0.9, green: 0.7, blue: 0.2)
         case .speaking: return Color(red: 0.2, green: 0.8, blue: 0.5)
         default: return Color.accentColor
         }

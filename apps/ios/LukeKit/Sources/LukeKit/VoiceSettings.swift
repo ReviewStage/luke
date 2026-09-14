@@ -37,11 +37,9 @@ public enum LiveVoice: String, CaseIterable, Sendable, Identifiable {
 
 /// Transcribed from `REALTIME_VOICE` in
 /// `packages/actions/src/remote-mint-legacy.ts`, the Live voices the Realtime
-/// API also speaks. The watch still mints a Realtime session until it moves
-/// onto the hosted exchange (LUKE-224): its picker offers these, the mint
-/// refuses a voice outside them, and a synced Live voice outside them reads
-/// as the default from the watch's own store rather than reaching the mint.
-/// The phone no longer reads this set. The default is
+/// API also speaks. Neither device reads this set any more: the phone moved
+/// onto the hosted exchange with LUKE-216 and the watch with LUKE-224, so it
+/// stays only until the legacy path is deleted (LUKE-219). The default is
 /// `REALTIME_DEFAULTS.VOICE`, the same voice the Live default is.
 public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
     case alloy
@@ -64,10 +62,10 @@ public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
 
 /// Transcribed from `REALTIME_VOICE_SPEED` in the same file. The Live model
 /// has no speed, so the phone dropped its slider and its sync with the move
-/// onto the hosted exchange (LUKE-216); the watch keeps the pace for its own
-/// Realtime mint until LUKE-224, stored under `VoiceSettingsKey.speed` on the
-/// watch alone and synced nowhere. Stored by name so an unknown stored value
-/// falls to the default rather than reaching the mint.
+/// onto the hosted exchange (LUKE-216) and the watch its picker with LUKE-224;
+/// nothing reads a pace any more, and this stays only until the legacy path
+/// is deleted (LUKE-219). Stored by name so an unknown stored value falls to
+/// the default rather than reaching the mint.
 public enum RealtimeVoiceSpeed: String, CaseIterable, Sendable, Identifiable {
     case slow
     case normal
@@ -107,6 +105,6 @@ public enum RealtimeVoiceSpeed: String, CaseIterable, Sendable, Identifiable {
 public enum VoiceSettingsKey {
     /// The voice both apps read and the sync carries, a `LiveVoice` name.
     public static let voice = "voiceSettings.voice"
-    /// The watch's own pace for its Realtime mint; the phone neither reads nor syncs it.
+    /// The pace the legacy Realtime mint took; read by neither device now, and LUKE-219's to delete.
     public static let speed = "voiceSettings.speed"
 }
