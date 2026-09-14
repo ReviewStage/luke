@@ -3,6 +3,12 @@ import XCTest
 @testable import LukeKit
 
 final class MobileSentryConfigurationTests: XCTestCase {
+    #if DEBUG
+    private static let expectedEnvironment = "development"
+    #else
+    private static let expectedEnvironment = "production"
+    #endif
+
     func testAnEmptyConfigurationDisablesSentry() {
         XCTAssertNil(
             MobileSentryConfiguration.resolve(
@@ -31,7 +37,7 @@ final class MobileSentryConfigurationTests: XCTestCase {
                 dsn: "https://public@example.invalid/1",
                 dist: "42",
                 enableCrashHandler: true,
-                environment: "development",
+                environment: Self.expectedEnvironment,
                 releaseName: "Luke@0.1.0"
             )
         )
@@ -62,6 +68,10 @@ final class MobileSentryConfigurationTests: XCTestCase {
             ]
         )
 
+        #if DEBUG
         XCTAssertEqual(configuration?.dsn, "https://env@example.invalid/1")
+        #else
+        XCTAssertEqual(configuration?.dsn, "https://plist@example.invalid/1")
+        #endif
     }
 }
