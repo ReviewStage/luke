@@ -35,6 +35,7 @@ import {
   ProductSessionActionSchema,
   ProductSettingValueSchema,
 } from "@sidecar/analytics";
+import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
 import { APP_SETTING_ID } from "@sidecar/guide";
 import {
   BRIEFING_PUSH_PAYLOAD_KEY,
@@ -47,7 +48,14 @@ import {
   READ_PAGE_BOUNDS,
   VAULT_KEY_MAX_LENGTH,
 } from "@sidecar/hosted";
-import { LIVE_VOICE } from "@sidecar/live";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_CLOSE_REASON,
+  LIVE_STATUS,
+  LIVE_VOICE,
+  RENDERER_CLIENT_EVENTS,
+  RENDERER_SERVER_EVENTS,
+} from "@sidecar/live";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   CONVERSATION_MESSAGE_AUTHOR,
@@ -272,6 +280,54 @@ test("LiveVoice is LIVE_VOICE", () => {
     swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "LiveVoice"),
     LIVE_VOICE,
     "a voice the desktop synced that the phone cannot name refuses the whole snapshot",
+  );
+});
+
+test("LiveClientEventType is RENDERER_CLIENT_EVENTS", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveClientEventType"),
+    RENDERER_CLIENT_EVENTS,
+    "a command outside what an untrusted peer may send is refused by the session's permissions",
+  );
+});
+
+test("every LiveClientEventType is a LIVE_CLIENT_EVENT", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveClientEventType"),
+    Object.values(LIVE_CLIENT_EVENT),
+    "a command renamed in the grammar leaves the phone sending one the API does not know",
+  );
+});
+
+test("LiveServerEventType is RENDERER_SERVER_EVENTS", () => {
+  assertSameValues(
+    swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveServerEventType"),
+    RENDERER_SERVER_EVENTS.map((selector) => selector.type),
+    "an event the channel shows the device and the phone cannot name is dropped unread",
+  );
+});
+
+test("LiveCloseReason is LIVE_CLOSE_REASON", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/LiveEvents.swift`), "LiveCloseReason"),
+    LIVE_CLOSE_REASON,
+    "a close reason the phone cannot name refuses the closed event and leaves the hang-up to its bound",
+  );
+});
+
+test("LiveStatus is LIVE_STATUS", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/LivePeer.swift`), "LiveStatus"),
+    LIVE_STATUS,
+    "a status the desktop reports that the phone cannot name has no screen state to draw",
+  );
+});
+
+test("LiveTransportState is LIVE_TRANSPORT_STATE", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/LivePeer.swift`), "LiveTransportState"),
+    LIVE_TRANSPORT_STATE,
+    "a transport state outside the report's schema is a state the desktop never tells its host about either",
   );
 });
 

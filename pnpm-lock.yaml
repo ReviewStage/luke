@@ -1043,6 +1043,9 @@ importers:
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../../packages/analytics
+      '@sidecar/gateway':
+        specifier: workspace:*
+        version: link:../../packages/gateway
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../../packages/guide
