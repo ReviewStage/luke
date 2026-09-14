@@ -1,5 +1,5 @@
 import type { LiveStatus } from "@sidecar/live";
-import type { ConversationEntry } from "@sidecar/session";
+import type { LiveConversationLine } from "@sidecar/session";
 import type { Effect } from "effect";
 
 /**
@@ -79,9 +79,5 @@ export interface LiveVoiceCallEvents {
   onError(message: string): void;
 }
 
-/** One caption row: whose it is, its words so far, and whether a fragment may still join it. */
-export interface LiveCaptionRow {
-  rowId: number;
-  entry: ConversationEntry;
-  settled: boolean;
-}
+/** One caption row: whose it is, its words so far, and whether a fragment may still join it; the line the panel is handed, under the name the captions know it by. */
+export type LiveCaptionRow = LiveConversationLine;

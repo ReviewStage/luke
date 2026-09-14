@@ -43,7 +43,10 @@ export function conversationEntryPresentation(
  * A line still being said, drawn as the bubble it will settle into: words
  * growing, no timestamp, and no copy, because copying half a sentence would
  * copy half a sentence. The settled line arrives from the service as a
- * stored message and is drawn by the turn renderer above it.
+ * stored message and is drawn by the turn renderer above it; this bubble is
+ * drawn until then, whatever clock the row settled on
+ * (`conversation-live-lines.ts`), so the words never leave the screen between
+ * the settle and the read.
  */
 function ConversationStreamingRow({ entry }: { entry: ConversationEntry }): React.JSX.Element {
   const presentation = conversationEntryPresentation(entry.kind);

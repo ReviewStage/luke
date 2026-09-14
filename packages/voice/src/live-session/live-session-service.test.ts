@@ -336,6 +336,8 @@ interface Fixture {
   open: () => Effect.Effect<FakeSideband>;
   /** What the test wants told of a briefing's last append; nothing by default. */
   onBriefingAppend?: (delivery: { briefing: string; decidedAt: number }, eventId: string) => void;
+  /** What the test wants told of every append whose words are on record; nothing by default. */
+  onRecordedAppend?: (eventId: string) => void;
 }
 
 function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, never, Scope.Scope> {
@@ -388,6 +390,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         trace: (trace) => traces.push(trace),
         onProactiveSpoken: (kind) => spoken.push(kind),
         onBriefingAppend: (delivery, eventId) => fixtureState.onBriefingAppend?.(delivery, eventId),
+        onRecordedAppend: (eventId) => fixtureState.onRecordedAppend?.(eventId),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -1399,13 +1402,15 @@ it.effect(
 );
 
 it.effect(
-  "a briefing's last append is told to the record before it is sent, once, under the event id the append carries; a beat tells nothing",
+  "a briefing's last append is told to the record before it is sent, once, under the event id the append carries; every chunk of it is told as on record, and a beat's is not",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const told: { briefing: string; eventId: string }[] = [];
+      const recordedTold: string[] = [];
       f.onBriefingAppend = (delivery, eventId) =>
         told.push({ briefing: delivery.briefing, eventId });
+      f.onRecordedAppend = (eventId) => recordedTold.push(eventId);
       const sideband = yield* f.open();
       yield* settle();
       const long = Array.from(
@@ -1428,6 +1433,30 @@ it.effect(
         (event) => event.event_id === told[0]?.eventId,
       );
       assert.ok(lastBriefingChunk);
+      // The briefing's chunks were each told as on record, by their own ids, before they were sent;
+      // the beat's append — the build's script, on no record — was not, so the voice's words for it become his row.
+      const briefingChunks = commentary.filter(
+        (event) =>
+          event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND && long.includes(event.content),
+      );
+      assert.equal(briefingChunks.length, commentary.length, "the beat waits behind the briefing");
+      // The briefing acknowledged and spoken to its end, the beat's append follows it.
+      for (let index = 0; index < briefingChunks.length; index += 1) {
+        sideband.acknowledge(index, 100 * index, 100 * index + 50);
+        yield* settle();
+      }
+      sideband.output(
+        "Read to the end.",
+        100 * briefingChunks.length,
+        100 * briefingChunks.length + 900,
+      );
+      yield* settle();
+      const withBeat = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(withBeat.length, briefingChunks.length + 1, "the beat's append went out");
+      assert.deepEqual(
+        recordedTold,
+        briefingChunks.map((event) => event.event_id),
+      );
     }),
 );
 

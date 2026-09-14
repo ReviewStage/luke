@@ -263,23 +263,14 @@ interface SpokenReplyWrite {
 }
 
 /**
- * Which end of a spoken line an instant is compared against: its end, for
- * words of Luke's that must follow the whole line to answer it; its start,
- * for a delegation, whose offset the API may place before the line's last
- * fragment ended and which is about the line all the same.
+ * The latest spoken developer line of one voice session that starts at or
+ * before an instant of the session's clock: the line a delegation at that
+ * offset is about, since the API may place the offset before the line's last
+ * fragment ended and the delegation is about the line all the same.
  */
-export const SPOKEN_LINE_BOUNDARY = {
-  START: "start",
-  END: "end",
-} as const;
-
-type SpokenLineBoundary = (typeof SPOKEN_LINE_BOUNDARY)[keyof typeof SPOKEN_LINE_BOUNDARY];
-
-/** The latest spoken developer line of one voice session whose named boundary is at or before an instant of the session's clock. */
 interface SpokenLineQuery {
   readonly voiceSessionId: string;
-  readonly boundary: SpokenLineBoundary;
-  readonly atOrBeforeMs: number;
+  readonly startingAtOrBeforeMs: number;
 }
 
 interface SpokenLineFound {
@@ -903,26 +894,6 @@ const SpokenLineRowSchema = Schema.Struct({
   }),
 );
 
-/** The latest line whose end is at or before the instant: the line Luke's words could be answering. */
-const findLatestSpokenLineEndingBy = SqlSchema.findOneOption({
-  Request: SpokenLineRequestSchema,
-  Result: SpokenLineRowSchema,
-  execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id, client_id, metadata ->> 'delegation_id' as delegation_id,
-               (metadata ->> 'from_ms')::int as from_ms, (metadata ->> 'to_ms')::int as to_ms
-        from messages
-        where conversation_id = ${request.conversationId}
-          and role = ${MESSAGE_ROLE.USER}
-          and metadata ->> 'voice_session_id' = ${request.voiceSessionId}
-          and (metadata ->> 'to_ms')::int <= ${request.atOrBeforeMs}
-        order by (metadata ->> 'to_ms')::int desc, seq desc
-        limit 1
-      `,
-    ),
-});
-
 /** The latest line whose start is at or before the instant: the line a delegation at that offset is about, its end past the offset or not. */
 const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
@@ -942,11 +913,6 @@ const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
       `,
     ),
 });
-
-const FIND_LATEST_SPOKEN_LINE = {
-  [SPOKEN_LINE_BOUNDARY.START]: findLatestSpokenLineStartingBy,
-  [SPOKEN_LINE_BOUNDARY.END]: findLatestSpokenLineEndingBy,
-} as const;
 
 /** The one write that renames a row's client id: an undelegated spoken line taking the delegation's, its words and span the ask's cut, while no turn owns it. */
 const rekeySpokenLine = SqlSchema.findOneOption({
@@ -1720,10 +1686,10 @@ const recordSpokenReply = /* @__PURE__ */ Effect.fn("recordSpokenReply")(functio
 
 function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write<SpokenLineResult> {
   return Effect.map(
-    FIND_LATEST_SPOKEN_LINE[query.boundary]({
+    findLatestSpokenLineStartingBy({
       conversationId: context.target.conversationId,
       voiceSessionId: query.voiceSessionId,
-      atOrBeforeMs: query.atOrBeforeMs,
+      atOrBeforeMs: query.startingAtOrBeforeMs,
     }),
     (found) => ({
       ok: true,

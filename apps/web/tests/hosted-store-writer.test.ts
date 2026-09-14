@@ -47,7 +47,6 @@ import {
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   type ConversationTarget,
-  SPOKEN_LINE_BOUNDARY,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,
@@ -1455,17 +1454,16 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   const ownLine = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_1",
-      boundary: SPOKEN_LINE_BOUNDARY.END,
-      atOrBeforeMs: 2500,
+      startingAtOrBeforeMs: 2500,
     }),
   );
   assert.ok(ownLine.ok);
   assert.deepEqual([ownLine.line?.clientId, ownLine.line?.delegated], ["line-1", false]);
+  // Found by where it starts: a delegation's offset may fall inside the line it is about.
   const delegatedLine = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_1",
-      boundary: SPOKEN_LINE_BOUNDARY.END,
-      atOrBeforeMs: 4000,
+      startingAtOrBeforeMs: 3500,
     }),
   );
   assert.ok(delegatedLine.ok);
@@ -1473,8 +1471,7 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   const none = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_1",
-      boundary: SPOKEN_LINE_BOUNDARY.END,
-      atOrBeforeMs: 500,
+      startingAtOrBeforeMs: 500,
     }),
   );
   assert.ok(none.ok);
@@ -1482,8 +1479,7 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   const otherSession = await database.run(
     writer.latestSpokenLine(target, {
       voiceSessionId: "vs_fixture_2",
-      boundary: SPOKEN_LINE_BOUNDARY.END,
-      atOrBeforeMs: 9000,
+      startingAtOrBeforeMs: 9000,
     }),
   );
   assert.ok(otherSession.ok);

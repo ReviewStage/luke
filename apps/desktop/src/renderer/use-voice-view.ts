@@ -1,6 +1,7 @@
+import type { ConversationEntry, ConversationViewSnapshot } from "@sidecar/session";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
-import { Effect } from "effect";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Duration, Effect } from "effect";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
 import {
@@ -14,6 +15,12 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
+import {
+  foldLiveLines,
+  liveLinesExpireAt,
+  NO_LIVE_LINES,
+  shownLiveEntries,
+} from "./conversation-live-lines";
 import { rendererServicesNow } from "./renderer-runtime";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
@@ -180,9 +187,18 @@ function useVoiceActive(report: LevelReport, voice: WaveformVoice, live: boolean
   return live && active;
 }
 
+/** The thread before the first read lands, which is what a panel with no document yet compares live lines against. */
+const UNREAD_CONVERSATION: ConversationViewSnapshot = { groups: [], settled: false };
+
 export interface VoiceViewState {
   /** The live conversation as the voice window last reported it. */
   view: VoiceView;
+  /**
+   * The lines the Conversation tab draws ahead of the record: the call's rows
+   * as reported, those that left the report while the record catches up, and
+   * none the record already shows (`conversation-live-lines.ts`).
+   */
+  liveConversationEntries: readonly ConversationEntry[];
   /** Whether Luke is speaking — his reply under way — as of the last report. */
   speaking: boolean;
   /** Whether the developer's microphone is being heard, which can stand with {@link speaking}. */
@@ -239,6 +255,35 @@ export function useVoiceView(): VoiceViewState {
     return created;
   });
   useEffect(() => () => strip.stop(), [strip]);
+
+  // The lines drawn ahead of the record, held across the gap between a row
+  // settling and the record showing it. The fold runs on each report; the
+  // one clock here re-reads the hold when its oldest held line is due to go,
+  // on the same services the strip's clocks run under.
+  const lines = view.liveConversationLines;
+  const [hold, setHold] = useState(NO_LIVE_LINES);
+  useEffect(() => {
+    setHold((standing) => foldLiveLines(standing, lines, Date.now()));
+  }, [lines]);
+  const expiresAt = liveLinesExpireAt(hold);
+  useEffect(() => {
+    if (expiresAt === undefined) return;
+    const fiber = Effect.runForkWith(rendererServicesNow())(
+      Effect.andThen(
+        Effect.sleep(Duration.millis(Math.max(0, expiresAt - Date.now()))),
+        Effect.sync(() => {
+          setHold((standing) => foldLiveLines(standing, standing.lines, Date.now()));
+        }),
+      ),
+    );
+    return () => fiber.interruptUnsafe();
+  }, [expiresAt]);
+  const conversation = state?.conversation ?? UNREAD_CONVERSATION;
+  const liveConversationEntries = useMemo(
+    () => shownLiveEntries(hold, conversation),
+    [hold, conversation],
+  );
+
   const stopSpeaking = useCallback(() => {
     tell(ACT_KIND.VOICE_COMMAND, { command: VOICE_COMMAND.STOP_SPEAKING });
   }, []);
@@ -258,6 +303,7 @@ export function useVoiceView(): VoiceViewState {
 
   return {
     view: panelVoiceView(view, stripLines),
+    liveConversationEntries,
     speaking: view.lukeSpeaking,
     listening: view.listening,
     levels: levelReport.levels,

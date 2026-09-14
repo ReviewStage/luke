@@ -335,7 +335,6 @@ export {
 } from "./voice-writer.js";
 export {
   type ConversationTarget,
-  SPOKEN_LINE_BOUNDARY,
   STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,

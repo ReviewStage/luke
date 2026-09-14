@@ -3,16 +3,16 @@ import type { Effect } from "effect";
 
 /**
  * Where what was said on a live session is written down, behind its own door
- * so the writer can change without the service noticing: the desktop's
- * Conversation table, or the hosted record where the brain's reply is the
- * assistant message, Luke's spoken words are transcript segments, and an
- * exchange the voice model answered itself leaves both speakers' settled
- * utterances as rows of their own. The two
- * writes stay two calls for that reason — a developer's utterance and Luke's
- * are different kinds of record even where one table takes both. A developer
- * utterance is written when it settles, undelegated, and again under its
- * delegation when the voice model delegates on it after; what each write
- * means is the record's to decide, and the row id is how it tells them apart.
+ * so the writer can change without the service noticing: the hosted record,
+ * where the brain's reply is the assistant message, every spoken word is a
+ * transcript segment, and each speaker's settled utterance is a row of its
+ * own — the developer's line, and Luke's words wherever they are the voice
+ * model's own rather than an append read aloud. The two writes stay two
+ * calls for that reason — a developer's utterance and Luke's are different
+ * kinds of record even where one table takes both. A developer utterance is
+ * written when it settles, undelegated, and again under its delegation when
+ * the voice model delegates on it after; what each write means is the
+ * record's to decide, and the row id is how it tells them apart.
  */
 
 export interface DeveloperUtteranceRecord {

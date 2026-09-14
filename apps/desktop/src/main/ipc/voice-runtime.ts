@@ -1,6 +1,7 @@
 import { PRODUCT_EVENT, type RecordProductEvent } from "@sidecar/analytics";
 import { CREDENTIAL_CONNECTION, CREDENTIAL_PROVIDERS } from "@sidecar/credentials";
 import { type LiveDiagnostics, liveExchangeActive } from "@sidecar/live";
+import type { LiveConversationLine } from "@sidecar/session";
 import { Effect } from "effect";
 import type { BrowserWindow, WebContents } from "electron";
 import { channels } from "#shared/bridge";
@@ -46,6 +47,27 @@ export interface VoiceRuntimeDependencies {
   clearConversation: () => Effect.Effect<boolean>;
   /** Whether a panel is recording a chord, which holds the talk and stop presses. */
   setShortcutCapturing: (capturing: boolean) => void;
+  /**
+   * A read of the Conversation asked for now: the voice window's report says
+   * a spoken line settled or left with its call, which is when the service
+   * writes it, and the panel draws the line until the record shows it.
+   */
+  refreshConversation: () => void;
+}
+
+/**
+ * Whether one report says the record is being written under a line the last
+ * one carried: a row settled since, or a row left the report — the call
+ * closing writes whatever still stood. Either is the moment to read the
+ * record rather than wait the poll's cadence out.
+ */
+export function recordMovedUnderLines(
+  previous: readonly LiveConversationLine[],
+  next: readonly LiveConversationLine[],
+): boolean {
+  const settled = (lines: readonly LiveConversationLine[]) =>
+    lines.filter((line) => line.settled).length;
+  return settled(next) > settled(previous) || next.length < previous.length;
 }
 
 type VoiceRuntimeActKind =
@@ -129,8 +151,14 @@ export function voiceRuntimeReports(
     reportVoiceView(context, view, countedKind) {
       if (!voiceWindow.owns(context.sender)) return;
       const { state } = dependencies;
-      state.update({ voice: { ...state.snapshot().voice, view } });
+      const held = state.snapshot().voice;
+      state.update({ voice: { ...held, view } });
       panels.setVoiceExchange(liveExchangeActive(view));
+      if (
+        recordMovedUnderLines(held.view?.liveConversationLines ?? [], view.liveConversationLines)
+      ) {
+        dependencies.refreshConversation();
+      }
       if (countedKind !== undefined) {
         dependencies.recordProductEvent(PRODUCT_EVENT.VOICE_EXCHANGE, {
           exchange_kind: countedKind,

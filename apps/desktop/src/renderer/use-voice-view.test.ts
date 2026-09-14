@@ -36,7 +36,7 @@ test("a panel that has heard nothing draws an idle voice with neither speaker", 
   assert.equal(IDLE_VOICE_VIEW.lukeSpeaking, false);
   assert.equal(IDLE_VOICE_VIEW.talkOpening, false);
   assert.equal(IDLE_VOICE_VIEW.lukeCaptions, undefined);
-  assert.deepEqual(IDLE_VOICE_VIEW.liveConversationEntries, []);
+  assert.deepEqual(IDLE_VOICE_VIEW.liveConversationLines, []);
 });
 
 test("a voice failure is drawn on the strip, but never over a speaker or a fixture", () => {
