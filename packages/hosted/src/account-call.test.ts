@@ -355,3 +355,41 @@ it.effect(
       assert.equal(answer.errorName, "TimeoutError");
     }),
 );
+
+it.effect(
+  "the deadline covers the body: a server that answers its headers and then stalls is a request that never ended",
+  () =>
+    Effect.gen(function* () {
+      const held = accountCall({
+        baseUrl: BASE_URL,
+        credential: fixedBearer("sk-test"),
+        requestTimeoutMs: 90_000,
+      });
+      const asked = yield* Deferred.make<void>();
+      const stalled = new ReadableStream<Uint8Array>({
+        start() {
+          Deferred.doneUnsafe(asked, Effect.void);
+        },
+      });
+
+      const sending = yield* Effect.forkChild(
+        Effect.provide(
+          held.send({ method: HTTP_METHOD.GET, path: PATH }),
+          fakeHttpClientLayer(() =>
+            Promise.resolve(
+              new Response(stalled, {
+                status: 200,
+                headers: { "content-type": "application/json" },
+              }),
+            ),
+          ),
+        ),
+      );
+      yield* Deferred.await(asked);
+      yield* TestClock.adjust(Duration.millis(90_000));
+      const answer = yield* Fiber.join(sending);
+
+      assert.ok(!callAnswered(answer) && answer.fault === CALL_FAULT.NETWORK);
+      assert.equal(answer.errorName, "TimeoutError");
+    }),
+);

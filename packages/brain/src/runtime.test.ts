@@ -22,10 +22,12 @@ import {
   type ToolInvocation,
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Fiber, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Result } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { COMPACTION_POLICY } from "./compaction.js";
 import { ResponsesContextEngine } from "./context-engine.js";
+import { BRAIN_DEFAULTS } from "./defaults.js";
 import { UNKNOWN_ACTION_RESULT } from "./journal.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 
@@ -911,3 +913,79 @@ test("the runtime's compact is the only fold there is: a run never folds the con
     COMPACTION_POLICY.SUMMARY_OUTPUT_TOKENS,
   );
 });
+
+/** A model answering one call of `act`, then done. */
+function oneCallThenDone(model: FakeModel): void {
+  model.answers.push(
+    answered({
+      items: [
+        {
+          type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
+          call_id: "c1",
+          name: "act",
+          arguments: "{}",
+        },
+      ],
+      toolCalls: [toolCall("c1", "act")],
+    }),
+  );
+}
+
+it.effect(
+  "a tool that never answers is told as unknown once its deadline passes, and the run goes on",
+  () =>
+    Effect.gen(function* () {
+      const h = harness({ execute: () => Effect.never });
+      oneCallThenDone(h.model);
+      const events: RuntimeEvent[] = [];
+      const run = toolLoop(h.model).start(effectRequest(h.request(), events));
+      const running = yield* Effect.forkChild(run.done);
+      while (h.model.requests.length === 0) {
+        yield* Effect.promise(() => new Promise((resolve) => setImmediate(resolve)));
+      }
+      yield* TestClock.adjust(Duration.millis(BRAIN_DEFAULTS.TOOL_CALL_DEADLINE_MS));
+      assert.deepEqual(yield* Fiber.join(running), {
+        reason: RUN_END_REASON.COMPLETED,
+        text: "done",
+      });
+      const results = events.filter((event) => event.kind === RUNTIME_EVENT.TOOL_RESULT);
+      assert.equal(results.length, 1);
+      const result = results[0];
+      assert.ok(result?.kind === RUNTIME_EVENT.TOOL_RESULT);
+      assert.equal(result.result.status, "unknown");
+      assert.match(result.result.outputJson, /did not answer in time/);
+      assert.equal(h.model.requests.length, 2);
+    }),
+);
+
+it.effect(
+  "a cancel does not cut off a tool already out; one that still never answers is ended by its deadline, and the run ends cancelled",
+  () =>
+    Effect.gen(function* () {
+      const reached = yield* Deferred.make<void>();
+      const h = harness({
+        execute: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
+      });
+      oneCallThenDone(h.model);
+      const events: RuntimeEvent[] = [];
+      const run = toolLoop(h.model).start(effectRequest(h.request(), events));
+      const running = yield* Effect.forkChild(run.done);
+      yield* Deferred.await(reached);
+      h.abort.abort();
+      yield* TestClock.adjust(Duration.millis(BRAIN_DEFAULTS.TOOL_CALL_DEADLINE_MS - 1));
+      assert.equal(
+        events.filter((event) => event.kind === RUNTIME_EVENT.TOOL_RESULT).length,
+        0,
+        "the cancel alone ends no dispatched call",
+      );
+      yield* TestClock.adjust(Duration.millis(1));
+      assert.deepEqual(yield* Fiber.join(running), { reason: RUN_END_REASON.CANCELLED });
+      const results = events.filter((event) => event.kind === RUNTIME_EVENT.TOOL_RESULT);
+      assert.equal(results.length, 1);
+      const result = results[0];
+      assert.ok(result?.kind === RUNTIME_EVENT.TOOL_RESULT);
+      assert.equal(result.result.status, "unknown");
+      assert.match(result.result.outputJson, /did not answer in time/);
+      assert.equal(h.model.requests.length, 1);
+    }),
+);
