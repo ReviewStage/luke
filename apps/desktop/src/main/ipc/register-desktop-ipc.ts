@@ -148,7 +148,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    reportAppGuide: (_context, snapshot) => operator.reportGuide(snapshot),
+    reportAppGuide: (_context, snapshot) => run(operator.reportGuide(snapshot)),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),
     // The development trace is the host's: a tapped wire event crosses to its
