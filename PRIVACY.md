@@ -251,9 +251,9 @@ you delete your account, which removes it at once.
 iOS app, and in the Apple Watch app, and attach your name and email to that
 record. The counts are event names and values from a fixed list, and each one
 says which of the three apps it came from. A voice session's start is counted
-with which of three sources opened it — our voice service on your account,
-your own OpenAI key, or the accountless introduction — and never with a key
-or a session id. A count made while no account is signed in on the Mac — a
+with which of two sources opened it — our voice service on your account, or
+the accountless introduction — and never with a session id. A count made
+while no account is signed in on the Mac — a
 launch, or the introduction where it plays before you sign in — is not sent
 then: it waits in a file in Luke's own data folder, for at most seven days
 and at most two hundred counts, and is sent under the account that next
@@ -333,9 +333,10 @@ AES-256-GCM with a server-only secret. It is never returned to any caller:
 there is no endpoint that reads it back, and no code path that decrypts it
 for any purpose other than observing your sessions or carrying the actions
 you explicitly request through that provider. Every key is deleted alongside
-your account if you delete that. Your OpenAI key, if you use your own for
-voice, is a different key with no vault: it stays encrypted on this Mac as
-described below.
+your account if you delete that. Voice holds no key of yours at all: it runs
+through our service on your account, and a key of your own that an earlier
+version of Luke stored for it is removed from your Mac the next time Luke
+opens, without being read.
 
 **Scheduled observation of your Conductor sessions.** While you hold a synced
 Conductor key and have signed in within the last 7 days, our service reads
@@ -467,9 +468,10 @@ Send.
   billed seconds of each session once, beside which of your registered
   devices opened it (the Mac names its own device row on the handshake, and
   the service accepts that name only for a row your account holds), so a
-  briefing that device claims is spoken into that session and no other. With your own OpenAI key the Mac
-  reaches OpenAI directly and our service sees nothing of the session. One
-  such session opens on its own at every signed-in launch, after the first
+  briefing that device claims is spoken into that session and no other.
+  Every voice session is opened this way, through our service on your
+  account; the Mac never reaches OpenAI on a key of your own. One such
+  session opens on its own at every signed-in launch, after the first
   sign-in's arrival beat has played, so Luke can greet you: your Mac decides
   the greeting is owed and asks our service to speak it, and the service
   speaks a fixed script into which travels only the first word of the name
@@ -492,15 +494,13 @@ Send.
   you ask him something: it carries that conversation's working memory —
   the bounded transcript excerpts described above, the session fields, the 20
   most recent lines of your conversation, and the things he remembers about
-  you — directly to OpenAI on your own key if you entered one, or through our
-  own service on our key when you use Luke through your account. While you
-  are still speaking, a small model on the same key or service may be sent
+  you — through our own service on our key. While you
+  are still speaking, a small model on the same service may be sent
   the words you have said so far, the recent lines of the conversation, and
   the session fields, to decide whether the answer will need one session's
   recent messages or one notebook search; that read, if it is made, is the
   same read a turn would make, is held only in memory for thirty seconds,
   and a short summary of it may be sent to the voice session as data.
-  Either way
   OpenAI stores the request and its reply under its own retention policy, and
   our service performs one model call per request and stores and logs none of
   the request, the reply, or the encrypted reasoning that travels in it; the
@@ -600,7 +600,7 @@ Your settings, local provider API keys, and calendar access stay on your
 Mac, and so do the workspace files of a Luke whose judgment runs on your Mac;
 that Luke's conversation and working memory are held in memory while he runs
 and written nowhere.
-Your OpenAI key and calendar access are encrypted in the macOS Keychain. Your
+Your calendar access is encrypted in the macOS Keychain. Your
 Conductor key, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
 encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
@@ -612,7 +612,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 ## Your choices
 
 - Disconnect any provider or calendar to stop it being read.
-- Delete your OpenAI key to turn voice off.
+- Sign out of your Luke account to turn voice off.
 - Delete your Conductor key from its row in Settings, which removes it from
   our vault. Keys are also deleted when you delete your account.
 - Clear the Conversation tab to have the service mark your account's
