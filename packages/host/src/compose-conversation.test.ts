@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { ACTION_OUTPUT_STATUS } from "@sidecar/actions";
 import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import {
   CONVERSATION_RATE_STATUS,
@@ -161,6 +162,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
   const reports: string[] = [];
   const client = fakeClient();
   const counted: { name: string; properties: WireValue }[] = [];
+  let refreshes = 0;
   const composer = composeConversation({
     kernel: {
       runMode: { sendsNetwork: options.sendsNetwork ?? true },
@@ -175,6 +177,9 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
     },
     account: { capabilitiesActive: () => options.active ?? true },
     devices: { deviceId: () => options.deviceId },
+    refreshRoster: Effect.sync(() => {
+      refreshes += 1;
+    }),
     heads: client,
     client,
   });
@@ -186,7 +191,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
         // SAFETY: the composer carries its own snapshot; the test reads it back as the domain type.
         return event.payload as unknown as ConversationViewSnapshot;
       });
-  return { composer, client, emitted, reports, views, counted };
+  return { composer, client, emitted, reports, views, counted, refreshes: () => refreshes };
 }
 
 async function clear(composer: ReturnType<typeof composeConversation>) {
@@ -266,6 +271,49 @@ test("an unreadable row is surfaced on the snapshot and never drawn as an empty 
   // The thread stands as it was last read.
   assert.equal(latest?.groups.length, 1);
   assert.equal(composer.snapshot().unreadable?.seq, 7);
+});
+
+test("an accepted create_workspace result with a created session pokes a roster refresh", async () => {
+  const { composer, client, refreshes } = harness();
+  const answer = messagesAnswer("hello");
+  const [group] = answer.groups;
+  const [ask, reply] = group?.messages ?? [];
+  assert.ok(group && ask && reply);
+  client.messagesAnswer = ok({
+    ...answer,
+    groups: [
+      {
+        ...group,
+        messages: [
+          ask,
+          {
+            ...reply,
+            message: {
+              ...reply.message,
+              parts: [
+                {
+                  type: "tool-create_workspace",
+                  toolCallId: "call_workspace_1",
+                  state: "output-available",
+                  input: { provider_id: "conductor", name: "Checkout" },
+                  output: {
+                    status: ACTION_OUTPUT_STATUS.ACCEPTED,
+                    target: { providerId: "conductor" },
+                    createdSession: {
+                      providerId: "conductor",
+                      providerSessionId: "workspace-created",
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  });
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(refreshes(), 1);
 });
 
 test("a page this build's registry refuses is named on the snapshot like a row the service could not read, and paging stops at it", async () => {

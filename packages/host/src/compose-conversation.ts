@@ -1,3 +1,4 @@
+import { ACTION_OUTPUT, ACTION_OUTPUT_STATUS, ACTIONS } from "@sidecar/actions";
 import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
 import {
@@ -24,10 +25,12 @@ import { ObservationLoop } from "@sidecar/runtime";
 import type {
   ConversationViewMessage,
   ConversationViewSnapshot,
+  StoredToolPart,
   UnreadableRow,
 } from "@sidecar/session";
+import { isStoredToolPart } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
-import { unparsedWire } from "@sidecar/wire";
+import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Effect, Result } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
@@ -90,6 +93,8 @@ export interface ConversationDependencies {
   settings: Pick<SettingsComposer, "recordProductEvent">;
   account: Pick<AccountComposer, "capabilitiesActive">;
   devices: Pick<DevicesComposer, "deviceId">;
+  /** A created workspace becomes openable only after the roster has observed it. */
+  refreshRoster: Effect.Effect<void>;
   heads: ConversationHeadsClient;
   client: ConversationReadsClient;
 }
@@ -135,7 +140,8 @@ function rateAnswer(status: ConversationRateStatus) {
  * from the caller, and never the message or its id.
  */
 export function composeConversation(dependencies: ConversationDependencies): ConversationComposer {
-  const { kernel, settings, account, devices, heads, client, onOpenOffers } = dependencies;
+  const { kernel, settings, account, devices, refreshRoster, heads, client, onOpenOffers } =
+    dependencies;
   const { runMode, report } = kernel;
 
   const registry = catalogToolSet();
@@ -212,6 +218,40 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     return { page: { conversations: answer.conversations, groups, next: answer.next } };
   });
 
+  function createdWorkspaceAnswer(part: StoredToolPart) {
+    if (
+      part.state !== "output-available" ||
+      part.type !== `tool-${ACTIONS.CREATE_WORKSPACE.name}`
+    ) {
+      return undefined;
+    }
+    // SAFETY: a stored tool part's output is JSON the service already stored; the action output
+    // schema below is the boundary that re-reads it.
+    return Result.getOrUndefined(
+      readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(
+        unparsedWire(part.output as WireBoundaryInput),
+      ),
+    );
+  }
+
+  function pageCreatedWorkspaceNeedsRefresh(page: ReadMessagesPage): boolean {
+    for (const group of page.groups) {
+      for (const message of group.messages) {
+        for (const part of message.message.parts) {
+          if (!isStoredToolPart(part)) continue;
+          const answer = createdWorkspaceAnswer(part);
+          if (
+            answer?.status === ACTION_OUTPUT_STATUS.ACCEPTED &&
+            answer.createdSession !== undefined
+          ) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  }
+
   /**
    * Pages one resource from the cursor held to its end, under the poll's
    * bound: each page is applied only while the poll still owns the loop, and
@@ -261,6 +301,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
             return false;
           }
           sync.applyMessages(read.page);
+          if (pageCreatedWorkspaceNeedsRefresh(read.page)) yield* refreshRoster;
           return true;
         }),
     );
