@@ -2,268 +2,425 @@ import Foundation
 import LukeKit
 import Observation
 
-/// Where a spoken action asked to take the developer once Luke has finished
-/// saying so: a session's own screen, or the list narrowed as asked. Held
-/// until the reply settles, because moving the page mid-sentence would close
-/// the call that is still speaking.
-enum WatchPendingNavigation {
-    case open(RosterSession)
-    case list(VoiceAsks.SessionListAsk)
-}
-
-/// Observable session state for the watch voice screen. Drives one
-/// RealtimeSession carrying the same tools the phone's conversation does,
-/// each call dispatched through the shared gauntlet in LukeKit against the
-/// roster the watch list draws. The conversation itself is not here: it lives
-/// in the app-scoped VoiceConversationThread this model records into, so the
-/// words survive a swipe to the sessions page while the call does not.
+/// The watch's voice call on the hosted exchange, over the service's audio
+/// route: `HostedVoiceSessionClient.createAudio` opens the session under the
+/// bearer the phone handed over and the watch's own device row, the service
+/// holds the session's primary socket to OpenAI itself, the watch's PCM goes
+/// up as `session.input_audio.append` and Luke's comes down as
+/// `session.output_audio.delta`, and the service's exchange and the hosted
+/// brain answer every ask. The policy is the phone's `LiveCall` on the
+/// desktop's terms, less what a primary socket cannot do: there is no attach,
+/// so a call ends when the service's function invocation does, the screen
+/// says so, and the next press opens a new call. Nothing here appends to the
+/// model, no tool call reaches the wrist, and no text of the watch's
+/// composing leaves it; the record is the voice writer's, read back by the
+/// Conversation under the controls.
 ///
-/// The session is not minted until the developer presses the talk button
-/// (beginTurn). prepare is called on view appear to store the credential
-/// reference and the action context without opening any connection.
+/// The talk button is held to talk: its press opens a session if none stands
+/// and streams the microphone for exactly as long as the press lasts. Between
+/// presses the watch streams silence, because the conversations guide asks
+/// that input audio keep running through silence on a WebSocket, and it is
+/// that silence the model reads the end of the developer's turn from.
 @Observable
 @MainActor
 final class WatchVoiceSessionModel {
-    var status: RealtimeStatus = .idle
-    var errorMessage: String?
-    // Read at each mint, so the watch uses the latest local voice settings.
-    var voice = RealtimeVoice.default
-    var speed = RealtimeVoiceSpeed.default
-    var pendingNavigation: WatchPendingNavigation?
-    /// The tools the service minted the latest call with, as the server
-    /// confirmed them at channel open; nil until a call has connected.
-    private(set) var mintedTools: [String]?
-    /// Where a workspace can be created, fetched beside the mint so the
-    /// conversation is told it at channel open and a creation ask can be
-    /// validated against it. Nil until an answer lands, and left nil when
-    /// the fetch fails, so the conversation is told nothing rather than
-    /// told there is nowhere.
-    private(set) var projects: ProjectsAnswer?
-    /// The New Workspace choices this watch remembers, read at the moment a
-    /// call opens or an action lands.
-    let defaults = WorkspaceCreationDefaults()
+    /// The desktop's `HOSTED_VOICE_UNAVAILABLE_NOTE`, the line the phone shows for the same refusal.
+    static let hostedUnavailableNote = "Voice is temporarily unavailable. Try again later."
+    /// The watch cannot renew a bearer itself, so a refused one is the phone's to replace.
+    static let signedOutNote = "Open Luke on your iPhone"
+    /// The peer's own word on the phone for every refusal the service says no more about.
+    static let refusedNote = "Luke could not open a voice session."
+    static let audioNote = "Couldn't start audio on the watch."
+    static let microphoneNote = "The microphone isn't available."
+    /// The clear end of a call the function's cap or the network ended, as distinct from one the developer or the service closed.
+    static let endedNote = "The call ended. Hold to start a new one."
 
-    private var accountSession: WatchAccountSession?
-    private var thread: VoiceConversationThread?
-    private var makeActionContext: (@MainActor () -> VoiceActionContext)?
-    private var session: RealtimeSession?
-    private var connectingForTurn = false
-    private var endTurnAfterConnect = false
-    private var connectTask: Task<Void, Never>?
+    /// `SPEAKING_HANGOVER_MS`: how long after Luke's last audio he still counts as speaking, so a pause between two sentences is not an exchange ending.
+    static let speakingHangover: Duration = .milliseconds(1500)
+    /// `LIVE_IDLE_WINDOW_MS`: how long a quiet call stands before it reports itself idle; the service decides the close.
+    static let idleWindow: Duration = .milliseconds(VoiceServiceContract.liveIdleWindowMs)
+    /// How much silence one frame between presses carries, in milliseconds.
+    static let silenceFrameMs = 100
 
-    func prepare(
-        accountSession: WatchAccountSession,
-        thread: VoiceConversationThread,
-        actionContext: @escaping @MainActor () -> VoiceActionContext
-    ) {
-        self.accountSession = accountSession
-        self.thread = thread
-        makeActionContext = actionContext
+    private(set) var status: LiveStatus = .idle
+    /// Why the last open failed or the last call ended, in words the screen can show; cleared by the next press.
+    private(set) var errorMessage: String?
+    /// Luke's words for the reply under way, from the relayed transcript deltas; cleared by the next press.
+    private(set) var caption: String?
+    /// The voice the next session is created in, the developer's synced choice.
+    var voice: LiveVoice = .default
+
+    @ObservationIgnored private var client: HostedVoiceSessionClient?
+    @ObservationIgnored private var session: HostedAudioSession?
+    @ObservationIgnored private var sessionReader: Task<Void, Never>?
+    /// The open still under way, so a second press reads its answer rather than opening a session of its own.
+    @ObservationIgnored private var opening: Task<HostedAudioSession?, Never>?
+    /// Counts the opens, so a session the service answers after a hang-up is known for what it is.
+    @ObservationIgnored private var openings = 0
+    @ObservationIgnored private var pressHeld = false
+    @ObservationIgnored private var capturer: PCMAudioCapturer?
+    @ObservationIgnored private var captureTask: Task<Void, Never>?
+    @ObservationIgnored private var silenceTask: Task<Void, Never>?
+    @ObservationIgnored private var player: PCMAudioPlayer?
+    /// When the audio queued so far will have played, so the status follows what the wrist hears rather than what arrived.
+    @ObservationIgnored private var playbackEndsAt: ContinuousClock.Instant?
+    @ObservationIgnored private var speakingWatch: Task<Void, Never>?
+    @ObservationIgnored private var idleTimer: Task<Void, Never>?
+    @ObservationIgnored private var idleReported = false
+    @ObservationIgnored private var closing = false
+    @ObservationIgnored private var sessionClosedAnnounced = false
+
+    /// The account the calls are opened under; read at each open through the client's token discipline.
+    func prepare(accountSession: WatchAccountSession) {
+        client = HostedVoiceSessionClient(
+            serviceURL: AccountConstants.serviceURL,
+            session: accountSession,
+            deviceId: { DeviceRegistrar.storedDeviceId() },
+            opener: WatchWebSocketOpener()
+        )
     }
 
-    private func connect(startWithTurn: Bool) async {
-        guard session == nil, let accountSession else { return }
+    // MARK: - Verbs
+
+    /// The talk button going down. Against no session it opens one; against a
+    /// standing one it opens the microphone. A hold that ended while the
+    /// session was opening opens no microphone.
+    func beginTurn() {
+        pressHeld = true
         errorMessage = nil
+        caption = nil
+        noteActivity()
+        Task { [weak self] in
+            guard let self, let session = await ensureSession() else { return }
+            if pressHeld, self.session === session { startCapturing(into: session) }
+        }
+    }
+
+    /// The talk button coming up: the microphone closes, and the silence the model reads the turn's end from follows.
+    func endTurn() {
+        pressHeld = false
+        stopCapturing()
+        noteActivity()
+        refreshStatus()
+    }
+
+    /// The stop control: the service is told to stop Luke through
+    /// `session.stop`, which it turns into the instruction on its own socket,
+    /// and what of his reply the wrist had not yet played is dropped, since
+    /// the developer has said they have heard enough.
+    func stopSpeaking() {
+        guard let session else { return }
+        session.stopSpeaking()
+        flushPlayback()
+        noteActivity()
+    }
+
+    /// The hang-up, taken when the screen goes or the voice changes:
+    /// `session.close` goes as the one Live client event the route forwards
+    /// from the watch, the session answers `session.closed`, and the service
+    /// ends the socket normally. The socket is let go on the guide's bound if
+    /// that close never comes back, or never got out: a send waits on a path
+    /// for as long as the path is down, so the bound is on the whole of the
+    /// hang-up and not on the answer alone. An open still under way is
+    /// disowned: the session it lands is closed the same way rather than
+    /// adopted.
+    func hangUp() {
+        pressHeld = false
+        stopCapturing()
+        flushPlayback()
+        openings += 1
+        guard let session, !closing else {
+            if session == nil { endCall(final: .idle) }
+            return
+        }
+        closing = true
+        status = .closing
+        session.hangUp()
+        Task { [weak self] in
+            try? await Task.sleep(for: LivePeerBounds.sessionClose)
+            guard let self, self.session === session else { return }
+            session.close()
+        }
+    }
+
+    /// The voice is fixed when a session is created, so a changed voice ends the call that stands and lets the next press open one in the new voice.
+    func changeVoice(_ newVoice: LiveVoice) {
+        guard newVoice != voice else { return }
+        voice = newVoice
+        if session != nil || opening != nil { hangUp() }
+    }
+
+    // MARK: - The open
+
+    /// The session standing or coming up, or a new one opened now. One opening at a time.
+    private func ensureSession() async -> HostedAudioSession? {
+        if let opening { return await opening.value }
+        if let session { return session }
+        guard let client else { return nil }
+        openings += 1
+        let thisOpening = openings
+        status = .connecting
+        let task = Task { [weak self] () -> HostedAudioSession? in
+            guard let self else { return nil }
+            return await open(client: client, opening: thisOpening)
+        }
+        opening = task
+        return await task.value
+    }
+
+    /// The audio session goes active before the socket opens, since watchOS
+    /// grants the socket to an active audio session alone, and stays active
+    /// until the call ends. The service's `session.created` is the session
+    /// started: the door read `session.started` itself, so the call stands
+    /// from the answer. An attempt a hang-up disowned clears nothing on its
+    /// way out, since a newer press may hold an attempt of its own by then.
+    private func open(client: HostedVoiceSessionClient, opening thisOpening: Int) async -> HostedAudioSession? {
+        defer { if thisOpening == openings { opening = nil } }
         do {
             try await WatchVoiceAudioSession.activate()
         } catch {
-            errorMessage = "Couldn't start audio on the watch."
-            status = .idle
-            return
+            if thisOpening == openings, !closing { failed(Self.audioNote) }
+            return nil
         }
-        // stop() may have run while activation was in flight: it has already
-        // cleared the account and deactivated, and the activation that just
-        // landed put the session back up. It goes down again here only if no
-        // newer press is holding or opening a call, since the audio session
-        // is shared and taking it down would refuse that call's socket.
-        guard !Task.isCancelled, self.accountSession != nil, session == nil else {
-            if session == nil, !connectingForTurn {
-                WatchVoiceAudioSession.deactivate()
+        let outcome = await client.createAudio(voice: voice)
+        guard thisOpening == openings, !closing else {
+            // A hang-up landed while the service was answering: the session it created is ended the way a standing one is.
+            if case .opened(let session) = outcome {
+                session.hangUp()
+                Task {
+                    await session.settleSends()
+                    session.close()
+                }
             }
-            return
+            if session == nil, opening == nil { WatchVoiceAudioSession.deactivate() }
+            return nil
         }
-        let mintVoice = voice.rawValue
-        let mintSpeed = speed.multiplier
+        switch outcome {
+        case .opened(let session):
+            self.session = session
+            sessionClosedAnnounced = false
+            listen(to: session)
+            streamSilence(into: session)
+            armIdle()
+            refreshStatus()
+            return session
+        case .refused(let refusal):
+            WatchVoiceAudioSession.deactivate()
+            failed(Self.note(for: refusal))
+            return nil
+        }
+    }
 
-        let opts = RealtimeSessionOptions(
-            requestConnection: { [weak accountSession, weak self] in
-                guard let accountSession else { throw AccountSessionError.signedOut }
-                let token = try await accountSession.validAccessToken()
-                // Fetched beside the mint rather than after it: the projects
-                // item is sent at channel open, and the ephemeral key's
-                // minute is not to be spent waiting on a second round trip.
-                async let projects = try? ProjectsClient(
-                    serviceURL: AccountConstants.serviceURL, http: WatchNetwork.session
-                )
-                .projects(bearerToken: token)
-                let connection: VoiceConnection
-                do {
-                    connection = try await VoiceMintClient(
-                        baseURL: AccountConstants.serviceURL, http: WatchNetwork.session
-                    )
-                    .mint(
-                        accessToken: token,
-                        voice: mintVoice,
-                        speed: mintSpeed
-                    )
-                } catch let error as URLError {
-                    throw WatchNetworkFailure(error)
+    /// The service's word on a refusal, in the lines the phone shows for the
+    /// same ones. The watch's socket cannot read the status of a refused
+    /// upgrade, so a 401, 403, or 503 the service states in the status alone
+    /// arrives as the transport failing and reads as Luke not reached.
+    static func note(for refusal: HostedVoiceSessionRefusal) -> String {
+        switch refusal {
+        case .notSignedIn:
+            signedOutNote
+        case .quotaExhausted(let quota):
+            quota.map { "\(hostedUnavailableNote) \(allowance($0))" } ?? hostedUnavailableNote
+        case .hostedUnavailable:
+            hostedUnavailableNote
+        case .networkError:
+            WatchNetwork.unreachable
+        case .httpError, .refused, .malformedResponse:
+            refusedNote
+        }
+    }
+
+    /// The allowance as the service counts it and the instant it resets.
+    static func allowance(_ quota: HostedQuota) -> String {
+        let resets = Date(timeIntervalSince1970: quota.resetsAt / 1000)
+        return "Your allowance is spent (\(Int(quota.used)) of \(Int(quota.limit))); it resets \(resets.formatted(date: .abbreviated, time: .shortened))."
+    }
+
+    private func failed(_ note: String) {
+        errorMessage = note
+        status = .failed
+    }
+
+    // MARK: - Audio up
+
+    private func startCapturing(into session: HostedAudioSession) {
+        guard capturer == nil else { return }
+        let capturer = PCMAudioCapturer(policy: .hostOwned, sampleRate: session.format.rate)
+        self.capturer = capturer
+        captureTask = Task { [weak self] in
+            do {
+                let stream = try capturer.start()
+                for await chunk in stream {
+                    guard let self, !Task.isCancelled else { return }
+                    session.appendAudio(chunk)
                 }
-                if let answer = await projects {
-                    await MainActor.run { [weak self] in self?.projects = answer }
-                }
-                return connection
-            },
-            onStatus: { [weak self] newStatus in
-                self?.status = newStatus
-                // An idle timeout releases the socket so the next button press
-                // remints rather than sending on a stale connection. A mint
-                // that failed publishes idle without closing, leaving the
-                // capturer the press started still running, so the session is
-                // closed here first: closing one already closed changes
-                // nothing, and the audio session goes down only once the
-                // engines have stopped.
-                if newStatus == .idle {
-                    self?.session?.close()
-                    self?.session = nil
-                    WatchVoiceAudioSession.deactivate()
-                }
-            },
-            onCaption: { [weak self] text in self?.thread?.recordCaption(text) },
-            onSpokenAsk: { [weak self] text in self?.thread?.recordSpokenAsk(text) },
-            onError: { [weak self, weak accountSession] message in
+            } catch {
+                guard let self, !Task.isCancelled else { return }
+                stopCapturing()
+                pressHeld = false
+                errorMessage = Self.microphoneNote
+                refreshStatus()
+            }
+        }
+        refreshStatus()
+    }
+
+    private func stopCapturing() {
+        captureTask?.cancel()
+        captureTask = nil
+        capturer?.stop()
+        capturer = nil
+    }
+
+    /// Silence in the session's format whenever the microphone is closed, on a steady cadence, for as long as the call stands.
+    private func streamSilence(into session: HostedAudioSession) {
+        let frame = [Int16](repeating: 0, count: session.format.rate * Self.silenceFrameMs / 1000)
+        silenceTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(Self.silenceFrameMs))
+                guard !Task.isCancelled, let self else { return }
+                if capturer == nil { session.appendAudio(frame) }
+            }
+        }
+    }
+
+    // MARK: - Audio down
+
+    /// Everything the session tells the watch. Luke's audio plays as it
+    /// arrives; the captions and the developer's own transcript are activity;
+    /// the socket's end for good is the call's end.
+    private func listen(to session: HostedAudioSession) {
+        sessionReader = Task { [weak self] in
+            for await event in session.events {
                 guard let self else { return }
-                // Surface a credential failure as an actionable prompt rather
-                // than a generic error: the watch can't refresh tokens itself.
-                if accountSession?.state == .signedOut {
-                    self.errorMessage = "Open Luke on your iPhone"
-                } else {
-                    self.errorMessage = message ?? "Connection error"
+                switch event {
+                case .live(let frame):
+                    receive(frame)
+                case .spoken:
+                    noteActivity()
+                case .closed:
+                    sessionEnded()
+                    return
                 }
-            },
-            onRecoverableError: { [weak self] message in self?.errorMessage = message },
-            onSessionTools: { [weak self] names in self?.mintedTools = names },
-            dispatchToolCall: { [weak self] name, arguments, _ in
-                guard let self, let makeActionContext = self.makeActionContext else {
-                    return #"{"error":"not authorized"}"#
-                }
-                return await dispatchVoiceToolCall(
-                    name: name,
-                    arguments: arguments,
-                    context: makeActionContext()
-                )
-            },
-            contextItems: { [weak self] in
-                guard let self else { return [] }
-                var items: [VoiceContextItem] = []
-                // Conversation before projects, the desktop's flush order.
-                if let thread = self.thread,
-                   let conversation = ConversationContext.item(messages: thread.messages)
-                {
-                    items.append(conversation)
-                }
-                if let projects = self.projects {
-                    items.append(
-                        WorkspaceProjectsContext.item(
-                            answer: projects,
-                            defaultProviderId: self.defaults.lastProviderId,
-                            defaultProjectIds: self.defaults.lastProjectIds,
-                            defaultAgentDefaults: self.defaults.agentDefaults
-                        )
-                    )
-                }
-                return items
-            },
-            makeWebSocket: { url, ephemeralKey in
-                WatchWebSocketChannel(url: url, ephemeralKey: ephemeralKey)
-            },
-            makeAudioCapturer: { PCMAudioCapturer(policy: .hostOwned) },
-            makeAudioPlayer: { PCMAudioPlayer(policy: .hostOwned) }
-        )
-        let s = RealtimeSession(options: opts)
-        session = s
-        await s.connect(startWithTurn: startWithTurn)
-    }
-
-    func stop() {
-        connectTask?.cancel()
-        connectTask = nil
-        connectingForTurn = false
-        endTurnAfterConnect = false
-        accountSession = nil
-        thread = nil
-        makeActionContext = nil
-        // The pending navigation is left standing: closing publishes the idle
-        // edge the screen performs it on, so an open accepted mid-reply still
-        // lands when the developer swipes away before Luke finishes saying
-        // so. Only a new press supersedes it.
-        session?.close()
-        session = nil
-        WatchVoiceAudioSession.deactivate()
-    }
-
-    func beginTurn() {
-        errorMessage = nil
-        // A new press supersedes what the last reply was about to do: an open
-        // the developer talked over is an open they no longer want taken.
-        pendingNavigation = nil
-        thread?.beginTurn()
-        if let session {
-            session.beginTurn()
-            return
-        }
-        if connectingForTurn {
-            // A re-press while the mint is in flight retracts the earlier release
-            // so the turn is not immediately ended when the connection lands.
-            endTurnAfterConnect = false
-            return
-        }
-        // No existing session: mint a new one and begin the turn once connected.
-        guard accountSession != nil else { return }
-        connectingForTurn = true
-        endTurnAfterConnect = false
-        status = .connecting
-        connectTask = Task { [weak self] in
-            await self?.connect(startWithTurn: true)
-            guard let self, !Task.isCancelled, self.connectingForTurn else { return }
-            self.connectingForTurn = false
-            self.connectTask = nil
-            if self.endTurnAfterConnect {
-                self.endTurnAfterConnect = false
-                self.session?.endTurn()
             }
         }
     }
 
-    func endTurn() {
-        if connectingForTurn {
-            endTurnAfterConnect = true
-            session?.endTurn()
-        } else {
-            session?.endTurn()
+    private func receive(_ frame: LiveServerEventFrame) {
+        if let samples = PCM16Audio.samples(in: frame) {
+            play(samples)
+            noteActivity()
+            return
+        }
+        guard let event = LiveServerEvent(json: frame.payload) else { return }
+        switch event {
+        case .outputTranscriptDelta(let delta):
+            caption = (caption ?? "") + delta.delta
+            noteActivity()
+        case .inputTranscriptDelta:
+            noteActivity()
+        case .sessionClosed:
+            sessionClosedAnnounced = true
+        case .sessionStarted, .inputAudioMuted, .inputAudioUnmuted, .usageUpdated, .error, .info:
+            break
         }
     }
 
-    /// Voice is fixed at mint time. The watch opens sockets only when the
-    /// developer presses, so a changed voice closes the current one and lets
-    /// the next press mint with the new choice.
-    func changeVoice(_ newVoice: RealtimeVoice) {
-        guard newVoice != voice else { return }
-        voice = newVoice
-        guard session != nil || connectTask != nil else { return }
-        connectTask?.cancel()
-        connectTask = nil
-        connectingForTurn = false
-        endTurnAfterConnect = false
-        session?.close()
-        session = nil
-        WatchVoiceAudioSession.deactivate()
-        status = .idle
+    /// Queues one chunk of Luke's voice and moves the moment the queue runs
+    /// dry, which is what the speaking status follows: GPT Live emits no
+    /// output-audio-done event, so the playback queue is the one thing that
+    /// says which received audio has played.
+    private func play(_ samples: [Int16]) {
+        guard let session, !samples.isEmpty else { return }
+        if player == nil { player = PCMAudioPlayer(policy: .hostOwned, sampleRate: session.format.rate) }
+        player?.enqueue(samples)
+        let now = ContinuousClock.now
+        let start = max(playbackEndsAt ?? now, now)
+        playbackEndsAt = start + .seconds(Double(samples.count) / Double(session.format.rate))
+        watchPlayback()
     }
 
-    func changeSpeed(_ newSpeed: RealtimeVoiceSpeed) {
-        guard newSpeed != speed else { return }
-        speed = newSpeed
-        session?.applySpeed(newSpeed.multiplier)
+    private func watchPlayback() {
+        speakingWatch?.cancel()
+        guard let endsAt = playbackEndsAt else { return }
+        refreshStatus()
+        speakingWatch = Task { [weak self] in
+            try? await Task.sleep(until: endsAt + Self.speakingHangover, clock: .continuous)
+            guard !Task.isCancelled, let self else { return }
+            playbackEndsAt = nil
+            speakingWatch = nil
+            refreshStatus()
+        }
+    }
+
+    private func flushPlayback() {
+        player?.stop()
+        player = nil
+        playbackEndsAt = nil
+        speakingWatch?.cancel()
+        speakingWatch = nil
+        refreshStatus()
+    }
+
+    // MARK: - Idle
+
+    /// Either speaker heard, or the button moved: the idle window starts over, and an idle already reported is taken back.
+    private func noteActivity() {
+        guard let session else { return }
+        if idleReported {
+            idleReported = false
+            session.reportActivity(idle: false)
+        }
+        armIdle()
+    }
+
+    private func armIdle() {
+        idleTimer?.cancel()
+        idleTimer = Task { [weak self] in
+            try? await Task.sleep(for: Self.idleWindow)
+            guard !Task.isCancelled, let self, let session, !idleReported else { return }
+            idleReported = true
+            session.reportActivity(idle: true)
+        }
+    }
+
+    // MARK: - State
+
+    private func refreshStatus() {
+        guard session != nil, !closing else { return }
+        status = playbackEndsAt != nil ? .speaking : capturer != nil ? .listening : .muted
+    }
+
+    /// The socket ended for good. The session closing on its own word, or
+    /// the developer's hang-up, is a plain end; the function's cap or a
+    /// dropped path, which announce nothing, are said so the wrist knows the
+    /// call is over and a press starts another.
+    private func sessionEnded() {
+        let announced = sessionClosedAnnounced
+        let hungUp = closing
+        endCall(final: .idle)
+        if !announced, !hungUp { errorMessage = Self.endedNote }
+    }
+
+    /// Every end of the call, however it came: the timers and the audio go,
+    /// the socket is let go of, and the audio session goes down only now,
+    /// because taking it down under a standing socket would cut the socket.
+    private func endCall(final: LiveStatus) {
+        idleTimer?.cancel()
+        idleTimer = nil
+        idleReported = false
+        stopCapturing()
+        flushPlayback()
+        silenceTask?.cancel()
+        silenceTask = nil
+        sessionReader?.cancel()
+        sessionReader = nil
+        session?.close()
+        session = nil
+        opening = nil
+        closing = false
+        sessionClosedAnnounced = false
+        WatchVoiceAudioSession.deactivate()
+        status = final
     }
 }

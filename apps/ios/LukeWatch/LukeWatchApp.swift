@@ -7,7 +7,6 @@ struct LukeWatchApp: App {
     @State private var rosterStore: WatchRosterStore
     @State private var events: ProductEventSender
     @State private var navigation = WatchNavigation()
-    @State private var conversation = VoiceConversationThread()
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the delegate must not be deallocated.
     private let connectivity: WatchConnectivityReceiver
@@ -59,7 +58,6 @@ struct LukeWatchApp: App {
                 .environment(rosterStore)
                 .environment(events)
                 .environment(navigation)
-                .environment(conversation)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background { events.flush() }

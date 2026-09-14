@@ -6,9 +6,10 @@ import AVFoundation
 /// WebSocket as low-level networking and grants it only to an audio streaming
 /// app while its audio session is active (TN3135; WWDC 2019 session 716).
 /// The watch app declares the audio background mode for that reason, and
-/// this is the other half: the session goes active before the Realtime
-/// socket opens and stays active until the call closes. A capturer or player
-/// that deactivated it between turns would cut the socket under the call.
+/// this is the other half: the session goes active before the voice socket
+/// to Luke's service opens and stays active until the call closes. A capturer
+/// or player that deactivated it between turns would cut the socket under the
+/// call.
 ///
 /// Activation is the asynchronous call watchOS added for itself. The
 /// synchronous `setActive(true)` returns without error on a watch and does

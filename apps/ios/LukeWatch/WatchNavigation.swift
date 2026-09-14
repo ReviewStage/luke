@@ -8,9 +8,9 @@ enum WatchPage: Hashable {
 }
 
 /// Where the watch stands: the page showing, and the session screen pushed
-/// over the list. Held at app scope rather than inside the pages because an
-/// open or a list asked of Luke in conversation lands on the sessions page
-/// the way a row press does, and the voice page has to be able to reach it.
+/// over the list. Held at app scope rather than inside the pages because a
+/// session named in the Conversation opens on the sessions page the way a
+/// row press does, and the voice page has to be able to reach it.
 @MainActor
 @Observable
 final class WatchNavigation {
@@ -20,12 +20,6 @@ final class WatchNavigation {
     /// Pushes a session's own screen over the list, the same press a row takes.
     func open(_ session: RosterSession) {
         path = [session]
-        page = .sessions
-    }
-
-    /// Shows the list itself, with nothing pushed over it.
-    func showList() {
-        path.removeAll()
         page = .sessions
     }
 

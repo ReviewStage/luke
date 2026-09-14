@@ -4,8 +4,8 @@ import Network
 /// The one URLSession every hosted read and act on the watch travels on.
 ///
 /// HTTP through URLSession is the networking watchOS opens to every app; the
-/// Realtime socket is the exception, and `WatchVoiceAudioSession` says on
-/// what terms. watchOS brings the path up on demand and chooses it itself:
+/// voice socket is the exception, and `WatchVoiceAudioSession` says on what
+/// terms. watchOS brings the path up on demand and chooses it itself:
 /// the paired iPhone's connection, tunneled over Bluetooth, whenever the
 /// phone is in range; this watch's own Wi-Fi or cellular only when it is not.
 /// What an app decides is the moment before a path is up: `URLSession.shared`

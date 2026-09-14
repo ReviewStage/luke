@@ -277,39 +277,32 @@ from the moment they open; they stand only while the call does.
 Gone with the move, by ruling (LUKE-212) or by the route's rule: the
 composer and the keyboard button (Luke is voice only on every device), the
 phone-side tool dispatch (`dispatchVoiceToolCall`, `VoiceAsks`'s roster
-validation, and the armed-turn discipline stay in `LukeKit` for the watch
-alone), and the two device-local tools the phone had, `open_session` and
+validation, and the armed-turn discipline stay in `LukeKit` until LUKE-219
+deletes them; the watch dispatches nothing either, since its call moved with
+LUKE-224), and the two device-local tools the phone had, `open_session` and
 `show_panel`, which have no service counterpart: Luke can no longer open a
 session's screen or narrow the list from a spoken ask on the phone. The
 legacy path's files (`RealtimeSession`, `VoiceMintClient`,
 `VoiceConversationThread`, `ConversationContext`, `WorkspaceProjectsContext`,
-`VoiceToolAvailability`) stay in `LukeKit` for the watch until it moves
-(LUKE-224) and are the phone's to delete then (LUKE-219).
+`VoiceToolAvailability`) have no caller on either device now that the watch
+has moved too (LUKE-224), and are LUKE-219's to delete.
 
 ## Voice actions
 
-The watch app's hold-to-talk screen carries the same eight tools. The
-dispatcher they run through, `dispatchVoiceToolCall` in `LukeKit`, is shared
-with the phone, so a call is validated the same way — against the roster the
-watch's sessions page draws and the projects answer fetched beside the mint —
-and sent to the same hosted action endpoints. The two that land on a screen land
-on the watch's own: `open_session` swipes to the sessions page and pushes the
-session's screen once Luke's reply has finished, and `show_panel` narrows,
-sorts, or searches the watch list the same way, drawing a Show All row above
-the rows a narrowing leaves so a list Luke narrowed never hides a session
-without saying so. The watch voice page also has the phone's Settings pattern:
-a gear button opens voice and speed controls, plus the Debug tool list read
-from the watch call and roster. The voice chosen there is the phone's own,
-kept equal through the settings sync described under Watch below, so the
-wrist is a quick way to change it and never a second copy; the speed is the
-watch's alone, since the phone's Live sessions have none.
+The watch's hold-to-talk screen carries none of these: its call runs on the
+hosted exchange, described under Watch below, where the service's exchange
+decides every action and no tool call reaches the wrist. Nothing on either
+device dispatches a tool any more; `dispatchVoiceToolCall`, `VoiceAsks`'s
+roster validation, and the context items stay in `LukeKit` only until the
+legacy path is deleted (LUKE-219).
 
 ## Voice service socket
 
 The phone's half of the desktop's hosted voice architecture (LUKE-210) lives
-in `LukeKit`; the voice screen runs on it through `LiveCall`, and
-`RealtimeSession` runs only the watch's calls on the legacy Realtime mint
-until the watch moves. The piece here is the sessions socket client, the
+in `LukeKit`; the phone's voice screen runs on it through `LiveCall`, and
+the watch through `WatchVoiceSessionModel` over the audio route described at
+the end of this section. Nothing runs on `RealtimeSession` and the legacy
+Realtime mint any more. The piece here is the sessions socket client, the
 phone's `HostedLiveSessionSource`
 (`packages/voice/src/live-session-source.ts`), speaking the vocabulary
 `packages/hosted/src/live-contract.ts` declares:
@@ -498,8 +491,8 @@ its launch as a test host and stands every outbound telemetry stream down.
 feeds. The phone hands it the account's tokens over WatchConnectivity, and the
 two exchange one more thing over the same channel, described next; the
 sessions list, a session's conversation, the messages and controls sent from
-the wrist, and the voice call's mint and Realtime socket all leave the watch
-itself. watchOS chooses the path and prefers the phone:
+the wrist, and the voice call's socket all leave the watch itself, under the
+watch's own device row. watchOS chooses the path and prefers the phone:
 the paired iPhone's connection tunneled over Bluetooth whenever the phone is
 in range, the watch's own Wi-Fi or cellular only when it is not.
 
@@ -509,7 +502,8 @@ watchOS draws or routes something differently: the credentials in
 class that are the only things the two sandboxes differ on; the voice call's
 audio in `PCMAudioPlayer` and `PCMAudioCapturer`, parameterized by who owns
 the audio session, since on the watch that is `WatchVoiceAudioSession` for the
-whole call; and Luke's own face in `FaceArt` and `LukeMark`, with only the
+whole call, and by the sample rate, since the watch speaks at the rate its
+session's format names; and Luke's own face in `FaceArt` and `LukeMark`, with only the
 tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
 kept in step by a "change both" comment is a copy that eventually is not, so
 each of those was one file with two callers rather than two files.
@@ -529,9 +523,40 @@ syncing. The application
 context is the right channel because it holds only the latest snapshot,
 delivers it whenever the pair next connects, and keeps the last one received
 across a relaunch. Nothing in it is account data: no token, key, or anything
-a provider wrote travels this way, and it leaves neither device. The pace the
-watch's Realtime mint still takes is the watch's own and travels nowhere: the
-Live model the phone speaks through has no speed.
+a provider wrote travels this way, and it leaves neither device. Neither
+device holds a pace any more: the Live model has no speed.
+
+The watch speaks to Luke through the service's audio route, the third of the
+voice service's routes and the one for a device with no WebRTC: there is no
+WebRTC for watchOS, and the GPT Live WebSocket transport takes the project
+key alone, which the wrist must never hold (LUKE-211, ruled 2026-09-14). So
+the service holds the session's primary socket to OpenAI itself, and the
+watch's one socket to the service carries the developer's voice up and
+Luke's down, beside the same events and reports the phone's socket carries;
+on this route alone both voices transit the service, in both directions.
+`WatchVoiceSessionModel` drives it through `HostedVoiceSessionClient`'s
+`createAudio` (described under Voice service socket) with the account bearer
+the phone handed over and `x-luke-device-id` set to the watch's own device
+row, so the session, its transcript, and its turn are written under the
+watch's device by the voice writer and read back by the Conversation under
+the controls on the watch, the phone, and a Mac alike; the watch writes no
+record of its own. Hold to talk opens a session if none stands, in the synced
+voice and PCM16 at 16 kHz, and streams the microphone for exactly as long as
+the press lasts; between presses the watch streams silence, because the
+conversations guide asks that input audio keep running through silence on a
+WebSocket, and that silence is what the model reads the end of a turn from.
+Luke's reply plays as it arrives, and the status follows the playback queue,
+since GPT Live emits no output-audio-done event; his words for the reply
+under way are the one caption the call draws. The stop control sends
+`session.stop` and drops what of his reply the wrist had not yet played; idle
+is the watch's own five-minute window reported as `session.activity`, with
+the close the service's decision; leaving the page or changing the voice
+sends `session.close`. Nothing on the wrist mints a credential, dispatches a
+tool, seeds a context item, or sets a speed: the exchange is the service's,
+the brain answers, and the Live model has no speed. A primary socket has no
+attach, so a call ends when the service's function invocation does, at its
+cap or sooner; the screen then says the call ended, and the next press opens
+a new one.
 
 watchOS draws one line through that traffic. HTTP over `URLSession` is open
 to every app, and every hosted read and act on the watch travels that way,
@@ -542,13 +567,16 @@ active (Apple's TN3135 and WWDC 2019 session 716), and tells anything else
 that opens one that the Internet connection appears to be offline, with the
 phone in the same pocket. Luke's voice call is a streamed spoken exchange, so
 the watch app declares the `audio` background mode in `LukeWatch/Info.plist`
-and holds its audio session active from before the Realtime socket opens
-until the call closes, in `WatchVoiceAudioSession`. Two details of that grant
-are watchOS's own and are easy to miss: the session must be activated with
-the asynchronous `activate(options:)` call, because the synchronous
+and holds its audio session active from before the voice socket opens until
+the call closes, in `WatchVoiceAudioSession`. Two details of that grant are
+watchOS's own and are easy to miss: the session must be activated with the
+asynchronous `activate(options:)` call, because the synchronous
 `setActive(true)` returns without error on a watch and earns nothing, and the
 socket must be opened from the app's own process through Network framework,
 in `WatchWebSocketChannel`, because URLSession on watchOS does its work in a
-system process that never inherits the grant. The call still opens only at
-the developer's press and closes on the same idle timer as before; the mode
+system process that never inherits the grant. Network framework hands back no
+status for a refused upgrade, so a refusal the service states in its first
+frame (no account, a spent allowance, an unavailable service) is shown in the
+lines the phone shows, and one it states in the status alone reads as Luke
+not reached. The call still opens only at the developer's press; the mode
 changes what watchOS lets the socket do, not when Luke listens.
