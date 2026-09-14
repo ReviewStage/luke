@@ -146,14 +146,14 @@ function githubRead(
 }
 
 /** One read of the head's preview from the deployment records, a dropped connection or a refused read retried a few times. */
-function readPreview(
-  source: PreviewSource,
-): Effect.Effect<
-  PreviewReading,
-  HttpClientError.HttpClientError | Schema.SchemaError,
-  HttpClient.HttpClient
-> {
-  return Effect.gen(function* () {
+const readPreview = /* @__PURE__ */ Effect.fn("readPreview")(
+  function* (
+    source: PreviewSource,
+  ): Effect.fn.Return<
+    PreviewReading,
+    HttpClientError.HttpClientError | Schema.SchemaError,
+    HttpClient.HttpClient
+  > {
     const client = HttpClient.filterStatusOk(yield* HttpClient.HttpClient);
     const records = yield* client
       .execute(
@@ -174,17 +174,16 @@ function readPreview(
       )
       .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(DeploymentStatuses)), Effect.scoped);
     return decidePreview([newest], () => statuses);
-  }).pipe(
-    Effect.retry({
-      schedule: TRANSPORT_RETRY,
-      // Every transport-level refusal and every response the status filter
-      // turned down is one `HttpClientError` in v4, whichever reason it
-      // carries; a body that failed to decode is not retried, since a second
-      // read of the same records would decode no better.
-      while: (error) => error._tag === "HttpClientError",
-    }),
-  );
-}
+  },
+  Effect.retry({
+    schedule: TRANSPORT_RETRY,
+    // Every transport-level refusal and every response the status filter
+    // turned down is one `HttpClientError` in v4, whichever reason it
+    // carries; a body that failed to decode is not retried, since a second
+    // read of the same records would decode no better.
+    while: (error) => error._tag === "HttpClientError",
+  }),
+);
 
 export interface PreviewWait {
   readonly intervalMs: number;

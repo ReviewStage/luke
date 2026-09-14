@@ -188,11 +188,13 @@ voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
 module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
-function module under `apps/web/server/routes/**` exports its `HttpApp`
-through, which reads that runtime once per instance and lets the handler it
-builds do its own running), `apps/web/server/hosted/store-route.ts` (the same
-door for a hosted store route, whose handler is composed over the ambient
-`SqlClient` rather than an `HttpApp`), `apps/web/server/voice/function.ts`
+function module under `apps/web/server/routes/**` exports its router through —
+`routeFromHttpRouter`, named for the `HttpRouter` it builds a web handler from,
+v4 having dropped the `HttpApp` module the old name was taken from — which
+reads that runtime once per instance and lets the handler it builds do its own
+running), `apps/web/server/hosted/store-route.ts` (the same door for a hosted
+store route, whose handler is composed over the ambient `SqlClient` rather than
+a router), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
 request, so there is no request fiber to compose it into) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
@@ -387,6 +389,35 @@ decision nobody has taken, not a migration owed.
 
 ### Idioms
 
+- A named function whose whole body is `return Effect.gen(function* () { … })`
+  is written as `Effect.fn`/`Effect.fnUntraced` instead, the generator itself
+  rather than a wrapper around one. Which of the two is not a matter of taste:
+  **`Effect.fn("name")` at an exported operation boundary** — one unit of
+  request or provider work, the name matching the binding — and
+  **`Effect.fnUntraced` for a module-private helper or anything on a per-row,
+  per-event, or per-message path**, because `Effect.fn` attaches a span and the
+  default `Tracer` is `nativeTracer`, which allocates an in-memory span per call
+  and exports it nowhere; on a hot path that is pure cost. Never `.pipe` off an
+  `Effect.fn` — trailing combinators are extra arguments to it. An anonymous
+  inline `Effect.gen` stays what it is; the rule is about wrappers, not
+  generators.
+- Three things that bite when converting one, each found by a suite rather than
+  by `tsc`:
+  - **`Effect.fn`'s span is observable in a failure.** The `Cause` gains
+    annotations naming the function, so a test asserting structurally on an
+    `Exit` or a `Cause` sees a different value. `withMigrationLock`
+    (`apps/web/server/db/migrate.ts`) is `fnUntraced` for exactly this reason.
+  - **`Effect.fn` is not timing-neutral against a bare `Effect.gen`.** The span
+    wrapper defers the body relative to the caller, which is enough to reorder a
+    `forkScoped` reader against what it was meant to have consumed.
+  - **A converted binding is a top-level call, and esbuild cannot prove it
+    side-effect-free.** A `function` declaration shook out of a bundle when
+    unused; `const f = Effect.fn(…)(…)` does not, and drags its imports in with
+    it. Every converted binding carries `/* @__PURE__ */`, which is worth ~3.6 KB
+    on the panel bundle and ~2.7 KB on the voice window's.
+- A function with a statement *before* its `return Effect.gen(…)` is not this
+  pattern and is left alone: moving that statement inside the generator turns
+  work done once per call into work done once per run.
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
 - Runtime only at an edge above; everywhere else returns an Effect.
@@ -405,17 +436,19 @@ decision nobody has taken, not a migration owed.
 - No `Effect.raceFirst` over an uninterruptible region: a race that loses
   interrupts the loser, and a fiber inside an uninterruptible region cannot be
   interrupted, so the race never resolves.
-- `Effect.forkDetach(interruptible)` and a join for a deadline that must run
-  inside an uninterruptible region, since the fork itself has to survive the
-  region even when its result does not.
+- `Effect.forkDetach` and a join for a deadline that must run inside an
+  uninterruptible region, since the fork itself has to survive the region even
+  when its result does not, and the fiber it detaches is interruptible whatever
+  the region around the fork, so the deadline still has something to end.
 - A fork does **not** inherit the interrupt status of whoever forked it.
   `forkUnsafe` defaults `uninterruptible` to `false`, so a fiber forked from
   inside an `Effect.acquireRelease` acquire, a finalizer, or any other
   uninterruptible region is interruptible unless it asks not to be; inheritance
-  is the opt-in `uninterruptible: "inherit"`. Some `Effect.interruptible(…)`
-  wrappers in this repository were written for the v3 rule and are now
-  redundant — they are harmless, and removing one is a behaviour change to
-  reason about rather than a tidy-up.
+  is the opt-in `uninterruptible: "inherit"`. The wrappers this repository wrote
+  for the v3 rule — an `Effect.interruptible(…)` standing as the immediate
+  argument of a `fork*` — are gone, so an `Effect.interruptible(…)` that remains
+  is one restoring interruptibility inside a region that really is
+  uninterruptible around it, and is load-bearing.
 - `startImmediately: true` on `forkChild`/`forkDetach`/`forkScoped`/`forkIn`
   evaluates the child on the calling stack. This is new ground: v3 could not
   say detached-and-started-at-once, and two permanent adaptors existed only for
@@ -463,6 +496,38 @@ decision nobody has taken, not a migration owed.
   fell from 635,847 to 586,626 gzipped bytes and the voice window's from
   323,364 to 270,260, and holding the old baseline would have left the check
   tolerating a regression it exists to catch.
+
+### The v4 modules this repository looked at and does not use
+
+Each was read against the code that would have adopted it and declined for a
+reason of its own, so that the next sweep reads this instead of repeating the
+search.
+
+- **`Newtype`** — `packages/runtime/src/identifiers.ts` is a hand-rolled
+  newtype, but its `Identifier<Brand> = string & { … }` is *assignable to
+  `string`*, and the repository leans on that everywhere: `SessionKey | string`
+  parameters, `split`, `join`. Effect's `Newtype` is opaque and unwrapped
+  through `Newtype.value`, so adopting it is a breaking change to every caller
+  rather than an idiom.
+- **`Latch`** — a latch is a gate that opens and closes again. Every
+  non-test `Deferred` here is one-shot, or carries a value or an `Exit` (a
+  latch carries neither and has no error channel), or belongs to a single
+  operation. Nothing re-gates.
+- **`Filter`** — the refinements here are single-step and `Schema`-backed.
+  The one composable-looking site is the settings guards, and composition is
+  precisely what would break them: `Filter.compose` types `Fail` as
+  `FailL | FailR`, which would widen each guard's fallback default out of its
+  own setting's type.
+- **`UndefinedOr`** the module — `?.` and `??` already say `map` and
+  `getOrElse` in less. `Schema.UndefinedOr` at a boundary is a different thing
+  and is in use.
+- **`Context.Reference`** for the host's seams — `packages/host/src/effect/kernel.ts`
+  states the invariant deliberately: every seam is a requirement, so a
+  composition that did not state one cannot build. A reference with a default
+  trades that compile-time refusal for a silent fallback. `Environment` and
+  `HostedEnvironment` must *especially* not become references: a reference's
+  default is computed once and cached, which is the exact `process.env`
+  snapshot bug `apps/web/server/runtime.ts` exists to avoid.
 
 ## TypeScript
 

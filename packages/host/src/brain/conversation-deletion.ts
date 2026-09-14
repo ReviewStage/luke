@@ -75,10 +75,10 @@ const CONVERSATION_DELETION_INCOMPLETE = {
  * soon as whoever runs it reaches that step and before it waits on anything,
  * exactly as they did when this flow was a promise begun at its call.
  */
-export const deleteConversationFlow = (
-  dependencies: ConversationDeletionDependencies,
-): Effect.Effect<ConversationDeleteOutcome> =>
-  Effect.gen(function* () {
+export const deleteConversationFlow = /* @__PURE__ */ Effect.fn("deleteConversationFlow")(
+  function* (
+    dependencies: ConversationDeletionDependencies,
+  ): Effect.fn.Return<ConversationDeleteOutcome> {
     const deletedAt = dependencies.now();
     dependencies.fence(deletedAt);
     // The cutoff read is dispatched on this step rather than forked onto a
@@ -120,4 +120,5 @@ export const deleteConversationFlow = (
       return CONVERSATION_DELETE_OUTCOME.INCOMPLETE;
     }
     return CONVERSATION_DELETE_OUTCOME.COMPLETE;
-  });
+  },
+);

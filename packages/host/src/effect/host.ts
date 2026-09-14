@@ -48,36 +48,35 @@ export type HostDrain = (
  * admissions close and the runs are cancelled once however many times the
  * quit arrives.
  */
-export const hostDrain = (
+export const hostDrain = /* @__PURE__ */ Effect.fn("hostDrain")(function* (
   steps: GatewayShutdownSteps,
   report: (message: string) => void,
-): Effect.Effect<HostDrain> =>
-  Effect.gen(function* () {
-    const claimed = yield* Ref.make(false);
-    const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
-    const run = (options: GatewayShutdownOptions) =>
-      shutdownGatewayEffect(steps, options).pipe(
-        // A step that died is a defect of the coordinator's own effect, since
-        // what the steps reach is work it did not write; it is the drain's
-        // named refusal here rather than a defect that would take the close
-        // down with it.
-        Effect.catchDefect((cause) => new HostDrainError({ cause })),
-        Effect.tap((settled) =>
-          Effect.sync(() => {
-            report(
-              `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.cancelled.length} cancelled, ${settled.unresolved} unresolved`,
-            );
-          }),
-        ),
-        Effect.tapError((failure) => Effect.sync(() => report(failure.message))),
-      );
-    return (options = {}) =>
-      Effect.gen(function* () {
-        const taken = yield* Ref.getAndSet(claimed, true);
-        if (!taken) yield* Deferred.into(run(options), outcome);
-        return yield* Deferred.await(outcome);
-      });
-  });
+): Effect.fn.Return<HostDrain> {
+  const claimed = yield* Ref.make(false);
+  const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
+  const run = (options: GatewayShutdownOptions) =>
+    shutdownGatewayEffect(steps, options).pipe(
+      // A step that died is a defect of the coordinator's own effect, since
+      // what the steps reach is work it did not write; it is the drain's
+      // named refusal here rather than a defect that would take the close
+      // down with it.
+      Effect.catchDefect((cause) => new HostDrainError({ cause })),
+      Effect.tap((settled) =>
+        Effect.sync(() => {
+          report(
+            `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.cancelled.length} cancelled, ${settled.unresolved} unresolved`,
+          );
+        }),
+      ),
+      Effect.tapError((failure) => Effect.sync(() => report(failure.message))),
+    );
+  return (options = {}) =>
+    Effect.gen(function* () {
+      const taken = yield* Ref.getAndSet(claimed, true);
+      if (!taken) yield* Deferred.into(run(options), outcome);
+      return yield* Deferred.await(outcome);
+    });
+});
 
 /** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {

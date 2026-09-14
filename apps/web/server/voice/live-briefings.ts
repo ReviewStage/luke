@@ -92,73 +92,70 @@ export interface HostedBriefings {
   readonly start: Effect.Effect<void, never, SqlClient.SqlClient>;
 }
 
-export function hostedBriefings(
+export const hostedBriefings = /* @__PURE__ */ Effect.fn("hostedBriefings")(function* (
   options: HostedBriefingsOptions,
-): Effect.Effect<HostedBriefings, never, Scope.Scope | SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const bounds = { ...HOSTED_BRIEFING_BOUNDS, ...options.bounds };
-    const socket = yield* Effect.scope;
-    let looking = false;
+): Effect.fn.Return<HostedBriefings, never, Scope.Scope | SqlClient.SqlClient> {
+  const bounds = { ...HOSTED_BRIEFING_BOUNDS, ...options.bounds };
+  const socket = yield* Effect.scope;
+  let looking = false;
 
-    function claimAndDeliver(offer: SpeechOffer, deviceId: string): BriefingLookEffect<void> {
-      return Effect.gen(function* () {
-        const words = yield* briefingWordsOf(options.tools, offer);
-        if (words === undefined) {
-          options.report(
-            "A briefing on offer has no words this build can read; left for the sweep",
-          );
-          return;
-        }
-        const claimed = yield* claimSpeech(
-          options.speech,
-          options.userId,
-          offer.messageId,
-          deviceId,
-          options.now(),
-        );
-        if (!claimed.ok) return;
-        options.deliver({ briefing: words, decidedAt: options.now(), claim: claimed.claim });
-      });
+  const claimAndDeliver = Effect.fnUntraced(function* (
+    offer: SpeechOffer,
+    deviceId: string,
+  ): Effect.fn.Return<void, BriefingLookFailure, SqlClient.SqlClient> {
+    const words = yield* briefingWordsOf(options.tools, offer);
+    if (words === undefined) {
+      options.report("A briefing on offer has no words this build can read; left for the sweep");
+      return;
     }
-
-    /** Every open offer of the account is read, so rows claimed or held elsewhere cannot fill a page ahead of a newer offer. */
-    const look: BriefingLookEffect<void> = Effect.gen(function* () {
-      const offers = yield* options.offers.open(options.userId);
-      const open = offers
-        .filter((offer) => offer.state === SPEECH_STATE.OFFERED)
-        .slice(0, bounds.OFFERS_PER_LOOK);
-      if (open.length === 0) return;
-      const now = options.now();
-      const quiet = yield* quietUntilByAccount(now, [options.userId]);
-      if (quiet.has(options.userId)) return;
-      const deviceId = yield* options.deviceId;
-      if (deviceId === undefined) {
-        options.report("Briefings are on offer, but the session names no device to claim them as");
-        return;
-      }
-      for (const offer of open) yield* claimAndDeliver(offer, deviceId);
-    });
-
-    const onSchedule = Effect.repeat(
-      Effect.catchCause(look, (cause) => {
-        if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
-        const failure = Cause.squash(cause);
-        return Effect.sync(() => {
-          options.report(
-            `Looking at the briefings on offer failed: ${failure instanceof Error ? failure.message : String(failure)}`,
-          );
-        });
-      }),
-      Schedule.spaced(Duration.millis(bounds.POLL_MS)),
+    const claimed = yield* claimSpeech(
+      options.speech,
+      options.userId,
+      offer.messageId,
+      deviceId,
+      options.now(),
     );
-
-    return {
-      look,
-      start: Effect.suspend(() => {
-        if (looking) return Effect.void;
-        looking = true;
-        return Effect.asVoid(Effect.forkIn(onSchedule, socket));
-      }),
-    };
+    if (!claimed.ok) return;
+    options.deliver({ briefing: words, decidedAt: options.now(), claim: claimed.claim });
   });
-}
+
+  /** Every open offer of the account is read, so rows claimed or held elsewhere cannot fill a page ahead of a newer offer. */
+  const look: BriefingLookEffect<void> = Effect.gen(function* () {
+    const offers = yield* options.offers.open(options.userId);
+    const open = offers
+      .filter((offer) => offer.state === SPEECH_STATE.OFFERED)
+      .slice(0, bounds.OFFERS_PER_LOOK);
+    if (open.length === 0) return;
+    const now = options.now();
+    const quiet = yield* quietUntilByAccount(now, [options.userId]);
+    if (quiet.has(options.userId)) return;
+    const deviceId = yield* options.deviceId;
+    if (deviceId === undefined) {
+      options.report("Briefings are on offer, but the session names no device to claim them as");
+      return;
+    }
+    for (const offer of open) yield* claimAndDeliver(offer, deviceId);
+  });
+
+  const onSchedule = Effect.repeat(
+    Effect.catchCause(look, (cause) => {
+      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+      const failure = Cause.squash(cause);
+      return Effect.sync(() => {
+        options.report(
+          `Looking at the briefings on offer failed: ${failure instanceof Error ? failure.message : String(failure)}`,
+        );
+      });
+    }),
+    Schedule.spaced(Duration.millis(bounds.POLL_MS)),
+  );
+
+  return {
+    look,
+    start: Effect.suspend(() => {
+      if (looking) return Effect.void;
+      looking = true;
+      return Effect.asVoid(Effect.forkIn(onSchedule, socket));
+    }),
+  };
+});

@@ -172,47 +172,46 @@ export function createTurnToolExecutor(
    * for. An effect that dies after dispatch has answered nothing about
    * itself: the outcome is unknown, counted as such, and never a refusal.
    */
-  const performJournaled = (
+  const performJournaled = /* @__PURE__ */ Effect.fnUntraced(function* (
     call: ToolInvocation,
     execution: BrainActionExecution,
     effect: Effect.Effect<WireRecord>,
-  ): Effect.Effect<WireRecord> =>
-    Effect.gen(function* () {
-      const { run, generation } = context;
-      const outcomes = outcomesFor(call.name);
-      if (dependencies.runRevoked(run) || execution.isRevoked()) {
-        return outcomes.refuse(REFUSAL_REASON.RUN_REVOKED);
+  ): Effect.fn.Return<WireRecord> {
+    const { run, generation } = context;
+    const outcomes = outcomesFor(call.name);
+    if (dependencies.runRevoked(run) || execution.isRevoked()) {
+      return outcomes.refuse(REFUSAL_REASON.RUN_REVOKED);
+    }
+    const recorded = generation.journal.get(run.runId, call.callId);
+    if (recorded) {
+      if (recorded.argumentsJson !== call.argumentsJson) {
+        return outcomes.refuse(REFUSAL_REASON.CALL_ID_REUSED);
       }
-      const recorded = generation.journal.get(run.runId, call.callId);
-      if (recorded) {
-        if (recorded.argumentsJson !== call.argumentsJson) {
-          return outcomes.refuse(REFUSAL_REASON.CALL_ID_REUSED);
-        }
-        return recorded.outputJson === undefined
-          ? outcomes.unknown(UNKNOWN_ACTION_RESULT.reason)
-          : parsedRecord(recorded.outputJson);
-      }
-      if (run.checkpointFailed) return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
-      generation.journal.start({
-        runId: run.runId,
-        callId: call.callId,
-        name: call.name,
-        argumentsJson: call.argumentsJson,
-        startedAt: dependencies.now(),
-      });
-      if (!(yield* dependencies.checkpoint(context))) {
-        generation.journal.forget(run.runId, call.callId);
-        run.checkpointFailed = true;
-        return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
-      }
-      const output = yield* Effect.catchDefect(effect, () =>
-        Effect.succeed(outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason)),
-      );
-      if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
-      if (output.status === UNKNOWN_ACTION_STATUS) run.unknownActions += 1;
-      generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
-      return output;
+      return recorded.outputJson === undefined
+        ? outcomes.unknown(UNKNOWN_ACTION_RESULT.reason)
+        : parsedRecord(recorded.outputJson);
+    }
+    if (run.checkpointFailed) return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
+    generation.journal.start({
+      runId: run.runId,
+      callId: call.callId,
+      name: call.name,
+      argumentsJson: call.argumentsJson,
+      startedAt: dependencies.now(),
     });
+    if (!(yield* dependencies.checkpoint(context))) {
+      generation.journal.forget(run.runId, call.callId);
+      run.checkpointFailed = true;
+      return outcomes.refuse(REFUSAL_REASON.NOT_CHECKPOINTED);
+    }
+    const output = yield* Effect.catchDefect(effect, () =>
+      Effect.succeed(outcomes.unknown(UNCONFIRMED_ACTION_RESULT.reason)),
+    );
+    if (output.status === ACTION_RESULT_STATUS.ACCEPTED) run.performedActions += 1;
+    if (output.status === UNKNOWN_ACTION_STATUS) run.unknownActions += 1;
+    generation.journal.settle(run.runId, call.callId, JSON.stringify(output), dependencies.now());
+    return output;
+  });
 
   /**
    * A memory provider's tool: a write through the same journal an action runs

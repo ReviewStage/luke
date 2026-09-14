@@ -426,15 +426,15 @@ export interface ConversationReadRefusal {
  * adapter's own bounded read of the provider's documented transcript
  * endpoint. The answer is assembled and returned; nothing is stored.
  */
-export function executeConversationRead(options: {
-  providerId: CloudAgentProviderId;
-  providerSessionId: string;
-  afterMessageId?: string;
-  beforeOffset?: number;
-  apiKey: string;
-  seams?: ActionExecuteSeams;
-}): Effect.Effect<HostedConversationAnswer | ConversationReadRefusal> {
-  return Effect.gen(function* () {
+export const executeConversationRead = /* @__PURE__ */ Effect.fn("executeConversationRead")(
+  function* (options: {
+    providerId: CloudAgentProviderId;
+    providerSessionId: string;
+    afterMessageId?: string;
+    beforeOffset?: number;
+    apiKey: string;
+    seams?: ActionExecuteSeams;
+  }): Effect.fn.Return<HostedConversationAnswer | ConversationReadRefusal> {
     const { providerId, providerSessionId, afterMessageId, beforeOffset, apiKey } = options;
     if (!providerReadsConversation(providerId)) {
       const displayName = PROVIDER_IDENTITY_BY_ID[providerId].displayName;
@@ -475,5 +475,5 @@ export function executeConversationRead(options: {
       ...(result.firstOffset !== undefined ? { firstOffset: result.firstOffset } : undefined),
       ...(result.hasOlder !== undefined ? { hasOlder: result.hasOlder } : undefined),
     };
-  });
-}
+  },
+);

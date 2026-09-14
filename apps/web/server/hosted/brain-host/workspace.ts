@@ -39,9 +39,6 @@ import { BRAIN_HOST } from "./bounds.js";
 /** The slice of the store the workspace reaches. */
 export type WorkspaceStore = Pick<HostedStore, "workspace">;
 
-/** What a read or write of the rows answers: an effect over the ambient client. */
-type WorkspaceEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
-
 const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
 
 /** The runtime the prompt's runtime line names: eve is the loop here, not the desktop's tool loop. */
@@ -55,21 +52,19 @@ function hostedWorkspacePath(name: string): string | undefined {
 }
 
 /** Writes every missing bootstrap file for the user; an existing row, edited or not, is left as it is. */
-export function seedHostedWorkspace(
+export const seedHostedWorkspace = /* @__PURE__ */ Effect.fn("seedHostedWorkspace")(function* (
   store: WorkspaceStore,
   userId: string,
   now: number,
-): WorkspaceEffect<readonly WorkspaceFile[]> {
-  return Effect.gen(function* () {
-    const seeded: WorkspaceFile[] = [];
-    for (const name of Object.values(WORKSPACE_FILE)) {
-      if (yield* store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now)) {
-        seeded.push(name);
-      }
+): Effect.fn.Return<readonly WorkspaceFile[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const seeded: WorkspaceFile[] = [];
+  for (const name of Object.values(WORKSPACE_FILE)) {
+    if (yield* store.workspace.seed(userId, name, BRAIN_WORKSPACE_SEEDS[name], now)) {
+      seeded.push(name);
     }
-    return seeded;
-  });
-}
+  }
+  return seeded;
+});
 
 const NO_SKILLS = "not loaded: this agent lists no skills";
 
@@ -127,34 +122,32 @@ export interface HostedPromptInput {
  * skills and runs in no directory, so those sections are absent rather than
  * invented.
  */
-export function hostedPrompt(
+export const hostedPrompt = /* @__PURE__ */ Effect.fn("hostedPrompt")(function* (
   store: WorkspaceStore,
   userId: string,
   input: HostedPromptInput,
-): WorkspaceEffect<BuiltPrompt> {
-  return Effect.gen(function* () {
-    const files = yield* Effect.forEach(BOOTSTRAP_FILE_ORDER, (name) =>
-      Effect.map(store.workspace.read(userId, name), (row) => ({
-        name,
-        path: `${BRAIN_HOST.WORKSPACE_NAME}/${name}`,
-        content: row?.content,
-      })),
-    );
-    return buildSystemPrompt({
-      profile: PROMPT_PROFILE.FULL,
-      identity: BRAIN_IDENTITY_LINE,
-      persona: BRAIN_PERSONA,
-      tools: input.policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
-      toolNotes: brainToolNotes(),
-      runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
-      skills: [],
-      workspaceDirectory: BRAIN_HOST.WORKSPACE_NAME,
-      bootstrapFiles: boundBootstrapFiles(files),
-      runtime: {
-        agentId: DEFAULT_AGENT_ID,
-        runtimeId: BRAIN_HOST_RUNTIME_ID,
-        ...(input.model ? { model: input.model } : undefined),
-      },
-    });
+): Effect.fn.Return<BuiltPrompt, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const files = yield* Effect.forEach(BOOTSTRAP_FILE_ORDER, (name) =>
+    Effect.map(store.workspace.read(userId, name), (row) => ({
+      name,
+      path: `${BRAIN_HOST.WORKSPACE_NAME}/${name}`,
+      content: row?.content,
+    })),
+  );
+  return buildSystemPrompt({
+    profile: PROMPT_PROFILE.FULL,
+    identity: BRAIN_IDENTITY_LINE,
+    persona: BRAIN_PERSONA,
+    tools: input.policy.allowed.map((tool) => ({ name: tool.schema.name, groups: tool.groups })),
+    toolNotes: brainToolNotes(),
+    runtimeContextMarker: BRAIN_INPUT_MARKER.STANDING_CONTEXT,
+    skills: [],
+    workspaceDirectory: BRAIN_HOST.WORKSPACE_NAME,
+    bootstrapFiles: boundBootstrapFiles(files),
+    runtime: {
+      agentId: DEFAULT_AGENT_ID,
+      runtimeId: BRAIN_HOST_RUNTIME_ID,
+      ...(input.model ? { model: input.model } : undefined),
+    },
   });
-}
+});

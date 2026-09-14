@@ -22,7 +22,7 @@ type WebHandler = (request: Request) => Promise<Response>;
  * already the platform's to record, and a URL Luke wrote to its own output is
  * a place a token in a query could land.
  */
-export function routeFromHttpApp(routes: WebRoutes<WebServices>): Route {
+export function routeFromHttpRouter(routes: WebRoutes<WebServices>): Route {
   let building: Promise<WebHandler> | undefined;
   return {
     async fetch(request: Request): Promise<Response> {

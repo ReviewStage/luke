@@ -147,7 +147,10 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
   compact(context: ContextEngine, options: CompactionOptions): Effect.Effect<RuntimeCompaction> {
     return Effect.flatMap(this.capabilities(), (capabilities) =>
       Effect.promise(() =>
-        compactContext(context, this.#options.model, { ...options, capabilities }),
+        compactContext(context, this.#options.model, {
+          ...options,
+          capabilities,
+        }),
       ),
     );
   }
@@ -175,7 +178,9 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
       bootstrap.loaded
         ? Effect.succeed(this.start({ ...request, context }))
         : Effect.fail(
-            new RuntimeResumeRefused({ reason: bootstrap.reason ?? "checkpoint not loaded" }),
+            new RuntimeResumeRefused({
+              reason: bootstrap.reason ?? "checkpoint not loaded",
+            }),
           ),
     );
   }
@@ -337,9 +342,16 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
                   callId: refused.callId,
                   outputJson: result.outputJson,
                 });
-                yield* emit({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation: refused, result });
+                yield* emit({
+                  kind: RUNTIME_EVENT.TOOL_RESULT,
+                  invocation: refused,
+                  result,
+                });
               }
-              yield* emit({ kind: RUNTIME_EVENT.LOOP_GUARD, detail: verdict.message });
+              yield* emit({
+                kind: RUNTIME_EVENT.LOOP_GUARD,
+                detail: verdict.message,
+              });
               return yield* finish({
                 reason: RUN_END_REASON.LOOP_GUARD,
                 detail: verdict.message,
@@ -353,14 +365,21 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
               outputJson: result.outputJson,
             });
             guard.record(call, result);
-            yield* emit({ kind: RUNTIME_EVENT.TOOL_RESULT, invocation: call, result });
+            yield* emit({
+              kind: RUNTIME_EVENT.TOOL_RESULT,
+              invocation: call,
+              result,
+            });
             if (verdict.stuck) {
               // A warning is words for the model, read at its next inference and never kept as an action.
               yield* ingest({
                 kind: CONTEXT_INPUT_KIND.USER_TEXT,
                 text: `${LOOP_GUARD_MARKER} ${verdict.message}`,
               });
-              yield* emit({ kind: RUNTIME_EVENT.LOOP_GUARD, detail: verdict.message });
+              yield* emit({
+                kind: RUNTIME_EVENT.LOOP_GUARD,
+                detail: verdict.message,
+              });
             }
           }
           return undefined;
@@ -395,7 +414,10 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
         );
         if (answer.outcome === MODEL_RESPONSE_OUTCOME.THROTTLED) {
           yield* emit({ kind: RUNTIME_EVENT.THROTTLED, until: answer.until });
-          return yield* finish({ reason: RUN_END_REASON.THROTTLED, until: answer.until });
+          return yield* finish({
+            reason: RUN_END_REASON.THROTTLED,
+            until: answer.until,
+          });
         }
         if (answer.outcome === MODEL_RESPONSE_OUTCOME.FAILED) {
           yield* emit({
@@ -440,55 +462,57 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
 }
 
 /** Keeps what the answer carried; answers whether there are calls to run. */
-function absorb(
+const absorb = /* @__PURE__ */ Effect.fnUntraced(function* (
   answer: ModelAnswer,
   emit: (event: RuntimeEvent) => Effect.Effect<void>,
   ingest: (input: ContextInput) => Effect.Effect<void>,
-): Effect.Effect<boolean> {
-  return Effect.gen(function* () {
-    yield* emit({
-      kind: RUNTIME_EVENT.ANSWERED,
-      toolNames: answer.toolCalls.map((call) => call.name),
-    });
-    if (answer.responseId !== undefined) {
-      yield* emit({ kind: RUNTIME_EVENT.RESPONSE, responseId: answer.responseId });
-    }
-    yield* ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
-    for (const reasoning of answer.reasoning ?? []) {
-      yield* emit({ kind: RUNTIME_EVENT.REASONING, reasoning });
-    }
-    if (answer.usage) yield* emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
-    // Every answer's text is reported, the empty one included, so a listener
-    // keeping the latest words holds what the final answer actually said.
-    yield* emit({ kind: RUNTIME_EVENT.TEXT, text: answer.text });
-    if (answer.incomplete) {
-      yield* emit({ kind: RUNTIME_EVENT.INCOMPLETE, incomplete: answer.incomplete });
-    }
-    return answer.toolCalls.length > 0;
+): Effect.fn.Return<boolean> {
+  yield* emit({
+    kind: RUNTIME_EVENT.ANSWERED,
+    toolNames: answer.toolCalls.map((call) => call.name),
   });
-}
+  if (answer.responseId !== undefined) {
+    yield* emit({
+      kind: RUNTIME_EVENT.RESPONSE,
+      responseId: answer.responseId,
+    });
+  }
+  yield* ingest({ kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT, items: answer.items });
+  for (const reasoning of answer.reasoning ?? []) {
+    yield* emit({ kind: RUNTIME_EVENT.REASONING, reasoning });
+  }
+  if (answer.usage) yield* emit({ kind: RUNTIME_EVENT.USAGE, usage: answer.usage });
+  // Every answer's text is reported, the empty one included, so a listener
+  // keeping the latest words holds what the final answer actually said.
+  yield* emit({ kind: RUNTIME_EVENT.TEXT, text: answer.text });
+  if (answer.incomplete) {
+    yield* emit({
+      kind: RUNTIME_EVENT.INCOMPLETE,
+      incomplete: answer.incomplete,
+    });
+  }
+  return answer.toolCalls.length > 0;
+});
 
 /**
  * One call, handed to the executor on the loop's own fiber; a tool that died
  * instead of answering is told as unknown rather than left dangling.
  */
-function executeToolCall(
+const executeToolCall = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: ToolInvocation,
   tools: RuntimeRunRequestEffect["tools"],
   runId: string,
   signal: AbortSignal,
   revoked: () => boolean,
-): Effect.Effect<ToolResult> {
-  return Effect.gen(function* () {
-    const result = yield* Effect.catchDefect(
-      tools.execute(call, { runId, signal, isRevoked: revoked }),
-      (): Effect.Effect<ToolResult> =>
-        Effect.succeed({
-          outputJson: JSON.stringify(TOOL_DID_NOT_ANSWER),
-          status: TOOL_DID_NOT_ANSWER.status,
-        }),
-    );
-    const status = result.status ?? outputStatus(result.outputJson);
-    return status !== undefined ? { outputJson: result.outputJson, status } : result;
-  });
-}
+): Effect.fn.Return<ToolResult> {
+  const result = yield* Effect.catchDefect(
+    tools.execute(call, { runId, signal, isRevoked: revoked }),
+    (): Effect.Effect<ToolResult> =>
+      Effect.succeed({
+        outputJson: JSON.stringify(TOOL_DID_NOT_ANSWER),
+        status: TOOL_DID_NOT_ANSWER.status,
+      }),
+  );
+  const status = result.status ?? outputStatus(result.outputJson);
+  return status !== undefined ? { outputJson: result.outputJson, status } : result;
+});

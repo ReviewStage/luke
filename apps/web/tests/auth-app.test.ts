@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { authApp, type WebRequestHandler } from "../server/auth-app.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
-import { routeFromHttpApp } from "../server/route-effect.js";
+import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 import {
   recordedGoldenNames,
@@ -131,7 +131,7 @@ test("the group answers what the handler answered, as the handler answered it", 
   for (const exchange of EXCHANGES) {
     const stub = stubbedHandler(exchange.answer);
     const request = exchange.request();
-    const answered = await routeFromHttpApp(authApp(stub.handle)).fetch(request);
+    const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(request);
     const carried = await recordedResponse(answered);
     const direct = await recordedResponse(await stub.handle(exchange.request()));
 
@@ -144,7 +144,7 @@ test("the group answers what the handler answered, as the handler answered it", 
 
 test("a bodyless request keeps the handler's status line and headers and carries no body", async () => {
   const stub = stubbedHandler(bodylessAnswer);
-  const answered = await routeFromHttpApp(authApp(stub.handle)).fetch(
+  const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(
     new Request(`${AUTH_ORIGIN}/api/auth/not-an-endpoint`, { method: "HEAD" }),
   );
   const carried = await recordedResponse(answered);
@@ -161,7 +161,7 @@ test("a bodyless request keeps the handler's status line and headers and carries
 
 test("a path the group declares no route for is refused without reaching the handler", async () => {
   const stub = stubbedHandler(signedInAnswer);
-  const answered = await routeFromHttpApp(authApp(stub.handle)).fetch(
+  const answered = await routeFromHttpRouter(authApp(stub.handle)).fetch(
     new Request(`${AUTH_ORIGIN}/api/not-the-auth-group`),
   );
   const carried = await recordedResponse(answered);

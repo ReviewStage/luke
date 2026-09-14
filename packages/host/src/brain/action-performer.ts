@@ -167,8 +167,8 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
 export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
 ): BrainActionPerformer {
-  const admission = (): Effect.Effect<ActionAdmissionReads> =>
-    Effect.gen(function* () {
+  const admission = /* @__PURE__ */ Effect.fnUntraced(
+    function* (): Effect.fn.Return<ActionAdmissionReads> {
       // The roster and the projects an action is admitted against are two readings
       // of one observation pass, so the pass runs once per action however many of
       // them admission asks for. An action that asks for neither — a setting —
@@ -193,37 +193,37 @@ export function createBrainActionPerformer(
         guide: dependencies.appGuide(),
         rememberedFacts: dependencies.rememberedFacts(),
       };
-    });
+    },
+  );
 
-  const carrySessionAction = (
+  const carrySessionAction = /* @__PURE__ */ Effect.fnUntraced(function* (
     action: ValidatedAction<SessionActionKind>,
     execution: BrainActionExecution,
-  ): Effect.Effect<ActionOutputEnvelope> =>
-    Effect.gen(function* () {
-      // The roster as admission just refreshed it is the snapshot the envelope
-      // carries: the title and agent the target wore when the action ran, read
-      // now rather than at render, when the session may be renamed or gone.
-      const sessions = dependencies.sessions();
-      const target = actionTargetSnapshot(action, sessions);
-      // The ask is recorded before the outcome is known: a refusal still leaves
-      // the developer having asked it, and the reply voicing the outcome is
-      // recorded as what Luke said.
-      dependencies.recordConversationEntry(
-        sessionActionConversationEntry(
-          action,
-          sessions,
-          execution.origin === RUN_ORIGIN.USER
-            ? CONVERSATION_ENTRY_KIND.ACTION
-            : CONVERSATION_ENTRY_KIND.OWN_ACTION,
-        ),
-      );
-      // The performer awaits once more of its own before a create or a spawn,
-      // so the execution rides along to be asked again there.
-      return actionOutputFromResult(
-        yield* dependencies.sessionActions.perform(action, execution),
-        target,
-      );
-    });
+  ): Effect.fn.Return<ActionOutputEnvelope> {
+    // The roster as admission just refreshed it is the snapshot the envelope
+    // carries: the title and agent the target wore when the action ran, read
+    // now rather than at render, when the session may be renamed or gone.
+    const sessions = dependencies.sessions();
+    const target = actionTargetSnapshot(action, sessions);
+    // The ask is recorded before the outcome is known: a refusal still leaves
+    // the developer having asked it, and the reply voicing the outcome is
+    // recorded as what Luke said.
+    dependencies.recordConversationEntry(
+      sessionActionConversationEntry(
+        action,
+        sessions,
+        execution.origin === RUN_ORIGIN.USER
+          ? CONVERSATION_ENTRY_KIND.ACTION
+          : CONVERSATION_ENTRY_KIND.OWN_ACTION,
+      ),
+    );
+    // The performer awaits once more of its own before a create or a spawn,
+    // so the execution rides along to be asked again there.
+    return actionOutputFromResult(
+      yield* dependencies.sessionActions.perform(action, execution),
+      target,
+    );
+  });
 
   /** A panel answer this build cannot read is a refusal, never an acceptance. */
   const carryAppAction = (

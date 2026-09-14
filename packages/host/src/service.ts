@@ -311,24 +311,24 @@ export function createGatewayService(
     nodes: nodes.list().map(nodeSnapshotToWire),
   });
 
-  const submit = (read: ParamReader): Effect.Effect<WireValue, GatewayRefusal> =>
-    Effect.gen(function* () {
-      const sessionKey = read.sessionKeyOrMain("sessionKey");
-      const submissionId = read.identifier("submissionId");
-      const question = read.string("question").trim().slice(0, maximumAskLength);
-      const origin = read.string("origin");
-      if (!isBrainRequestOrigin(origin))
-        return yield* invalid("origin is not one this build knows");
-      const agent = brain.current(sessionKey);
-      if (!agent) {
-        return submissionResultToWire({
-          outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-          reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-        });
-      }
-      const result = yield* agent.submitAsk({ submissionId, origin, question });
-      return submissionResultToWire(result);
-    });
+  const submit = /* @__PURE__ */ Effect.fnUntraced(function* (
+    read: ParamReader,
+  ): Effect.fn.Return<WireValue, GatewayRefusal> {
+    const sessionKey = read.sessionKeyOrMain("sessionKey");
+    const submissionId = read.identifier("submissionId");
+    const question = read.string("question").trim().slice(0, maximumAskLength);
+    const origin = read.string("origin");
+    if (!isBrainRequestOrigin(origin)) return yield* invalid("origin is not one this build knows");
+    const agent = brain.current(sessionKey);
+    if (!agent) {
+      return submissionResultToWire({
+        outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+        reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+      });
+    }
+    const result = yield* agent.submitAsk({ submissionId, origin, question });
+    return submissionResultToWire(result);
+  });
 
   /** Which connection a remote node was last registered on, so only that connection's closing disconnects it. */
   const nodeOwners = new Map<string, string>();

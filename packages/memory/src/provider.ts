@@ -225,23 +225,22 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
     execute: executions[shape.name],
   }));
 
-  const recall = (
+  const recall = /* @__PURE__ */ Effect.fnUntraced(function* (
     scope: MemoryScope,
     history: MemoryRecallHistory,
-  ): Effect.Effect<MemoryRecallResult> =>
-    Effect.gen(function* () {
-      if (!owned(scope)) return { messages: [] };
-      const messages: MemoryRecallMessage[] = [];
-      const facts = rememberedFactsText(seams.facts());
-      if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
-      if (history.items.length === 0) {
-        const notes = yield* seams.recentNotes();
-        if (notes.length > 0 && !history.signal.aborted) {
-          messages.push({ content: primedNotesText(notes) });
-        }
+  ): Effect.fn.Return<MemoryRecallResult> {
+    if (!owned(scope)) return { messages: [] };
+    const messages: MemoryRecallMessage[] = [];
+    const facts = rememberedFactsText(seams.facts());
+    if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
+    if (history.items.length === 0) {
+      const notes = yield* seams.recentNotes();
+      if (notes.length > 0 && !history.signal.aborted) {
+        messages.push({ content: primedNotesText(notes) });
       }
-      return { messages };
-    });
+    }
+    return { messages };
+  });
 
   const capture = seams.capture;
   return {

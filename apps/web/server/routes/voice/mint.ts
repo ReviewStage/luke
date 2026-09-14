@@ -1,5 +1,5 @@
 import { hostedVoiceMintSeams } from "../../hosted/voice-mint-route.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 import { voiceMintApp } from "../../voice-mint-app.js";
 
 /**
@@ -8,4 +8,4 @@ import { voiceMintApp } from "../../voice-mint-app.js";
  * `server/voice-mint-app.ts`; this file only hands it the deployment's real
  * seams.
  */
-export default routeFromHttpApp(voiceMintApp(hostedVoiceMintSeams()));
+export default routeFromHttpRouter(voiceMintApp(hostedVoiceMintSeams()));

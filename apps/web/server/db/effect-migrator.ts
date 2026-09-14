@@ -73,18 +73,19 @@ function migrationId(entry: JournalEntry): number {
 }
 
 /** The generated folder journal: the order and the instants Drizzle stamped. */
-export function webMigrationJournal(
-  folder: string = DRIZZLE_MIGRATIONS_FOLDER,
-): Effect.Effect<ReadonlyArray<JournalEntry>, Migrator.MigrationError, FileSystem | Path> {
-  return Effect.gen(function* () {
+export const webMigrationJournal: (
+  folder?: string,
+) => Effect.Effect<ReadonlyArray<JournalEntry>, Migrator.MigrationError, FileSystem | Path> =
+  /* @__PURE__ */ Effect.fn("webMigrationJournal")(function* (
+    folder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  ) {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
     const journal = yield* decodeJournal(
       yield* fileSystem.readFileString(path.join(folder, ...JOURNAL_PATH)),
     );
     return journal.entries;
-  }).pipe(Effect.mapError(failed));
-}
+  }, Effect.mapError(failed));
 
 function statementsOf(file: string): ReadonlyArray<string> {
   return file
@@ -94,10 +95,10 @@ function statementsOf(file: string): ReadonlyArray<string> {
 }
 
 /** The generated folder as migration records, in the journal's own order. */
-export function webMigrations(
-  folder: string = DRIZZLE_MIGRATIONS_FOLDER,
-): Migrator.Loader<FileSystem | Path> {
-  return Effect.gen(function* () {
+export const webMigrations: (folder?: string) => Migrator.Loader<FileSystem | Path> =
+  /* @__PURE__ */ Effect.fn("webMigrations")(function* (
+    folder: string = DRIZZLE_MIGRATIONS_FOLDER,
+  ) {
     const fileSystem = yield* FileSystem;
     const path = yield* Path;
     const entries = yield* webMigrationJournal(folder);
@@ -122,7 +123,6 @@ export function webMigrations(
       ),
     );
   });
-}
 
 const migrate = Migrator.make({});
 
@@ -142,22 +142,22 @@ function ensureMigrationsTable(table: string) {
  * copy runs only into an empty table, which is what makes a second launch a
  * no-op rather than a second copy.
  */
-export function bootstrapFromDrizzleHistory(
-  folder: string = DRIZZLE_MIGRATIONS_FOLDER,
-  table: string = MIGRATIONS_TABLE,
-): Effect.Effect<
-  ReadonlyArray<readonly [id: number, name: string]>,
-  Migrator.MigrationError | SqlError,
-  SqlClient.SqlClient | FileSystem | Path
-> {
-  return Effect.gen(function* () {
+export const bootstrapFromDrizzleHistory = /* @__PURE__ */ Effect.fn("bootstrapFromDrizzleHistory")(
+  function* (
+    folder: string = DRIZZLE_MIGRATIONS_FOLDER,
+    table: string = MIGRATIONS_TABLE,
+  ): Effect.fn.Return<
+    ReadonlyArray<readonly [id: number, name: string]>,
+    Migrator.MigrationError | SqlError,
+    SqlClient.SqlClient | FileSystem | Path
+  > {
     yield* ensureMigrationsTable(table);
     const sql = yield* SqlClient.SqlClient;
     const present = yield* sql`
-      select 1 as present from information_schema.tables
-      where table_schema = ${DRIZZLE_MIGRATIONS_TABLE.SCHEMA}
-        and table_name = ${DRIZZLE_MIGRATIONS_TABLE.NAME}
-    `.withoutTransform;
+    select 1 as present from information_schema.tables
+    where table_schema = ${DRIZZLE_MIGRATIONS_TABLE.SCHEMA}
+      and table_name = ${DRIZZLE_MIGRATIONS_TABLE.NAME}
+  `.withoutTransform;
     if (present.length === 0) {
       return [];
     }
@@ -169,9 +169,9 @@ export function bootstrapFromDrizzleHistory(
     }
     const history = yield* decodeHistoryRow(
       (yield* sql`
-        select max(created_at)::text as latest
-        from ${sql(DRIZZLE_MIGRATIONS_TABLE.SCHEMA)}.${sql(DRIZZLE_MIGRATIONS_TABLE.NAME)}
-      `.withoutTransform)[0],
+      select max(created_at)::text as latest
+      from ${sql(DRIZZLE_MIGRATIONS_TABLE.SCHEMA)}.${sql(DRIZZLE_MIGRATIONS_TABLE.NAME)}
+    `.withoutTransform)[0],
     ).pipe(Effect.mapError(failed));
     const latest = history.latest;
     if (latest === null) {
@@ -184,25 +184,23 @@ export function bootstrapFromDrizzleHistory(
       return [];
     }
     yield* sql`
-      insert into ${sql(table)} ${sql.insert(
-        applied.map(([migration_id, name]) => ({ migration_id, name })),
-      )}
-    `.withoutTransform;
+    insert into ${sql(table)} ${sql.insert(
+      applied.map(([migration_id, name]) => ({ migration_id, name })),
+    )}
+  `.withoutTransform;
     return applied;
-  });
-}
+  },
+);
 
 /** Bootstraps, then applies whatever the generated folder still holds. */
-export function runWebMigrations(
+export const runWebMigrations = /* @__PURE__ */ Effect.fn("runWebMigrations")(function* (
   folder: string = DRIZZLE_MIGRATIONS_FOLDER,
   table: string = MIGRATIONS_TABLE,
-): Effect.Effect<
+): Effect.fn.Return<
   ReadonlyArray<readonly [id: number, name: string]>,
   Migrator.MigrationError | SqlError,
   SqlClient.SqlClient | FileSystem | Path
 > {
-  return Effect.gen(function* () {
-    yield* bootstrapFromDrizzleHistory(folder, table);
-    return yield* migrate({ loader: webMigrations(folder), table });
-  });
-}
+  yield* bootstrapFromDrizzleHistory(folder, table);
+  return yield* migrate({ loader: webMigrations(folder), table });
+});

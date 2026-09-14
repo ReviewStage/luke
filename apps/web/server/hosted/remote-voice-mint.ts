@@ -34,33 +34,31 @@ export interface RemoteObserveSeams
  * answers a list rather than a refusal — a mint whose roster could not be
  * read is still a mint.
  */
-export function observeCloudSessions(
+export const observeCloudSessions = /* @__PURE__ */ Effect.fn("observeCloudSessions")(function* (
   userId: string,
   options: RemoteObserveSeams,
-): Effect.Effect<ObservedSession[], never, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const secret = (options.encryptionSecret ?? "").trim();
-    if (!secret) return [];
+): Effect.fn.Return<ObservedSession[], never, SqlClient.SqlClient> {
+  const secret = (options.encryptionSecret ?? "").trim();
+  if (!secret) return [];
 
-    const rows = yield* Effect.orElseSucceed(
-      options.readVaultKeys(userId),
-      (): readonly VaultKeyRow[] => [],
-    );
-    const passes = yield* observeProviders({
-      readApiKey: readApiKeyFor(rows, secret),
-      read: (adapter) => adapter.observe(),
-      seams: options,
-    });
-
-    const sessions: ObservedSession[] = [];
-    for (const pass of passes) {
-      for (const observation of pass.answer ?? []) {
-        sessions.push(observedSessionForResponse(pass.providerId, observation));
-      }
-    }
-    return sessions;
+  const rows = yield* Effect.orElseSucceed(
+    options.readVaultKeys(userId),
+    (): readonly VaultKeyRow[] => [],
+  );
+  const passes = yield* observeProviders({
+    readApiKey: readApiKeyFor(rows, secret),
+    read: (adapter) => adapter.observe(),
+    seams: options,
   });
-}
+
+  const sessions: ObservedSession[] = [];
+  for (const pass of passes) {
+    for (const observation of pass.answer ?? []) {
+      sessions.push(observedSessionForResponse(pass.providerId, observation));
+    }
+  }
+  return sessions;
+});
 
 /** The roster's context item as the mint answers it: the item's own id and its text. */
 export interface RemoteSessionContextItem {

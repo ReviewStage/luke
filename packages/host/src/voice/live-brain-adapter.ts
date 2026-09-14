@@ -94,94 +94,93 @@ function liveRunEventOf(event: BrainRunEvent): LiveBrainRunEvent | undefined {
  * left to end the pump it threw in, which is the guarantee the agent used to
  * hold.
  */
-export function brainAgentLiveBrain(
+export const brainAgentLiveBrain = /* @__PURE__ */ Effect.fn("brainAgentLiveBrain")(function* (
   options: BrainAgentLiveBrainOptions,
-): Effect.Effect<LiveBrain, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const scope = yield* Effect.scope;
-    const listeners = new Set<(event: LiveBrainRunEvent) => void>();
-    const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
-    const subscribed = new WeakSet<LiveBrainAgent>();
+): Effect.fn.Return<LiveBrain, never, Scope.Scope> {
+  const scope = yield* Effect.scope;
+  const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  const factsListeners = new Set<(facts: LiveBrainAnticipationFacts) => void>();
+  const subscribed = new WeakSet<LiveBrainAgent>();
 
-    const follow = (agent: LiveBrainAgent): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        if (subscribed.has(agent)) return;
-        subscribed.add(agent);
-        const events = yield* Scope.provide(agent.runEvents, scope);
-        yield* Effect.forkIn(
-          Stream.runForEach(events, (event) =>
-            Effect.catchDefect(
-              Effect.sync(() => {
-                const translated = liveRunEventOf(event);
-                if (!translated) return;
-                for (const listener of [...listeners]) listener(translated);
-              }),
-              (defect) =>
-                Effect.logError("a listener failed while a run event was delivered", defect),
-            ),
-          ),
-          scope,
-        );
-        // The brain keys an anticipation by the string the service handed it,
-        // which is the service's own row number; it goes back as the number it
-        // came from, and a key that is not one names no row and is dropped.
-        agent.onAnticipationFacts?.((facts) => {
-          const rowId = Number(facts.id);
-          if (!Number.isInteger(rowId)) return;
-          for (const listener of [...factsListeners]) listener({ rowId, text: facts.text });
-        });
-      });
+  const follow = /* @__PURE__ */ Effect.fnUntraced(function* (
+    agent: LiveBrainAgent,
+  ): Effect.fn.Return<void> {
+    if (subscribed.has(agent)) return;
+    subscribed.add(agent);
+    const events = yield* Scope.provide(agent.runEvents, scope);
+    yield* Effect.forkIn(
+      Stream.runForEach(events, (event) =>
+        Effect.catchDefect(
+          Effect.sync(() => {
+            const translated = liveRunEventOf(event);
+            if (!translated) return;
+            for (const listener of [...listeners]) listener(translated);
+          }),
+          (defect) => Effect.logError("a listener failed while a run event was delivered", defect),
+        ),
+      ),
+      scope,
+    );
+    // The brain keys an anticipation by the string the service handed it,
+    // which is the service's own row number; it goes back as the number it
+    // came from, and a key that is not one names no row and is dropped.
+    agent.onAnticipationFacts?.((facts) => {
+      const rowId = Number(facts.id);
+      if (!Number.isInteger(rowId)) return;
+      for (const listener of [...factsListeners]) listener({ rowId, text: facts.text });
+    });
+  });
 
-    const spokenAsk = (ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> =>
-      Effect.gen(function* () {
-        const agent = options.agent();
-        if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };
-        yield* follow(agent);
-        const result = yield* agent.submitAsk({
-          submissionId: ask.submissionId,
-          question: ask.question,
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        });
-        if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
-          return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: result.runId };
-        }
-        return {
-          outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-          refusal: BRAIN_ASK_REFUSAL[result.reason],
-        };
-      });
-
+  const spokenAsk = /* @__PURE__ */ Effect.fnUntraced(function* (
+    ask: LiveBrainAsk,
+  ): Effect.fn.Return<LiveBrainSubmission> {
+    const agent = options.agent();
+    if (!agent) return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: NO_BRAIN_REFUSAL };
+    yield* follow(agent);
+    const result = yield* agent.submitAsk({
+      submissionId: ask.submissionId,
+      question: ask.question,
+      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+    });
+    if (result.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED) {
+      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: result.runId };
+    }
     return {
-      anticipate: (anticipation) =>
-        Effect.suspend(() => {
-          const agent = options.agent();
-          if (!agent?.anticipateAsk) return Effect.void;
-          return Effect.andThen(
-            follow(agent),
-            agent.anticipateAsk({
-              id: String(anticipation.rowId),
-              partialAsk: anticipation.partialAsk,
-              recentTurns: anticipation.recentTurns,
-            }),
-          );
-        }),
-      dropAnticipation: () =>
-        Effect.sync(() => {
-          options.agent()?.dropAnticipation?.();
-        }),
-      onAnticipationFacts: (listener) => {
-        factsListeners.add(listener);
-        return () => {
-          factsListeners.delete(listener);
-        };
-      },
-      submitAsk: spokenAsk,
-      onRunEvent: (listener) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
-        };
-      },
+      outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+      refusal: BRAIN_ASK_REFUSAL[result.reason],
     };
   });
-}
+
+  return {
+    anticipate: (anticipation) =>
+      Effect.suspend(() => {
+        const agent = options.agent();
+        if (!agent?.anticipateAsk) return Effect.void;
+        return Effect.andThen(
+          follow(agent),
+          agent.anticipateAsk({
+            id: String(anticipation.rowId),
+            partialAsk: anticipation.partialAsk,
+            recentTurns: anticipation.recentTurns,
+          }),
+        );
+      }),
+    dropAnticipation: () =>
+      Effect.sync(() => {
+        options.agent()?.dropAnticipation?.();
+      }),
+    onAnticipationFacts: (listener) => {
+      factsListeners.add(listener);
+      return () => {
+        factsListeners.delete(listener);
+      };
+    },
+    submitAsk: spokenAsk,
+    onRunEvent: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+});

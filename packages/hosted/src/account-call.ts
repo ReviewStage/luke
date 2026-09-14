@@ -315,8 +315,12 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     const settled = <Read>(
       effect: Effect.Effect<Read, CallTransportError, HttpClient.HttpClient>,
     ): Effect.Effect<{ readonly read: Read } | CallFailed, never, HttpClient.HttpClient> =>
-      Effect.map(Effect.result(effect), (end) =>
-        Result.isFailure(end) ? { failure: transportFailure(end.failure) } : { read: end.success },
+      Effect.map(
+        Effect.result(effect),
+        Result.match({
+          onFailure: (error) => ({ failure: transportFailure(error) }),
+          onSuccess: (read) => ({ read }),
+        }),
       );
 
     return Effect.gen(function* () {

@@ -250,9 +250,9 @@ type HandshakeDecision = { admitted: GatewayClientIdentity } | { refusal: Gatewa
  * a frame. Events are not requests and never were: they are the event log's
  * own stream, forwarded to every socket that stands.
  */
-const makeGatewaySocket = (
+const makeGatewaySocket = /* @__PURE__ */ Effect.fnUntraced(function* (
   options: GatewaySocketOptions,
-): Effect.Effect<
+): Effect.fn.Return<
   {
     readonly protocol: RpcServer.Protocol["Service"];
     readonly binding: GatewaySocketBinding["Service"];
@@ -263,432 +263,426 @@ const makeGatewaySocket = (
   | GatewayEventLog
   | GatewayAdmissions
   | Scope.Scope
-> =>
-  Effect.gen(function* () {
-    const maximumFrameBytes =
-      options.maximumFrameBytes ?? WEB_SOCKET_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES;
-    const serialization = yield* RpcSerialization.RpcSerialization;
-    const parser = serialization.makeUnsafe();
-    const clients = yield* GatewayClients;
-    const log = yield* GatewayEventLog;
-    const admissions = yield* GatewayAdmissions;
-    const disconnects = yield* Queue.make<number>();
-    const admitting = MutableRef.make(true);
-    const held = new Map<number, SocketClient>();
-    // Subscribed before any socket is accepted, so an event emitted while one
-    // is being admitted is carried to it rather than missed.
-    const events = yield* log.events;
-    let connections = 0;
+> {
+  const maximumFrameBytes =
+    options.maximumFrameBytes ?? WEB_SOCKET_GATEWAY_DEFAULTS.MAXIMUM_FRAME_BYTES;
+  const serialization = yield* RpcSerialization.RpcSerialization;
+  const parser = serialization.makeUnsafe();
+  const clients = yield* GatewayClients;
+  const log = yield* GatewayEventLog;
+  const admissions = yield* GatewayAdmissions;
+  const disconnects = yield* Queue.make<number>();
+  const admitting = MutableRef.make(true);
+  const held = new Map<number, SocketClient>();
+  // Subscribed before any socket is accepted, so an event emitted while one
+  // is being admitted is carried to it rather than missed.
+  const events = yield* log.events;
+  let connections = 0;
 
-    const refusalEnvelope = (id: string, code: GatewayErrorCode, message: string): string =>
-      JSON.stringify(gatewayResponseToWire(gatewayRefusal(id, code, message, log.revision())));
+  const refusalEnvelope = (id: string, code: GatewayErrorCode, message: string): string =>
+    JSON.stringify(gatewayResponseToWire(gatewayRefusal(id, code, message, log.revision())));
 
-    const offer = (client: SocketClient, frame: string): Effect.Effect<void> =>
-      Effect.sync(() => {
-        Queue.offerUnsafe(client.outbound, frame);
-      });
-
-    let write: (clientId: number, message: FromClientEncoded) => Effect.Effect<void> = () =>
-      Effect.void;
-    const protocol = yield* RpcServer.Protocol.make((carry) => {
-      write = carry;
-      return Effect.succeed({
-        disconnects,
-        send: (clientId, response) =>
-          Effect.suspend(() => {
-            const client = held.get(clientId);
-            if (!client) return Effect.void;
-            switch (response._tag) {
-              case "Exit": {
-                const wireId = client.wireIds.get(response.requestId);
-                if (wireId === undefined) return Effect.void;
-                client.wireIds.delete(response.requestId);
-                const written = parser.encode({ ...response, requestId: wireId });
-                return offer(
-                  client,
-                  frameOf(
-                    GATEWAY_FRAME.RESPONSE,
-                    textOf(written) ??
-                      refusalEnvelope(
-                        wireId,
-                        GATEWAY_ERROR.INTERNAL,
-                        "the answer did not survive the wire",
-                      ),
-                  ),
-                );
-              }
-              case "Defect": {
-                // The runtime gave up on this client as a whole; every ask still open is answered rather than left hanging.
-                const abandoned = [...client.wireIds.values()];
-                client.wireIds.clear();
-                return Effect.forEach(
-                  abandoned,
-                  (wireId) =>
-                    offer(
-                      client,
-                      frameOf(
-                        GATEWAY_FRAME.RESPONSE,
-                        refusalEnvelope(
-                          wireId,
-                          GATEWAY_ERROR.INTERNAL,
-                          "the host could not answer",
-                        ),
-                      ),
-                    ),
-                  { discard: true },
-                );
-              }
-              default:
-                return Effect.void;
-            }
-          }),
-        end: (clientId) =>
-          Effect.andThen(
-            Effect.sync(() => {
-              held.delete(clientId);
-            }),
-            clients.disconnect(clientId),
-          ),
-        clientIds: Effect.sync(() => new Set(held.keys())),
-        initialMessage: Effect.succeedNone,
-        supportsAck: false,
-        supportsTransferables: false,
-        supportsSpanPropagation: false,
-        // A request on this socket is always answered under the envelope id it
-        // arrived with, so a request that expects no answer is not one this
-        // seam carries.
-        supportsNotifications: false,
-        codecFor: serialization.codecFor,
-      });
+  const offer = (client: SocketClient, frame: string): Effect.Effect<void> =>
+    Effect.sync(() => {
+      Queue.offerUnsafe(client.outbound, frame);
     });
 
-    yield* Effect.forkScoped(
-      Stream.runForEach(events, (event) =>
-        Effect.sync(() => {
-          const frame = frameOf(GATEWAY_FRAME.EVENT, JSON.stringify(gatewayEventToWire(event)));
-          for (const client of held.values()) Queue.offerUnsafe(client.outbound, frame);
-        }),
-      ),
-    );
-
-    const authenticate = (headers: IncomingHttpHeaders): Effect.Effect<GatewayHandshakeAdmission> =>
-      Effect.catch(
-        Effect.tryPromise({
-          try: async () => options.authenticate(headers),
-          catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
-        }),
-        // An authentication that failed to decide has authorized no one.
-        (message) =>
-          Effect.as(
-            Effect.sync(() =>
-              options.report?.(`a Gateway handshake could not be authenticated: ${message}`),
-            ),
-            { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED } as const,
-          ),
-      );
-
-    const handshake = (headers: IncomingHttpHeaders): Effect.Effect<HandshakeDecision> =>
-      Effect.gen(function* () {
-        if (!MutableRef.get(admitting)) {
-          return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
-        }
-        const authenticated = yield* authenticate(headers);
-        if ("refusal" in authenticated) return authenticated;
-        // Read again: a host that closed its admissions while this handshake
-        // was authenticating is one that has started to leave, and must admit
-        // no new socket behind it.
-        if (!MutableRef.get(admitting)) {
-          return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
-        }
-        const version = Number(headerValue(headers[GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]));
-        return version === GATEWAY_PROTOCOL_VERSION
-          ? { admitted: authenticated.admitted }
-          : { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION };
-      });
-
-    /** One socket as the host's methods see it: the connection a node registers against and is asked back through. */
-    const connectionFor = (accepted: WebSocket, client: SocketClient): GatewayHostConnection => {
-      connections += 1;
-      return {
-        connectionId: `socket-${connections}`,
-        invoke: (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
-          Effect.suspend(() => {
-            // The socket's own state decides this and not the queue behind it: an
-            // ask a closing socket would still take into the queue never leaves
-            // the host, and answering it unknown would record an effect that may
-            // have happened where nothing was dispatched at all.
-            if (accepted.readyState !== WebSocket.OPEN) {
-              return Effect.succeed(
-                unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+  let write: (clientId: number, message: FromClientEncoded) => Effect.Effect<void> = () =>
+    Effect.void;
+  const protocol = yield* RpcServer.Protocol.make((carry) => {
+    write = carry;
+    return Effect.succeed({
+      disconnects,
+      send: (clientId, response) =>
+        Effect.suspend(() => {
+          const client = held.get(clientId);
+          if (!client) return Effect.void;
+          switch (response._tag) {
+            case "Exit": {
+              const wireId = client.wireIds.get(response.requestId);
+              if (wireId === undefined) return Effect.void;
+              client.wireIds.delete(response.requestId);
+              const written = parser.encode({ ...response, requestId: wireId });
+              return offer(
+                client,
+                frameOf(
+                  GATEWAY_FRAME.RESPONSE,
+                  textOf(written) ??
+                    refusalEnvelope(
+                      wireId,
+                      GATEWAY_ERROR.INTERNAL,
+                      "the answer did not survive the wire",
+                    ),
+                ),
               );
             }
-            const answered = client.pending.open(invocation);
-            const carried = Queue.offerUnsafe(
-              client.outbound,
-              frameOf(GATEWAY_FRAME.INVOCATION, JSON.stringify(nodeInvocationToWire(invocation))),
-            );
-            if (!carried) {
-              client.pending.answer({
-                invocationId: invocation.invocationId,
-                result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
-              });
+            case "Defect": {
+              // The runtime gave up on this client as a whole; every ask still open is answered rather than left hanging.
+              const abandoned = [...client.wireIds.values()];
+              client.wireIds.clear();
+              return Effect.forEach(
+                abandoned,
+                (wireId) =>
+                  offer(
+                    client,
+                    frameOf(
+                      GATEWAY_FRAME.RESPONSE,
+                      refusalEnvelope(wireId, GATEWAY_ERROR.INTERNAL, "the host could not answer"),
+                    ),
+                  ),
+                { discard: true },
+              );
             }
-            return answered;
-          }),
-        onClosed: (listener) => {
-          client.closedListeners.add(listener);
-          return () => {
-            client.closedListeners.delete(listener);
-          };
-        },
-      };
-    };
-
-    const take = (
-      clientId: number,
-      client: SocketClient,
-      writer: Socket.Writer,
-      data: string | Uint8Array,
-    ): Effect.Effect<void> =>
-      Effect.suspend(() => {
-        if (data instanceof Uint8Array) {
-          return Effect.ignore(
-            writer.write(new Socket.CloseEvent(UNSUPPORTED_DATA_CLOSE, "text frames only")),
-          );
-        }
-        const value = valueFromJsonText(data);
-        if (!isRecord(value) || !isRecord(value.envelope)) return Effect.void;
-        const envelope = value.envelope;
-        if (value.kind === GATEWAY_FRAME.ANSWER) {
-          // An answer settles only an ask this same socket was sent; another
-          // socket's answer, or one for an ask already settled or never made,
-          // lands nowhere.
-          const answer = nodeInvocationAnswerFromWire(envelope);
-          return answer
-            ? Effect.sync(() => {
-                client.pending.answer(answer);
-              })
-            : Effect.void;
-        }
-        if (value.kind !== GATEWAY_FRAME.REQUEST) return Effect.void;
-        const requests = parser
-          .decode(JSON.stringify(envelope))
-          .flatMap((message) => Option.toArray(readRpcRequestMessage(message)));
-        const request = requests[0];
-        if (!request || requests.length !== 1) {
-          return offer(
-            client,
-            frameOf(
-              GATEWAY_FRAME.RESPONSE,
-              refusalEnvelope(
-                isWireString(envelope.id) ? envelope.id : "",
-                GATEWAY_ERROR.INVALID_PARAMS,
-                "the request is not one this host reads",
-              ),
-            ),
-          );
-        }
-        client.next += 1;
-        const requestId = String(client.next);
-        client.wireIds.set(requestId, request.id);
-        return write(clientId, {
-          ...request,
-          id: requestId,
-          headers: request.headers.map(([name, value]) => [name, value]),
-        });
-      });
-
-    const closed = (clientId: number, client: SocketClient): Effect.Effect<void> =>
-      Effect.gen(function* () {
-        yield* Effect.sync(() => {
-          held.delete(clientId);
-          // The asks still out settle first, so a node handler waiting on one
-          // reads its answer lost before it hears the connection is gone and
-          // marks the node disconnected.
-          client.pending.close();
-          for (const listener of [...client.closedListeners]) listener();
-          client.closedListeners.clear();
-        });
-        yield* Queue.end(client.outbound);
-        yield* Queue.offer(disconnects, clientId);
-      });
-
-    const serve = (
-      accepted: WebSocket,
-      raw: Duplex,
-      identity: GatewayClientIdentity,
-    ): Effect.Effect<void, never, Scope.Scope> =>
-      Effect.gen(function* () {
-        const socket = yield* Socket.fromWebSocket(
-          Effect.acquireRelease(
-            // SAFETY: `ws`'s socket is the WebSocket this listens on; the DOM interface is the only name TypeScript has for it.
-            // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- `ws` and the DOM declare the same socket and share no declared type.
-            Effect.succeed(accepted as unknown as globalThis.WebSocket),
-            (open) => Effect.sync(() => open.close()),
-          ),
-        );
-        const client: SocketClient = {
-          wireIds: new Map(),
-          outbound: yield* Queue.make<string, Cause.Done>(),
-          pending: new PendingInvocations(),
-          closedListeners: new Set(),
-          next: 0,
-        };
-        const clientId = yield* clients.connect({
-          identity,
-          connection: connectionFor(accepted, client),
-        });
-        held.set(clientId, client);
-        yield* Effect.addFinalizer(() => closed(clientId, client));
-        const writer = yield* socket.writer;
-        yield* Effect.forkScoped(
-          Stream.runForEach(Stream.fromQueue(client.outbound), (frame) =>
-            Effect.ignore(writer.write(frame)),
-          ),
-        );
-        // The reader answers a batch of frames at a time and ends with the
-        // socket, whose close is a failure of its own; the frames are taken in
-        // the order they were read.
-        const reading = Effect.gen(function* () {
-          const { pull } = yield* socket.reader;
-          while (true) {
-            const frames = yield* pull;
-            for (const frame of frames) yield* take(clientId, client, writer, frame);
+            default:
+              return Effect.void;
           }
-        });
-        yield* Effect.catch(reading, (error) =>
-          error.reason._tag === "SocketCloseError" && GRACEFUL_CLOSE_CODES.has(error.reason.code)
-            ? Effect.void
-            : Effect.sync(() =>
-                options.report?.(`a Gateway client socket failed: ${error.message}`),
-              ),
-        );
-        // The socket is this connection's own and nothing else reads it, so
-        // what the closing handshake did not finish ends here rather than
-        // holding the host's own close open behind it.
-        yield* Effect.sync(() => raw.destroy());
-      });
-
-    /**
-     * One connection from its upgrade: the handshake first, on the headers
-     * alone, and the socket run only for a client it admitted. Until
-     * `handleUpgrade` hands the socket to `ws`, nothing else listens on it: a
-     * client that drops while its credential is being checked would emit an
-     * unhandled error and take the host process with it.
-     */
-    const admit = (
-      request: IncomingMessage,
-      raw: Duplex,
-      head: Buffer,
-    ): Effect.Effect<void, never, Scope.Scope> =>
-      Effect.gen(function* () {
-        const absorb = (): void => {
-          raw.destroy();
-        };
-        yield* Effect.sync(() => raw.on("error", absorb));
-        // A host leaving while this credential is still being checked takes
-        // the socket with it rather than holding its own close open behind a
-        // credential authority that may never answer.
-        const decision = yield* Effect.onInterrupt(handshake(request.headers), () =>
-          Effect.sync(absorb),
-        );
-        if (raw.destroyed) return;
-        if ("refusal" in decision) {
-          return yield* Effect.sync(() => {
-            raw.write(
-              `HTTP/1.1 ${REFUSAL_STATUS[decision.refusal]} Refused\r\n${GATEWAY_REFUSAL_HEADER}: ${decision.refusal}\r\nConnection: close\r\n\r\n`,
-            );
-            raw.destroy();
-          });
-        }
-        const accepted = yield* Effect.callback<Option.Option<WebSocket>>((resume) => {
-          // A socket that died between the check and the upgrade admits
-          // nobody: `ws` destroys it and calls nothing back.
-          const gone = (): void => resume(Effect.succeedNone);
-          raw.once("close", gone);
-          raw.off("error", absorb);
-          sockets.handleUpgrade(request, raw, head, (socket) => {
-            raw.off("close", gone);
-            resume(Effect.succeedSome(socket));
-          });
-          // An interruption here leaves an upgrade `ws` may still finish, and
-          // a socket nothing serves would hold the host's own close open, so
-          // the connection ends rather than outliving the fiber that admitted
-          // it.
-          return Effect.sync(() => raw.destroy());
-        });
-        if (Option.isNone(accepted)) return;
-        yield* serve(accepted.value, raw, decision.admitted);
-      });
-
-    const sockets = yield* Effect.acquireRelease(
-      Effect.sync(() => new WebSocketServer({ noServer: true, maxPayload: maximumFrameBytes })),
-      (server) =>
-        Effect.callback<void>((resume) => {
-          server.close(() => resume(Effect.void));
         }),
-    );
-    // The 101 carries the host's protocol, so a client learns it on the same
-    // handshake it was admitted by.
-    yield* Effect.sync(() =>
-      sockets.on("headers", (headers) => {
-        headers.push(`${GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION}: ${GATEWAY_PROTOCOL_VERSION}`);
+      end: (clientId) =>
+        Effect.andThen(
+          Effect.sync(() => {
+            held.delete(clientId);
+          }),
+          clients.disconnect(clientId),
+        ),
+      clientIds: Effect.sync(() => new Set(held.keys())),
+      initialMessage: Effect.succeedNone,
+      supportsAck: false,
+      supportsTransferables: false,
+      supportsSpanPropagation: false,
+      // A request on this socket is always answered under the envelope id it
+      // arrived with, so a request that expects no answer is not one this
+      // seam carries.
+      supportsNotifications: false,
+      codecFor: serialization.codecFor,
+    });
+  });
+
+  yield* Effect.forkScoped(
+    Stream.runForEach(events, (event) =>
+      Effect.sync(() => {
+        const frame = frameOf(GATEWAY_FRAME.EVENT, JSON.stringify(gatewayEventToWire(event)));
+        for (const client of held.values()) Queue.offerUnsafe(client.outbound, frame);
       }),
+    ),
+  );
+
+  const authenticate = (headers: IncomingHttpHeaders): Effect.Effect<GatewayHandshakeAdmission> =>
+    Effect.catch(
+      Effect.tryPromise({
+        try: async () => options.authenticate(headers),
+        catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
+      }),
+      // An authentication that failed to decide has authorized no one.
+      (message) =>
+        Effect.as(
+          Effect.sync(() =>
+            options.report?.(`a Gateway handshake could not be authenticated: ${message}`),
+          ),
+          { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNAUTHORIZED } as const,
+        ),
     );
-    const node = yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        createServer((_request, response) => {
-          response.writeHead(NOT_UPGRADED_STATUS).end();
+
+  const handshake = /* @__PURE__ */ Effect.fnUntraced(function* (
+    headers: IncomingHttpHeaders,
+  ): Effect.fn.Return<HandshakeDecision> {
+    if (!MutableRef.get(admitting)) {
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
+    }
+    const authenticated = yield* authenticate(headers);
+    if ("refusal" in authenticated) return authenticated;
+    // Read again: a host that closed its admissions while this handshake
+    // was authenticating is one that has started to leave, and must admit
+    // no new socket behind it.
+    if (!MutableRef.get(admitting)) {
+      return { refusal: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN };
+    }
+    const version = Number(headerValue(headers[GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]));
+    return version === GATEWAY_PROTOCOL_VERSION
+      ? { admitted: authenticated.admitted }
+      : { refusal: GATEWAY_HANDSHAKE_REFUSAL.UNSUPPORTED_VERSION };
+  });
+
+  /** One socket as the host's methods see it: the connection a node registers against and is asked back through. */
+  const connectionFor = (accepted: WebSocket, client: SocketClient): GatewayHostConnection => {
+    connections += 1;
+    return {
+      connectionId: `socket-${connections}`,
+      invoke: (invocation: NodeInvocation): Effect.Effect<NodeCapabilityResult> =>
+        Effect.suspend(() => {
+          // The socket's own state decides this and not the queue behind it: an
+          // ask a closing socket would still take into the queue never leaves
+          // the host, and answering it unknown would record an effect that may
+          // have happened where nothing was dispatched at all.
+          if (accepted.readyState !== WebSocket.OPEN) {
+            return Effect.succeed(
+              unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+            );
+          }
+          const answered = client.pending.open(invocation);
+          const carried = Queue.offerUnsafe(
+            client.outbound,
+            frameOf(GATEWAY_FRAME.INVOCATION, JSON.stringify(nodeInvocationToWire(invocation))),
+          );
+          if (!carried) {
+            client.pending.answer({
+              invocationId: invocation.invocationId,
+              result: unavailableInvocation(invocation, NODE_INVOCATION_REFUSAL.DISCONNECTED),
+            });
+          }
+          return answered;
         }),
-      ),
-      (server) =>
-        Effect.callback<void>((resume) => {
-          server.closeAllConnections();
-          server.close(() => resume(Effect.void));
-        }),
-    );
-    const port = yield* Effect.callback<number, SocketServer.SocketServerError>((resume) => {
-      const failed = (cause: Error): void => {
-        resume(
-          Effect.fail(
-            new SocketServer.SocketServerError({
-              reason: new SocketServer.SocketServerOpenError({ cause }),
-            }),
+      onClosed: (listener) => {
+        client.closedListeners.add(listener);
+        return () => {
+          client.closedListeners.delete(listener);
+        };
+      },
+    };
+  };
+
+  const take = (
+    clientId: number,
+    client: SocketClient,
+    writer: Socket.Writer,
+    data: string | Uint8Array,
+  ): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      if (data instanceof Uint8Array) {
+        return Effect.ignore(
+          writer.write(new Socket.CloseEvent(UNSUPPORTED_DATA_CLOSE, "text frames only")),
+        );
+      }
+      const value = valueFromJsonText(data);
+      if (!isRecord(value) || !isRecord(value.envelope)) return Effect.void;
+      const envelope = value.envelope;
+      if (value.kind === GATEWAY_FRAME.ANSWER) {
+        // An answer settles only an ask this same socket was sent; another
+        // socket's answer, or one for an ask already settled or never made,
+        // lands nowhere.
+        const answer = nodeInvocationAnswerFromWire(envelope);
+        return answer
+          ? Effect.sync(() => {
+              client.pending.answer(answer);
+            })
+          : Effect.void;
+      }
+      if (value.kind !== GATEWAY_FRAME.REQUEST) return Effect.void;
+      const requests = parser
+        .decode(JSON.stringify(envelope))
+        .flatMap((message) => Option.toArray(readRpcRequestMessage(message)));
+      const request = requests[0];
+      if (!request || requests.length !== 1) {
+        return offer(
+          client,
+          frameOf(
+            GATEWAY_FRAME.RESPONSE,
+            refusalEnvelope(
+              isWireString(envelope.id) ? envelope.id : "",
+              GATEWAY_ERROR.INVALID_PARAMS,
+              "the request is not one this host reads",
+            ),
           ),
         );
-      };
-      node.once("error", failed);
-      node.listen(
-        options.port ?? WEB_SOCKET_GATEWAY_DEFAULTS.PORT,
-        options.host ?? WEB_SOCKET_GATEWAY_DEFAULTS.HOST,
-        () => {
-          node.off("error", failed);
-          // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
-          resume(Effect.succeed((node.address() as AddressInfo).port));
-        },
-      );
+      }
+      client.next += 1;
+      const requestId = String(client.next);
+      client.wireIds.set(requestId, request.id);
+      return write(clientId, {
+        ...request,
+        id: requestId,
+        headers: request.headers.map(([name, value]) => [name, value]),
+      });
     });
-    // Every connection is a fiber of this binding's own set, so the scope
-    // that opened the socket is what ends all of them.
-    const runFork = yield* FiberSet.makeRuntime<never>();
-    yield* Effect.sync(() =>
-      node.on("upgrade", (request, raw, head) => {
-        runFork(Effect.scoped(admit(request, raw, head)));
-      }),
-    );
 
-    return {
-      protocol,
-      binding: GatewaySocketBinding.of({
-        port,
-        connections: Effect.sync(() => held.size),
-        closeAdmissions: Effect.andThen(
-          Effect.sync(() => MutableRef.set(admitting, false)),
-          admissions.close,
-        ),
-      }),
-    };
+  const closed = /* @__PURE__ */ Effect.fnUntraced(function* (
+    clientId: number,
+    client: SocketClient,
+  ): Effect.fn.Return<void> {
+    yield* Effect.sync(() => {
+      held.delete(clientId);
+      // The asks still out settle first, so a node handler waiting on one
+      // reads its answer lost before it hears the connection is gone and
+      // marks the node disconnected.
+      client.pending.close();
+      for (const listener of [...client.closedListeners]) listener();
+      client.closedListeners.clear();
+    });
+    yield* Queue.end(client.outbound);
+    yield* Queue.offer(disconnects, clientId);
   });
+
+  const serve = /* @__PURE__ */ Effect.fnUntraced(function* (
+    accepted: WebSocket,
+    raw: Duplex,
+    identity: GatewayClientIdentity,
+  ): Effect.fn.Return<void, never, Scope.Scope> {
+    const socket = yield* Socket.fromWebSocket(
+      Effect.acquireRelease(
+        // SAFETY: `ws`'s socket is the WebSocket this listens on; the DOM interface is the only name TypeScript has for it.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- `ws` and the DOM declare the same socket and share no declared type.
+        Effect.succeed(accepted as unknown as globalThis.WebSocket),
+        (open) => Effect.sync(() => open.close()),
+      ),
+    );
+    const client: SocketClient = {
+      wireIds: new Map(),
+      outbound: yield* Queue.make<string, Cause.Done>(),
+      pending: new PendingInvocations(),
+      closedListeners: new Set(),
+      next: 0,
+    };
+    const clientId = yield* clients.connect({
+      identity,
+      connection: connectionFor(accepted, client),
+    });
+    held.set(clientId, client);
+    yield* Effect.addFinalizer(() => closed(clientId, client));
+    const writer = yield* socket.writer;
+    yield* Effect.forkScoped(
+      Stream.runForEach(Stream.fromQueue(client.outbound), (frame) =>
+        Effect.ignore(writer.write(frame)),
+      ),
+    );
+    // The reader answers a batch of frames at a time and ends with the
+    // socket, whose close is a failure of its own; the frames are taken in
+    // the order they were read.
+    const reading = Effect.gen(function* () {
+      const { pull } = yield* socket.reader;
+      while (true) {
+        const frames = yield* pull;
+        for (const frame of frames) yield* take(clientId, client, writer, frame);
+      }
+    });
+    yield* Effect.catch(reading, (error) =>
+      error.reason._tag === "SocketCloseError" && GRACEFUL_CLOSE_CODES.has(error.reason.code)
+        ? Effect.void
+        : Effect.sync(() => options.report?.(`a Gateway client socket failed: ${error.message}`)),
+    );
+    // The socket is this connection's own and nothing else reads it, so
+    // what the closing handshake did not finish ends here rather than
+    // holding the host's own close open behind it.
+    yield* Effect.sync(() => raw.destroy());
+  });
+
+  /**
+   * One connection from its upgrade: the handshake first, on the headers
+   * alone, and the socket run only for a client it admitted. Until
+   * `handleUpgrade` hands the socket to `ws`, nothing else listens on it: a
+   * client that drops while its credential is being checked would emit an
+   * unhandled error and take the host process with it.
+   */
+  const admit = /* @__PURE__ */ Effect.fnUntraced(function* (
+    request: IncomingMessage,
+    raw: Duplex,
+    head: Buffer,
+  ): Effect.fn.Return<void, never, Scope.Scope> {
+    const absorb = (): void => {
+      raw.destroy();
+    };
+    yield* Effect.sync(() => raw.on("error", absorb));
+    // A host leaving while this credential is still being checked takes
+    // the socket with it rather than holding its own close open behind a
+    // credential authority that may never answer.
+    const decision = yield* Effect.onInterrupt(handshake(request.headers), () =>
+      Effect.sync(absorb),
+    );
+    if (raw.destroyed) return;
+    if ("refusal" in decision) {
+      return yield* Effect.sync(() => {
+        raw.write(
+          `HTTP/1.1 ${REFUSAL_STATUS[decision.refusal]} Refused\r\n${GATEWAY_REFUSAL_HEADER}: ${decision.refusal}\r\nConnection: close\r\n\r\n`,
+        );
+        raw.destroy();
+      });
+    }
+    const accepted = yield* Effect.callback<Option.Option<WebSocket>>((resume) => {
+      // A socket that died between the check and the upgrade admits
+      // nobody: `ws` destroys it and calls nothing back.
+      const gone = (): void => resume(Effect.succeedNone);
+      raw.once("close", gone);
+      raw.off("error", absorb);
+      sockets.handleUpgrade(request, raw, head, (socket) => {
+        raw.off("close", gone);
+        resume(Effect.succeedSome(socket));
+      });
+      // An interruption here leaves an upgrade `ws` may still finish, and
+      // a socket nothing serves would hold the host's own close open, so
+      // the connection ends rather than outliving the fiber that admitted
+      // it.
+      return Effect.sync(() => raw.destroy());
+    });
+    if (Option.isNone(accepted)) return;
+    yield* serve(accepted.value, raw, decision.admitted);
+  });
+
+  const sockets = yield* Effect.acquireRelease(
+    Effect.sync(() => new WebSocketServer({ noServer: true, maxPayload: maximumFrameBytes })),
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.close(() => resume(Effect.void));
+      }),
+  );
+  // The 101 carries the host's protocol, so a client learns it on the same
+  // handshake it was admitted by.
+  yield* Effect.sync(() =>
+    sockets.on("headers", (headers) => {
+      headers.push(`${GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION}: ${GATEWAY_PROTOCOL_VERSION}`);
+    }),
+  );
+  const node = yield* Effect.acquireRelease(
+    Effect.sync(() =>
+      createServer((_request, response) => {
+        response.writeHead(NOT_UPGRADED_STATUS).end();
+      }),
+    ),
+    (server) =>
+      Effect.callback<void>((resume) => {
+        server.closeAllConnections();
+        server.close(() => resume(Effect.void));
+      }),
+  );
+  const port = yield* Effect.callback<number, SocketServer.SocketServerError>((resume) => {
+    const failed = (cause: Error): void => {
+      resume(
+        Effect.fail(
+          new SocketServer.SocketServerError({
+            reason: new SocketServer.SocketServerOpenError({ cause }),
+          }),
+        ),
+      );
+    };
+    node.once("error", failed);
+    node.listen(
+      options.port ?? WEB_SOCKET_GATEWAY_DEFAULTS.PORT,
+      options.host ?? WEB_SOCKET_GATEWAY_DEFAULTS.HOST,
+      () => {
+        node.off("error", failed);
+        // SAFETY: a TCP server that is listening answers an AddressInfo, never a pipe path.
+        resume(Effect.succeed((node.address() as AddressInfo).port));
+      },
+    );
+  });
+  // Every connection is a fiber of this binding's own set, so the scope
+  // that opened the socket is what ends all of them.
+  const runFork = yield* FiberSet.makeRuntime<never>();
+  yield* Effect.sync(() =>
+    node.on("upgrade", (request, raw, head) => {
+      runFork(Effect.scoped(admit(request, raw, head)));
+    }),
+  );
+
+  return {
+    protocol,
+    binding: GatewaySocketBinding.of({
+      port,
+      connections: Effect.sync(() => held.size),
+      closeAdmissions: Effect.andThen(
+        Effect.sync(() => MutableRef.set(admitting, false)),
+        admissions.close,
+      ),
+    }),
+  };
+});
 
 /** The socket as the `Protocol` a server reads its frames from, beside the binding itself. */
 function layerGatewaySocketProtocol(
@@ -757,7 +751,10 @@ export const GATEWAY_UNREACHABLE = "unreachable";
 
 export type GatewayConnectResult =
   | { ok: true; connection: WebSocketGatewayConnection }
-  | { ok: false; failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE };
+  | {
+      ok: false;
+      failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE;
+    };
 
 function isRefusal(value: string | undefined): value is GatewayHandshakeRefusal {
   return Object.values(GATEWAY_HANDSHAKE_REFUSAL).some((held) => held === value);
@@ -767,7 +764,10 @@ function disconnected(id: string): GatewayResponse {
   return {
     id,
     ok: false,
-    error: { code: GATEWAY_ERROR.DISCONNECTED, message: "the Gateway socket is closed" },
+    error: {
+      code: GATEWAY_ERROR.DISCONNECTED,
+      message: "the Gateway socket is closed",
+    },
     revision: { configuration: 0, sequence: 0 },
   };
 }
@@ -786,7 +786,10 @@ interface HeldGatewaySocket {
 
 type GatewaySocketHandshake =
   | { readonly ok: true; readonly held: HeldGatewaySocket }
-  | { readonly ok: false; readonly failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE };
+  | {
+      readonly ok: false;
+      readonly failure: GatewayHandshakeRefusal | typeof GATEWAY_UNREACHABLE;
+    };
 
 /**
  * The handshake, and the socket it was made over held for the scope that
@@ -798,54 +801,55 @@ type GatewaySocketHandshake =
  * handshake answers — and a fiber interrupted while it is still out answers
  * nothing — the scope that asked is what ends the socket.
  */
-function openGatewaySocket(
+const openGatewaySocket = /* @__PURE__ */ Effect.fnUntraced(function* (
   options: WebSocketGatewayConnectOptions,
-): Effect.Effect<GatewaySocketHandshake, never, Scope.Scope> {
-  return Effect.gen(function* () {
-    const arrivals = yield* Queue.make<string, Cause.Done>();
-    const socket = yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const opening = new WebSocket(options.url, {
-          headers: {
-            ...options.headers,
-            [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
-            [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: options.client.clientId,
-            [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: options.client.role,
-          },
-          handshakeTimeout: options.timeoutMs ?? WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS,
-          perMessageDeflate: false,
-        });
-        opening.on("message", (data, isBinary) => {
-          if (!isBinary) Queue.offerUnsafe(arrivals, data.toString());
-        });
-        const ending = (): void => {
-          Queue.endUnsafe(arrivals);
-        };
-        opening.once("close", ending);
-        opening.once("error", ending);
-        return opening;
-      }),
-      (opening) => Effect.sync(() => opening.terminate()),
-    );
-    return yield* Effect.callback<GatewaySocketHandshake>((resume) => {
-      let settled = false;
-      const settle = (handshake: GatewaySocketHandshake): void => {
-        if (settled) return;
-        settled = true;
-        resume(Effect.succeed(handshake));
-      };
-      socket.once("unexpected-response", (_request, response: IncomingMessage) => {
-        const refusal = response.headers[GATEWAY_REFUSAL_HEADER];
-        const named = Array.isArray(refusal) ? refusal[0] : refusal;
-        response.resume();
-        socket.terminate();
-        settle({ ok: false, failure: isRefusal(named) ? named : GATEWAY_UNREACHABLE });
+): Effect.fn.Return<GatewaySocketHandshake, never, Scope.Scope> {
+  const arrivals = yield* Queue.make<string, Cause.Done>();
+  const socket = yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      const opening = new WebSocket(options.url, {
+        headers: {
+          ...options.headers,
+          [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
+          [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: options.client.clientId,
+          [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: options.client.role,
+        },
+        handshakeTimeout: options.timeoutMs ?? WEB_SOCKET_GATEWAY_CONNECT_DEFAULTS.TIMEOUT_MS,
+        perMessageDeflate: false,
       });
-      socket.once("error", () => settle({ ok: false, failure: GATEWAY_UNREACHABLE }));
-      socket.once("open", () => settle({ ok: true, held: { socket, arrivals } }));
+      opening.on("message", (data, isBinary) => {
+        if (!isBinary) Queue.offerUnsafe(arrivals, data.toString());
+      });
+      const ending = (): void => {
+        Queue.endUnsafe(arrivals);
+      };
+      opening.once("close", ending);
+      opening.once("error", ending);
+      return opening;
+    }),
+    (opening) => Effect.sync(() => opening.terminate()),
+  );
+  return yield* Effect.callback<GatewaySocketHandshake>((resume) => {
+    let settled = false;
+    const settle = (handshake: GatewaySocketHandshake): void => {
+      if (settled) return;
+      settled = true;
+      resume(Effect.succeed(handshake));
+    };
+    socket.once("unexpected-response", (_request, response: IncomingMessage) => {
+      const refusal = response.headers[GATEWAY_REFUSAL_HEADER];
+      const named = Array.isArray(refusal) ? refusal[0] : refusal;
+      response.resume();
+      socket.terminate();
+      settle({
+        ok: false,
+        failure: isRefusal(named) ? named : GATEWAY_UNREACHABLE,
+      });
     });
+    socket.once("error", () => settle({ ok: false, failure: GATEWAY_UNREACHABLE }));
+    socket.once("open", () => settle({ ok: true, held: { socket, arrivals } }));
   });
-}
+});
 
 class WebSocketGatewayConnection implements GatewayTransport {
   readonly #socket: WebSocket;
@@ -1012,10 +1016,10 @@ class WebSocketGatewayConnection implements GatewayTransport {
  * with it. A request that is in flight when the socket closes answers the
  * typed disconnected error rather than hanging.
  */
-export function connectWebSocketGateway(
-  options: WebSocketGatewayConnectOptions,
-): Effect.Effect<GatewayConnectResult, never, Scope.Scope> {
-  return Effect.gen(function* () {
+export const connectWebSocketGateway = /* @__PURE__ */ Effect.fn("connectWebSocketGateway")(
+  function* (
+    options: WebSocketGatewayConnectOptions,
+  ): Effect.fn.Return<GatewayConnectResult, never, Scope.Scope> {
     const handshake = yield* openGatewaySocket(options);
     if (!handshake.ok) return { ok: false, failure: handshake.failure };
     const answering = yield* FiberSet.make<void>();
@@ -1033,5 +1037,5 @@ export function connectWebSocketGateway(
       ),
     );
     return { ok: true, connection };
-  });
-}
+  },
+);

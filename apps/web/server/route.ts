@@ -26,7 +26,7 @@ export const ANY_PATH = "*";
 
 /**
  * What a group of routes is: a layer that registers each of its routes with
- * the one `HttpRouter` service `routeFromHttpApp` builds. A route's own
+ * the one `HttpRouter` service `routeFromHttpRouter` builds. A route's own
  * requirements are carried as request markers rather than as the layer's
  * inputs, since they are provided per request rather than when the router is
  * built; `R` names them as the services they are. A group answers every

@@ -130,33 +130,31 @@ export function hostedMethod(
  * the sender may omit or misstate, and is left the moment the bound is
  * passed, so an oversized request is never held whole.
  */
-export function readJsonBodyEffect(
+export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("readJsonBodyEffect")(function* (
   maximumBytes: number,
-): Effect.Effect<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const chunks: Uint8Array[] = [];
-    let counted = 0;
-    const received = yield* Stream.runForEachWhile(request.stream, (chunk) => {
-      chunks.push(chunk);
-      counted += chunk.byteLength;
-      return Effect.succeed(counted <= maximumBytes);
-    }).pipe(
-      Effect.map(() => counted),
-      Effect.mapError((): HostedRefusal => HOSTED_REFUSAL.INVALID_REQUEST),
-    );
-    if (received > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
-    const joined = new Uint8Array(received);
-    let offset = 0;
-    for (const chunk of chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.byteLength;
-    }
-    return yield* Effect.try({
-      // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
-      try: () =>
-        JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
-      catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
-    });
+): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const chunks: Uint8Array[] = [];
+  let counted = 0;
+  const received = yield* Stream.runForEachWhile(request.stream, (chunk) => {
+    chunks.push(chunk);
+    counted += chunk.byteLength;
+    return Effect.succeed(counted <= maximumBytes);
+  }).pipe(
+    Effect.map(() => counted),
+    Effect.mapError((): HostedRefusal => HOSTED_REFUSAL.INVALID_REQUEST),
+  );
+  if (received > maximumBytes) return yield* Effect.fail(HOSTED_REFUSAL.REQUEST_TOO_LARGE);
+  const joined = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    joined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return yield* Effect.try({
+    // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
+    try: () =>
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
+    catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
-}
+});

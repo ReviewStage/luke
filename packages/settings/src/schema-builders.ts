@@ -32,15 +32,16 @@ const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: fa
 
 /**
  * Every guard settles as a `Result` before it ever becomes a `{ valid, value
- * }` pair: a `Right` is what a guard accepted, and a `Left` carries the same
+ * }` pair: a success is what a guard accepted, and a failure carries the same
  * value a caller sees on refusal (the default, or `undefined`), because the
  * exported shape keeps a value on both branches even where the failure
- * channel usually would not.
+ * channel usually would not. The fold is total, so it is stated as one —
+ * `Result.match` rather than a test of the tag and a reach into the arm it
+ * proved.
  */
 export const settingGuardFromEither = <Value>(
   either: Result.Result<Value, Value>,
-): SettingGuardResult<Value> =>
-  Result.isSuccess(either) ? valid(either.success) : invalid(either.failure);
+): SettingGuardResult<Value> => Result.match(either, { onSuccess: valid, onFailure: invalid });
 
 export function optional<Value extends UnparsedWireValue>(
   value: UnparsedWireValue,

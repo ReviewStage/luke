@@ -70,74 +70,72 @@ function reportedInstant(value: number | null | undefined): Date | null | undefi
   return new Date(value);
 }
 
-export function handleChanges(
+export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function* (
   options: ChangeSignalOptions,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { request, resolveUserId, store } = options;
-    const now = options.now ?? Date.now;
+): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const { request, resolveUserId, store } = options;
+  const now = options.now ?? Date.now;
 
-    if (request.method !== CHANGES_METHOD) {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
-    }
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
-    if (!(yield* changesBrake.check(userId))) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-    }
-    const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES));
-    if (parsed instanceof Response) return parsed;
-    const body: ChangesRequest | undefined = Result.getOrUndefined(
-      readEither(changesRequestSchema)(parsed),
+  if (request.method !== CHANGES_METHOD) {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
     );
-    if (!body) {
-      return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-    }
+  }
+  const userId = yield* resolveUserId(request);
+  if (!userId) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+  if (!(yield* changesBrake.check(userId))) {
+    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+  }
+  const parsed = yield* Effect.promise(() => readJsonBody(request, MAXIMUM_CHANGES_BODY_BYTES));
+  if (parsed instanceof Response) return parsed;
+  const body: ChangesRequest | undefined = Result.getOrUndefined(
+    readEither(changesRequestSchema)(parsed),
+  );
+  if (!body) {
+    return errorResponse(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+  }
 
-    const seen = yield* options.touchDevice(
-      userId,
-      {
-        deviceId: body.deviceId,
-        activeUntil: reportedInstant(body.activeUntil),
-        ...(body.quietUntil !== undefined
-          ? { quietUntil: reportedInstant(body.quietUntil) }
-          : undefined),
-        push: undefined,
-      },
-      new Date(now()),
-    );
+  const seen = yield* options.touchDevice(
+    userId,
+    {
+      deviceId: body.deviceId,
+      activeUntil: reportedInstant(body.activeUntil),
+      ...(body.quietUntil !== undefined
+        ? { quietUntil: reportedInstant(body.quietUntil) }
+        : undefined),
+      push: undefined,
+    },
+    new Date(now()),
+  );
 
-    const [standing, latestTurn, rosterObservedAt] = yield* Effect.all([
-      store.directory.standing(userId),
-      store.turns.latest(userId),
-      store.roster.observedAt(userId),
-    ]);
-    const answer: ChangesAnswer = {
-      seen,
-      // A messages head carries the conversation's journal revision beside the
-      // last sequence handed out, so a journal written in place moves the head
-      // and a journal left open, unwritten, leaves it standing.
-      messages: encodeSequenceReadCursor(
-        standing.map((conversation) => ({
-          conversationId: conversation.id,
-          seq: conversation.nextMessageSeq - 1,
-          revision: conversation.journalRevision,
-        })),
-      ),
-      events: encodeSequenceReadCursor(
-        standing.map((conversation) => ({
-          conversationId: conversation.id,
-          seq: conversation.nextEventSeq - 1,
-        })),
-      ),
-      ...(latestTurn !== undefined ? { turns: encodeTurnReadCursor(latestTurn) } : undefined),
-      ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
-    };
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  const [standing, latestTurn, rosterObservedAt] = yield* Effect.all([
+    store.directory.standing(userId),
+    store.turns.latest(userId),
+    store.roster.observedAt(userId),
+  ]);
+  const answer: ChangesAnswer = {
+    seen,
+    // A messages head carries the conversation's journal revision beside the
+    // last sequence handed out, so a journal written in place moves the head
+    // and a journal left open, unwritten, leaves it standing.
+    messages: encodeSequenceReadCursor(
+      standing.map((conversation) => ({
+        conversationId: conversation.id,
+        seq: conversation.nextMessageSeq - 1,
+        revision: conversation.journalRevision,
+      })),
+    ),
+    events: encodeSequenceReadCursor(
+      standing.map((conversation) => ({
+        conversationId: conversation.id,
+        seq: conversation.nextEventSeq - 1,
+      })),
+    ),
+    ...(latestTurn !== undefined ? { turns: encodeTurnReadCursor(latestTurn) } : undefined),
+    ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
+  };
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});

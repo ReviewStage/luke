@@ -80,37 +80,37 @@ interface PrivateTurnOptions {
  * with an inert event sink, and disposed whatever happened, so nothing the
  * turn read or said outlives it or reaches a conversation.
  */
-function runPrivateTurn(options: PrivateTurnOptions): Effect.Effect<RuntimeRunEnd> {
-  return Effect.gen(function* () {
-    const opened = yield* options.runtime.openContext(undefined, UNKNOWN_ACTION_RESULT);
-    return yield* Effect.ensuring(
-      Effect.gen(function* () {
-        const items = options.items;
-        if (items && items.length > 0) {
-          yield* Effect.promise(
-            async () => await opened.context.adopt([...items], { signal: options.signal }),
-          );
-        }
-        const run = options.runtime.start({
-          runId: options.runId,
-          context: opened.context,
-          tools: options.tools,
-          toolSchemas: options.toolSchemas,
-          prompt: options.prompt,
-          input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.ask }],
-          ephemeral: () => [],
-          maximumOutputTokens: options.maximumOutputTokens,
-          signal: options.signal,
-          onEvent: () => Effect.void,
-        });
-        return yield* run.done;
-      }),
-      Effect.promise(async () => {
-        await Promise.resolve(opened.context.dispose()).catch(() => undefined);
-      }),
-    );
-  });
-}
+const runPrivateTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
+  options: PrivateTurnOptions,
+): Effect.fn.Return<RuntimeRunEnd> {
+  const opened = yield* options.runtime.openContext(undefined, UNKNOWN_ACTION_RESULT);
+  return yield* Effect.ensuring(
+    Effect.gen(function* () {
+      const items = options.items;
+      if (items && items.length > 0) {
+        yield* Effect.promise(
+          async () => await opened.context.adopt([...items], { signal: options.signal }),
+        );
+      }
+      const run = options.runtime.start({
+        runId: options.runId,
+        context: opened.context,
+        tools: options.tools,
+        toolSchemas: options.toolSchemas,
+        prompt: options.prompt,
+        input: [{ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: options.ask }],
+        ephemeral: () => [],
+        maximumOutputTokens: options.maximumOutputTokens,
+        signal: options.signal,
+        onEvent: () => Effect.void,
+      });
+      return yield* run.done;
+    }),
+    Effect.promise(async () => {
+      await Promise.resolve(opened.context.dispose()).catch(() => undefined);
+    }),
+  );
+});
 
 function rejection(reason: string): ToolResult {
   return answer({ status: ACTION_RESULT_STATUS.REJECTED, reason });
@@ -139,7 +139,11 @@ export function runMemoryHousekeeping(
         if (call.name === BRAIN_TOOL.READ_WORKSPACE_FILE) {
           const read = yield* options.workspace.read(name);
           return read.ok
-            ? answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, content: read.content })
+            ? answer({
+                status: ACTION_RESULT_STATUS.ACCEPTED,
+                name,
+                content: read.content,
+              })
             : rejection(read.reason);
         }
         if (!isDailyNotePathForDay(name, options.dateStamp)) {
@@ -158,7 +162,11 @@ export function runMemoryHousekeeping(
         const written = yield* options.workspace.write(name, content);
         if (!written.ok) return rejection(written.reason);
         writes += 1;
-        return answer({ status: ACTION_RESULT_STATUS.ACCEPTED, name, chars: written.chars });
+        return answer({
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          name,
+          chars: written.chars,
+        });
       }),
   };
   return Effect.catchDefect(
@@ -186,7 +194,11 @@ export function runMemoryHousekeeping(
             };
           case RUN_END_REASON.CANCELLED:
           case RUN_END_REASON.DEADLINE:
-            return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED, writes, reason: end.reason };
+            return {
+              outcome: MEMORY_HOUSEKEEPING_OUTCOME.INTERRUPTED,
+              writes,
+              reason: end.reason,
+            };
           case RUN_END_REASON.THROTTLED:
             return {
               outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
@@ -200,7 +212,11 @@ export function runMemoryHousekeeping(
               reason: `${end.failure}: ${end.detail}`,
             };
           default:
-            return { outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED, writes, reason: end.detail };
+            return {
+              outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+              writes,
+              reason: end.detail,
+            };
         }
       },
     ),

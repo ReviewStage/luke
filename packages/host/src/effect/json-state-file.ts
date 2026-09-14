@@ -60,25 +60,26 @@ export function jsonStateFileEffect<A extends object, I>(
     return Object.keys(decoded.success).length === 0 ? undefined : decoded.success;
   });
 
-  const update: JsonStateFileEffect<A>["update"] = (mutate) =>
-    Effect.gen(function* () {
-      const current = yield* read;
-      const next = mutate(current);
-      const fs = yield* FileSystem.FileSystem;
-      const target = yield* filePath;
-      yield* fs
-        .writeFileString(target, `${JSON.stringify(encode(next))}\n`)
-        .pipe(
-          Effect.catch((error) =>
-            Effect.flatMap(Reporter, (reporter) =>
-              Effect.sync(() =>
-                reporter.report(`Could not persist ${options.fileName}: ${error.message}`),
-              ),
+  const update: JsonStateFileEffect<A>["update"] = /* @__PURE__ */ Effect.fnUntraced(function* (
+    mutate: (current: A | undefined) => A,
+  ): Effect.fn.Return<A, never, FileSystem.FileSystem | StateRoot | Reporter> {
+    const current = yield* read;
+    const next = mutate(current);
+    const fs = yield* FileSystem.FileSystem;
+    const target = yield* filePath;
+    yield* fs
+      .writeFileString(target, `${JSON.stringify(encode(next))}\n`)
+      .pipe(
+        Effect.catch((error) =>
+          Effect.flatMap(Reporter, (reporter) =>
+            Effect.sync(() =>
+              reporter.report(`Could not persist ${options.fileName}: ${error.message}`),
             ),
           ),
-        );
-      return next;
-    });
+        ),
+      );
+    return next;
+  });
 
   return { read, update };
 }

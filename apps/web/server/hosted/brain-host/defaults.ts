@@ -56,23 +56,21 @@ const findDefaultProjects = SqlSchema.findAll({
  * They steer the projects context the brain reads and the admission of a
  * creation that names no project, exactly as the desktop's settings do.
  */
-export function readWorkspaceDefaults(
+export const readWorkspaceDefaults = /* @__PURE__ */ Effect.fn("readWorkspaceDefaults")(function* (
   userId: string,
-): Effect.Effect<HostedWorkspaceDefaults, WorkspaceDefaultsFailure, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const preference = yield* findDefaultProvider(userId);
-    const projects = yield* findDefaultProjects(userId);
-    const defaultProjectIds: Partial<Record<string, string>> = {};
-    for (const row of projects) {
-      if (row.defaultProjectId) defaultProjectIds[row.providerId] = row.defaultProjectId;
-    }
-    const defaultProviderId = preference.pipe(
-      Option.flatMapNullishOr((row) => row.defaultWorkspaceProvider),
-      Option.getOrUndefined,
-    );
-    return {
-      ...(defaultProviderId ? { defaultProviderId } : undefined),
-      ...(Object.keys(defaultProjectIds).length > 0 ? { defaultProjectIds } : undefined),
-    };
-  });
-}
+): Effect.fn.Return<HostedWorkspaceDefaults, WorkspaceDefaultsFailure, SqlClient.SqlClient> {
+  const preference = yield* findDefaultProvider(userId);
+  const projects = yield* findDefaultProjects(userId);
+  const defaultProjectIds: Partial<Record<string, string>> = {};
+  for (const row of projects) {
+    if (row.defaultProjectId) defaultProjectIds[row.providerId] = row.defaultProjectId;
+  }
+  const defaultProviderId = preference.pipe(
+    Option.flatMapNullishOr((row) => row.defaultWorkspaceProvider),
+    Option.getOrUndefined,
+  );
+  return {
+    ...(defaultProviderId ? { defaultProviderId } : undefined),
+    ...(Object.keys(defaultProjectIds).length > 0 ? { defaultProjectIds } : undefined),
+  };
+});

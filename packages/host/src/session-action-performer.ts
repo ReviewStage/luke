@@ -190,22 +190,20 @@ export function createSessionActionPerformer(
    * standing says, so a write that reached the provider is always the one
    * that redraws the roster and is counted.
    */
-  function carry(
+  const carry = /* @__PURE__ */ Effect.fnUntraced(function* (
     identity: SessionIdentity,
     counted: ProductSessionAction,
     call: (target: HostedActionTarget) => Effect.Effect<HostedActionOutcome>,
-  ): Effect.Effect<CarriedActionResult> {
-    return Effect.gen(function* () {
-      const target = cloudTarget(identity);
-      if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const outcome = yield* carriedHostedCall(call(target));
-          return yield* settle(target.providerId, counted, hostedActionResult(outcome));
-        }),
-      );
-    });
-  }
+  ): Effect.fn.Return<CarriedActionResult> {
+    const target = cloudTarget(identity);
+    if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const outcome = yield* carriedHostedCall(call(target));
+        return yield* settle(target.providerId, counted, hostedActionResult(outcome));
+      }),
+    );
+  });
 
   const countOpen = (identity: SessionIdentity) => {
     if (isProviderId(identity.providerId)) {
@@ -360,121 +358,118 @@ export function createSessionActionPerformer(
   // the same snapshot before the provider's documented creation endpoint is
   // reached. A fixture run offers no projects at all, so it refuses every ask
   // without touching a network.
-  const createWorkspace = (
+  const createWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
     action: ValidatedAction<typeof ACTION_KIND.CREATE_WORKSPACE>,
     guard: ActionGuard | undefined,
-  ): Effect.Effect<CarriedActionResult> =>
-    Effect.gen(function* () {
-      const { providerId, providerProjectId } = action;
-      if (!sendsNetwork) {
-        return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_NETWORK };
-      }
-      if (!isCloudAgentProviderId(providerId)) {
-        return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_CREATION };
-      }
-      // A model the user named for this one creation outranks the stored choice
-      // for this action alone; the stored choice stands otherwise. Both are held
-      // to the build's documented table — the named one by admission, the stored
-      // one when it was written — and the service's admission holds whichever
-      // rides to the same table again before anything reaches the provider.
-      const stored = yield* storedSelection(providerId, guard);
-      if (guard?.isRevoked()) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-      }
-      const selection = action.agentSelection ?? stored;
-      // From the creation to the remembered default the fiber is
-      // uninterruptible: a workspace the provider made is redrawn, counted,
-      // watched for, and remembered whatever became of the standing that
-      // asked for it.
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const outcome = yield* carriedHostedCall(
-            actions.createWorkspace(providerId, {
-              providerProjectId,
-              agent: action.agent ?? selection?.agent,
-              model: selection?.model,
-              effort: selection?.effort,
-              name: action.name,
-              task: action.task,
-            }),
-          );
-          const result = yield* settle(
-            providerId,
-            PRODUCT_SESSION_ACTION.WORKSPACE_CREATE,
-            hostedActionResult(outcome),
-          );
-          if ("failure" in outcome || result.status !== ACTION_RESULT_STATUS.ACCEPTED)
-            return result;
-          // The session the creation named rides out as an identity under the
-          // provider that was asked — an identifier, never an address — for the
-          // envelope to record as the created session.
-          const { providerSessionId } = outcome.answer;
-          const createdSession: SessionIdentity | undefined =
-            providerSessionId === undefined ? undefined : { providerId, providerSessionId };
-          if (createdSession) {
-            // A workspace that landed is also one the developer just asked to be
-            // taken to, so the session the creation response named waits here for
-            // observation to report it, and is opened then like a pressed row.
-            // Noted before the refresh the settle began can commit, so the very pass
-            // that first sees the session resolves it; a pass that already committed
-            // it is claimed against here, and later commits carry every later arrival.
-            expectCreatedWorkspace(createdSession, Date.now());
-            openCreatedWorkspaces();
-          }
-          // The first workspace that actually lands chooses the default provider,
-          // so a later ask that names none has somewhere unsurprising to go. Only
-          // while nothing is chosen: a default the user holds is theirs to change,
-          // never a creation's. Deterministic on the validated action — nothing a
-          // model composed decides this — and losing the save loses only the
-          // remembered default, never the workspace that just landed.
-          yield* rememberWorkspaceDefaults(providerId, providerProjectId, action.agentSelection);
-          return {
-            status: ACTION_RESULT_STATUS.ACCEPTED,
-            ...(createdSession ? { createdSession } : undefined),
-          };
-        }),
-      );
-    });
+  ): Effect.fn.Return<CarriedActionResult> {
+    const { providerId, providerProjectId } = action;
+    if (!sendsNetwork) {
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_NETWORK };
+    }
+    if (!isCloudAgentProviderId(providerId)) {
+      return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_CREATION };
+    }
+    // A model the user named for this one creation outranks the stored choice
+    // for this action alone; the stored choice stands otherwise. Both are held
+    // to the build's documented table — the named one by admission, the stored
+    // one when it was written — and the service's admission holds whichever
+    // rides to the same table again before anything reaches the provider.
+    const stored = yield* storedSelection(providerId, guard);
+    if (guard?.isRevoked()) {
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
+    }
+    const selection = action.agentSelection ?? stored;
+    // From the creation to the remembered default the fiber is
+    // uninterruptible: a workspace the provider made is redrawn, counted,
+    // watched for, and remembered whatever became of the standing that
+    // asked for it.
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const outcome = yield* carriedHostedCall(
+          actions.createWorkspace(providerId, {
+            providerProjectId,
+            agent: action.agent ?? selection?.agent,
+            model: selection?.model,
+            effort: selection?.effort,
+            name: action.name,
+            task: action.task,
+          }),
+        );
+        const result = yield* settle(
+          providerId,
+          PRODUCT_SESSION_ACTION.WORKSPACE_CREATE,
+          hostedActionResult(outcome),
+        );
+        if ("failure" in outcome || result.status !== ACTION_RESULT_STATUS.ACCEPTED) return result;
+        // The session the creation named rides out as an identity under the
+        // provider that was asked — an identifier, never an address — for the
+        // envelope to record as the created session.
+        const { providerSessionId } = outcome.answer;
+        const createdSession: SessionIdentity | undefined =
+          providerSessionId === undefined ? undefined : { providerId, providerSessionId };
+        if (createdSession) {
+          // A workspace that landed is also one the developer just asked to be
+          // taken to, so the session the creation response named waits here for
+          // observation to report it, and is opened then like a pressed row.
+          // Noted before the refresh the settle began can commit, so the very pass
+          // that first sees the session resolves it; a pass that already committed
+          // it is claimed against here, and later commits carry every later arrival.
+          expectCreatedWorkspace(createdSession, Date.now());
+          openCreatedWorkspaces();
+        }
+        // The first workspace that actually lands chooses the default provider,
+        // so a later ask that names none has somewhere unsurprising to go. Only
+        // while nothing is chosen: a default the user holds is theirs to change,
+        // never a creation's. Deterministic on the validated action — nothing a
+        // model composed decides this — and losing the save loses only the
+        // remembered default, never the workspace that just landed.
+        yield* rememberWorkspaceDefaults(providerId, providerProjectId, action.agentSelection);
+        return {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          ...(createdSession ? { createdSession } : undefined),
+        };
+      }),
+    );
+  });
 
   // Another agent in an observed workspace: the agent kind the action carries
   // is the one that session's own observation listed, and the service reads
   // the workspace it lands in back from its stored snapshot.
-  const addWorkspaceAgent = (
+  const addWorkspaceAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
     action: ValidatedAction<typeof ACTION_KIND.ADD_AGENT>,
     guard: ActionGuard | undefined,
-  ): Effect.Effect<CarriedActionResult> =>
-    Effect.gen(function* () {
-      const target = cloudTarget(action.identity);
-      if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
-      const stored = yield* storedSelection(target.providerId, guard);
-      if (guard?.isRevoked()) {
-        return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
-      }
-      // A stored pairing rides along only when it names the very agent kind the
-      // developer asked for, and a model the ask named brings its own effort or
-      // none: a preference rides with an ask, never against it.
-      const paired = stored?.agent === action.agent ? stored : undefined;
-      const model = action.model ?? paired?.model;
-      const effort = action.model === undefined ? paired?.effort : action.effort;
-      return yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const outcome = yield* carriedHostedCall(
-            actions.addAgent(target, {
-              agent: action.agent,
-              model,
-              effort,
-              name: action.name,
-              task: action.task,
-            }),
-          );
-          return yield* settle(
-            target.providerId,
-            PRODUCT_SESSION_ACTION.AGENT_ADD,
-            hostedActionResult(outcome),
-          );
-        }),
-      );
-    });
+  ): Effect.fn.Return<CarriedActionResult> {
+    const target = cloudTarget(action.identity);
+    if (!target) return { status: ACTION_RESULT_STATUS.UNSUPPORTED, reason: REFUSAL.NO_ENDPOINT };
+    const stored = yield* storedSelection(target.providerId, guard);
+    if (guard?.isRevoked()) {
+      return { status: ACTION_RESULT_STATUS.REJECTED, reason: REFUSAL.TURN_OVER };
+    }
+    // A stored pairing rides along only when it names the very agent kind the
+    // developer asked for, and a model the ask named brings its own effort or
+    // none: a preference rides with an ask, never against it.
+    const paired = stored?.agent === action.agent ? stored : undefined;
+    const model = action.model ?? paired?.model;
+    const effort = action.model === undefined ? paired?.effort : action.effort;
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const outcome = yield* carriedHostedCall(
+          actions.addAgent(target, {
+            agent: action.agent,
+            model,
+            effort,
+            name: action.name,
+            task: action.task,
+          }),
+        );
+        return yield* settle(
+          target.providerId,
+          PRODUCT_SESSION_ACTION.AGENT_ADD,
+          hostedActionResult(outcome),
+        );
+      }),
+    );
+  });
 
   // The two renames carry the session and the name, never the target: the
   // service resolves the workspace or the session from its stored snapshot.

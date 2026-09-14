@@ -28,35 +28,33 @@ function lockFailure(cause: unknown): Migrator.MigrationError {
  * migration runs; the two finalizers close in reverse, which is what makes the
  * connection close even when the unlock itself fails.
  */
-export function withMigrationLock<A, E, R>(
+export const withMigrationLock = /* @__PURE__ */ Effect.fnUntraced(function* <A, E, R>(
   connection: MigrationConnection,
   migrate: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | Migrator.MigrationError, R> {
-  return Effect.gen(function* () {
-    yield* Effect.acquireRelease(
-      Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
-      () => Effect.promise(() => connection.end()),
-    );
-    yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () =>
-          connection.query("select pg_advisory_lock($1, $2)", [
-            MIGRATION_LOCK.NAMESPACE,
-            MIGRATION_LOCK.RESOURCE,
-          ]),
-        catch: lockFailure,
-      }),
-      () =>
-        Effect.promise(() =>
-          connection.query("select pg_advisory_unlock($1, $2)", [
-            MIGRATION_LOCK.NAMESPACE,
-            MIGRATION_LOCK.RESOURCE,
-          ]),
-        ),
-    );
-    return yield* migrate;
-  }).pipe(Effect.scoped);
-}
+) {
+  yield* Effect.acquireRelease(
+    Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
+    () => Effect.promise(() => connection.end()),
+  );
+  yield* Effect.acquireRelease(
+    Effect.tryPromise({
+      try: () =>
+        connection.query("select pg_advisory_lock($1, $2)", [
+          MIGRATION_LOCK.NAMESPACE,
+          MIGRATION_LOCK.RESOURCE,
+        ]),
+      catch: lockFailure,
+    }),
+    () =>
+      Effect.promise(() =>
+        connection.query("select pg_advisory_unlock($1, $2)", [
+          MIGRATION_LOCK.NAMESPACE,
+          MIGRATION_LOCK.RESOURCE,
+        ]),
+      ),
+  );
+  return yield* migrate;
+}, Effect.scoped);
 
 /**
  * The unpooled URL, because the migration holds one session's advisory lock and

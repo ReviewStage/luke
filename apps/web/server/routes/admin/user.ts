@@ -1,6 +1,6 @@
 import { hostedAdminSeams } from "../../admin/admin-route.js";
 import { adminApp } from "../../admin-app.js";
-import { routeFromHttpApp } from "../../route-effect.js";
+import { routeFromHttpRouter } from "../../route-effect.js";
 
 /**
  * One account's own page behind the overview's table. It lives behind the
@@ -9,4 +9,4 @@ import { routeFromHttpApp } from "../../route-effect.js";
  * in one equality against the user table's key — it is never rendered back
  * and never reaches a write.
  */
-export default routeFromHttpApp(adminApp(hostedAdminSeams()));
+export default routeFromHttpRouter(adminApp(hostedAdminSeams()));

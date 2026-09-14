@@ -61,44 +61,40 @@ export interface AccountAppSeams {
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
-function resolvedUserId(
+const resolvedUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: AccountAppSeams,
-): Effect.Effect<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const userId = yield* seams.resolveUserId(request);
-    if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return userId;
-  });
-}
+): Effect.fn.Return<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const userId = yield* seams.resolveUserId(request);
+  if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return userId;
+});
 
 /**
  * Without both halves of the analytics configuration there is no person to
  * erase and nothing to erase it with, so the erasure is simply skipped.
  */
-function forgetAnalytics(
+const forgetAnalytics = /* @__PURE__ */ Effect.fn("forgetAnalytics")(function* (
   userId: string,
-): Effect.Effect<void, never, HostedEnvironment | HttpClient.HttpClient> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    if (!environment.posthogPersonalApiKey || !environment.posthogProjectId) return;
-    const personalApiKey = Redacted.value(environment.posthogPersonalApiKey);
-    const projectId = environment.posthogProjectId;
-    const host = environment.posthogApiHost;
-    yield* forgetPosthogPersonEffect(userId, {
-      personalApiKey,
-      projectId,
-      ...(host ? { host } : undefined),
-    }).pipe(
-      Effect.catch((error) =>
-        Effect.sync(() =>
-          process.stderr.write(`Analytics erasure did not complete: ${error.message}\n`),
-        ),
+): Effect.fn.Return<void, never, HostedEnvironment | HttpClient.HttpClient> {
+  const environment = yield* HostedEnvironment;
+  if (!environment.posthogPersonalApiKey || !environment.posthogProjectId) return;
+  const personalApiKey = Redacted.value(environment.posthogPersonalApiKey);
+  const projectId = environment.posthogProjectId;
+  const host = environment.posthogApiHost;
+  yield* forgetPosthogPersonEffect(userId, {
+    personalApiKey,
+    projectId,
+    ...(host ? { host } : undefined),
+  }).pipe(
+    Effect.catch((error) =>
+      Effect.sync(() =>
+        process.stderr.write(`Analytics erasure did not complete: ${error.message}\n`),
       ),
-    );
-  });
-}
+    ),
+  );
+});
 
 /**
  * POST: erases the signed-in desktop's account. The bearer token is the
@@ -108,9 +104,9 @@ function forgetAnalytics(
  * refusal or an outage there must not hold up the delete, so it is logged as
  * a status and the delete proceeds.
  */
-function accountDeleteEndpoint(
+const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("accountDeleteEndpoint")(function* (
   seams: AccountAppSeams,
-): Effect.Effect<
+): Effect.fn.Return<
   HttpServerResponse.HttpServerResponse,
   HostedRefusal,
   | HostedEnvironment
@@ -118,84 +114,78 @@ function accountDeleteEndpoint(
   | SqlClient.SqlClient
   | HttpServerRequest.HttpServerRequest
 > {
-  return Effect.gen(function* () {
-    yield* hostedMethod(HTTP_METHOD.POST);
-    const userId = yield* resolvedUserId(seams);
-    yield* forgetAnalytics(userId);
-    yield* Effect.orDie(seams.deleteUser(userId));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
-  });
-}
+  yield* hostedMethod(HTTP_METHOD.POST);
+  const userId = yield* resolvedUserId(seams);
+  yield* forgetAnalytics(userId);
+  yield* Effect.orDie(seams.deleteUser(userId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
+});
 
 /** GET: the caller's own stored preferences, or an empty snapshot for a user with none stored. */
-function preferencesReadEndpoint(
+const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("preferencesReadEndpoint")(function* (
   seams: AccountAppSeams,
-): Effect.Effect<
+): Effect.fn.Return<
   ReturnType<typeof hostedJsonResponse>,
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
 > {
-  return Effect.gen(function* () {
-    const userId = yield* resolvedUserId(seams);
-    const row = yield* Effect.orDie(seams.readPreferences(userId));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      preferences: row?.preferences ?? {},
-      ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
-    });
+  const userId = yield* resolvedUserId(seams);
+  const row = yield* Effect.orDie(seams.readPreferences(userId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    preferences: row?.preferences ?? {},
+    ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
   });
-}
+});
 
 /** PUT: replaces the caller's stored preferences with a validated snapshot. */
-function preferencesWriteEndpoint(
+const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("preferencesWriteEndpoint")(function* (
   seams: AccountAppSeams,
-): Effect.Effect<
+): Effect.fn.Return<
   ReturnType<typeof hostedJsonResponse>,
   HostedRefusal,
   HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
 > {
-  return Effect.gen(function* () {
-    const userId = yield* resolvedUserId(seams);
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const parsed = yield* incoming.json.pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
-    // SAFETY: Request JSON is untrusted boundary data; accountPreferencesFromWire validates it before use.
-    const body = parsed as UnparsedWireValue;
-    if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const userId = yield* resolvedUserId(seams);
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const parsed = yield* incoming.json.pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
+  // SAFETY: Request JSON is untrusted boundary data; accountPreferencesFromWire validates it before use.
+  const body = parsed as UnparsedWireValue;
+  if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
-    const shared = accountPreferencesFromWire(body.preferences);
-    const pace = phoneVoiceSpeed(body.preferences);
-    if (shared === undefined || !pace.valid) {
-      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-    }
-    const preferences: HostedAccountPreferences = {
-      ...shared,
-      ...(pace.value !== undefined
-        ? { [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]: pace.value }
-        : undefined),
-    };
+  const shared = accountPreferencesFromWire(body.preferences);
+  const pace = phoneVoiceSpeed(body.preferences);
+  if (shared === undefined || !pace.valid) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  const preferences: HostedAccountPreferences = {
+    ...shared,
+    ...(pace.value !== undefined
+      ? { [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]: pace.value }
+      : undefined),
+  };
 
-    const updatedAt = yield* Effect.orDie(seams.writePreferences(userId, preferences));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      preferences,
-      updatedAt: updatedAt.getTime(),
-    });
+  const updatedAt = yield* Effect.orDie(seams.writePreferences(userId, preferences));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    preferences,
+    updatedAt: updatedAt.getTime(),
   });
-}
+});
 
 /** GET or PUT on the same path; any other method is the same refusal the two branches would answer separately. */
-function accountPreferencesEndpoint(
-  seams: AccountAppSeams,
-): Effect.Effect<
-  HttpServerResponse.HttpServerResponse,
-  HostedRefusal,
-  SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
-> {
-  return Effect.gen(function* () {
+const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("accountPreferencesEndpoint")(
+  function* (
+    seams: AccountAppSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* preferencesReadEndpoint(seams);
     if (incoming.method === HTTP_METHOD.PUT) return yield* preferencesWriteEndpoint(seams);
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  });
-}
+  },
+);
 
 /**
  * An endpoint's refusal carried back onto the answer channel. A refusal is

@@ -51,7 +51,9 @@ type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH } & BrainPrefetchTraceRecord)
+  | ({
+      kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH;
+    } & BrainPrefetchTraceRecord)
   | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
 /**
@@ -67,7 +69,10 @@ const TRACE_WORK = {
 
 type TraceWork =
   | { readonly kind: typeof TRACE_WORK.LINE; readonly line: string }
-  | { readonly kind: typeof TRACE_WORK.SETTLED; readonly done: Deferred.Deferred<void> };
+  | {
+      readonly kind: typeof TRACE_WORK.SETTLED;
+      readonly done: Deferred.Deferred<void>;
+    };
 
 export interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
@@ -91,17 +96,15 @@ function traceLine(entry: PendingTraceEntry, now: () => Date): string {
 }
 
 /** Appends one already-formatted line, making the directory on first use. */
-function writeTraceLine(
+const writeTraceLine = /* @__PURE__ */ Effect.fnUntraced(function* (
   directory: string,
   file: string,
   line: string,
-): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    yield* fs.makeDirectory(directory, { recursive: true });
-    yield* fs.writeFileString(file, line, { flag: "a" });
-  });
-}
+): Effect.fn.Return<void, PlatformError, FileSystem.FileSystem> {
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(directory, { recursive: true });
+  yield* fs.writeFileString(file, line, { flag: "a" });
+});
 
 /**
  * Appends the development trace as JSONL, one line per tapped event. The file
@@ -195,7 +198,10 @@ export class AgentTraceWriter {
   }
 
   #append(entry: PendingTraceEntry): void {
-    Queue.offerUnsafe(this.#work, { kind: TRACE_WORK.LINE, line: traceLine(entry, this.#now) });
+    Queue.offerUnsafe(this.#work, {
+      kind: TRACE_WORK.LINE,
+      line: traceLine(entry, this.#now),
+    });
   }
 
   /**

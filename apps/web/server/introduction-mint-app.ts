@@ -40,26 +40,26 @@ export interface IntroductionMintSeams extends MintSeams {
  * introduction is not an allowance the desktop tracks, only a cap it may run
  * into.
  */
-function introductionMint(seams: IntroductionMintSeams) {
-  return Effect.gen(function* () {
-    yield* refusingMint(hostedMethod(MINT_METHOD));
-    const apiKey = yield* hostedKey();
-    const environment = yield* HostedEnvironment;
-    const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
-    const spend = yield* Effect.orDie(seams.spendIntroduction());
-    if (!spend.allowed) {
-      return yield* Effect.fail(
-        hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
-          error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
-        }),
-      );
-    }
-    const connection = yield* mintedConnection(
-      mintOptions(seams, apiKey, environment.realtimeModel, read, introductionClientSecretRequest),
+const introductionMint = /* @__PURE__ */ Effect.fn("introductionMint")(function* (
+  seams: IntroductionMintSeams,
+) {
+  yield* refusingMint(hostedMethod(MINT_METHOD));
+  const apiKey = yield* hostedKey();
+  const environment = yield* HostedEnvironment;
+  const read = yield* mintPreferences(INTRODUCTION_MINT_FIELDS);
+  const spend = yield* Effect.orDie(seams.spendIntroduction());
+  if (!spend.allowed) {
+    return yield* Effect.fail(
+      hostedJsonResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, {
+        error: HOSTED_API_ERROR.QUOTA_EXHAUSTED,
+      }),
     );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection });
-  });
-}
+  }
+  const connection = yield* mintedConnection(
+    mintOptions(seams, apiKey, environment.realtimeModel, read, introductionClientSecretRequest),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection });
+});
 
 /** The group, which is the introduction's own mint and the refusal anywhere else. */
 export function introductionMintApp(

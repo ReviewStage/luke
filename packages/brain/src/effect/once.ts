@@ -36,9 +36,7 @@ export const joinedOnce = <Value>(work: Effect.Effect<Value>): Effect.Effect<Val
     const wait = Deferred.await(settled);
     MutableRef.set(standing, wait);
     return Effect.flatMap(
-      Effect.forkDetach(
-        Effect.interruptible(Effect.onExit(work, (exit) => Deferred.done(settled, exit))),
-      ),
+      Effect.forkDetach(Effect.onExit(work, (exit) => Deferred.done(settled, exit))),
       () => wait,
     );
   });

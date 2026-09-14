@@ -136,13 +136,19 @@ export const layerGatewayClients: Layer.Layer<GatewayClients> = Layer.effect(
 /** Whether the host still admits new work; closed at the quit, so every mutation but the shutdown itself is refused from then on. */
 export class GatewayAdmissions extends Context.Service<
   GatewayAdmissions,
-  { readonly admitting: Effect.Effect<boolean>; readonly close: Effect.Effect<void> }
+  {
+    readonly admitting: Effect.Effect<boolean>;
+    readonly close: Effect.Effect<void>;
+  }
 >()("@sidecar/gateway/GatewayAdmissions") {}
 
 const makeGatewayAdmissions: Effect.Effect<GatewayAdmissions["Service"]> = Effect.map(
   Ref.make(true),
   (admitting) =>
-    GatewayAdmissions.of({ admitting: Ref.get(admitting), close: Ref.set(admitting, false) }),
+    GatewayAdmissions.of({
+      admitting: Ref.get(admitting),
+      close: Ref.set(admitting, false),
+    }),
 );
 
 export const layerGatewayAdmissions: Layer.Layer<GatewayAdmissions> = Layer.effect(
@@ -226,76 +232,74 @@ function newestSequence(events: Chunk.Chunk<GatewayEvent>): number {
   });
 }
 
-function makeGatewayEventLog(
+const makeGatewayEventLog = /* @__PURE__ */ Effect.fnUntraced(function* (
   options: GatewayEventLogOptions,
-): Effect.Effect<GatewayEventLog["Service"]> {
-  return Effect.gen(function* () {
-    const window = Math.max(1, options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW);
-    const ring = MutableRef.make(Chunk.empty<GatewayEvent>());
-    const bus = yield* PubSub.unbounded<GatewayEvent>();
-    const listeners = new Set<GatewayEventListener>();
-    const publish = (
-      kind: GatewayEventKind,
-      payload: WireValue,
-      identity: { sessionKey?: string; runId?: string } = {},
-    ): GatewayEvent => {
-      const events = MutableRef.get(ring);
-      const emitted: GatewayEvent = {
-        eventId: options.createEventId(),
-        sequence: newestSequence(events) + 1,
-        kind,
-        at: options.now(),
-        ...(identity.sessionKey !== undefined ? { sessionKey: identity.sessionKey } : undefined),
-        ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
-        payload,
-      };
-      MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
-      // The unbounded bus takes every event, so the offer is the publish an
-      // effect would have awaited, made where the caller is not a fiber.
-      PubSub.publishUnsafe(bus, emitted);
-      for (const listener of [...listeners]) listener(emitted);
-      return emitted;
+): Effect.fn.Return<GatewayEventLog["Service"]> {
+  const window = Math.max(1, options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW);
+  const ring = MutableRef.make(Chunk.empty<GatewayEvent>());
+  const bus = yield* PubSub.unbounded<GatewayEvent>();
+  const listeners = new Set<GatewayEventListener>();
+  const publish = (
+    kind: GatewayEventKind,
+    payload: WireValue,
+    identity: { sessionKey?: string; runId?: string } = {},
+  ): GatewayEvent => {
+    const events = MutableRef.get(ring);
+    const emitted: GatewayEvent = {
+      eventId: options.createEventId(),
+      sequence: newestSequence(events) + 1,
+      kind,
+      at: options.now(),
+      ...(identity.sessionKey !== undefined ? { sessionKey: identity.sessionKey } : undefined),
+      ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
+      payload,
     };
-    return GatewayEventLog.of({
-      publish,
-      emit: (kind, payload, identity) => Effect.sync(() => publish(kind, payload, identity)),
-      replayFrom: (lastSequence) =>
-        Effect.sync(() => {
-          const events = MutableRef.get(ring);
-          const sequence = newestSequence(events);
-          if (lastSequence >= sequence) {
-            return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events: [] };
-          }
-          const oldest = Option.map(Chunk.head(events), (first) => first.sequence);
-          if (Option.isNone(oldest) || oldest.value > lastSequence + 1) {
-            return {
-              kind: GATEWAY_RECONNECT_KIND.SNAPSHOT,
-              sequence,
-              snapshot: options.snapshot(),
-            };
-          }
+    MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
+    // The unbounded bus takes every event, so the offer is the publish an
+    // effect would have awaited, made where the caller is not a fiber.
+    PubSub.publishUnsafe(bus, emitted);
+    for (const listener of [...listeners]) listener(emitted);
+    return emitted;
+  };
+  return GatewayEventLog.of({
+    publish,
+    emit: (kind, payload, identity) => Effect.sync(() => publish(kind, payload, identity)),
+    replayFrom: (lastSequence) =>
+      Effect.sync(() => {
+        const events = MutableRef.get(ring);
+        const sequence = newestSequence(events);
+        if (lastSequence >= sequence) {
+          return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events: [] };
+        }
+        const oldest = Option.map(Chunk.head(events), (first) => first.sequence);
+        if (Option.isNone(oldest) || oldest.value > lastSequence + 1) {
           return {
-            kind: GATEWAY_RECONNECT_KIND.REPLAY,
-            events: Chunk.toReadonlyArray(
-              Chunk.filter(events, (event) => event.sequence > lastSequence),
-            ),
+            kind: GATEWAY_RECONNECT_KIND.SNAPSHOT,
+            sequence,
+            snapshot: options.snapshot(),
           };
-        }),
-      sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
-      events: Effect.map(PubSub.subscribe(bus), Stream.fromSubscription),
-      revision: () => ({
-        configuration: options.configurationRevision(),
-        sequence: newestSequence(MutableRef.get(ring)),
-      }),
-      listen: (listener) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
+        }
+        return {
+          kind: GATEWAY_RECONNECT_KIND.REPLAY,
+          events: Chunk.toReadonlyArray(
+            Chunk.filter(events, (event) => event.sequence > lastSequence),
+          ),
         };
-      },
-    });
+      }),
+    sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
+    events: Effect.map(PubSub.subscribe(bus), Stream.fromSubscription),
+    revision: () => ({
+      configuration: options.configurationRevision(),
+      sequence: newestSequence(MutableRef.get(ring)),
+    }),
+    listen: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   });
-}
+});
 
 export function layerGatewayEventLog(
   options: GatewayEventLogOptions,
@@ -364,7 +368,11 @@ export interface GatewayServerLayerOptions extends GatewayEventLogOptions {
 function methodOf(rpc: Rpc.AnyWithProps): Effect.Effect<GatewayMethod, UnknownMethodRefusal> {
   return isGatewayMethod(rpc._tag)
     ? Effect.succeed(rpc._tag)
-    : Effect.fail(new UnknownMethodRefusal({ message: `no handler stands for ${rpc._tag}` }));
+    : Effect.fail(
+        new UnknownMethodRefusal({
+          message: `no handler stands for ${rpc._tag}`,
+        }),
+      );
 }
 
 /** The flag the method's own entry declared; an Rpc carrying none is not the protocol's, and the server does not guess for it. */
@@ -403,7 +411,9 @@ function layerGatewayAdmission(
             : role === GATEWAY_CLIENT_ROLE.OPERATOR || NODE_METHODS.has(method);
           if (!allowed) {
             return yield* Effect.fail(
-              new UnauthorizedRefusal({ message: `${role} may not call ${method}` }),
+              new UnauthorizedRefusal({
+                message: `${role} may not call ${method}`,
+              }),
             );
           }
           const changes = mutates(rpc);
@@ -561,7 +571,11 @@ function readLastSequence(params: WireRecord): Effect.Effect<number, InvalidPara
   const lastSequence = params.lastSequence;
   return isWireNumber(lastSequence) && lastSequence >= 0
     ? Effect.succeed(lastSequence)
-    : Effect.fail(new InvalidParamsRefusal({ message: "lastSequence must be a whole number" }));
+    : Effect.fail(
+        new InvalidParamsRefusal({
+          message: "lastSequence must be a whole number",
+        }),
+      );
 }
 
 /**
@@ -588,8 +602,15 @@ function layerGatewayMethods(
         Effect.flatMap(readLastSequence(params), (lastSequence) =>
           Effect.map(log.replayFrom(lastSequence), (answer) =>
             answer.kind === GATEWAY_RECONNECT_KIND.REPLAY
-              ? { kind: answer.kind, events: answer.events.map(gatewayEventToWire) }
-              : { kind: answer.kind, sequence: answer.sequence, snapshot: answer.snapshot },
+              ? {
+                  kind: answer.kind,
+                  events: answer.events.map(gatewayEventToWire),
+                }
+              : {
+                  kind: answer.kind,
+                  sequence: answer.sequence,
+                  snapshot: answer.snapshot,
+                },
           ),
         );
       const methods: GatewayMethodTable = {
@@ -601,12 +622,17 @@ function layerGatewayMethods(
         const handler = methods[method];
         return (
           payload: WireRecord,
-          asked: { readonly client: Rpc.ServerClient; readonly headers: Headers },
+          asked: {
+            readonly client: Rpc.ServerClient;
+            readonly headers: Headers;
+          },
         ): Effect.Effect<WireValue | undefined, GatewayRefusal> =>
           Effect.gen(function* () {
             if (!handler) {
               return yield* Effect.fail(
-                new UnknownMethodRefusal({ message: `no handler stands for ${method}` }),
+                new UnknownMethodRefusal({
+                  message: `no handler stands for ${method}`,
+                }),
               );
             }
             const client = yield* clients.client(asked.client.id);

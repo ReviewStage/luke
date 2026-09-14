@@ -208,16 +208,15 @@ export const pendingArchiveIdsEffect: Effect.Effect<readonly string[], SqlError,
   );
 
 /** Forgets one archive's registry row; answers whether a row stood at that id. */
-export const removeArchiveRowEffect = (
-  archiveId: string,
-): Effect.Effect<boolean, SqlError, Client.SqlClient> =>
-  Effect.gen(function* () {
+export const removeArchiveRowEffect = /* @__PURE__ */ Effect.fn("removeArchiveRowEffect")(
+  function* (archiveId: string): Effect.fn.Return<boolean, SqlError, Client.SqlClient> {
     const sql = yield* Client.SqlClient;
     const changes = yield* changedRows(
       sql`DELETE FROM conversation_archives WHERE archive_id = ${archiveId}`.raw,
     );
     return changes > 0;
-  });
+  },
+);
 
 /**
  * The synchronous doors onto the effects above, for `archives.ts`, which

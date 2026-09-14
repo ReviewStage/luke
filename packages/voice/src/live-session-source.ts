@@ -223,7 +223,10 @@ function socketFaultOutcome(opening: SocketOpenFailure): RecordedOutcome {
       detail: opening.errorName ?? "unknown error",
     };
   }
-  return { outcome: statusOutcome(opening.status), detail: `status ${opening.status}` };
+  return {
+    outcome: statusOutcome(opening.status),
+    detail: `status ${opening.status}`,
+  };
 }
 
 function statusOutcome(status: number): LiveSessionOutcome {
@@ -637,7 +640,10 @@ class ServiceLiveSessionSource {
   /** The attach frame's own exchange on a socket that stands: the answer decides, and every answer but the attachment closes it. */
   #attachAnswer(socket: HeldSocket, sessionId: string): Effect.Effect<ReattachAttempt> {
     return Effect.gen({ self: this }, function* () {
-      const frame: SessionAttachFrame = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId };
+      const frame: SessionAttachFrame = {
+        type: VOICE_SERVICE_FRAME.SESSION_ATTACH,
+        sessionId,
+      };
       const answer = yield* this.#firstFrame(socket, () => socket.send(JSON.stringify(frame)));
       if (answer === undefined) {
         socket.close();
@@ -850,20 +856,21 @@ function reattachingSocket(options: {
     });
 
     /** Reads one connection to its end and answers the close that ended it. */
-    const readConnection = (socket: LiveSocket): Effect.Effect<SocketClose> =>
-      Effect.gen(function* () {
-        let ended: SocketClose | undefined;
-        yield* Stream.runForEach(socket.arrivals, (arrival) =>
-          Effect.sync(() => {
-            if ("close" in arrival) {
-              ended = arrival.close;
-              return;
-            }
-            hold.hear(arrival);
-          }),
-        );
-        return ended ?? {};
-      });
+    const readConnection = /* @__PURE__ */ Effect.fnUntraced(function* (
+      socket: LiveSocket,
+    ): Effect.fn.Return<SocketClose> {
+      let ended: SocketClose | undefined;
+      yield* Stream.runForEach(socket.arrivals, (arrival) =>
+        Effect.sync(() => {
+          if ("close" in arrival) {
+            ended = arrival.close;
+            return;
+          }
+          hold.hear(arrival);
+        }),
+      );
+      return ended ?? {};
+    });
 
     const attempted = (
       outcome: ReattachAttempt,

@@ -40,10 +40,10 @@ export interface ConversationClearOptions {
   now?: () => number;
 }
 
-export function handleConversationClear(
-  options: ConversationClearOptions,
-): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
+export const handleConversationClear = /* @__PURE__ */ Effect.fn("handleConversationClear")(
+  function* (
+    options: ConversationClearOptions,
+  ): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
     const { request, resolveUserId, store } = options;
     const now = options.now ?? Date.now;
     if (request.method !== CLEAR_METHOD) {
@@ -67,5 +67,5 @@ export function handleConversationClear(
       cleared: outcome.cleared.length,
     };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
-  });
-}
+  },
+);
