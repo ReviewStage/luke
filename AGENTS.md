@@ -105,7 +105,7 @@ in for the missing job before the first release.
   (`apps/web/server/hosted/speech-push.ts`), run on the scheduled tick after the
   speech sweep and by nothing else. What it may carry is only a briefing the
   brain has already decided, the settled `announce` call's own words read back
-  from the announcing row under the tool's 600-character bound
+  from the announcing row under the tool's 200-character bound
   (`briefing-words.ts`; `maximumBriefingLength`), and it decides from two things
   it reads and nothing it infers: how the offer stands, and what the account's
   devices last reported of themselves. No Mac reporting itself active means the

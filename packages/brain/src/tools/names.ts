@@ -43,8 +43,14 @@ export const TOOL_GROUP = {
   MEMORY: "memory",
 } as const;
 
-/** The longest briefing the mouth is handed; a briefing is a breath, not a report. */
-export const maximumBriefingLength = 600;
+/**
+ * The longest briefing the mouth is handed; a briefing is a breath, not a
+ * report. Two short sentences, about twelve seconds aloud: voice UX research
+ * puts a listener's drop-off at six seconds and most of them gone by ten, and
+ * the persona already says one sentence, two only when the second earned its
+ * place. The bound used to be 600, which is forty seconds of speech.
+ */
+export const maximumBriefingLength = 200;
 
 /** The most of a child task's words a spawn carries; a task is a brief, not a transcript. */
 export const maximumChildTaskLength = 8_000;

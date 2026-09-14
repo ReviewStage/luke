@@ -28,8 +28,8 @@ for (const scene of Object.values(LIVE_SCENE)) {
   });
 }
 
-/** Identity, backchannel, and interruption: every block the two scenes share, ahead of the delegation policy. */
-const SHARED_BLOCKS = 3;
+/** Identity, backchannel, interruption, and the speaking policies: every block the two scenes share, ahead of the delegation policy. */
+const SHARED_BLOCKS = 4;
 
 test("the two scenes differ in their delegation policy alone", () => {
   const desktop = blocksOf(LIVE_SCENE.DESKTOP);
