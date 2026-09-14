@@ -5,7 +5,6 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import type { ContextInput } from "./execution.js";
 import { type ConversationKind, isConversationKind, type SessionKey } from "./identifiers.js";
 
 /**
@@ -31,39 +30,6 @@ export const COMPACTION_SOURCE = {
 } as const;
 
 export type CompactionSource = (typeof COMPACTION_SOURCE)[keyof typeof COMPACTION_SOURCE];
-
-/**
- * What one retained transcript event is. The transcript is the conversation
- * as it happened between the host, the model, and the tools — every input the
- * context engine ingested, in order — and every point at which the active
- * projection folded. A compaction changes what the model is shown next; it
- * changes nothing here, which is what makes the transcript the record and the
- * checkpoint the projection.
- */
-export const TRANSCRIPT_EVENT_KIND = {
-  CONTEXT_INPUT: "context_input",
-  COMPACTION: "compaction",
-} as const;
-
-interface CompactionBoundary {
-  readonly source: CompactionSource;
-  /** How many retained items the fold let go of from the projection. */
-  readonly dropped: number;
-  /** The checkpoint format the projection was in when it folded, as its tag. */
-  readonly checkpointFormat?: string;
-}
-
-export type TranscriptEvent =
-  | {
-      readonly kind: typeof TRANSCRIPT_EVENT_KIND.CONTEXT_INPUT;
-      readonly recordedAt: number;
-      readonly input: ContextInput;
-    }
-  | {
-      readonly kind: typeof TRANSCRIPT_EVENT_KIND.COMPACTION;
-      readonly recordedAt: number;
-      readonly boundary: CompactionBoundary;
-    };
 
 /**
  * Why a conversation left the active list. The developer's own press is one

@@ -31,24 +31,12 @@ export type BrainRequestStatus = (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAI
 const BRAIN_REQUEST_STATUS_LIST: readonly BrainRequestStatus[] =
   Object.values(BRAIN_REQUEST_STATUS);
 
-const BRAIN_REQUEST_TERMINAL_STATUS: ReadonlySet<BrainRequestStatus> = new Set([
-  BRAIN_REQUEST_STATUS.SUCCEEDED,
-  BRAIN_REQUEST_STATUS.FAILED,
-  BRAIN_REQUEST_STATUS.CANCELLED,
-  BRAIN_REQUEST_STATUS.TIMED_OUT,
-  BRAIN_REQUEST_STATUS.INTERRUPTED,
-]);
-
 function isBrainRequestStatus(value: UnparsedWireValue): value is BrainRequestStatus {
   return (
     isWireString(value) &&
     // SAFETY: value is a string; list membership is the vocabulary check.
     BRAIN_REQUEST_STATUS_LIST.includes(value as BrainRequestStatus)
   );
-}
-
-export function isTerminalBrainRequestStatus(status: BrainRequestStatus): boolean {
-  return BRAIN_REQUEST_TERMINAL_STATUS.has(status);
 }
 
 /** Where the ask came from: the developer's own voice, or a requester's spawn. */
@@ -277,35 +265,11 @@ function finiteNumber(value: UnparsedWireValue): value is number {
 }
 
 /**
- * What a launch does to the records the last one left unfinished: nothing it
- * was doing is resumed, because an action mid-flight when the process died is
- * one whose effect it cannot know, and a queued ask is answered with the
- * honest interruption rather than run against a roster the developer has not
- * looked at since.
- */
-export function interruptedUnfinishedRequests(
-  records: readonly BrainRequestRecord[],
-  now: number,
-): readonly BrainRequestRecord[] {
-  if (records.every((record) => isTerminalBrainRequestStatus(record.status))) return records;
-  return records.map((record) =>
-    isTerminalBrainRequestStatus(record.status)
-      ? record
-      : {
-          ...record,
-          status: BRAIN_REQUEST_STATUS.INTERRUPTED,
-          revision: record.revision + 1,
-          settledAt: now,
-        },
-  );
-}
-
-/**
  * The answer to a submission. Accepted names the run — the same run for a
  * retry of the same submission — and rejected says why in a word the host
  * words for the developer.
  */
-export const BRAIN_SUBMISSION_REJECTION = {
+const BRAIN_SUBMISSION_REJECTION = {
   EMPTY: "empty",
   ABSENT: "absent",
   PERSISTENCE: "persistence",
@@ -328,10 +292,6 @@ export const BRAIN_SUBMISSION_OUTCOME = {
   ACCEPTED: "accepted",
   REJECTED: "rejected",
 } as const;
-
-export type BrainSubmissionResult =
-  | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.ACCEPTED; runId: string; acceptedAt: number }
-  | { outcome: typeof BRAIN_SUBMISSION_OUTCOME.REJECTED; reason: BrainSubmissionRejection };
 
 export interface BrainSubmission {
   submissionId: string;
@@ -441,14 +401,4 @@ export const STOPPED_ASK_NARRATION = "stopped working on that ask";
 export function stoppedAskNarration(snapshot: BrainRequestRecord): string | undefined {
   if (snapshot.status !== BRAIN_REQUEST_STATUS.CANCELLED) return undefined;
   return actionsAccount(snapshot).length > 0 ? undefined : STOPPED_ASK_NARRATION;
-}
-
-/** Some fields of one record, as a save applies them over what is committed. */
-export type RecordChanges = Partial<Omit<BrainRequestRecord, "runId" | "revision">>;
-
-/** One record's fields over the committed record — or the record itself, for its own acceptance. */
-export interface BrainRecordChange {
-  runId: string;
-  changes: RecordChanges;
-  insert?: BrainRequestRecord;
 }

@@ -575,9 +575,6 @@ fi
 # which is why the list is spelled out rather than matched by a pattern: the
 # sibling imports `effect` and the port never does.
 openclaw_ported_files=(
-    packages/runtime/src/queue.ts
-    packages/runtime/src/lanes.ts
-    packages/runtime/src/children.ts
     packages/runtime/src/child-records.ts
     packages/runtime/src/workspace.ts
     packages/runtime/src/prompt.ts
@@ -586,10 +583,6 @@ openclaw_ported_files=(
     packages/runtime/src/skills.ts
     packages/memory/src/defaults.ts
     packages/memory/src/flush.ts
-    packages/brain/src/loop-guard.ts
-    packages/brain/src/compaction.ts
-    packages/brain/src/context-engine.ts
-    packages/brain/src/state-store.ts
 )
 openclaw_effect_imports=""
 for ported in "${openclaw_ported_files[@]}"; do

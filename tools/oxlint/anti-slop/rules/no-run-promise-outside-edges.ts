@@ -37,17 +37,13 @@ const RUNNING_MEMBERS: ReadonlyMap<string, ReadonlySet<string>> = new Map([
 ]);
 
 /**
- * Names whose call answers a runner rather than a result: the brain's own
- * dispatch between a `ManagedRuntime` and a bare `Context`
- * (`packages/brain/src/effect/carry.ts`), where `runtimeExit(execution)(effect)`
- * runs the effect as surely as `Effect.runPromiseExitWith` does, the same file's
- * `detachOn(execution)(effect)`, which forks it as surely as
- * `Effect.runForkWith` does, and the web edge's `webRuntime()` (`apps/web/server/runtime.ts`),
- * whose `webRuntime().runPromise(effect)` is the same run one member deeper
- * than `RUNNING_MEMBERS` reaches. Naming them here is what keeps their
- * callers on the allowlist rather than invisible to it.
+ * Names whose call answers a runner rather than a result: the web edge's
+ * `webRuntime()` (`apps/web/server/runtime.ts`), whose
+ * `webRuntime().runPromise(effect)` is the same run one member deeper than
+ * `RUNNING_MEMBERS` reaches. Naming it here is what keeps its callers on the
+ * allowlist rather than invisible to it.
  */
-const RUNNER_FACTORIES: ReadonlySet<string> = new Set(["runtimeExit", "detachOn", "webRuntime"]);
+const RUNNER_FACTORIES: ReadonlySet<string> = new Set(["webRuntime"]);
 
 /**
  * Runners an edge exports for a collaborator to hold. `runWeb`
@@ -86,7 +82,7 @@ export const noRunPromiseOutsideEdgesRule = defineRule({
     type: "problem",
     docs: {
       description:
-        "Disallow Effect.run* and Effect.run*With, ManagedRuntime.make, Runtime.makeRunMain, NodeRuntime.runMain, the brain's runtimeExit and detachOn dispatch, and the web edge's runWeb and webRuntime runners outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
+        "Disallow Effect.run* and Effect.run*With, ManagedRuntime.make, Runtime.makeRunMain, NodeRuntime.runMain, and the web edge's runWeb and webRuntime runners outside the runtime edges and permanent adaptors root AGENTS.md's \"Effect idioms\" section names.",
     },
     messages: {
       runOutsideEdge:

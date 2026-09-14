@@ -29,20 +29,14 @@
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
-    "packages/brain/src/effect/carry.ts",
-    "packages/brain/src/generation.ts",
     "packages/credentials/src/single-flight.ts",
-    "packages/devtrace/src/brain-trace.ts",
     "packages/host/src/host-kernel.ts",
     "packages/wire/src/testing/effect.ts"
   ],
   "runOnHandedRuntime": [
     "apps/desktop/src/main/app-state.ts",
     "apps/desktop/src/main/update-service.ts",
-    "packages/brain/src/agent.ts",
     "packages/gateway/src/client.ts",
-    "packages/runtime/src/children.effect.ts",
-    "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
   ],
   "rawAsyncPrimitives": [
@@ -74,17 +68,6 @@
     "apps/web/src/NotchMock.tsx",
     "apps/web/src/admin/use-admin-read.ts",
     "apps/web/tests/support/voice-fakes.ts",
-    "packages/brain/src/generation.ts",
-    "packages/brain/src/harness.ts",
-    "packages/brain/src/maintenance.ts",
-    "packages/brain/src/read-prefetch.ts",
-    "packages/brain/src/runtime.ts",
-    "packages/brain/src/testing.ts",
-    "packages/brain/src/turn.ts",
-    "packages/gateway/src/testing.ts",
-    "packages/runtime/src/children.ts",
-    "packages/runtime/src/lanes.effect.ts",
-    "packages/runtime/src/lanes.ts",
-    "packages/runtime/src/queue.ts"
+    "packages/gateway/src/testing.ts"
   ]
 }

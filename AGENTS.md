@@ -221,49 +221,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### The permanent adaptors
 
-- **`packages/brain/src/effect/carry.ts`** — `detachOn`, the brain's detach
-  door: `Effect.runForkWith` evaluates on the calling stack, while
-  `Effect.forkChild`, `forkIn`, and `forkDetach` exist only inside a fiber and
-  every caller here is a synchronous non-fiber collaborator; and only a run
-  makes `BrainAgent#enqueue`'s acquisition (what `busy()` reads) stand in the
-  step that detached. `packages/brain/src/agent.ts`'s `BrainAgent#enqueue`
-  holds `detachOn`'s returned door on the services the caller handed it and
-  starts a turn on the calling stack through it, which is why it is named on
-  the run allowlist's `runOnHandedRuntime` rows rather than left for a new file
-  to fork through unseen. The same file's `runtimeExit` is the door
-  `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` runs
-  through, because every caller of a model adapter still holds a
-  promise and the `ModelAdapter` interface it answers is one: `compaction.ts`
-  is a port of OpenClaw `b7528507` that awaits `model.respond` and imports
-  nothing from `effect`, so no adapter can answer an effect while that port
-  stands.
-- **`packages/runtime/src/execution.ts`**'s `ModelAdapter`, `EmbeddingAdapter`,
-  and `MaybePromise` vocabulary, and **`packages/brain/src/transcript-recorder.ts`**'s
-  `RecordingContextEngine` — each answers in a `Promise` or a bare value
-  because the ports beneath them do: `compaction.ts`'s adapters await
-  `model.respond`, and `context-engine.ts`'s engines await their lifecycle
-  hooks, both OpenClaw ports of `b7528507` that import nothing from `effect`.
-- **`BrainStateRepository` and `ChildStore`** — two interfaces read by
-  OpenClaw ports (`packages/brain/src/state-store.ts`,
-  `packages/runtime/src/children.ts`) that may not import `effect`, so
-  neither can be stated as effects while its port stands. What would end this
-  row is a decision about the ports themselves, not an implementation detail
-  of this migration. The SQLite store that once answered them through a
-  worker's Rpc client is deleted (LUKE-143), the notebook index with it, and
-  the in-memory answer the desktop kept after it is deleted with the local
-  brain (LUKE-206); no production code answers either interface now.
-- **`packages/brain/src/ledger.ts`** — a promise face downstream of the ports
-  above: it holds `Promise`s of its own over `BrainStateStore`
-  (`state-store.ts`'s port), imports nothing from `effect`, and stays a
-  promise face because the port it stands on does.
-- **`packages/brain/src/generation.ts`** — `retireGeneration`'s `Scope.close`
-  over `Effect.runSync`: which generation stands is a `MutableRef`, so the
-  fence a replacement raises is up before the caller's next statement with no
-  run anywhere in the open, but the close is two synchronous finalizers
-  (the abort signal every wait settles on, the runtime's own context) that
-  must stand nowhere before the caller's next statement either — a `Scope` is
-  what already states reverse order and closing exactly once, so the row is
-  bookkeeping for a synchronous fence rather than a deletion owed.
+- **`packages/runtime/src/execution.ts`**'s `ContextEngine` and its
+  `MaybePromise` vocabulary — each hook answers in a `Promise` or a bare value
+  because the OpenClaw port of `b7528507` it was written for awaited them and
+  imported nothing from `effect`.
 - **`packages/credentials/src/single-flight.ts`** — the check-and-create of
   the one `Deferred` every concurrent caller joins is an uninterruptible step
   that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks
@@ -301,13 +262,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
-- **`packages/runtime/src/children.effect.ts` and
-  `packages/runtime/src/queue.effect.ts`** — each wraps an OpenClaw port
-  (`children.ts`, `queue.ts`) that awaits promises and may not import
-  `effect`, so the Effect sibling runs on the services its caller handed it
-  rather than a context it builds; `packages/runtime/src/lanes.ts` and
-  `packages/runtime/src/lanes.effect.ts` are the same port and sibling shape,
-  on the raw-primitive allowlist rather than this one.
 - **The test-support edges** — `apps/web/tests/support/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
@@ -339,7 +293,7 @@ and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
   rather than arming a real `setTimeout` its own runner has to outlive.
 - `MutableRef` for a synchronous facade over state a synchronous caller reads
   and writes as statements, when the fence it stands for must be up before the
-  caller's next statement (`generation.ts` above).
+  caller's next statement.
 - `Effect.runPromiseExit` and `Cause.squash` at a promise door, so a caller
   still holding a `Promise` sees the same rejection shape an `Effect.tryPromise`
   would have caught, not a fiber's own defect representation.

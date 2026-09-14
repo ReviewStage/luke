@@ -141,15 +141,6 @@ export function userMessageItem(text: string): ResponsesInputItem {
   };
 }
 
-/** Words in Luke's own voice, as the input array carries them: a fold's summary standing in for the items it replaced. */
-export function assistantMessageItem(text: string): ResponsesInputItem {
-  return {
-    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
-    role: RESPONSES_MESSAGE_ROLE.ASSISTANT,
-    content: [{ type: RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT, text }],
-  };
-}
-
 /**
  * One function call as the input array carries it, minted by the host rather
  * than answered by the model: exactly the three fields the API documents and
@@ -177,13 +168,6 @@ export function functionCallOutputItem(callId: string, output: string): Response
     call_id: callId,
     output,
   };
-}
-
-/** Whether an input item is a user message, the boundary a fold may cut at. */
-export function isUserMessageItem(item: ResponsesInputItem): boolean {
-  return (
-    item.type === RESPONSES_INPUT_ITEM_TYPE.MESSAGE && item.role === RESPONSES_MESSAGE_ROLE.USER
-  );
 }
 
 interface BrainFunctionCall {

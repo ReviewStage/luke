@@ -1,10 +1,5 @@
 import assert from "node:assert/strict";
 import {
-  RESPONSES_CONTENT_PART_TYPE,
-  RESPONSES_INPUT_ITEM_TYPE,
-  RESPONSES_MESSAGE_ROLE,
-} from "@sidecar/hosted";
-import {
   CONTEXT_INPUT_KIND,
   type ContextEngine,
   checkpointFormatTag,
@@ -38,7 +33,6 @@ import {
 } from "ai";
 import { Schema } from "effect";
 import { test } from "vitest";
-import { ResponsesContextEngine } from "./context-engine.js";
 import {
   type ContextRow,
   type ModelInputOptions,
@@ -97,32 +91,6 @@ interface Reasoning {
   readonly itemId: string;
   readonly encrypted: string;
   readonly summary: string;
-}
-
-function reasoningItem(reasoning: Reasoning): WireRecord {
-  return {
-    type: RESPONSES_INPUT_ITEM_TYPE.REASONING,
-    id: reasoning.itemId,
-    encrypted_content: reasoning.encrypted,
-    summary: [{ type: RESPONSES_CONTENT_PART_TYPE.SUMMARY_TEXT, text: reasoning.summary }],
-  };
-}
-
-function functionCallItem(): WireRecord {
-  return {
-    type: RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL,
-    call_id: TURN.CALL_ID,
-    name: TOOL_NAME,
-    arguments: JSON.stringify(TURN.INPUT),
-  };
-}
-
-function assistantMessageItem(text: string): WireRecord {
-  return {
-    type: RESPONSES_INPUT_ITEM_TYPE.MESSAGE,
-    role: RESPONSES_MESSAGE_ROLE.ASSISTANT,
-    content: [{ type: RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT, text }],
-  };
 }
 
 function openAiReplay(reasoning: Reasoning): ProviderMetadata {
@@ -220,8 +188,6 @@ function replyParts(
 }
 
 /** How many of a reply's parts stand before the crash the interrupted fixtures model: the step's start, its reasoning, and the call. */
-const PARTS_THROUGH_CALL = 3;
-
 const ASK_ROW = userRow("3f1c9a2e-7b4d-4e8f-9a01-2b3c4d5e6f70", TURN.ASK);
 const REPLY_ROW = assistantRow("5a2d7b3c-8e4f-4a9b-8c12-3d4e5f6a7b81", replyParts(), MODEL);
 
@@ -280,53 +246,6 @@ function texts(content: UnparsedWireValue, type: string): string {
     .join("");
 }
 
-function shownByResponses(items: readonly WireRecord[]): Shown[] {
-  const shown: Shown[] = [];
-  for (const item of items) {
-    switch (item.type) {
-      case RESPONSES_INPUT_ITEM_TYPE.MESSAGE:
-        shown.push(
-          item.role === RESPONSES_MESSAGE_ROLE.USER
-            ? {
-                kind: SHOWN.USER,
-                text: texts(item.content, RESPONSES_CONTENT_PART_TYPE.INPUT_TEXT),
-              }
-            : {
-                kind: SHOWN.ASSISTANT,
-                text: texts(item.content, RESPONSES_CONTENT_PART_TYPE.OUTPUT_TEXT),
-              },
-        );
-        break;
-      case RESPONSES_INPUT_ITEM_TYPE.REASONING:
-        shown.push({
-          kind: SHOWN.REASONING,
-          itemId: item.id,
-          encrypted: item.encrypted_content,
-          summary: texts(item.summary, RESPONSES_CONTENT_PART_TYPE.SUMMARY_TEXT),
-        });
-        break;
-      case RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL:
-        shown.push({
-          kind: SHOWN.CALL,
-          callId: item.call_id,
-          name: item.name,
-          input: isWireString(item.arguments) ? JSON.parse(item.arguments) : undefined,
-        });
-        break;
-      case RESPONSES_INPUT_ITEM_TYPE.FUNCTION_CALL_OUTPUT:
-        shown.push({
-          kind: SHOWN.RESULT,
-          callId: item.call_id,
-          output: isWireString(item.output) ? JSON.parse(item.output) : undefined,
-        });
-        break;
-      default:
-        throw new Error(`unexpected item ${String(item.type)}`);
-    }
-  }
-  return shown;
-}
-
 const MODEL_MESSAGE_ROLE = { USER: "user", ASSISTANT: "assistant", TOOL: "tool" } as const;
 const MODEL_PART = {
   TEXT: "text",
@@ -383,55 +302,6 @@ function shownByModelMessages(messages: readonly WireRecord[]): Shown[] {
   }
   return shown;
 }
-
-test("the same turn produces equivalent model input from both engines", async () => {
-  const responses = new ResponsesContextEngine(RUNTIME);
-  responses.bootstrap(undefined, LOST_RESULT);
-  responses.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: TURN.ASK });
-  responses.ingest({
-    kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
-    items: [reasoningItem(TURN.REASONING_BEFORE_CALL), functionCallItem()],
-  });
-  responses.ingest({
-    kind: CONTEXT_INPUT_KIND.TOOL_RESULT,
-    callId: TURN.CALL_ID,
-    outputJson: JSON.stringify(TURN.OUTPUT),
-  });
-  responses.ingest({
-    kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
-    items: [reasoningItem(TURN.REASONING_BEFORE_REPLY), assistantMessageItem(TURN.REPLY)],
-  });
-  const { context, bootstrap } = await bootstrapped([ASK_ROW, REPLY_ROW]);
-  assert.deepEqual(bootstrap, { loaded: true, repaired: 0 });
-
-  const ephemeral = [TURN.EPHEMERAL];
-  const fromCheckpoint = shownByResponses(responses.assemble({ ephemeral }));
-  const fromRows = shownByModelMessages(await context.assemble({ ephemeral }));
-
-  assert.deepEqual(fromRows, fromCheckpoint);
-  assert.deepEqual(
-    fromRows.map((item) => item.kind),
-    [
-      SHOWN.USER,
-      SHOWN.REASONING,
-      SHOWN.CALL,
-      SHOWN.RESULT,
-      SHOWN.REASONING,
-      SHOWN.ASSISTANT,
-      SHOWN.USER,
-    ],
-  );
-  assert.deepEqual(fromRows[1], {
-    kind: SHOWN.REASONING,
-    itemId: TURN.REASONING_BEFORE_CALL.itemId,
-    encrypted: TURN.REASONING_BEFORE_CALL.encrypted,
-    summary: TURN.REASONING_BEFORE_CALL.summary,
-  });
-  assert.deepEqual(fromRows[3], { kind: SHOWN.RESULT, callId: TURN.CALL_ID, output: TURN.OUTPUT });
-  // The ephemeral text rides last and is kept by neither engine.
-  assert.equal(context.checkpoint().items.length, 2);
-  assert.equal(responses.checkpoint().items.length, 6);
-});
 
 function isAssistant(message: ModelMessage): message is AssistantModelMessage {
   return message.role === MODEL_MESSAGE_ROLE.ASSISTANT;
@@ -640,34 +510,6 @@ test("compact drops the rows the derivation no longer reads, keeps the rest in w
   assert.deepEqual(retained, ["m6", "m7", "m8", "m9", "m10", "m11"]);
   assert.deepEqual(shownByModelMessages(await context.assemble({ ephemeral: [] })), before);
   assert.equal(context.compact(), 0);
-});
-
-test("a call left unanswered is shown to the model as an answer whose envelope says unknown, the same from both engines", async () => {
-  const responses = new ResponsesContextEngine(RUNTIME);
-  responses.bootstrap(undefined, LOST_RESULT);
-  responses.ingest({ kind: CONTEXT_INPUT_KIND.USER_TEXT, text: TURN.ASK });
-  responses.ingest({
-    kind: CONTEXT_INPUT_KIND.MODEL_OUTPUT,
-    items: [reasoningItem(TURN.REASONING_BEFORE_CALL), functionCallItem()],
-  });
-  const resumed = new ResponsesContextEngine(RUNTIME);
-  resumed.bootstrap(responses.checkpoint(), LOST_RESULT);
-  const interrupted = assistantRow(
-    "m2",
-    replyParts(TOOL_PART_STATE.INPUT_AVAILABLE).slice(0, PARTS_THROUGH_CALL),
-    MODEL,
-  );
-  const { context, bootstrap } = await bootstrapped([ASK_ROW, interrupted]);
-  assert.deepEqual(bootstrap, { loaded: true, repaired: 1 });
-
-  const fromCheckpoint = shownByResponses(resumed.assemble({ ephemeral: [] }));
-  const fromRows = shownByModelMessages(await context.assemble({ ephemeral: [] }));
-  assert.deepEqual(fromRows, fromCheckpoint);
-  assert.deepEqual(
-    fromRows.map((item) => item.kind),
-    [SHOWN.USER, SHOWN.REASONING, SHOWN.CALL, SHOWN.RESULT],
-  );
-  assert.deepEqual(fromRows[3], { kind: SHOWN.RESULT, callId: TURN.CALL_ID, output: LOST_RESULT });
 });
 
 test("a call the record left unanswered is answered with the lost result, and the record is not rewritten", async () => {
