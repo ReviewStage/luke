@@ -10,8 +10,6 @@ import { HostedActionClient, HostedRosterClient } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
   CLOUD_AGENT_PROVIDER_ID,
-  type CloudAgentProviderId,
-  CreatedWorkspaceOpenTracker,
   isProviderId,
   isSessionApplicationId,
   normalizeObservedWorkspaceProjects,
@@ -22,7 +20,6 @@ import {
   type SessionIdentity,
   SessionRoster,
   staleWorkspaceProjectDefaults,
-  type WorkspaceAgentSelection,
   workspaceProjectSelectionId,
 } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
@@ -33,10 +30,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import {
-  createSessionActionPerformer,
-  type SessionActionPerformer,
-} from "./session-action-performer.js";
+import { createSessionOpens, type SessionOpens } from "./session-opens.js";
 import { createSessionRowActions } from "./session-row-actions.js";
 import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
 
@@ -59,7 +53,7 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
 export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
-  readonly sessionActions: SessionActionPerformer;
+  readonly sessionOpens: SessionOpens;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
   /**
@@ -116,7 +110,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
    */
   const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
 
-  const createdWorkspaceOpens = new CreatedWorkspaceOpenTracker();
   let unsubscribeSessions: (() => void) | undefined;
   let lastWorkspaceProjects: string | undefined;
   /** Where a workspace can be created, as the service's snapshot last listed it. */
@@ -185,77 +178,9 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     kernel.emit(GATEWAY_EVENT.WORKSPACE_PROJECTS_CHANGED, { projects: carried(projects) });
   });
 
-  const rememberWorkspaceDefaultsEffect = /* @__PURE__ */ Effect.fnUntraced(
-    function* (
-      providerId: CloudAgentProviderId,
-      providerProjectId: string,
-      namedSelection: WorkspaceAgentSelection | undefined,
-    ) {
-      let accountPreferencesTouched = false;
-      if (
-        (yield* settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)) === undefined
-      ) {
-        const saved = yield* settings.store.set(
-          APP_SETTING_SCHEMA.defaultWorkspaceProvider.field,
-          providerId,
-        );
-        settings.emitSettingsSnapshot(saved.settings);
-        accountPreferencesTouched = true;
-      }
-      if (
-        (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field))?.[
-          providerId
-        ] === undefined
-      ) {
-        const saved = yield* settings.store.setEntry(
-          APP_SETTING_SCHEMA.workspaceProjectDefaults.field,
-          providerId,
-          workspaceProjectSelectionId({ providerProjectId }),
-        );
-        settings.emitSettingsSnapshot(saved.settings);
-        accountPreferencesTouched = true;
-      }
-      if (
-        namedSelection !== undefined &&
-        (yield* settings.store.get(APP_SETTING_SCHEMA.workspaceAgentDefaults.field))?.[
-          providerId
-        ] === undefined
-      ) {
-        const saved = yield* settings.store.setEntry(
-          APP_SETTING_SCHEMA.workspaceAgentDefaults.field,
-          providerId,
-          namedSelection,
-        );
-        settings.emitSettingsSnapshot(saved.settings);
-        accountPreferencesTouched = true;
-      }
-      if (accountPreferencesTouched) settings.pushAccountPreferences();
-    },
-    // The reply is the creation's; a failed remember has no line in it,
-    // exactly as the try/catch this replaced swallowed every step's own.
-    Effect.catch(() => Effect.void),
-  );
-
-  function openCreatedWorkspaces(sessions: readonly Session[]): void {
-    for (const created of createdWorkspaceOpens.claim(sessions, now())) {
-      const link = created.detail.link;
-      if (!link) continue;
-      kernel.openExternalThroughNode(link).catch((error: Error) => {
-        report(`Created workspace could not be opened: ${error.message}`);
-      });
-    }
-  }
-
-  const sessionActions = createSessionActionPerformer({
+  const sessionOpens = createSessionOpens({
     sessionRegistry,
     openExternal: (url, kind) => kernel.openExternalThroughNode(url, kind),
-    actions: actionClient,
-    refreshSessions: pokeRefresh,
-    sendsNetwork: runMode.sendsNetwork,
-    settingsStore: settings.store,
-    rememberWorkspaceDefaults: rememberWorkspaceDefaultsEffect,
-    expectCreatedWorkspace: (identity, at) => createdWorkspaceOpens.expect(identity, at),
-    openCreatedWorkspaces: () => openCreatedWorkspaces(sessionRegistry.list()),
     recordProductEvent: settings.recordProductEvent,
   });
 
@@ -352,7 +277,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     if (!runMode.observesProviders || !account.capabilitiesActive() || unsubscribeSessions) return;
     unsubscribeSessions = sessionRegistry.subscribe((sessions) => {
       broadcastSessions(sessions);
-      openCreatedWorkspaces(sessions);
       countObservedSessions(sessions);
     });
   }
@@ -393,7 +317,7 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     [GATEWAY_METHOD.SESSION_OPEN]: (params) => {
       const identity = params.identity;
       if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      return Effect.map(sessionActions.openSession(identity), (answer) => carried(answer));
+      return Effect.map(sessionOpens.openSession(identity), (answer) => carried(answer));
     },
     [GATEWAY_METHOD.SESSION_OPEN_APPLICATION]: (params) => {
       const identity = params.identity;
@@ -402,14 +326,14 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
       if (!isWireString(applicationId) || !isSessionApplicationId(applicationId)) {
         return invalid("applicationId is not one this build knows");
       }
-      return Effect.map(sessionActions.openSessionApplication(identity, applicationId), (answer) =>
+      return Effect.map(sessionOpens.openSessionApplication(identity, applicationId), (answer) =>
         carried(answer),
       );
     },
     [GATEWAY_METHOD.SESSION_OPEN_CHANGE]: (params) => {
       const identity = params.identity;
       if (!isSessionIdentity(identity)) return invalid("identity must name a session");
-      return Effect.map(sessionActions.openSessionChange(identity), (answer) => carried(answer));
+      return Effect.map(sessionOpens.openSessionChange(identity), (answer) => carried(answer));
     },
     [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: (params) => {
       const identity = params.identity;
@@ -444,7 +368,7 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   return {
     methods,
     loop,
-    sessionActions,
+    sessionOpens,
     rosterForClients,
     onRosterChange: (listener) => {
       rosterListeners.push(listener);
