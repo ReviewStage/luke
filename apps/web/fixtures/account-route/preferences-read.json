@@ -7,5 +7,5 @@
       "application/json"
     ]
   ],
-  "body": "{\"preferences\":{\"voice\":\"coral\",\"voiceSpeed\":1.25},\"updatedAt\":1788868800000}"
+  "body": "{\"preferences\":{\"voice\":\"coral\"},\"updatedAt\":1788868800000}"
 }

@@ -33,7 +33,6 @@ final class AccountPreferencesClientTests: XCTestCase {
 
         let wire = snapshot.accountPreferencesWire
         XCTAssertEqual(wire["voice"] as? String, "coral")
-        XCTAssertNil(wire["voiceSpeed"])
         XCTAssertEqual(wire["defaultWorkspaceProvider"] as? String, "conductor")
         XCTAssertEqual(wire["workspaceProjectDefaults"] as? [String: String], [
             "conductor": "project-1",
@@ -52,7 +51,6 @@ final class AccountPreferencesClientTests: XCTestCase {
     func testAccountPreferencesWireParsesHostedSnapshot() async {
         let snapshot = DeviceSettingsSnapshot(accountPreferencesWire: [
             "voice": "beacon",
-            "voiceSpeed": 1.5,
             "defaultWorkspaceProvider": "conductor",
             "workspaceProjectDefaults": ["conductor": "project-1"],
             "workspaceAgentDefaults": [
@@ -74,11 +72,6 @@ final class AccountPreferencesClientTests: XCTestCase {
     func testAccountPreferencesWireRejectsUnknownAndInvalidHostedValues() async {
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["futureSetting": "ignored"]))
         XCTAssertNil(DeviceSettingsSnapshot(accountPreferencesWire: ["voice": "baritone"]))
-        XCTAssertEqual(
-            DeviceSettingsSnapshot(accountPreferencesWire: ["voiceSpeed": true]),
-            DeviceSettingsSnapshot(),
-            "the retired pace is read past, whatever an old account stored under it"
-        )
         XCTAssertNil(
             DeviceSettingsSnapshot(accountPreferencesWire: [
                 "workspaceProjectDefaults": ["unknown": "project-1"],
@@ -100,10 +93,7 @@ final class AccountPreferencesClientTests: XCTestCase {
             XCTAssertNil(request.httpBody)
             return (
                 preferencesJSONData([
-                    "preferences": [
-                        "voice": "coral",
-                        "voiceSpeed": 1.25,
-                    ],
+                    "preferences": ["voice": "coral"],
                     "updatedAt": 1_800_000_000_000,
                 ]),
                 preferencesResponse(url: request.url!, status: 200)
@@ -128,7 +118,6 @@ final class AccountPreferencesClientTests: XCTestCase {
             ) as! [String: Any]
             let preferences = body["preferences"] as? [String: Any]
             XCTAssertEqual(preferences?["voice"] as? String, "willow")
-            XCTAssertNil(preferences?["voiceSpeed"], "the phone writes no pace")
             return (
                 preferencesJSONData([
                     "preferences": ["voice": "willow"],

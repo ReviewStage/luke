@@ -8,18 +8,20 @@ import { observeProviders, readApiKeyFor } from "./vault-keys.js";
 import type { HostedVaultRoute, VaultKeyRow } from "./vault-route.js";
 
 /**
- * Mints one ephemeral Realtime credential for the signed-in iPhone, on the
+ * Mints one ephemeral Realtime credential for the signed-in watch, on the
  * key this deployment holds. Unlike the desktop mint, this endpoint also runs
  * a cloud observe pass and pre-serializes the session roster as a context item
- * so the phone can be a thin terminal: it forwards the opaque string into the
+ * so the watch can be a thin terminal: it forwards the opaque string into the
  * Realtime conversation without re-implementing context serialization logic.
+ * The phone was this mint's other caller until its voice moved onto the
+ * hosted exchange (LUKE-216); the mint goes when the watch follows (LUKE-224).
  *
  * The tool list is narrowed to the actions the remote action endpoints serve; the
  * server re-validates every action on its own fresh observation pass regardless,
- * so the phone's narrowed set is a first gate, not the last.
+ * so the watch's narrowed set is a first gate, not the last.
  */
 
-/** The fields the phone's mint takes, and nothing beyond them. */
+/** The fields the watch's mint takes, and nothing beyond them. */
 export const MOBILE_MINT_STRICT_FIELDS: readonly string[] = ["voice", "speed"];
 
 /** What a roster read needs of the deployment: the vault secret and the caller's stored keys. */
@@ -29,7 +31,7 @@ export interface RemoteObserveSeams
 }
 
 /**
- * The phone's roster: one cloud observe pass under the caller's own stored
+ * The watch's roster: one cloud observe pass under the caller's own stored
  * keys, or nothing at all when this deployment holds no vault secret. It
  * answers a list rather than a refusal — a mint whose roster could not be
  * read is still a mint.
@@ -67,7 +69,7 @@ export interface RemoteSessionContextItem {
 }
 
 /**
- * The roster as the one context item the phone forwards into its Realtime
+ * The roster as the one context item the watch forwards into its Realtime
  * conversation. The label prefix matches the one `sessionContextEvents` in
  * `@sidecar/brain` applies, so the model reads remote and desktop context
  * items identically.

@@ -281,20 +281,27 @@ validation, and the armed-turn discipline stay in `LukeKit` until LUKE-219
 deletes them; the watch dispatches nothing either, since its call moved with
 LUKE-224), and the two device-local tools the phone had, `open_session` and
 `show_panel`, which have no service counterpart: Luke can no longer open a
-session's screen or narrow the list from a spoken ask on the phone. The
-legacy path's files (`RealtimeSession`, `VoiceMintClient`,
+session's screen or narrow the list from a spoken ask on the phone. Nothing
+under `Luke/` calls the remote mint or the Realtime session any more, the
+phone's typed-ask path is deleted from `RealtimeSession`, the phone's own
+audio-session policy is deleted from `PCMAudio`, and the account's stored
+pace is gone from the service with the sync that carried it (LUKE-219). The
+legacy path's remaining files (`RealtimeSession`, `VoiceMintClient`,
 `VoiceConversationThread`, `ConversationContext`, `WorkspaceProjectsContext`,
-`VoiceToolAvailability`) have no caller on either device now that the watch
-has moved too (LUKE-224), and are LUKE-219's to delete.
+`VoiceActionDispatcher`, `VoiceAsks`'s tool validation,
+`VoiceToolAvailability`, `PressAudioBuffer`, and `RealtimeVoice` and
+`RealtimeVoiceSpeed` in `VoiceSettings`) have no caller on either device now
+that the watch has moved too (LUKE-224), and are LUKE-219's to delete in its
+watch half.
 
 ## Voice actions
 
-The watch's hold-to-talk screen carries none of these: its call runs on the
-hosted exchange, described under Watch below, where the service's exchange
-decides every action and no tool call reaches the wrist. Nothing on either
-device dispatches a tool any more; `dispatchVoiceToolCall`, `VoiceAsks`'s
+Neither device dispatches a tool: on the hosted exchange the service decides
+every action, the phone sends only the microphone switch, the stop, the idle
+report, and the hang-up, and no tool call reaches the wrist either (its call
+is described under Watch below). `dispatchVoiceToolCall`, `VoiceAsks`'s
 roster validation, and the context items stay in `LukeKit` only until the
-legacy path is deleted (LUKE-219).
+legacy path's watch half is deleted (LUKE-219).
 
 ## Voice service socket
 

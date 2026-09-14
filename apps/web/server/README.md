@@ -616,8 +616,9 @@ it. It is an exact-path file, so Vercel's zero-config `api/`
 detection routes it without a `routes` entry; only the bracketed auth
 catch-all needs one. The mint lives behind the group in
 `server/voice-mint-app.ts`, which is what all three mint functions serve —
-the desktop's, the phone's `remote-mint`, and the accountless
-`introduction-mint` — each request resolved to a user through the auth
+the desktop's, the watch's `remote-mint` (the phone's until its voice moved
+onto the hosted voice service; it goes with the watch's move, LUKE-224), and
+the accountless `introduction-mint` — each request resolved to a user through the auth
 service's own `/oauth2/userinfo` endpoint, called in process, except the
 introduction's, which carries no bearer at all. Each path is declared for
 every method, so the POST a mint documents stays its own
@@ -628,7 +629,8 @@ replaced and unchanged by the conversion.
 
 The mint answer's `connection` object carries both a WebRTC calls endpoint
 (`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`) for
-mobile clients such as the iOS/watchOS companion, which has no WebRTC. Both
+the watch, which has no WebRTC; the phone is a WebRTC peer through the hosted
+voice service and reads neither. Both
 point at the canonical OpenAI host and are pinned by the build rather than
 composed by the client: `callsUrl` is the calls endpoint at
 `https://api.openai.com/v1/realtime/calls`; `wsUrl` is the WebSocket base at

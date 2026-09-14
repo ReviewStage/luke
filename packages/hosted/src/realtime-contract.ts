@@ -1,5 +1,14 @@
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 
+/**
+ * The ephemeral Realtime credential the legacy mints answer with. Its readers
+ * are the watch's remote mint, until the watch moves onto the hosted exchange
+ * (LUKE-224), and the two mints the installed desktops of earlier releases
+ * still ask for, which are the desktop's to retire; the phone reads none of
+ * it since its own move (LUKE-216, LUKE-219). The remote half of this
+ * contract goes with the watch.
+ */
+
 /** The OpenAI path a Realtime connection opens after minting. */
 export const REALTIME_CALLS_PATH = "/realtime/calls";
 

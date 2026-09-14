@@ -131,7 +131,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
 
         XCTAssertEqual(methods, ["GET", "PUT"])
         XCTAssertEqual(writtenPreferences?["voice"] as? String, "sage")
-        XCTAssertNil(writtenPreferences?["voiceSpeed"])
         XCTAssertEqual(writtenPreferences?["workspaceProjectDefaults"] as? [String: String], [
             "conductor": "project-local",
         ])

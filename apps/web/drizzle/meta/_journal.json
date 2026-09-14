@@ -197,6 +197,13 @@
       "when": 1789267979213,
       "tag": "0028_journal_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1789415000000,
+      "tag": "0029_h7_drop_voice_speed",
+      "breakpoints": true
     }
   ]
 }

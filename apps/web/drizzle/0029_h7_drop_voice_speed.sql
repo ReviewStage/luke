@@ -1,0 +1,1 @@
+ALTER TABLE "account_preference" DROP COLUMN "voice_speed";

@@ -125,20 +125,6 @@ final class SessionsStore {
         withAnimation { sessions.append(session) }
     }
 
-    /// Shows the list as a spoken ask narrowed, ordered, or searched it, the
-    /// way the filter sheet and the search field would have. The ask arrives
-    /// validated against the roster; this only applies it and shows the list.
-    func showList(_ ask: VoiceAsks.SessionListAsk) {
-        if let filters = ask.filters { self.filters = filters }
-        if let sort = ask.sort { self.sort = sort }
-        if let query = ask.query {
-            searchQuery = query
-            searchPresented = true
-        }
-        tab = .sessions
-        path.removeAll()
-    }
-
     func refresh(account: AccountSession, events: ProductEventSender) async {
         refreshPass += 1
         let pass = refreshPass
