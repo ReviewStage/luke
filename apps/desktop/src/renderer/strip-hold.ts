@@ -15,7 +15,7 @@
 /**
  * What kind of words the caption strip is carrying, which is what colours
  * them. Luke's spoken words are the strip's own job; the developer's own
- * words are drawn quieter, since they are a read-back rather than a reply; a
+ * words are told apart in the tone but drawn in the same style for now; a
  * failure borrows it in the error red; a notice borrows it in the attention
  * orange for a temporary state rather than a fault.
  */

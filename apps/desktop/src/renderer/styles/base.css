@@ -1438,13 +1438,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
 /* A voice failure borrows the caption's strip — same box, same travel — in
    the `.error-message` red, because it is a fault being reported rather than
    words being spoken. */
-/* The developer's own words read back are quieter than a reply: a read-back is
-   a check that the microphone heard right, not something to be read closely. */
-.voice-caption[data-tone="ask"] .voice-caption-text {
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
 .voice-caption[data-tone="error"] .voice-caption-text {
   color: var(--error-text);
 }
