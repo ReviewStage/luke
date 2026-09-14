@@ -11,7 +11,7 @@ import {
   parseLiveServerEvent,
 } from "../live.js";
 import {
-  desktopFrameDecision,
+  deviceFrameDecision,
   FRAME_DECISION,
   frameType,
   upstreamFrameDecision,
@@ -27,13 +27,13 @@ import {
 } from "./socket.js";
 
 /**
- * The pipe between one desktop socket and one OpenAI sideband, once both
+ * The pipe between one device socket and one OpenAI sideband, once both
  * stand. Each side's frames are a `Stream` read by a fiber of the session's
  * own scope, and they cross as the bytes they arrived as; the service reads
  * each frame's `type` and nothing else of it, drops reflected audio by that
  * type on every route, on the introduction route admits only what a renderer's
  * own data channel would carry, and on the sessions route admits from the
- * desktop only the hang-up, its idle report, and its stop, closing the socket
+ * device only the hang-up, its idle report, and its stop, closing the socket
  * on anything else. The two reports are the frames read past their type: they
  * are the service's own vocabulary, handed to the exchange that holds the
  * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
@@ -43,10 +43,10 @@ import {
  * that with; a caller who has hung up is sent none of it, whichever side of
  * the start they went. It ends the way the docs say a
  * session ends: `session.closed` is the finalization, reported once with the
- * seconds it named; a desktop that goes first has `session.close` sent on
+ * seconds it named; a device that goes first has `session.close` sent on
  * its behalf and the sideband held open for the final event under a
  * timeout; a sideband that goes first leaves the usage unconfirmed and takes
- * the desktop socket with it.
+ * the device socket with it.
  *
  * A side going is its stream ending, so the two endings are read where every
  * other frame is; the two waits are `Effect.sleep` forked into the same scope,
@@ -86,15 +86,15 @@ export type OpeningSettled =
     }
   | { outcome: typeof OPENING_OUTCOME.UNACKNOWLEDGED };
 
-/** The reason a desktop socket is closed with when OpenAI's side ended before `session.closed`. */
+/** The reason a device socket is closed with when OpenAI's side ended before `session.closed`. */
 export const UPSTREAM_CLOSED_REASON = "upstream-closed";
 
-/** The reason a desktop socket is closed with when it sent a frame the route does not admit. */
+/** The reason a device socket is closed with when it sent a frame the route does not admit. */
 export const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
 
 export interface RelayOptions<R = never> {
   route: VoiceRoute;
-  desktop: VoiceSocket;
+  device: VoiceSocket;
   upstream: VoiceSocket;
   /** Runs once, on the first `session.closed`; the relay waits for it before settling. */
   onSessionClosed?: ((closed: LiveSessionClosed) => Effect.Effect<void, never, R>) | undefined;
@@ -104,9 +104,9 @@ export interface RelayOptions<R = never> {
   onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
   /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
   onOpeningSettled?: ((settled: OpeningSettled) => LiveClientEvent | undefined) | undefined;
-  /** Runs on every report the desktop sent in the service's vocabulary, which is read here and forwarded nowhere. */
-  onDesktopReport?: ((report: SessionReportFrame) => void) | undefined;
-  /** Runs once, when a desktop frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
+  /** Runs on every report the device sent in the service's vocabulary, which is read here and forwarded nowhere. */
+  onDeviceReport?: ((report: SessionReportFrame) => void) | undefined;
+  /** Runs once, when a device frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
   onFrameRefused?: ((type: string | undefined) => void) | undefined;
   closeTimeoutMs?: number;
   openingTimeoutMs?: number;
@@ -122,7 +122,7 @@ export interface RelaySummary extends RelayCounts {
 export function relaySession<R = never>(
   options: RelayOptions<R>,
 ): Effect.Effect<RelaySummary, never, R | Scope.Scope> {
-  const { route, desktop, upstream } = options;
+  const { route, device, upstream } = options;
   const closeTimeoutMs = options.closeTimeoutMs ?? RELAY_DEFAULTS.CLOSE_TIMEOUT_MS;
   const openingTimeoutMs = options.openingTimeoutMs ?? RELAY_DEFAULTS.OPENING_TIMEOUT_MS;
 
@@ -130,8 +130,8 @@ export function relaySession<R = never>(
     const counts: RelayCounts = {
       framesToUpstream: 0,
       bytesToUpstream: 0,
-      framesToDesktop: 0,
-      bytesToDesktop: 0,
+      framesToDevice: 0,
+      bytesToDevice: 0,
       droppedAudio: 0,
       droppedUnpermitted: 0,
       reportsRead: 0,
@@ -237,10 +237,10 @@ export function relaySession<R = never>(
         counts.droppedAudio += 1;
       } else if (decision === FRAME_DECISION.DROP_UNPERMITTED) {
         counts.droppedUnpermitted += 1;
-      } else if (yield* desktop.isOpen) {
-        yield* desktop.send(frame);
-        counts.framesToDesktop += 1;
-        counts.bytesToDesktop += frameBytes(frame);
+      } else if (yield* device.isOpen) {
+        yield* device.send(frame);
+        counts.framesToDevice += 1;
+        counts.bytesToDevice += frameBytes(frame);
       }
       if (type === LIVE_SERVER_EVENT.SESSION_STARTED && !startedSeen) {
         startedSeen = true;
@@ -288,26 +288,26 @@ export function relaySession<R = never>(
     );
 
     /**
-     * A desktop frame the route does not admit closes the desktop's socket
+     * A device frame the route does not admit closes the device's socket
      * with a policy violation rather than dropping the frame: an older
      * build's append, dropped silently, would leave the developer hearing
      * nothing and seeing nothing, and the close is what surfaces it. The
      * session itself ends the way a hang-up does, since the socket closing
-     * is the desktop gone, and the graceful close upstream records its
+     * is the device gone, and the graceful close upstream records its
      * seconds.
      */
     const refuse = Effect.fnUntraced(function* (type: string | undefined) {
       counts.refusedUnpermitted += 1;
       options.onFrameRefused?.(type);
-      if (yield* desktop.isOpen) {
-        yield* desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
+      if (yield* device.isOpen) {
+        yield* device.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
       }
     });
 
-    const onDesktopFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
+    const onDeviceFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
       const text = frameText(frame);
       const type = frameType(text);
-      const decision = desktopFrameDecision(type, route);
+      const decision = deviceFrameDecision(type, route);
       if (decision === FRAME_DECISION.REFUSE) {
         yield* refuse(type);
         return;
@@ -321,7 +321,7 @@ export function relaySession<R = never>(
           return;
         }
         counts.reportsRead += 1;
-        options.onDesktopReport?.(report);
+        options.onDeviceReport?.(report);
         return;
       }
       if (decision !== FRAME_DECISION.FORWARD) {
@@ -335,12 +335,12 @@ export function relaySession<R = never>(
     });
 
     /**
-     * The desktop went first. The docs' graceful close on its behalf: the
+     * The device went first. The docs' graceful close on its behalf: the
      * sideband's own stream is already read, `session.close` goes up, and the
      * sideband is held for the final event so the seconds are recorded, under
      * the timeout after which finalization is reported incomplete.
      */
-    const onDesktopGone = Effect.gen(function* () {
+    const onDeviceGone = Effect.gen(function* () {
       hungUp = true;
       if (closedSeen || (yield* Deferred.isDone(settled))) return;
       // The caller has hung up, so the opening command will never be answered
@@ -366,15 +366,15 @@ export function relaySession<R = never>(
       Effect.andThen(Stream.runForEach(upstream.frames, onUpstreamFrame), onUpstreamGone),
     );
     yield* Effect.forkScoped(
-      Effect.andThen(Stream.runForEach(desktop.frames, onDesktopFrame), onDesktopGone),
+      Effect.andThen(Stream.runForEach(device.frames, onDeviceFrame), onDeviceGone),
     );
 
     const finalization = yield* Deferred.await(settled);
     openingEventId = undefined;
-    if (yield* desktop.isOpen) {
+    if (yield* device.isOpen) {
       yield* finalization === FINALIZATION.CONFIRMED
-        ? desktop.close(SOCKET_CLOSE_CODE.NORMAL)
-        : desktop.close(SOCKET_CLOSE_CODE.GOING_AWAY, UPSTREAM_CLOSED_REASON);
+        ? device.close(SOCKET_CLOSE_CODE.NORMAL)
+        : device.close(SOCKET_CLOSE_CODE.GOING_AWAY, UPSTREAM_CLOSED_REASON);
     }
     if (yield* upstream.isOpen) yield* upstream.close(SOCKET_CLOSE_CODE.NORMAL);
     return { ...counts, finalization, seconds: closed?.usage.seconds };

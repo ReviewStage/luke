@@ -24,7 +24,7 @@ import { SOCKET_CLOSE_CODE } from "./socket.js";
 
 /**
  * How the service reaches OpenAI on Luke's project key: the one POST that
- * creates a WebRTC session from the desktop's offer, and the one socket that
+ * creates a WebRTC session from the device's offer, and the one socket that
  * attaches this service's sideband to it. The key travels as the bearer on
  * both and nowhere else; a failure is answered as an outcome name and a
  * status, never as an error whose words could carry the key.

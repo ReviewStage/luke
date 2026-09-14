@@ -98,14 +98,23 @@ export function registerDevice(write: {
 
 const HeldDeviceSchema = Schema.Struct({ userId: Schema.String, deviceId: Schema.String });
 
-/** The account's own device row by id, or none: the one fact a voice session's device claim is admitted on. */
+const HeldDeviceRowSchema = Schema.Struct({ id: Schema.String, platform: Schema.String });
+
+/**
+ * The account's own device row by id, or none: the one fact a voice session's
+ * device claim is admitted on, with the platform the row named beside it, so
+ * the caller a session was opened from is read here rather than from a header
+ * the caller chose. The platform is answered as the column holds it, a word
+ * this build may not know, and `isDevicePlatform` is what narrows it.
+ */
 export const findHeldDevice = SqlSchema.findOneOption({
   Request: HeldDeviceSchema,
-  Result: DeviceIdRowSchema,
+  Result: HeldDeviceRowSchema,
   execute: (key) =>
     statement(
       (sql) => sql`
-        select id from devices where user_id = ${key.userId} and id = ${key.deviceId} limit 1
+        select id, platform from devices
+        where user_id = ${key.userId} and id = ${key.deviceId} limit 1
       `,
     ),
 });
