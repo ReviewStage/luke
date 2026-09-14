@@ -31,7 +31,7 @@ import {
 } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LiveSessionHolder } from "./live-session-holder.js";
+import { LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted session, over a scripted source and
@@ -681,6 +681,17 @@ it.scoped(
       assert.equal(f.holder.wantSession(), false);
       assert.equal(f.holder.speakBeat(CALENDAR), true);
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      // A word unanswered for its standing is spent: the next reason asks afresh.
+      yield* TestClock.adjust(WANTED_WORD.STANDS_MS - 1);
+      assert.equal(f.holder.sessionWanted(), true);
+      yield* TestClock.adjust(1);
+      assert.equal(f.holder.sessionWanted(), false);
+      assert.equal(f.holder.wantSession(), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED, LIVE_SESSION_PHASE.WANTED]);
+      // Dropped by the caller (a hold began, a sign-out): spent at once.
+      f.holder.dropWant();
+      assert.equal(f.holder.sessionWanted(), false);
+      assert.equal(f.holder.wantSession(), true);
       const created = yield* f.holder.createSession("offer");
       assert.ok(created);
       assert.equal(f.holder.sessionWanted(), false);
@@ -695,6 +706,8 @@ it.scoped(
       yield* settle();
       assert.equal(f.holder.wantSession(), true);
       assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.WANTED,
         LIVE_SESSION_PHASE.WANTED,
         LIVE_SESSION_PHASE.CREATED,
         LIVE_SESSION_PHASE.STARTED,

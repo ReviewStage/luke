@@ -381,6 +381,13 @@ export const composeLive = (
         for (const kind of BEAT_KINDS) {
           if (service.withdrawBeat(kind)) beatHeld = true;
         }
+        // A `wanted` out for a briefing is taken back too, and the briefing
+        // kept for the lift; a session the peer already offered is the
+        // exchange's, and the service's own hold on the offer stands over it.
+        if (service.sessionWanted()) {
+          service.dropWant();
+          if (lastOpenOffers > 0) briefingHeld = true;
+        }
         return;
       }
       if (beatHeld) yield* onboardingBeat;
@@ -469,6 +476,8 @@ export const composeLive = (
       },
       withdrawBeats: () => {
         for (const kind of BEAT_KINDS) service.withdrawBeat(kind);
+        // A signed-out Mac wants no session: the word out for a beat or a briefing goes with them.
+        service.dropWant();
       },
       // The session itself is closed by the drain, inside the quit's deadline,
       // before any composer stops; nothing is left here to give back.
