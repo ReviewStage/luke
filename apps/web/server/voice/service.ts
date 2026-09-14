@@ -522,6 +522,10 @@ export class VoiceService {
         return;
       }
       const { sessionId, accountId, platform, sideband } = opened;
+      // Walked from a copy, never the door's list: the door's own reader
+      // still stands on the paused socket and holds again whatever is emitted
+      // to it while paused, which is these frames on their way back.
+      const held = [...opened.held];
       // The exchange stands before the device is answered, on the same socket
       // the relay is about to pipe. The socket is paused since the attach, so a
       // frame the session spoke while the exchange stood is read once both
@@ -560,7 +564,7 @@ export class VoiceService {
       // waits for a `session.closed` a paused socket would never deliver.
       if (!(yield* device.isOpen)) {
         yield* Effect.sync(() => {
-          replayHeldFrames(sideband, opened.held);
+          replayHeldFrames(sideband, held);
           sideband.resume();
         });
         if (exchange !== undefined) yield* this.#stopExchange(route, exchange, platform);
@@ -569,13 +573,16 @@ export class VoiceService {
       yield* device.send({ text: JSON.stringify(opened.answer) });
       this.#log({ event: opened.logEvent, route });
 
-      const pipe = yield* voiceSocket(sideband);
-      // Both consumers listen now: what the door held for them first, then
-      // what the session spoke since, read here, by both, in order.
-      yield* Effect.sync(() => {
-        replayHeldFrames(sideband, opened.held);
-        sideband.resume();
-      });
+      // What the door held goes to each consumer now, in order and ahead of
+      // anything the socket says next: emitted on the socket for the
+      // exchange's reader, which stands on it already, while the socket is
+      // still paused; and offered to the pipe's own stream as the pipe is
+      // built, since the pipe's reader resumes the socket the moment it
+      // stands and an emit after that could land behind a live frame.
+      yield* Effect.sync(() => replayHeldFrames(sideband, held));
+      const pipe = yield* voiceSocket(sideband, { held });
+      // Both consumers listen now: what the session spoke since the attach is read here, by both.
+      yield* Effect.sync(() => sideband.resume());
       const summary = yield* relaySession<SqlClient.SqlClient>({
         route,
         device,

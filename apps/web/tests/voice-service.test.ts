@@ -1585,22 +1585,26 @@ test("on the audio route the device's audio reaches OpenAI as the bytes it arriv
   assert.equal(await context.sessions(), 0);
 });
 
-test("what the primary socket said beside session.started reaches the device first, once, and in order", async () => {
+test("what the primary socket said beside session.started reaches the device first, once, and in order, ahead of what it said while the door still held the socket", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
   const beside = [
     JSON.stringify({ type: LIVE_SERVER_EVENT.INFO, event_id: "i1", code: "noted" }),
     caption("Hello", "c1"),
   ];
+  const then = [caption(" there", "c2"), caption(", Ada", "c3")];
   context.openAi.startedBeside = beside;
+  context.openAi.startedThen = then;
 
   const { watch, upstream } = await openAudioSession(context);
 
-  const later = caption(" there", "c2");
+  const later = caption(".", "c4");
   await sendText(upstream.socket, later);
   const seen: string[] = [];
-  for (let index = 0; index < 3; index += 1) seen.push(await watch.next());
-  assert.deepEqual(seen, [...beside, later]);
+  for (let index = 0; index < beside.length + then.length + 1; index += 1) {
+    seen.push(await watch.next());
+  }
+  assert.deepEqual(seen, [...beside, ...then, later]);
   assert.equal(await watch.arrives(), false);
 });
 

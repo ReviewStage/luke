@@ -130,8 +130,9 @@ type Opened =
        * The frames the door took off that socket before any consumer stood,
        * in order: what a primary socket said beside `session.started`, and
        * nothing on the routes whose socket the service resumes untouched.
-       * They reach both consumers ahead of the resume, through the socket's
-       * own event, so a frame that arrived with the handshake is heard once.
+       * The service hands them to each consumer ahead of anything the socket
+       * says next, so a frame that arrived with the handshake is heard once
+       * and in its place.
        */
       held: readonly string[];
       answer: SessionCreatedFrame | SessionAttachedFrame | SessionAudioCreatedFrame;

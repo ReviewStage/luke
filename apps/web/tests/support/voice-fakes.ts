@@ -98,6 +98,8 @@ export interface FakeOpenAi {
    * so they reach the door in the one tick that event does; none by default.
    */
   startedBeside: string[];
+  /** Text frames sent as their own writes the instant that chunk has gone, so they arrive while the door still holds the socket paused; none by default. */
+  startedThen: string[];
   /** Resolves with the next attach the service opens, or the one already waiting. */
   nextAttach(): Promise<RecordedAttach>;
   /** Resolves with the next primary socket the service started a session on, or the one already waiting. */
@@ -173,6 +175,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
     createStatus: HTTP_CREATED,
     primaryStatus: undefined,
     startedBeside: [],
+    startedThen: [],
     nextAttach: attachLine.next,
     nextPrimary: primaryLine.next,
     close: async () => {
@@ -230,6 +233,7 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
             session: { id: sessionId },
           });
           socket.write(Buffer.concat([started, ...fake.startedBeside].map(textFrame)));
+          for (const frame of fake.startedThen) webSocket.send(frame);
           const primary: RecordedPrimary = {
             authorization: request.headers.authorization,
             start,

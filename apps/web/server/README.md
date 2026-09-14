@@ -763,8 +763,9 @@ is written then, with the device's id, the exchange is stood on the same
 socket, and the device is answered `session.created` with the id and the
 quota and no SDP answer (`SessionAudioCreatedFrame`). Whatever the socket
 said beside `session.started` in the handshake's own chunk is handed to both
-consumers ahead of the resume (`replayHeldFrames`), so no frame is heard by
-nobody or twice. From then on the relay is the same pipe with two arms of its
+consumers ahead of anything the socket says next (`replayHeldFrames` for the
+exchange's reader, `VoiceSocketOptions.held` for the pipe's), so no frame is
+heard by nobody, twice, or out of its place. From then on the relay is the same pipe with two arms of its
 own (`frames.ts`, `AUDIO_CLIENT_EVENTS` and `AUDIO_REPORT_FRAMES`): from the
 device, `session.input_audio.append` and `session.close` are forwarded as the
 bytes they arrived as, `session.activity` and `session.stop` are read for the
