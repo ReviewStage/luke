@@ -70,15 +70,20 @@ import {
  */
 
 /**
- * The platforms whose live session can claim an offer and say it, so whose
- * reported presence is a reason to wait for a claim. A platform joins this
- * set when it can claim an offer and speak it, not when it can report
- * presence: the phone reports presence from its conversation screen and
- * holds voice calls, but nothing on it claims a briefing today, and the
- * watch never speaks, so a developer reading the phone with the Mac idle is
- * pushed to at once rather than made to wait out a grace nobody will use.
- * Adding a platform here is a product decision that comes with its claim
- * path, never a widening on its own.
+ * The platforms whose reported presence is a reason to wait for a claim. A
+ * platform joins this set when it can claim an offer and report the presence
+ * that says it will, not when it can do either alone: the Mac reports itself
+ * active from input and screen state and opens a session of its own for an
+ * offer, so a Mac reporting itself active and not claiming inside the grace
+ * is a Mac that will not claim at all. A standing phone or watch call claims
+ * a briefing and speaks it exactly as a Mac's session does, since the
+ * exchange behind either route claims as the session's device and never asks
+ * what platform that device is, and such an offer is never pushed; but
+ * neither opens a session for an offer, and each reports itself active only
+ * while a screen of its own is up, so a phone or watch that is merely
+ * present is pushed to at once rather than made to wait out a grace nobody
+ * will use. Adding a platform here is a product decision that comes with
+ * both halves, never a widening on its own.
  */
 const SPEAKING_PLATFORMS: ReadonlySet<DevicePlatform> = new Set([DEVICE_PLATFORM.MACOS]);
 
