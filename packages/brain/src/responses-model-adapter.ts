@@ -13,15 +13,15 @@ import { HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/w
 import { type Failure, type Normalized, payloadOf, throttled } from "./model-adapter-shared.js";
 
 /**
- * One model adapter over the two transports that speak the Responses item
- * shapes: the developer's own key straight to OpenAI, and Luke's hosted
- * service on the signed-in account. What the two share is everything the
- * host relies on — an inference is held back while the adapter is quiet, a
- * rate limit stands it down for a bounded wait, a request that could not be
- * built or admitted is a failure named by kind, and an answer is read only
- * once its status has been — and what they differ in is the transport: how a
- * request is authorized and addressed, what it is admitted against, how its
- * body is composed, and how each answer is read.
+ * One model adapter over a transport that speaks the Responses item shapes.
+ * The one transport this build ships is Luke's hosted service on the
+ * signed-in account (`hosted-model-adapter.ts`); the adapter keeps what every
+ * transport would share and the host relies on — an inference is held back
+ * while the adapter is quiet, a rate limit stands it down for a bounded wait,
+ * a request that could not be built or admitted is a failure named by kind,
+ * and an answer is read only once its status has been — and leaves to the
+ * transport how a request is authorized and addressed, what it is admitted
+ * against, how its body is composed, and how each answer is read.
  */
 
 /**
@@ -67,9 +67,9 @@ export interface ResponsesTransport<Admitted> {
   /** The model, when the transport knows it before any call. */
   model(): string | undefined;
   /**
-   * What an operation is admitted against: nothing to read for a key, the
-   * service's capabilities for the hosted tier. Asked without an operation,
-   * it is the capabilities read itself.
+   * What an operation is admitted against: the service's capabilities, for
+   * the hosted transport. Asked without an operation, it is the capabilities
+   * read itself.
    */
   admit(operation?: ResponsesOperation): Promise<Admission<Admitted>>;
   capabilitiesOf(admitted: Admitted): Omit<ModelCapabilities, "adapter" | "checkpoint">;
