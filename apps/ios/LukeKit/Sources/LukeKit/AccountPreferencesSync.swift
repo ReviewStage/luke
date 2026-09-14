@@ -204,7 +204,6 @@ private extension DeviceSettingsSnapshot {
     ) -> DeviceSettingsSnapshot {
         DeviceSettingsSnapshot(
             voice: current.voice == expected.voice ? voice : current.voice,
-            speed: current.speed == expected.speed ? speed : current.speed,
             workspaceProviderId: current.workspaceProviderId == expected.workspaceProviderId
                 ? workspaceProviderId
                 : current.workspaceProviderId,

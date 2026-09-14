@@ -25,7 +25,6 @@ final class DeviceSettingsSyncTests: XCTestCase {
 
     private let changed = DeviceSettingsSnapshot(
         voice: .coral,
-        speed: .fast,
         workspaceProviderId: "conductor",
         workspaceProjectIds: ["conductor": "proj-1", "codex": "https://github.com/o/r"],
         workspaceAgentDefaults: [
@@ -97,15 +96,15 @@ final class DeviceSettingsSyncTests: XCTestCase {
         phone.start()
         watch.start()
 
-        phoneStore.set(RealtimeVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
-        watchStore.set(RealtimeVoiceSpeed.slow.rawValue, forKey: VoiceSettingsKey.speed)
+        phoneStore.set(LiveVoice.beacon.rawValue, forKey: VoiceSettingsKey.voice)
+        WorkspaceCreationDefaults(store: watchStore).lastProviderId = "codex"
 
         phone.receive(watchPublished.last!)
-        XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).speed, .slow)
+        XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).workspaceProviderId, "codex")
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .default)
 
         watch.receive(phonePublished.last!)
-        XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore).speed, .slow)
+        XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore).workspaceProviderId, "codex")
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: watchStore).voice, .default)
     }
 
@@ -226,12 +225,13 @@ final class DeviceSettingsSyncTests: XCTestCase {
         let store = makeStore()
         let sync = DeviceSettingsSync(store: store, role: .primary, now: tick) { _ in }
         sync.start()
-        sync.receive(["settingsVersion": 99, "changedAt": 5.0, "voice": "coral", "speed": "fast"])
-        sync.receive(["settingsVersion": 1, "voice": "coral", "speed": "fast"])
-        sync.receive(["settingsVersion": 1, "changedAt": 5.0, "voice": "coral"])
+        sync.receive(["settingsVersion": 99, "changedAt": 5.0, "voice": "coral"])
+        sync.receive(["settingsVersion": 2, "voice": "coral"])
+        sync.receive(["settingsVersion": 2, "changedAt": 5.0, "speed": "fast"])
+        sync.receive(["settingsVersion": 1, "changedAt": 5.0, "voice": "coral", "speed": "fast"])
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store), DeviceSettingsSnapshot())
 
-        sync.receive(["settingsVersion": 1, "changedAt": 5.0, "voice": "nobody", "speed": "warp"])
+        sync.receive(["settingsVersion": 2, "changedAt": 5.0, "voice": "nobody"])
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store), DeviceSettingsSnapshot())
     }
 }

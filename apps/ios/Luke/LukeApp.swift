@@ -6,7 +6,6 @@ struct LukeApp: App {
     @State private var session: AccountSession
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
-    @State private var conversation = VoiceConversationThread()
     @UIApplicationDelegateAdaptor(PushCoordinator.self) private var push
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
@@ -77,7 +76,6 @@ struct LukeApp: App {
                 .environment(session)
                 .environment(vault)
                 .environment(events)
-                .environment(conversation)
                 .environment(push)
                 // Notification permission is asked at the first launch, over
                 // the sign-in card and before any account: the phone runs no
@@ -136,7 +134,6 @@ struct LukeApp: App {
             }
         case (.signedIn, .signedOut):
             SessionReplay.resetPerson()
-            conversation.clear()
         default:
             break
         }
