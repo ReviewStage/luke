@@ -11,13 +11,11 @@ import {
   CREDENTIAL_SOURCE,
   providerRunsSessionsInCloud,
   SECRET_STORAGE,
-  VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { CloudBadge, ProviderMark } from "@sidecar/panel";
 import { isProviderId, workspaceAgentModels } from "@sidecar/session";
 import { APP_SETTING_SCHEMA, type SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView, CalendarAccount } from "@sidecar/settings/wire";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import type { CredentialEntryControl } from "../credential-entry";
 import { entryForProvider } from "../credential-entry";
@@ -36,7 +34,6 @@ import type { SettingsWrites } from "./writes";
  * their own.
  */
 export const CONNECTION_SECTION = {
-  VOICE_PROVIDER: "voice-provider",
   PROVIDERS: "providers",
   INTEGRATIONS: "integrations",
   /** The two ways into the same meetings, drawn as one block. */
@@ -464,19 +461,6 @@ function googleAccountConnection(account: CalendarAccount, order: number): Conne
 }
 
 export const CONNECTION_SCHEMA: readonly ConnectionSpec[] = [
-  // The key voice can run on, beside the feature it turns on. Its half of the
-  // Provider section's picker is what draws it, so it stands only while that
-  // half is the live one — or while a key is being entered into it.
-  credentialConnection(
-    VOICE_CREDENTIAL_PROVIDER,
-    { page: SETTINGS_VIEW.VOICE, section: CONNECTION_SECTION.VOICE_PROVIDER, order: 10 },
-    (visibility) => visibility.accountDrawn && visibility.settings.voiceSource === VOICE_SOURCE.KEY,
-    // An entry in flight keeps the row on screen whichever half is live: the
-    // panel brought back around it has to find the field still drawn, and the
-    // source itself does not move until the key lands.
-    (input) => entryForProvider(input.credentials, VOICE_CREDENTIAL_PROVIDER.id) !== undefined,
-    "voice provider",
-  ),
   ...CLOUD_AGENT_PROVIDER_LIST.map((provider, index) =>
     credentialConnection(provider, {
       page: SETTINGS_VIEW.CONNECTIONS,
@@ -614,10 +598,9 @@ export function connectionsFor(
  * `order` by itself would answer in the reverse of what is drawn.
  */
 const SECTION_ORDER = {
-  [CONNECTION_SECTION.VOICE_PROVIDER]: 0,
-  [CONNECTION_SECTION.PROVIDERS]: 1,
-  [CONNECTION_SECTION.INTEGRATIONS]: 2,
-  [CONNECTION_SECTION.CALENDAR]: 3,
+  [CONNECTION_SECTION.PROVIDERS]: 0,
+  [CONNECTION_SECTION.INTEGRATIONS]: 1,
+  [CONNECTION_SECTION.CALENDAR]: 2,
 } satisfies Record<ConnectionSection, number>;
 
 /**

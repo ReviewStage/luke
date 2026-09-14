@@ -1,16 +1,14 @@
 import { LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
-import { VOICE_SOURCE, type VoiceSource } from "@sidecar/settings/wire";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
 
 /**
- * Why voice as a whole is off: nothing it can run on stands — no signed-in
- * account carrying hosted voice, and no key of the developer's own.
- * One sentence, shared by every mark that stands for the same absence — the
- * front page's Voice row, the key's own heading, and the shortcut rows whose
- * chords answer nothing without it — so it never reads as two different
- * problems.
+ * Why voice as a whole is off: nothing it can run on stands, which since
+ * LUKE-205 means no signed-in account carrying hosted voice. One sentence,
+ * shared by every mark that stands for the same absence — the front page's
+ * Voice row, the Voice page's own heading, and the shortcut rows whose chords
+ * answer nothing without it — so it never reads as two different problems.
  */
-export const VOICE_KEYLESS_NOTE = "Voice is off: sign in, or connect an OpenAI key.";
+export const VOICE_KEYLESS_NOTE = "Voice is off: sign in to turn it on.";
 
 export const HOSTED_VOICE_UNAVAILABLE_NOTE = "Voice is temporarily unavailable. Try again later.";
 
@@ -21,23 +19,6 @@ export function hostedVoiceUnavailableNote(
   return diagnostics?.lastOutcome === LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED
     ? HOSTED_VOICE_UNAVAILABLE_NOTE
     : undefined;
-}
-
-/** The two sources as the toggle names them. */
-export const VOICE_SOURCE_LABEL = {
-  [VOICE_SOURCE.ACCOUNT]: "Your Luke account",
-  [VOICE_SOURCE.KEY]: "Your OpenAI key",
-};
-
-/** The one line under each name: what running on it is like, day to day. */
-export const VOICE_SOURCE_DETAIL = {
-  [VOICE_SOURCE.ACCOUNT]: "Included with your Luke account",
-  [VOICE_SOURCE.KEY]: "Billed directly by OpenAI",
-};
-
-/** The toggle's name for a source, as a control says it aloud. */
-export function voiceSourceLabel(source: VoiceSource): string {
-  return VOICE_SOURCE_LABEL[source];
 }
 
 /** Why Luke can speak but not listen: the system's grant is still missing. */

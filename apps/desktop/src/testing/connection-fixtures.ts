@@ -1,6 +1,5 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import { settingsView } from "@sidecar/settings/testing";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import type { ConnectionInput, ConnectionVisibility } from "../renderer/settings/connection-schema";
 
@@ -20,7 +19,6 @@ export function connectionVisibility(
 export function everyConnectionOffered(): ConnectionVisibility {
   return connectionVisibility({
     settings: settingsView({
-      voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
       appleCalendarAvailable: true,
     }),
@@ -37,7 +35,6 @@ export function connectionInput(overrides: Partial<ConnectionInput> = {}): Conne
   return {
     visibility: everyConnectionOffered(),
     settings: settingsView({
-      voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
       appleCalendarAvailable: true,
       credentialSources: {

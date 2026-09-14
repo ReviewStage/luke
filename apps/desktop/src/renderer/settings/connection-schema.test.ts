@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { CLOUD_AGENT_PROVIDER_LIST, CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
-import { settingsView } from "@sidecar/settings/testing";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
+import { CLOUD_AGENT_PROVIDER_LIST } from "@sidecar/credentials/vocabulary";
 import { test } from "vitest";
 import {
   connectionInput,
@@ -51,29 +49,9 @@ test("a build that can offer nothing draws no connection but the ones always the
 
 test("every connection this build can offer stands when its condition is true", () => {
   const offered = offeredConnections(everything()).map((spec) => spec.id);
-  for (const id of [CREDENTIAL_PROVIDER_ID.OPENAI, "apple-calendar", "google-calendar"]) {
+  for (const id of ["apple-calendar", "google-calendar"]) {
     assert.ok(offered.includes(id), id);
   }
-});
-
-test("the voice key's row stands with the half that supplies it, and nowhere else", () => {
-  const spec = CONNECTION_SCHEMA.find((entry) => entry.page === SETTINGS_VIEW.VOICE);
-  assert.ok(spec);
-  assert.equal(spec.offered(everything()), true);
-  // On the account, the section's own toggle is where a key is begun from, so
-  // the row itself is not drawn — and is not offered by a search either.
-  assert.equal(
-    spec.offered(connectionVisibility({ accountDrawn: true, settings: settingsView() })),
-    false,
-    "the account half describes itself",
-  );
-  assert.equal(
-    spec.offered(
-      connectionVisibility({ settings: settingsView({ voiceSource: VOICE_SOURCE.KEY }) }),
-    ),
-    false,
-    "no account, no Provider section",
-  );
 });
 
 test("at most one of a row's actions asks first", () => {
