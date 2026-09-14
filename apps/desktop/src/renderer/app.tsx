@@ -194,8 +194,11 @@ export function App(): React.JSX.Element {
    * on the page it began on. Written by each begin, because the return is a
    * fact about what was begun rather than about what was begun last: one page
    * remembered for all three landed a cancelled note on Connections, wherever
-   * the note had actually been started. A ref rather than state: it is read
-   * only when the panel is restored, by a callback that has to stay stable.
+   * the note had actually been started — and the tab is written on the same
+   * terms, so a note offered by a thumbs down comes back to the Conversation
+   * rather than to whichever tab the last key entry remembered. A ref rather
+   * than state: it is read only when the panel is restored, by a callback
+   * that has to stay stable.
    */
   const standDownPage = useRef<SettingsView>(SETTINGS_VIEW.ROOT);
   const standDownTab = useRef<PanelTab>(PANEL_TAB.SETTINGS);
@@ -367,16 +370,20 @@ export function App(): React.JSX.Element {
     presentation,
     stillMotion,
     standDownPage,
+    standDownTab,
   });
 
   /**
    * The composer a thumbs down offers, opened only at the offer's own press:
-   * the panel asking, so leaving returns to it, on a draft of words the thread
-   * already drew, which lands only in a note with nothing written yet.
+   * the panel asking from the Conversation tab, so leaving — Cancel, Escape,
+   * or the thank-you a send lands in — returns to the Conversation rather
+   * than to the Settings page the section's own buttons stand on, on a draft
+   * of words the thread already drew, which lands only in a note with nothing
+   * written yet.
    */
   const offerRatingFeedback = useCallback(
     (draft: string) => {
-      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft);
+      feedback.begin(FEEDBACK_KIND.FEEDBACK, true, draft, PANEL_TAB.CONVERSATION);
     },
     [feedback.begin],
   );
