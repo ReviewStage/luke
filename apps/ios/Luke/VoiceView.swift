@@ -87,7 +87,10 @@ struct VoiceView: View {
         .onChange(of: call?.status) { _, newStatus in
             if newStatus == .idle || newStatus == .failed { isLatched = false }
         }
+        // The screen's state outlives the screen (the tab, the Conversation
+        // pushed over it), so the latch goes with the call it held open.
         .onDisappear {
+            isLatched = false
             guard let call else { return }
             Task { await call.hangUp() }
         }
