@@ -189,6 +189,8 @@ interface PromisedSettingsStore {
     preferences: AccountPreferences,
   ): Promise<boolean>;
   readApiKey(providerId: CredentialProviderId): Promise<string | undefined>;
+  readStoredApiKey(providerId: CredentialProviderId): Promise<string | undefined>;
+  retireStoredApiKeys(): Promise<boolean>;
   setApiKey(
     providerId: CredentialProviderId,
     apiKey: string | undefined,
@@ -236,6 +238,8 @@ function awaitedStoreOf(
     setAccountPreferencesSyncBaseline: (accountEmail, preferences) =>
       awaited(store.setAccountPreferencesSyncBaseline(accountEmail, preferences)),
     readApiKey: (providerId) => awaited(store.readApiKey(providerId)),
+    readStoredApiKey: (providerId) => awaited(store.readStoredApiKey(providerId)),
+    retireStoredApiKeys: () => awaited(store.retireStoredApiKeys()),
     setApiKey: (providerId, apiKey) => awaited(store.setApiKey(providerId, apiKey)),
     readCalendarAccounts: () => awaited(store.readCalendarAccounts()),
     addCalendarAccount: (accountId, refreshToken, selectedCalendarIds) =>
@@ -520,17 +524,21 @@ test("decrypts once and re-decrypts only after the key changes", async (t) => {
       },
     },
   });
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
+  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
 
-  const afterStore = decryptions;
-  for (let read = 0; read < 5; read += 1) await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI);
+  // The snapshot a save answers with reports a cloud provider's key from the
+  // vault and resolves nothing locally, so the first read is the one decrypt.
+  await store.readApiKey(CONDUCTOR);
+  const afterFirstRead = decryptions;
+  assert.equal(afterFirstRead, 1);
+  for (let read = 0; read < 5; read += 1) await store.readApiKey(CONDUCTOR);
   const afterReads = decryptions;
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-replacement-key");
-  await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI);
+  await store.setApiKey(CONDUCTOR, "conductor-replacement-key");
+  await store.readApiKey(CONDUCTOR);
 
-  assert.equal(afterReads, afterStore, "a repeated read decrypted again");
+  assert.equal(afterReads, afterFirstRead, "a repeated read decrypted again");
   assert.ok(decryptions > afterReads, "a replaced key was not re-read");
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-replacement-key");
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-replacement-key");
 });
 
 test("reads a stored key back from a new store instance", async (t) => {
@@ -779,61 +787,72 @@ test("a calendar account never disturbs a stored key, nor a key an account", asy
   assert.equal((await reopened.readCalendarAccounts()).length, 1);
 });
 
-test("keeps each provider's key, environment fallback, and reported source separate", async (t) => {
+test("a stored key outranks the environment fallback in a read, and clearing it returns the read to the environment", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory, {
     environment: { [TEST_ENVIRONMENT_VARIABLE.API_KEY]: "conductor-environment" },
   });
 
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
-  const settings = appSettingsView(await store.snapshot());
-
-  assert.equal(
-    settings.credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-  );
-  assert.equal(settings.credentialSources[CONDUCTOR], CREDENTIAL_SOURCE.NONE);
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
-
-  // Storing and then clearing one provider's key leaves the other untouched.
   await store.setApiKey(CONDUCTOR, "conductor-stored-key");
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
-  await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, undefined);
-
   assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), undefined);
+  // The stored key alone is Luke's to send anywhere; the environment's is
+  // the shell's, and a caller that asks for what is stored is told so.
+  assert.equal(await store.readStoredApiKey(CONDUCTOR), "conductor-stored-key");
+
+  // Clearing the stored key does not clear the environment, which was never
+  // Luke's to hold.
+  await store.setApiKey(CONDUCTOR, undefined);
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-environment");
+  assert.equal(await store.readStoredApiKey(CONDUCTOR), undefined);
+  // A cloud provider's row answers for the vault, never for a key this Mac
+  // holds or reads from its shell.
   assert.equal(
-    appSettingsView(await store.snapshot()).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
+    appSettingsView(await store.snapshot()).credentialSources[CONDUCTOR],
     CREDENTIAL_SOURCE.NONE,
-    "a provider with no key must report nothing",
   );
 });
 
-test("keeps both keys when two providers are saved at once", async (t) => {
-  // Each settings row carries its own busy flag, so a user with more than one
-  // provider can start a second save before the first has landed.
+test("a launch drops the ciphertext of a provider this build no longer names, and keeps the rest", async (t) => {
+  const directory = await temporaryDirectory(t, "luke-settings-");
+  const store = storeIn(directory);
+  await store.setApiKey(CONDUCTOR, "conductor-stored-key");
+  // The developer's own OpenAI key, as a build before LUKE-205 stored it.
+  const contents = JSON.parse(await readSettingsFile(directory));
+  await fs.writeFile(
+    path.join(directory, SETTINGS_FILE_NAME),
+    JSON.stringify({ ...contents, apiKeys: { ...contents.apiKeys, openai: sealed("sk-retired") } }),
+    "utf8",
+  );
+
+  const reopened = storeIn(directory);
+  assert.equal(await reopened.retireStoredApiKeys(), true, "the file moved");
+  assert.deepEqual(
+    JSON.parse(await readSettingsFile(directory)),
+    expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
+  );
+  assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
+  // Nothing left to drop is no write at all.
+  assert.equal(await reopened.retireStoredApiKeys(), false);
+});
+
+test("the last of two overlapping saves of one key is what the file keeps", async (t) => {
+  // Each settings row carries its own busy flag, so a save can begin before
+  // the one before it has landed; the write gate orders them.
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
 
   await Promise.all([
-    store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key"),
+    store.setApiKey(CONDUCTOR, "conductor-first-key"),
     store.setApiKey(CONDUCTOR, "conductor-stored-key"),
   ]);
 
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
   assert.deepEqual(
     JSON.parse(await readSettingsFile(directory)),
-    expectedPersistedSettings({
-      apiKeys: {
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
-        [CONDUCTOR]: sealed("conductor-stored-key"),
-      },
-    }),
+    expectedPersistedSettings({ apiKeys: { [CONDUCTOR]: sealed("conductor-stored-key") } }),
   );
   const reopened = storeIn(directory);
-  assert.equal(await reopened.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
   assert.equal(await reopened.readApiKey(CONDUCTOR), "conductor-stored-key");
 });
 
@@ -1524,13 +1543,11 @@ test("recovers from a corrupt settings file", async (t) => {
   await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
   const store = storeIn(directory);
 
-  const { settings } = await store.setApiKey(CREDENTIAL_PROVIDER_ID.OPENAI, "sk-stored-key");
+  const { status, settings } = await store.setApiKey(CONDUCTOR, "conductor-stored-key");
 
-  assert.equal(
-    appSettingsView(settings).credentialSources[CREDENTIAL_PROVIDER_ID.OPENAI],
-    CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-  );
-  assert.equal(await store.readApiKey(CREDENTIAL_PROVIDER_ID.OPENAI), "sk-stored-key");
+  assert.equal(status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.ok(appSettingsView(settings));
+  assert.equal(await store.readApiKey(CONDUCTOR), "conductor-stored-key");
 });
 
 test("a voice reset forgets the voice, captions, and duck in one action", async (t) => {

@@ -228,7 +228,6 @@ export const hostAssemblyLayer: Layer.Layer<
     yield* settings.link({
       refreshAccount: account.session.refreshOnce,
       cloudKeyHeld: calendars.settleKeyGate,
-      applyVoiceCredential: account.applyVoiceCredential,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
       refreshAnnouncementHold: calendars.refreshAnnouncementHold,

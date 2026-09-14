@@ -68,8 +68,7 @@ export function KeySlot({
         <SecretSlot
           label={credential}
           /* An agent provider's mark keeps the cloud badge its session rows
-             wear, and a service Luke merely uses — OpenAI — stands
-             bare, because the same mark cannot differ between the line and the
+             wear, because the same mark cannot differ between the line and the
              slot it opens. */
           mark={
             <>

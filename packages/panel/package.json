@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@sidecar/calendar": "workspace:*",
-    "@sidecar/credentials": "workspace:*",
     "@sidecar/session": "workspace:*",
     "@sidecar/surface": "workspace:*",
     "effect": "catalog:",

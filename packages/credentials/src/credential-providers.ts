@@ -5,20 +5,13 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
  * The services Luke can hold a credential for: the subset of the observed
  * providers whose sessions live in a cloud service with no local state to
  * read, each of which must observe nothing at all until the user connects it
- * by pasting a key. Most ids are core's, so a credential row names the same
+ * by pasting a key. Every id is core's, so a credential row names the same
  * service a session row does — that is what lets one mark registry serve them
- * all.
- *
- * OpenAI is the one that names nothing elsewhere, so it carries an id of its
- * own: Luke speaks through it rather than observing it, and there are no OpenAI
- * sessions or issues for a row to belong to. It belongs here all the same,
- * because a credential the app cannot be given is a feature the app does not
- * have — and an app opened from Finder has no launch environment to read one
- * from.
+ * all. Voice holds no credential of its own: it runs on the signed-in Luke
+ * account, through Luke's own service.
  */
 export const CREDENTIAL_PROVIDER_ID = {
   CONDUCTOR: PROVIDER_ID.CONDUCTOR,
-  OPENAI: "openai",
 } as const;
 
 export type CredentialProviderId =
@@ -128,44 +121,11 @@ export const CREDENTIAL_PROVIDERS: CredentialProviderRegistry = {
     apiKeysUrl: "https://app.conductor.build/users/api-keys",
     environmentVariables: [CONDUCTOR_ENVIRONMENT.API_KEY, CONDUCTOR_ENVIRONMENT.API_TOKEN],
   },
-  [CREDENTIAL_PROVIDER_ID.OPENAI]: {
-    id: CREDENTIAL_PROVIDER_ID.OPENAI,
-    connection: CREDENTIAL_CONNECTION.KEY,
-    displayName: "OpenAI",
-    // No description, alone among the providers: the toggle above the row and
-    // the disclosure below it already say everything a sentence could.
-    hint: {
-      lead: "Create a key on the OpenAI platform under",
-      destination: "API keys",
-      trail: "Talking uses the GPT Live API, which needs billing enabled.",
-    },
-    apiKeysUrl: "https://platform.openai.com/api-keys",
-    // Deliberately no environment fallback, alone among the providers: an
-    // `OPENAI_API_KEY` exported for some other tool would silently start
-    // spending itself on voice and move review off the hosted path — a key
-    // that costs money and changes where session fields travel is connected
-    // by hand or not at all.
-    environmentVariables: [],
-    // No key format. Every kind OpenAI issues carries `sk-`, so a prefix would
-    // refuse nothing, and which of them can reach GPT Live is something only
-    // OpenAI can answer — it answers it on the first session.
-  },
 };
 
 /** Every provider that can hold a key, in the order Settings lists them. */
 export const CREDENTIAL_PROVIDER_LIST: readonly CredentialProvider[] =
   Object.values(CREDENTIAL_PROVIDERS);
-
-/**
- * The one key Luke speaks through, and asks about a session with. Its row
- * lives on the Voice page rather than under Connections, because the key is
- * what turns voice on and the page that goes quiet without one is where that
- * is learned.
- */
-export const VOICE_CREDENTIAL_PROVIDER_ID = CREDENTIAL_PROVIDER_ID.OPENAI;
-
-export const VOICE_CREDENTIAL_PROVIDER: CredentialProvider =
-  CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
 
 /**
  * The coding-agent providers, in the order the Providers section lists them.
@@ -179,9 +139,9 @@ export const CLOUD_AGENT_PROVIDER_LIST: readonly CredentialProvider[] =
 
 /**
  * Whether this provider's key buys the observation of cloud sessions, which is
- * what the cloud badge on a mark says. OpenAI's voice is a service Luke uses
- * rather than sessions he watches, so its mark carries no badge — a badge there
- * would claim sessions the service has none of.
+ * what the cloud badge on a mark says. Every provider this build holds a key
+ * for does; the question stays a question so a mark for a service Luke merely
+ * uses could stand bare.
  */
 export function providerRunsSessionsInCloud(id: CredentialProviderId): boolean {
   return isCloudAgentProviderId(id);
