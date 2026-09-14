@@ -3576,3 +3576,10 @@ Landed: #1401 (1a, a key of the developer's own stands no brain), #1403 (1b-i, a
 **LUKE-206 (G1b) rulings, orchestrator's:** a PR in flight rebases on every move of main (the "hold" rule applied only to PRs held for sequencing). The orphaned Gateway method and event names nothing answers or emits stay in `protocol.ts` as the protocol's own test vocabulary with a note — no contract change, no churn PR; a low ticket covers re-pointing the tests later. **Escalated to Dean:** 4b's depth — whether to delete the whole dead app-action chain through the errand UI (~2,000 lines; the hosted brain has no path to app actions, so "Luke changes a setting when asked" is already lost since E5-3) or only the main-process half. Recommendation: delete it all, and decide separately whether the hosted brain should regain app actions through a desktop channel.
 
 **Effect 4 landed** (#1416) under Charles's lane; the preview-probe job passes on it. LUKE-208 filed (voice test flake, fixed pauses racing socket events).
+
+
+## 2026-09-14 05:00Z — Dean's rulings: 4b deletes the whole app-action chain; the notch check may run on his screen
+
+Dean: "Decision 1: let's delete the whole chain including the errand UI." LUKE-206 4b is therefore the full dead chain — the panel app-action node capability, its bridge entries, the renderer's guide builder and report, the app-action carrier, and the errand flight UI — about 2,000 lines, mostly whole files. The capability "Luke changes a setting, shows the panel, or opens the composer when asked" has been unreachable since E5-3 (the hosted brain has no path to app actions); if it is to return it is a new design through a desktop channel, filed only if Dean asks. Root `AGENTS.md`'s native-node sentence and `PRIVACY.md`'s "carrying an action to the panel" move with it — orchestrator-word.
+
+Dean: "Decision 2: yes the Mac worker can launch the app." The LUKE-159 physical-notch check runs as `run.sh --fixture smoke` on Dean's screen; the note lands on the ticket.
