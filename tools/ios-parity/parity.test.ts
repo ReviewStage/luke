@@ -47,12 +47,17 @@ import {
   PUSH_ENVIRONMENT,
   READ_PAGE_BOUNDS,
   VAULT_KEY_MAX_LENGTH,
+  VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
+  VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
+  LIVE_IDLE_WINDOW_MS,
   LIVE_STATUS,
   LIVE_VOICE,
+  PROACTIVE_SPEECH_KIND,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
 } from "@sidecar/live";
@@ -67,6 +72,7 @@ import {
   TOOL_PART_STATE,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
+import { HOSTED_REATTACH_DELAYS_MS } from "@sidecar/voice";
 import {
   ACTION_RESULT_STATUS,
   CONVERSATION_EVENT_KIND,
@@ -84,6 +90,7 @@ import { test } from "vitest";
 import {
   swiftEnumRawValues,
   swiftStaticNumber,
+  swiftStaticNumberList,
   swiftStaticString,
   swiftSwitchLiterals,
   swiftSwitchNumbers,
@@ -328,6 +335,57 @@ test("LiveTransportState is LIVE_TRANSPORT_STATE", () => {
     swiftEnumRawValues(swift(`${KIT}/LivePeer.swift`), "LiveTransportState"),
     LIVE_TRANSPORT_STATE,
     "a transport state outside the report's schema is a state the desktop never tells its host about either",
+  );
+});
+
+test("VoiceServiceFrame is VOICE_SERVICE_FRAME", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "VoiceServiceFrame"),
+    VOICE_SERVICE_FRAME,
+    "a service frame the phone cannot name is read as a session event it is not",
+  );
+});
+
+test("LiveClientEventName is LIVE_CLIENT_EVENT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "LiveClientEventName"),
+    LIVE_CLIENT_EVENT,
+    "a client event the phone names by another word is refused by the route, which closes the socket",
+  );
+});
+
+test("VoiceServiceHeader is VOICE_SERVICE_HEADER", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "VoiceServiceHeader"),
+    VOICE_SERVICE_HEADER,
+    "a header the service does not read leaves the session naming no device",
+  );
+});
+
+test("ProactiveSpeechKind is PROACTIVE_SPEECH_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "ProactiveSpeechKind"),
+    PROACTIVE_SPEECH_KIND,
+    "a spoken kind the phone cannot name drops the service's word that it was spoken",
+  );
+});
+
+test("the sessions socket path, idle window, and reattach cadence are the desktop's", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  assert.equal(
+    `/${swiftStaticString(source, "sessionsPath")}`,
+    VOICE_SERVICE_PATH.SESSIONS,
+    "a path the service does not answer opens no session",
+  );
+  assert.equal(
+    swiftStaticNumber(source, "liveIdleWindowMs"),
+    LIVE_IDLE_WINDOW_MS,
+    "an idle window of the phone's own reports idle on another clock than the Mac's",
+  );
+  assert.deepEqual(
+    swiftStaticNumberList(source, "reattachDelaysMs"),
+    HOSTED_REATTACH_DELAYS_MS,
+    "a cadence of the phone's own tries a lost connection on other terms than the Mac's",
   );
 });
 
@@ -632,6 +690,15 @@ test("a computed property inside the body is not part of the case list", () => {
       ["fast", 1.5],
     ],
   );
+});
+
+test("a static list reads its numbers in order", () => {
+  assert.deepEqual(
+    swiftStaticNumberList("static let delays = [0, 3_000, 7000]", "delays"),
+    [0, 3000, 7000],
+  );
+  assert.throws(() => swiftStaticNumberList("static let delays = []", "delays"), /not a list/u);
+  assert.throws(() => swiftStaticNumberList("static let other = [1]", "delays"), /found 0/u);
 });
 
 test("a declaration that is not there is a failure, never an empty set", () => {

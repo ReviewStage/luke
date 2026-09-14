@@ -265,6 +265,59 @@ from the watch call and roster. The voice and speed chosen there are the
 phone's own, kept equal through the settings sync described under Watch below,
 so the wrist is a quick way to change them and never a second copy.
 
+## Voice service socket
+
+The phone's half of the desktop's hosted voice architecture (LUKE-210) is
+being built in `LukeKit`, one piece at a time, with nothing yet calling it
+from the voice screen: `RealtimeSession` still runs the phone's calls on the
+legacy Realtime mint until the cutover lands. The piece here is the sessions
+socket client, the phone's `HostedLiveSessionSource`
+(`packages/voice/src/live-session-source.ts`), speaking the vocabulary
+`packages/hosted/src/live-contract.ts` declares:
+
+- `VoiceServiceContract.swift` transcribes `VOICE_SERVICE_FRAME`,
+  `LIVE_CLIENT_EVENT` whole (as `LiveClientEventName`; `LiveEvents.swift`'s
+  `LiveClientEventType` is the data channel's subset of it),
+  `VOICE_SERVICE_HEADER`, and `PROACTIVE_SPEECH_KIND`,
+  the sessions path, the idle window, and the reattach cadence, each held
+  equal to its TypeScript set by `tools/ios-parity`; it writes the four frames
+  the phone may send (`session.create` with an empty seed, `session.attach`,
+  `session.activity`, `session.stop`) and the one Live client event the route
+  forwards (`session.close`), and reads `session.created`,
+  `session.attached`, `session.spoken`, and the hosted refusal document, handing
+  everything else naming a type up as a relayed Live event. Every frame is
+  checked against the JSON Schema goldens
+  `packages/hosted/fixtures/json-schema/live-contract-*.json`, read as the
+  bytes they are, the way `ConversationReads.swift` is checked against
+  `fixtures/reads`.
+- `VoiceServiceSocket.swift` is the socket seam, a protocol over
+  `URLSessionWebSocketTask` so the client's tests run against a scripted
+  socket and on Linux. The production socket sets exactly the two headers the
+  contract names, `Authorization` and `x-luke-device-id`, and refuses to build
+  a request carrying an `Origin`, because the route answers 403 to one; RFC
+  6455 makes `Origin` a browser client's header and Apple documents no default
+  for it, and the device pass (LUKE-220) is what confirms the upgrade answers
+  101.
+- `HostedVoiceSessionClient.swift` opens the socket under the account's
+  bearer, read fresh per attempt through `AccountSession`'s token discipline
+  (a 401 renews once and retries once under the same holder), and the device
+  row id `DeviceRegistrar` holds; sends the offer as the first frame and
+  answers with the session or the refusal it read (401, 403, 503, a 429, a
+  first frame carrying `{ error }`, a socket closed or silent before it
+  answered). The session it hands back re-attaches with `session.attach` on
+  `HOSTED_REATTACH_DELAYS_MS` when the service's function invocation ends
+  under a standing WebRTC session, restating the last-reported idle first
+  and replaying a stop pressed in the gap, and tells its one consumer every
+  relayed Live event, the service's `session.spoken`, and the close that ends
+  it for good. Its `created` is the `LiveSessionCreated` that
+  `LivePeerSeams.createSession` answers with, so the peer and the socket
+  client wire together without an adaptor.
+
+The idle report is the peer's to make on `LIVE_IDLE_WINDOW_MS`, five minutes,
+which replaces the phone's own 180-second idle close once the peer lands; the
+client only carries it. Nothing on the phone sends `session.beat`, which is
+the desktop's, and no frame of the phone's composing carries instruction text.
+
 ## Conversation
 
 The Luke tab's toolbar opens the Conversation: the one long thread the

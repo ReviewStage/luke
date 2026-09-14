@@ -5,14 +5,17 @@ import XCTest
 /// same bytes: `packages/session/fixtures/ui-messages/` (one stored message
 /// each), `packages/session/fixtures/conversation-view/` (a view selection's
 /// input), and `packages/hosted/fixtures/reads/` (one answer of each read
-/// route). Both languages decode the same files, so a shape the phone cannot
-/// read is a finding about the wire rather than a second fixture. The
-/// repository root is found by walking up from this file, or named by
-/// `LUKE_REPO_ROOT` where the tests run from a copy.
+/// route), and `packages/hosted/fixtures/json-schema/` (the JSON Schema each
+/// wire declaration emits, one file per schema). Both languages decode the
+/// same files, so a shape the phone cannot read is a finding about the wire
+/// rather than a second fixture. The repository root is found by walking up
+/// from this file, or named by `LUKE_REPO_ROOT` where the tests run from a
+/// copy.
 enum RepositoryFixtures {
     static let uiMessages = "packages/session/fixtures/ui-messages"
     static let conversationView = "packages/session/fixtures/conversation-view"
     static let reads = "packages/hosted/fixtures/reads"
+    static let jsonSchema = "packages/hosted/fixtures/json-schema"
 
     static let root: URL = {
         if let named = ProcessInfo.processInfo.environment["LUKE_REPO_ROOT"] {
