@@ -4,7 +4,6 @@ export {
   describeWire,
   emitJsonSchema,
   readEither,
-  refusalIssue,
   SchemaRefusalError,
   verbatimJsonSchema,
   WIRE_DESCRIPTION_ANNOTATION,

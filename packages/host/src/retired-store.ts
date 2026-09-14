@@ -1,4 +1,6 @@
 import path from "node:path";
+import { Cause, Effect } from "effect";
+import * as FileSystem from "effect/FileSystem";
 
 /**
  * What an earlier build kept under the agent's directory and this one never
@@ -28,8 +30,6 @@ export const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
 export interface RemoveRetiredStoreOptions {
   /** The agent's own directory under Luke's application data. */
   agentRoot: string;
-  /** Removes one path, file or directory, whether or not it is there; the machine's file system, handed in. */
-  remove: (target: string) => Promise<void>;
   report: (message: string) => void;
 }
 
@@ -39,17 +39,28 @@ export interface RemoveRetiredStoreOptions {
  * be removed is reported and left for the next launch, without stopping the
  * others or the launch. The workspace and skills beside them are untouched.
  * Stateless by design: every launch looks, so no marker has to record that
- * one did.
+ * one did. The machine's file system is the ambient `FileSystem` service.
  */
-export async function removeRetiredStore(options: RemoveRetiredStoreOptions): Promise<void> {
-  for (const entry of RETIRED_STORE_ENTRIES) {
-    const target = path.join(options.agentRoot, entry);
-    try {
-      await options.remove(target);
-    } catch (error) {
-      options.report(
-        `The retired conversation store could not be removed at ${target}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-  }
-}
+export const removeRetiredStore = (
+  options: RemoveRetiredStoreOptions,
+): Effect.Effect<void, never, FileSystem.FileSystem> =>
+  Effect.gen(function* () {
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* Effect.forEach(
+      RETIRED_STORE_ENTRIES,
+      (entry) => {
+        const target = path.join(options.agentRoot, entry);
+        return Effect.catchCause(
+          fileSystem.remove(target, { recursive: true, force: true }),
+          (cause) =>
+            Effect.sync(() => {
+              const reason = Cause.squash(cause);
+              options.report(
+                `The retired conversation store could not be removed at ${target}: ${reason instanceof Error ? reason.message : String(reason)}`,
+              );
+            }),
+        );
+      },
+      { discard: true },
+    );
+  });

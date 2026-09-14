@@ -26,13 +26,10 @@ export const DEVICE_PLATFORM = {
 
 export type DevicePlatform = (typeof DEVICE_PLATFORM)[keyof typeof DEVICE_PLATFORM];
 
-const DEVICE_PLATFORM_LIST = Object.values(DEVICE_PLATFORM);
+const devicePlatformSchema = EffectSchema.Literals(Object.values(DEVICE_PLATFORM));
 
-const DEVICE_PLATFORM_SET: ReadonlySet<string> = new Set(DEVICE_PLATFORM_LIST);
-
-export function isDevicePlatform(value: UnparsedWireValue): value is DevicePlatform {
-  return isWireString(value) && DEVICE_PLATFORM_SET.has(value);
-}
+export const isDevicePlatform: (value: UnparsedWireValue) => value is DevicePlatform =
+  EffectSchema.is(devicePlatformSchema);
 
 /**
  * Which of Apple's two push gateways a token belongs to. A build run from
@@ -47,13 +44,10 @@ export const PUSH_ENVIRONMENT = {
 
 export type PushEnvironment = (typeof PUSH_ENVIRONMENT)[keyof typeof PUSH_ENVIRONMENT];
 
-const PUSH_ENVIRONMENT_LIST = Object.values(PUSH_ENVIRONMENT);
+const pushEnvironmentSchema = EffectSchema.Literals(Object.values(PUSH_ENVIRONMENT));
 
-const PUSH_ENVIRONMENT_SET: ReadonlySet<string> = new Set(PUSH_ENVIRONMENT_LIST);
-
-export function isPushEnvironment(value: UnparsedWireValue): value is PushEnvironment {
-  return isWireString(value) && PUSH_ENVIRONMENT_SET.has(value);
-}
+export const isPushEnvironment: (value: UnparsedWireValue) => value is PushEnvironment =
+  EffectSchema.is(pushEnvironmentSchema);
 
 /**
  * The one custom key a briefing's notification carries beside `aps`, and
@@ -97,8 +91,6 @@ const pushToken = trimmedText(DEVICE_TOKEN_BOUNDS.MAX_LENGTH)
   .pipe(EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.toLowerCase()))
   .check(EffectSchema.makeFilter(deviceTokenIsStorable));
 
-const pushEnvironment = EffectSchema.Literals(PUSH_ENVIRONMENT_LIST);
-
 /**
  * Every id on this wire is a UUID: the installation id a client mints once
  * and keeps, and the device id the service mints for its row. The shape is
@@ -140,10 +132,10 @@ export interface DeviceRegisterRequest {
 }
 
 const deviceRegisterRequestCore = EffectSchema.Struct({
-  platform: EffectSchema.Literals(DEVICE_PLATFORM_LIST),
+  platform: devicePlatformSchema,
   installationId: deviceId,
   pushToken: EffectSchema.optionalKey(pushToken),
-  pushEnvironment: EffectSchema.optionalKey(pushEnvironment),
+  pushEnvironment: EffectSchema.optionalKey(pushEnvironmentSchema),
 }).check(EffectSchema.makeFilter(pushFieldsPaired));
 
 export const deviceRegisterRequestSchema = deviceRegisterRequestCore;
@@ -182,7 +174,7 @@ const deviceHeartbeatRequestCore = EffectSchema.Struct({
       wireRefusal(SCHEMA_REFUSAL.MALFORMED),
     ),
   ),
-  pushEnvironment: EffectSchema.optionalKey(pushEnvironment),
+  pushEnvironment: EffectSchema.optionalKey(pushEnvironmentSchema),
 }).check(EffectSchema.makeFilter(pushFieldsPaired));
 
 export const deviceHeartbeatRequestSchema = deviceHeartbeatRequestCore;

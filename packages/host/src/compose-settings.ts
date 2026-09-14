@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
@@ -903,12 +902,9 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
         // never wait on the file system for it.
         if (runMode.observesProviders) {
           yield* Effect.forkScoped(
-            Effect.promise(() =>
-              removeRetiredStore({
-                agentRoot: kernel.agentRootPath(),
-                remove: (target) => fs.rm(target, { recursive: true, force: true }),
-                report,
-              }),
+            Effect.provide(
+              removeRetiredStore({ agentRoot: kernel.agentRootPath(), report }),
+              fileSystemContext,
             ),
           );
         }
