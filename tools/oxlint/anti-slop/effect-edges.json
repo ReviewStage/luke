@@ -42,7 +42,6 @@
     "apps/desktop/src/main/update-service.ts",
     "packages/brain/src/agent.ts",
     "packages/gateway/src/client.ts",
-    "packages/host/src/brain/wiring.ts",
     "packages/runtime/src/children.effect.ts",
     "packages/runtime/src/queue.effect.ts",
     "packages/voice/src/orchestrator/live-voice-orchestrator.ts"
@@ -86,9 +85,6 @@
     "packages/brain/src/testing.ts",
     "packages/brain/src/turn.ts",
     "packages/gateway/src/testing.ts",
-    "packages/host/src/brain/wiring.ts",
-    "packages/host/src/memory-maintenance.ts",
-    "packages/host/src/testing/brain-harness.ts",
     "packages/runtime/src/children.ts",
     "packages/runtime/src/lanes.effect.ts",
     "packages/runtime/src/lanes.ts",

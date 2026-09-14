@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import {
   PRODUCT_EVENT,
   type ProductEventPropertiesFor,
@@ -46,6 +47,7 @@ import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { heldProductEvents } from "./held-product-events.js";
+import { removeRetiredStore } from "./retired-store.js";
 import { hostSettingSideEffects } from "./settings-side-effects.js";
 import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
 import { vaultStepBearer } from "./vault-step-bearer.js";
@@ -894,6 +896,22 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
           }),
           productEvents.drop,
         );
+        // A live launch removes the SQLite store an earlier build left under
+        // the agent's directory; a removal that fails is reported and stops
+        // nothing else. A fixture or capture run keeps nothing on disk and
+        // touches nothing. Forked, so the composers built after this one
+        // never wait on the file system for it.
+        if (runMode.observesProviders) {
+          yield* Effect.forkScoped(
+            Effect.promise(() =>
+              removeRetiredStore({
+                agentRoot: kernel.agentRootPath(),
+                remove: (target) => fs.rm(target, { recursive: true, force: true }),
+                report,
+              }),
+            ),
+          );
+        }
         // The settings read once so the file is warm for the composers built
         // after this one, waited on by none of them. The read first drops the
         // ciphertext of any key this build no longer names — the developer's

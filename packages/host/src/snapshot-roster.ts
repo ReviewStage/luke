@@ -22,8 +22,7 @@ export interface SnapshotRosterDependencies {
 
 /**
  * One observation pass of the desktop: the roster the service's scheduled
- * pass last stored, drawn into the one roster the rows, the brain, and the
- * voice read. Each cloud provider's slice is replaced whole, so a session the
+ * pass last stored, drawn into the one roster the rows and the voice read. Each cloud provider's slice is replaced whole, so a session the
  * snapshot no longer holds leaves on this pass. A read that answers nothing
  * leaves the last roster standing, the way a failed provider pass always
  * did, and says so; the next tick is the retry. A pass stopped while its
@@ -83,8 +82,8 @@ export function snapshotProjects(
 
 /**
  * The same pass's read of where a workspace can be created: the projects the
- * service's stored snapshot lists for the account's keys, so the brain and
- * the settings rows offer exactly what a creation is admitted against. A
+ * service's stored snapshot lists for the account's keys, so the settings
+ * rows offer exactly what a creation is admitted against. A
  * read that answers nothing leaves the last list standing and says so; a
  * pass stopped while its read was out replaces nothing. `client.projects()`
  * is yielded the same way `drawSnapshotRoster` yields `observe()`, and for

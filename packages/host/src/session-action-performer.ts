@@ -96,14 +96,15 @@ export interface SessionActionPerformerDependencies {
 }
 
 /**
- * The one entry every action on a session passes through. The brain
- * is the only caller, and what arrives is a `ValidatedAction`, which only
- * `admitEffect()` mints: whether the action may run was decided there, against the
- * roster it read for itself, so what is left here is carrying it — a session
- * write to the service that admits it once more against the same stored
- * snapshot — and counting what landed. The opens are exposed on their own
- * because a row press is not a
- * write and reaches them without the brain.
+ * The one entry every action on a session passes through. What arrives at
+ * `perform` is a `ValidatedAction`, which only `admitEffect()` mints: whether
+ * the action may run was decided there, against the roster it read for
+ * itself, so what is left here is carrying it — a session write to the
+ * service that admits it once more against the same stored snapshot — and
+ * counting what landed. Its one caller was the local brain, deleted in
+ * LUKE-206; the trim of `perform` and the write-carrying dependencies below
+ * follows in that ticket's next PR. The opens are exposed on their own because
+ * a row press is not a write and reaches them directly.
  */
 export interface SessionActionPerformer {
   /**

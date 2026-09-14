@@ -1,6 +1,4 @@
 import { PRODUCT_EVENT, productSessionCountBucket } from "@sidecar/analytics";
-import type { BrainRoster } from "@sidecar/brain";
-import { sessionContextText } from "@sidecar/brain";
 import {
   carried,
   GATEWAY_EVENT,
@@ -8,11 +6,7 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import {
-  HostedActionClient,
-  HostedRosterClient,
-  HostedSessionMessagesClient,
-} from "@sidecar/hosted";
+import { HostedActionClient, HostedRosterClient } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -35,12 +29,10 @@ import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Effect, Result, type Scope } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-import type { WorkspaceCreationDefaults } from "./brain/action-performer.js";
-import { hostedTranscriptReads, type SessionTranscriptReads } from "./brain/hosted-transcripts.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
-import { HostKernelTag, lateService } from "./effect/kernel.js";
+import { HostKernelTag } from "./effect/kernel.js";
 import {
   createSessionActionPerformer,
   type SessionActionPerformer,
@@ -64,18 +56,10 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
   );
 }
 
-/** What observation reaches in the brain: the look the pass ends with. */
-interface ObservationLinks {
-  rosterLook: () => Effect.Effect<void>;
-}
-
 export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   readonly sessionActions: SessionActionPerformer;
-  /** The brain's transcript reads, each through the service's documented read of the session's conversation. */
-  readonly transcripts: SessionTranscriptReads;
-  session: (identity: SessionIdentity) => Session | undefined;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
   /**
@@ -94,15 +78,8 @@ export interface ObservationComposer extends Composer {
    * changed a default.
    */
   broadcastWorkspaceProjects: Effect.Effect<void>;
-  /** The sessions an action may name: the drawn roster less the voice's own. */
-  actableSessions: () => readonly Session[];
-  roster: () => BrainRoster;
-  workspaceProjects: () => readonly ObservedWorkspaceProject[];
-  workspaceDefaults: Effect.Effect<WorkspaceCreationDefaults>;
-  heldWorkspaceDefaults: () => WorkspaceCreationDefaults;
   startObservation: () => void;
   stopObservation: () => void;
-  link: (links: ObservationLinks) => Effect.Effect<void>;
 }
 
 export interface ObservationDependencies {
@@ -122,7 +99,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   const { settings, account, observationGate } = dependencies;
   const kernel = yield* HostKernelTag;
   const { runMode, report, now } = kernel;
-  const late = yield* lateService<ObservationLinks>();
 
   const sessionRegistry = new SessionRoster();
   const rosterClient = new HostedRosterClient({
@@ -133,15 +109,10 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     serviceBaseUrl: kernel.hostedServiceBaseUrl,
     ...account.token,
   });
-  const messagesClient = new HostedSessionMessagesClient({
-    serviceBaseUrl: kernel.hostedServiceBaseUrl,
-    ...account.token,
-  });
   /**
-   * The redraw a landed write earns. A row's press and the brain's carried
-   * act each settle on their own fiber now, so the poke is a fork from
-   * there rather than a run: the write's answer goes back the moment the
-   * pass is started, exactly as the detached run it replaces did.
+   * The redraw a landed write earns. A row's press settles on its own
+   * fiber, so the poke is a fork from there rather than a run: the write's
+   * answer goes back the moment the pass is started.
    */
   const pokeRefresh = Effect.asVoid(Effect.forkDetach(Effect.suspend(() => loop.refresh)));
 
@@ -153,7 +124,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   let workspaceProjectsBroadcastGeneration = 0;
   let rosterBroadcast = false;
   const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
-  let brainWorkspaceDefaults: WorkspaceCreationDefaults = {};
 
   function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
     return heldWorkspaceProjects.some(
@@ -163,33 +133,11 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     );
   }
 
-  // The one list every offer of a project reads: the settings rows, the
-  // bootstrap, and the brain's admission all see what the service's stored
-  // snapshot lists for the account's keys, which is what a creation is
-  // admitted against there.
+  // The one list every offer of a project reads: the settings rows and the
+  // bootstrap both see what the service's stored snapshot lists for the
+  // account's keys, which is what a creation is admitted against there.
   function offeredWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
     return runMode.observesProviders ? heldWorkspaceProjects : [];
-  }
-
-  const readWorkspaceDefaultsEffect: Effect.Effect<WorkspaceCreationDefaults> = Effect.gen(
-    function* () {
-      const [defaultProviderId, defaultProjectIds] = yield* Effect.all([
-        Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.defaultWorkspaceProvider.field)),
-        Effect.orDie(settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field)),
-      ]);
-      const defaults: WorkspaceCreationDefaults = {};
-      if (defaultProviderId) defaults.defaultProviderId = defaultProviderId;
-      if (defaultProjectIds) defaults.defaultProjectIds = defaultProjectIds;
-      brainWorkspaceDefaults = defaults;
-      return defaults;
-    },
-  );
-
-  function brainWorkspaceProjects(): readonly ObservedWorkspaceProject[] {
-    return normalizeObservedWorkspaceProjects(
-      offeredWorkspaceProjects(),
-      brainWorkspaceDefaults.defaultProjectIds,
-    );
   }
 
   const pruneWorkspaceProjectDefaultsEffect = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -220,7 +168,9 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   const broadcastWorkspaceProjects: Effect.Effect<void> = Effect.gen(function* () {
     const generation = ++workspaceProjectsBroadcastGeneration;
     const offeredProjects = offeredWorkspaceProjects();
-    const defaults = (yield* readWorkspaceDefaultsEffect).defaultProjectIds;
+    const defaults = yield* Effect.orDie(
+      settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
+    );
     if (generation !== workspaceProjectsBroadcastGeneration) return;
     yield* pruneWorkspaceProjectDefaultsEffect(
       offeredProjects,
@@ -309,11 +259,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     recordProductEvent: settings.recordProductEvent,
   });
 
-  const transcripts = hostedTranscriptReads({
-    client: messagesClient,
-    session: (identity) => sessionRegistry.get(identity),
-  });
-
   // A row's own send or press is admitted where its roster is: the service
   // admits it against the stored snapshot the row was drawn from, the same
   // observation and not a second one read here, so a control the provider
@@ -356,7 +301,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
         }),
         FetchHttpClient.layer,
       ),
-    afterRun: () => Effect.flatMap(late.value, (links) => links.rosterLook()),
   });
 
   /**
@@ -501,8 +445,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     methods,
     loop,
     sessionActions,
-    transcripts,
-    session: (identity) => sessionRegistry.get(identity),
     rosterForClients,
     onRosterChange: (listener) => {
       rosterListeners.push(listener);
@@ -511,25 +453,8 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     offeredWorkspaceProjects,
     workspaceProjectOffered,
     broadcastWorkspaceProjects,
-    actableSessions,
-    roster: () => {
-      const at = now();
-      const sessions = actableSessions();
-      return {
-        text: sessionContextText(sessions, at),
-        identities: sessions.map((session) => ({
-          providerId: session.providerId,
-          providerSessionId: session.providerSessionId,
-        })),
-        sessions,
-      };
-    },
-    workspaceProjects: brainWorkspaceProjects,
-    workspaceDefaults: readWorkspaceDefaultsEffect,
-    heldWorkspaceDefaults: () => brainWorkspaceDefaults,
     startObservation,
     stopObservation,
-    link: (next) => Effect.asVoid(late.set(next)),
     lifetime: Effect.addFinalizer(() =>
       Effect.sync(() => {
         unsubscribeSessions?.();
