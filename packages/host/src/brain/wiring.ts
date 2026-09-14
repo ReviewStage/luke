@@ -421,8 +421,7 @@ function buildBrainWiring(
   };
 
   // Nothing is opened here: a store is built the first time a conversation is
-  // asked for, so a run with nothing on disk — a fixture, a capture, a launch
-  // before the database is open — never reaches the worker for a load.
+  // asked for, so a run that never asks for one builds none.
   const current = (sessionKey: SessionKey = MAIN_SESSION_KEY) =>
     conversations.get(sessionKey)?.host.current();
   const conversationForRun = (runId: string): SessionKey | undefined => {

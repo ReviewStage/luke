@@ -3,6 +3,10 @@ import {
   LIVE_INPUT_BOUNDS,
   LIVE_VOICE_LIST,
   type LiveVoice,
+  OBSERVED_VALUE_LENGTH,
+  PROACTIVE_SPEECH_KIND,
+  type ProactiveSpeechKind,
+  ProactiveSpeechKindSchema,
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
@@ -115,6 +119,36 @@ export const VOICE_SERVICE_FRAME = {
   SESSION_ATTACH: "session.attach",
   /** The service's answer once its sideband stands on that session again. */
   SESSION_ATTACHED: "session.attached",
+  /**
+   * One of the two frames the desktop sends after the handshake in this
+   * vocabulary: whether its peer has gone quiet, as the renderer's own idle
+   * window reads it. The service's exchange decides the idle close against
+   * the appends it made itself, so the report crosses to it; the relay reads
+   * the frame and forwards it nowhere.
+   */
+  SESSION_ACTIVITY: "session.activity",
+  /**
+   * The other: the stop key. The desktop asks the service to tell the model
+   * to stop and wait, and the service's exchange appends the one build-fixed
+   * instruction that says so, so the desktop appends nothing to a session
+   * and the relay forwards no instruction text of the desktop's choosing.
+   */
+  SESSION_STOP: "session.stop",
+  /**
+   * The third: a beat the desktop decided is owed, one of the build-fixed
+   * scripts Luke says unprompted, with the bounded observed values that
+   * script may mention and nothing else. The words are the service's: its
+   * exchange speaks the script through `speakBeat`, so no sentence of the
+   * desktop's composing reaches a session.
+   */
+  SESSION_BEAT: "session.beat",
+  /**
+   * The one frame the service sends the desktop after the handshake in this
+   * vocabulary: a proactive turn was spoken to its end, by kind. The
+   * decision and the record of what was spoken are the desktop's, so the
+   * desktop is told rather than left to infer it from the transcript.
+   */
+  SESSION_SPOKEN: "session.spoken",
 } as const;
 
 /**
@@ -179,6 +213,52 @@ export interface SessionAttachedFrame {
 
 /** Either frame a socket may open with. */
 export type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
+
+/** The desktop's word on its peer after the handshake: idle, or heard again. */
+export interface SessionActivityFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_ACTIVITY;
+  idle: boolean;
+}
+
+/** The stop key pressed: the type alone, since what is said to the model is the service's fixed sentence. */
+export interface SessionStopFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_STOP;
+}
+
+/**
+ * A beat the desktop asks the service to speak. Each kind names exactly the
+ * observed values its script may mention, each bounded as `@sidecar/live`
+ * bounds a value before it enters an append; the calendar line mentions
+ * nothing observed and carries nothing.
+ */
+export type SessionBeatFrame =
+  | {
+      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
+      kind: typeof PROACTIVE_SPEECH_KIND.ARRIVAL;
+      /** A working session's title, so the suggested first ask is about the developer's own work. */
+      sessionTitle?: string;
+      /** The talk key worded for a sentence, present only while holding it would open a turn. */
+      talkKeyLabel?: string;
+    }
+  | {
+      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
+      kind: typeof PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING;
+    }
+  | {
+      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
+      kind: typeof PROACTIVE_SPEECH_KIND.LAUNCH;
+      /** The signed-in account's first name, as the account service reported it. */
+      firstName?: string;
+    };
+
+/** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
+export type SessionReportFrame = SessionActivityFrame | SessionStopFrame | SessionBeatFrame;
+
+/** The service's word that a proactive turn was spoken to its end: the kind, and nothing of the words. */
+export interface SessionSpokenFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_SPOKEN;
+  kind: ProactiveSpeechKind;
+}
 
 /**
  * A declaration handed the interface it decodes into, since Effect's `Schema`
@@ -311,6 +391,57 @@ export const sessionOpeningFrameSchema = schemaAs<SessionOpeningFrame>(
   ),
 );
 
+export const sessionActivityFrameSchema = schemaAs<SessionActivityFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ACTIVITY),
+    idle: Schema.Boolean,
+  }),
+);
+
+export const sessionStopFrameSchema = schemaAs<SessionStopFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_STOP),
+  }),
+);
+
+/** An observed value a beat may mention, bounded here as the append that will carry it is bounded. */
+const beatValue = Schema.optional(text(OBSERVED_VALUE_LENGTH));
+
+export const sessionBeatFrameSchema = schemaAs<SessionBeatFrame>(
+  Schema.Union([
+    Schema.Struct({
+      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.ARRIVAL),
+      sessionTitle: beatValue,
+      talkKeyLabel: beatValue,
+    }),
+    Schema.Struct({
+      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING),
+    }),
+    Schema.Struct({
+      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.LAUNCH),
+      firstName: beatValue,
+    }),
+  ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
+);
+
+export const sessionReportFrameSchema = schemaAs<SessionReportFrame>(
+  Schema.Union([
+    sessionActivityFrameSchema,
+    sessionStopFrameSchema,
+    sessionBeatFrameSchema,
+  ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
+);
+
+export const sessionSpokenFrameSchema = schemaAs<SessionSpokenFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_SPOKEN),
+    kind: ProactiveSpeechKindSchema,
+  }),
+);
+
 export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
   Schema.Struct({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -379,6 +510,38 @@ export function sessionOpeningFrameFromWire(
   value: UnparsedWireValue,
 ): SessionOpeningFrame | undefined {
   return admitted(sessionOpeningFrameSchema, value);
+}
+
+export function sessionActivityFrameFromWire(
+  value: UnparsedWireValue,
+): SessionActivityFrame | undefined {
+  return admitted(sessionActivityFrameSchema, value);
+}
+
+export function sessionStopFrameFromWire(value: UnparsedWireValue): SessionStopFrame | undefined {
+  return admitted(sessionStopFrameSchema, value);
+}
+
+export function sessionBeatFrameFromWire(value: UnparsedWireValue): SessionBeatFrame | undefined {
+  return admitted(sessionBeatFrameSchema, value);
+}
+
+export function sessionReportFrameFromWire(
+  value: UnparsedWireValue,
+): SessionReportFrame | undefined {
+  return admitted(sessionReportFrameSchema, value);
+}
+
+/**
+ * The service says a beat was spoken, so the read is the answering one: a key
+ * a newer service added is dropped rather than refusing the whole frame. On
+ * the v3 side this record carried its own `onExcessProperty: "ignore"`; v4
+ * states that grain at the read, which is what {@link admittedAnswer} is.
+ */
+export function sessionSpokenFrameFromWire(
+  value: UnparsedWireValue,
+): SessionSpokenFrame | undefined {
+  return admittedAnswer(sessionSpokenFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

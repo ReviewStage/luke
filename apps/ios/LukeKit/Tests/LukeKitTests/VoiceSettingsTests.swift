@@ -6,10 +6,22 @@ import XCTest
 final class VoiceSettingsTests: XCTestCase {
     func testVoicesMatchTheSharedVocabulary() {
         XCTAssertEqual(
+            LiveVoice.allCases.map(\.rawValue),
+            [
+                "alloy", "ash", "ballad", "beacon", "bossa", "cedar", "cinder", "coral", "delta", "echo",
+                "gleam", "marin", "meridian", "quartz", "ripple", "sage", "shimmer", "stone", "tempo",
+                "verse", "vesper", "willow",
+            ]
+        )
+        XCTAssertEqual(
             RealtimeVoice.allCases.map(\.rawValue),
             ["alloy", "ash", "ballad", "cedar", "coral", "echo", "marin", "sage", "shimmer", "verse"]
         )
-        XCTAssertEqual(RealtimeVoice.default, .echo)
+        XCTAssertEqual(RealtimeVoice.default, .marin)
+        XCTAssertEqual(RealtimeVoice(spoken: .cedar), .cedar)
+        XCTAssertEqual(RealtimeVoice(spoken: .beacon), .default)
+        XCTAssertEqual(RealtimeVoice(syncedName: "willow"), .default)
+        XCTAssertNil(RealtimeVoice(syncedName: "baritone"))
         XCTAssertEqual(RealtimeVoice.coral.displayName, "Coral")
         XCTAssertNil(RealtimeVoice(rawValue: "Echo"))
     }

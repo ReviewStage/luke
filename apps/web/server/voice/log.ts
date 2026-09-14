@@ -30,6 +30,10 @@ export const LOG_EVENT = {
   EXCHANGE_ATTACHED: "exchange-attached",
   /** The composition offered an exchange and it could not stand on the session; the session is refused rather than run with no one to answer. */
   EXCHANGE_FAILED: "exchange-failed",
+  /** The standing exchange reported something of itself: which of its fixed sentences, and nothing of the detail behind it. */
+  EXCHANGE_REPORTED: "exchange-reported",
+  /** The desktop sent a frame the sessions route does not admit; its socket was closed on it. */
+  FRAME_REFUSED: "frame-refused",
   SESSION_ENDED: "session-ended",
   /** A session's own `voice_sessions` write failed; the route is all it says, as every other line is. */
   SESSION_FAILED: "session-failed",
@@ -52,6 +56,10 @@ export interface RelayCounts {
   droppedAudio: number;
   /** Frames a route does not permit in that direction, dropped by type. */
   droppedUnpermitted: number;
+  /** Reports in the service's own vocabulary the desktop sent after the handshake, read here and never forwarded. */
+  reportsRead: number;
+  /** Desktop frames the sessions route refused, closing the socket; at most one, since the first ends the socket. */
+  refusedUnpermitted: number;
 }
 
 export type LogEntry =
@@ -77,6 +85,8 @@ export type LogEntry =
     }
   | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED; route: VoiceRoute }
   | { event: typeof LOG_EVENT.EXCHANGE_FAILED; route: VoiceRoute }
+  | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; route: VoiceRoute; reason: string }
+  | { event: typeof LOG_EVENT.FRAME_REFUSED; route: VoiceRoute; type: string | undefined }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;
       route: VoiceRoute;

@@ -1,15 +1,13 @@
 import {
   BRAIN_PREFETCH_MODEL,
-  HostedEmbeddingAdapter,
   HostedModelAdapter,
-  OpenAiEmbeddingAdapter,
   openAiModelAdapter,
   RESPONSES_OPERATION,
 } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
 import type { LiveDiagnostics } from "@sidecar/live";
-import type { EmbeddingAdapter, ExecutionRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
+import type { ExecutionRuntime, ModelAdapter } from "@sidecar/runtime/vocabulary";
 import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
@@ -131,7 +129,6 @@ export class VoiceCapabilityAssembler {
   readonly #options: VoiceCapabilityAssemblerOptions;
   #brainModel: ModelAdapter | undefined;
   #prefetchModel: ModelAdapter | undefined;
-  #embeddingAdapter: EmbeddingAdapter | undefined;
   #liveSessions: LiveSessionSource | undefined;
   #unavailableLiveDiagnostics: LiveDiagnostics;
   #voiceSource: VoiceSource = VOICE_SOURCE.ACCOUNT;
@@ -168,16 +165,6 @@ export class VoiceCapabilityAssembler {
    */
   get prefetchModel(): ModelAdapter | undefined {
     return this.#prefetchModel;
-  }
-
-  /**
-   * The embedding adapter the notebook index runs on, following the same
-   * source as the brain's model: the developer's key straight to OpenAI's
-   * embeddings, or Luke's hosted service on the account. Nothing when no
-   * brain may stand, and the index then searches by keyword alone.
-   */
-  get embeddingAdapter(): EmbeddingAdapter | undefined {
-    return this.#embeddingAdapter;
   }
 
   /**
@@ -274,16 +261,6 @@ export class VoiceCapabilityAssembler {
         builtPrefetchModel && this.#options.wrapBrainModel
           ? this.#options.wrapBrainModel(builtPrefetchModel)
           : builtPrefetchModel;
-      this.#embeddingAdapter =
-        policy.useKey && apiKey
-          ? new OpenAiEmbeddingAdapter({
-              apiKey,
-              ...(httpClient ? { httpClient } : undefined),
-              ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-            })
-          : policy.useHosted
-            ? new HostedEmbeddingAdapter(seams)
-            : undefined;
       const openSocket = this.#options.openSocket;
       this.#liveSessions = !openSocket
         ? undefined

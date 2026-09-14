@@ -34,7 +34,6 @@ const GATEWAY_METHODS = {
   HELLO: { name: "gateway.hello", mutates: false },
   RECONNECT: { name: "gateway.reconnect", mutates: false },
   SHUTDOWN: { name: "gateway.shutdown", mutates: true },
-  CONVERSATION_LINES: { name: "conversation.lines", mutates: false },
   CONVERSATION_DELETE: { name: "conversation.delete", mutates: true },
   /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
   CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
@@ -90,7 +89,6 @@ const GATEWAY_METHODS = {
   VOICE_RECORD_TRACE: { name: "voice.recordTrace", mutates: true },
   GUIDE_REPORT: { name: "guide.report", mutates: true },
   ANALYTICS_RECORD: { name: "analytics.record", mutates: true },
-  CONVERSATION_APPEND: { name: "conversation.append", mutates: true },
   ONBOARDING_STATE: { name: "onboarding.state", mutates: false },
   ONBOARDING_SKIP_CALENDAR: { name: "onboarding.skipCalendar", mutates: true },
   ONBOARDING_COMPLETE_CALENDAR: { name: "onboarding.completeCalendar", mutates: true },

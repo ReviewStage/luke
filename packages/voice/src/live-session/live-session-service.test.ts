@@ -905,6 +905,70 @@ it.effect("an error naming an append refuses that append and never counts as suc
 );
 
 it.effect(
+  "the launch greeting is an instructions append acknowledged before the one commentary cue, settled spoken by output past the cue",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.service.speakBeat({
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+        firstName: "Ada",
+        decidedAt: f.clock.now,
+      });
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      const sideband = yield* f.open();
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      const instruction = sideband.sent[0];
+      assert.equal(
+        instruction && "delegation_id" in instruction && instruction.delegation_id,
+        null,
+      );
+      sideband.acknowledge(0, 100, 200);
+      yield* settle();
+      const cues = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(cues.length, 1);
+      assert.equal(cues[0] && "delegation_id" in cues[0] && cues[0].delegation_id, null);
+      sideband.acknowledge(1, 300, 400);
+      yield* settle();
+      sideband.output("Hey Ada", 350, 380);
+      yield* settle();
+      assert.deepEqual(f.spoken, []);
+      sideband.output(", I'm here.", 380, 900);
+      yield* settle();
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.LAUNCH]);
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 1);
+    }),
+);
+
+it.effect(
+  "a launch greeting whose instruction is refused sends no cue and stands released for another ask",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      const instruction = sideband.sent[0];
+      assert.ok(instruction);
+      sideband.receive({
+        type: LIVE_SERVER_EVENT.ERROR,
+        event_id: "err",
+        error: { code: null, client_event_id: instruction.event_id },
+      });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      assert.deepEqual(f.spoken, []);
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND).length, 2);
+    }),
+);
+
+it.effect(
   "a proactive turn with no session asks for one, muted, and speaks once it starts; a stale one is dropped instead",
   () =>
     Effect.gen(function* () {

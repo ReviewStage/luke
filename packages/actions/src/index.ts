@@ -1,5 +1,4 @@
 export * from "./action-kinds.js";
-export * from "./action-narration.js";
 export * from "./action-output.js";
 export {
   ADD_AGENT_REQUEST,

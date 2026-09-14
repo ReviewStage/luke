@@ -7,6 +7,7 @@ import {
   OBSERVED_VALUE_LENGTH,
   PROACTIVE_SPEECH_KIND,
   speechAppends,
+  speechOpening,
 } from "./proactive.js";
 import { estimatedTokens } from "./tokens.js";
 
@@ -35,7 +36,7 @@ test("a long briefing is several appends, each under the bound", () => {
   for (const append of appends) assert.ok(estimatedTokens(append) <= APPEND_TOKEN_BOUND);
 });
 
-test("every beat is one append under the bound", () => {
+test("every onboarding beat is one append under the bound, and none opens with an instruction", () => {
   for (const turn of [
     arrivalOf({}),
     arrivalOf({ sessionTitle: "Fix flaky checkout test", talkKeyLabel: "Right Option" }),
@@ -44,7 +45,44 @@ test("every beat is one append under the bound", () => {
     const appends = speechAppends(turn);
     assert.equal(appends.length, 1);
     assert.ok(estimatedTokens(appends[0] ?? "") <= APPEND_TOKEN_BOUND);
+    assert.equal(speechOpening(turn), undefined);
   }
+  assert.equal(speechOpening(briefingOf("News.")), undefined);
+});
+
+test("the launch greeting is an opening pair under the bound and no commentary of its own", () => {
+  const turn = {
+    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+    firstName: "Ada",
+    decidedAt: DECIDED_AT,
+  } as const;
+  const opening = speechOpening(turn);
+
+  assert.deepEqual(speechAppends(turn), []);
+  assert.ok(opening);
+  assert.ok(estimatedTokens(opening.instruction) <= APPEND_TOKEN_BOUND);
+  assert.ok(estimatedTokens(opening.cue) <= APPEND_TOKEN_BOUND);
+});
+
+test("the launch greeting's name is bounded, flattened, and unquoted before it enters the instruction", () => {
+  const unnamed = speechOpening({ kind: PROACTIVE_SPEECH_KIND.LAUNCH, decidedAt: DECIDED_AT });
+  const named = speechOpening({
+    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+    firstName: `"Ada\n${"a".repeat(OBSERVED_VALUE_LENGTH * 2)}`,
+    decidedAt: DECIDED_AT,
+  });
+  const quotesOnly = speechOpening({
+    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+    firstName: '""',
+    decidedAt: DECIDED_AT,
+  });
+
+  assert.ok(unnamed && named && quotesOnly);
+  assert.equal(named.instruction.includes("\n"), false);
+  assert.equal(named.instruction.split('"').length, unnamed.instruction.split('"').length);
+  assert.ok(named.instruction.length - unnamed.instruction.length < OBSERVED_VALUE_LENGTH + 8);
+  assert.ok(named.instruction.length > unnamed.instruction.length);
+  assert.equal(quotesOnly.instruction, unnamed.instruction);
 });
 
 test("the arrival beat's observed values are bounded and flattened before they enter an append", () => {

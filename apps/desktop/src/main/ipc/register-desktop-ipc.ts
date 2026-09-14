@@ -44,10 +44,10 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // The Conversation Clear is the service's soft delete of the account's
     // main conversation, which is the thread every panel draws; a Clear the
     // service did not take leaves the thread standing and is reported to the
-    // panel as refused. Only once it landed is the local store's own thread —
-    // the voice window's relay and the local brain's context — deleted
-    // behind its recovery archive as before, so the two never disagree about
-    // whether anything was cleared.
+    // panel as refused. Only once it landed is the thread this process holds
+    // for the local brain — the voice window's relay and the brain's context
+    // — forgotten too, so the two never disagree about whether anything was
+    // cleared.
     clearConversation: () =>
       Effect.gen(function* () {
         const cleared = yield* operator.host.clearConversation();
@@ -161,11 +161,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    // The voice window's appends to the conversation, carried to the host's
-    // store under this window's opaque reporter, and relayed back to every
-    // other panel's Conversation by the host's change event.
-    appendConversationLines: (context, entries) =>
-      run(operator.host.appendConversation(entries, windows.reporterOf(context.sender))),
     reportAppGuide: (_context, snapshot) => run(operator.reportGuide(snapshot)),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),

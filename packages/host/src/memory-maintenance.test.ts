@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { inProcessStoreTransport, storeClient } from "@sidecar/brain/store";
 import {
   MEMORY_HOUSEKEEPING_OUTCOME,
   memoryFlushPrompt,
@@ -11,7 +10,6 @@ import { recentDailyNotes } from "@sidecar/runtime";
 import {
   type AgentRuntimeEffect,
   DEFAULT_AGENT_ID,
-  MAIN_CONVERSATION_NAME,
   MAIN_SESSION_KEY,
   MEMORY_CAPTURE_PHASE,
   MEMORY_SCOPE_KIND,
@@ -23,7 +21,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import type { WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { Context, Effect } from "effect";
+import { Effect } from "effect";
 import { type TestContext, test } from "vitest";
 import { type MemoryMaintenanceDependencies, wireMemoryMaintenance } from "./memory-maintenance.js";
 
@@ -47,11 +45,6 @@ function turnOf(phase: MemoryCapturePhase, items: readonly WireRecord[]): Memory
     items,
     signal: NEVER,
   };
-}
-
-function client() {
-  const store = storeClient(inProcessStoreTransport(), Context.empty());
-  return { store, close: () => store.close() };
 }
 
 /** A runtime whose one answer per system prompt the test decides; it executes no tool. */
@@ -95,51 +88,27 @@ async function harness(
     path.join(workspace, "MEMORY.md"),
     "# MEMORY.md\n\n- Deploys go out on Tuesday afternoons\n",
   );
-  const { store, close } = client();
-  await store.open({
-    agentRoot: root,
-    workspaceDirectory: workspace,
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: MAIN_SESSION_KEY,
-    conversationName: MAIN_CONVERSATION_NAME,
-    now: NOW,
-  });
   const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
   const temporary = threadSessionKey("22222222-2222-2222-2222-222222222222");
-  await store.ask("conversations.create", {
-    agentId: DEFAULT_AGENT_ID,
-    sessionKey: thread,
-    name: "Thread",
-    now: NOW,
-  });
   const fake = fakeRuntime(answer);
   const reports: string[] = [];
-  let changed = 0;
   const maintenance = wireMemoryMaintenance({
-    persistent: true,
-    client: () => store,
     createRuntime: () => fake.runtime,
     workspaceDirectory: () => workspace,
     isTemporary: (sessionKey) => sessionKey === temporary,
     now: () => NOW,
     createId: () => "id",
     report: (message) => reports.push(message),
-    onNotebookChanged: Effect.sync(() => {
-      changed += 1;
-    }),
     ...overrides,
   });
   return {
     root,
     workspace,
-    store,
-    close,
     thread,
     temporary,
     maintenance,
     prompts: fake.prompts,
     reports,
-    changed: () => changed,
     memory: () => fs.readFileSync(path.join(workspace, "MEMORY.md"), "utf8"),
   };
 }
@@ -171,7 +140,6 @@ test("the capture exists only for main and durable private threads, runs each ph
     failingMain(turnOf(MEMORY_CAPTURE_PHASE.RESET_REQUESTED, [{ type: "message" }])),
   );
   assert.equal(failed.outcome, MEMORY_HOUSEKEEPING_OUTCOME.FAILED);
-  failing.close();
   fs.writeFileSync(path.join(h.workspace, "memory", `${TODAY}.md`), "- today\n");
   fs.writeFileSync(path.join(h.workspace, "memory", `${YESTERDAY}-standup.md`), "- standup\n");
   fs.writeFileSync(path.join(h.workspace, "memory", `${TWO_DAYS_AGO}.md`), "- older\n");
@@ -180,7 +148,6 @@ test("the capture exists only for main and durable private threads, runs each ph
     primed.map((note) => note.name).sort(),
     [`${TODAY}.md`, `${YESTERDAY}-standup.md`].sort(),
   );
-  h.close();
 });
 
 test("the flush marker is kept per conversation under the generation the brain names, and a new generation reads none", async (t) => {
@@ -204,5 +171,4 @@ test("the flush marker is kept per conversation under the generation the brain n
   );
   await thread.write("gen-1", 0);
   assert.equal(await marker.read("gen-1"), 2);
-  h.close();
 });

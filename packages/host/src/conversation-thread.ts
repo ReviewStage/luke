@@ -7,8 +7,8 @@ import {
 } from "@sidecar/session";
 
 /**
- * The conversation as the main process holds it between the brain's store and
- * the windows: the thread every panel is shown, the last Clear's cutoff, and
+ * The conversation as the main process holds it between the brain and the
+ * windows: the thread every panel is shown, the last Clear's cutoff, and
  * an epoch that fences every append still out against a Clear that landed
  * while it waited. The store's append is asynchronous, so a report dispatched
  * before a Clear can answer after it; the answer describes a thread the Clear
@@ -26,9 +26,9 @@ export interface ConversationThreadStore {
 }
 
 /**
- * The thread of a run with nothing on disk — a fixture or capture run — kept
- * under the same append rule: idempotent on each line's identity, placed
- * where it happened, and retained to the same bounds.
+ * The thread as this process holds it, in memory and for this run alone,
+ * under one append rule: idempotent on each line's identity, placed where it
+ * happened, and retained to the thread's bounds.
  */
 export class MemoryConversationStore implements ConversationThreadStore {
   #entries: readonly ConversationEntry[] = [];
@@ -50,7 +50,7 @@ export class MemoryConversationStore implements ConversationThreadStore {
     return Promise.resolve({ changed, entries: thread });
   }
 
-  /** The deletion's erasure, bounded like the store's: lines recorded at or before the instant go, later ones stay. */
+  /** The deletion's erasure: lines recorded at or before the instant go, later ones stay. */
   eraseAtOrBefore(instant: number): void {
     this.#entries = this.#entries.filter((entry) => (entry.recordedAt ?? 0) > instant);
   }
@@ -87,12 +87,6 @@ export class ConversationThread {
     return this.#entries;
   }
 
-  /** The thread as the store holds it at launch, and the cutoff its marker carries. */
-  restore(entries: readonly ConversationEntry[], clearedAt: number | undefined): void {
-    this.#entries = entries;
-    this.#clearedAt = clearedAt;
-  }
-
   /**
    * Appends lines and tells every window but `except` the thread as it now
    * stands. Answers whether the thread holds everything it was asked to: a
@@ -116,10 +110,8 @@ export class ConversationThread {
     if (epoch !== this.#epoch) return true;
     if (!outcome.changed) return true;
     // The store's answer is filtered through the cutoff as it stands now,
-    // not trusted whole: until the Clear's marker and erasure land in the
-    // store — and for good if the disk refused them — its rows still hold
-    // the lines the fence already emptied here, and the fence must hold
-    // whatever the disk did.
+    // not trusted whole: an append answered after a Clear may still carry
+    // the lines the fence already emptied here, and the fence must hold.
     const merged = outcome.entries.filter((entry) => this.#afterClear(entry));
     this.#entries = merged;
     this.#onChanged(merged, except);

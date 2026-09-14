@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
 import { test } from "vitest";
 import { remoteRealtimeToolDefinitions } from "./actions.js";
 import {
@@ -15,6 +16,7 @@ import {
   realtimeClientSecretRequest,
   realtimeSessionConfig,
   realtimeSessionInstructions,
+  realtimeVoiceFor,
   remoteRealtimeClientSecretRequest,
 } from "./remote-mint-legacy.js";
 
@@ -57,19 +59,29 @@ test("the minted session chooses how it gives way at the edge of the window", ()
 });
 
 test("the default voice is what the session is minted with, and one the phone offers", () => {
-  assert.equal(REALTIME_DEFAULTS.VOICE, "echo");
+  assert.equal(REALTIME_DEFAULTS.VOICE, LIVE_DEFAULTS.VOICE);
   assert.equal(
     realtimeSessionConfig(REALTIME_SCENE.DESKTOP, mouthToolDefinitions()).audio.output.voice,
-    "echo",
+    LIVE_DEFAULTS.VOICE,
   );
   assert.equal(isRealtimeVoice(REALTIME_DEFAULTS.VOICE), true);
 });
 
-test("every offered voice is recognized and anything else is refused", () => {
+test("every Realtime voice is a Live voice, and anything else is refused", () => {
   for (const voice of REALTIME_VOICE_LIST) assert.equal(isRealtimeVoice(voice), true);
+  assert.equal(
+    REALTIME_VOICE_LIST.every((voice) => LIVE_VOICE_LIST.includes(voice)),
+    true,
+  );
   for (const value of ["baritone", "", "  cedar  ", undefined, null, 3]) {
     assert.equal(isRealtimeVoice(value), false);
   }
+});
+
+test("a Live voice the Realtime API does not speak is minted at the default", () => {
+  assert.equal(realtimeVoiceFor(LIVE_VOICE.CEDAR), LIVE_VOICE.CEDAR);
+  assert.equal(realtimeVoiceFor(LIVE_VOICE.BEACON), REALTIME_DEFAULTS.VOICE);
+  assert.equal(isRealtimeVoice(LIVE_VOICE.BEACON), false);
 });
 
 test("the session is minted at the voice's natural pace unless asked otherwise", () => {

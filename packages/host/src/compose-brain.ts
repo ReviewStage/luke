@@ -1,8 +1,6 @@
-import fs from "node:fs";
-
+import fs from "node:fs/promises";
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
-import { workerStoreTransport } from "@sidecar/brain/store";
 import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   carried,
@@ -22,18 +20,10 @@ import {
   CONVERSATION_KIND,
   conversationKindOf,
   DEFAULT_AGENT_ID,
-  isIdentifier,
   MAIN_SESSION_KEY,
   MEMORY_SCOPE_KIND,
   type SessionKey,
-  sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import {
-  type ConversationEntry,
-  conversationLinesText,
-  recentConversationEntries,
-  storedConversationEntry,
-} from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
@@ -41,37 +31,28 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Effect, Exit, type FileSystem, Queue, Scope } from "effect";
+import { Cause, Effect, Queue, type Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
-import { conversationMaintenance, conversationOperations } from "./conversation-operations.js";
+import { conversationOperations } from "./conversation-operations.js";
 import { startedAndStopped } from "./effect/composer.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
-import { StoreWorker } from "./effect/seams.js";
-import { seedWorkspaceThenStartMemory } from "./lifecycle.js";
+import { type HeldConversations, wireHeldConversations } from "./held-conversations.js";
 import { wireMemoryDefinitions } from "./memory-definition.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
-import {
-  composeNotebookMemory,
-  INERT_MEMORY_WIRING,
-  type MemoryWiring,
-} from "./notebook-memory.js";
+import { removeRetiredStore } from "./retired-store.js";
 import type { GatewayService } from "./service.js";
-import { agentRootPath } from "./store-path.js";
-import { type StoreWiring, wireStore } from "./store-wiring.js";
-import { reporterOf } from "./wire-helpers.js";
 
 type BrainWiring = Effect.Success<ReturnType<typeof wireBrain>>;
 
 export interface BrainComposer extends Composer {
   readonly wiring: BrainWiring;
-  readonly store: StoreWiring;
-  readonly conversations: ReturnType<typeof conversationOperations>;
-  readonly memoryMode: MemoryWiring["mode"];
-  readonly syncMemory: MemoryWiring["requestSync"];
+  /** The conversations this run holds for the local brain, in memory alone. */
+  readonly conversations: HeldConversations;
+  readonly operations: ReturnType<typeof conversationOperations>;
 }
 
 export interface BrainDependencies {
@@ -86,29 +67,18 @@ export interface BrainDependencies {
 
 export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* (
   dependencies: BrainDependencies,
-): Effect.fn.Return<
-  BrainComposer,
-  never,
-  HostKernelTag | HostService | StoreWorker | FileSystem.FileSystem | Scope.Scope
-> {
+): Effect.fn.Return<BrainComposer, never, HostKernelTag | HostService | Scope.Scope> {
   const { account, observation, announcements } = dependencies;
   const kernel = yield* HostKernelTag;
   const hostService = yield* HostService;
-  const storeWorker = yield* StoreWorker;
-  // The index's watch, its start, and every pass of it are fibers of a
-  // scope of this composer's own, closed in its stop before the store is:
-  // the notebook's own scope closing is what used to be `memory.stop()`,
-  // and a file event arriving after it can no longer begin a reconcile
-  // against a store that has closed.
-  const indexScope = yield* Scope.fork(yield* Effect.scope);
-  // The services the store's asks and every run of the tool loop are begun
-  // under: the host's own, so a turn and the host that cancels it stand on
-  // one set rather than on a second one built where the work lives.
+  // The services every run of the tool loop is begun under: the host's own,
+  // so a turn and the host that cancels it stand on one set rather than on
+  // a second one built where the work lives.
   const execution = yield* Effect.context<never>();
   const { runMode, report, now, createId } = kernel;
 
   /**
-   * What the store and the wiring tell the clients, as effects taken in turn
+   * What the conversations and the wiring tell the clients, as effects taken in turn
    * by a fiber of this composer's scope. Both doors are synchronous
    * callbacks of collaborators that hold no fiber, and the service they
    * speak through is what the merge composes after this composer is built,
@@ -134,54 +104,30 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
   };
 
   /**
-   * The brain's store and the conversation it holds: one retained thread
-   * shared by every panel window and persisted for the next launch. A window's
-   * report is appended under an opaque reporter the client minted, so the
-   * history event can skip echoing it to the window that reported it, and the
-   * reporter names nothing about the window to anyone else.
+   * The conversations the local brain holds, in memory and for this run
+   * alone: each thread is shared by every panel window and gone at the
+   * next launch. A window's report is appended under an opaque reporter
+   * the client minted, so the history event can skip echoing it to the
+   * window that reported it, and the reporter names nothing about the
+   * window to anyone else.
    */
-  const store = wireStore({
-    persistent: runMode.observesProviders,
-    transport: workerStoreTransport(storeWorker.create),
-    execution,
-    agentRoot: () => agentRootPath(kernel.stateRoot),
-    workspaceDirectory: kernel.agentWorkspacePath,
-    ensureDirectory: (directory) => fs.mkdirSync(directory, { recursive: true, mode: 0o700 }),
+  const conversations = wireHeldConversations({
     now,
     createEventId: createId,
     onConversationChanged: (sessionKey, entries, except) => {
       publish((service) => service.conversationChanged(sessionKey, entries, except));
     },
-    onDirectoryChanged: () => undefined,
     report,
   });
   let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
 
-  const memory: MemoryWiring = runMode.observesProviders
-    ? yield* Scope.provide(
-        composeNotebookMemory({
-          client: store.client,
-          embeddingAdapter: () => account.voiceCapabilities.embeddingAdapter,
-          workspaceDirectory: kernel.agentWorkspacePath,
-          conversationDirectory: () => store.directory(),
-          isTemporary: store.isTemporary,
-          now,
-          report,
-          onSynced: Effect.asVoid(Effect.promise(() => store.refreshNotebook())),
-        }),
-        indexScope,
-      )
-    : INERT_MEMORY_WIRING;
   const memoryMaintenance = wireMemoryMaintenance({
-    persistent: runMode.observesProviders,
-    client: store.client,
     createRuntime: () => wiring.createRuntime(),
     workspaceDirectory: kernel.agentWorkspacePath,
-    isTemporary: store.isTemporary,
+    isTemporary: conversations.isTemporary,
     now,
     createId,
     report,
-    onNotebookChanged: memory.requestSync,
   });
 
   /**
@@ -191,26 +137,23 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
    */
   const memoryDefinitions = wireMemoryDefinitions({
     scope: { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: DEFAULT_AGENT_ID },
-    index: memory,
     maintenance: memoryMaintenance,
-    facts: store.rememberedFacts,
     workspaceDirectory: kernel.agentWorkspacePath,
     now,
   });
 
   /**
    * What a conversation is handed beside the roster, by which conversation it
-   * is. The recent exchange reaches every conversation, so an observed
-   * session's knows what the developer was just told before it briefs; the
-   * remembered facts reach every conversation too, recalled by the memory
-   * provider rather than rendered here. The app guide and the projects a
-   * workspace could be created in belong to the conversations the developer
-   * actually holds; an observed session's conversation and a child's brief
+   * is. The recent exchange is no longer rendered here: the Conversation is
+   * the service's record since E5-3, and the hosted brain reads it as
+   * messages; the remembered facts reach every conversation recalled by the
+   * memory provider rather than rendered here. The app guide and the
+   * projects a workspace could be created in belong to the conversations the
+   * developer actually holds; an observed session's conversation and a child's brief
    * one session or one task, and would pay for both on every call and every
    * iteration of their tool loops.
    */
   function standingContext(sessionKey: SessionKey): string {
-    const sessions = observation.actableSessions();
     const kind = conversationKindOf(sessionKey);
     const developerHeld = kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
     const defaults = observation.heldWorkspaceDefaults();
@@ -224,7 +167,6 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
             ),
           ]
         : []),
-      conversationLinesText(recentConversationEntries(store.thread().entries()), sessions),
       ...(developerHeld ? [appGuideContextText(appGuide)] : []),
     ]
       .filter((part): part is string => part !== undefined && part.trim().length > 0)
@@ -259,17 +201,16 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
 
   const wiring = yield* wireBrain({
     execution,
-    repositoryFor: (sessionKey) => store.brainStateRepository(sessionKey),
+    repositoryFor: (sessionKey) => conversations.brainStateRepository(sessionKey),
     ensureObservedConversation: async (sessionKey, name) => {
-      await store.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
+      await conversations.ensureConversation(sessionKey, CONVERSATION_KIND.OBSERVED, name);
     },
     ensureChildConversation: async (sessionKey, name) => {
-      await store.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
+      await conversations.ensureConversation(sessionKey, CONVERSATION_KIND.CHILD, name);
     },
-    archiveConversation: (sessionKey) => store.archive(sessionKey),
-    conversationDirectory: () => store.directory(),
-    conversationLines: (sessionKey) => store.thread(sessionKey).entries(),
-    childStore: () => store.childStore(),
+    archiveConversation: (sessionKey) => conversations.archive(sessionKey),
+    conversationDirectory: () => conversations.directory(),
+    childStore: () => conversations.childStore(),
     createId,
     report,
     ...(account.agentTrace
@@ -293,13 +234,17 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
       workspaceProjects: observation.workspaceProjects,
       workspaceDefaults: observation.workspaceDefaults,
       appGuide: () => appGuide,
-      rememberedFacts: store.rememberedFacts,
+      // This Mac keeps no remembered facts: the notebook and its index
+      // stood in the SQLite store the desktop no longer opens, and the
+      // remembered facts are the hosted brain's. The local brain's two
+      // notebook writes are refused, so nothing is "remembered" here that
+      // the next launch would not know.
+      rememberedFacts: () => [],
       notebook: {
-        remember: store.rememberNotebookEntry,
-        forget: store.forgetNotebookEntry,
+        remember: () => Promise.resolve(false),
+        forget: () => Promise.resolve(false),
       },
       performAppAction: (action) => performAppAction(action),
-      recordConversationEntry: store.recordConversationEntry,
     },
     roster: observation.roster,
     standingContext,
@@ -324,8 +269,8 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
     flushMarker: (sessionKey) => memoryMaintenance.flushMarkerFor(sessionKey),
   });
 
-  const conversations = conversationOperations({
-    store,
+  const operations = conversationOperations({
+    conversations,
     brain: wiring,
     now,
     report,
@@ -338,65 +283,39 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
       appGuide = guide;
       return Effect.succeed({});
     },
-    [GATEWAY_METHOD.CONVERSATION_APPEND]: (params) =>
-      Effect.gen(function* () {
-        const sessionKey =
-          params.sessionKey === undefined
-            ? MAIN_SESSION_KEY
-            : isIdentifier(params.sessionKey)
-              ? toSessionKey(params.sessionKey)
-              : undefined;
-        if (!sessionKey) return yield* invalid("sessionKey must be a non-empty string");
-        if (!Array.isArray(params.entries)) return yield* invalid("entries must be a list");
-        const entries: ConversationEntry[] = [];
-        for (const entry of params.entries) {
-          const stored = storedConversationEntry(entry);
-          if (!stored) return yield* invalid("an entry is not the shape Conversation keeps");
-          entries.push(stored);
-        }
-        const accepted = yield* Effect.promise(() =>
-          store.thread(sessionKey).append(entries, reporterOf(params)),
-        );
-        return { accepted };
-      }),
   };
 
   return {
     methods,
     wiring,
-    store,
     conversations,
-    memoryMode: memory.mode,
-    syncMemory: memory.requestSync,
-    // The hourly pass is armed after the start that opened the store and
-    // ends with the scope this composer's lifetime is, before its stop.
-    lifetime: Effect.andThen(
-      startedAndStopped(
-        Effect.gen(function* () {
-          if (!runMode.observesProviders) return;
-          yield* Effect.promise(() => store.open());
-          yield* Scope.provide(
-            seedWorkspaceThenStartMemory({
-              seedWorkspace: Effect.asVoid(
-                Effect.mapError(wiring.seedWorkspace(), (error) => error.cause),
-              ),
-              startMemory: memory.start,
-              report,
-            }),
-            indexScope,
-          );
-          yield* Effect.promise(() => wiring.store().load());
-          yield* Effect.promise(() => store.restore());
-        }),
-        Effect.gen(function* () {
-          yield* wiring.retire();
-          yield* Scope.close(indexScope, Exit.void);
-          yield* Effect.promise(() => store.close());
-        }),
-      ),
-      Effect.suspend(() =>
-        runMode.observesProviders ? conversationMaintenance({ store, brain: wiring }) : Effect.void,
-      ),
+    operations,
+    // A live launch first removes the SQLite store an earlier build left
+    // under the agent's directory, then seeds the workspace's missing files,
+    // never rewriting one; a removal or a seed that fails is reported and
+    // stops nothing else. A fixture or capture run keeps nothing on disk and
+    // touches neither.
+    lifetime: startedAndStopped(
+      Effect.gen(function* () {
+        if (!runMode.observesProviders) return;
+        yield* Effect.promise(() =>
+          removeRetiredStore({
+            agentRoot: kernel.agentRootPath(),
+            remove: (target) => fs.rm(target, { recursive: true, force: true }),
+            report,
+          }),
+        );
+        yield* Effect.catchCause(wiring.seedWorkspace(), (cause) => {
+          const failure = Cause.squash(cause);
+          return Effect.sync(() => {
+            report(
+              `Brain workspace could not be seeded: ${failure instanceof Error ? failure.message : String(failure)}`,
+            );
+          });
+        });
+        yield* Effect.promise(() => wiring.store().load());
+      }),
+      wiring.retire(),
     ),
   };
 });

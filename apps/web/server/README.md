@@ -703,13 +703,36 @@ meter before any session exists, so a refused account costs no session. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed);
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
-client delegation), attaches the trusted sideband, and
-answers `session.created` with the id, the SDP answer, and the quota. From
-then on it is a pipe: desktop frames to OpenAI untouched, OpenAI frames to the
+client delegation), attaches the trusted sideband, stands the hosted
+exchange on it (below), and answers `session.created` with the id, the SDP
+answer, and the quota. From then on the relay is a pipe: OpenAI frames to the
 desktop untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so the developer's voice and
-Luke's never transit the service. It keeps no conversation, reads no frame
-past its `type`, and logs status codes, outcome names, and counts.
+Luke's never transit the service; and from the desktop exactly four frames
+(`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
+graceful hang-up's `session.close`, forwarded untouched, and three in the
+service's own vocabulary, read here and handed to the exchange rather than
+forwarded: `session.activity`, the peer's idle report; `session.stop`, the
+stop key, which the exchange answers with the one instruction it appends
+itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone); and
+`session.beat`, an onboarding beat or the launch greeting the desktop decided
+is owed, carrying the kind and the bounded observed values its script may
+mention (one working session's title, the talk key's label, the account's
+first name), which the exchange speaks from the build's own script
+(`speechAppends`, `speechOpening` in `@sidecar/live`). So the desktop appends
+nothing to a session, and no sentence of the desktop's composing reaches one
+through this route. One frame goes the other way in that vocabulary,
+`session.spoken`: the exchange's word, by kind alone, that a proactive turn
+was spoken to its end, sent to the desktop by the service itself (outside the
+relay's counts) because the record of the beats and the counts that follow
+every spoken turn are the desktop's. Any other desktop frame — an older build's own append, the
+microphone switch that never crosses this socket, an unreadable frame —
+closes the desktop's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
+rather than dropping it, so a desktop still running an exchange of its own is
+refused where it can be seen and never doubles the one standing here; the
+session then ends as a hang-up does, seconds recorded. The relay keeps no
+conversation, reads no frame past its `type` but that one report, and logs
+status codes, outcome names, and counts.
 
 The service itself is a scope. `VoiceService.make(options)` answers
 `Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
@@ -758,21 +781,28 @@ already knows how to end. The voice never travels here: it is WebRTC's. A
 signed-in desktop's socket is bounded the same way at eight mebibytes, since
 its account is spent per session and answers for what it sends.
 
-### The live session service, composed and not yet attached
+### The live session service, attached to the sessions route
 
-The machinery that owns a session's exchange — seeding, the delegation
-adapter that hands each ask to the brain and speaks the reply as commentary
-once the run's actions settle, the append channel, the briefing queue under
-the announcement hold, idle, and the graceful close — is `@sidecar/voice`'s
-`LiveSessionService`, behind that package's `./live-session` door, which
-names no socket library so a function bundle takes it without `ws`. The
-desktop's host composes it over its local brain today; this service's
-composition of it stands in `server/voice/` and is exercised by
-`tests/voice-live-record.test.ts` but is attached to no route yet, because
-while the desktop owns the exchange both ends would append. Attaching it is
-the desktop cutover's, by build, and the brain door it needs (`LiveBrain`,
-answered in process from the ask door and `projectTurnEvents` over the store,
-never over HTTP as the user) lands with it.
+The machinery that owns a session's exchange — the delegation adapter that
+hands each ask to the brain and speaks the reply as commentary once the run's
+actions settle, the append channel, the briefing queue, idle, and the
+graceful close — is `@sidecar/voice`'s `LiveSessionService`, behind that
+package's `./live-session` door, which names no socket library so a function
+bundle takes it without `ws`. This service composes it for every signed-in
+session (`server/voice/live-exchange.ts`, adopted over the same socket the
+relay pipes by `exchange-attachment.ts`, composed over the deployment's seams
+by `deployment-exchange.ts`, and passed by `function.ts`): the exchange stands
+before the desktop is answered, and a deployment missing the payload secret,
+the deployment secret, or eve's origin composes none and refuses every
+session as `unavailable`, since a session with no exchange behind it has no
+one to answer its asks. The desktop composes no exchange of its own since
+E5-3; what it holds is `LiveSessionHolder`, which seeds the session at
+creation, ends it, reports its idle and its stop, and asks for the beats it
+decides are owed, opening a muted session for one when none stands. What stops the
+model's output from becoming an action is not the attachment and not the
+sideband but the brain's own gauntlet: `acceptAsk` on every spoken ask, eve's
+tool policy on every tool a turn reaches for, and `admit()` on every action,
+exactly as a typed ask meets them.
 
 What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
 voice writer (`server/hosted/store/voice-writer.ts`). Every server event is

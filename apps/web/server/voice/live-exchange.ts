@@ -1,6 +1,9 @@
+import type { SessionBeatFrame } from "@sidecar/hosted";
+import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   type AdoptableSession,
+  type BeatTurn,
   type BriefingDelivery,
   type LiveSessionOpened,
   LiveSessionService,
@@ -82,6 +85,13 @@ export interface HostedLiveExchangeOptions {
   readonly createId: () => string;
   readonly report: (message: string) => void;
   readonly trace?: LiveSessionServiceOptions<BriefingDelivery>["trace"];
+  /**
+   * A proactive turn was spoken to its end, by kind: a beat the desktop
+   * asked for, or a briefing this exchange decided. The desktop keeps the
+   * record of the beats and the counts that follow every spoken turn, so the
+   * route tells it in the service's own frame.
+   */
+  readonly onProactiveSpoken?: (kind: ProactiveSpeechKind) => void;
 }
 
 /** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
@@ -94,6 +104,8 @@ export interface AttachedSession {
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
   readonly started: boolean;
+  /** The desktop's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
+  readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
 }
 
 /**
@@ -101,10 +113,10 @@ export interface AttachedSession {
  * where this build stands none; one offered that cannot stand throws, and the
  * route refuses the session. The attachment builds the sideband over the
  * socket and adopts, so the service itself reaches nothing of the exchange
- * or the live-session door, and the function bundle gains that edge only in
- * the commit that passes the attachment: the desktop still runs an exchange
- * of its own, and with both live every spoken ask would be delegated twice
- * and every reply appended twice.
+ * or the live-session door; the function bundle gained that edge in the
+ * commit that passed the attachment and unwired the desktop's own exchange,
+ * since with both live every spoken ask would be delegated twice and every
+ * reply appended twice.
  */
 export type ExchangeAttachment = (
   session: AttachedSession,
@@ -120,6 +132,13 @@ export interface HostedLiveExchange {
    * sideband ahead of the service, and the service stands it without seeding.
    */
   adopt(opened: AdoptableSession): Effect.Effect<boolean>;
+  /**
+   * A beat the desktop decided is owed, spoken by this exchange from the
+   * build's own script: the frame carries the kind and the bounded values the
+   * script may mention, and the moment it was decided is this side's clock,
+   * not the desktop's word.
+   */
+  speakBeat(beat: SessionBeatFrame): void;
 }
 
 /**
@@ -271,6 +290,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
       ...(options.trace ? { trace: options.trace } : undefined),
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
+      ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );
@@ -288,5 +308,29 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
         attach: observing(() => opened.attach()),
         started: opened.started,
       }),
+    speakBeat: (beat) => {
+      service.speakBeat(beatTurn(beat, options.now()));
+    },
   };
 });
+
+/** The turn a beat frame asks for: the frame's own values, and the instant it was read as its decision. */
+function beatTurn(beat: SessionBeatFrame, decidedAt: number): BeatTurn {
+  switch (beat.kind) {
+    case PROACTIVE_SPEECH_KIND.ARRIVAL:
+      return {
+        kind: beat.kind,
+        decidedAt,
+        ...(beat.sessionTitle === undefined ? undefined : { sessionTitle: beat.sessionTitle }),
+        ...(beat.talkKeyLabel === undefined ? undefined : { talkKeyLabel: beat.talkKeyLabel }),
+      };
+    case PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING:
+      return { kind: beat.kind, decidedAt };
+    case PROACTIVE_SPEECH_KIND.LAUNCH:
+      return {
+        kind: beat.kind,
+        decidedAt,
+        ...(beat.firstName === undefined ? undefined : { firstName: beat.firstName }),
+      };
+  }
+}

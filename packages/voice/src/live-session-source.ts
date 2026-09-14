@@ -12,8 +12,11 @@ import {
   hostedQuotaSchema,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
+  type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionCreateFrame,
+  type SessionStopFrame,
+  sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
   VOICE_SERVICE_FRAME,
@@ -123,6 +126,22 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * own connections stand for.
    */
   attach(): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope>;
+  /**
+   * Tells the service standing between this peer and the session whether
+   * the peer has gone quiet, in the service's own vocabulary rather than as
+   * a Live event, since it is read by the service and never by OpenAI. A
+   * session with no service between (the keyed source, straight to OpenAI)
+   * has no one to tell and offers no door.
+   */
+  reportActivity?(idle: boolean): void;
+  /**
+   * Asks the service standing between this peer and the session to tell the
+   * model to stop and wait, in the service's own vocabulary: the instruction
+   * that says so is the service's to append, so nothing on this side names
+   * it or appends it. A session with no service between has no one to ask
+   * and offers no door.
+   */
+  stopSpeaking?(): void;
 }
 
 /**
@@ -832,6 +851,19 @@ function reattachingSocket(options: {
   sessionId: string;
   attach: (sessionId: string) => Effect.Effect<ReattachAttempt>;
   delaysMs: readonly number[];
+  /**
+   * The frames whose meaning stands for the session rather than for one
+   * connection, which the service on the far side has no memory of across
+   * its own recycle: a fresh connection is told them first, as they stand at
+   * that instant, and a send made during the gap that `matches` one of them
+   * is dropped rather than replayed, since the standing frame already says
+   * the latest and an older one replayed behind it would be read as news.
+   * Nothing where nothing stands.
+   */
+  standing?: {
+    readonly frames: () => readonly string[];
+    readonly matches: (data: string) => boolean;
+  };
 }): Effect.Effect<LiveSocket, never, Scope.Scope> {
   return Effect.gen(function* () {
     let inner = options.socket;
@@ -925,8 +957,10 @@ function reattachingSocket(options: {
           return;
         }
         inner = recovered;
-        const pending = heldSends ?? [];
+        const standing = options.standing;
+        const pending = (heldSends ?? []).filter((data) => !standing?.matches(data));
         heldSends = undefined;
+        for (const data of standing?.frames() ?? []) recovered.send(data);
         for (const data of pending) recovered.send(data);
       }
     });
@@ -983,15 +1017,43 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       if (!opened) return undefined;
       // The socket that answered is already the session's: the sideband is held
       // now, so nothing the session says before the host attaches is lost.
-      const sideband = this.holdSideband(
-        yield* reattachingSocket({
-          socket: opened.socket,
-          sessionId: opened.created.sessionId,
-          attach: (sessionId) => this.attachOnce(sessionId),
-          delaysMs: this.#reattachDelaysMs,
-        }),
-      );
-      return { ...opened.created, attach: () => Effect.succeed(sideband) };
+      /** The peer's idle as last reported, which the service is told again on every connection that stands anew. */
+      let activity: SessionActivityFrame | undefined;
+      const socket = yield* reattachingSocket({
+        socket: opened.socket,
+        sessionId: opened.created.sessionId,
+        attach: (sessionId) => this.attachOnce(sessionId),
+        delaysMs: this.#reattachDelaysMs,
+        standing: {
+          frames: () => (activity === undefined ? [] : [JSON.stringify(activity)]),
+          matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
+        },
+      });
+      const sideband = this.holdSideband(socket);
+      return {
+        ...opened.created,
+        attach: () => Effect.succeed(sideband),
+        // The report rides the same socket as the sideband's events. The
+        // peer reports only its transitions, and the exchange a re-attached
+        // connection stands is a fresh one with no memory of the last, so
+        // the report last made is told to each new connection first, and
+        // reports made during a gap are not replayed behind it: a peer that
+        // went idle before the gap is still idle to the exchange that comes
+        // after it, and one heard again during the gap is never read as idle
+        // by it on the strength of a stale frame.
+        reportActivity: (idle) => {
+          activity = { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle };
+          socket.send(JSON.stringify(activity));
+        },
+        // The stop rides the same socket, held through a gap and sent on the
+        // next connection like any send: the model keeps speaking across the
+        // service's own recycle, so a stop pressed in the gap is still meant
+        // when the connection comes back.
+        stopSpeaking: () => {
+          const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
+          socket.send(JSON.stringify(frame));
+        },
+      };
     });
   }
 }

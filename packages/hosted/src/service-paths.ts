@@ -50,7 +50,7 @@ export const HOSTED_SERVICE_PATH = {
   BRAIN_CAPABILITIES: "/api/brain/capabilities",
   BRAIN_RESPOND_V2: "/api/brain/v2/respond",
   BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
-  /** Embeddings for the notebook index on Luke's key (POST), the third operation of the contract. */
+  /** Embeddings on Luke's key (POST), the third operation of the contract; its caller, the desktop's notebook index, went with LUKE-143. */
   BRAIN_EMBED: "/api/brain/v2/embed",
   /**
    * The read prefetch's two small inferences (POST): planning which reads a

@@ -105,8 +105,7 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
         (result) =>
           result.ok &&
           isRecord(result.result) &&
-          (result.result.outcome === CONVERSATION_DELETE_OUTCOME.COMPLETE ||
-            result.result.outcome === CONVERSATION_DELETE_OUTCOME.INCOMPLETE),
+          result.result.outcome === CONVERSATION_DELETE_OUTCOME.COMPLETE,
       ),
     onRunsChanged: (listener) =>
       on(GATEWAY_EVENT.RUNS_CHANGED, (payload) => runsFromWire(payload), listener),

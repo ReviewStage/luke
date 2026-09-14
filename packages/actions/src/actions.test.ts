@@ -1,19 +1,10 @@
 import assert from "node:assert/strict";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import {
-  type AdvertisedControl,
-  CONVERSATION_ENTRY_KIND,
-  normalizeSession,
-  SESSION_APPLICATION_ID,
-  SESSION_APPLICATION_SCOPE,
-  SESSION_STATUS,
-} from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { ACTION_KIND } from "./action-kinds.js";
-import { actionNarration, sessionActionConversationEntry } from "./action-narration.js";
 import { ACTION_TOOL, actionToolDefinitions, remoteRealtimeToolDefinitions } from "./actions.js";
 import { maximumRememberedFacts, type RememberedFact } from "./memory.js";
 import { withoutAdmission } from "./testing/admitted.js";
@@ -35,29 +26,6 @@ const appToolAction = (
       rememberedFacts,
     }),
   );
-
-test("a setting action narrates the setting label and accepted value", async () => {
-  assert.equal(
-    actionNarration(
-      {
-        kind: ACTION_KIND.SETTING,
-        setting: {
-          id: "voice_captions",
-          label: "Captions",
-          description: "Shows Luke's spoken replies as text.",
-          kind: "toggle",
-          value: "off",
-          defaultValue: "off",
-          adjustable: true,
-          manual: "Settings, Voice",
-        },
-        value: "on",
-      },
-      [],
-    ),
-    "changed Captions to on",
-  );
-});
 
 const memoryCall = (name: string, args: Record<string, string>) => ({
   name,
@@ -202,103 +170,4 @@ test("the phone is handed the actions it carries, in the shape its own surface g
     if (tool.name === ACTION_TOOL.OPEN_SESSION || tool.name === ACTION_TOOL.SHOW_PANEL) continue;
     assert.deepEqual(tool, desktop.get(tool.name));
   }
-});
-
-const OBSERVED_AT = 1_800_000_000_000;
-
-function rosterSession(providerSessionId: string, title: string) {
-  return normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    { providerSessionId, title, status: SESSION_STATUS.WORKING, lastActivityAt: OBSERVED_AT },
-  );
-}
-
-test("an action's line records the ask in words, with the identity it named", () => {
-  const sessions = [rosterSession("session-a", "checkout-service")];
-  const identity = { providerId: "claude-code", providerSessionId: "session-a" };
-
-  const message = sessionActionConversationEntry(
-    { kind: ACTION_KIND.MESSAGE, identity, text: "please add tests" },
-    sessions,
-    CONVERSATION_ENTRY_KIND.ACTION,
-  );
-  assert.equal(message.kind, CONVERSATION_ENTRY_KIND.ACTION);
-  assert.equal(message.words, 'sent a message to "checkout-service": "please add tests"');
-  assert.deepEqual(message.identity, identity);
-
-  const control: AdvertisedControl = { kind: ACTION_KIND.CONTROL, id: "retry", label: "Retry" };
-  assert.equal(
-    sessionActionConversationEntry(
-      { kind: ACTION_KIND.CONTROL, identity, control },
-      sessions,
-      CONVERSATION_ENTRY_KIND.ACTION,
-    ).words,
-    'ran "Retry" on "checkout-service"',
-  );
-
-  // A session the roster no longer shows is still named honestly.
-  assert.equal(
-    sessionActionConversationEntry(
-      { kind: ACTION_KIND.OPEN, identity },
-      [],
-      CONVERSATION_ENTRY_KIND.ACTION,
-    ).words,
-    "opened a session",
-  );
-
-  // An open that picked an app records where it landed, under the display
-  // name the roster listed — or the bare id when the roster has let it go.
-  const heldByApp = normalizeSession(
-    { id: "claude-code", displayName: "Claude Code" },
-    {
-      providerSessionId: "session-a",
-      title: "checkout-service",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: OBSERVED_AT,
-      applications: [
-        {
-          id: SESSION_APPLICATION_ID.SUPERSET,
-          displayName: "Superset",
-          scope: SESSION_APPLICATION_SCOPE.SESSION,
-          link: "superset://v2-workspace/workspace-1",
-        },
-      ],
-    },
-  );
-  const openedInApp = {
-    kind: ACTION_KIND.OPEN,
-    identity,
-    applicationId: SESSION_APPLICATION_ID.SUPERSET,
-  } as const;
-  assert.equal(
-    sessionActionConversationEntry(openedInApp, [heldByApp], CONVERSATION_ENTRY_KIND.ACTION).words,
-    'opened "checkout-service" in Superset',
-  );
-  assert.equal(
-    sessionActionConversationEntry(openedInApp, [], CONVERSATION_ENTRY_KIND.ACTION).words,
-    "opened a session in superset",
-  );
-
-  // A workspace creation aims at no session, so its line carries no identity.
-  const created = sessionActionConversationEntry(
-    { kind: ACTION_KIND.CREATE_WORKSPACE, providerId: "conductor", providerProjectId: "p1" },
-    sessions,
-    CONVERSATION_ENTRY_KIND.ACTION,
-  );
-  assert.equal(created.words, "asked conductor to create a workspace");
-  assert.equal(created.identity, undefined);
-  const createdNamed = sessionActionConversationEntry(
-    {
-      kind: ACTION_KIND.CREATE_WORKSPACE,
-      providerId: "conductor",
-      providerProjectId: "p1",
-      name: "Notch panel clipping",
-    },
-    sessions,
-    CONVERSATION_ENTRY_KIND.ACTION,
-  );
-  assert.equal(
-    createdNamed.words,
-    'asked conductor to create a workspace named "Notch panel clipping"',
-  );
 });

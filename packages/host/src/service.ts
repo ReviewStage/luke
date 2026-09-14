@@ -56,13 +56,12 @@ import type { ConversationOperations } from "./conversation-operations.js";
 /** The two parameters a Gateway method refuses by name; protocol diagnostics, never words a person reads. */
 const REFUSAL = {
   NO_RUN: "no run has that id",
-  NOT_LISTED: "the directory does not list that conversation",
 } as const;
 
 /**
  * The host side of the Gateway: every capability the protocol
  * names, answered over the wirings that already own it. The service composes
- * nothing new about the brain, the store, or the notebook; it is the one
+ * nothing new about the brain or the conversations; it is the one
  * boundary a client crosses to reach them, and the one place their changes
  * become numbered events. Today the client is the same process over the
  * in-process transport; the seams are drawn so the process split that
@@ -335,15 +334,6 @@ export function createGatewayService(
 
   const methods: GatewayMethodTable = {
     ...dependencies.methods,
-    [GATEWAY_METHOD.CONVERSATION_LINES]: reading((read) => {
-      const sessionKey = read.sessionKeyOrMain("sessionKey");
-      if (!conversations.holds(sessionKey)) {
-        return Effect.fail(new NotFoundRefusal({ message: REFUSAL.NOT_LISTED }));
-      }
-      return Effect.succeed({
-        entries: conversations.lines(sessionKey).map(conversationEntryToWire),
-      });
-    }),
     [GATEWAY_METHOD.CONVERSATION_DELETE]: reading((read) =>
       Effect.map(
         conversations.deleteConversation(read.sessionKeyOrMain("sessionKey")),

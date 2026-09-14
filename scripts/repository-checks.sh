@@ -588,17 +588,11 @@ openclaw_ported_files=(
     packages/runtime/src/storage.ts
     packages/runtime/src/skills.ts
     packages/memory/src/defaults.ts
-    packages/memory/src/ranking.ts
-    packages/memory/src/chunking.ts
     packages/memory/src/flush.ts
     packages/brain/src/loop-guard.ts
     packages/brain/src/compaction.ts
     packages/brain/src/context-engine.ts
     packages/brain/src/state-store.ts
-    packages/brain/src/store/maintenance.ts
-    packages/brain/src/store/maintenance-run.ts
-    packages/brain/src/store/archives.ts
-    packages/brain/src/store/compression.ts
 )
 openclaw_effect_imports=""
 for ported in "${openclaw_ported_files[@]}"; do
@@ -664,8 +658,8 @@ node --input-type=module -e '
       }
       // The whole path, never a tail of it: a basename lets two files named
       // `testing.ts` collide, so the paragraph about
-      // `packages/gateway/src/testing.ts` could answer for
-      // `packages/brain/src/store/testing.ts`, which had no paragraph at all.
+      // `packages/gateway/src/testing.ts` could answer for a `testing.ts` in
+      // another package that had no paragraph at all.
       // The path is also never the tail of a longer one, so `queue.effect.ts`
       // is not satisfied by a mention of
       // `packages/runtime/src/queue.effect.ts.bak`.
