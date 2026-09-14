@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -50,6 +51,8 @@ import {
   storeWriter,
   sweepSpeech,
 } from "../server/hosted/store";
+import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
+import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   DeviceRowSchema,
@@ -230,6 +233,54 @@ async function speechEvents(messageId: string) {
 async function deviceIds(userId: string): Promise<string[]> {
   const rows = await readDevicesByUser(database.run, userId);
   return rows.map((row) => Schema.decodeUnknownSync(DeviceRowSchema)(row).id);
+}
+
+const sessionRecord = voiceSessionRecord(() => clock);
+
+const VoiceSessionDeviceRowSchema = Schema.Struct({ device_id: Schema.NullOr(Schema.String) });
+
+/**
+ * A call standing behind one device, as either signed-in route leaves it: the
+ * `voice_sessions` row the opening registers naming that device, and one look
+ * of the exchange's own briefing look over it, reading the device out of that
+ * row the way `hostedLiveExchange` does. The look asks nothing about the
+ * platform, so this is the same call on a Mac, a phone, or a watch. Answers
+ * what it handed the service to speak.
+ */
+async function standingCall(
+  userId: string,
+  deviceId: string,
+): Promise<readonly HostedBriefingDelivery[]> {
+  const liveSessionId = `sess_${randomUUID()}`;
+  await database.run(sessionRecord.register({ userId, sessionId: liveSessionId, deviceId }));
+  const spoken: HostedBriefingDelivery[] = [];
+  await database.run(
+    Effect.scoped(
+      Effect.flatMap(
+        hostedBriefings({
+          userId,
+          speech: store,
+          offers: database.store.speech,
+          tools: CATALOG_TOOL_SET,
+          deviceId: Effect.gen(function* () {
+            const sql = yield* SqlClient.SqlClient;
+            const [row] = yield* sql`
+              select device_id from voice_sessions where live_session_id = ${liveSessionId}
+            `;
+            if (row === undefined) return undefined;
+            return (
+              Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined
+            );
+          }),
+          deliver: (delivery) => spoken.push(delivery),
+          now: () => clock,
+          report: () => undefined,
+        }),
+        (briefings) => briefings.look,
+      ),
+    ),
+  );
+  return spoken;
 }
 
 function offer(overrides: Partial<SpeechOffer> = {}): SpeechOffer {
@@ -701,5 +752,140 @@ test("a pass reads only the accounts it is told", async () => {
   assert.deepEqual(
     (await speechEvents(row.messageId)).map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_PUSHED],
+  );
+});
+
+test("a phone's call standing: the session claims the briefing as the phone and speaks it, and no pass pushes it, inside the grace or past it", async () => {
+  clock = NOW;
+  const userId = await database.createUser();
+  const phone = await device(userId, {
+    platform: DEVICE_PLATFORM.IOS,
+    push: { token: token(), environment: PUSH_ENVIRONMENT.SANDBOX },
+    activeUntil: NOW + SPEECH_OFFER.TTL_MS,
+  });
+  const row = await offered(userId);
+  const spoken = await standingCall(userId, phone);
+  const { seams, sent } = fakeSender();
+
+  assert.deepEqual(
+    spoken.map((delivery) => [
+      delivery.briefing,
+      delivery.claim.deviceId,
+      delivery.claim.messageId,
+    ]),
+    [[BRIEFING, phone, row.messageId]],
+  );
+  assert.deepEqual(
+    (await openOffers({ userId })).map((open) => [open.state, open.claimedByDeviceId]),
+    [[SPEECH_STATE.CLAIMED, phone]],
+  );
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  clock = NOW + SPEECH_PUSH.GRACE_MS;
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.deepEqual(sent, []);
+  assert.deepEqual(await speechEvents(row.messageId), [
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null },
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, deviceId: phone },
+  ]);
+});
+
+test("a watch's call standing, as the audio route registers one: the session claims the briefing as the watch and the phone holding the token is pushed nothing; once the call has gone the next briefing is the push's", async () => {
+  clock = NOW;
+  const userId = await database.createUser();
+  const watch = await device(userId, { platform: DEVICE_PLATFORM.WATCHOS, lastSeenAt: NOW });
+  const phoneToken = token();
+  const phone = await device(userId, {
+    platform: DEVICE_PLATFORM.IOS,
+    push: { token: phoneToken, environment: PUSH_ENVIRONMENT.SANDBOX },
+    lastSeenAt: NOW - 60_000,
+  });
+  const claimed = await offered(userId);
+  const spoken = await standingCall(userId, watch);
+  const { seams, sent } = fakeSender();
+
+  assert.deepEqual(
+    spoken.map((delivery) => [
+      delivery.briefing,
+      delivery.claim.deviceId,
+      delivery.claim.messageId,
+    ]),
+    [[BRIEFING, watch, claimed.messageId]],
+  );
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })),
+    NOTHING,
+  );
+  assert.equal(sent.length, 0);
+  assert.deepEqual(await speechEvents(claimed.messageId), [
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null },
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED, deviceId: watch },
+  ]);
+
+  // The watch hangs up: nothing looks at the offers any more, so the next
+  // briefing reaches the phone that holds the token, which the claim and not
+  // the platform is what had kept it from.
+  clock = NOW + 60_000;
+  const pushed = await offered(userId);
+  assert.deepEqual(await database.run(pushSpeech(seams, { now: clock, userIds: [userId] })), {
+    ...NOTHING,
+    pushed: 1,
+  });
+  assert.deepEqual(
+    sent.map((notification) => [notification.token, notification.payload.aps.alert]),
+    [[phoneToken, { body: BRIEFING }]],
+  );
+  assert.deepEqual(await speechEvents(pushed.messageId), [
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null },
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED, deviceId: phone },
+  ]);
+});
+
+test("a phone and a watch present with no call standing are pushed to at the offer's own instant, while the same instant on an account whose Mac reports itself active is waited out", async () => {
+  clock = NOW;
+  const present = await database.createUser();
+  await device(present, {
+    platform: DEVICE_PLATFORM.WATCHOS,
+    activeUntil: NOW + SPEECH_OFFER.TTL_MS,
+    lastSeenAt: NOW,
+  });
+  const phoneToken = token();
+  const phone = await device(present, {
+    platform: DEVICE_PLATFORM.IOS,
+    push: { token: phoneToken, environment: PUSH_ENVIRONMENT.SANDBOX },
+    activeUntil: NOW + SPEECH_OFFER.TTL_MS,
+    lastSeenAt: NOW,
+  });
+  const row = await offered(present);
+  const awake = await database.createUser();
+  await device(awake, {
+    platform: DEVICE_PLATFORM.MACOS,
+    activeUntil: NOW + SPEECH_OFFER.TTL_MS,
+  });
+  await device(awake, { push: { token: token(), environment: PUSH_ENVIRONMENT.PRODUCTION } });
+  const waited = await offered(awake);
+  const { seams, sent } = fakeSender();
+
+  // The instant the offers were made, which is inside the grace for both.
+  assert.deepEqual(
+    await database.run(pushSpeech(seams, { now: clock, userIds: [present, awake] })),
+    { ...NOTHING, pushed: 1, waiting: 1 },
+  );
+  assert.deepEqual(
+    sent.map((notification) => [notification.token, notification.environment]),
+    [[phoneToken, PUSH_ENVIRONMENT.SANDBOX]],
+  );
+  assert.deepEqual(await speechEvents(row.messageId), [
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_OFFERED, deviceId: null },
+    { kind: CONVERSATION_EVENT_KIND.SPEECH_PUSHED, deviceId: phone },
+  ]);
+  assert.deepEqual(
+    (await openOffers({ userIds: [present, awake] })).map((open) => [open.messageId, open.state]),
+    [[waited.messageId, SPEECH_STATE.OFFERED]],
   );
 });
