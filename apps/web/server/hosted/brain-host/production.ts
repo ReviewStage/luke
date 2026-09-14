@@ -1,3 +1,4 @@
+import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
 import { Effect, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -31,8 +32,12 @@ import type { CloudActionExecutor } from "./performer.js";
  * meter. An authored file hands what it needs here and nothing else.
  */
 
-/** The default model the hosted brain runs on when the deployment names none. */
-const DEFAULT_BRAIN_MODEL = "gpt-5.4";
+/**
+ * The model the hosted brain runs on when the deployment names none: the one
+ * default every brain turn shares, so the service's own turns and the relay
+ * never fall back to different models.
+ */
+const DEFAULT_BRAIN_MODEL = BRAIN_OPENAI_DEFAULTS.MODEL;
 
 /**
  * What a seam over the ambient client answers: an effect the caller composes
