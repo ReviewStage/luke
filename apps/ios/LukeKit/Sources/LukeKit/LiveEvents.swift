@@ -153,8 +153,14 @@ public enum LiveServerEvent: Equatable, Sendable {
     /// Reads one data-channel payload: JSON text, or nothing for anything the
     /// grammar refuses.
     public init?(payload text: String) {
-        guard let json = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)),
-              case .object = json,
+        guard let json = try? JSONDecoder().decode(JSONValue.self, from: Data(text.utf8)) else { return nil }
+        self.init(json: json)
+    }
+
+    /// Reads one event already decoded, as the audio route's relayed frames
+    /// arrive: the same grammar over the same document.
+    public init?(json: JSONValue) {
+        guard case .object = json,
               let type = json["type"]?.stringValue.flatMap(LiveServerEventType.init(rawValue:)),
               let eventId = json["event_id"].flatMap(LiveServerEvent.opaqueId)
         else { return nil }

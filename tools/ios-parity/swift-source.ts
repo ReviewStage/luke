@@ -90,26 +90,32 @@ const CASE_LINE = /^[ \t]*case[ \t]+(.+)$/gmu;
 const CASE_ENTRY = /^\s*`?([A-Za-z_]\w*)`?\s*(?:=\s*"([^"]*)")?\s*$/u;
 
 /**
- * Every raw value of a `enum <name>: String`, in source order. A case with no
- * `= "…"` contributes its own name, which is the raw value Swift derives for
- * it — the way `codex`, `conductor`, and every voice get theirs.
+ * Every case of a `enum <name>: String` with its raw value, in source order.
+ * A case with no `= "…"` contributes its own name, which is the raw value
+ * Swift derives for it — the way `codex`, `conductor`, and every voice get
+ * theirs.
  */
-export function swiftEnumRawValues(source: string, name: string): readonly string[] {
+export function swiftEnumCases(source: string, name: string): ReadonlyMap<string, string> {
   const declaration = new RegExp(
     String.raw`(?:public\s+|private\s+|internal\s+|fileprivate\s+)?enum\s+${name}\s*:\s*String\b[^{]*\{`,
     "u",
   );
   const body = bodyOf(source, declaration, `String-raw-valued enum ${name}`, true);
-  const values: string[] = [];
+  const cases = new Map<string, string>();
   for (const line of body.matchAll(CASE_LINE)) {
     for (const entry of splitOutsideQuotes(line[1] ?? "")) {
       const parsed = CASE_ENTRY.exec(entry);
-      if (!parsed) throw new Error(`${name}: cannot read the case "${entry.trim()}"`);
-      values.push(parsed[2] ?? parsed[1] ?? "");
+      if (!parsed?.[1]) throw new Error(`${name}: cannot read the case "${entry.trim()}"`);
+      cases.set(parsed[1], parsed[2] ?? parsed[1]);
     }
   }
-  if (values.length === 0) throw new Error(`${name}: the enum declares no cases`);
-  return values;
+  if (cases.size === 0) throw new Error(`${name}: the enum declares no cases`);
+  return cases;
+}
+
+/** Every raw value of a `enum <name>: String`, in source order. */
+export function swiftEnumRawValues(source: string, name: string): readonly string[] {
+  return [...swiftEnumCases(source, name).values()];
 }
 
 function typeBody(source: string, type: string): string {
@@ -180,6 +186,21 @@ function staticLiteral(source: string, name: string): string {
 /** The string a `static let <name> = "…"` holds. */
 export function swiftStaticString(source: string, name: string): string {
   return staticLiteral(source, name);
+}
+
+/** The case name a `static let <name>: Type = .case` holds. */
+export function swiftStaticCase(source: string, name: string): string {
+  const declaration = new RegExp(
+    String.raw`static\s+let\s+\x60?${name}\x60?\s*(?::[^=\n]+)?=\s*\.(\w+)`,
+    "gu",
+  );
+  const matches = [...source.matchAll(declaration)];
+  if (matches.length !== 1) {
+    throw new Error(`static let ${name}: expected one case declaration, found ${matches.length}`);
+  }
+  const value = matches[0]?.[1];
+  if (value === undefined) throw new Error(`static let ${name}: no case`);
+  return value;
 }
 
 /** The number a `static let <name> = 42` holds. */
