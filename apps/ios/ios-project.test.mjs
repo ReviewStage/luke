@@ -102,6 +102,34 @@ test("both apps ship a privacy manifest that matches the APIs the code calls", (
   }
 });
 
+const kitManifest = fs.readFileSync(path.join(iosRoot, "LukeKit", "Package.swift"), "utf8");
+const kitSources = path.join(iosRoot, "LukeKit", "Sources", "LukeKit");
+const webRTCImport = /^import LiveKitWebRTC$/m;
+
+// The WebRTC binary has no watchOS slice, so the watch build must never
+// reach it: the manifest links it for the phone (and for a Mac's
+// `swift test`) alone, and the one file that imports it compiles only where
+// it is linked, so every other target compiles the peer without the binary.
+test("the WebRTC framework is linked for the phone alone, behind one gated file", () => {
+  assert.match(kitManifest, /url: "https:\/\/github\.com\/livekit\/webrtc-xcframework\.git", exact: "150\.7871\.02"/);
+  assert.match(
+    kitManifest,
+    /name: "LiveKitWebRTC",\s*package: "webrtc-xcframework",\s*condition: \.when\(platforms: \[\.iOS, \.macOS\]\)/,
+  );
+  const linuxExclusions = kitManifest.slice(kitManifest.indexOf("#if os(Linux)"), kitManifest.indexOf("#else"));
+  assert.match(linuxExclusions, /"WebRTCPeer\.swift",/);
+  assert.match(linuxExclusions, /let webRTCPackages: \[Package\.Dependency\] = \[\]/);
+  const importers = fs
+    .readdirSync(kitSources)
+    .filter((name) => name.endsWith(".swift"))
+    .filter((name) => webRTCImport.test(fs.readFileSync(path.join(kitSources, name), "utf8")));
+  assert.deepEqual(importers, ["WebRTCPeer.swift"]);
+  const adaptor = fs.readFileSync(path.join(kitSources, "WebRTCPeer.swift"), "utf8");
+  assert.equal(adaptor.split("\n")[0], "#if canImport(LiveKitWebRTC)");
+  assert.match(adaptor, /\n#endif\n$/);
+  assert.doesNotMatch(swiftSources(path.join(iosRoot, "LukeWatch")), webRTCImport);
+});
+
 const phoneEntitlements = fs.readFileSync(path.join(iosRoot, "Luke", "Luke.entitlements"), "utf8");
 
 test("the iPhone app alone signs with the push entitlement, in both configurations", () => {

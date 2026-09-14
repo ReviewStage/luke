@@ -39,8 +39,10 @@ reference nor through a test plan — so a scheme entry would claim coverage the
 simulator run does not deliver.
 
 CI runs the LukeKit suites too, on Linux, where there is no Xcode and no
-simulator: the package has no dependencies, so everything in it that is neither
-a drawing nor an Apple framework compiles and runs on a Swift toolchain alone.
+simulator: the package's one dependency is the WebRTC binary, left out of the
+graph on Linux, so everything in it that is neither a drawing, an Apple
+framework, nor that binary's one adaptor compiles and runs on a Swift toolchain
+alone.
 
 ```sh
 ./apps/ios/LukeKit/scripts/test-linux.sh
@@ -58,8 +60,9 @@ Two things are left out, for two different reasons:
   each: the keychain and the PKCE challenge (Security, CryptoKit), the call's
   audio (AVFoundation), Luke's face (SwiftUI), Markdown rendering (Apple
   Foundation's `AttributedString` Markdown), the account session that reads the
-  keychain, and the suites over those. A new file importing one of those, or
-  WatchConnectivity, UIKit, or a binary framework, belongs there. An exclusion
+  keychain, the WebRTC adaptor (the binary has Apple slices alone), and the
+  suites over those. A new file importing one of those, or WatchConnectivity,
+  UIKit, or a binary framework, belongs there. An exclusion
   is coverage the job no longer has, so a file lands there only when Linux
   cannot compile it at all.
 - The suites Linux compiles but cannot answer for, skipped by the script at the
@@ -184,6 +187,40 @@ The simulator receives no real push. To see one land, the service needs the
 four `APNS_*` variables set, and a device build signed under the team that
 holds the App ID; `xcrun simctl push` can deliver a payload file to the
 simulator to exercise the tap alone.
+
+## Voice transport
+
+`LukeKit` links one binary, LiveKit's build of WebRTC
+(`livekit/webrtc-xcframework`, pinned to an exact release in
+`LukeKit/Package.swift`, with the reasons for the fork and the pin in the
+manifest's comment), and links it for the phone alone: the framework has no
+watchOS slice, so the watch target never reaches it, which
+`ios-project.test.mjs` holds by checking the manifest's platform condition and
+that `WebRTCPeer.swift` is the one file that imports it, behind
+`#if canImport(LiveKitWebRTC)`. The framework's own privacy manifest declares
+the required-reason APIs it calls (system boot time and file timestamps);
+the app manifests declare only what the app and `LukeKit` sources call.
+
+`LivePeer` is the phone's counterpart of the desktop's `live-peer.ts` and the
+peer half of its `live-call.ts`: a GPT Live WebRTC peer built in the guide's
+order (the microphone's track on the one sending line, the `oai-events` data
+channel created before the offer, ICE gathered under a bound, the offer
+handed to whoever creates the session, the answer applied) and driven through
+the only events an untrusted peer may send, the microphone switch and the
+hang-up. Press-to-talk enables and disables the one microphone track, never
+swapping it: a disabled track is encoded as silence and keeps the model's
+input timeline running. Capture and playback are the framework's own audio
+device module. The peer reads its own lifecycle and acknowledgments off the
+channel and hands every event the device is shown, decoded by
+`LiveEvents.swift` under the grammar `packages/live` declares, to whoever
+draws the captions. Its seams (the connection, the microphone, the session
+creator) are injected, so `LivePeerTests` drive offer, answer, track
+toggling, and close through fakes with no device and no binary, on Linux as
+on a Mac; `WebRTCPeerFactory` answers the same seams from the framework on a
+phone. `tools/ios-parity` holds the event types, close reasons, statuses, and
+transport states the peer transcribes equal to the TypeScript sets. Nothing
+calls the peer yet: the sessions socket that creates the session and the
+screen that drives the peer follow it.
 
 ## Voice actions
 
