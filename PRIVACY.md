@@ -244,16 +244,21 @@ things its screens show — session titles, branches, error text, and
 your name and email. A Conductor session's conversation, fetched onto that
 session's screen, and your Conversation with Luke on its own screen are each
 masked out of recordings the way the desktop's Conversation tab is blocked, so
-those messages reach your phone and nothing else. Text you
-type into a field is masked, a message you sent stays masked when it is drawn
-back as a chat bubble, and a crash is reported on the next launch with its
-message and code path. Unlike the Mac
-app, taps are not separately reported with their text — only the recording
-itself shows what was pressed. Signing in attaches the running recording to
-your account, and signing out starts a fresh anonymous one.
+those messages reach your phone and nothing else. Text you type into a field
+is masked, a message you sent stays masked when it is drawn back as a chat
+bubble, and taps are not separately reported with their text — only the
+recording itself shows what was pressed. Separately, in ordinary runs the iOS
+app sends Sentry anonymous exception and process-session reports and native
+crash reports on the next launch, with the same posture as the Mac app: no
+Luke account or other identity, no PII collection, no tracing, no Sentry
+Replay, no screenshots, no profiling, and no manual reports of handled
+errors. Signing in attaches the running recording to your account, and signing
+out starts a fresh anonymous one.
 
-The Apple Watch app records nothing and reports no crashes. It counts its use
-through the same fixed list as the other two apps, and nothing else leaves it.
+The Apple Watch app records nothing. It counts its use through the same fixed
+list as the other two apps, and in ordinary runs it also sends Sentry's
+anonymous process-session status. Sentry's watchOS support does not capture
+native crashes there, so no watch crash report is filed.
 The Conversation it shows is read from the same stored messages the phone
 reads, under your account, and the watch only reads them: a rating you gave a
 message is shown there and cannot be given from the wrist.
@@ -494,9 +499,9 @@ Send.
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
 - PostHog, for usage data and screen recordings, from the Mac, iOS, and
-  Apple Watch apps. The counts go through our own service; the recordings,
-  desktop clicks, and iOS errors that ride with them go from Luke to PostHog
-  directly, and the watch app sends PostHog nothing directly.
+  Apple Watch apps. The counts go through our own service; the recordings and
+  desktop clicks go from Luke to PostHog directly, and the watch app sends
+  PostHog nothing directly.
 - Apple, for briefing notifications. When no device of yours is placed to
   say a briefing, our service hands Luke's words to Apple's push notification
   service, addressed to the push token your device registered, and Apple
@@ -504,7 +509,8 @@ Send.
   unlocking. The notification carries those words and the briefing's own
   opaque message id, and nothing else about you or your sessions.
 - Sentry, for the anonymous exception, process-session, and native crash reports
-  described above.
+  described above; on watchOS this is limited to process-session status because
+  the SDK does not capture native crashes there.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -568,11 +574,13 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   you synced to the hosted service, your device rows, the conversation our
   service kept with its workspace files and remembered facts, and the stored
   roster of your sessions, and asks PostHog to erase your usage data
-  and recordings, including the iOS and Apple Watch apps'. It does not reach a recording that was
-  never attached to your account, as described above. Luke stops recording for
-  the rest of the session, and starts again the next time you open it or sign
-  in. Sentry reporting continues after deletion, and prior anonymous crash
-  reports cannot be identified as yours and targeted through account deletion.
+  and recordings, including the iOS app's. The Apple Watch app sends no
+  direct PostHog data, and its counted events are erased with your Luke
+  account. It does not reach a recording that was never attached to your
+  account, as described above. Luke stops recording for the rest of the
+  session, and starts again the next time you open it or sign in. Sentry
+  reporting continues after deletion, and prior anonymous crash reports cannot
+  be identified as yours and targeted through account deletion.
   Deleting does not affect your Google or GitHub account, and anything stored
   only on your Mac stays there until you remove it.
 

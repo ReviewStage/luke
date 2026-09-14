@@ -625,6 +625,7 @@
 					"@executable_path/Frameworks",
 				);
 				POSTHOG_PROJECT_API_KEY = "";
+				SENTRY_DSN = "";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -658,6 +659,7 @@
 					"@executable_path/Frameworks",
 				);
 				POSTHOG_PROJECT_API_KEY = "";
+				SENTRY_DSN = "";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -718,6 +720,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				SENTRY_DSN = "";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -747,6 +750,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				SENTRY_DSN = "";
 				PRODUCT_BUNDLE_IDENTIFIER = dev.tryluke.ios.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;

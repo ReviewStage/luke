@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Merged into the generated Info.plist. The value is the `SENTRY_DSN`
+	     build setting, empty unless a build injects one. An empty DSN leaves
+	     the watch without Sentry at all, the same explicit kill switch the
+	     phone and desktop keep. -->
+	<key>LukeSentryDSN</key>
+	<string>$(SENTRY_DSN)</string>
 	<!-- Merged into the generated Info.plist. watchOS grants a WebSocket, which
 	     it counts as low-level networking, only to an audio streaming app while
 	     its audio session is active (TN3135; WWDC 2019 session 716). Luke's

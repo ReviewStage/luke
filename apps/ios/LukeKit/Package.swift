@@ -42,6 +42,8 @@ let excludedTests = [
 ]
 let webRTCPackages: [Package.Dependency] = []
 let webRTCProducts: [Target.Dependency] = []
+let sentryPackages: [Package.Dependency] = []
+let sentryProducts: [Target.Dependency] = []
 #else
 let excludedSources: [String] = []
 let excludedTests: [String] = []
@@ -73,6 +75,23 @@ let webRTCProducts: [Target.Dependency] = [
         condition: .when(platforms: [.iOS, .macOS])
     ),
 ]
+let sentryPackages: [Package.Dependency] = [
+    // Luke's Apple apps share the desktop's posture: crash/error reporting by
+    // Sentry, with replay kept separate on the phone. Pinned to the current
+    // v9 line the repository verified for iOS/watchOS support rather than a
+    // moving range, so a toolchain update does not quietly move the SDK.
+    .package(url: "https://github.com/getsentry/sentry-cocoa.git", exact: "9.28.0"),
+]
+let sentryProducts: [Target.Dependency] = [
+    // The local package compiles from source, so it links Sentry's SPM
+    // product rather than the binary xcframework product. macOS is named so a
+    // developer's `swift test` on a Mac compiles the same shared helper.
+    .product(
+        name: "SentrySPM",
+        package: "sentry-cocoa",
+        condition: .when(platforms: [.iOS, .watchOS, .macOS])
+    ),
+]
 #endif
 
 let package = Package(
@@ -86,11 +105,11 @@ let package = Package(
     products: [
         .library(name: "LukeKit", targets: ["LukeKit"]),
     ],
-    dependencies: webRTCPackages,
+    dependencies: webRTCPackages + sentryPackages,
     targets: [
         .target(
             name: "LukeKit",
-            dependencies: webRTCProducts,
+            dependencies: webRTCProducts + sentryProducts,
             path: "Sources/LukeKit",
             exclude: excludedSources
         ),
