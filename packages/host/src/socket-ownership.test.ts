@@ -20,7 +20,6 @@ import {
   WEB_SOCKET_GATEWAY_DEFAULTS,
 } from "@sidecar/gateway/websocket";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { isRecord, type WireValue } from "@sidecar/wire";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { test } from "vitest";
@@ -65,7 +64,6 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
     let runs = 0;
     const live = new Map<string, BrainRequestRecord>();
     const persisted = new Map<string, BrainRequestRecord>();
-    const lines: ConversationEntry[] = [];
     // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
     const agent = {
@@ -109,8 +107,6 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
       conversations: {
         deleteConversation: () => Effect.succeed(CONVERSATION_DELETE_OUTCOME.COMPLETE),
-        holds: () => true,
-        lines: () => lines,
         directory: () => [],
       } as unknown as ConversationOperations,
       memory: { status: () => Effect.succeed({}) },
@@ -118,7 +114,7 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
       now: () => NOW,
       createId: () => `id-${++ids}`,
     });
-    return { service, live, persisted, lines, agent };
+    return { service, live, persisted, agent };
   });
 }
 
@@ -198,17 +194,12 @@ it.live(
         yield* first.connection.close();
         yield* Effect.sleep("20 millis");
         assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-        // The next client's hello snapshot and reads find the run and the host's lines.
-        f.lines.push({ kind: CONVERSATION_ENTRY_KIND.ASK, words: "what needs me?" });
+        // The next client's hello snapshot finds the run.
         const second = yield* client(port, "desktop-2");
         const hello = yield* second.gateway.call(GATEWAY_METHOD.HELLO);
         assert.ok(hello.ok);
         const snapshot = recordOf(recordOf(hello.result).snapshot);
         assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
-        const listed = yield* second.gateway.call(GATEWAY_METHOD.CONVERSATION_LINES, {});
-        assert.ok(listed.ok);
-        const entries = recordOf(listed.result).entries;
-        assert.ok(Array.isArray(entries) && entries.length === 1);
         yield* second.connection.close();
       }),
     ),

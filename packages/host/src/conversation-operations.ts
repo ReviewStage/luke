@@ -1,5 +1,4 @@
 import type { ConversationRecord, SessionKey } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import type { Effect } from "effect";
 import {
   type ConversationDeleteOutcome,
@@ -10,19 +9,17 @@ import type { HeldConversations } from "./held-conversations.js";
 
 /**
  * The conversation operations the host carries out over the two wirings,
- * each on a key the directory lists: the directory itself, one conversation's
- * thread, and Delete conversation — the deletion the panel's Clear is, in the
- * order its own module states.
+ * each on a key the directory lists: the directory itself, and Delete
+ * conversation — the deletion the panel's Clear is, in the order its own
+ * module states.
  */
 export interface ConversationOperations {
   directory: () => readonly ConversationRecord[];
-  holds: (sessionKey: SessionKey) => boolean;
-  lines: (sessionKey: SessionKey) => readonly ConversationEntry[];
   deleteConversation: (sessionKey: SessionKey) => Effect.Effect<ConversationDeleteOutcome>;
 }
 
 export interface ConversationOperationsDependencies {
-  conversations: Pick<HeldConversations, "directory" | "holds" | "thread" | "erase">;
+  conversations: Pick<HeldConversations, "directory" | "thread" | "erase">;
   brain: Pick<BrainWiring, "store">;
   now: () => number;
   report: (message: string) => void;
@@ -34,8 +31,6 @@ export function conversationOperations(
   const { conversations, brain } = dependencies;
   return {
     directory: () => conversations.directory(),
-    holds: (sessionKey) => conversations.holds(sessionKey),
-    lines: (sessionKey) => conversations.thread(sessionKey).entries(),
     deleteConversation: (sessionKey) => {
       const generations = brain.store(sessionKey);
       return deleteConversationFlow({

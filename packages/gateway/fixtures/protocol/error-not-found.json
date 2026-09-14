@@ -1,10 +1,10 @@
 {
   "request": {
     "protocolVersion": 1,
-    "id": "request-conversation-lines",
-    "method": "conversation.lines",
+    "id": "request-run-cancel",
+    "method": "run.cancel",
     "params": {
-      "case": "conversation.lines",
+      "case": "run.cancel",
       "note": "synthetic",
       "detail": {
         "flag": true,
@@ -15,10 +15,11 @@
           "second"
         ]
       }
-    }
+    },
+    "idempotencyKey": "key-run-cancel"
   },
   "response": {
-    "id": "request-conversation-lines",
+    "id": "request-run-cancel",
     "ok": false,
     "error": {
       "code": "not_found",
