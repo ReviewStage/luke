@@ -5,7 +5,7 @@ import {
   text,
   withoutTrailingSlash,
 } from "@sidecar/wire";
-import { webResponseFromClientResponse } from "@sidecar/wire/effect";
+import { bufferedWebResponseFromClientResponse } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
 import * as HttpBody from "effect/unstable/http/HttpBody";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -345,8 +345,17 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     });
   }
 
+  /**
+   * The answer a `send` hands back, its body already read: the deadline
+   * covers the reading as well as the request, and a body still streaming
+   * when this reader ended would have carried the wait past it. A body the
+   * client could not read is the transport failure it is.
+   */
   const responseReader: Reader<CallResponse> = (response) =>
-    Effect.map(webResponseFromClientResponse(response), (web) => ({ response: web }));
+    Effect.mapBoth(bufferedWebResponseFromClientResponse(response), {
+      onFailure: (error) => new CallTransportError({ errorName: errorName(error.cause) }),
+      onSuccess: (web) => ({ response: web }),
+    });
 
   function reading<Answer>(
     request: CallRequest,

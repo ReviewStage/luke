@@ -13,6 +13,15 @@ const ENTRY_KIND_OF = {
   [TRANSCRIPT_SPEAKER.ASSISTANT]: CONVERSATION_ENTRY_KIND.REPLY,
 } as const satisfies Record<TranscriptSpeaker, string>;
 
+/**
+ * How long a settled row stays drawn after it settled. The record's own row
+ * for it is written by the service at the same settle on its clock and
+ * reaches this Mac on the Conversation poll that follows, so the live row
+ * holds the line's place until that row lands and the panel retires it, or
+ * until this bound passes for a row nothing ever wrote.
+ */
+export const SETTLED_ROW_HOLD_MS = 12_000;
+
 export interface LiveCaptionsOptions {
   onRows(rows: readonly LiveCaptionRow[]): void;
   now?: () => number;
@@ -26,7 +35,8 @@ export interface LiveCaptionsOptions {
  * a late fragment grows a row in place rather than moving it. A row settles
  * once no fragment has joined it for the gap plus the margin, measured on
  * this window's clock rather than the session's, since a fragment's arrival
- * is what the drawing follows.
+ * is what the drawing follows; it stays among the rows for the hold above
+ * and leaves them once that has passed.
  */
 export class LiveCaptions {
   readonly #options: LiveCaptionsOptions;
@@ -56,10 +66,12 @@ export class LiveCaptions {
       const entry = streamingConversationEntry(ENTRY_KIND_OF[utterance.speaker], utterance.text);
       if (!entry) continue;
       const arrivedAt = this.#lastArrivalByRow.get(utterance.rowId) ?? now;
+      const quiet = now - arrivedAt;
+      if (quiet >= UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS + SETTLED_ROW_HOLD_MS) continue;
       rows.push({
         rowId: utterance.rowId,
         entry,
-        settled: now - arrivedAt >= UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS,
+        settled: quiet >= UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS,
       });
     }
     return rows;

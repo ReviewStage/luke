@@ -1,4 +1,4 @@
-export { webResponseFromClientResponse } from "./http.js";
+export { bufferedWebResponseFromClientResponse, webResponseFromClientResponse } from "./http.js";
 export {
   declareReader,
   describeWire,

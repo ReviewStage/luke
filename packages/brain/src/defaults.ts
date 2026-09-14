@@ -14,6 +14,13 @@ export const BRAIN_DEFAULTS = {
   ASK_WAIT_MS: 30_000,
   /** How long a run may execute once it starts before it is timed out and its execution revoked. */
   EXECUTION_DEADLINE_MS: 48 * 60 * 60 * 1000,
+  /**
+   * How long one tool call may go unanswered before the loop tells the model
+   * it did not answer and goes on. The batch a model's calls are dispatched in
+   * is uninterruptible, so a tool waiting on a promise that never settles
+   * would otherwise hold the run open past every deadline above it.
+   */
+  TOOL_CALL_DEADLINE_MS: 2 * 60 * 1000,
   /** The most of one session's new transcript one wake carries, cut from the front. */
   DELTA_PER_SESSION_CHARS: 20_000,
   /** The most of a whole transcript one read answers with, cut from the front. */

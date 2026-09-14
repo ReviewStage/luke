@@ -41,7 +41,12 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   talkOpening: boolean;
   /** Luke's rows while he speaks, when the captions preference or a silent output asks for them. */
   lukeCaptions: readonly string[] | undefined;
-  /** Both speakers' rows still being spoken, ahead of the record the host writes once each settles. */
+  /**
+   * Both speakers' rows, the ones still being spoken and the ones lately
+   * settled, drawn ahead of the record the service writes as each settles: a
+   * settled row holds its line's place until the record's row for it reaches
+   * this Mac, which the panel decides, or until the captions let it go.
+   */
   liveConversationEntries: readonly ConversationEntry[];
   /** Whether the developer is being heard and has not been transcribed yet. */
   spokenAskPending: boolean;
@@ -134,6 +139,8 @@ export class LiveVoiceOrchestrator {
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
   #liveEntries: readonly ConversationEntry[] = [];
+  /** Whether a developer's row is still growing, which is what holds the listening row off. */
+  #askBeingSaid = false;
   #talkOpening = false;
   /** Whether the microphone was last heard live, kept across the call's own end so a lost session knows what it was carrying. */
   #lastListening = false;
@@ -462,8 +469,9 @@ export class LiveVoiceOrchestrator {
 
   /**
    * The captions as the panel draws them: Luke's words under the housing
-   * while he speaks and there is a reason to read them, and every row still
-   * being spoken as a line the Conversation tab draws ahead of the record.
+   * while he speaks and there is a reason to read them, and every row the
+   * captions still hold, spoken or lately settled, as a line the Conversation
+   * tab draws ahead of the record.
    */
   #recomposeCaptions(): void {
     const unsettled = this.#rows.filter((row) => !row.settled);
@@ -475,8 +483,9 @@ export class LiveVoiceOrchestrator {
       this.#status === LIVE_STATUS.SPEAKING;
     const nextCaptions = wanted && lukeRows.length > 0 ? lukeRows : undefined;
     if (!sameWords(this.#lukeCaptions, nextCaptions)) this.#lukeCaptions = nextCaptions;
-    const nextEntries = unsettled.map((row) => row.entry);
+    const nextEntries = this.#rows.map((row) => row.entry);
     if (!sameEntries(this.#liveEntries, nextEntries)) this.#liveEntries = nextEntries;
+    this.#askBeingSaid = unsettled.some((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK);
   }
 
   #compose(): LiveVoiceView {
@@ -489,9 +498,7 @@ export class LiveVoiceOrchestrator {
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
       liveConversationEntries: this.#liveEntries,
-      spokenAskPending:
-        this.#status === LIVE_STATUS.LISTENING &&
-        !this.#liveEntries.some((entry) => entry.kind === CONVERSATION_ENTRY_KIND.ASK),
+      spokenAskPending: this.#status === LIVE_STATUS.LISTENING && !this.#askBeingSaid,
     };
   }
 

@@ -5,13 +5,14 @@ import {
   type ConversationViewSnapshot,
   type SessionIdentity,
 } from "@sidecar/session";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import { useEffect, useRef, useState } from "react";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
   ConversationListeningRow,
 } from "./conversation-rows";
-import { ConversationTurns } from "./conversation-turns";
+import { ConversationTurns, messageWords } from "./conversation-turns";
 import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
@@ -110,6 +111,40 @@ export function ConversationClearButton({ onClear }: { onClear: () => void }): R
   );
 }
 
+/** The words of a line as two tellings of it compare: case and spacing aside. */
+function comparableWords(words: string): string {
+  return words.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/** The kind a live row of a stored role would have been drawn as. */
+const LIVE_KIND_OF_ROLE = {
+  [MESSAGE_ROLE.USER]: CONVERSATION_ENTRY_KIND.ASK,
+  [MESSAGE_ROLE.ASSISTANT]: CONVERSATION_ENTRY_KIND.REPLY,
+} as const;
+
+/**
+ * Every spoken line the stored thread already holds, keyed as a live row is:
+ * its kind and its words. A live row settles on this Mac's clock and its row
+ * on the service's, and the record reaches this Mac on the poll that follows,
+ * so for a few seconds both tellings of one line are in hand; the stored one
+ * is the line, and the live one is drawn only until it lands.
+ */
+function storedLiveKeys(view: ConversationViewSnapshot): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const group of view.groups) {
+    for (const { message } of group.messages) {
+      if (message.role === MESSAGE_ROLE.SYSTEM) continue;
+      const words = messageWords(message);
+      if (words.trim().length > 0) keys.add(liveKey(LIVE_KIND_OF_ROLE[message.role], words));
+    }
+  }
+  return keys;
+}
+
+function liveKey(kind: ConversationEntry["kind"], words: string): string {
+  return JSON.stringify([kind, comparableWords(words)]);
+}
+
 /** How many rows a stored thread stands as, for the scroll that follows an append. */
 function messageCount(view: ConversationViewSnapshot): number {
   return view.groups.reduce((total, group) => total + group.messages.length, 0);
@@ -139,8 +174,10 @@ export function ConversationPanel({
    */
   now: number;
   /**
-   * The lines still being said, drawn under the settled thread as the same
-   * bubbles they will settle into — words growing, no timestamp, no copy.
+   * The lines still being said, and the ones lately said whose stored row
+   * has not reached this Mac yet, drawn under the settled thread as the same
+   * bubbles they will settle into — words growing, no timestamp, no copy. A
+   * line the stored thread already holds is drawn once, as the stored row.
    */
   live?: readonly ConversationEntry[];
   /**
@@ -152,7 +189,9 @@ export function ConversationPanel({
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
   const entryCount = messageCount(view);
-  const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
+  const stored = storedLiveKeys(view);
+  const drawnLive = live.filter((entry) => !stored.has(liveKey(entry.kind, entry.words)));
+  const liveLength = drawnLive.reduce((total, entry) => total + entry.words.length, 0);
   useEffect(() => {
     // Reading the count binds the scroll to an append, a clear, or a spoken
     // turn's place arriving, not to an unrelated render of the same conversation.
@@ -202,7 +241,7 @@ export function ConversationPanel({
                   on every delta — a key made of either would remount the bubble
                   mid-sentence, while its position holds still for exactly as
                   long as the line does. */}
-              {live.map((entry, index) => (
+              {drawnLive.map((entry, index) => (
                 <ConversationStreamingRow key={`live:${entry.kind}:${index}`} entry={entry} />
               ))}
               {/* After the lines still being said: the newest spoken turn's

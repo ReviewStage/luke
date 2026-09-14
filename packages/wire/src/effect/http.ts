@@ -1,4 +1,5 @@
 import { Effect, Stream } from "effect";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 
 /**
@@ -30,4 +31,21 @@ export function webResponseFromClientResponse(
     Stream.toReadableStreamEffect(response.stream),
     (body) => new Response(body, init),
   );
+}
+
+/**
+ * The same `Response`, with its body read to bytes before this effect ends.
+ * For a caller that bounds the whole answer with one deadline: a stream would
+ * carry the body past that bound, so a server that answered its headers and
+ * then stalled would be a request that never ended, while bytes read here
+ * either arrive within the deadline or fail it. The body a client could not
+ * read is the client's own error, for the caller to name as it names any other
+ * transport failure.
+ */
+export function bufferedWebResponseFromClientResponse(
+  response: HttpClientResponse.HttpClientResponse,
+): Effect.Effect<Response, HttpClientError.HttpClientError> {
+  const init: ResponseInit = { status: response.status, headers: response.headers };
+  if (bodilessStatuses.has(response.status)) return Effect.succeed(new Response(null, init));
+  return Effect.map(response.arrayBuffer, (body) => new Response(body, init));
 }

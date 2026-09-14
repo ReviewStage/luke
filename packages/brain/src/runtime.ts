@@ -28,8 +28,9 @@ import {
   type ToolResult,
 } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type UnknownActionResult } from "@sidecar/wire";
-import { Cause, Effect, Exit, Fiber, Semaphore } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Semaphore } from "effect";
 import { compactContext } from "./compaction.js";
+import { BRAIN_DEFAULTS } from "./defaults.js";
 import { whenAborted } from "./effect/settled.js";
 import { LOOP_GUARD_LEVEL, LoopGuard, type LoopGuardConfig } from "./loop-guard.js";
 import { outputStatus } from "./tool-results.js";
@@ -66,6 +67,19 @@ const TOOL_DID_NOT_ANSWER = {
   status: TOOL_RESULT_STATUS.UNKNOWN,
   reason: "the tool did not answer; it may have run, so do not repeat it",
 } as const;
+
+/** What the model is told about a tool still unanswered when its deadline passed. */
+const TOOL_OUTLIVED_DEADLINE = {
+  status: TOOL_RESULT_STATUS.UNKNOWN,
+  reason: "the tool did not answer in time; it may have run, so do not repeat it",
+} as const;
+
+/** How a bounded tool call ended when the tool itself did not end it. */
+const TOOL_WAIT = {
+  TIMED_OUT: "timed-out",
+} as const;
+
+type ToolWait = (typeof TOOL_WAIT)[keyof typeof TOOL_WAIT];
 
 export interface ToolLoopRuntimeOptions {
   model: ModelAdapter;
@@ -317,7 +331,9 @@ export class ToolLoopAgentRuntime implements AgentRuntimeEffect {
      * and uninterruptible as one: a cancel that lands mid-batch neither
      * leaves a call without an output nor cuts a dispatched effect off from
      * the result the host checkpoints for it. The run ends the instant the
-     * batch does, on the interruption that was waiting for it.
+     * batch does, on the interruption that was waiting for it — which is why
+     * each call inside it is bounded by `executeToolCall`, since a call the
+     * region holds open is one nothing outside it can end.
      */
     const dispatch = (calls: readonly ToolInvocation[]): Effect.Effect<RuntimeRunEnd | undefined> =>
       Effect.uninterruptible(
@@ -495,8 +511,18 @@ const absorb = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /**
- * One call, handed to the executor on the loop's own fiber; a tool that died
- * instead of answering is told as unknown rather than left dangling.
+ * One call, handed to the executor on the loop's own fiber and bounded there.
+ * The batch it runs in is uninterruptible, so nothing above this call can end
+ * it: the run's cancel, the execution deadline, and the host's revocation all
+ * reach it only as the signal, which a dispatched action is right to ignore —
+ * an effect already under way is waited for, never cut off from the result
+ * the host records — while a read that is safe to abandon races the signal
+ * itself, as `readWholeTranscript` does. What no tool may do is wait forever:
+ * a promise that never settles would hold the run open for as long as the
+ * process stood, so every call is raced against a deadline of its own, on a
+ * detached fiber joined from here, and a tool that outlives it is told to the
+ * model as unknown rather than left dangling, since it may have run. A tool
+ * that died instead of answering is told the same way.
  */
 const executeToolCall = /* @__PURE__ */ Effect.fnUntraced(function* (
   call: ToolInvocation,
@@ -505,7 +531,7 @@ const executeToolCall = /* @__PURE__ */ Effect.fnUntraced(function* (
   signal: AbortSignal,
   revoked: () => boolean,
 ): Effect.fn.Return<ToolResult> {
-  const result = yield* Effect.catchDefect(
+  const answered: Effect.Effect<ToolResult | ToolWait> = Effect.catchDefect(
     tools.execute(call, { runId, signal, isRevoked: revoked }),
     (): Effect.Effect<ToolResult> =>
       Effect.succeed({
@@ -513,6 +539,26 @@ const executeToolCall = /* @__PURE__ */ Effect.fnUntraced(function* (
         status: TOOL_DID_NOT_ANSWER.status,
       }),
   );
+  const deadline = Effect.as(
+    Effect.sleep(Duration.millis(BRAIN_DEFAULTS.TOOL_CALL_DEADLINE_MS)),
+    TOOL_WAIT.TIMED_OUT,
+  );
+  // The race runs on a detached fiber of its own, interruptible there so the
+  // arm that lost can be ended, and is joined from this fiber: opening an
+  // interruptible region on the batch's own fiber would let the interruption
+  // already waiting on it land mid-batch, which is the one thing the region
+  // exists to refuse.
+  const racing = yield* Effect.forkDetach(
+    Effect.interruptible(Effect.raceFirst(answered, deadline)),
+  );
+  const outcome = yield* Fiber.join(racing);
+  const result: ToolResult =
+    outcome === TOOL_WAIT.TIMED_OUT
+      ? {
+          outputJson: JSON.stringify(TOOL_OUTLIVED_DEADLINE),
+          status: TOOL_OUTLIVED_DEADLINE.status,
+        }
+      : outcome;
   const status = result.status ?? outputStatus(result.outputJson);
   return status !== undefined ? { outputJson: result.outputJson, status } : result;
 });
