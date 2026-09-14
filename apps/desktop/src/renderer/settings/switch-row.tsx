@@ -22,7 +22,7 @@ export function SwitchRow({
   checked: boolean;
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
-  /** The id a pressed search result lands on; marked on the row, since the landing scrolls to the whole line. */
+  /** The id a pressed search result lands on: marked on the switch itself, which then takes the keyboard. */
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
@@ -31,7 +31,7 @@ export function SwitchRow({
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <>
-      <div className="settings-row" {...(anchor ? searchAnchorProps(anchor) : undefined)}>
+      <div className="settings-row">
         <span className="settings-copy">
           <strong>
             {label}
@@ -45,6 +45,7 @@ export function SwitchRow({
           aria-checked={checked}
           aria-label={ariaLabel ?? label}
           className="switch"
+          {...(anchor ? searchAnchorProps(anchor) : undefined)}
           disabled={busy}
           onClick={() => run(!checked)}
         >
