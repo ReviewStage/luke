@@ -76,6 +76,13 @@ export interface LiveLineHold {
    * shows is taken off at drawing time, since the record moves on its own.
    */
   readonly entries: readonly ConversationEntry[];
+  /**
+   * The next instant a drawn line is let go on the clock — the oldest held
+   * line's bound, or the oldest drawn settled line's — for the clock that
+   * re-reads the hold; nothing while no drawn line stands under a bound. A
+   * line already let go names no bound, so the clock re-arms for the next.
+   */
+  readonly expiresAt: number | undefined;
 }
 
 export const NO_LIVE_LINES: LiveLineHold = {
@@ -84,6 +91,7 @@ export const NO_LIVE_LINES: LiveLineHold = {
   held: [],
   settledAt: new Map(),
   entries: [],
+  expiresAt: undefined,
 };
 
 /** Whether `next` is `previous` grown: the same kind, and the words so far a prefix of the words now. */
@@ -163,35 +171,31 @@ export function foldLiveLines(
     const since = previous?.settled ? hold.settledAt.get(line.rowId) : undefined;
     settledAt.set(line.rowId, since ?? now);
   }
-  const entries = [
-    ...held.map((line) => line.entry),
-    ...lines.filter((line) => settledLineDrawn(line, settledAt, now)).map((line) => line.entry),
+  const drawn = lines.filter((line) => settledLineDrawn(line, settledAt, now));
+  const entries = [...held.map((line) => line.entry), ...drawn.map((line) => line.entry)];
+  const bounds = [
+    ...held.map((line) => line.since + LIVE_LINE_HOLD_MS),
+    ...drawn.flatMap((line) => {
+      const since = settledAt.get(line.rowId);
+      return since === undefined ? [] : [since + LIVE_LINE_SETTLED_HOLD_MS];
+    }),
   ];
+  const expiresAt = bounds.length === 0 ? undefined : Math.min(...bounds);
   if (
     held === hold.held &&
     openedAt === hold.openedAt &&
+    expiresAt === hold.expiresAt &&
     sameLines(hold.lines, lines) &&
     sameEntries(hold.entries, entries)
   ) {
     return hold;
   }
-  return { lines, openedAt, held, settledAt, entries };
+  return { lines, openedAt, held, settledAt, entries, expiresAt };
 }
 
-/**
- * The next instant a drawn line is let go on the clock — the oldest held
- * line's bound, or the oldest settled reported line's — for the clock that
- * re-reads the hold; nothing while no line stands under a bound.
- */
+/** The hold's next bound, for the clock that re-reads it; nothing while no drawn line stands under one. */
 export function liveLinesExpireAt(hold: LiveLineHold): number | undefined {
-  const bounds = [
-    ...hold.held.map((held) => held.since + LIVE_LINE_HOLD_MS),
-    ...hold.lines.flatMap((line) => {
-      const since = hold.settledAt.get(line.rowId);
-      return since === undefined ? [] : [since + LIVE_LINE_SETTLED_HOLD_MS];
-    }),
-  ];
-  return bounds.length === 0 ? undefined : Math.min(...bounds);
+  return hold.expiresAt;
 }
 
 /** The stored role a spoken kind is written as; the two kinds a live line can be, and nothing for the rest. */
@@ -225,16 +229,26 @@ function isTextPart(part: StoredPart): part is TextPart {
 }
 
 /**
- * Words as they compare between the transcript and the record: letters and
- * digits alone, lower-cased. The transcript spells punctuation and case its
- * own way, and a reply the voice read from the brain's journal is the
- * journal's words as the speech model said them.
+ * Words as they compare between the transcript and the record: each word its
+ * letters and digits alone, lower-cased, one space between words. The
+ * transcript spells punctuation and case its own way, and a reply the voice
+ * read from the brain's journal is the journal's words as the speech model
+ * said them; the spaces stay so a match lands on whole words, and a short
+ * line is never found inside a longer word of another row.
  */
 function comparable(words: string): string {
-  return words.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+  return words
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((word) => word.length > 0)
+    .join(" ");
 }
 
-/** One row of the record as the lines are matched against it: its words, and how far along them the lines matched so far reach. */
+/**
+ * One row of the record as the lines are matched against it: its words with
+ * a space at either end, so every word boundary is a space, and how far along
+ * them the lines matched so far reach.
+ */
 interface RecordedWords {
   readonly role: MessageRole;
   readonly words: string;
@@ -271,7 +285,9 @@ function recordedSince(view: ConversationViewSnapshot, since: number): RecordedW
     for (const message of group.messages) {
       if (message.createdAt < since) continue;
       const words = comparable(spokenWordsOf(message));
-      if (words.length > 0) rows.push({ role: message.message.role, words, covered: 0 });
+      if (words.length > 0) {
+        rows.push({ role: message.message.role, words: ` ${words} `, covered: 0 });
+      }
     }
   }
   return rows;
@@ -279,21 +295,23 @@ function recordedSince(view: ConversationViewSnapshot, since: number): RecordedW
 
 /**
  * Whether the row's words, past what earlier lines covered, cover a spoken
- * line's, and takes them if so: the line inside what is left — one utterance
- * of an ask the delegation cut wider, a sentence of a reply read from a
- * journal — or what is left a prefix of the line, where a cut ended inside
- * the utterance and the rest went to the next ask. Walking the row forward
- * is what lets one wide row cover each utterance inside it once, and keeps
- * one short row from covering the same word said twice.
+ * line's whole words, and takes them if so: the line inside what is left —
+ * one utterance of an ask the delegation cut wider, a sentence of a reply
+ * read from a journal — or what is left the first words of the line, where a
+ * cut ended inside the utterance and the rest went to the next ask. Walking
+ * the row forward is what lets one wide row cover each utterance inside it
+ * once, and keeps one short row from covering the same word said twice.
  */
 function takes(row: RecordedWords, spoken: string): boolean {
-  const at = row.words.indexOf(spoken, row.covered);
+  const needle = ` ${spoken} `;
+  const at = row.words.indexOf(needle, row.covered);
   if (at !== -1) {
-    row.covered = at + spoken.length;
+    // The trailing space stays uncovered: it is the next word's leading one.
+    row.covered = at + needle.length - 1;
     return true;
   }
-  const rest = row.words.slice(row.covered);
-  if (rest.length > 0 && spoken.startsWith(rest)) {
+  const rest = row.words.slice(row.covered).trim();
+  if (rest.length > 0 && (spoken === rest || spoken.startsWith(`${rest} `))) {
     row.covered = row.words.length;
     return true;
   }

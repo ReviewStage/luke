@@ -286,3 +286,42 @@ test("a briefing the voice read is covered by the announce row that carries it",
   };
   assert.deepEqual(shownLiveEntries(hold, view(announced)), []);
 });
+
+test("the clock re-arms for the next settled line once the first has been let go", () => {
+  const first = line(1, CONVERSATION_ENTRY_KIND.REPLY, "Hey, I'm here.", true);
+  let hold = foldLiveLines(NO_LIVE_LINES, [first], OPENED);
+  assert.equal(liveLinesExpireAt(hold), OPENED + LIVE_LINE_SETTLED_HOLD_MS);
+  // The first is let go; a second settled later stands under its own bound, which is what the clock is told now.
+  const second = line(2, CONVERSATION_ENTRY_KIND.REPLY, "Anything else?", true);
+  hold = foldLiveLines(hold, [first, second], OPENED + 20_000);
+  assert.equal(liveLinesExpireAt(hold), OPENED + LIVE_LINE_SETTLED_HOLD_MS);
+  hold = foldLiveLines(hold, [first, second], OPENED + LIVE_LINE_SETTLED_HOLD_MS);
+  assert.deepEqual(shownLiveEntries(hold, EMPTY), [second.entry]);
+  assert.equal(liveLinesExpireAt(hold), OPENED + 20_000 + LIVE_LINE_SETTLED_HOLD_MS);
+  hold = foldLiveLines(hold, [first, second], OPENED + 20_000 + LIVE_LINE_SETTLED_HOLD_MS);
+  assert.deepEqual(shownLiveEntries(hold, EMPTY), []);
+  assert.equal(liveLinesExpireAt(hold), undefined);
+});
+
+test("a line is covered by whole words only: a short line is not found inside a longer word of an earlier row", () => {
+  const yes = line(1, CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
+  const no = line(2, CONVERSATION_ENTRY_KIND.ASK, "No", true);
+  const hold = foldLiveLines(NO_LIVE_LINES, [yes, no], OPENED);
+  const longer = view(
+    recorded(MESSAGE_ROLE.USER, "Yesterday it passed, and nothing else.", OPENED + 1_000),
+  );
+  assert.deepEqual(shownLiveEntries(hold, longer), [yes.entry, no.entry]);
+  const words = view(recorded(MESSAGE_ROLE.USER, "Yes, no.", OPENED + 1_000));
+  assert.deepEqual(shownLiveEntries(hold, words), []);
+  // A cut that ended inside the utterance covers it only at a word's end.
+  const cutShort = line(3, CONVERSATION_ENTRY_KIND.ASK, "Restart the fixture agent", true);
+  const cut = foldLiveLines(NO_LIVE_LINES, [cutShort], OPENED);
+  assert.deepEqual(
+    shownLiveEntries(cut, view(recorded(MESSAGE_ROLE.USER, "Restart the fix", OPENED + 1_000))),
+    [cutShort.entry],
+  );
+  assert.deepEqual(
+    shownLiveEntries(cut, view(recorded(MESSAGE_ROLE.USER, "Restart the fixture", OPENED + 1_000))),
+    [],
+  );
+});

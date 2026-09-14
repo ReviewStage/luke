@@ -337,13 +337,24 @@ interface Exchange {
   /** The session the delegations belong to; a closed session's ids die with it and later sentences go session-wide. */
   sessionId: string | undefined;
   settled: boolean;
-  buffered: string[];
+  buffered: SpokenSentence[];
   /** Sentences that could not be appended because no session stood; spoken into the next one. */
-  late: string[];
+  late: SpokenSentence[];
   spokenChunks: number;
   slowStepTold: boolean;
   finalize: SessionDelay | undefined;
   end: LiveBrainRunEnd | undefined;
+}
+
+/**
+ * One sentence an exchange speaks, and whether its words are on record
+ * already: a reply's sentence is, under its turn's journal; the standing note
+ * for a run that ended with nothing said is the build's, and what the voice
+ * says for it becomes his row like any other words of his.
+ */
+interface SpokenSentence {
+  readonly words: string;
+  readonly onRecord: boolean;
 }
 
 interface UtteranceWrite {
@@ -1427,10 +1438,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         exchange.settled = true;
         for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);
         return;
-      case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
-        if (exchange.settled) this.#speakSentence(exchange, event.sentence);
-        else exchange.buffered.push(event.sentence);
+      case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE: {
+        const sentence: SpokenSentence = { words: event.sentence, onRecord: true };
+        if (exchange.settled) this.#speakSentence(exchange, sentence);
+        else exchange.buffered.push(sentence);
         return;
+      }
       case LIVE_BRAIN_RUN_EVENT.ENDED:
         exchange.runIds.delete(event.runId);
         // A stopped or failed rider marks the exchange; a completed one only fills an empty mark.
@@ -1462,11 +1475,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
       return;
     }
-    this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
+    this.#speakSentence(exchange, { words: RUN_END_NOTE[exchange.end], onRecord: false });
   }
 
   /** One sentence of an exchange's reply, into its session under its delegation, or kept for the next session. */
-  #speakSentence(exchange: Exchange, sentence: string): void {
+  #speakSentence(exchange: Exchange, sentence: SpokenSentence): void {
     const session = this.#sessionOf(exchange);
     if (!session) {
       exchange.late.push(sentence);
@@ -1492,13 +1505,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     exchange: Exchange,
     session: StandingSession,
     delegationId: LiveDelegationId,
-    sentence: string,
+    sentence: SpokenSentence,
   ): void {
-    for (const chunk of chunkForAppend(sentence)) {
+    for (const chunk of chunkForAppend(sentence.words)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
           const taken = yield* this.#commentary(session, this.#input(delegationId, chunk), {
-            onRecord: true,
+            onRecord: sentence.onRecord,
           });
           if (taken) exchange.spokenChunks += 1;
         }),

@@ -652,6 +652,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
+      const recordedTold: string[] = [];
+      f.onRecordedAppend = (eventId) => recordedTold.push(eventId);
       const sideband = yield* f.open();
       yield* settle();
       sideband.acknowledgeThinkingAtOnce = false;
@@ -707,6 +709,11 @@ it.effect(
       assert.deepEqual(
         commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
         ["item_1", "item_1"],
+      );
+      // Each sentence is the turn's journal spoken, so each was told as on record before it went out.
+      assert.deepEqual(
+        recordedTold,
+        commentary.map((event) => event.event_id),
       );
     }),
 );
@@ -1753,6 +1760,8 @@ it.effect(
       });
       yield* advanceClock(1000);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      const recordedTold: string[] = [];
+      f.onRecordedAppend = (eventId) => recordedTold.push(eventId);
       f.record.release(true);
       yield* settle();
       yield* advanceClock(1000);
@@ -1762,6 +1771,8 @@ it.effect(
         commentary[0] && "content" in commentary[0] && commentary[0].content,
         RUN_END_NOTE[LIVE_BRAIN_RUN_END.FAILED],
       );
+      // The note is the build's, on no record: what the voice says for it becomes his row, so it is not told as on record.
+      assert.deepEqual(recordedTold, []);
     }),
 );
 
