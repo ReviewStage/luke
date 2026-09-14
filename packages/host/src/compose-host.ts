@@ -320,7 +320,6 @@ export const hostAssemblyLayer: Layer.Layer<
       // This Mac holds no notebook: the remembered facts and their index are
       // the hosted brain's, so the status names no entries and no mode.
       memory: { status: () => Effect.succeed({ entries: 0 }) },
-      observedSessionCount: observation.observedSessionCount,
       nodes: kernel.nodes,
       now,
       createId: kernel.createId,

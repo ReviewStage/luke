@@ -1,5 +1,4 @@
 import { ACTION_KIND } from "@sidecar/actions";
-import { brainRequestRecordFromWire } from "@sidecar/brain/requests";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import {
   GATEWAY_METHOD,
@@ -10,8 +9,6 @@ import {
   type NodeInvocation,
 } from "@sidecar/gateway";
 import {
-  createGatewayOperator,
-  type GatewayOperator,
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
@@ -54,7 +51,6 @@ export interface GatewayWiringDependencies {
 }
 
 export interface GatewayWiring {
-  readonly operator: GatewayOperator;
   readonly host: HostOperator;
   /**
    * What every attachment owes the host it now reaches: the host's stream
@@ -93,41 +89,21 @@ export function wireGateway(
       transport,
       createId: dependencies.createId,
       report,
-      // A snapshot stands in for events the client will never see: the ones a
-      // replaced host never numbered, or a window that moved past. The runs it
-      // carries land in the document as the runs event would have.
-      onSnapshot: (snapshot) => {
-        if (!isRecord(snapshot) || !Array.isArray(snapshot.runs)) return;
-        state.update({
-          brain: { runs: snapshot.runs.flatMap((held) => brainRequestRecordFromWire(held) ?? []) },
-        });
-      },
     });
-    const operator = createGatewayOperator({ client });
     const host = createHostOperator({
       client,
       lastSettings: () => state.snapshot().settings,
       report,
     });
 
-    // What the host tells its clients: the runs and the Conversation as its
-    // reads of the service compose it, each written to the document every
-    // window is told from. The local store's own thread event still arrives
-    // for the voice window's relay and is written nowhere: the thread a panel
-    // draws is the account's. Both are the scope's, as the client's own
-    // subscription is, so the close that ends one ends all three.
-    const heardRuns = operator.onRunsChanged((runs) => {
-      state.update({ brain: { runs } });
-    });
+    // What the host tells its clients: the Conversation as its reads of the
+    // service compose it, written to the document every window is told from.
+    // The subscription is the scope's, as the client's own is, so the close
+    // that ends one ends both.
     const heardConversation = host.onConversationViewChanged((view) => {
       state.update({ conversation: view });
     });
-    yield* Effect.addFinalizer(() =>
-      Effect.sync(() => {
-        heardConversation();
-        heardRuns();
-      }),
-    );
+    yield* Effect.addFinalizer(() => Effect.sync(() => heardConversation()));
 
     /**
      * The capabilities this process performs at the host's ask. Each is
@@ -195,7 +171,6 @@ export function wireGateway(
     yield* transport.serveInvocations?.(perform) ?? Effect.void;
 
     return {
-      operator,
       host,
       attached: () =>
         Effect.gen(function* () {

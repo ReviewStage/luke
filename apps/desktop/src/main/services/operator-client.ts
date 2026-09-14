@@ -9,7 +9,7 @@ import { Effect, type Scope } from "effect";
 import { channels } from "#shared/bridge";
 import { type AppStateStore, bootstrapPatch } from "../app-state";
 import type { HostBootstrap, HostOperator } from "../gateway/host-operator";
-import { type GatewayWiring, wireGateway } from "../gateway/wiring";
+import { wireGateway } from "../gateway/wiring";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNodeCapabilities } from "./native-node";
 
@@ -36,8 +36,6 @@ export interface OperatorClient {
   link: (links: OperatorClientLinks) => void;
   /** The host's own method vocabulary, as this client calls it. */
   readonly host: HostOperator;
-  /** The runs, deliveries, and history operations the brain's windows reach. */
-  readonly operator: GatewayWiring["operator"];
   settings: () => AppSettings | undefined;
   /** The settings this launch decides its windows from, read from the host once and written down. */
   ensureSettings: () => Effect.Effect<AppSettings | undefined>;
@@ -199,7 +197,6 @@ export function createOperatorClient(
         heldLinks = next;
       },
       host: gateway.host,
-      operator: gateway.operator,
       settings: () => state.snapshot().settings,
       ensureSettings: () =>
         Effect.gen(function* () {
