@@ -437,6 +437,20 @@ export class LiveSessionHolder {
   }
 
   /**
+   * The caller wants a session and has nothing to send into it: a briefing
+   * stands on offer to the account, and the service's exchange will claim
+   * and speak it once a session stands. The peer is told the session is
+   * wanted so it opens one muted, exactly as for a beat; a session already
+   * standing is left to its own exchange's look. Answers whether the peer
+   * was told.
+   */
+  wantSession(): boolean {
+    if (this.sessionStands()) return false;
+    this.#options.emit({ phase: LIVE_SESSION_PHASE.WANTED });
+    return true;
+  }
+
+  /**
    * Removes a beat whose reason has gone, or that a hold now keeps, before it
    * was sent, and answers whether one was waiting; one the service already
    * has is the service's to speak, and is not withdrawn.

@@ -668,6 +668,37 @@ it.scoped(
 );
 
 it.scoped(
+  "wanting a session for a briefing announces wanted while none stands, and is refused while one does",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.wantSession(), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      const created = yield* f.holder.createSession("offer");
+      assert.ok(created);
+      // Created and not yet started: a session stands, and its exchange's look is what claims the offer.
+      assert.equal(f.holder.wantSession(), false);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+      assert.equal(f.holder.wantSession(), false);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 4);
+      yield* settle();
+      assert.equal(f.holder.wantSession(), true);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.STARTED,
+        LIVE_SESSION_PHASE.CLOSED,
+        LIVE_SESSION_PHASE.WANTED,
+      ]);
+      assert.deepEqual(f.beats, []);
+      assert.deepEqual(sideband.sent, []);
+    }),
+);
+
+it.scoped(
   "a beat is dropped on a source with no door, since a session with no service between will never speak it",
   () =>
     Effect.gen(function* () {

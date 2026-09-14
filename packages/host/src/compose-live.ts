@@ -26,12 +26,15 @@ import {
   firstNameOf,
   launchGreetingOwed,
 } from "./arrival-flow.js";
+import { BRIEFING_SESSION_DECISION, briefingSessionDecision } from "./briefing-session.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
+import { activeUntilFrom } from "./device-presence.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import { MachinePresenceReader } from "./effect/seams.js";
 import { voiceRoster } from "./voice-roster.js";
 
 export interface LiveComposer extends Composer {
@@ -49,6 +52,13 @@ export interface LiveComposer extends Composer {
   requestOnboardingBeat: () => void;
   /** Asked when the announcement hold was read again: the beat the hold kept is asked for once it has lifted. */
   onAnnouncementHoldRead: () => void;
+  /**
+   * Told how many briefings stand on offer to the account, on each publish
+   * of the Conversation: with one on offer, this Mac present, speech free,
+   * and no session standing, the peer is told a session is wanted so the
+   * service's exchange can claim and say it here (`briefing-session.ts`).
+   */
+  briefingsOffered: (openOffers: number) => void;
   /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
   seedArrivalOnFirstSignIn: () => void;
   /** Every beat not yet sent is dropped; a sign-out is no reason to keep one waiting for a session. */
@@ -86,7 +96,10 @@ const BEAT_KINDS: readonly BeatKind[] = [
  * session for one when none stands. The words are the service's; what the
  * service tells back, by kind, is that a turn was spoken to its end, which
  * is what settles the arrival's moment and the first-announcement count
- * here. It reaches no brain and writes no record, so it needs no seam for
+ * here. It opens a muted session for a briefing the same way: when one
+ * stands on offer to the account and this Mac is present with speech free,
+ * a status edge from observed rows and never a model's word, so the
+ * service's exchange can claim and say it here rather than the phone. It reaches no brain and writes no record, so it needs no seam for
  * either. The holder stands for this composition's own scope, which is the
  * host's, and its graceful close stays a drain step of `compose-host.ts`
  * rather than a finalizer, so a quit ends the session inside its own
@@ -94,10 +107,11 @@ const BEAT_KINDS: readonly BeatKind[] = [
  */
 export const composeLive = (
   dependencies: LiveDependencies,
-): Effect.Effect<LiveComposer, never, HostKernelTag | Scope.Scope> =>
+): Effect.Effect<LiveComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> =>
   Effect.gen(function* () {
     const { settings, account, observation, calendars } = dependencies;
     const kernel = yield* HostKernelTag;
+    const machinePresence = yield* MachinePresenceReader;
     const { now, runMode } = kernel;
 
     // What a caller asked for and nothing waits on: each decision is taken in
@@ -289,6 +303,35 @@ export const composeLive = (
       service.speakBeat(launchGreeting());
     });
 
+    /** When this Mac last asked for a session on a briefing's account, for the debounce. */
+    let briefingSessionAskedAt: number | undefined;
+
+    /**
+     * A briefing on offer, decided from observed rows and this Mac's own
+     * state and nothing a model said: the offer count the Conversation's
+     * events fold to, the presence the heartbeat reports, the hold as the
+     * beats read it, and whether a session already stands. The ask is the
+     * same `wanted` the beats announce; what is said into the session is the
+     * exchange's to claim and speak.
+     */
+    const briefingSession = (openOffers: number) =>
+      Effect.gen(function* () {
+        if (!runMode.requiresAccount || !account.signedIn()) return;
+        if (!account.voiceCapabilities.liveSessions) return;
+        const at = now();
+        const decision = briefingSessionDecision({
+          openOffers,
+          present: activeUntilFrom(machinePresence.read?.(), at) !== null,
+          held: yield* speechHeld,
+          sessionStands: service.sessionStands(),
+          lastOpenedAt: briefingSessionAskedAt,
+          now: at,
+        });
+        if (decision !== BRIEFING_SESSION_DECISION.OPEN) return;
+        briefingSessionAskedAt = at;
+        service.wantSession();
+      });
+
     /**
      * The hold read again. A hold that has begun takes back every beat still
      * waiting for a session (one the service already has is the service's to
@@ -378,6 +421,9 @@ export const composeLive = (
       },
       onAnnouncementHoldRead: () => {
         Queue.unsafeOffer(asks, holdRead);
+      },
+      briefingsOffered: (openOffers) => {
+        Queue.unsafeOffer(asks, briefingSession(openOffers));
       },
       seedArrivalOnFirstSignIn: () => {
         if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
