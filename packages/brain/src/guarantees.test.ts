@@ -12,7 +12,7 @@ import {
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { LOOK_SUBJECT } from "./agent.js";
-import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
+import { hostedBrainTransport } from "./client.js";
 import { advanceHarness, effectHarness } from "./effect/harness.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -545,23 +545,17 @@ it.effect("an ask's reply is its final text, and announce is refused inside one"
 );
 
 /**
- * "The brain's own turns are the first … on the developer's own key or
- * through Luke's own service." — `client.ts`: a call is addressed to the one
- * origin its transport was built with, and what a quiet reports names the
- * transport and the wait alone.
+ * "The brain's own turns are the first … through Luke's own service." —
+ * `client.ts`: a call is addressed to the one origin its transport was built
+ * with, never to the provider, and what a quiet reports names the transport
+ * and the wait alone.
  */
-test("a brain call is addressed to the developer's own key or to Luke's own service, and reports neither", async () => {
+test("a brain call is addressed to Luke's own service alone, and reports nothing of what it carried", async () => {
   const addressed: string[] = [];
   const fetch = (url: string) => {
     addressed.push(url);
     return Promise.resolve(Response.json({}));
   };
-  const keyed = keyedBrainTransport({
-    baseUrl: "https://api.openai.test/v1",
-    apiKey: "sk-secret",
-    httpClient: fakeHttpClientLayer(fetch),
-    now: () => NOW,
-  });
   const service = hostedBrainTransport({
     baseUrl: "https://luke.test",
     readAccessToken: () => Effect.succeed("account-secret"),
@@ -569,10 +563,13 @@ test("a brain call is addressed to the developer's own key or to Luke's own serv
     httpClient: fakeHttpClientLayer(fetch),
     now: () => NOW,
   });
-  await keyed.send("/responses", HTTP_METHOD.POST, TRANSCRIPT_SECRET);
   await service.send("/api/brain/v2/respond", HTTP_METHOD.POST, TRANSCRIPT_SECRET);
-  assert.deepEqual(addressed, [
-    "https://api.openai.test/v1/responses",
-    "https://luke.test/api/brain/v2/respond",
-  ]);
+  assert.deepEqual(addressed, ["https://luke.test/api/brain/v2/respond"]);
+  const quiet = service.quietUntil(
+    new Response("", { status: 429, headers: { "retry-after": "7" } }),
+  );
+  assert.deepEqual(quiet, {
+    until: NOW + 7_000,
+    message: "Hosted brain turns are rate limited; pausing for 7s",
+  });
 });

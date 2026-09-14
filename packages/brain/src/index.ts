@@ -43,8 +43,8 @@ export {
   RETRY_AFTER_HEADER,
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
+export { BRAIN_OPENAI_DEFAULTS, BRAIN_PREFETCH_MODEL } from "./model-defaults.js";
 export type { BrainObservationEntry } from "./observation-inbox.js";
-export { BRAIN_OPENAI_DEFAULTS, BRAIN_PREFETCH_MODEL } from "./openai-model-adapter.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
   type BrainAnticipation,

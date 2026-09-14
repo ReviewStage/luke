@@ -5,7 +5,7 @@ import { HTTP_METHOD } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { hostedBrainTransport, keyedBrainTransport } from "./client.js";
+import { hostedBrainTransport } from "./client.js";
 import {
   BRAIN_RATE_LIMIT_COOLDOWN_MS,
   BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
@@ -45,23 +45,11 @@ function recorder(answers: readonly (() => Response)[]) {
   return { fetch, calls };
 }
 
-function keyed(answers: readonly (() => Response)[], baseUrl = `${BASE}/v1/`) {
-  const { fetch, calls } = recorder(answers);
-  return {
-    calls,
-    transport: keyedBrainTransport({
-      baseUrl,
-      apiKey: "sk-test",
-      httpClient: fakeHttpClientLayer(fetch),
-      now: () => NOW,
-    }),
-  };
-}
-
 function hosted(
   answers: readonly (() => Response)[],
   tokens: (string | undefined)[] = ["token-1"],
   accounts?: string[],
+  baseUrl = BASE,
 ) {
   const { fetch, calls } = recorder(answers);
   const queue = [...tokens];
@@ -70,7 +58,7 @@ function hosted(
   let holder = holders?.shift();
   const refreshes: number[] = [];
   const transport = hostedBrainTransport({
-    baseUrl: BASE,
+    baseUrl,
     readAccessToken: () => Effect.succeed(current),
     refreshAccount: () =>
       Effect.sync(() => {
@@ -85,17 +73,33 @@ function hosted(
   return { calls, refreshes, transport };
 }
 
+/** A transport over one fetch the test scripts, with the account token fixed. */
+function transportOver(fetch: (url: string, init: RequestInit) => Promise<Response>) {
+  return hostedBrainTransport({
+    baseUrl: BASE,
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
+    httpClient: fakeHttpClientLayer(fetch),
+    now: () => NOW,
+  });
+}
+
 test("a base URL is trimmed once, the credential is one bearer header, and a body names its own type", async () => {
-  const { calls, transport } = keyed([() => Response.json({ ok: true })]);
+  const { calls, transport } = hosted(
+    [() => Response.json({ ok: true })],
+    undefined,
+    undefined,
+    `${BASE}/v1/`,
+  );
   const response = await transport.send("/responses", HTTP_METHOD.POST, '{"a":1}');
   assert.ok(response instanceof Response);
   assert.equal(calls[0]?.url, `${BASE}/v1/responses`);
   assert.equal(calls[0]?.method, HTTP_METHOD.POST);
-  assert.equal(calls[0]?.authorization, "Bearer sk-test");
+  assert.equal(calls[0]?.authorization, "Bearer token-1");
   assert.equal(calls[0]?.contentType, "application/json");
   assert.equal(calls[0]?.body, '{"a":1}');
 
-  const read = keyed([() => Response.json({ ok: true })]);
+  const read = hosted([() => Response.json({ ok: true })]);
   await read.transport.send("/capabilities", HTTP_METHOD.GET);
   assert.equal(read.calls[0]?.body, undefined);
   assert.equal(read.calls[0]?.contentType, null);
@@ -103,18 +107,13 @@ test("a base URL is trimmed once, the credential is one bearer header, and a bod
 
 test("the run's own cancellation ends the request it was handed to", async () => {
   const cancellation = new AbortController();
-  const transport = keyedBrainTransport({
-    baseUrl: BASE,
-    apiKey: "sk-test",
-    httpClient: fakeHttpClientLayer(
-      () =>
-        new Promise<Response>((_settle, reject) => {
-          cancellation.abort();
-          cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
-        }),
-    ),
-    now: () => NOW,
-  });
+  const transport = transportOver(
+    () =>
+      new Promise<Response>((_settle, reject) => {
+        cancellation.abort();
+        cancellation.signal.addEventListener("abort", () => reject(cancellation.signal.reason));
+      }),
+  );
 
   const failure = await transport.send("/responses", HTTP_METHOD.POST, "{}", cancellation.signal);
 
@@ -125,14 +124,9 @@ test("the run's own cancellation ends the request it was handed to", async () =>
 });
 
 test("a fetch that throws is a network failure named by the error's kind alone, never by its words", async () => {
-  const transport = keyedBrainTransport({
-    baseUrl: BASE,
-    apiKey: "sk-secret-key",
-    httpClient: fakeHttpClientLayer(() =>
-      Promise.reject(new TypeError("sk-secret-key was refused by dns")),
-    ),
-    now: () => NOW,
-  });
+  const transport = transportOver(() =>
+    Promise.reject(new TypeError("token-1 was refused by dns")),
+  );
   const failure = await transport.send("/responses", HTTP_METHOD.POST, "{}");
   assert.ok(!(failure instanceof Response));
   assert.equal(failure.outcome, MODEL_RESPONSE_OUTCOME.FAILED);
@@ -140,12 +134,7 @@ test("a fetch that throws is a network failure named by the error's kind alone, 
   assert.equal(failure.reason, "request did not complete: TypeError");
 });
 
-test("the keyed transport sends one attempt and never refreshes; no account token at all is a credential failure", async () => {
-  const { calls, transport } = keyed([() => new Response("", { status: 401 })]);
-  const refused = await transport.send("/responses", HTTP_METHOD.POST, "{}");
-  assert.ok(refused instanceof Response && refused.status === 401);
-  assert.equal(calls.length, 1);
-
+test("no account token at all is a credential failure, and nothing is sent", async () => {
   const signedOut = hosted([], [undefined]);
   const failure = await signedOut.transport.send("/responses", HTTP_METHOD.POST, "{}");
   assert.ok(!(failure instanceof Response) && failure.failure === MODEL_FAILURE.CREDENTIAL);
@@ -173,42 +162,34 @@ test("a token refreshed for another account never carries this turn's input", as
 
 test("the brain asks for its own deadline, and an explicit one replaces it", () => {
   assert.equal(BRAIN_REQUEST_TIMEOUT_MS, 90_000);
-  assert.equal(keyed([]).transport.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
   assert.equal(hosted([]).transport.requestTimeoutMs, BRAIN_REQUEST_TIMEOUT_MS);
-  const tighter = keyedBrainTransport({
+  const tighter = hostedBrainTransport({
     baseUrl: BASE,
-    apiKey: "sk-test",
+    readAccessToken: () => Effect.succeed("token-1"),
+    refreshAccount: () => Effect.void,
     requestTimeoutMs: 5_000,
     now: () => NOW,
   });
   assert.equal(tighter.requestTimeoutMs, 5_000);
 });
 
-test("a 429 earns the bounded Retry-After or the fixed cooldown on either transport, and a spent allowance waits for its reset", () => {
-  const { transport } = keyed([]);
-  const header = transport.quietUntil(
-    new Response("", { status: 429, headers: { "retry-after": "7" } }),
-  );
-  assert.deepEqual(header, {
-    until: NOW + 7_000,
-    message: "OpenAI brain turns are rate limited; pausing for 7s",
-  });
-  assert.equal(
-    transport.quietUntil(new Response("", { status: 429 })).until,
-    NOW + BRAIN_RATE_LIMIT_COOLDOWN_MS,
-  );
-  assert.equal(
-    transport.quietUntil(new Response("", { status: 429, headers: { "retry-after": "86400" } }))
-      .until,
-    NOW + BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
-  );
-
+test("a 429 earns the bounded Retry-After or the fixed cooldown, and a spent allowance waits for its reset", () => {
   const service = hosted([]);
   const throttle = new Response("", { status: 429, headers: { "retry-after": "7" } });
   assert.deepEqual(service.transport.quietUntil(throttle), {
     until: NOW + 7_000,
     message: "Hosted brain turns are rate limited; pausing for 7s",
   });
+  assert.equal(
+    service.transport.quietUntil(new Response("", { status: 429 })).until,
+    NOW + BRAIN_RATE_LIMIT_COOLDOWN_MS,
+  );
+  assert.equal(
+    service.transport.quietUntil(
+      new Response("", { status: 429, headers: { "retry-after": "86400" } }),
+    ).until,
+    NOW + BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
+  );
   const resetsAt = NOW + 3_600_000;
   assert.deepEqual(
     service.transport.quietUntil(throttle, {
