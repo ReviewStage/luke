@@ -75,12 +75,12 @@ test("an answered inference returns unchanged and records counts, kinds, and usa
 
 test("the model travels on the record when the adapter names one", async () => {
   const records: BrainRequestTraceRecord[] = [];
-  const keyed = tracedModelAdapter(adapterAnswering(ANSWERED, "gpt-test"), (record) =>
+  const named = tracedModelAdapter(adapterAnswering(ANSWERED, "gpt-test"), (record) =>
     records.push(record),
   );
-  await keyed.respond(INPUT, OPTIONS);
+  await named.respond(INPUT, OPTIONS);
   assert.equal(records[0]?.model, "gpt-test");
-  assert.equal(keyed.model, "gpt-test");
+  assert.equal(named.model, "gpt-test");
   const hosted = tracedModelAdapter(adapterAnswering(ANSWERED), (record) => records.push(record));
   await hosted.respond(INPUT, OPTIONS);
   assert.ok(records[1] && !("model" in records[1]));
@@ -160,7 +160,7 @@ test("quiet, capabilities, and counting pass through the wrapped adapter untouch
   );
 });
 
-test("a keyed turn records that it asked for a prefix cache, and what the provider answered from one", async () => {
+test("a turn records that it asked for a prefix cache, and what the provider answered from one", async () => {
   const cached = responsesModelAnswer({
     output: [
       { type: "message", role: "assistant", content: [{ type: "output_text", text: "ok" }] },

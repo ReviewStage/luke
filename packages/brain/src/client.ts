@@ -9,7 +9,6 @@ import {
   type CallAnswer,
   type CallCredential,
   callAnswered,
-  fixedBearer,
   HOSTED_API_ERROR,
   HOSTED_BRAIN_CONTRACT_VERSION,
   HOSTED_SERVICE_PATH,
@@ -23,7 +22,6 @@ import {
   HTTP_METHOD,
   HTTP_STATUS,
   type HttpMethod,
-  text,
   type UnparsedWireValue,
   unparsedWire,
   wireRecord,
@@ -162,10 +160,10 @@ export class BrainTransport {
   }
 
   /**
-   * What a 429 means. The bounded `Retry-After` wait is the floor every
-   * transport takes, so a hosted developer and a keyed one wait the same way
-   * for the same provider limit; a body naming a later reset — a spent daily
-   * allowance — stands the transport down until then instead.
+   * What a 429 means. The bounded `Retry-After` wait is the floor: the
+   * service relays the provider's own limit, and the transport waits for it
+   * the same way; a body naming a later reset — a spent daily allowance —
+   * stands the transport down until then instead.
    */
   quietUntil(response: Response, body?: UnparsedWireValue): Quiet {
     const record = wireRecord(unparsedWire(body));
@@ -212,22 +210,6 @@ export class BrainTransport {
     }
     return capabilities;
   }
-}
-
-/** The developer's own key straight to the provider: one header, one attempt, nothing to renew. */
-export function keyedBrainTransport(
-  options: BrainTransportOptions & { apiKey: string },
-): BrainTransport {
-  // Destructured rather than spread: the key travels no further than the one
-  // credential that holds it.
-  const { apiKey, ...addressed } = options;
-  const key = text(apiKey);
-  if (!key) throw new Error("OpenAI API key must not be empty");
-  return new BrainTransport({
-    ...addressed,
-    credential: fixedBearer(key),
-    label: "OpenAI brain turns",
-  });
 }
 
 /**
