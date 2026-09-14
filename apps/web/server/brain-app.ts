@@ -391,9 +391,10 @@ function prefetch(seams: BrainSeams) {
 }
 
 /**
- * POST: one vector per text for the desktop's notebook index, under the
- * embedding model this build fixes. The texts are notebook chunks the
- * desktop chose to index; the service embeds them and keeps none.
+ * POST: one vector per text, under the embedding model this build fixes; the
+ * service embeds the texts and keeps none. Its one caller was the desktop's
+ * notebook index, deleted with the SQLite store (LUKE-143); the operation
+ * stays in the contract and nothing calls it today.
  */
 function embed(seams: BrainSeams) {
   return brainOperation(seams, {

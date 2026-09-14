@@ -241,29 +241,18 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   because the ports beneath them do: `compaction.ts`'s adapters await
   `model.respond`, and `context-engine.ts`'s engines await their lifecycle
   hooks, both OpenClaw ports of `b7528507` that import nothing from `effect`.
-- **`packages/brain/src/store/store-client.ts`** — `StoreClient`'s promise
-  face over the store's Rpc client. The client's own door is `request`, an
-  effect over that Rpc client that runs nothing, and what still stands on the
-  promise face beside it is exactly two interfaces: `BrainStateRepository` and
-  `ChildStore`, read by OpenClaw ports (`packages/brain/src/state-store.ts`,
-  `packages/runtime/src/children.ts`) that may not import `effect`, so neither
-  can be stated as effects while its port stands. What would end this row is a
-  decision about the ports themselves, not an implementation detail of this
-  migration. `NotebookMemoryStore` (`packages/memory/src/notebook-memory.ts`)
-  was the third interface this face answered and the one with no port behind
-  it; it answers effects over `request` now, and the notebook's index, a
-  scoped effect, yields them rather than wrapping promises.
-- **`packages/brain/src/store/database.ts`** — `StoreDatabase#run`, the
-  synchronous accessor two OpenClaw ports reach the store through:
-  `archives.ts` and `maintenance-run.ts` import nothing from `effect` and hold
-  a database handle, so the tables they read answer through the door's old
-  synchronous signature rather than an effect.
-- **`packages/host/src/store-wiring.ts`** and **`packages/brain/src/ledger.ts`**
-  — promise faces downstream of the ports above: `store-wiring.ts` composes
-  the host's store over `StoreClient`'s promises directly, and `ledger.ts`
-  holds `Promise`s of its own over `BrainStateStore` (`state-store.ts`'s
-  port). Neither imports `effect`; each stays a promise face because the port
-  it stands on does.
+- **`BrainStateRepository` and `ChildStore`**, answered in memory by
+  **`packages/host/src/held-conversations.ts`** — two interfaces read by
+  OpenClaw ports (`packages/brain/src/state-store.ts`,
+  `packages/runtime/src/children.ts`) that may not import `effect`, so
+  neither can be stated as effects while its port stands. What would end this
+  row is a decision about the ports themselves, not an implementation detail
+  of this migration. The SQLite store that once answered them through a
+  worker's Rpc client is deleted (LUKE-143), and the notebook index with it.
+- **`packages/brain/src/ledger.ts`** — a promise face downstream of the ports
+  above: it holds `Promise`s of its own over `BrainStateStore`
+  (`state-store.ts`'s port), imports nothing from `effect`, and stays a
+  promise face because the port it stands on does.
 - **`packages/brain/src/generation.ts`** — `retireGeneration`'s `Scope.close`
   over `Effect.runSync`: which generation stands is a `MutableRef`, so the
   fence a replacement raises is up before the caller's next statement with no
@@ -326,10 +315,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 - **The test-support edges** — `apps/web/tests/support/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
-  `apps/web/eve/evals/brain-host.eval.ts`, `packages/brain/src/store/testing.ts`,
-  and `packages/wire/src/testing/effect.ts` each build a runner (a
+  `apps/web/eve/evals/brain-host.eval.ts`, and
+  `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
-  statement, a synchronous database handle) so a suite or an offline eval
+  statement) so a suite or an offline eval
   still written on `node:assert` or a plain fixture can hold a promise where
   an effect is described; a test body is its own edge.
 

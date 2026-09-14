@@ -34,7 +34,7 @@ export const HOSTED_BRAIN_CONTRACT_VERSION = 2;
 export const HOSTED_BRAIN_OPERATION = {
   RESPOND: "respond",
   COUNT_TOKENS: "count-tokens",
-  /** Embeddings for the notebook index: texts in, one vector each out, under the model the service fixes. */
+  /** Embeddings: texts in, one vector each out, under the model the service fixes; without a caller since the desktop's notebook index went (LUKE-143). */
   EMBED: "embed",
   /**
    * The read prefetch's small inferences on the model the service fixes for

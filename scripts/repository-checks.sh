@@ -651,8 +651,8 @@ node --input-type=module -e '
       }
       // The whole path, never a tail of it: a basename lets two files named
       // `testing.ts` collide, so the paragraph about
-      // `packages/gateway/src/testing.ts` could answer for
-      // `packages/brain/src/store/testing.ts`, which had no paragraph at all.
+      // `packages/gateway/src/testing.ts` could answer for a `testing.ts` in
+      // another package that had no paragraph at all.
       // The path is also never the tail of a longer one, so `queue.effect.ts`
       // is not satisfied by a mention of
       // `packages/runtime/src/queue.effect.ts.bak`.
