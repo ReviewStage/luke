@@ -312,19 +312,6 @@ export const hostAssemblyLayer: Layer.Layer<
 
     const methods = yield* mergedMethods(Object.values(concerns));
     const service = yield* createGatewayService({
-      brain: {
-        current: (sessionKey) => brain.wiring.current(sessionKey),
-        agentForRun: (runId) => brain.wiring.agentForRun(runId),
-        allRequests: () => brain.wiring.allRequests(),
-        generationId: (sessionKey) => brain.wiring.store(sessionKey).generationId(),
-        children: brain.wiring.children,
-        configuration: () => brain.wiring.configuration(),
-        updateConfiguration: (patch) => brain.wiring.updateConfiguration(patch),
-      },
-      conversations: brain.operations,
-      // This Mac holds no notebook: the remembered facts and their index are
-      // the hosted brain's, so the status names no entries and no mode.
-      memory: { status: () => Effect.succeed({ entries: 0 }) },
       nodes: kernel.nodes,
       now,
       createId: kernel.createId,

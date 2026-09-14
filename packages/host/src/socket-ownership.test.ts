@@ -1,13 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
-import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   GATEWAY_CLIENT_ROLE,
-  GATEWAY_ERROR,
   GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
-  GATEWAY_SHUTDOWN_DEFAULTS,
   gatewayClient,
   NODE_CAPABILITY_STATUS,
   shutdownGatewayEffect,
@@ -19,109 +15,34 @@ import {
   layerGatewaySocket,
   WEB_SOCKET_GATEWAY_DEFAULTS,
 } from "@sidecar/gateway/websocket";
-import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
-import { isRecord, type WireValue } from "@sidecar/wire";
 import { Context, Effect, Layer, type Scope } from "effect";
 import { test } from "vitest";
-import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
-import type { ConversationOperations } from "./conversation-operations.js";
 import { HOST_NATIVE_NODE_ID, HOST_NODE_CAPABILITY } from "./node-capabilities.js";
-import { createGatewayService } from "./service.js";
+import { createGatewayService, type GatewayService } from "./service.js";
 
 /**
  * The ownership the client and host boundary claims, exercised over a real
- * socket: the host holds the asks and the Conversation; a client
- * that dies takes none of it with it; the next client finds it all; the
- * host's native asks answer typed unavailable while no client stands; and
- * the explicit shutdown counts what the durable records still hold.
+ * socket: the host's native asks answer typed unavailable while no client
+ * stands, and the explicit shutdown ends at its deadline with what did not
+ * settle counted.
  */
 const NOW = 1_800_000_000_000;
 const TOKEN = "a-shared-secret";
 
-function record(overrides: Partial<BrainRequestRecord> = {}): BrainRequestRecord {
-  return {
-    runId: "run-1",
-    submissionId: "sub-1",
-    origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    question: "what needs me?",
-    status: BRAIN_REQUEST_STATUS.RUNNING,
-    revision: 1,
-    acceptedAt: NOW,
-    performedActions: 0,
-    unknownActions: 0,
-    ...overrides,
-  };
-}
-
-/**
- * A host over a fake brain whose records are "persisted" into a separate
- * store the way the ledger persists them: a cancellation that fails to
- * persist leaves the persisted record running, which is what a launch finds.
- */
-function fakeHost(options: { persistCancellations?: boolean } = {}) {
+function fakeHost() {
   return Effect.gen(function* () {
     let ids = 0;
-    let runs = 0;
-    const live = new Map<string, BrainRequestRecord>();
-    const persisted = new Map<string, BrainRequestRecord>();
-    // SAFETY: the service reads only these members off an agent; the fixture stands in for the rest.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- A fake agent is stood up whole for the host under test.
-    const agent = {
-      submitAsk: (submission: BrainSubmission) =>
-        Effect.sync(() => {
-          const runId = `run-${++runs}`;
-          const held = record({
-            runId,
-            submissionId: submission.submissionId,
-            question: submission.question,
-          });
-          live.set(runId, held);
-          persisted.set(runId, held);
-          return { outcome: "accepted", runId, acceptedAt: NOW };
-        }),
-      request: (runId: string) => live.get(runId),
-      waitAsk: (runId: string) => Effect.sync(() => live.get(runId)),
-      cancelAsk: (runId: string) =>
-        Effect.sync(() => {
-          const held = live.get(runId);
-          if (!held) return undefined;
-          const cancelled = { ...held, status: BRAIN_REQUEST_STATUS.CANCELLED, settledAt: NOW + 1 };
-          live.set(runId, cancelled);
-          if (options.persistCancellations !== false) persisted.set(runId, cancelled);
-          return cancelled;
-        }),
-      markAskRecorded: () => Effect.succeed(true),
-    } as unknown as BrainAgent;
     const service = yield* createGatewayService({
-      brain: {
-        current: () => agent,
-        agentForRun: (runId) => (live.has(runId) ? agent : undefined),
-        allRequests: () => [...live.values()],
-        generationId: () => "gen-1",
-        // SAFETY: no test here reaches a child; the fixture stands in for the service.
-        children: {} as ChildRunService,
-        // SAFETY: only the revision is read; the fixture stands in for the snapshot.
-        configuration: () => ({ revision: 1 }) as unknown as ResolvedConfiguration,
-        updateConfiguration: () => [],
-      },
-      // SAFETY: the tests reach Conversation and the deletion alone; the fixture stands in for the rest.
-      conversations: {
-        deleteConversation: () => Effect.succeed(CONVERSATION_DELETE_OUTCOME.COMPLETE),
-        directory: () => [],
-      } as unknown as ConversationOperations,
-      memory: { status: () => Effect.succeed({}) },
       now: () => NOW,
       createId: () => `id-${++ids}`,
     });
-    return { service, live, persisted, agent };
+    return { service };
   });
 }
 
 /** One host's own methods on a real socket, bound for as long as the test's scope stands. */
 interface Listening {
   readonly port: number;
-  /** The shutdown's own press, as the drain's steps take it. */
-  readonly closeAdmissions: Effect.Effect<void>;
 }
 
 /**
@@ -131,9 +52,7 @@ interface Listening {
  * the same methods, the same readers, and the same node registry the service
  * holds.
  */
-const listen = (
-  service: Effect.Effect.Success<ReturnType<typeof fakeHost>>["service"],
-): Effect.Effect<Listening, never, Scope.Scope> =>
+const listen = (service: GatewayService): Effect.Effect<Listening, never, Scope.Scope> =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
       layerGatewaySocket({
@@ -142,10 +61,7 @@ const listen = (
       }),
     ).pipe(Effect.orDie);
     const binding = Context.get(context, GatewaySocketBinding);
-    return {
-      port: binding.port,
-      closeAdmissions: binding.closeAdmissions,
-    };
+    return { port: binding.port };
   });
 
 function client(port: number, clientId: string) {
@@ -164,49 +80,6 @@ function client(port: number, clientId: string) {
     return { connection: connected.connection, gateway };
   });
 }
-
-function recordOf(value: WireValue | undefined) {
-  assert.ok(isRecord(value));
-  return value;
-}
-
-it.live(
-  "an ask survives the client that submitted it dying, and the next client reads it from the host",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const f = yield* fakeHost();
-        const { port } = yield* listen(f.service);
-        const first = yield* client(port, "desktop-1");
-        const submitted = yield* first.gateway.call(
-          GATEWAY_METHOD.RUN_SUBMIT,
-          {
-            submissionId: "sub-1",
-            question: "what needs me?",
-            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-          },
-          { idempotencyKey: "sub-1" },
-        );
-        assert.ok(submitted.ok);
-        assert.equal(recordOf(submitted.result).runId, "run-1");
-        // The client is gone; the host is not.
-        yield* first.connection.close();
-        yield* Effect.sleep("20 millis");
-        assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-        // The next client reads the run from the host; the hello's snapshot
-        // carries no runs, since no client draws them.
-        const second = yield* client(port, "desktop-2");
-        const hello = yield* second.gateway.call(GATEWAY_METHOD.HELLO);
-        assert.ok(hello.ok);
-        assert.equal(recordOf(recordOf(hello.result).snapshot).runs, undefined);
-        const listed = yield* second.gateway.call(GATEWAY_METHOD.RUN_LIST);
-        assert.ok(listed.ok);
-        const runs = recordOf(listed.result).runs;
-        assert.ok(Array.isArray(runs) && runs.length === 1);
-        yield* second.connection.close();
-      }),
-    ),
-);
 
 it.live("while no client stands, a native capability the host needs answers unavailable", () =>
   Effect.scoped(
@@ -235,69 +108,6 @@ it.live("while no client stands, a native capability the host needs answers unav
       assert.equal(absent.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
     }),
   ),
-);
-
-it.live(
-  "the explicit shutdown closes admissions, cancels what runs, and counts unresolved from the persisted records, so a cancellation that never landed stays recoverable",
-  () =>
-    Effect.forEach(
-      [true, false],
-      (persistCancellations: boolean) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const f = yield* fakeHost({ persistCancellations });
-            const { port, closeAdmissions } = yield* listen(f.service);
-            const desktop = yield* client(port, "desktop");
-            const submitted = yield* desktop.gateway.call(
-              GATEWAY_METHOD.RUN_SUBMIT,
-              { submissionId: "sub-q", question: "long", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-              { idempotencyKey: "sub-q" },
-            );
-            assert.ok(submitted.ok);
-            const report = yield* shutdownGatewayEffect(
-              {
-                closeAdmissions,
-                cancelActive: Effect.gen(function* () {
-                  const cancelled: string[] = [];
-                  for (const held of f.live.values()) {
-                    if (held.status !== BRAIN_REQUEST_STATUS.RUNNING) continue;
-                    cancelled.push(held.runId);
-                    yield* f.agent.cancelAsk(held.runId);
-                  }
-                  return cancelled;
-                }),
-                awaitSettled: Effect.void,
-                persistUnresolved: Effect.sync(
-                  () =>
-                    [...f.persisted.values()].filter(
-                      (held) =>
-                        held.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                        held.status === BRAIN_REQUEST_STATUS.RUNNING,
-                    ).length,
-                ),
-              },
-              { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS },
-            );
-            assert.deepEqual(report.cancelled, ["run-1"]);
-            assert.equal(report.settled, true);
-            // A cancellation the store took leaves nothing unresolved; one it did
-            // not leaves the run running on disk, which the next launch marks
-            // interrupted and never replays.
-            assert.equal(report.unresolved, persistCancellations ? 0 : 1);
-            // The door is closed: a new ask is refused as shutting down, a read still answers.
-            const refused = yield* desktop.gateway.call(
-              GATEWAY_METHOD.RUN_SUBMIT,
-              { submissionId: "sub-late", question: "more", origin: BRAIN_REQUEST_ORIGIN.SPOKEN },
-              { idempotencyKey: "sub-late" },
-            );
-            assert.equal(refused.ok, false);
-            if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.SHUTTING_DOWN);
-            assert.ok((yield* desktop.gateway.call(GATEWAY_METHOD.RUN_LIST)).ok);
-            yield* desktop.connection.close();
-          }),
-        ),
-      { discard: true },
-    ),
 );
 
 test("a shutdown whose cancellation hangs still ends at the deadline with what did not settle counted", async () => {

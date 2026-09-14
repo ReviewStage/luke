@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import type { BrainAgent, BrainRequestRecord, BrainSubmission } from "@sidecar/brain";
+import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
 import { BRAIN_REQUEST_ORIGIN, BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
-import { maximumAskLength } from "@sidecar/session";
 import { Effect, Fiber } from "effect";
 import { test } from "vitest";
-import { operatorOverBrain } from "../testing/index.js";
 import { followBrainRequests, publishRuns } from "./publication.js";
 
 const NOW = 1_800_000_000_000;
@@ -48,19 +46,6 @@ function record(overrides: RecordOverrides = {}): BrainRequestRecord {
   );
 }
 
-/** A brain that accepts every submission into one run and remembers what it was asked. */
-function acceptingBrain(asked: BrainSubmission[]): BrainAgent {
-  // SAFETY: the ask path reads only `submitAsk` and `request` off the agent; the fixture stands in for the rest.
-  return {
-    submitAsk: (submission: BrainSubmission) =>
-      Effect.sync(() => {
-        asked.push(submission);
-        return { outcome: "accepted", runId: "run-1", acceptedAt: NOW };
-      }),
-    request: () => record({ status: BRAIN_REQUEST_STATUS.QUEUED }),
-  } as unknown as BrainAgent;
-}
-
 /** A brain that only remembers which runs were marked taken, and when. */
 function markingBrain(
   marked: { runId: string; at: number }[],
@@ -75,35 +60,6 @@ function markingBrain(
     request: (runId) => records().find((record) => record.runId === runId),
   };
 }
-
-it.scoped("an ask with no brain is refused in fixed words", () =>
-  Effect.gen(function* () {
-    const operator = yield* operatorOverBrain({ current: () => undefined });
-    const result = yield* operator.submit({
-      submissionId: "sub-1",
-      question: "what needs me?",
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    });
-    assert.deepEqual(result, { outcome: "rejected", reason: "absent" });
-  }),
-);
-
-it.scoped("an ask is bounded and handed to the brain whole under its own submission id", () =>
-  Effect.gen(function* () {
-    const asked: BrainSubmission[] = [];
-    const long = `  ${"a".repeat(maximumAskLength + 50)}`;
-    const operator = yield* operatorOverBrain({ current: () => acceptingBrain(asked) });
-    const result = yield* operator.submit({
-      submissionId: "sub-1",
-      question: long,
-      origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-    });
-    assert.deepEqual(result, { outcome: "accepted", runId: "run-1", acceptedAt: NOW });
-    assert.equal(asked[0]?.question.length, maximumAskLength);
-    assert.equal(asked[0]?.submissionId, "sub-1");
-    assert.equal(asked[0]?.origin, BRAIN_REQUEST_ORIGIN.SPOKEN);
-  }),
-);
 
 test("a run's end is marked taken once, at the moment it settled, decided against the live record", async () => {
   const marked: { runId: string; at: number }[] = [];
