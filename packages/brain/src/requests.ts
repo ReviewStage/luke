@@ -345,7 +345,7 @@ export interface BrainSubmission {
  */
 export const BRAIN_ASK_REFUSAL = {
   [BRAIN_SUBMISSION_REJECTION.ABSENT]:
-    "I can't reach my judgment right now: this build thinks only on an OpenAI key, and none is connected.",
+    "I can't reach my judgment right now: no Luke account is signed in on this Mac.",
   [BRAIN_SUBMISSION_REJECTION.EMPTY]: "I didn't catch an ask in that.",
   [BRAIN_SUBMISSION_REJECTION.PERSISTENCE]:
     "I couldn't write that ask down, so I haven't taken it. Ask me again in a moment.",
