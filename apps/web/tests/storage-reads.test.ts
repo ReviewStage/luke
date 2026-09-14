@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -11,6 +10,7 @@ import {
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -26,6 +26,7 @@ import {
   insertEvent as insertEventRow,
   insertMessage as insertMessageRow,
   insertTurn as insertTurnRow,
+  instantColumn,
   type MessageRow as MessageInsertRow,
   POSTGRES_ERROR,
   readConversationById,
@@ -133,7 +134,7 @@ async function countConversations(id: string): Promise<number> {
 }
 
 function readRecords(
-  read: Effect.Effect.Success<ReturnType<typeof database.store.messages.list>>,
+  read: Effect.Success<ReturnType<typeof database.store.messages.list>>,
 ): readonly StoredMessageRecord[] {
   assert.equal(read.ok, true);
   return read.ok ? read.value : [];
@@ -390,9 +391,9 @@ test("a cleared conversation disappears from every read on the next call, and a 
   const [opened] = await readConversationById(database.run, outcome.opened);
   assert.equal(opened?.kind, CONVERSATION_KIND.MAIN);
   assert.equal(opened?.deleted_at, null);
-  assert.deepEqual(opened?.created_at, NOW);
+  assert.deepEqual(instantColumn(opened?.created_at), NOW);
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(stamped?.deleted_at, NOW);
+  assert.deepEqual(instantColumn(stamped?.deleted_at), NOW);
   assert.equal(await countConversations(main), 1);
   assert.equal((await readMessagesByConversation(database.run, main)).length, 3);
 });

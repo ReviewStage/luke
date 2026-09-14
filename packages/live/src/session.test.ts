@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import { RENDERER_CLIENT_EVENTS, RENDERER_SERVER_EVENTS } from "./events.js";
 import { LIVE_SCENE, sessionInstructions } from "./instructions.js";
@@ -74,7 +74,9 @@ test("the creation request carries the session and the WebRTC offer", () => {
 });
 
 function parseLiveCreateAnswer(value: UnparsedWireValue) {
-  return Either.getOrUndefined(readEither(liveCreateAnswerSchema)(value));
+  return Result.getOrUndefined(
+    readEither(liveCreateAnswerSchema, { excess: EXCESS_KEYS.DROP })(value),
+  );
 }
 
 test("the creation answer is read for its id and SDP, ignoring what else the service adds", () => {

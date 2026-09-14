@@ -21,7 +21,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import type { UserMessageMetadata, WireRecord } from "@sidecar/wire";
-import { Cause, Duration, Effect, Either, Exit, Fiber, Option } from "effect";
+import { Cause, Duration, Effect, Exit, Fiber, Option, Result } from "effect";
 import { BRAIN_DEFAULTS } from "./defaults.js";
 import { whenAborted } from "./effect/settled.js";
 import { CONTEXT_OPENING, claimOpenedContext, retireContext } from "./generation.js";
@@ -246,7 +246,7 @@ export class TurnRunner {
    * folded ones, then each ask's own words.
    */
   runAsk(inputs: readonly AskInput[]): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const waiting = [...inputs];
       while (waiting.length > 0) {
         const primary = waiting.shift();
@@ -316,7 +316,7 @@ export class TurnRunner {
           events: inboxEvents(generation.inbox),
           run,
         };
-        const { result, events } = yield* Effect.catchAllDefect(
+        const { result, events } = yield* Effect.catchDefect(
           this.#underDeadline(
             run,
             this.#turn(
@@ -365,9 +365,9 @@ export class TurnRunner {
    */
   #underDeadline<A>(run: RunControl, work: Effect.Effect<A>): Effect.Effect<A> {
     return Effect.scoped(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         yield* Effect.forkScoped(
-          Effect.zipRight(
+          Effect.andThen(
             Effect.sleep(Duration.millis(this.#options.executionDeadlineMs)),
             Effect.sync(() => {
               run.timedOut = true;
@@ -392,7 +392,7 @@ export class TurnRunner {
     primary: RunControl,
     result: TurnResult,
   ): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       for (const rider of riders) {
         this.#options.forgetRun(rider.runId);
         const { status, end } = runOutcomeOf(primary, result, this.#seam.stopped());
@@ -415,8 +415,8 @@ export class TurnRunner {
 
   /** The turn and its teller, for the ask's settlement that tells the turn's end after the record's. */
   #turn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<Omit<OpenedTurn, "run">> {
-    return Effect.gen(this, function* () {
-      const outcome = yield* Effect.catchAllDefect(this.#openTurn(plan, riders), () =>
+    return Effect.gen({ self: this }, function* () {
+      const outcome = yield* Effect.catchDefect(this.#openTurn(plan, riders), () =>
         Effect.succeed<OpenedTurn>({
           result: { outcome: TURN_OUTCOME.FAILED },
           run: plan.run,
@@ -453,7 +453,7 @@ export class TurnRunner {
 
   /** The turn itself, answering its result and the run it ran under; the door's refusals answer the plan's own. */
   #openTurn(plan: TurnPlan, riders: RunControl[]): Effect.Effect<OpenedTurn> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#seam.ready();
       // The generation's death is checked at the door of every turn, so a
       // memory that outlived its fortnight while the app sat idle is not read
@@ -521,7 +521,7 @@ export class TurnRunner {
       // stands under the one its own opening already armed.
       const running = this.#runTurn(plan, turnContext, execution, riders);
       const result = yield* Effect.ensuring(
-        Effect.catchAllDefect(plan.run ? running : this.#underDeadline(run, running), () =>
+        Effect.catchDefect(plan.run ? running : this.#underDeadline(run, running), () =>
           Effect.succeed<TurnResult>({ outcome: TURN_OUTCOME.FAILED }),
         ),
         Effect.sync(() => {
@@ -553,7 +553,7 @@ export class TurnRunner {
     execution: BrainActionExecution,
     riders: RunControl[],
   ): Effect.Effect<TurnResult> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation, context, run, events } = turnContext;
       const startedAt = this.#seam.now();
       let contextMark: ContextMark = context.mark();
@@ -593,7 +593,7 @@ export class TurnRunner {
       }
       let transcriptBytes = 0;
       // Everything between the turn's start and its end, in one fiber.
-      const driving = Effect.gen(this, function* () {
+      const driving = Effect.gen({ self: this }, function* () {
         const attachedDeltas = yield* attachTranscriptDeltas(plan.events, {
           cursors: generation.cursors,
           read: (identity, cursor) => this.#options.readTranscriptSince(identity, cursor),
@@ -622,8 +622,8 @@ export class TurnRunner {
           contextMark = context.mark();
           cursorMark = generation.cursors.persisted();
         };
-        return yield* Effect.catchAllDefect(
-          Effect.gen(this, function* () {
+        return yield* Effect.catchDefect(
+          Effect.gen({ self: this }, function* () {
             preparation = yield* awaited(() =>
               this.#options.prepareTurn({
                 kind: BRAIN_TURN_KIND.TURN,
@@ -633,16 +633,16 @@ export class TurnRunner {
             );
             policy = this.#resolvePolicy(preparation, plan.trigger);
             const prepared = this.#revoked(turnContext)
-              ? Either.right(undefined)
-              : yield* Effect.either(
+              ? Result.succeed(undefined)
+              : yield* Effect.result(
                   this.#options.compactIfNeeded(turnContext, preparation.prompt),
                 );
             if (this.#revoked(turnContext)) return revocation();
-            if (Either.isLeft(prepared)) {
+            if (Result.isFailure(prepared)) {
               // The request would not fit and the context could not be folded:
               // the run fails recoverably, and what stands is exactly what stood.
               run.compactionFailed = true;
-              gathering.error = `compaction required: ${prepared.left.reason}`;
+              gathering.error = `compaction required: ${prepared.failure.reason}`;
               return { outcome: TURN_OUTCOME.FAILED };
             }
             // The admission's compaction, if any, is the new rollback point: a
@@ -694,13 +694,13 @@ export class TurnRunner {
       // delta read, a recall, a model answer — settles at once; a run cut
       // short that way is revoked, and a defect that escaped it ends the turn
       // where it always did, before this settlement.
-      const running = yield* Effect.fork(driving);
-      yield* Effect.fork(
-        Effect.zipRight(whenAborted(turnContext.signal), Fiber.interrupt(running)),
+      const running = yield* Effect.forkChild(driving);
+      yield* Effect.forkChild(
+        Effect.andThen(whenAborted(turnContext.signal), Fiber.interrupt(running)),
       );
       const exit = yield* Fiber.await(running);
       if (Exit.isSuccess(exit)) failure = exit.value;
-      else if (Cause.isInterruptedOnly(exit.cause)) failure = revocation();
+      else if (Cause.hasInterruptsOnly(exit.cause)) failure = revocation();
       else return yield* Effect.failCause(exit.cause);
 
       // An unrecorded run's journal has done its work once the turn's actions have
@@ -738,7 +738,7 @@ export class TurnRunner {
             gathering.error = "turn revoked before delivery";
             break;
           }
-          yield* Effect.catchAllDefect(
+          yield* Effect.catchDefect(
             awaited(() => this.#options.deliver(delivery)),
             (deliverError) =>
               Effect.sync(() => {
@@ -796,7 +796,7 @@ export class TurnRunner {
    * generation standing without a context, its stored checkpoint untouched.
    */
   #restoreContext(turnContext: TurnContext, mark: ContextMark): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { generation, context } = turnContext;
       const reopened = yield* claimOpenedContext(
         this.#options.runtime.openContext(
@@ -841,7 +841,7 @@ export class TurnRunner {
   #recall(
     turnContext: TurnContext,
   ): Effect.Effect<{ opening: readonly string[]; standing: readonly string[] }> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const context = turnContext.context;
       const inherited = this.#options.inheritedContext;
       if (context.checkpoint().items.length === 0 && inherited && inherited.length > 0) {
@@ -852,7 +852,7 @@ export class TurnRunner {
       }
       const memory = this.#options.memory;
       if (!memory) return { opening: [], standing: [] };
-      const recalled = yield* Effect.catchAllDefect(
+      const recalled = yield* Effect.catchDefect(
         memory.provider.recall(memory.scope, {
           items: context.checkpoint().items,
           signal: turnContext.signal,
@@ -890,7 +890,7 @@ export class TurnRunner {
     policy: EffectiveToolPolicy,
     turnContext: TurnContext,
   ): Effect.Effect<readonly PrefetchedRead[]> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const prefetch = this.#options.prefetch;
       if (
         !prefetch ||
@@ -947,7 +947,7 @@ export class TurnRunner {
       advanceMark: () => Promise<void>;
     },
   ): Effect.Effect<RuntimeRunEnd> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { context, run, events } = turnContext;
       const runId = run.runId;
       const tools = createTurnToolExecutor(

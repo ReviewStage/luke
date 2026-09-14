@@ -1,12 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import * as Headers from "@effect/platform/Headers";
-import * as HttpClient from "@effect/platform/HttpClient";
-import type * as HttpClientError from "@effect/platform/HttpClientError";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { withoutTrailingSlash } from "@sidecar/wire";
 import { Clock, Duration, Effect, Option, Redacted, Schedule, Schema } from "effect";
-import type { ParseError } from "effect/ParseResult";
+import * as Headers from "effect/unstable/http/Headers";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import type * as HttpClientError from "effect/unstable/http/HttpClientError";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
 
 /**
@@ -49,10 +48,10 @@ export const PROBE_DOOR = {
   OPTIONS_ALLOWLIST: "options-allowlist",
 } as const;
 export type ProbeDoor = (typeof PROBE_DOOR)[keyof typeof PROBE_DOOR];
-export const ProbeDoorSchema = Schema.Literal(
+export const ProbeDoorSchema = Schema.Literals([
   PROBE_DOOR.BYPASS_SECRET,
   PROBE_DOOR.OPTIONS_ALLOWLIST,
-);
+]);
 
 export const PROBE_METHOD = {
   GET: "GET",
@@ -145,17 +144,17 @@ export function planProbes(door: ProbeDoor, paths: ProbePaths): readonly Planned
 
 const VERCEL_CONFIG_FILE = "vercel.json";
 const VercelCrons = Schema.Struct({
-  crons: Schema.optionalWith(Schema.Array(Schema.Struct({ path: Schema.String })), {
-    default: () => [],
-  }),
+  crons: Schema.Array(Schema.Struct({ path: Schema.String })).pipe(
+    Schema.withDecodingDefaultType(Effect.succeed([])),
+  ),
 });
-const decodeVercelCrons = Schema.decodeUnknown(Schema.parseJson(VercelCrons));
+const decodeVercelCrons = Schema.decodeUnknownEffect(Schema.fromJsonString(VercelCrons));
 
 /** The caller paths of the checkout, read the way the callers check reads them, and the cron paths of its `vercel.json`. */
 export function readProbePaths(input: {
   readonly repoRoot: string;
   readonly web: string;
-}): Effect.Effect<ProbePaths, ParseError> {
+}): Effect.Effect<ProbePaths, Schema.SchemaError> {
   return Effect.gen(function* () {
     const report = yield* Effect.promise(() => checkApiCallers(input));
     const config = yield* decodeVercelCrons(
@@ -249,7 +248,7 @@ export const PROBE_REQUEST_INIT: RequestInit = { redirect: "manual" };
 
 /** A dropped connection is retried a few times; an answer, whatever its status, is never retried. */
 export const TRANSPORT_RETRY = Schedule.exponential(Duration.seconds(1)).pipe(
-  Schedule.intersect(Schedule.recurs(3)),
+  Schedule.upTo({ times: 3 }),
 );
 const PROBE_CONCURRENCY = 4;
 
@@ -270,40 +269,46 @@ function probeRequest(
 }
 
 /** Every planned request sent to the target and judged; the answer's body is never read. */
-export function probeDeployment(
+export const probeDeployment = /* @__PURE__ */ Effect.fn("probeDeployment")(function* (
   target: ProbeTarget,
   plan: readonly PlannedRequest[],
-): Effect.Effect<readonly ProbeResult[], HttpClientError.HttpClientError, HttpClient.HttpClient> {
-  return Effect.gen(function* () {
-    const client = yield* HttpClient.HttpClient;
-    const now = yield* Clock.currentTimeMillis;
-    return yield* Effect.forEach(
-      plan,
-      (planned, index) =>
-        client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
-          Effect.map((response): ProbeResult => {
-            const answer: ProbeAnswer = {
-              status: response.status,
-              vercelError: Headers.get(response.headers, HEADER.VERCEL_ERROR),
-              location: Headers.get(response.headers, HEADER.LOCATION),
-            };
-            return {
-              ...planned,
-              status: answer.status,
-              vercelError: Option.getOrUndefined(answer.vercelError),
-              verdict: judge(planned, answer),
-            };
-          }),
-          Effect.scoped,
-          Effect.retry({
-            schedule: TRANSPORT_RETRY,
-            while: (error) => error._tag === "RequestError",
-          }),
-        ),
-      { concurrency: PROBE_CONCURRENCY },
-    );
-  });
-}
+): Effect.fn.Return<
+  readonly ProbeResult[],
+  HttpClientError.HttpClientError,
+  HttpClient.HttpClient
+> {
+  const client = yield* HttpClient.HttpClient;
+  const now = yield* Clock.currentTimeMillis;
+  return yield* Effect.forEach(
+    plan,
+    (planned, index) =>
+      client.execute(probeRequest(target, planned, `${now}-${index}`)).pipe(
+        Effect.map((response): ProbeResult => {
+          const answer: ProbeAnswer = {
+            status: response.status,
+            vercelError: Headers.get(response.headers, HEADER.VERCEL_ERROR),
+            location: Headers.get(response.headers, HEADER.LOCATION),
+          };
+          return {
+            ...planned,
+            status: answer.status,
+            vercelError: Option.getOrUndefined(answer.vercelError),
+            verdict: judge(planned, answer),
+          };
+        }),
+        Effect.scoped,
+        Effect.retry({
+          // Every failure that lands before an answer does — a dropped
+          // connection, a request this could neither address nor encode —
+          // is one `HttpClientError` in v4, and what tells it from a
+          // refused answer is that it carries no response of its own.
+          schedule: TRANSPORT_RETRY,
+          while: (error) => error.response === undefined,
+        }),
+      ),
+    { concurrency: PROBE_CONCURRENCY },
+  );
+});
 
 export function probeFailures(report: ProbeReport): readonly ProbeResult[] {
   return report.results.filter((result) => result.verdict !== VERDICT.OK);

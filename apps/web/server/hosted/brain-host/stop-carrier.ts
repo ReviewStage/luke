@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import { EVE_CANCEL_OUTCOME, type EveSessions } from "./eve-sessions.js";
 
@@ -25,21 +25,19 @@ export interface StopCarrierSeams {
  * the same store effect every other write here is, on the fiber the event
  * arrived on.
  */
-export function carryStop(
+export const carryStop = /* @__PURE__ */ Effect.fn("carryStop")(function* (
   seams: StopCarrierSeams,
   target: ConversationTarget,
   sessionId: string,
   eveTurnId: string,
   turnId: string,
-): Effect.Effect<void, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
-    if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
-      seams.report(
-        `The Stop on turn ${eveTurnId} of session ${sessionId} was refused by eve (${cancelled.status}).`,
-      );
-      return;
-    }
-    yield* seams.writer.requestTurnCancel(target, { turnId, at: new Date(seams.now()) });
-  });
-}
+): Effect.fn.Return<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const cancelled = yield* Effect.promise(() => seams.eve.cancel(sessionId, eveTurnId));
+  if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
+    seams.report(
+      `The Stop on turn ${eveTurnId} of session ${sessionId} was refused by eve (${cancelled.status}).`,
+    );
+    return;
+  }
+  yield* seams.writer.requestTurnCancel(target, { turnId, at: new Date(seams.now()) });
+});

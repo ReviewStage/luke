@@ -37,12 +37,14 @@ const CONVERSATION_DELETION_REFUSED = "the brain's memory could not be marked er
  * empty successor, and a credential rebuild landing meanwhile builds over the
  * same store, whose standing generation is that successor. This side keeps
  * no lines to forget: the Conversation the press clears is the service's,
- * and its soft delete is the conversation composer's own call.
+ * and its soft delete is the conversation composer's own call. The fence is
+ * the effect's own first step, so it stands as soon as whoever runs it
+ * reaches that step and before it waits on anything.
  */
-export const deleteConversationFlow = (
-  dependencies: ConversationDeletionDependencies,
-): Effect.Effect<ConversationDeleteOutcome> =>
-  Effect.gen(function* () {
+export const deleteConversationFlow = /* @__PURE__ */ Effect.fn("deleteConversationFlow")(
+  function* (
+    dependencies: ConversationDeletionDependencies,
+  ): Effect.fn.Return<ConversationDeleteOutcome> {
     const deletedAt = dependencies.now();
     const marked = yield* Effect.promise(() => dependencies.fenceBrain(deletedAt));
     if (!marked) {
@@ -52,4 +54,5 @@ export const deleteConversationFlow = (
       return CONVERSATION_DELETE_OUTCOME.REFUSED;
     }
     return CONVERSATION_DELETE_OUTCOME.COMPLETE;
-  });
+  },
+);

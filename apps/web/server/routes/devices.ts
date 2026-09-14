@@ -1,6 +1,6 @@
 import { devicesVaultApp } from "../devices-vault-app.js";
 import { productionDevicesVaultSeams } from "../hosted/vault-route.js";
-import { routeFromHttpApp } from "../route-effect.js";
+import { routeFromHttpRouter } from "../route-effect.js";
 
 /**
  * Registers (POST), heartbeats (PUT), and forgets (DELETE) the signed-in
@@ -8,4 +8,4 @@ import { routeFromHttpApp } from "../route-effect.js";
  * vault. The logic lives in `server/devices-vault-app.ts`; this file only
  * hands it the deployment's real seams.
  */
-export default routeFromHttpApp(devicesVaultApp(productionDevicesVaultSeams()));
+export default routeFromHttpRouter(devicesVaultApp(productionDevicesVaultSeams()));

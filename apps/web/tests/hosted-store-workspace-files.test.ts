@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { userSeal } from "../server/hosted/store/database";
 import {
@@ -42,7 +42,7 @@ const openUser = Effect.gen(function* () {
   return { userId, seal: userSeal(payloadKeyRing(TEST_PAYLOAD_SECRET), userId) };
 });
 
-it.layer(testSqlClient)("the workspace files over @effect/sql", (it) => {
+it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => {
   it.effect("seeds once, writes whole, and answers the instants as numbers", () =>
     Effect.gen(function* () {
       const { userId, seal } = yield* openUser;

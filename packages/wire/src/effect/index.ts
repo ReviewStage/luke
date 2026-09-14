@@ -7,6 +7,6 @@ export {
   refusalIssue,
   SchemaRefusalError,
   verbatimJsonSchema,
-  WireDescriptionAnnotationId,
+  WIRE_DESCRIPTION_ANNOTATION,
   wireRefusal,
 } from "./json-schema.js";

@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type HostedProjectsAnswer,
   type HostedRosterClient,
@@ -11,6 +10,7 @@ import {
   type SessionRoster,
 } from "@sidecar/session";
 import { Effect } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 
 export interface SnapshotRosterDependencies {
   client: Pick<HostedRosterClient, "observe">;
@@ -33,29 +33,27 @@ export interface SnapshotRosterDependencies {
  * does this: the observation loop's own pass is a fiber now, so the read is
  * yielded where the pass runs rather than run to a promise here.
  */
-export function drawSnapshotRoster(
+export const drawSnapshotRoster = /* @__PURE__ */ Effect.fn("drawSnapshotRoster")(function* (
   dependencies: SnapshotRosterDependencies,
-): Effect.Effect<void, never, HttpClient.HttpClient> {
+): Effect.fn.Return<void, never, HttpClient.HttpClient> {
   const { client, registry, isCurrent, report } = dependencies;
-  return Effect.gen(function* () {
-    const answer = yield* client.observe();
-    if (!isCurrent()) return;
-    if (!answer) {
-      report("Roster snapshot could not be read; the last roster stands.");
-      return;
+  const answer = yield* client.observe();
+  if (!isCurrent()) return;
+  if (!answer) {
+    report("Roster snapshot could not be read; the last roster stands.");
+    return;
+  }
+  for (const [providerId, observations] of snapshotRoster(answer)) {
+    const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];
+    try {
+      registry.replaceProvider({ id, displayName }, observations);
+    } catch (error) {
+      report(
+        `Roster snapshot could not be drawn (${providerId}): ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
-    for (const [providerId, observations] of snapshotRoster(answer)) {
-      const { id, displayName } = PROVIDER_IDENTITY_BY_ID[providerId];
-      try {
-        registry.replaceProvider({ id, displayName }, observations);
-      } catch (error) {
-        report(
-          `Roster snapshot could not be drawn (${providerId}): ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
-  });
-}
+  }
+});
 
 export interface SnapshotProjectsDependencies {
   client: Pick<HostedRosterClient, "projects">;
@@ -92,17 +90,15 @@ export function snapshotProjects(
  * is yielded the same way `drawSnapshotRoster` yields `observe()`, and for
  * the same reason.
  */
-export function drawSnapshotProjects(
+export const drawSnapshotProjects = /* @__PURE__ */ Effect.fn("drawSnapshotProjects")(function* (
   dependencies: SnapshotProjectsDependencies,
-): Effect.Effect<readonly ObservedWorkspaceProject[] | undefined, never, HttpClient.HttpClient> {
+): Effect.fn.Return<readonly ObservedWorkspaceProject[] | undefined, never, HttpClient.HttpClient> {
   const { client, isCurrent, report } = dependencies;
-  return Effect.gen(function* () {
-    const answer = yield* client.projects();
-    if (!isCurrent()) return undefined;
-    if (!answer) {
-      report("Workspace projects could not be read; the last list stands.");
-      return undefined;
-    }
-    return snapshotProjects(answer);
-  });
-}
+  const answer = yield* client.projects();
+  if (!isCurrent()) return undefined;
+  if (!answer) {
+    report("Workspace projects could not be read; the last list stands.");
+    return undefined;
+  }
+  return snapshotProjects(answer);
+});

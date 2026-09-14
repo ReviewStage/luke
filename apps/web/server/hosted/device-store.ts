@@ -1,10 +1,10 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { DeviceSeams } from "./devices.js";
 
 /**
- * The device seams over `@effect/sql`. A push token is unique across rows
+ * The device seams over `effect/unstable/sql`. A push token is unique across rows
  * because Apple issues one per installation: a reinstall that minted a fresh
  * installation id but kept its token takes the token off the old row in the
  * same transaction, so the row that can be addressed is always the one that
@@ -15,7 +15,7 @@ import type { DeviceSeams } from "./devices.js";
  * the old row, and a caller who takes nothing evicts nothing.
  */
 
-type DeviceFailure = SqlError | ParseResult.ParseError;
+type DeviceFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -30,11 +30,11 @@ const RegisterWriteSchema = Schema.Struct({
   userId: Schema.String,
   installationId: Schema.String,
   platform: Schema.String,
-  now: Schema.DateFromSelf,
+  now: Schema.Date,
   push: Schema.UndefinedOr(PushAddressSchema),
 });
 
-const upsertDeviceRow = SqlSchema.findOne({
+const upsertDeviceRow = SqlSchema.findOneOption({
   Request: RegisterWriteSchema,
   Result: DeviceIdRowSchema,
   execute: (write) =>
@@ -99,7 +99,7 @@ export function registerDevice(write: {
 const HeldDeviceSchema = Schema.Struct({ userId: Schema.String, deviceId: Schema.String });
 
 /** The account's own device row by id, or none: the one fact a voice session's device claim is admitted on. */
-export const findHeldDevice = SqlSchema.findOne({
+export const findHeldDevice = SqlSchema.findOneOption({
   Request: HeldDeviceSchema,
   Result: DeviceIdRowSchema,
   execute: (key) =>
@@ -113,9 +113,9 @@ export const findHeldDevice = SqlSchema.findOne({
 const TouchWriteSchema = Schema.Struct({
   userId: Schema.String,
   deviceId: Schema.String,
-  now: Schema.DateFromSelf,
-  activeUntil: Schema.NullishOr(Schema.DateFromSelf),
-  quietUntil: Schema.NullishOr(Schema.DateFromSelf),
+  now: Schema.Date,
+  activeUntil: Schema.NullishOr(Schema.Date),
+  quietUntil: Schema.NullishOr(Schema.Date),
   push: Schema.NullishOr(PushAddressSchema),
 });
 

@@ -1,9 +1,9 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import type { Fragment } from "@effect/sql/Statement";
 import { readEither } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
-import { Effect, Either, type ParseResult, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { Fragment } from "effect/unstable/sql/Statement";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_ROLE,
@@ -21,7 +21,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
-import { EpochMillisColumnSchema, optionalField } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
 
 /**
  * The per-resource reads a device polls with a cursor of its own — a
@@ -42,7 +42,7 @@ import { EpochMillisColumnSchema, optionalField } from "./database.js";
  * it; a page holding a row this build cannot read is refused whole, naming
  * the row's sequence, rather than answered with the row silently reshaped.
  *
- * Every read below is an `Effect<A, SqlError | ParseError, SqlClient>` over
+ * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` over
  * the ambient client, its statement the client's own tagged template and its
  * row a `Schema` decodes rather than trusts; the standing-conversation join
  * and the turn's changed-at expression are the two fragments every query
@@ -52,7 +52,7 @@ import { EpochMillisColumnSchema, optionalField } from "./database.js";
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-export type MessageReadFailure = SqlError | ParseResult.ParseError;
+export type MessageReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -154,17 +154,22 @@ function pageLimit(cursor: { readonly limit?: number }): number {
 const SelectedMessageRowSchema = Schema.Struct({
   id: Schema.String,
   seq: EpochMillisColumnSchema,
-  turnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(Schema.fromKey("turn_id")),
-  clientId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("client_id")),
+  turnId: Schema.NullOr(Schema.String),
+  clientId: Schema.String,
   role: Schema.String,
   parts: Schema.Any,
   metadata: Schema.NullOr(Schema.Any),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-  finishedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("finished_at"),
-  ),
+  createdAt: InstantColumnSchema,
+  finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
-});
+}).pipe(
+  Schema.encodeKeys({
+    turnId: "turn_id",
+    clientId: "client_id",
+    createdAt: "created_at",
+    finishedAt: "finished_at",
+  }),
+);
 
 type SelectedMessage = typeof SelectedMessageRowSchema.Type;
 
@@ -390,7 +395,7 @@ export function readMessageById(
 
 const FoundMessageIdSchema = Schema.Struct({ id: Schema.String });
 
-const findMessageIdByClientId = SqlSchema.findOne({
+const findMessageIdByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({
     conversationId: Schema.String,
     userId: Schema.String,
@@ -434,16 +439,21 @@ export interface StoredEventRecord {
 
 const EventRowSchema = Schema.Struct({
   id: Schema.String,
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  conversationId: Schema.String,
   seq: EpochMillisColumnSchema,
-  messageId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("message_id")),
+  messageId: Schema.String,
   kind: Schema.String,
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
+  deviceId: Schema.NullOr(Schema.String),
   payload: Schema.NullOr(Schema.Any),
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    conversationId: "conversation_id",
+    messageId: "message_id",
+    deviceId: "device_id",
+    createdAt: "created_at",
+  }),
+);
 
 type EventRow = typeof EventRowSchema.Type;
 
@@ -569,41 +579,40 @@ const TURN_COLUMNS =
 
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  userId: Schema.String,
+  conversationId: Schema.String,
   origin: Schema.String,
   status: Schema.String,
   /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
-  eveTurnId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("eve_turn_id"),
-  ),
+  eveTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
-  reasoningEffort: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("reasoning_effort"),
-  ),
-  promptHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("prompt_hash"),
-  ),
-  toolSetHash: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("tool_set_hash"),
-  ),
-  responseIds: Schema.propertySignature(Schema.NullOr(Schema.Array(Schema.String))).pipe(
-    Schema.fromKey("response_ids"),
-  ),
+  reasoningEffort: Schema.NullOr(Schema.String),
+  promptHash: Schema.NullOr(Schema.String),
+  toolSetHash: Schema.NullOr(Schema.String),
+  responseIds: Schema.NullOr(Schema.Array(Schema.String)),
   usage: Schema.NullOr(Schema.Any),
-  queuedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("queued_at")),
-  startedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("started_at"),
-  ),
-  settledAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("settled_at"),
-  ),
+  queuedAt: InstantColumnSchema,
+  startedAt: Schema.NullOr(InstantColumnSchema),
+  settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.propertySignature(Schema.NullOr(Schema.DateFromSelf)).pipe(
-    Schema.fromKey("cancel_requested_at"),
-  ),
-  changedAt: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("changed_at")),
-});
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  changedAt: Schema.String,
+}).pipe(
+  Schema.encodeKeys({
+    userId: "user_id",
+    conversationId: "conversation_id",
+    eveTurnId: "eve_turn_id",
+    reasoningEffort: "reasoning_effort",
+    promptHash: "prompt_hash",
+    toolSetHash: "tool_set_hash",
+    responseIds: "response_ids",
+    queuedAt: "queued_at",
+    startedAt: "started_at",
+    settledAt: "settled_at",
+    cancelRequestedAt: "cancel_requested_at",
+    changedAt: "changed_at",
+  }),
+);
 
 type TurnRow = typeof TurnRowSchema.Type;
 
@@ -661,7 +670,7 @@ export function listTurns(
     `;
   }).pipe(
     Effect.flatMap((rows) =>
-      Schema.decodeUnknown(Schema.Array(TurnRowSchema))(rows).pipe(
+      Schema.decodeUnknownEffect(Schema.Array(TurnRowSchema))(rows).pipe(
         Effect.map((decoded) => decoded.map(toStoredTurn)),
       ),
     ),
@@ -670,9 +679,9 @@ export function listTurns(
 
 const QueuedTurnRowSchema = Schema.Struct({
   id: Schema.String,
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
-  queuedAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("queued_at")),
-});
+  conversationId: Schema.String,
+  queuedAt: InstantColumnSchema,
+}).pipe(Schema.encodeKeys({ conversationId: "conversation_id", queuedAt: "queued_at" }));
 
 /** A queued turn as the opener reads it: the row, the conversation it waits on, and when it was queued. */
 export type QueuedTurnRecord = typeof QueuedTurnRowSchema.Type;
@@ -726,7 +735,7 @@ export function turnsNamed(
     `,
   ).pipe(
     Effect.flatMap((rows) =>
-      Schema.decodeUnknown(Schema.Array(TurnRowSchema))(rows).pipe(
+      Schema.decodeUnknownEffect(Schema.Array(TurnRowSchema))(rows).pipe(
         Effect.map((decoded) => decoded.map(toStoredTurn)),
       ),
     ),
@@ -747,8 +756,8 @@ const changedAtOrBeforeFragment = (sql: SqlClient.SqlClient, position: TurnCurso
 
 const TurnPositionRowSchema = Schema.Struct({
   id: Schema.String,
-  changedAt: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("changed_at")),
-});
+  changedAt: Schema.String,
+}).pipe(Schema.encodeKeys({ changedAt: "changed_at" }));
 
 /**
  * Where the account's turns stand: the cursor of the turn that changed last,
@@ -773,7 +782,7 @@ export function latestTurnPosition(
       limit 1
     `;
   }).pipe(
-    Effect.flatMap((rows) => Schema.decodeUnknown(Schema.Array(TurnPositionRowSchema))(rows)),
+    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(TurnPositionRowSchema))(rows)),
     Effect.map((rows) => rows[0]),
   );
 }
@@ -786,12 +795,12 @@ export function latestTurnPosition(
  * does not own.
  */
 const AuthorshipRowSchema = Schema.Struct({
-  conversationId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("conversation_id")),
+  conversationId: Schema.String,
   role: Schema.String,
   compaction: Schema.Boolean,
-});
+}).pipe(Schema.encodeKeys({ conversationId: "conversation_id" }));
 
-const findAuthorship = SqlSchema.findOne({
+const findAuthorship = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, messageId: Schema.String }),
   Result: AuthorshipRowSchema,
   execute: (options) =>
@@ -840,14 +849,12 @@ export interface StoredRatingRecord extends RatingEventPayload {
 const RatingRowSchema = Schema.Struct({
   id: Schema.String,
   seq: EpochMillisColumnSchema,
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
+  deviceId: Schema.NullOr(Schema.String),
   payload: Schema.Any,
-  createdAt: Schema.propertySignature(Schema.DateFromSelf).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: InstantColumnSchema,
+}).pipe(Schema.encodeKeys({ deviceId: "device_id", createdAt: "created_at" }));
 
-const findLatestRating = SqlSchema.findOne({
+const findLatestRating = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, messageId: Schema.String }),
   Result: RatingRowSchema,
   execute: (options) =>
@@ -879,7 +886,7 @@ export function latestMessageRating(
   return Effect.map(findLatestRating({ userId, messageId }), (found) => {
     if (found._tag === "None") return undefined;
     const row = found.value;
-    const payload = Either.getOrUndefined(
+    const payload = Result.getOrUndefined(
       readEither(RATING_EVENT_PAYLOAD)(unparsedWire(row.payload)),
     );
     if (payload === undefined) return undefined;

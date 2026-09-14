@@ -6,7 +6,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { test } from "vitest";
 import type {
   LiveCaptionRow,
@@ -58,7 +58,7 @@ class FakeCall implements LiveVoiceCall {
     this.opens += 1;
     this.openings.push(opening);
     this.settle(LIVE_STATUS.CONNECTING);
-    return Effect.async<boolean>((resume) => {
+    return Effect.callback<boolean>((resume) => {
       this.#release = () => {
         if (this.opensSucceed) this.settle(LIVE_STATUS.MUTED);
         else this.settle(LIVE_STATUS.FAILED);
@@ -123,7 +123,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   let microphoneAsk: (() => Effect.Effect<boolean>) | undefined;
   const stops: number[] = [];
   const orchestrator = new LiveVoiceOrchestrator({
-    runtime: Runtime.defaultRuntime,
+    services: Context.empty(),
     bridge: {
       reportView: (view, exchange) => {
         views.push(view);
@@ -178,7 +178,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
   };
 }
 
-/** Lets the orchestrator's own forked fibers, on `Runtime.defaultRuntime`, run their queued microtasks. */
+/** Lets the orchestrator's own forked fibers, under no services of their own, run their queued microtasks. */
 async function settleFibers(ticks = 30): Promise<void> {
   for (let turn = 0; turn < ticks; turn += 1) await Promise.resolve();
 }
@@ -326,7 +326,7 @@ test("a key let go of while the microphone dialog stands opens the session muted
   const f = fixture({ microphoneGranted: false });
   let grant: ((granted: boolean) => void) | undefined;
   f.setMicrophoneAsk(() =>
-    Effect.async<boolean>((resume) => {
+    Effect.callback<boolean>((resume) => {
       grant = (granted) => resume(Effect.succeed(granted));
     }),
   );

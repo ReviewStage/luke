@@ -1,6 +1,6 @@
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { NoticeStrip } from "@sidecar/voice/orchestrator";
-import { Runtime } from "effect";
+import { Effect } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, type RunProfile } from "#shared/messages/app-state";
@@ -15,7 +15,7 @@ import {
   type VoiceView,
 } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import { rendererRuntimeNow } from "./renderer-runtime";
+import { rendererServicesNow } from "./renderer-runtime";
 import { useAppState } from "./use-app-state";
 import { VOICE_ACTIVITY_HANGOVER_MS, VOICE_ACTIVITY_THRESHOLD } from "./voice/voice-level-meter";
 import { WAVEFORM_VOICE, type WaveformVoice } from "./waveform";
@@ -240,7 +240,7 @@ export function useVoiceView(): VoiceViewState {
   const [strip] = useState(() => {
     const created: NoticeStrip = new NoticeStrip({
       onChanged: () => setStripLines({ error: created.error, notice: created.notice }),
-      fork: (effect) => Runtime.runFork(rendererRuntimeNow())(effect),
+      fork: (effect) => Effect.runForkWith(rendererServicesNow())(effect),
     });
     return created;
   });

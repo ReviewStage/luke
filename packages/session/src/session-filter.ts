@@ -40,12 +40,12 @@ export type SessionFilter =
   | HostedAgentId
   | SessionApplicationId;
 
-export const SessionFilterSchema = Schema.Union(
-  Schema.Literal(...Object.values(SESSION_FILTER)),
+export const SessionFilterSchema = Schema.Union([
+  Schema.Literals(Object.values(SESSION_FILTER)),
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,
-);
+]);
 
 const readsSessionFilter = Schema.is(SessionFilterSchema);
 

@@ -7,9 +7,9 @@
  * the same way it drives every other Effect timer.
  */
 
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { ConfigProvider, Layer } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { type HostKernelTag, type HostService, hostKernelLayer } from "../effect/kernel.js";
 import {
   AppIdentity,
@@ -55,16 +55,7 @@ const testSeamLayers = (seams: HostSeams) =>
     Layer.succeed(StateRoot, seams.stateRoot),
     Layer.succeed(RunMode, seams.runMode),
     Layer.succeed(AppIdentity, { appVersion: seams.appVersion, packaged: seams.packaged }),
-    Layer.succeed(
-      Environment,
-      ConfigProvider.fromMap(
-        new Map(
-          Object.entries(seams.environment).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-          ),
-        ),
-      ),
-    ),
+    Layer.succeed(Environment, ConfigProvider.fromEnvRecord(seams.environment)),
     Layer.succeed(SecretCipher, seams.cipher),
     Layer.succeed(IdSource, { create: seams.createId }),
     reporterLayer(seams.report),

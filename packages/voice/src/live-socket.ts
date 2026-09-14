@@ -4,7 +4,7 @@ import {
   type LiveServerEvent,
   parseLiveServerEvent,
 } from "@sidecar/live";
-import { Effect, Option, Stream } from "effect";
+import { Effect, Result, Stream } from "effect";
 import type { HeldSocket } from "./held-socket.js";
 
 /**
@@ -122,12 +122,17 @@ const REFLECTED_AUDIO_TYPES: ReadonlySet<string> = new Set([
  */
 export function sidebandOverSocket(socket: LiveSocket): LiveSideband {
   return {
-    arrivals: Stream.filterMap(socket.arrivals, (arrival): Option.Option<SidebandArrival> => {
-      if ("close" in arrival) return Option.some({ close: arrival.close });
-      const event = parseLiveServerEvent(arrival.frame);
-      if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) return Option.none();
-      return Option.some({ event });
-    }),
+    arrivals: Stream.filterMap(
+      socket.arrivals,
+      (arrival): Result.Result<SidebandArrival, SocketArrival> => {
+        if ("close" in arrival) return Result.succeed({ close: arrival.close });
+        const event = parseLiveServerEvent(arrival.frame);
+        if (event === undefined || REFLECTED_AUDIO_TYPES.has(event.type)) {
+          return Result.fail(arrival);
+        }
+        return Result.succeed({ event });
+      },
+    ),
     send: (event) => Effect.sync(() => socket.send(JSON.stringify(event))),
     close: Effect.sync(() => socket.close()),
   };

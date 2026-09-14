@@ -6,18 +6,24 @@ import {
 } from "@sidecar/hosted";
 import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
 import {
+  EXCESS_KEYS,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
 import { handleConversationClear } from "../server/hosted/conversation-clear";
 import { handleConversationMessages } from "../server/hosted/resource-reads";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage, readConversationById } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  instantColumn,
+  readConversationById,
+} from "./support/store-rows";
 
 /**
  * Clear over the real store: the route stamps the standing main and answers
@@ -55,10 +61,12 @@ async function body(response: Response): Promise<UnparsedWireValue> {
 }
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  // Every answer read here belongs to a family declared tolerant, so the read
+  // drops a key a newer service may have added.
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 async function populate(userId: string): Promise<string> {
@@ -107,7 +115,7 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   assert.equal(answer.openedAt, NOW);
 
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(stamped?.deleted_at, new Date(NOW));
+  assert.deepEqual(instantColumn(stamped?.deleted_at), new Date(NOW));
 
   const after = parse(
     conversationMessagesAnswerSchema,

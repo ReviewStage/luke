@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
-import { Effect, Option, type ParseResult } from "effect";
+import { Effect, Option, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
@@ -58,7 +58,7 @@ import {
 } from "./workspace-files.js";
 
 /** How a store read or write fails: the driver's own refusal, or a row this build cannot decode. */
-type HostedStoreFailure = SqlError | ParseResult.ParseError;
+type HostedStoreFailure = SqlError | Schema.SchemaError;
 
 /**
  * What every `HostedStore` method answers: an effect over the ambient client,

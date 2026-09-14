@@ -10,8 +10,8 @@
  * named for the ported file, wrapping its exported API and reaching inside
  * none of it.
  */
-import type { Fiber } from "effect";
-import { Data, Duration, Effect, FiberId, Runtime, Schedule, type Scope } from "effect";
+import type { Context, Fiber } from "effect";
+import { Data, Duration, Effect, Schedule, type Scope } from "effect";
 import {
   admitToQueue,
   DEFAULT_QUEUE_SETTINGS,
@@ -84,8 +84,7 @@ export const admitInput = (
  */
 export const queueDebounceSchedule = (
   settings: Pick<QueueSettings, "debounceMs"> = DEFAULT_QUEUE_SETTINGS,
-): Schedule.Schedule<Duration.Duration> =>
-  Schedule.fromDelays(Duration.millis(settings.debounceMs));
+): Schedule.Schedule<Duration.Duration> => Schedule.duration(Duration.millis(settings.debounceMs));
 
 /** The live queue's operations, each as an effect, with the refusals typed. */
 export interface EffectPendingInputQueue {
@@ -106,21 +105,21 @@ export type EffectPendingInputQueueOptions = Omit<PendingInputQueueOptions, "sch
 
 /**
  * The `schedule`/`cancel` pair the port's constructor still takes, answered
- * from this runtime's own `Clock` so the debounce it arms reads whichever
- * clock the runtime carries — the real one in production, a `TestClock` in a
- * test — without the port itself importing `effect`. Starting the fiber here
- * is a run outside an Effect, which the "runtime only at an edge" rule allows
- * precisely because this is that edge: it starts the work on the runtime it
- * was handed rather than building a second one. `cancel` has no way to be
- * awaited, so it interrupts the fiber without waiting for the interruption to
- * finish: what it must guarantee is that the callback does not run
- * afterwards, never that the fiber has already ended.
+ * from the `Clock` the handed services carry, so the debounce it arms reads
+ * that clock — the real one in production, a `TestClock` in a test — without
+ * the port itself importing `effect`. Starting the fiber here is a run
+ * outside an Effect, which the "runtime only at an edge" rule allows
+ * precisely because this is that edge: it starts the work on the services it
+ * was handed rather than building a runtime of its own. `cancel` has no way
+ * to be awaited, so it interrupts the fiber without waiting for the
+ * interruption to finish: what it must guarantee is that the callback does
+ * not run afterwards, never that the fiber has already ended.
  */
-const scheduleOnRuntime = (
-  runtime: Runtime.Runtime<never>,
+const scheduleOnServices = (
+  services: Context.Context<never>,
 ): Pick<PendingInputQueueOptions, "schedule" | "cancel"> => {
-  const fork = Runtime.runFork(runtime);
-  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+  const fork = Effect.runForkWith(services);
+  const armed = new Map<ScheduledTimer, Fiber.Fiber<void>>();
   return {
     schedule: (callback, delayMs) => {
       const handle: ScheduledTimer = {};
@@ -136,23 +135,23 @@ const scheduleOnRuntime = (
       const fiber = armed.get(timer);
       if (fiber === undefined) return;
       armed.delete(timer);
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     },
   };
 };
 
 /**
- * The live queue of one conversation, armed on the runtime's own `Clock` and
- * owned by a `Scope`: closing the scope forgets what waits and disarms the
- * debounce, so no drained turn opens after the conversation that held it is
- * gone.
+ * The live queue of one conversation, armed on the `Clock` its caller's own
+ * services carry and owned by a `Scope`: closing the scope forgets what waits
+ * and disarms the debounce, so no drained turn opens after the conversation
+ * that held it is gone.
  */
 export const makePendingInputQueue = (
   options: EffectPendingInputQueueOptions,
 ): Effect.Effect<EffectPendingInputQueue, never, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.map(Effect.runtime<never>(), (runtime) => {
-      const queue = new PendingInputQueue({ ...options, ...scheduleOnRuntime(runtime) });
+    Effect.map(Effect.context<never>(), (services) => {
+      const queue = new PendingInputQueue({ ...options, ...scheduleOnServices(services) });
       return { queue, wrapped: wrap(queue) };
     }),
     ({ queue }) => Effect.sync(() => queue.clear()),

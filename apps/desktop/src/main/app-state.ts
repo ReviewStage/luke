@@ -2,7 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
-import { Runtime, type Stream, SubscriptionRef } from "effect";
+import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { HostBootstrap } from "./gateway/host-operator";
@@ -38,25 +38,27 @@ function patchEntries(patch: AppStatePatch): [AppStateSlice, AppState[AppStateSl
  * The document itself is a `SubscriptionRef`, so its own `changes` Stream is
  * the one subscription a production caller forks to reach the windows.
  * `snapshot`, `update`, and `touch` are the synchronous face the rest of main
- * still holds, each running its Ref operation on the launch's own runtime —
- * the one `main.ts` disposes, captured once at construction — rather than the
- * default runtime `Effect.runSync` would otherwise reach for; a
- * `SubscriptionRef` read or write never suspends, so the call still answers
- * in the same turn its caller made it in.
+ * still holds, each running its Ref operation under the launch's own services
+ * — the context of the runtime `main.ts` disposes, captured once at
+ * construction — rather than the empty context plain `Effect.runSync` stands
+ * for, so a clock, a scheduler, or any other reference the launch set is the
+ * one these writes run under. `runSyncWith` runs on the calling stack exactly
+ * as it does without a context, and a `SubscriptionRef` read or write never
+ * suspends, so the call still answers in the same turn its caller made it in.
  */
 export class AppStateStore {
   readonly #ref: SubscriptionRef.SubscriptionRef<AppState>;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #services: Context.Context<never>;
 
-  constructor(initial: Omit<AppState, "version">, runtime: Runtime.Runtime<never>) {
-    this.#runtime = runtime;
-    this.#ref = Runtime.runSync(runtime)(
+  constructor(initial: Omit<AppState, "version">, services: Context.Context<never>) {
+    this.#services = services;
+    this.#ref = Effect.runSyncWith(services)(
       SubscriptionRef.make<AppState>({ ...initial, version: 0 }),
     );
   }
 
   snapshot(): AppState {
-    return Runtime.runSync(this.#runtime)(SubscriptionRef.get(this.#ref));
+    return Effect.runSyncWith(this.#services)(SubscriptionRef.get(this.#ref));
   }
 
   update(patch: AppStatePatch): void {
@@ -70,7 +72,7 @@ export class AppStateStore {
       ...Object.fromEntries(moved),
       version: previous.version + 1,
     };
-    Runtime.runSync(this.#runtime)(SubscriptionRef.set(this.#ref, next));
+    Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, next));
   }
 
   /**
@@ -83,12 +85,12 @@ export class AppStateStore {
    * version.
    */
   touch(): void {
-    Runtime.runSync(this.#runtime)(SubscriptionRef.set(this.#ref, this.snapshot()));
+    Effect.runSyncWith(this.#services)(SubscriptionRef.set(this.#ref, this.snapshot()));
   }
 
   /** The document's own change stream, direct from the ref, for the one production subscriber. */
   get changes(): Stream.Stream<AppState> {
-    return this.#ref.changes;
+    return SubscriptionRef.changes(this.#ref);
   }
 }
 

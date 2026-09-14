@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Chunk, Effect, type Scope, TestClock } from "effect";
+import { Clock, Effect, type Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { detachOn } from "./effect/carry.js";
 import {
   BRAIN_GENERATION_LIFETIME_MS,
@@ -34,26 +35,26 @@ const launch = (
   Scope.Scope
 > =>
   Effect.gen(function* () {
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const reports: string[] = [];
     let generations = 0;
     const store = new BrainStateStore({
       automaticReset: false,
       repository,
       createGenerationId: () => `gen-${++generations}`,
-      now: () => clock.unsafeCurrentTimeMillis(),
+      now: () => clock.currentTimeMillisUnsafe(),
       report: (message) => reports.push(message),
     });
     const generationClock = new BrainGenerationClock({
       store,
       clock,
-      detach: detachOn(yield* Effect.runtime<never>()),
+      detach: detachOn(yield* Effect.context<never>()),
       scope: yield* Effect.scope,
     });
     return { store, generationClock, reports };
   });
 
-it.scoped(
+it.effect(
   "a launch under the default policy keeps a checkpoint past its stamped deadline and arms no clock",
   () =>
     Effect.gen(function* () {
@@ -68,9 +69,10 @@ it.scoped(
       assert.equal(store.generationId(), "gen-old");
       assert.deepEqual(store.current()?.items, stale.items);
       assert.equal(reports.length, 0);
-      assert.deepEqual(Chunk.toReadonlyArray(yield* TestClock.sleeps()), []);
       // Nothing was armed, so advancing past the deadline fires nothing and the
       // generation stands: only a store with automatic reset has a clock to keep.
+      // v4's TestClock keeps its pending sleeps private, so what stands armed is
+      // read from what advancing the clock does rather than from the queue.
       yield* TestClock.setTime(NOW + BRAIN_GENERATION_LIFETIME_MS);
       assert.equal(store.generationId(), "gen-old");
       generationClock.stop();

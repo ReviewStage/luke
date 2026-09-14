@@ -1,6 +1,6 @@
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Either, Schema } from "effect";
+import { Result, Schema, SchemaGetter } from "effect";
 import {
   REALTIME_CALLS_PATH,
   type RealtimeConnection,
@@ -13,7 +13,11 @@ import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
  * allowance it was spent against, and — for the phone's mint — the roster
  * context it forwards verbatim. A credential is validated field by field
  * rather than repaired, because a mis-answering service must read as a
- * malformed response and never as a call aimed somewhere else.
+ * malformed response and never as a call aimed somewhere else. Every record
+ * here is a plain struct read through
+ * `readEither(schema, { excess: EXCESS_KEYS.DROP })`: a key a newer service
+ * added is dropped rather than refused, and that grain is the read's now
+ * rather than the declaration's.
  */
 
 /**
@@ -44,13 +48,9 @@ export interface HostedMintAnswer {
  * only agrees with that interface rather than restating it. The same claim
  * the facade's own `schemaOver` made over its assembled AST.
  */
-function schemaAs<Value>(schema: Schema.Schema.Any): Schema.Schema<Value, UnparsedWireValue> {
-  return Schema.make<Value, UnparsedWireValue>(schema.ast);
+function schemaAs<Value>(schema: Schema.Top): Schema.Codec<Value, UnparsedWireValue> {
+  return Schema.make<Schema.Codec<Value, UnparsedWireValue>>(schema.ast);
 }
-
-/** A record that ignores a key a newer service added, which is what an answer always does. */
-const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 /**
  * A key a `dropRefused` field left holding `undefined` is dropped entirely,
@@ -59,61 +59,60 @@ const tolerantRecord = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
  * `quota` it can ask `in` about unless one actually read.
  */
 function omittingUndefinedKeys<Fields extends object, Encoded>(
-  schema: Schema.Schema<Fields, Encoded>,
+  schema: Schema.Codec<Fields, Encoded>,
 ) {
-  return Schema.transform(schema, Schema.Unknown, {
-    strict: false,
-    decode: (value) =>
-      Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
-    encode: (value) => value,
-  });
+  return schema.pipe(
+    Schema.decodeTo(Schema.Unknown, {
+      decode: SchemaGetter.transform((value) =>
+        Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)),
+      ),
+      // Nothing on this wire encodes a mint answer, and the shape the decode
+      // answers with is `unknown`, so the way back is a passthrough that
+      // states it cannot narrow.
+      encode: SchemaGetter.passthrough({ strict: false }),
+    }),
+  );
 }
 
 /** A trimmed text, refused when only whitespace remains. */
-const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(Schema.minLength(1));
+const text: Schema.Codec<string, string> = Schema.Trim.check(Schema.isNonEmpty());
 
 /**
  * The `wsUrl` is the one field no per-field declaration can settle: it is
  * legal only for the model the same credential names, so it is read against
  * the record it arrived in.
  */
-const connectionSchema = tolerantRecord({
+const connectionSchema = Schema.Struct({
   value: text,
-  expiresAt: Schema.Number.pipe(Schema.finite()),
+  expiresAt: Schema.Finite,
   model: text,
   callsUrl: Schema.Literal(HOSTED_CALLS_URL),
   wsUrl: text,
-}).pipe(
-  Schema.filter(
+}).check(
+  Schema.makeFilter(
     (connection) => connection.wsUrl === `${HOSTED_WS_BASE_URL}?model=${connection.model}`,
   ),
 );
 
 /** The value a schema admitted, or nothing, for a caller that only cares whether the value is admissible. */
 function admitted<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 /** The value a `dropRefused` field admits: whatever the schema read, or nothing. */
 function droppedField<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
-): Schema.Schema<Value | undefined, UnparsedWireValue> {
+  schema: Schema.Codec<Value, Encoded>,
+): Schema.Codec<Value | undefined, UnparsedWireValue> {
   return declareReader<Value | undefined>(
     (value) => ({ ok: true, value: admitted(schema, value) }),
     emitJsonSchema(schema),
   );
 }
 
-const quotaField = Schema.optionalWith(droppedField(hostedQuotaSchema), {
-  exact: true,
-});
+const quotaField = Schema.optionalKey(droppedField(hostedQuotaSchema));
 
 /** What both mint answers carry: the credential, and the allowance it was spent against. */
 const MINT_FIELDS = {
@@ -127,7 +126,7 @@ const MINT_FIELDS = {
  * is where a moment in time meets it.
  */
 export const hostedMintAnswerSchema = schemaAs<HostedMintAnswer>(
-  omittingUndefinedKeys(tolerantRecord(MINT_FIELDS)),
+  omittingUndefinedKeys(Schema.Struct(MINT_FIELDS)),
 );
 
 /**
@@ -136,7 +135,7 @@ export const hostedMintAnswerSchema = schemaAs<HostedMintAnswer>(
  * the OpenAI mint response reader.
  */
 function mintAnswerAt<Answer extends HostedMintAnswer, Encoded>(
-  schema: Schema.Schema<Answer, Encoded>,
+  schema: Schema.Codec<Answer, Encoded>,
 ): (value: UnparsedWireValue, now: number) => Answer | undefined {
   return (value, now) => {
     const answer = admitted(schema, value);
@@ -175,10 +174,10 @@ export interface RemoteMintAnswer extends HostedMintAnswer {
  */
 export const remoteMintAnswerSchema = schemaAs<RemoteMintAnswer>(
   omittingUndefinedKeys(
-    tolerantRecord({
+    Schema.Struct({
       ...MINT_FIELDS,
-      context: tolerantRecord({
-        sessions: tolerantRecord({ itemId: text, text }),
+      context: Schema.Struct({
+        sessions: Schema.Struct({ itemId: text, text }),
       }),
     }),
   ),

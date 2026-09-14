@@ -7,7 +7,7 @@ import {
   type RuntimeCheckpoint,
 } from "@sidecar/runtime/vocabulary";
 import type { UnknownActionResult } from "@sidecar/wire";
-import { Effect, ExecutionStrategy, Exit, Option, Scope } from "effect";
+import { Effect, Exit, Option, Scope } from "effect";
 import { TranscriptCursors } from "./cursors.js";
 import { joinedOnce } from "./effect/once.js";
 import { claimedUnlessAborted } from "./effect/settled.js";
@@ -76,7 +76,7 @@ export interface Generation {
    * generation, and it is synchronous — every finalizer here is — so the
    * fence a replacement raises still stands before any disk is waited on.
    */
-  scope: Scope.CloseableScope;
+  scope: Scope.Closeable;
 }
 
 export const CONTEXT_OPENING = {
@@ -163,14 +163,14 @@ export function generationFrom(
 ): Generation {
   const abort = new AbortController();
   const checkpoint = storedCheckpoint(state);
-  const scope = Effect.runSync(Scope.make());
+  const scope = Scope.makeUnsafe("sequential");
   // The context has a scope of its own, forked from the generation's before
   // the signal's finalizer is added, so one close still fires the signal
   // first and retires the context behind it. An open that settles after that
   // close adds its finalizer to a scope already closed, which runs it there
   // and then, so a context nobody will read again is retired however late it
   // arrives.
-  const opening = Effect.runSync(Scope.fork(scope, ExecutionStrategy.sequential));
+  const opening = Scope.forkUnsafe(scope, "sequential");
   Effect.runSync(
     Scope.addFinalizer(
       scope,
@@ -216,7 +216,7 @@ function openStoredContext(options: {
   readonly checkpoint: RuntimeCheckpoint | undefined;
   readonly lostResult: UnknownActionResult;
   readonly abort: AbortController;
-  readonly opening: Scope.CloseableScope;
+  readonly opening: Scope.Closeable;
   readonly now: () => number;
 }): Effect.Effect<OpenedContext> {
   const { runtime, checkpoint, lostResult, abort, opening, now } = options;
@@ -229,7 +229,7 @@ function openStoredContext(options: {
     ),
   ).pipe(
     Effect.map(Option.getOrElse(() => incompatibleContext(REPLACED_WHILE_OPENING))),
-    Effect.catchAllDefect((defect) =>
+    Effect.catchDefect((defect) =>
       Effect.succeed(
         incompatibleContext(
           `the runtime could not open the context: ${defect instanceof Error ? defect.message : String(defect)}`,

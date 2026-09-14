@@ -4,7 +4,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { Data, type Effect, type ManagedRuntime, type Runtime, Schema } from "effect";
+import { type Context, Data, type Effect, type ManagedRuntime, Schema } from "effect";
 import type { CompactionSource } from "./storage.js";
 
 /**
@@ -147,7 +147,7 @@ export const REASONING_EFFORT = {
 
 export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_EFFORT];
 
-export const ReasoningEffortSchema = Schema.Literal(...Object.values(REASONING_EFFORT));
+export const ReasoningEffortSchema = Schema.Literals(Object.values(REASONING_EFFORT));
 
 const readsReasoningEffort = Schema.is(ReasoningEffortSchema);
 
@@ -639,5 +639,10 @@ export interface AgentRuntimeEffect {
   ): Effect.Effect<RuntimeRunEffect, RuntimeResumeRefused>;
 }
 
-/** A runtime a run is carried on: the managed one an edge holds, or a plain one. */
-export type ExecutionRuntime = ManagedRuntime.ManagedRuntime<never, never> | Runtime.Runtime<never>;
+/**
+ * What a run is carried on: the managed runtime an edge holds, or the bare
+ * services a caller captured. v4 has no `Runtime<R>` — a context and the
+ * `Effect.run*With` family took its place — so the second arm is the context
+ * itself, and `Context.empty()` is what a caller that named none hands over.
+ */
+export type ExecutionRuntime = ManagedRuntime.ManagedRuntime<never, never> | Context.Context<never>;

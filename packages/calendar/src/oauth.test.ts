@@ -70,7 +70,7 @@ it.effect("the consent page is Google's own, asking for availability alone, with
       environment: environment(),
     });
 
-    const pending = yield* Effect.fork(Effect.scoped(signIn.signInEffect()));
+    const pending = yield* Effect.forkChild(Effect.scoped(signIn.signInEffect()));
     // The browser is opened once the loopback is listening; wait for the URL.
     yield* Effect.promise(async () => {
       while (opened.length === 0) await new Promise((resolve) => setImmediate(resolve));

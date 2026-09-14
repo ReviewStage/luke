@@ -120,7 +120,7 @@ const BRAIN_ONLY_DESCRIPTORS = {
 function schemaOf(module: {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
+  readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
 }): ToolSchema {
   const definition: ActionToolDefinition = {
     type: BRAIN_TOOL_TYPE,
@@ -219,7 +219,7 @@ export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSche
 export interface BrainToolRegistration {
   readonly name: string;
   readonly description: string;
-  readonly inputSchema: Schema.Schema<unknown, UnparsedWireValue>;
+  readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
 }
 
 /** Every catalog tool with its wire schema, keyed by name, in the catalog's order. */

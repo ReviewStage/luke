@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect";
+import { Effect, Queue, Stream } from "effect";
 import type { LiveSocket, SocketArrival, SocketClose, SocketVerbs } from "./live-socket.js";
 
 /**
@@ -136,30 +136,30 @@ export function holdSocket(verbs: SocketVerbs): SocketHold {
    * One consumer's reading of the hold: what was held first and in order,
    * then what arrives while it reads, and the close as the last of it.
    */
-  const arrivals = Stream.asyncPush<SocketArrival>(
-    (emit) =>
-      Effect.acquireRelease(
+  // No `bufferSize`, so the queue behind the callback is unbounded: the replay
+  // of a full hold is offered in one synchronous burst and must not drop.
+  const arrivals = Stream.callback<SocketArrival>((queue) =>
+    Effect.acquireRelease(
+      Effect.sync(() => {
+        const consumer = (arrival: SocketArrival) => {
+          Queue.offerUnsafe(queue, arrival);
+          if ("close" in arrival) Queue.endUnsafe(queue);
+        };
+        consumers.add(consumer);
+        const replay = heldFrames ?? [];
+        heldFrames = undefined;
+        for (const frame of replay) Queue.offerUnsafe(queue, { frame });
+        if (closed !== undefined) {
+          Queue.offerUnsafe(queue, { close: closed });
+          Queue.endUnsafe(queue);
+        }
+        return consumer;
+      }),
+      (consumer) =>
         Effect.sync(() => {
-          const consumer = (arrival: SocketArrival) => {
-            emit.single(arrival);
-            if ("close" in arrival) emit.end();
-          };
-          consumers.add(consumer);
-          const replay = heldFrames ?? [];
-          heldFrames = undefined;
-          for (const frame of replay) emit.single({ frame });
-          if (closed !== undefined) {
-            emit.single({ close: closed });
-            emit.end();
-          }
-          return consumer;
+          consumers.delete(consumer);
         }),
-        (consumer) =>
-          Effect.sync(() => {
-            consumers.delete(consumer);
-          }),
-      ),
-    { bufferSize: "unbounded" },
+    ),
   );
 
   return {
@@ -167,7 +167,7 @@ export function holdSocket(verbs: SocketVerbs): SocketHold {
       send: (data) => verbs.send(data),
       close: () => verbs.close(),
       arrivals,
-      takeFirst: Effect.async<SocketArrival>((resume) => {
+      takeFirst: Effect.callback<SocketArrival>((resume) => {
         const arrival = held();
         if (arrival !== undefined) {
           resume(Effect.succeed(arrival));

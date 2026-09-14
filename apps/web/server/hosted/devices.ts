@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import type { Effect, ParseResult } from "effect";
+import type { Effect, Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { DeviceHeartbeatRequest, DevicePlatform, PushEnvironment } from "../core.js";
 
 /**
@@ -46,7 +46,7 @@ export interface DeviceHeartbeat {
 }
 
 /** What a device write answers: an effect over the ambient client, composed into the request that made it. */
-type DeviceEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type DeviceEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 export interface DeviceSeams {
   /**

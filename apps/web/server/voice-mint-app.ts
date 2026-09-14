@@ -1,6 +1,6 @@
-import { type HttpApp, type HttpClient, HttpRouter, HttpServerRequest } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
-import { Effect, Redacted } from "effect";
+import { Effect, Layer, Redacted } from "effect";
+import { type HttpClient, HttpRouter, HttpServerRequest } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   HOSTED_SERVICE_PATH,
   type ObservedSession,
@@ -13,7 +13,7 @@ import {
   HOSTED_REFUSAL,
   hostedJsonResponse,
   hostedMethod,
-  hostedRefusalResponse,
+  hostedNotFoundRoute,
 } from "./hosted/http-effect.js";
 import {
   hostedKey,
@@ -33,6 +33,7 @@ import {
   type RemoteObserveSeams,
   remoteSessionContextItem,
 } from "./hosted/remote-voice-mint.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The two signed-in Realtime mints as the one route group their functions
@@ -71,68 +72,64 @@ function revealed(secret: Redacted.Redacted | undefined): string | undefined {
 }
 
 /** The signed-in caller behind the request's bearer, or the refusal that says there is none. */
-function signedIn(seams: VoiceMintSeams) {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const userId = yield* seams.resolveUserId(request.headers.authorization);
-    return userId ? userId : yield* refuseMint(HOSTED_REFUSAL.INVALID_TOKEN);
-  });
-}
+const signedIn = /* @__PURE__ */ Effect.fnUntraced(function* (seams: VoiceMintSeams) {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const userId = yield* seams.resolveUserId(request.headers.authorization);
+  return userId ? userId : yield* refuseMint(HOSTED_REFUSAL.INVALID_TOKEN);
+});
 
 /** POST: the signed-in desktop's own credential, spent against its daily allowance. */
-function voiceMint(seams: VoiceMintSeams) {
-  return Effect.gen(function* () {
-    yield* refusingMint(hostedMethod(MINT_METHOD));
-    const apiKey = yield* hostedKey();
-    const environment = yield* HostedEnvironment;
-    const userId = yield* signedIn(seams);
-    const read = yield* mintPreferences();
-    const spend = yield* Effect.orDie(seams.spend(userId));
-    if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
-    const connection = yield* mintedConnection(
-      mintOptions(seams, apiKey, environment.realtimeModel, read, realtimeClientSecretRequest),
-    );
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection, quota: spend.quota });
-  });
-}
+const voiceMint = /* @__PURE__ */ Effect.fn("voiceMint")(function* (seams: VoiceMintSeams) {
+  yield* refusingMint(hostedMethod(MINT_METHOD));
+  const apiKey = yield* hostedKey();
+  const environment = yield* HostedEnvironment;
+  const userId = yield* signedIn(seams);
+  const read = yield* mintPreferences();
+  const spend = yield* Effect.orDie(seams.spend(userId));
+  if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
+  const connection = yield* mintedConnection(
+    mintOptions(seams, apiKey, environment.realtimeModel, read, realtimeClientSecretRequest),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { connection, quota: spend.quota });
+});
 
 /**
  * POST: the signed-in phone's credential and the roster it is to speak about.
  * The two are asked for at once, because neither depends on the other, and a
  * roster that ran long leaves the mint standing.
  */
-function remoteVoiceMint(seams: VoiceMintSeams) {
-  return Effect.gen(function* () {
-    yield* refusingMint(hostedMethod(MINT_METHOD));
-    const apiKey = yield* hostedKey();
-    const environment = yield* HostedEnvironment;
-    const userId = yield* signedIn(seams);
-    const read = yield* mintPreferences(MOBILE_MINT_STRICT_FIELDS);
-    const spend = yield* Effect.orDie(seams.spend(userId));
-    if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
-    const [connection, sessions] = yield* Effect.all(
-      [
-        mintedConnection(
-          mintOptions(
-            seams,
-            apiKey,
-            environment.realtimeModel,
-            read,
-            remoteRealtimeClientSecretRequest,
-          ),
+const remoteVoiceMint = /* @__PURE__ */ Effect.fn("remoteVoiceMint")(function* (
+  seams: VoiceMintSeams,
+) {
+  yield* refusingMint(hostedMethod(MINT_METHOD));
+  const apiKey = yield* hostedKey();
+  const environment = yield* HostedEnvironment;
+  const userId = yield* signedIn(seams);
+  const read = yield* mintPreferences(MOBILE_MINT_STRICT_FIELDS);
+  const spend = yield* Effect.orDie(seams.spend(userId));
+  if (!spend.allowed) return yield* Effect.fail(quotaExhausted(spend));
+  const [connection, sessions] = yield* Effect.all(
+    [
+      mintedConnection(
+        mintOptions(
+          seams,
+          apiKey,
+          environment.realtimeModel,
+          read,
+          remoteRealtimeClientSecretRequest,
         ),
-        roster(seams, revealed(environment.providerKeyEncryptionSecret), userId),
-      ],
-      { concurrency: 2 },
-    );
-    const now = seams.now ?? Date.now;
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      connection,
-      quota: spend.quota,
-      context: { sessions: remoteSessionContextItem(sessions, now()) },
-    });
+      ),
+      roster(seams, revealed(environment.providerKeyEncryptionSecret), userId),
+    ],
+    { concurrency: 2 },
+  );
+  const now = seams.now ?? Date.now;
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    connection,
+    quota: spend.quota,
+    context: { sessions: remoteSessionContextItem(sessions, now()) },
   });
-}
+});
 
 function roster(
   seams: VoiceMintSeams,
@@ -148,12 +145,18 @@ function roster(
 /** The group, which is the two signed-in mints and the refusal anywhere else. */
 export function voiceMintApp(
   seams: VoiceMintSeams,
-): HttpApp.Default<never, HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(HOSTED_SERVICE_PATH.VOICE_MINT, Effect.merge(voiceMint(seams))),
-    HttpRouter.all(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, Effect.merge(remoteVoiceMint(seams))),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.VOICE_MINT,
+      Effect.catch(voiceMint(seams), Effect.succeed),
     ),
+    HttpRouter.add(
+      ANY_METHOD,
+      HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT,
+      Effect.catch(remoteVoiceMint(seams), Effect.succeed),
+    ),
+    hostedNotFoundRoute,
   );
 }

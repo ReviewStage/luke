@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { SqlError } from "@effect/sql/SqlError";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
+import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import {
   PRODUCT_EVENT,
@@ -349,7 +349,12 @@ test("a deployment that reads no person, or fails to, still records the counts",
   const survived = await runWithoutDatabase(
     handleEvents(
       options({
-        readPerson: () => Effect.fail(new SqlError({ cause: new Error("database unreachable") })),
+        readPerson: () =>
+          Effect.fail(
+            new SqlError({
+              reason: new ConnectionError({ cause: new Error("database unreachable") }),
+            }),
+          ),
         httpClient: failing.layer,
         resolveUserId: freshUser(),
       }),

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Exit, Fiber, Schedule, Scope, TestClock } from "effect";
+import { Clock, Effect, Exit, Fiber, Schedule, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { scheduleOnce, scheduleRepeat } from "./timers.js";
 
 describe("scheduleOnce", () => {
@@ -12,7 +13,7 @@ describe("scheduleOnce", () => {
       const fiber = yield* Effect.provideService(
         scheduleOnce(
           5_000,
-          Effect.flatMap(TestClock.currentTimeMillis, (at) => Effect.sync(() => fired.push(at))),
+          Effect.flatMap(Clock.currentTimeMillis, (at) => Effect.sync(() => fired.push(at))),
         ),
         Scope.Scope,
         scope,
@@ -44,7 +45,7 @@ describe("scheduleOnce", () => {
       yield* Scope.close(scope, Exit.void);
       yield* TestClock.adjust("1 minute");
 
-      assert.equal(Exit.isInterrupted(yield* Fiber.await(fiber)), true);
+      assert.equal(Exit.hasInterrupts(yield* Fiber.await(fiber)), true);
       assert.deepEqual(fired, []);
     }),
   );
@@ -68,7 +69,7 @@ describe("scheduleOnce", () => {
       yield* Scope.close(scope, Exit.void);
       yield* TestClock.adjust("1 minute");
 
-      assert.equal(Exit.isInterrupted(yield* Fiber.await(fiber)), true);
+      assert.equal(Exit.hasInterrupts(yield* Fiber.await(fiber)), true);
       assert.deepEqual(fired, []);
     }),
   );
@@ -120,7 +121,7 @@ describe("scheduleRepeat", () => {
       assert.deepEqual(rounds, [0, 1, 2, 3]);
 
       yield* Scope.close(scope, Exit.void);
-      assert.equal(Exit.isInterrupted(yield* Fiber.await(fiber)), true);
+      assert.equal(Exit.hasInterrupts(yield* Fiber.await(fiber)), true);
       yield* TestClock.adjust("1 minute");
 
       assert.deepEqual(rounds, [0, 1, 2, 3]);

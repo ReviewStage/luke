@@ -55,6 +55,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     // the service, by a heartbeat sent now rather than at the next scheduled
     // beat, so a pause released frees the account's briefings at once.
     [SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]: () =>
-      Effect.zipRight(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
+      Effect.andThen(dependencies.refreshAnnouncementHold, dependencies.reportPresence),
   } satisfies HostSettingSideEffects;
 }

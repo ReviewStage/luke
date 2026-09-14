@@ -1,4 +1,3 @@
-import type * as FileSystem from "@effect/platform/FileSystem";
 import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
@@ -17,6 +16,7 @@ import {
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Effect, Layer } from "effect";
+import type * as FileSystem from "effect/FileSystem";
 import { composeAccount } from "./compose-account.js";
 import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
@@ -99,7 +99,7 @@ export const hostAssemblyLayer: Layer.Layer<
   | MachinePresenceReader
   | ShutdownSignal
   | FileSystem.FileSystem
-> = Layer.scoped(
+> = Layer.effect(
   HostAssemblyTag,
   Effect.gen(function* () {
     const kernel = yield* HostKernelTag;
@@ -339,7 +339,7 @@ export const hostAssemblyLayer: Layer.Layer<
             const agent = brain.wiring.agentForRun(record.runId);
             if (!agent) continue;
             cancelled.push(record.runId);
-            yield* Effect.catchAllDefect(agent.cancelAsk(record.runId), () => Effect.void);
+            yield* Effect.catchDefect(agent.cancelAsk(record.runId), () => Effect.void);
           }
           for (const child of brain.wiring.children.children()) {
             if (isTerminalChildRunStatus(child.status)) continue;
@@ -411,7 +411,7 @@ export const hostAssemblyLayer: Layer.Layer<
       // The loops are disarmed before the admissions close, so no observation
       // pass begins behind a quit; the gate's own scope is what the standing
       // scope closes after.
-      drain: (shutdown) => Effect.zipRight(supervisor.disarm, drain(shutdown)),
+      drain: (shutdown) => Effect.andThen(supervisor.disarm, drain(shutdown)),
     };
     return assembly;
   }),

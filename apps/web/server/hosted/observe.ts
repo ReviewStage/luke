@@ -1,7 +1,7 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type Layer, type ParseResult } from "effect";
+import { Effect, type Layer, type Schema } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { ProviderSessionObservation } from "../core.js";
 import {
   ACTION_KIND,
@@ -59,60 +59,58 @@ export interface ObserveOptions
  * same pass the schedule runs, stored the same way. A user with no cloud key
  * has no roster to read or store and is answered empty.
  */
-export function handleObserve(
+export const handleObserve = /* @__PURE__ */ Effect.fn("handleObserve")(function* (
   options: ObserveOptions,
-): Effect.Effect<Response, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
-    const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
+): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const { request, resolveUserId, encryptionSecret, readVaultKeys } = options;
 
-    if (request.method !== "GET") {
-      return errorResponse(
-        HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
-        HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
-      );
+  if (request.method !== "GET") {
+    return errorResponse(
+      HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED,
+      HOSTED_API_ERROR.METHOD_NOT_ALLOWED,
+    );
+  }
+
+  const userId = yield* resolveUserId(request);
+  if (!userId) {
+    return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
+  }
+
+  const secret = (encryptionSecret ?? "").trim();
+  if (!secret) {
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+
+  const rows = yield* readVaultKeys(userId);
+  if (keyedCloudProviderIds(rows).length === 0) {
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
+  }
+
+  const store = options.store(secret);
+  const fresh =
+    new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
+  if (!fresh) {
+    const stored = yield* storedRoster(store, userId, rows, secret);
+    if (stored?.roster) {
+      return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
     }
+  }
 
-    const userId = yield* resolveUserId(request);
-    if (!userId) {
-      return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
-    }
+  const now = (options.now ?? Date.now)();
+  if (!(yield* observeBrake.check(userId))) {
+    return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
+  }
 
-    const secret = (encryptionSecret ?? "").trim();
-    if (!secret) {
-      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-    }
-
-    const rows = yield* readVaultKeys(userId);
-    if (keyedCloudProviderIds(rows).length === 0) {
-      return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(undefined, undefined));
-    }
-
-    const store = options.store(secret);
-    const fresh =
-      new URL(request.url).searchParams.get(OBSERVE_QUERY.FRESH) === OBSERVE_QUERY.FRESH_VALUE;
-    if (!fresh) {
-      const stored = yield* storedRoster(store, userId, rows, secret);
-      if (stored?.roster) {
-        return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(stored.roster, stored.observedAt));
-      }
-    }
-
-    const now = (options.now ?? Date.now)();
-    if (!(yield* observeBrake.check(userId))) {
-      return errorResponse(HOSTED_HTTP_STATUS.TOO_MANY_REQUESTS, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-    }
-
-    const outcome = yield* observeAndSnapshot({
-      userId,
-      rows,
-      secret,
-      store,
-      seams: options,
-      now,
-    });
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(outcome.roster, outcome.observedAt));
+  const outcome = yield* observeAndSnapshot({
+    userId,
+    rows,
+    secret,
+    store,
+    seams: options,
+    now,
   });
-}
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, observeAnswer(outcome.roster, outcome.observedAt));
+});
 
 /** The roster as the wire carries it: every provider's observations as bounded rows, dated by the snapshot. */
 function observeAnswer(

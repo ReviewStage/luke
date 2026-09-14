@@ -28,13 +28,14 @@ import {
 } from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
   isWireString,
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema, Either, Fiber } from "effect";
+import { Effect, Schema as EffectSchema, Fiber, Result } from "effect";
 import type { SessionActionPerformer } from "../session-action-performer.js";
 
 /** The developer's saved creation tie-breaks, as the projects context narrates them. */
@@ -83,23 +84,15 @@ const REFUSAL = {
 } as const;
 
 /** A trimmed text, refused when only whitespace remains. */
-const text: EffectSchema.Schema<string, string> = EffectSchema.transform(
-  EffectSchema.String,
-  EffectSchema.String,
-  {
-    strict: true,
-    decode: (value) => value.trim(),
-    encode: (value) => value,
-  },
-).pipe(EffectSchema.minLength(1));
+const text: EffectSchema.Codec<string, string> = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
 /** The value a dropped field admits: whatever the inner schema read, or nothing. */
 function dropped<Value, Encoded>(
-  inner: EffectSchema.Schema<Value, Encoded>,
-): EffectSchema.Schema<Value | undefined, UnparsedWireValue> {
+  inner: EffectSchema.Codec<Value, Encoded>,
+): EffectSchema.Codec<Value | undefined, UnparsedWireValue> {
   const read = readEither(inner);
   return declareReader<Value | undefined>(
-    (value) => ({ ok: true, value: Either.getOrUndefined(read(value)) }),
+    (value) => ({ ok: true, value: Result.getOrUndefined(read(value)) }),
     emitJsonSchema(inner),
   );
 }
@@ -107,22 +100,27 @@ function dropped<Value, Encoded>(
 /**
  * The panel's answer to an app action, read as untrusted: the status and the
  * sentence beside it, in the panel's own dialect — a refusal's reason, or the
- * note or outcome an acceptance sometimes carries — and nothing else it says.
+ * note or outcome an acceptance sometimes carries. A key the declaration does
+ * not name is dropped rather than refused, which the read below asks for: a
+ * declaration carries no parse options of its own, so the tolerance stands at
+ * the one place this answer is read.
  */
 const PANEL_ANSWER = EffectSchema.Struct({
-  status: EffectSchema.Literal(
+  status: EffectSchema.Literals([
     ACTION_RESULT_STATUS.ACCEPTED,
     ACTION_RESULT_STATUS.REJECTED,
     ACTION_RESULT_STATUS.UNSUPPORTED,
     UNKNOWN_ACTION_STATUS,
-  ),
-  reason: EffectSchema.optionalWith(dropped(text), { exact: true }),
-  note: EffectSchema.optionalWith(dropped(text), { exact: true }),
-  outcome: EffectSchema.optionalWith(dropped(text), { exact: true }),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+  ]),
+  reason: EffectSchema.optionalKey(dropped(text)),
+  note: EffectSchema.optionalKey(dropped(text)),
+  outcome: EffectSchema.optionalKey(dropped(text)),
+});
 
 function panelResult(answered: WireRecord): CarriedActionResult | undefined {
-  const read = Either.getOrUndefined(readEither(PANEL_ANSWER)(answered));
+  const read = Result.getOrUndefined(
+    readEither(PANEL_ANSWER, { excess: EXCESS_KEYS.DROP })(answered),
+  );
   if (read === undefined) return undefined;
   if (read.status === ACTION_RESULT_STATUS.ACCEPTED) {
     const note = read.note ?? read.outcome;
@@ -159,8 +157,8 @@ function panelResult(answered: WireRecord): CarriedActionResult | undefined {
 export function createBrainActionPerformer(
   dependencies: BrainActionPerformerDependencies,
 ): BrainActionPerformer {
-  const admission = (): Effect.Effect<ActionAdmissionReads> =>
-    Effect.gen(function* () {
+  const admission = /* @__PURE__ */ Effect.fnUntraced(
+    function* (): Effect.fn.Return<ActionAdmissionReads> {
       // The roster and the projects an action is admitted against are two readings
       // of one observation pass, so the pass runs once per action however many of
       // them admission asks for. An action that asks for neither — a setting —
@@ -168,7 +166,7 @@ export function createBrainActionPerformer(
       // it, because what a cancel ends is the wait and never the observation:
       // an interrupted pass would leave the registry half-written.
       const observed = yield* Effect.cached(
-        Effect.flatMap(Effect.forkDaemon(dependencies.refreshSessions()), Fiber.join),
+        Effect.flatMap(Effect.forkDetach(dependencies.refreshSessions()), Fiber.join),
       );
       return {
         // The reads before an effect wait only as long as the standing does: a
@@ -185,25 +183,25 @@ export function createBrainActionPerformer(
         guide: dependencies.appGuide(),
         rememberedFacts: dependencies.rememberedFacts(),
       };
-    });
+    },
+  );
 
-  const carrySessionAction = (
+  const carrySessionAction = /* @__PURE__ */ Effect.fnUntraced(function* (
     action: ValidatedAction<SessionActionKind>,
     execution: BrainActionExecution,
-  ): Effect.Effect<ActionOutputEnvelope> =>
-    Effect.gen(function* () {
-      // The roster as admission just refreshed it is the snapshot the envelope
-      // carries: the title and agent the target wore when the action ran, read
-      // now rather than at render, when the session may be renamed or gone.
-      const sessions = dependencies.sessions();
-      const target = actionTargetSnapshot(action, sessions);
-      // The performer awaits once more of its own before a create or a spawn,
-      // so the execution rides along to be asked again there.
-      return actionOutputFromResult(
-        yield* dependencies.sessionActions.perform(action, execution),
-        target,
-      );
-    });
+  ): Effect.fn.Return<ActionOutputEnvelope> {
+    // The roster as admission just refreshed it is the snapshot the envelope
+    // carries: the title and agent the target wore when the action ran, read
+    // now rather than at render, when the session may be renamed or gone.
+    const sessions = dependencies.sessions();
+    const target = actionTargetSnapshot(action, sessions);
+    // The performer awaits once more of its own before a create or a spawn,
+    // so the execution rides along to be asked again there.
+    return actionOutputFromResult(
+      yield* dependencies.sessionActions.perform(action, execution),
+      target,
+    );
+  });
 
   /** A panel answer this build cannot read is a refusal, never an acceptance. */
   const carryAppAction = (

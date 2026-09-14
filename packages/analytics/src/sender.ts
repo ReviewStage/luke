@@ -1,5 +1,3 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountCallEffects,
   type AccountToken,
@@ -11,7 +9,9 @@ import {
 } from "@sidecar/hosted";
 import { scheduleRepeat } from "@sidecar/runtime/effect";
 import { HTTP_METHOD, positiveInteger } from "@sidecar/wire";
-import { Duration, Effect, type Layer, Schedule, type Scope } from "effect";
+import { Duration, Effect, type Layer, Schedule, type Scope, Semaphore } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   adoptableHeldProductEvents,
   HELD_PRODUCT_EVENTS_VERSION,
@@ -127,7 +127,7 @@ export class ProductEventSender {
    * it assume: a second flush asked for while one is under way waits for it
    * and then carries whatever is queued by then.
    */
-  readonly #gate = Effect.unsafeMakeSemaphore(1);
+  readonly #gate = Semaphore.makeUnsafe(1);
 
   /**
    * One flush, delayed by the cadence and then repeated on it — never an
@@ -275,7 +275,7 @@ export class ProductEventSender {
    * hold again with the batch back in it.
    */
   #flushEffect(): Effect.Effect<void, never, HttpClient.HttpClient> {
-    return Effect.zipRight(
+    return Effect.andThen(
       this.#adoptHold(),
       Effect.suspend(() => {
         if (this.#queue.length === 0) return this.#persistHold();
@@ -283,7 +283,7 @@ export class ProductEventSender {
         // authenticated at all.
         const events = this.#queue.splice(0, PRODUCT_EVENT_BATCH_LIMIT);
         return this.#persistHold().pipe(
-          Effect.zipRight(this.#send(events)),
+          Effect.andThen(this.#send(events)),
           Effect.flatMap((requeued) => (requeued ? this.#persistHold() : Effect.void)),
         );
       }),

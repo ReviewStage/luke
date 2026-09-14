@@ -218,77 +218,72 @@ export function conductorActions(pass: CloudPass): ActionHandlers {
  * named. The task deliberately does not ride the creation: Conductor's
  * creation endpoint documents no prompt field.
  */
-function createWorkspace(
+const createWorkspace = /* @__PURE__ */ Effect.fnUntraced(function* (
   pass: CloudPass,
   input: Parameters<ActionHandlers["createWorkspace"]>[0],
-): Effect.Effect<ProviderWorkspaceResult> {
-  return Effect.gen(function* () {
-    const { project, name, task, agentSelection } = input;
-    // The chosen agent, model, and effort ride together, and only as a
-    // selection the build's table lists — the provider answers for its own
-    // writes, so a value that slipped past the store is dropped here rather
-    // than sent.
-    const chosen =
-      agentSelection && isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, agentSelection)
-        ? agentSelection
-        : undefined;
-    const created = yield* write(
-      pass,
-      {
-        segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
-        body: {
-          [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
-          ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : undefined),
-          ...(chosen
-            ? {
-                [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
-                [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
-                ...(chosen.effort
-                  ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort }
-                  : undefined),
-              }
-            : undefined),
-        },
+): Effect.fn.Return<ProviderWorkspaceResult> {
+  const { project, name, task, agentSelection } = input;
+  // The chosen agent, model, and effort ride together, and only as a
+  // selection the build's table lists — the provider answers for its own
+  // writes, so a value that slipped past the store is dropped here rather
+  // than sent.
+  const chosen =
+    agentSelection && isListedWorkspaceAgentModel(CONDUCTOR_PROVIDER_ID, agentSelection)
+      ? agentSelection
+      : undefined;
+  const created = yield* write(
+    pass,
+    {
+      segments: [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
+      body: {
+        [CONDUCTOR_WORKSPACE_FIELD.PROJECT_ID]: project.providerProjectId,
+        ...(name ? { [CONDUCTOR_WORKSPACE_FIELD.NAME]: name } : undefined),
+        ...(chosen
+          ? {
+              [CONDUCTOR_WORKSPACE_FIELD.AGENT]: chosen.agent,
+              [CONDUCTOR_WORKSPACE_FIELD.MODEL]: chosen.model,
+              ...(chosen.effort
+                ? { [CONDUCTOR_WORKSPACE_FIELD.EFFORT]: chosen.effort }
+                : undefined),
+            }
+          : undefined),
       },
-      WRITE_SUBJECT.PROJECT,
-    );
-    if (created.outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) return created.outcome;
+    },
+    WRITE_SUBJECT.PROJECT,
+  );
+  if (created.outcome.status !== ACTION_RESULT_STATUS.ACCEPTED) return created.outcome;
 
-    // The id the response named rides the acceptance — an identifier only,
-    // never an address — so the surface can open the workspace once an
-    // observation pass reports that session itself. The body it was read from
-    // never leaves this module.
-    const createdSessionId = textFromRecord(
-      created.body ?? {},
-      CONDUCTOR_WORKSPACE_FIELD.SESSION_ID,
-    );
-    const landed: ProviderWorkspaceResult = {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
-    };
-    if (!task) return landed;
+  // The id the response named rides the acceptance — an identifier only,
+  // never an address — so the surface can open the workspace once an
+  // observation pass reports that session itself. The body it was read from
+  // never leaves this module.
+  const createdSessionId = textFromRecord(created.body ?? {}, CONDUCTOR_WORKSPACE_FIELD.SESSION_ID);
+  const landed: ProviderWorkspaceResult = {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    ...(createdSessionId ? { providerSessionId: createdSessionId } : undefined),
+  };
+  if (!task) return landed;
 
-    if (!createdSessionId) {
-      return {
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason:
-          "The workspace was created, but its opening task was not delivered: " +
-          "Conductor did not say which session takes the opening message.",
-      };
-    }
-    const delivered = yield* write(
-      pass,
-      CONDUCTOR_WRITE_ROUTE.message(createdSessionId, task),
-      WRITE_SUBJECT.SESSION,
-    );
-    if (delivered.outcome.status === ACTION_RESULT_STATUS.ACCEPTED) return landed;
+  if (!createdSessionId) {
     return {
       status: ACTION_RESULT_STATUS.REJECTED,
-      reason: `The workspace was created, but its opening task was not delivered: ${
-        delivered.outcome.status === ACTION_RESULT_STATUS.REJECTED
-          ? delivered.outcome.reason
-          : "the provider documents no way to hand it over."
-      }`,
+      reason:
+        "The workspace was created, but its opening task was not delivered: " +
+        "Conductor did not say which session takes the opening message.",
     };
-  });
-}
+  }
+  const delivered = yield* write(
+    pass,
+    CONDUCTOR_WRITE_ROUTE.message(createdSessionId, task),
+    WRITE_SUBJECT.SESSION,
+  );
+  if (delivered.outcome.status === ACTION_RESULT_STATUS.ACCEPTED) return landed;
+  return {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: `The workspace was created, but its opening task was not delivered: ${
+      delivered.outcome.status === ACTION_RESULT_STATUS.REJECTED
+        ? delivered.outcome.reason
+        : "the provider documents no way to hand it over."
+    }`,
+  };
+});

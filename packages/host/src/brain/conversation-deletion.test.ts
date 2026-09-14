@@ -19,8 +19,11 @@ function harness(marks: boolean) {
         calls.push(`report:${message}`);
       },
     });
-    const running = yield* Effect.fork(flow);
-    yield* Effect.yieldNow();
+    // Started on this stack, because what the first assertion is about is the
+    // step the fence stands in: the flow must have reached its own await
+    // before the harness answers.
+    const running = yield* Effect.forkChild(flow, { startImmediately: true });
+    yield* Effect.yieldNow;
     return { calls, release: Deferred.succeed(marker, marks), running };
   });
 }

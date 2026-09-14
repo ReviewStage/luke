@@ -54,12 +54,12 @@ export function closeGracefully(
   options: GracefulCloseOptions,
 ): Effect.Effect<SidebandCloseResult> {
   return Effect.ensuring(
-    Effect.zipRight(
+    Effect.andThen(
       sideband.send(closeEvent(options.eventId)),
-      Effect.timeoutTo(options.settled, {
+      Effect.timeoutOrElse(options.settled, {
         duration: Duration.millis(options.timeoutMs ?? SIDEBAND_CLOSE_TIMEOUT_MS),
-        onSuccess: (result: SidebandCloseResult) => result,
-        onTimeout: (): SidebandCloseResult => ({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
+        orElse: (): Effect.Effect<SidebandCloseResult> =>
+          Effect.succeed({ outcome: SIDEBAND_CLOSE_OUTCOME.TIMED_OUT }),
       }),
     ),
     sideband.close,

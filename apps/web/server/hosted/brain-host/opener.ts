@@ -1,6 +1,6 @@
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Cause, Effect, Option, type ParseResult } from "effect";
+import { Cause, Effect, Option, type Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { BrainWakeEvent, SessionIdentity } from "../../core.js";
 import { holdReleasedInputText, TURN_ORIGIN, wakeInputText } from "../../core.js";
 import { OBSERVATION_TICK } from "../observation-bounds.js";
@@ -118,7 +118,7 @@ const TURN_OPENER = {
 } as const;
 
 /** What an opening answers: an effect over the ambient client, run by the tick's own edge. */
-type OpenerEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type OpenerEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 /**
  * A read whose answer is optional however it failed: the payload envelope
@@ -127,7 +127,7 @@ type OpenerEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlCl
  * than failing the account's whole opening.
  */
 const optionally = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.option(Effect.catchAllDefect(effect, () => Effect.fail(undefined)));
+  Effect.option(Effect.catchDefect(effect, () => Effect.fail(undefined)));
 
 /** The kinds of turn the opener sends, which is what its eve client is admitted for and nothing wider. */
 export type ScheduledTurn =
@@ -219,84 +219,85 @@ function nothingWoken(settled: Settled): TurnOpeningOutcome {
  * visit finds no bookmark and adopts the snapshot as it stands, waking
  * nothing, exactly as the first pass records no change against nothing.
  */
-function settledChange(seams: TurnOpenerSeams, userId: string): OpenerEffect<Settled> {
-  return Effect.gen(function* () {
-    // A snapshot this build cannot open is the pass's to replace on its next whole read; until then
-    // the visit wakes nothing from it and says so, rather than failing the account's whole opening.
-    const read = yield* optionally(seams.store.roster.read(userId));
-    if (Option.isNone(read)) {
+const settledChange = /* @__PURE__ */ Effect.fn("settledChange")(function* (
+  seams: TurnOpenerSeams,
+  userId: string,
+): Effect.fn.Return<Settled, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  // A snapshot this build cannot open is the pass's to replace on its next whole read; until then
+  // the visit wakes nothing from it and says so, rather than failing the account's whole opening.
+  const read = yield* optionally(seams.store.roster.read(userId));
+  if (Option.isNone(read)) {
+    seams.report(
+      `The roster snapshot of account ${userId} cannot be opened; nothing is woken from it.`,
+    );
+    return NOTHING_SETTLED;
+  }
+  const snapshot: RosterSnapshotRecord | undefined = read.value;
+  if (snapshot === undefined) return NOTHING_SETTLED;
+  const current = decodeObservedRoster(snapshot.body);
+  if (current === undefined) {
+    seams.report(
+      `The roster snapshot of account ${userId} cannot be read; nothing is woken from it.`,
+    );
+    return NOTHING_SETTLED;
+  }
+  const bookmark = yield* seams.store.roster.consumed(userId);
+  if (bookmark.state === CONSUMED_ROSTER.ABSENT) {
+    yield* seams.store.roster.keepConsumed(userId, snapshot, undefined);
+    return NOTHING_SETTLED;
+  }
+  // A bookmark this build cannot open or read is replaced by the snapshot as it stands, over the
+  // bookmark's own instant: kept where none stands it would lose to the row it meant to replace,
+  // and every later visit would adopt in silence.
+  const replace = (from: number): OpenerEffect<Settled> =>
+    Effect.gen(function* () {
       seams.report(
-        `The roster snapshot of account ${userId} cannot be opened; nothing is woken from it.`,
+        `The roster bookmark of account ${userId} could not be read; it is replaced by the snapshot as it stands, and nothing is woken from it.`,
       );
+      yield* seams.store.roster.keepConsumed(userId, snapshot, from);
       return NOTHING_SETTLED;
-    }
-    const snapshot: RosterSnapshotRecord | undefined = read.value;
-    if (snapshot === undefined) return NOTHING_SETTLED;
-    const current = decodeObservedRoster(snapshot.body);
-    if (current === undefined) {
-      seams.report(
-        `The roster snapshot of account ${userId} cannot be read; nothing is woken from it.`,
-      );
-      return NOTHING_SETTLED;
-    }
-    const bookmark = yield* seams.store.roster.consumed(userId);
-    if (bookmark.state === CONSUMED_ROSTER.ABSENT) {
-      yield* seams.store.roster.keepConsumed(userId, snapshot, undefined);
-      return NOTHING_SETTLED;
-    }
-    // A bookmark this build cannot open or read is replaced by the snapshot as it stands, over the
-    // bookmark's own instant: kept where none stands it would lose to the row it meant to replace,
-    // and every later visit would adopt in silence.
-    const replace = (from: number): OpenerEffect<Settled> =>
-      Effect.gen(function* () {
-        seams.report(
-          `The roster bookmark of account ${userId} could not be read; it is replaced by the snapshot as it stands, and nothing is woken from it.`,
-        );
-        yield* seams.store.roster.keepConsumed(userId, snapshot, from);
-        return NOTHING_SETTLED;
-      });
-    if (bookmark.state === CONSUMED_ROSTER.UNREADABLE) return yield* replace(bookmark.observedAt);
-    const heard = decodeObservedRoster(bookmark.roster.body);
-    if (heard === undefined) return yield* replace(bookmark.roster.observedAt);
-    // A bookmark trailing the snapshot past the stale gap has not been caught up for that long — an
-    // empty visit keeps it level below, so this is never an idle roster — and what changed in between
-    // is history the roster shows rather than news: the bookmark is reseeded from the snapshot as it
-    // stands, over its own instant, and nothing is woken from the gap. The gap is the two rows' own
-    // instants apart, never the clock's reading.
-    const gap = snapshot.observedAt - bookmark.roster.observedAt;
-    if (gap > OBSERVATION_TICK.STALE_GAP_MS) {
-      seams.report(
-        `The roster bookmark of account ${userId} trails the snapshot by ${gap} ms, past the stale gap; it is reseeded from the snapshot as it stands, and nothing is woken from the gap.`,
-      );
-      yield* seams.store.roster.keepConsumed(userId, snapshot, bookmark.roster.observedAt);
-      return RESEEDED;
-    }
-    // A provider whose key was replaced, added, or removed since the bookmark is another account's
-    // roster to compare against; it is taken from the snapshot as it stands, as the pass refuses the
-    // same comparison, so a key change wakes nothing and the bookmark settles on the new key at once.
-    const consumed = rosterComparable(heard, current);
-    const change: DerivedChange = {
-      snapshot,
-      current,
-      consumed,
-      from: bookmark.roster.observedAt,
-      diff: rosterDiff(consumed, current),
-    };
-    // Nothing to wake, and the bookmark is kept level with the snapshot all the same, over its own
-    // instant: its instant is what the stale gap reads as when the brain was last caught up, so an
-    // idle roster must move it as a woken change does, and a provider taken from the snapshot on a
-    // key change must reach it or the same adoption is made on every visit. A visit whose pass left
-    // the snapshot standing, and whose bookmark already holds it, writes nothing.
-    if (
-      rosterDiffIsEmpty(change.diff) &&
-      (snapshot.observedAt !== change.from ||
-        encodeObservedRoster(consumed) !== encodeObservedRoster(heard))
-    ) {
-      yield* seams.store.roster.keepConsumed(userId, snapshot, change.from);
-    }
-    return { change, reseeded: false };
-  });
-}
+    });
+  if (bookmark.state === CONSUMED_ROSTER.UNREADABLE) return yield* replace(bookmark.observedAt);
+  const heard = decodeObservedRoster(bookmark.roster.body);
+  if (heard === undefined) return yield* replace(bookmark.roster.observedAt);
+  // A bookmark trailing the snapshot past the stale gap has not been caught up for that long — an
+  // empty visit keeps it level below, so this is never an idle roster — and what changed in between
+  // is history the roster shows rather than news: the bookmark is reseeded from the snapshot as it
+  // stands, over its own instant, and nothing is woken from the gap. The gap is the two rows' own
+  // instants apart, never the clock's reading.
+  const gap = snapshot.observedAt - bookmark.roster.observedAt;
+  if (gap > OBSERVATION_TICK.STALE_GAP_MS) {
+    seams.report(
+      `The roster bookmark of account ${userId} trails the snapshot by ${gap} ms, past the stale gap; it is reseeded from the snapshot as it stands, and nothing is woken from the gap.`,
+    );
+    yield* seams.store.roster.keepConsumed(userId, snapshot, bookmark.roster.observedAt);
+    return RESEEDED;
+  }
+  // A provider whose key was replaced, added, or removed since the bookmark is another account's
+  // roster to compare against; it is taken from the snapshot as it stands, as the pass refuses the
+  // same comparison, so a key change wakes nothing and the bookmark settles on the new key at once.
+  const consumed = rosterComparable(heard, current);
+  const change: DerivedChange = {
+    snapshot,
+    current,
+    consumed,
+    from: bookmark.roster.observedAt,
+    diff: rosterDiff(consumed, current),
+  };
+  // Nothing to wake, and the bookmark is kept level with the snapshot all the same, over its own
+  // instant: its instant is what the stale gap reads as when the brain was last caught up, so an
+  // idle roster must move it as a woken change does, and a provider taken from the snapshot on a
+  // key change must reach it or the same adoption is made on every visit. A visit whose pass left
+  // the snapshot standing, and whose bookmark already holds it, writes nothing.
+  if (
+    rosterDiffIsEmpty(change.diff) &&
+    (snapshot.observedAt !== change.from ||
+      encodeObservedRoster(consumed) !== encodeObservedRoster(heard))
+  ) {
+    yield* seams.store.roster.keepConsumed(userId, snapshot, change.from);
+  }
+  return { change, reseeded: false };
+});
 
 interface Opening {
   readonly identity: SessionIdentity;
@@ -328,65 +329,61 @@ function plan(change: DatedRosterDiff, roster: HostedRoster, limit: number): Pla
 }
 
 /** Whether eve took the message: sent to the session the conversation runs in, or opened in a new one where none runs. */
-function handToEve(
+const handToEve = /* @__PURE__ */ Effect.fn("handToEve")(function* (
   seams: TurnOpenerSeams,
   target: ConversationTarget,
   turn: ScheduledTurn,
   words: string,
-): OpenerEffect<boolean> {
-  return Effect.gen(function* () {
-    const message = { conversationId: target.conversationId, turn, message: words };
-    const recorded = yield* recordedRuntimeSession(target);
-    if (recorded !== undefined) {
-      const sent = yield* Effect.promise(() => seams.eve.send(recorded, message));
-      if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-      if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-        seams.report(
-          `eve refused a ${turn} turn on conversation ${target.conversationId} with status ${sent.status}.`,
-        );
-        return false;
-      }
+): Effect.fn.Return<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const message = { conversationId: target.conversationId, turn, message: words };
+  const recorded = yield* recordedRuntimeSession(target);
+  if (recorded !== undefined) {
+    const sent = yield* Effect.promise(() => seams.eve.send(recorded, message));
+    if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+    if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
+      seams.report(
+        `eve refused a ${turn} turn on conversation ${target.conversationId} with status ${sent.status}.`,
+      );
+      return false;
     }
-    const opened = yield* Effect.promise(() => seams.eve.open(message));
-    if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-    seams.report(
-      `eve refused to open a session for conversation ${target.conversationId} with status ${opened.status}.`,
-    );
-    return false;
-  });
-}
+  }
+  const opened = yield* Effect.promise(() => seams.eve.open(message));
+  if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+  seams.report(
+    `eve refused to open a session for conversation ${target.conversationId} with status ${opened.status}.`,
+  );
+  return false;
+});
 
 /** One session's transcript since the cursor kept for it, riding on its first wake; a read that throws is a read not made, and the cursor stands for the next. */
-function withTranscript(
+const withTranscript = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: TurnOpenerSeams,
   opening: Opening,
-): Effect.Effect<{ events: readonly BrainWakeEvent[]; cursor?: string; from?: string }> {
-  return Effect.gen(function* () {
-    // A defect as well as a failure: a read that dies — a provider plugin
-    // that throws where its effect declares no error — was a read not made
-    // when it was a rejected promise, and stays one now. Neither catch
-    // reaches an interruption, so a cancelled tick still ends the tick.
-    const read = yield* Effect.asSome(seams.transcripts.since(opening.identity)).pipe(
-      Effect.catchAllDefect(Effect.fail),
-      Effect.catchAll((failure) => {
-        seams.report(
-          `The transcript of ${opening.identity.providerSessionId} could not be read: ${String(failure)}.`,
-        );
-        return Effect.succeedNone;
-      }),
-    );
-    if (Option.isNone(read)) return { events: opening.events };
-    const reading = read.value;
-    if (reading === undefined) return { events: opening.events };
-    const [first, ...rest] = opening.events;
-    if (first === undefined) return { events: opening.events };
-    return {
-      events: [{ ...first, transcriptDelta: reading.delta }, ...rest],
-      ...(reading.cursor !== undefined ? { cursor: reading.cursor } : undefined),
-      ...(reading.from !== undefined ? { from: reading.from } : undefined),
-    };
-  });
-}
+): Effect.fn.Return<{ events: readonly BrainWakeEvent[]; cursor?: string; from?: string }> {
+  // A defect as well as a failure: a read that dies — a provider plugin
+  // that throws where its effect declares no error — was a read not made
+  // when it was a rejected promise, and stays one now. Neither catch
+  // reaches an interruption, so a cancelled tick still ends the tick.
+  const read = yield* Effect.asSome(seams.transcripts.since(opening.identity)).pipe(
+    Effect.catchDefect(Effect.fail),
+    Effect.catch((failure) => {
+      seams.report(
+        `The transcript of ${opening.identity.providerSessionId} could not be read: ${String(failure)}.`,
+      );
+      return Effect.succeedNone;
+    }),
+  );
+  if (Option.isNone(read)) return { events: opening.events };
+  const reading = read.value;
+  if (reading === undefined) return { events: opening.events };
+  const [first, ...rest] = opening.events;
+  if (first === undefined) return { events: opening.events };
+  return {
+    events: [{ ...first, transcriptDelta: reading.delta }, ...rest],
+    ...(reading.cursor !== undefined ? { cursor: reading.cursor } : undefined),
+    ...(reading.from !== undefined ? { from: reading.from } : undefined),
+  };
+});
 
 /**
  * Whether eve took the message. A handover that fails for any reason is one
@@ -401,9 +398,9 @@ function offered(
   turn: ScheduledTurn,
   words: string,
 ): OpenerEffect<boolean> {
-  return Effect.catchAllCause(handToEve(seams, target, turn, words), (cause) => {
+  return Effect.catchCause(handToEve(seams, target, turn, words), (cause) => {
     // A cancelled tick is not a refused send; it is the tick ending.
-    if (Cause.isInterruptedOnly(cause)) return Effect.failCause(cause);
+    if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
     seams.report(
       `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
     );
@@ -412,22 +409,20 @@ function offered(
 }
 
 /** Opens the account's observation turns for the diffs pending now, as the module comment describes. */
-export function openObservationTurns(
+export const openObservationTurns = /* @__PURE__ */ Effect.fn("openObservationTurns")(function* (
   seams: TurnOpenerSeams,
   userId: string,
   options: TurnOpeningOptions = {},
-): OpenerEffect<TurnOpeningOutcome> {
-  return Effect.gen(function* () {
-    const settled = yield* settledChange(seams, userId);
-    if (settled.change === undefined) return nothingWoken(settled);
-    return yield* wakeFrom(
-      seams,
-      userId,
-      settled.change,
-      options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT,
-    );
-  });
-}
+): Effect.fn.Return<TurnOpeningOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const settled = yield* settledChange(seams, userId);
+  if (settled.change === undefined) return nothingWoken(settled);
+  return yield* wakeFrom(
+    seams,
+    userId,
+    settled.change,
+    options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT,
+  );
+});
 
 /** The wakes a settled change owes, under the bound; the change is required, so nothing here runs before the bookmark's own bookkeeping did. */
 function wakeFrom(
@@ -516,83 +511,79 @@ function wakeFrom(
  * earlier turn already carried them — has nothing left to decide, and its
  * rows go without a turn, said rather than sent as an empty ask.
  */
-export function openHoldReleaseTurns(
+export const openHoldReleaseTurns = /* @__PURE__ */ Effect.fn("openHoldReleaseTurns")(function* (
   seams: TurnOpenerSeams,
   userId: string,
   options: TurnOpeningOptions = {},
-): OpenerEffect<TurnOpeningOutcome> {
-  return Effect.gen(function* () {
-    const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
-    if (limit <= 0) return NOTHING_OPENED;
-    const rows = yield* queuedTurns(userId, TURN_ORIGIN.HOLD_RELEASE, TURN_OPENER.QUEUED_ROWS_READ);
-    const byConversation = new Map<string, QueuedTurnRecord[]>();
-    for (const row of rows) {
-      const held = byConversation.get(row.conversationId);
-      if (held) held.push(row);
-      else if (byConversation.size < limit) byConversation.set(row.conversationId, [row]);
+): Effect.fn.Return<TurnOpeningOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  if (limit <= 0) return NOTHING_OPENED;
+  const rows = yield* queuedTurns(userId, TURN_ORIGIN.HOLD_RELEASE, TURN_OPENER.QUEUED_ROWS_READ);
+  const byConversation = new Map<string, QueuedTurnRecord[]>();
+  for (const row of rows) {
+    const held = byConversation.get(row.conversationId);
+    if (held) held.push(row);
+    else if (byConversation.size < limit) byConversation.set(row.conversationId, [row]);
+  }
+  let holdRelease = 0;
+  for (const [conversationId, queued] of byConversation) {
+    const target: ConversationTarget = { userId, conversationId };
+    const briefings = yield* releasedBriefings(target, {
+      limit: TURN_OPENER.RELEASED_BRIEFINGS_READ,
+    });
+    if (briefings.length >= TURN_OPENER.RELEASED_BRIEFINGS_READ) {
+      seams.report(
+        `Conversation ${conversationId} has at least ${TURN_OPENER.RELEASED_BRIEFINGS_READ} briefings released since its last re-decision; only that many are handed over.`,
+      );
     }
-    let holdRelease = 0;
-    for (const [conversationId, queued] of byConversation) {
-      const target: ConversationTarget = { userId, conversationId };
-      const briefings = yield* releasedBriefings(target, {
-        limit: TURN_OPENER.RELEASED_BRIEFINGS_READ,
-      });
-      if (briefings.length >= TURN_OPENER.RELEASED_BRIEFINGS_READ) {
-        seams.report(
-          `Conversation ${conversationId} has at least ${TURN_OPENER.RELEASED_BRIEFINGS_READ} briefings released since its last re-decision; only that many are handed over.`,
-        );
+    if (briefings.length > 0) {
+      const words = holdReleasedInputText(
+        briefings.map((briefing) => ({
+          briefing: briefing.briefing,
+          decidedAt: briefing.decidedAt,
+        })),
+        seams.now(),
+      );
+      if (!(yield* offered(seams, target, BRAIN_HOST_TURN.HOLD_RELEASE, words))) {
+        return { observation: 0, holdRelease, failed: 1, reseeded: 0 };
       }
-      if (briefings.length > 0) {
-        const words = holdReleasedInputText(
-          briefings.map((briefing) => ({
-            briefing: briefing.briefing,
-            decidedAt: briefing.decidedAt,
-          })),
-          seams.now(),
-        );
-        if (!(yield* offered(seams, target, BRAIN_HOST_TURN.HOLD_RELEASE, words))) {
-          return { observation: 0, holdRelease, failed: 1, reseeded: 0 };
-        }
-        holdRelease += 1;
-      } else {
-        seams.report(
-          `Conversation ${conversationId} queued a hold release with no released briefing left to decide; its rows go without a turn.`,
-        );
-      }
-      for (const row of queued) {
-        const removed = yield* seams.writer.dequeueTurn(target, row.id);
-        if (!removed.ok) {
-          seams.report(`The queued turn ${row.id} could not be removed: ${removed.refusal}.`);
-        }
+      holdRelease += 1;
+    } else {
+      seams.report(
+        `Conversation ${conversationId} queued a hold release with no released briefing left to decide; its rows go without a turn.`,
+      );
+    }
+    for (const row of queued) {
+      const removed = yield* seams.writer.dequeueTurn(target, row.id);
+      if (!removed.ok) {
+        seams.report(`The queued turn ${row.id} could not be removed: ${removed.refusal}.`);
       }
     }
-    return { observation: 0, holdRelease, failed: 0, reseeded: 0 };
-  });
-}
+  }
+  return { observation: 0, holdRelease, failed: 0, reseeded: 0 };
+});
 
 /** One account's opening whole: the hold releases first, then the observations under what remains of the bound. */
-export function openAccountTurns(
+export const openAccountTurns = /* @__PURE__ */ Effect.fn("openAccountTurns")(function* (
   seams: TurnOpenerSeams,
   userId: string,
   options: TurnOpeningOptions = {},
-): OpenerEffect<TurnOpeningOutcome> {
-  return Effect.gen(function* () {
-    const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
-    // The bookmark is settled before anything is woken, so neither the hold releases filling the bound
-    // nor eve refusing one can leave a first bookmark unplaced for a visit.
-    const settled = yield* settledChange(seams, userId);
-    const released = yield* openHoldReleaseTurns(seams, userId, { limit });
-    // A refused hold release ends the visit's wakes, since eve is refusing; a reseed the visit made
-    // is settled already and counted either way.
-    if (released.failed > 0 || settled.change === undefined) {
-      return summed(released, nothingWoken(settled));
-    }
-    const observed = yield* wakeFrom(
-      seams,
-      userId,
-      settled.change,
-      Math.max(0, limit - released.holdRelease),
-    );
-    return summed(released, observed);
-  });
-}
+): Effect.fn.Return<TurnOpeningOutcome, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const limit = options.limit ?? TURN_OPENER.TURNS_PER_ACCOUNT;
+  // The bookmark is settled before anything is woken, so neither the hold releases filling the bound
+  // nor eve refusing one can leave a first bookmark unplaced for a visit.
+  const settled = yield* settledChange(seams, userId);
+  const released = yield* openHoldReleaseTurns(seams, userId, { limit });
+  // A refused hold release ends the visit's wakes, since eve is refusing; a reseed the visit made
+  // is settled already and counted either way.
+  if (released.failed > 0 || settled.change === undefined) {
+    return summed(released, nothingWoken(settled));
+  }
+  const observed = yield* wakeFrom(
+    seams,
+    userId,
+    settled.change,
+    Math.max(0, limit - released.holdRelease),
+  );
+  return summed(released, observed);
+});

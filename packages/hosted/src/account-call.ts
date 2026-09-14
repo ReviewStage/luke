@@ -1,7 +1,3 @@
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import {
   HTTP_STATUS,
   type HttpMethod,
@@ -10,7 +6,11 @@ import {
   withoutTrailingSlash,
 } from "@sidecar/wire";
 import { webResponseFromClientResponse } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, type Schema as EffectSchema } from "effect";
+import { Data, Duration, Effect, type Schema as EffectSchema, Result } from "effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type { AccountToken } from "./account-token.js";
 
 const ACCOUNT_CALL_DEFAULTS = {
@@ -129,7 +129,7 @@ export interface AccountCallEffects {
    */
   ask<Answer, Encoded>(
     request: CallRequest,
-    answer: EffectSchema.Schema<Answer, Encoded>,
+    answer: EffectSchema.Codec<Answer, Encoded>,
   ): Effect.Effect<Answer | undefined, never, HttpClient.HttpClient>;
 }
 
@@ -211,9 +211,9 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     effect: Effect.Effect<Answer, CallTransportError, Requirements>,
   ): Effect.Effect<Answer, CallTransportError, Requirements> {
     return effect.pipe(
-      Effect.timeoutFail({
+      Effect.timeoutOrElse({
         duration: deadline,
-        onTimeout: () => new CallTransportError({ errorName: DEADLINE_ERROR_NAME }),
+        orElse: () => Effect.fail(new CallTransportError({ errorName: DEADLINE_ERROR_NAME })),
       }),
     );
   }
@@ -244,7 +244,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     CallTransportError,
     HttpClient.HttpClient
   > {
-    return Effect.catchAll(HttpClient.execute(httpRequest(request, authorization)), (error) =>
+    return Effect.catch(HttpClient.execute(httpRequest(request, authorization)), (error) =>
       Effect.fail(new CallTransportError({ errorName: errorName(error.cause) })),
     );
   }
@@ -315,8 +315,12 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
     const settled = <Read>(
       effect: Effect.Effect<Read, CallTransportError, HttpClient.HttpClient>,
     ): Effect.Effect<{ readonly read: Read } | CallFailed, never, HttpClient.HttpClient> =>
-      Effect.map(Effect.either(effect), (end) =>
-        end._tag === "Left" ? { failure: transportFailure(end.left) } : { read: end.right },
+      Effect.map(
+        Effect.result(effect),
+        Result.match({
+          onFailure: (error) => ({ failure: transportFailure(error) }),
+          onSuccess: (read) => ({ read }),
+        }),
       );
 
     return Effect.gen(function* () {
@@ -365,7 +369,7 @@ export function accountCall(options: AccountCallOptions): AccountCallEffects {
       ),
     ask: (request, answer) =>
       reading(request, (response) =>
-        Effect.catchAll(HttpClientResponse.schemaBodyJson(answer)(response), () =>
+        Effect.catch(HttpClientResponse.schemaBodyJson(answer)(response), () =>
           Effect.succeed(undefined),
         ),
       ),

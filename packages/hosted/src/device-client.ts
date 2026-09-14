@@ -1,8 +1,8 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either, type Layer } from "effect";
+import { Effect, type Schema as EffectSchema, type Layer, Result } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
   accountBearer,
@@ -94,7 +94,7 @@ export class HostedDeviceClient {
   }
 
   register(request: DeviceRegisterRequest): Effect.Effect<DeviceRegisterAnswer | undefined> {
-    const admitted = Either.getOrUndefined(
+    const admitted = Result.getOrUndefined(
       readEither(deviceRegisterRequestSchema)(registerRecord(request)),
     );
     if (admitted === undefined) return Effect.succeed(undefined);
@@ -113,7 +113,7 @@ export class HostedDeviceClient {
     request: DeviceForgetRequest,
     departing?: DepartingCredential,
   ): Effect.Effect<DeviceForgetAnswer | undefined> {
-    const admitted = Either.getOrUndefined(
+    const admitted = Result.getOrUndefined(
       readEither(deviceForgetRequestSchema)(forgetRecord(request)),
     );
     if (admitted === undefined) return Effect.succeed(undefined);
@@ -130,7 +130,7 @@ export class HostedDeviceClient {
    */
   #ask<Answer, Encoded>(
     request: DeviceRequest,
-    answer: EffectSchema.Schema<Answer, Encoded>,
+    answer: EffectSchema.Codec<Answer, Encoded>,
     departing?: DepartingCredential,
   ): Effect.Effect<Answer | undefined> {
     const call = departing ? this.#callOn(fixedBearer(departing.accessToken)) : this.#call;

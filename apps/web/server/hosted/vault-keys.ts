@@ -1,5 +1,5 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { Cause, Effect, Exit, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   CLOUD_AGENT_PROVIDER_ID,
   type CloudAgentProviderId,
@@ -80,7 +80,7 @@ export function observeProviders<Answer>(options: {
             // A leg the caller's own deadline ended is not a leg that answered
             // nothing, so an interruption fails the fan-out rather than being
             // read as this provider's answer.
-            Exit.isFailure(exit) && Cause.isInterruptedOnly(exit.cause)
+            Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)
               ? Effect.failCause(exit.cause)
               : Effect.succeed({
                   providerId,

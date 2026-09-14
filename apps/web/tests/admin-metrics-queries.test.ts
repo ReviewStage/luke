@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { USER_ROLE } from "../server/admin/admin-access";
 import { readAdminMetricsSource } from "../server/admin/admin-queries";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "../server/admin/http";
@@ -89,7 +89,7 @@ const seed = Effect.gen(function* () {
   return { ordinary, quiet, maintainer };
 });
 
-it.layer(testSqlClient)("the dashboard's aggregates over @effect/sql", (it) => {
+it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (it) => {
   it.effect("one window's aggregates, and what the two scopes keep of them", () =>
     Effect.gen(function* () {
       const { ordinary, quiet, maintainer } = yield* seed;

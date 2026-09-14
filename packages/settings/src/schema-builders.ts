@@ -6,7 +6,7 @@ import {
   appToggleText,
 } from "@sidecar/guide";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import {
   type AppSettingGuideSettings,
   type AppSettingSchemaEntry,
@@ -31,39 +31,40 @@ const valid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: true
 const invalid = <Value>(value: Value): SettingGuardResult<Value> => ({ valid: false, value });
 
 /**
- * Every guard settles as an `Either` before it ever becomes a `{ valid, value
- * }` pair: a `Right` is what a guard accepted, and a `Left` carries the same
+ * Every guard settles as a `Result` before it ever becomes a `{ valid, value
+ * }` pair: a success is what a guard accepted, and a failure carries the same
  * value a caller sees on refusal (the default, or `undefined`), because the
  * exported shape keeps a value on both branches even where the failure
- * channel usually would not.
+ * channel usually would not. The fold is total, so it is stated as one —
+ * `Result.match` rather than a test of the tag and a reach into the arm it
+ * proved.
  */
 export const settingGuardFromEither = <Value>(
-  either: Either.Either<Value, Value>,
-): SettingGuardResult<Value> =>
-  Either.isRight(either) ? valid(either.right) : invalid(either.left);
+  either: Result.Result<Value, Value>,
+): SettingGuardResult<Value> => Result.match(either, { onSuccess: valid, onFailure: invalid });
 
 export function optional<Value extends UnparsedWireValue>(
   value: UnparsedWireValue,
   guard: (candidate: UnparsedWireValue) => candidate is Value,
 ): SettingGuardResult<Value | undefined> {
   if (value === undefined) return valid(undefined);
-  return settingGuardFromEither(guard(value) ? Either.right(value) : Either.left(undefined));
+  return settingGuardFromEither(guard(value) ? Result.succeed(value) : Result.fail(undefined));
 }
 
 function boolean(defaultValue: boolean) {
   const isBoolean = Schema.is(Schema.Boolean);
   return (value: UnparsedWireValue): SettingGuardResult<boolean> =>
-    settingGuardFromEither(isBoolean(value) ? Either.right(value) : Either.left(defaultValue));
+    settingGuardFromEither(isBoolean(value) ? Result.succeed(value) : Result.fail(defaultValue));
 }
 
 function hotkey(value: UnparsedWireValue): SettingGuardResult<string | undefined> {
   if (value === undefined) return valid(undefined);
-  if (!isWireString(value)) return settingGuardFromEither(Either.left(undefined));
+  if (!isWireString(value)) return settingGuardFromEither(Result.fail(undefined));
   // A deletion is a choice the parser cannot spell: no chord at all, with no
   // default standing in behind the absence.
-  if (value === VOICE_HOTKEY_NONE) return settingGuardFromEither(Either.right(VOICE_HOTKEY_NONE));
+  if (value === VOICE_HOTKEY_NONE) return settingGuardFromEither(Result.succeed(VOICE_HOTKEY_NONE));
   const parsed = parseVoiceHotkey(value);
-  return settingGuardFromEither(parsed ? Either.right(parsed) : Either.left(undefined));
+  return settingGuardFromEither(parsed ? Result.succeed(parsed) : Result.fail(undefined));
 }
 
 const toggleAnalytics = (value: StoredSettingValue): ProductSettingValue =>

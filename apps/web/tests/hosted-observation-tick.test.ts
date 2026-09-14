@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Fiber, TestClock } from "effect";
+import { Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
@@ -108,7 +109,7 @@ function tickOptions(
         recorded.ran.push(`observe:${userId}`);
         // A concurrent batch's passes interleave before any opens it, exactly
         // as a real pass's own await would; the yield stands in for that.
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
         return yield* outcome(userId);
       }),
     openTurns: (userId) =>
@@ -246,7 +247,9 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
         userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true, changed: true }),
     );
 
-    const fiber = yield* Effect.fork(Effect.provide(handleObservationTick(options), noDatabase));
+    const fiber = yield* Effect.forkChild(
+      Effect.provide(handleObservationTick(options), noDatabase),
+    );
     yield* TestClock.adjust(Duration.millis(20));
     const response = yield* Fiber.join(fiber);
     const body = yield* Effect.promise(() => response.json());

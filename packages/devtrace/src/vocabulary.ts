@@ -29,7 +29,7 @@ export const TRACE_ENTRY_KIND = {
 } as const;
 
 /** Which lines a reader recognizes at all; anything else costs only itself. */
-export const TraceEntryKindSchema = Schema.Literal(...Object.values(TRACE_ENTRY_KIND));
+export const TraceEntryKindSchema = Schema.Literals(Object.values(TRACE_ENTRY_KIND));
 
 export const TRACE_DIRECTION = {
   CLIENT: "client",
@@ -38,7 +38,7 @@ export const TRACE_DIRECTION = {
 
 export type TraceDirection = (typeof TRACE_DIRECTION)[keyof typeof TRACE_DIRECTION];
 
-const TraceDirectionSchema = Schema.Literal(...Object.values(TRACE_DIRECTION));
+const TraceDirectionSchema = Schema.Literals(Object.values(TRACE_DIRECTION));
 
 /** One live event as the tap saw it cross the data channel. */
 export interface AgentWireTrace {

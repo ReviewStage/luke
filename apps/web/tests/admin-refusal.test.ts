@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { HttpApiSchema, HttpServerResponse } from "@effect/platform";
+import { Schema } from "effect";
+import { HttpServerResponse } from "effect/unstable/http";
 import { test } from "vitest";
 import { ADMIN_HTTP_STATUS, errorResponse } from "../server/admin/http.js";
 import {
@@ -69,7 +70,7 @@ test("a refusal answers the status and the bytes the promise-shaped gate answers
 
 test("each refusal schema carries the status the group answers with", () => {
   for (const entry of REFUSALS) {
-    assert.equal(HttpApiSchema.getStatusError(entry.schema), entry.status);
+    assert.equal(Schema.resolveAnnotations(entry.schema)?.httpApiStatus, entry.status);
   }
 });
 

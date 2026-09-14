@@ -151,7 +151,7 @@ function decide<Kind extends ActionKind>(
   context: AdmitContext,
 ): Promise<ValidatedAction<Kind> | Refusal> {
   return Effect.runPromise(
-    Effect.catchAll(
+    Effect.catch(
       admitEffect(request, context),
       (refusal): Effect.Effect<ValidatedAction<Kind> | Refusal> =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.reason }),

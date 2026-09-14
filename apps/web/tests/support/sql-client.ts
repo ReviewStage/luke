@@ -1,13 +1,13 @@
-import * as Reactivity from "@effect/experimental/Reactivity";
-import { NodeContext } from "@effect/platform-node";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type * as SqlConnection from "@effect/sql/SqlConnection";
-import { SqlError } from "@effect/sql/SqlError";
+import { NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
-import { Effect, Layer, ManagedRuntime, Stream } from "effect";
+import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
+import * as Reactivity from "effect/unstable/reactivity/Reactivity";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
+import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { runWebMigrations } from "../../server/db/effect-migrator.js";
-import { createPool } from "../../server/db/index.js";
+import { sqlClientOverUrl } from "../../server/db/sql-client.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
 
 /**
@@ -28,7 +28,11 @@ const ROW_MODE = {
 } as const;
 
 function pgliteConnection(client: PGlite): SqlConnection.Connection {
-  const fail = (cause: unknown) => new SqlError({ cause, message: "Failed to execute statement" });
+  // PGlite's own failures are not classified here: the store's tests read the
+  // failure as one refusal whatever the database said, and no classifier for
+  // this driver ships with the library.
+  const fail = (cause: unknown) =>
+    new SqlError({ reason: new UnknownError({ cause, message: "Failed to execute statement" }) });
   const objectRows = (sql: string, params: ReadonlyArray<unknown>) =>
     Effect.tryPromise({
       try: () => client.query<SqlConnection.Row>(sql, [...params]),
@@ -42,18 +46,20 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
     objectRows(sql, params).pipe(
       Effect.map((result) => (transformRows ? transformRows(result.rows) : result.rows)),
     );
+  const values = (sql: string, params: ReadonlyArray<unknown>) =>
+    Effect.tryPromise({
+      try: () =>
+        client.query<ReadonlyArray<unknown>>(sql, [...params], { rowMode: ROW_MODE.ARRAY }),
+      catch: fail,
+    }).pipe(Effect.map((result) => result.rows));
   return {
     execute: rows,
     executeRaw: (sql, params) => objectRows(sql, params),
     executeUnprepared: rows,
     executeStream: (sql, params, transformRows) =>
       Stream.fromIterableEffect(rows(sql, params, transformRows)),
-    executeValues: (sql, params) =>
-      Effect.tryPromise({
-        try: () =>
-          client.query<ReadonlyArray<unknown>>(sql, [...params], { rowMode: ROW_MODE.ARRAY }),
-        catch: fail,
-      }).pipe(Effect.map((result) => result.rows)),
+    executeValues: values,
+    executeValuesUnprepared: values,
   };
 }
 
@@ -71,9 +77,9 @@ function pgliteConnection(client: PGlite): SqlConnection.Connection {
  * would land inside whichever transaction was open.
  */
 export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlClient> =>
-  Layer.scoped(
+  Layer.effect(
     SqlClient.SqlClient,
-    Effect.flatMap(Effect.makeSemaphore(1), (connections) => {
+    Effect.flatMap(Semaphore.make(1), (connections) => {
       const exclusive = Effect.acquireRelease(
         Effect.as(connections.take(1), pgliteConnection(client)),
         () => connections.release(1),
@@ -91,7 +97,7 @@ export const sqlClientOverPglite = (client: PGlite): Layer.Layer<SqlClient.SqlCl
 export async function openMigratedPglite(): Promise<PGlite> {
   const client = new PGlite();
   const migrationRuntime = ManagedRuntime.make(
-    Layer.mergeAll(sqlClientOverPglite(client), NodeContext.layer),
+    Layer.mergeAll(sqlClientOverPglite(client), NodeServices.layer),
   );
   try {
     await migrationRuntime.runPromise(runWebMigrations());
@@ -102,7 +108,7 @@ export async function openMigratedPglite(): Promise<PGlite> {
 }
 
 function pgliteSqlClientOver(open: () => Promise<PGlite>) {
-  return Layer.unwrapScoped(
+  return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(Effect.promise(open), (client) => Effect.promise(() => client.close())),
       sqlClientOverPglite,
@@ -125,19 +131,13 @@ export const unmigratedPgliteSqlClient: Layer.Layer<SqlClient.SqlClient, SqlErro
  * after the clone's in the same scope, and finalizers run in reverse.
  */
 function postgresSqlClient(connectionString: string) {
-  return Layer.unwrapScoped(
+  return Layer.unwrap(
     Effect.map(
       Effect.acquireRelease(
         Effect.promise(() => cloneStoreTestPostgres(connectionString)),
         (clone) => Effect.promise(() => clone.drop()),
       ),
-      (clone) =>
-        PgClient.layerFromPool({
-          acquire: Effect.acquireRelease(
-            Effect.sync(() => createPool(clone.connectionString)),
-            (pool) => Effect.promise(() => pool.end()),
-          ),
-        }),
+      (clone) => sqlClientOverUrl(clone.connectionString),
     ),
   );
 }

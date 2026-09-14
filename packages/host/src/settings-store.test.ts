@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import type { CalendarAccountCredential } from "@sidecar/calendar";
@@ -45,7 +44,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
-import { ConfigProvider, Effect, Layer, Runtime } from "effect";
+import { ConfigProvider, Context, Effect, Layer } from "effect";
+import * as FileSystem from "effect/FileSystem";
 import { test } from "vitest";
 import type { AppleCalendarConnection } from "./apple-calendar.js";
 import { Environment } from "./effect/seams.js";
@@ -144,14 +144,14 @@ const FILE_SYSTEM: FileSystem.FileSystem = Effect.runSync(
 );
 
 /**
- * The runtime this suite's own promise face runs the store's effects on: the
+ * The services this suite's own promise face runs the store's effects under: the
  * store's own methods are effects, and this suite holds them as the promises
  * its assertions are written against. `settings-store-awaited.ts` once
  * answered production callers the same shape by name and is now deleted;
  * this is that shape kept for the suite alone, where the run-outside-an-edge
  * rule does not reach (tests are exempt by extension).
  */
-const RUNTIME: Runtime.Runtime<never> = Runtime.defaultRuntime;
+const SERVICES: Context.Context<never> = Context.empty();
 
 /**
  * The store's own methods, as this suite's assertions are written against
@@ -215,10 +215,10 @@ interface PromisedSettingsStore {
 
 function awaitedStoreOf(
   store: SettingsStore,
-  runtime: Runtime.Runtime<never>,
+  services: Context.Context<never>,
 ): PromisedSettingsStore {
   const awaited = <Value>(effect: Effect.Effect<Value, unknown>): Promise<Value> =>
-    Runtime.runPromise(runtime)(effect);
+    Effect.runPromiseWith(services)(effect);
   return {
     get: (field) => awaited(store.get(field)),
     set: (field, value) => awaited(store.set(field, value)),
@@ -256,13 +256,10 @@ function awaitedStoreOf(
 }
 
 function overridesFor(environment: NodeJS.ProcessEnv): SettingsEnvironmentOverrides {
-  const entries = Object.entries(environment).filter(
-    (entry): entry is [string, string] => entry[1] !== undefined,
-  );
   return Effect.runSync(
     Effect.provide(
       settingsOverrides,
-      Layer.succeed(Environment, ConfigProvider.fromMap(new Map(entries))),
+      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(environment)),
     ),
   );
 }
@@ -282,7 +279,7 @@ function storeIn(
     vaultKeyHeld: options.vaultKeyHeld ?? (() => false),
     fileSystem: FILE_SYSTEM,
   };
-  return awaitedStoreOf(new SettingsStore(config), RUNTIME);
+  return awaitedStoreOf(new SettingsStore(config), SERVICES);
 }
 
 test("a failed first load is retried before a later write", async (t) => {
@@ -310,7 +307,7 @@ test("a failed first load is retried before a later write", async (t) => {
       vaultKeyHeld: () => false,
       fileSystem: FILE_SYSTEM,
     }),
-    RUNTIME,
+    SERVICES,
   );
 
   await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);

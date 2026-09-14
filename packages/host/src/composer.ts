@@ -1,5 +1,5 @@
 import type { GatewayMethod, GatewayMethodTable } from "@sidecar/gateway";
-import { Data, type Effect, Either, type Scope } from "effect";
+import { Data, type Effect, Result, type Scope } from "effect";
 
 /** One concern of the host: the Gateway methods it answers, and its own lifecycle. */
 export interface Composer {
@@ -30,16 +30,16 @@ export class DuplicateGatewayMethod extends Data.TaggedError("DuplicateGatewayMe
 /** The one method table, folded from the composers' own, or the first method two of them claim. */
 export function foldMethods(
   composers: readonly Composer[],
-): Either.Either<GatewayMethodTable, DuplicateGatewayMethod> {
+): Result.Result<GatewayMethodTable, DuplicateGatewayMethod> {
   const merged: GatewayMethodTable = {};
   for (const composer of composers) {
     // SAFETY: a method table's keys are the method names it was built from.
     for (const method of Object.keys(composer.methods) as GatewayMethod[]) {
       const handler = composer.methods[method];
       if (handler === undefined) continue;
-      if (merged[method]) return Either.left(new DuplicateGatewayMethod({ method }));
+      if (merged[method]) return Result.fail(new DuplicateGatewayMethod({ method }));
       merged[method] = handler;
     }
   }
-  return Either.right(merged);
+  return Result.succeed(merged);
 }

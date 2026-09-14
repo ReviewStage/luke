@@ -3,9 +3,10 @@ import {
   MessageRatingSchema,
   type UnparsedWireValue,
   type WireRecord,
+  type WireValue,
   WireValueSchema,
 } from "@sidecar/wire";
-import { Option, Schema } from "effect";
+import { Effect, Option, Predicate, Schema, SchemaGetter, SchemaTransformation } from "effect";
 
 /**
  * The Gateway protocol: what a client asks the host and what the host tells
@@ -105,7 +106,7 @@ export const GATEWAY_METHOD =
 
 export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD];
 
-export const GatewayMethodSchema = Schema.Literal(...Object.values(GATEWAY_METHOD));
+export const GatewayMethodSchema = Schema.Literals(Object.values(GATEWAY_METHOD));
 
 /** One method as the table names it: its wire name and whether it changes something. */
 export interface GatewayMethodEntry {
@@ -116,11 +117,29 @@ export interface GatewayMethodEntry {
 /** Every entry of the one table, in its order, for whatever derives a vocabulary from it rather than keeping a list beside it. */
 export const GATEWAY_METHOD_ENTRIES: readonly GatewayMethodEntry[] = Object.values(GATEWAY_METHODS);
 
-/** What a method takes: a record the host reads under its own declared shape, admitted here only as a record. */
-export const GatewayParamsSchema = WireValueSchema.pipe(Schema.filter(isRecord));
+/**
+ * What a method takes: a record the host reads under its own declared shape,
+ * admitted here only as a record. It is stated as a record of wire values
+ * rather than as the wire value narrowed to one, because the wire value is a
+ * suspended declaration and a check cannot stand on a suspension; the
+ * refinement beside it is what still refuses an array, a boxed primitive, and
+ * anything else carrying a prototype no record literal has.
+ */
+export const GatewayParamsSchema = Schema.Record(Schema.String, WireValueSchema).pipe(
+  Schema.refine(isRecord),
+);
 
-/** What a method answers: a wire value, or nothing at all, which the envelope carries as an absent field. */
-export const GatewayResultSchema = Schema.UndefinedOr(WireValueSchema);
+/**
+ * What a method answers: a wire value, or nothing at all, which the envelope
+ * carries as an absent field. The nothing arm stands first on purpose: JSON
+ * has no `undefined`, so the codec the Rpc runtime fills a message's result
+ * hole with lowers it to `null`, and the arm that reads `null` back is
+ * whichever the union names first. Naming it first is what keeps a method
+ * that answered nothing answering nothing across the wire, at the price of
+ * reading a wire value that was itself `null` as nothing — which is what the
+ * envelope's absent field already says of it.
+ */
+export const GatewayResultSchema = Schema.Union([Schema.Undefined, WireValueSchema]);
 
 /**
  * The live voice session's vocabulary, declared beside the four methods and
@@ -168,27 +187,40 @@ const LIVE_TRANSPORT_STATES: readonly LiveTransportState[] = Object.values(LIVE_
  */
 export const LIVE_SDP_MAX_CHARACTERS = 65_536;
 
+/**
+ * The representation a check carries so the node a model is shown says the
+ * bound the check stands for. Effect's own length filters annotate themselves
+ * with it, and a filter of this module's own that means the same bound says so
+ * under the same id rather than emitting nothing.
+ */
+const SCHEMA_CHECK_REPRESENTATION = {
+  MIN_LENGTH: "effect/schema/isMinLength",
+} as const;
+
 /** A trimmed text, refused when only whitespace remains. */
-const text: Schema.Schema<string, string> = Schema.transform(Schema.String, Schema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(Schema.minLength(1));
+const text: Schema.Codec<string, string> = Schema.Trim.check(Schema.isNonEmpty());
 
 /** A text admitted as written, refused when only whitespace remains, and bounded by `max`. */
-function keptText(max: number): Schema.Schema<string, string> {
-  return Schema.String.pipe(
-    Schema.filter((value) => value.trim().length > 0, {
-      schemaId: Schema.MinLengthSchemaId,
-      jsonSchema: { minLength: 1 },
+function keptText(max: number): Schema.Codec<string, string> {
+  return Schema.String.check(
+    Schema.makeFilter<string>((value) => value.trim().length > 0, {
+      representation: {
+        id: SCHEMA_CHECK_REPRESENTATION.MIN_LENGTH,
+        payload: { minLength: 1 },
+      },
     }),
-    Schema.maxLength(max),
+    Schema.isMaxLength(max),
   );
 }
 
-/** A record that ignores a key a newer service added, which is what every answer here does. */
-const tolerant = <Fields extends Schema.Struct.Fields>(fields: Fields) =>
-  Schema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+/**
+ * Every answer below is a plain struct that names exactly its own keys. A key
+ * a newer service added is ignored at the read rather than in the declaration,
+ * because whether an unnamed key refuses a value is a parse option a caller
+ * passes and no longer something a schema can say for itself: the readers of
+ * these answers hand `readEither` `{ excess: EXCESS_KEYS.DROP }`, and what a
+ * model is shown still says `additionalProperties: false`.
+ */
 
 /** SDP is line-oriented and ends its lines with CRLF, so it travels verbatim: nothing is trimmed, collapsed, or cut. */
 const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
@@ -197,7 +229,7 @@ const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({ sdp: sdpSchema });
 
 /** What `voice.createLiveSession` answers: the session the provider named, and the SDP answer the peer sets. */
-export const voiceCreateLiveSessionResultSchema = tolerant({
+export const voiceCreateLiveSessionResultSchema = Schema.Struct({
   sessionId: text,
   sdpAnswer: sdpSchema,
 });
@@ -206,7 +238,7 @@ export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSc
 
 /** `voice.reportLiveTransport`: the peer connection's state as the peer saw it change. */
 export const voiceReportLiveTransportParamsSchema = Schema.Struct({
-  state: Schema.Literal(...LIVE_TRANSPORT_STATES),
+  state: Schema.Literals(LIVE_TRANSPORT_STATES),
 });
 
 /** `voice.reportLiveActivity`: whether the peer has decided, from its own local signals, that the exchange is idle. */
@@ -218,13 +250,13 @@ export const voiceReportLiveActivityParamsSchema = Schema.Struct({ idle: Schema.
  * says nothing about Luke's own output, so the method takes no parameters
  * and the mute carries none of its meaning.
  */
-export const voiceStopSpeakingResultSchema = tolerant({ stopped: Schema.Boolean });
+export const voiceStopSpeakingResultSchema = Schema.Struct({ stopped: Schema.Boolean });
 
 /** `voiceLiveSession.changed`: the phase the host's one session moved to, the id once the provider named one, and the reason of a close. */
-export const voiceLiveSessionChangedSchema = tolerant({
-  sessionId: Schema.optionalWith(text, { exact: true }),
-  phase: Schema.Literal(...LIVE_SESSION_PHASES),
-  reason: Schema.optionalWith(text, { exact: true }),
+export const voiceLiveSessionChangedSchema = Schema.Struct({
+  sessionId: Schema.optionalKey(text),
+  phase: Schema.Literals(LIVE_SESSION_PHASES),
+  reason: Schema.optionalKey(text),
 });
 
 export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
@@ -261,8 +293,8 @@ export type ConversationRateStatus =
   (typeof CONVERSATION_RATE_STATUS)[keyof typeof CONVERSATION_RATE_STATUS];
 
 /** What `conversation.rateMessage` answers: whether the rating was recorded, and if not, which of the three refusals stands. */
-export const conversationRateMessageResultSchema = tolerant({
-  status: Schema.Literal(...Object.values(CONVERSATION_RATE_STATUS)),
+export const conversationRateMessageResultSchema = Schema.Struct({
+  status: Schema.Literals(Object.values(CONVERSATION_RATE_STATUS)),
 });
 
 export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
@@ -287,10 +319,10 @@ const GatewayIdentifierSchema = Schema.NonEmptyString;
 /** What a caller may say it expects to still stand when its request lands. */
 export const GatewayExpectedRevisionSchema = Schema.Struct({
   /** The conversation whose lifetime the caller read, and the generation it read there. */
-  sessionKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
-  sessionRevision: Schema.optionalWith(Schema.String, { exact: true }),
+  sessionKey: Schema.optionalKey(GatewayIdentifierSchema),
+  sessionRevision: Schema.optionalKey(Schema.String),
   /** The configuration revision the caller read. */
-  configurationRevision: Schema.optionalWith(Schema.Number, { exact: true }),
+  configurationRevision: Schema.optionalKey(Schema.Number),
 });
 
 export type GatewayExpectedRevision = typeof GatewayExpectedRevisionSchema.Type;
@@ -307,8 +339,8 @@ export const GatewayRequestSchema = Schema.Struct({
   id: GatewayIdentifierSchema,
   method: GatewayMethodSchema,
   params: GatewayParamsSchema,
-  idempotencyKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
-  expectedRevision: Schema.optionalWith(GatewayExpectedRevisionSchema, { exact: true }),
+  idempotencyKey: Schema.optionalKey(GatewayIdentifierSchema),
+  expectedRevision: Schema.optionalKey(GatewayExpectedRevisionSchema),
 });
 
 export type GatewayRequest = typeof GatewayRequestSchema.Type;
@@ -332,7 +364,7 @@ export const GATEWAY_ERROR = {
 
 export type GatewayErrorCode = (typeof GATEWAY_ERROR)[keyof typeof GATEWAY_ERROR];
 
-export const GatewayErrorCodeSchema = Schema.Literal(...Object.values(GATEWAY_ERROR));
+export const GatewayErrorCodeSchema = Schema.Literals(Object.values(GATEWAY_ERROR));
 
 const readsGatewayErrorCode = Schema.is(GatewayErrorCodeSchema);
 
@@ -350,10 +382,7 @@ export type GatewayError = typeof GatewayErrorSchema.Type;
 
 /** One refusal's code, fixed by its class: the constructor takes the message alone. */
 function refusalCode<Code extends GatewayErrorCode>(code: Code) {
-  return Schema.Literal(code).pipe(
-    Schema.propertySignature,
-    Schema.withConstructorDefault(() => code),
-  );
+  return Schema.Literal(code).pipe(Schema.withConstructorDefault(Effect.succeed(code)));
 }
 
 /**
@@ -495,15 +524,16 @@ export function gatewayRefusalFromError(error: GatewayError): GatewayRefusal {
  * `{ code, message }` object and nothing else, so the class's own tag never
  * reaches the wire and the envelope goldens hold.
  */
-export const GatewayRefusalSchema: Schema.Schema<GatewayRefusal, GatewayError> = Schema.transform(
-  GatewayErrorSchema,
-  Schema.typeSchema(Schema.Union(...GATEWAY_REFUSALS)),
-  {
-    strict: true,
-    decode: gatewayRefusalFromError,
-    encode: (refusal) => ({ code: refusal.code, message: refusal.message }),
-  },
-);
+export const GatewayRefusalSchema: Schema.Codec<GatewayRefusal, GatewayError> =
+  GatewayErrorSchema.pipe(
+    Schema.decodeTo(
+      Schema.toType(Schema.Union(GATEWAY_REFUSALS)),
+      SchemaTransformation.transform({
+        decode: gatewayRefusalFromError,
+        encode: (refusal) => ({ code: refusal.code, message: refusal.message }),
+      }),
+    ),
+  );
 
 /**
  * The one refusal the protocol decides before any method is named: a request
@@ -534,13 +564,17 @@ export type GatewayRevision = typeof GatewayRevisionSchema.Type;
  * all. `null` is a value here and travels; only `undefined` leaves.
  */
 function absentOrWireValue() {
-  return Schema.optionalToRequired(WireValueSchema, Schema.UndefinedOr(WireValueSchema), {
-    decode: Option.getOrUndefined,
-    encode: (value) => (value === undefined ? Option.none() : Option.some(value)),
-  });
+  return Schema.optionalKey(WireValueSchema).pipe(
+    Schema.decodeTo(Schema.UndefinedOr(WireValueSchema), {
+      decode: SchemaGetter.transformOptional((held) => Option.some(Option.getOrUndefined(held))),
+      encode: SchemaGetter.transformOptional((held: Option.Option<WireValue | undefined>) =>
+        Option.filter(held, Predicate.isNotUndefined),
+      ),
+    }),
+  );
 }
 
-export const GatewayResponseSchema = Schema.Union(
+export const GatewayResponseSchema = Schema.Union([
   Schema.Struct({
     id: GatewayIdentifierSchema,
     ok: Schema.Literal(true),
@@ -553,7 +587,7 @@ export const GatewayResponseSchema = Schema.Union(
     error: GatewayErrorSchema,
     revision: GatewayRevisionSchema,
   }),
-);
+]);
 
 export type GatewayResponse = typeof GatewayResponseSchema.Type;
 
@@ -583,7 +617,7 @@ export const GATEWAY_EVENT = {
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
 
-export const GatewayEventKindSchema = Schema.Literal(...Object.values(GATEWAY_EVENT));
+export const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
 
 const readsGatewayEventKind = Schema.is(GatewayEventKindSchema);
 
@@ -597,8 +631,8 @@ export const GatewayEventSchema = Schema.Struct({
   sequence: Schema.Number,
   kind: GatewayEventKindSchema,
   at: Schema.Number,
-  sessionKey: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
-  runId: Schema.optionalWith(GatewayIdentifierSchema, { exact: true }),
+  sessionKey: Schema.optionalKey(GatewayIdentifierSchema),
+  runId: Schema.optionalKey(GatewayIdentifierSchema),
   payload: WireValueSchema,
 });
 
@@ -618,7 +652,7 @@ export const GATEWAY_RECONNECT_KIND = {
 export type GatewayReconnectKind =
   (typeof GATEWAY_RECONNECT_KIND)[keyof typeof GATEWAY_RECONNECT_KIND];
 
-export const GatewayReconnectAnswerSchema = Schema.Union(
+export const GatewayReconnectAnswerSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal(GATEWAY_RECONNECT_KIND.REPLAY),
     events: Schema.Array(GatewayEventSchema),
@@ -628,7 +662,7 @@ export const GatewayReconnectAnswerSchema = Schema.Union(
     sequence: Schema.Number,
     snapshot: WireValueSchema,
   }),
-);
+]);
 
 export type GatewayReconnectAnswer = typeof GatewayReconnectAnswerSchema.Type;
 
@@ -693,7 +727,7 @@ export const NODE_CAPABILITY_STATUS = {
 export type NodeCapabilityStatus =
   (typeof NODE_CAPABILITY_STATUS)[keyof typeof NODE_CAPABILITY_STATUS];
 
-export const NodeCapabilityResultSchema = Schema.Union(
+export const NodeCapabilityResultSchema = Schema.Union([
   Schema.Struct({ status: Schema.Literal(NODE_CAPABILITY_STATUS.OK), value: absentOrWireValue() }),
   Schema.Struct({
     status: Schema.Literal(NODE_CAPABILITY_STATUS.UNAVAILABLE),
@@ -710,7 +744,7 @@ export const NodeCapabilityResultSchema = Schema.Union(
     capability: Schema.String,
     reason: Schema.String,
   }),
-);
+]);
 
 export type NodeCapabilityResult = typeof NodeCapabilityResultSchema.Type;
 

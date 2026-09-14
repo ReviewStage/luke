@@ -1,5 +1,6 @@
-import { HttpApiSchema, HttpServerResponse } from "@effect/platform";
 import { Schema } from "effect";
+import { HttpServerResponse } from "effect/unstable/http";
+import { HttpApiSchema } from "effect/unstable/httpapi";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**
@@ -30,8 +31,8 @@ const ADMIN_REFUSAL_STATUS = {
 type AdminRefusalSlug = keyof typeof ADMIN_REFUSAL_STATUS;
 
 function refusalSchema<Slug extends AdminRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).annotations(
-    HttpApiSchema.annotations({ status: ADMIN_REFUSAL_STATUS[slug] }),
+  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
+    HttpApiSchema.status(ADMIN_REFUSAL_STATUS[slug]),
   );
 }
 
@@ -56,7 +57,7 @@ export const ADMIN_REFUSAL = {
 
 /** A refusal as the response the group answers with. */
 export function adminRefusalResponse(refusal: AdminRefusal): HttpServerResponse.HttpServerResponse {
-  return HttpServerResponse.unsafeJson(refusal, {
+  return HttpServerResponse.jsonUnsafe(refusal, {
     status: ADMIN_REFUSAL_STATUS[refusal.error],
     headers: { [RESPONSE_HEADER.CACHE_CONTROL]: NO_STORE },
   });

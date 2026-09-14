@@ -1,7 +1,7 @@
-import { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { LanguageModel } from "ai";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
@@ -116,7 +116,7 @@ export function eveTurnIdOf(event: UnparsedWireValue): string | undefined {
 }
 
 /** What a host function answers: an effect over the ambient client, which eve's own authored files run at the web's edge. */
-type HostEffect<A> = Effect.Effect<A, SqlError | ParseResult.ParseError, SqlClient.SqlClient>;
+type HostEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 export interface BrainHost {
   /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */

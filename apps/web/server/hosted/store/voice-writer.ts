@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type AssistantMessageMetadata,
   MESSAGE_AUTHOR,
@@ -186,7 +186,7 @@ const SEGMENT_ROLE_OF_DELTA = {
 } as const satisfies Record<SegmentDelta["type"], VoiceSegmentRole>;
 
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
-type VoiceWriteFailure = SqlError | ParseResult.ParseError;
+type VoiceWriteFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -200,16 +200,14 @@ const VoiceSessionKeySchema = Schema.Struct({
 /** The `voice_sessions` row this writer reads: its id, and the device the session belongs to. */
 const VoiceSessionRowSchema = Schema.Struct({
   id: Schema.String,
-  deviceId: Schema.propertySignature(Schema.NullOr(Schema.String)).pipe(
-    Schema.fromKey("device_id"),
-  ),
-});
+  deviceId: Schema.NullOr(Schema.String),
+}).pipe(Schema.encodeKeys({ deviceId: "device_id" }));
 
 type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 
-const VoiceSegmentRoleSchema = Schema.Literal(...Object.values(VOICE_SEGMENT_ROLE));
+const VoiceSegmentRoleSchema = Schema.Literals(Object.values(VOICE_SEGMENT_ROLE));
 
-const findVoiceSession = SqlSchema.findOne({
+const findVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
   execute: (key) =>
@@ -223,7 +221,7 @@ const findVoiceSession = SqlSchema.findOne({
 });
 
 /** The same row, locked, where the caller is about to take a position in the session's sequence. */
-const lockVoiceSession = SqlSchema.findOne({
+const lockVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
   execute: (key) =>
@@ -237,7 +235,7 @@ const lockVoiceSession = SqlSchema.findOne({
     ),
 });
 
-const findLastSegmentSeq = SqlSchema.findOne({
+const findLastSegmentSeq = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ seq: Schema.Number }),
   execute: (voiceSessionId) =>
@@ -307,8 +305,8 @@ const findUtteranceSegments = SqlSchema.findAll({
   }),
   Result: Schema.Struct({
     text: Schema.String,
-    startMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("start_ms")),
-  }),
+    startMs: Schema.Number,
+  }).pipe(Schema.encodeKeys({ startMs: "start_ms" })),
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -324,7 +322,7 @@ const findUtteranceSegments = SqlSchema.findAll({
 });
 
 /** Whether one speaker said anything on the session from an instant on: the first such segment, where one stands. */
-const findSegmentFrom = SqlSchema.findOne({
+const findSegmentFrom = SqlSchema.findOneOption({
   Request: Schema.Struct({
     voiceSessionId: Schema.String,
     role: VoiceSegmentRoleSchema,
@@ -354,8 +352,8 @@ const findSpokenSegments = SqlSchema.findAll({
   }),
   Result: Schema.Struct({
     text: Schema.String,
-    startMs: Schema.propertySignature(Schema.Number).pipe(Schema.fromKey("start_ms")),
-  }),
+    startMs: Schema.Number,
+  }).pipe(Schema.encodeKeys({ startMs: "start_ms" })),
   execute: (request) =>
     statement(
       (sql) => sql`

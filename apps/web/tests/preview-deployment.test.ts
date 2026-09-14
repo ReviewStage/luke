@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Exit, Fiber, Redacted, TestClock } from "effect";
+import { Cause, Effect, Exit, Fiber, Option, Redacted } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import {
   DEPLOYMENT_STATE,
@@ -125,7 +126,7 @@ it.effect("the wait reads the records on its schedule until the preview's record
       ],
       reads,
     );
-    const fiber = yield* Effect.fork(
+    const fiber = yield* Effect.forkChild(
       waitForPreview(SOURCE, { wait: { intervalMs: 15_000, attempts: 5 } }).pipe(
         Effect.provide(layer),
       ),
@@ -160,7 +161,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const reads: GithubRead[] = [];
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         waitForPreview(SOURCE, { wait: { intervalMs: 1_000, attempts: 2 } }).pipe(
           Effect.provide(github([], reads)),
         ),
@@ -170,8 +171,9 @@ it.effect(
       const exit = yield* Fiber.await(fiber);
       assert.equal(Exit.isFailure(exit), true);
       if (Exit.isFailure(exit)) {
-        assert.equal(exit.cause._tag, "Fail");
-        if (exit.cause._tag === "Fail") assert.equal(exit.cause.error._tag, "PreviewNotReady");
+        assert.equal(Cause.hasFails(exit.cause), true);
+        const failure = Cause.findErrorOption(exit.cause);
+        assert.equal(Option.isSome(failure) && failure.value._tag, "PreviewNotReady");
       }
       assert.equal(reads.length, 3);
     }),

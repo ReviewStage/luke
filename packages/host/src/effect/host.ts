@@ -48,36 +48,35 @@ export type HostDrain = (
  * admissions close and the runs are cancelled once however many times the
  * quit arrives.
  */
-export const hostDrain = (
+export const hostDrain = /* @__PURE__ */ Effect.fn("hostDrain")(function* (
   steps: GatewayShutdownSteps,
   report: (message: string) => void,
-): Effect.Effect<HostDrain> =>
-  Effect.gen(function* () {
-    const claimed = yield* Ref.make(false);
-    const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
-    const run = (options: GatewayShutdownOptions) =>
-      shutdownGatewayEffect(steps, options).pipe(
-        // A step that died is a defect of the coordinator's own effect, since
-        // what the steps reach is work it did not write; it is the drain's
-        // named refusal here rather than a defect that would take the close
-        // down with it.
-        Effect.catchAllDefect((cause) => new HostDrainError({ cause })),
-        Effect.tap((settled) =>
-          Effect.sync(() => {
-            report(
-              `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.cancelled.length} cancelled, ${settled.unresolved} unresolved`,
-            );
-          }),
-        ),
-        Effect.tapError((failure) => Effect.sync(() => report(failure.message))),
-      );
-    return (options = {}) =>
-      Effect.gen(function* () {
-        const taken = yield* Ref.getAndSet(claimed, true);
-        if (!taken) yield* Effect.intoDeferred(run(options), outcome);
-        return yield* Deferred.await(outcome);
-      });
-  });
+): Effect.fn.Return<HostDrain> {
+  const claimed = yield* Ref.make(false);
+  const outcome = yield* Deferred.make<GatewayShutdownReport, HostDrainError>();
+  const run = (options: GatewayShutdownOptions) =>
+    shutdownGatewayEffect(steps, options).pipe(
+      // A step that died is a defect of the coordinator's own effect, since
+      // what the steps reach is work it did not write; it is the drain's
+      // named refusal here rather than a defect that would take the close
+      // down with it.
+      Effect.catchDefect((cause) => new HostDrainError({ cause })),
+      Effect.tap((settled) =>
+        Effect.sync(() => {
+          report(
+            `shutting down: ${settled.settled ? "settled" : "unsettled"}, ${settled.cancelled.length} cancelled, ${settled.unresolved} unresolved`,
+          );
+        }),
+      ),
+      Effect.tapError((failure) => Effect.sync(() => report(failure.message))),
+    );
+  return (options = {}) =>
+    Effect.gen(function* () {
+      const taken = yield* Ref.getAndSet(claimed, true);
+      if (!taken) yield* Deferred.into(run(options), outcome);
+      return yield* Deferred.await(outcome);
+    });
+});
 
 /** Everything constructed and linked, and nothing yet begun. */
 export interface HostAssembly {
@@ -95,10 +94,9 @@ export interface HostAssembly {
   readonly drain: HostDrain;
 }
 
-export class HostAssemblyTag extends Context.Tag("@sidecar/host/HostAssembly")<
-  HostAssemblyTag,
-  HostAssembly
->() {}
+export class HostAssemblyTag extends Context.Service<HostAssemblyTag, HostAssembly>()(
+  "@sidecar/host/HostAssembly",
+) {}
 
 /** The host with every composer started: what a client operates and what the quit drains. */
 export interface StandingHost {
@@ -106,7 +104,7 @@ export interface StandingHost {
   readonly drain: HostDrain;
 }
 
-export class HostTag extends Context.Tag("@sidecar/host/Host")<HostTag, StandingHost>() {}
+export class HostTag extends Context.Service<HostTag, StandingHost>()("@sidecar/host/Host") {}
 
 /**
  * The composers started in the assembly's order, the loops armed after the
@@ -114,13 +112,13 @@ export class HostTag extends Context.Tag("@sidecar/host/Host")<HostTag, Standing
  * this layer is built in closes as the quit: drain, disarm, then every
  * composer's stop in the reverse of its start.
  */
-export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrapEffect(
+export const hostStandingLayer: Layer.Layer<HostTag, never, HostAssemblyTag> = Layer.unwrap(
   Effect.map(HostAssemblyTag, (assembly) => {
     const composers = layersInOrder(
-      assembly.startOrder.map((composer) => Layer.scopedDiscard(composer.lifetime)),
+      assembly.startOrder.map((composer) => Layer.effectDiscard(composer.lifetime)),
     );
-    const armed = Layer.scopedDiscard(assembly.armed);
-    const standing = Layer.scoped(
+    const armed = Layer.effectDiscard(assembly.armed);
+    const standing = Layer.effect(
       HostTag,
       Effect.as(
         Effect.addFinalizer(() => Effect.ignore(assembly.drain())),

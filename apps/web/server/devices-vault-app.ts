@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { type HttpApp, HttpRouter, HttpServerRequest } from "@effect/platform";
-import type { SqlClient } from "@effect/sql";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either, Redacted } from "effect";
+import { Effect, type Schema as EffectSchema, Layer, Redacted, Result } from "effect";
+import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
+import type { SqlClient } from "effect/unstable/sql";
 import {
   DEVICE_METHOD,
   deviceForgetRequestSchema,
@@ -28,11 +28,13 @@ import {
   HOSTED_REFUSAL,
   type HostedRefusal,
   hostedJsonResponse,
+  hostedNotFoundRoute,
   hostedRefusalResponse,
   readJsonBodyEffect,
 } from "./hosted/http-effect.js";
 import { makeRateBrake } from "./hosted/rate-brake.js";
 import type { VaultKeyEffect } from "./hosted/vault-key-store.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The device record's three writes and the provider key vault's three, on
@@ -75,25 +77,23 @@ export interface DevicesVaultSeams extends DeviceSeams {
 }
 
 /** The signed-in account behind the request's bearer, or the invalid-token refusal. */
-function bearerUserId(
+const bearerUserId = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: Pick<DevicesVaultSeams, "resolveUserId">,
-): Effect.Effect<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
-  return Effect.gen(function* () {
-    const request = yield* HttpServerRequest.HttpServerRequest;
-    const userId = yield* seams.resolveUserId(request.headers.authorization);
-    if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
-    return userId;
-  });
-}
+): Effect.fn.Return<string, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  const request = yield* HttpServerRequest.HttpServerRequest;
+  const userId = yield* seams.resolveUserId(request.headers.authorization);
+  if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+  return userId;
+});
 
 /** Decodes a wire body through its Effect declaration, refusing anything it does not read. */
 function decodeBody<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   payload: UnparsedWireValue,
 ): Effect.Effect<Value, HostedRefusal> {
-  return Either.match(readEither(schema)(payload), {
-    onLeft: () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST),
-    onRight: Effect.succeed,
+  return Result.match(readEither(schema)(payload), {
+    onFailure: () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST),
+    onSuccess: Effect.succeed,
   });
 }
 
@@ -103,8 +103,14 @@ function decodeBody<Value, Encoded>(
  * documented shape is one 400 whatever was wrong with it, so a refused
  * request tells a caller nothing about which field the service reads.
  */
-function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default<never, SqlClient.SqlClient> {
-  return Effect.gen(function* () {
+const devicesEffect = /* @__PURE__ */ Effect.fn("devicesEffect")(
+  function* (
+    seams: DevicesVaultSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  > {
     const request = yield* HttpServerRequest.HttpServerRequest;
     const method = request.method;
     if (
@@ -146,19 +152,22 @@ function devicesEffect(seams: DevicesVaultSeams): HttpApp.Default<never, SqlClie
     const body = yield* decodeBody(deviceForgetRequestSchema, payload);
     const deleted = yield* Effect.orDie(seams.forgetDevice(userId, body.deviceId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
-}
+  },
+  Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+);
 
 /** The vault's encryption secret, read from the environment, or the unavailable refusal without one. */
-function vaultSecret(): Effect.Effect<string, HostedRefusal, HostedEnvironment> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    if (environment.providerKeyEncryptionSecret === undefined) {
-      return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-    }
-    return Redacted.value(environment.providerKeyEncryptionSecret);
-  });
-}
+const vaultSecret = /* @__PURE__ */ Effect.fnUntraced(function* (): Effect.fn.Return<
+  string,
+  HostedRefusal,
+  HostedEnvironment
+> {
+  const environment = yield* HostedEnvironment;
+  if (environment.providerKeyEncryptionSecret === undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return Redacted.value(environment.providerKeyEncryptionSecret);
+});
 
 /**
  * A valid provider key, by the shape rule the wire contract fixes for both
@@ -170,10 +179,14 @@ function parseProviderKey(value: UnparsedWireValue): string | undefined {
 }
 
 /** Stores, replaces, or deletes the provider API key for the signed-in user. */
-function vaultKeyEffect(
-  seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
-  return Effect.gen(function* () {
+const vaultKeyEffect = /* @__PURE__ */ Effect.fn("vaultKeyEffect")(
+  function* (
+    seams: DevicesVaultSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  > {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "POST" && request.method !== "DELETE") {
       return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
@@ -197,14 +210,19 @@ function vaultKeyEffect(
     const ciphertext = encryptProviderKey(key, secret);
     yield* Effect.orDie(seams.storeKey(userId, providerId, ciphertext));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { stored: true });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
-}
+  },
+  Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+);
 
 /** Lists stored provider keys for the signed-in user. Never returns ciphertext or plaintext. */
-function vaultKeysEffect(
-  seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
-  return Effect.gen(function* () {
+const vaultKeysEffect = /* @__PURE__ */ Effect.fn("vaultKeysEffect")(
+  function* (
+    seams: DevicesVaultSeams,
+  ): Effect.fn.Return<
+    HttpServerResponse.HttpServerResponse,
+    HostedRefusal,
+    HostedEnvironment | SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+  > {
     const request = yield* HttpServerRequest.HttpServerRequest;
     if (request.method !== "GET") return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
     yield* vaultSecret();
@@ -220,8 +238,9 @@ function vaultKeysEffect(
         .filter((row) => isCloudAgentProviderId(row.providerId))
         .map((row) => ({ providerId: row.providerId, updatedAt: row.updatedAt.getTime() })),
     });
-  }).pipe(Effect.catchAll((refusal) => Effect.succeed(hostedRefusalResponse(refusal))));
-}
+  },
+  Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal))),
+);
 
 /**
  * The group: the device row's three writes on one path, the vault key's
@@ -232,13 +251,11 @@ function vaultKeysEffect(
  */
 export function devicesVaultApp(
   seams: DevicesVaultSeams,
-): HttpApp.Default<never, HostedEnvironment | SqlClient.SqlClient> {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(DEVICES_PATH, devicesEffect(seams)),
-    HttpRouter.all(VAULT_KEY_PATH, vaultKeyEffect(seams)),
-    HttpRouter.all(VAULT_KEYS_PATH, vaultKeysEffect(seams)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+): WebRoutes<HostedEnvironment | SqlClient.SqlClient> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, DEVICES_PATH, devicesEffect(seams)),
+    HttpRouter.add(ANY_METHOD, VAULT_KEY_PATH, vaultKeyEffect(seams)),
+    HttpRouter.add(ANY_METHOD, VAULT_KEYS_PATH, vaultKeysEffect(seams)),
+    hostedNotFoundRoute,
   );
 }

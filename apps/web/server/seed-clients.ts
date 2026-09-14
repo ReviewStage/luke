@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,
@@ -58,7 +58,7 @@ export function seedOAuthClient(
 export function seedOAuthClients(
   now = new Date(),
 ): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
-  return Effect.zipRight(
+  return Effect.andThen(
     seedOAuthClient(DESKTOP_OAUTH_CLIENT, now),
     seedOAuthClient(MOBILE_OAUTH_CLIENT, now),
   );

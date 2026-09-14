@@ -86,7 +86,9 @@ export const API_REWRITES_FILE = join("server", "api-rewrites.json");
 
 const RewriteSchema = Schema.Struct({ src: Schema.String, dest: Schema.String });
 
-const decodeApiRewrites = Schema.decodeUnknownSync(Schema.parseJson(Schema.Array(RewriteSchema)));
+const decodeApiRewrites = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Array(RewriteSchema)),
+);
 
 /** The table as committed. */
 export async function readApiRewritesTable(web: string): Promise<readonly Rewrite[]> {
@@ -139,7 +141,7 @@ const VercelConfig = Schema.Struct({
 });
 type VercelConfig = typeof VercelConfig.Type;
 
-const decodeVercelConfig = Schema.decodeUnknownSync(Schema.parseJson(VercelConfig));
+const decodeVercelConfig = Schema.decodeUnknownSync(Schema.fromJsonString(VercelConfig));
 
 /** Whether the file carries both keys, by their presence: a `routes` key that is merely undefined-valued is still the wrong shape. */
 function hasTopLevelRoutesBesideServices(source: string): boolean {

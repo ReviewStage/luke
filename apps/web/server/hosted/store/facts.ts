@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult, Schema } from "effect";
+import { Effect, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -9,14 +9,14 @@ import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
  * the one it corrects and a forgotten one is simply absent from the next
  * list. The words are sealed; the id is what a request to forget names.
  *
- * Every statement below is an `Effect<A, SqlError | ParseError, SqlClient>`
+ * Every statement below is an `Effect<A, SqlError | SchemaError, SqlClient>`
  * over the ambient client, the way `workspace-files.ts` reads; the row lock
  * a replacement takes is a statement like any other, run inside the one
  * `withTransaction` that also holds the delete and the inserts that follow it.
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-export type FactsFailure = SqlError | ParseResult.ParseError;
+export type FactsFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
@@ -36,15 +36,15 @@ export interface FactWrite {
 /** The row as `personal_fact` holds it, words still sealed. */
 const SealedFactRowSchema = Schema.Struct({
   id: Schema.String,
-  sealedWords: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("sealed_words")),
-  createdAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("created_at")),
-});
+  sealedWords: Schema.String,
+  createdAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ sealedWords: "sealed_words", createdAt: "created_at" }));
 
 /** What a replacement needs of the row it is about to delete: the instant it was first remembered. */
 const HeldFactRowSchema = Schema.Struct({
   id: Schema.String,
-  createdAt: Schema.propertySignature(EpochMillisColumnSchema).pipe(Schema.fromKey("created_at")),
-});
+  createdAt: EpochMillisColumnSchema,
+}).pipe(Schema.encodeKeys({ createdAt: "created_at" }));
 
 const FactInsertSchema = Schema.Struct({
   userId: Schema.String,

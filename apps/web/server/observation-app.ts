@@ -1,7 +1,7 @@
-import { type HttpApp, HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Redacted, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Schema } from "effect";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
@@ -23,7 +23,7 @@ import { deviceSeams } from "./hosted/device-store.js";
 import { payloadKeyRing } from "./hosted/encryption.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { type EventsOptions, handleEvents } from "./hosted/events.js";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { observeAndSnapshot } from "./hosted/observation-pass.js";
 import { handleObservationTick, type ObservationTickOptions } from "./hosted/observation-tick.js";
 import { handleObserve } from "./hosted/observe.js";
@@ -39,6 +39,7 @@ import {
 import { readStoredVaultKeys } from "./hosted/vault-key-store.js";
 import { readApiKeyFor } from "./hosted/vault-keys.js";
 import { hostedEncryptionSecretEffect, hostedVaultSeams } from "./hosted/vault-route.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The observation group: the routes that read and are read from the roster
@@ -64,7 +65,7 @@ const NOTHING_PUSHED: SpeechPushOutcome = {
 };
 
 /** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
-type ObservationAppFailure = SqlError | ParseResult.ParseError;
+type ObservationAppFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
@@ -72,7 +73,7 @@ const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E
 
 const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
 
-const findPerson = SqlSchema.findOne({
+const findPerson = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PersonRowSchema,
   execute: (userId) =>
@@ -88,12 +89,12 @@ export function readPerson(
 
 const EligibleAccountRequestSchema = Schema.Struct({
   limit: Schema.Number,
-  seenAfter: Schema.DateFromSelf,
+  seenAfter: Schema.Date,
 });
 
 const EligibleAccountRowSchema = Schema.Struct({
-  userId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("user_id")),
-});
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
 const findEligibleAccounts = SqlSchema.findAll({
   Request: EligibleAccountRequestSchema,
@@ -162,46 +163,42 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * fiber rather than through a runner of its own, so a failed statement it
  * reads is a defect here.
  */
-function effectPassthrough<R>(
+const effectPassthrough = /* @__PURE__ */ Effect.fn("effectPassthrough")(function* <R>(
   handle: (request: Request) => Effect.Effect<Response, unknown, R>,
-): HttpApp.Default<never, R> {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.orDie(handle(request));
-    return incoming.method === HTTP_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  R | HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const answer = yield* Effect.orDie(handle(request));
+  return incoming.method === HTTP_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /** Reads one observed session's conversation for the caller who opened its screen. */
-function sessionsMessagesEffect(
+const sessionsMessagesEffect = /* @__PURE__ */ Effect.fn("sessionsMessagesEffect")(function* (
   request: Request,
-): Effect.Effect<
+): Effect.fn.Return<
   Response,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient | HostedEnvironment
 > {
-  return Effect.gen(function* () {
-    const encryptionSecret = yield* hostedEncryptionSecretEffect;
-    return yield* handleConversationRead({
-      ...hostedVaultSeams,
-      encryptionSecret,
-      request,
-      execute: executeConversationRead,
-    });
+  const encryptionSecret = yield* hostedEncryptionSecretEffect;
+  return yield* handleConversationRead({
+    ...hostedVaultSeams,
+    encryptionSecret,
+    request,
+    execute: executeConversationRead,
   });
-}
+});
 
 /** Lists where the signed-in user's keys can create a workspace. */
 function projectsEffect(
   request: Request,
-): Effect.Effect<
-  Response,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
   return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
     handleProjects({ ...hostedVaultSeams, encryptionSecret, request }),
   );
@@ -210,11 +207,7 @@ function projectsEffect(
 /** Observes the signed-in user's cloud sessions on demand. */
 function observeEffect(
   request: Request,
-): Effect.Effect<
-  Response,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient | HostedEnvironment
-> {
+): Effect.Effect<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient | HostedEnvironment> {
   return Effect.flatMap(hostedEncryptionSecretEffect, (encryptionSecret) =>
     handleObserve({ ...hostedVaultSeams, encryptionSecret, request }),
   );
@@ -228,27 +221,25 @@ function observeEffect(
  * userinfo call is better-auth's own foreign promise, so it is wrapped here,
  * at the seam's implementation, rather than inside the handler.
  */
-function eventsEffect(
+const eventsEffect = /* @__PURE__ */ Effect.fn("eventsEffect")(function* (
   request: Request,
-): Effect.Effect<Response, never, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const options: EventsOptions = {
-      request,
-      projectApiKey:
-        environment.posthogProjectApiKey === undefined
-          ? undefined
-          : Redacted.value(environment.posthogProjectApiKey),
-      resolveUserId: (incoming) =>
-        hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
-      // Read from the service's own user row rather than from the request, so
-      // the desktop still sends nothing that names anybody.
-      readPerson,
-    };
-    if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
-    return yield* handleEvents(options);
-  });
-}
+): Effect.fn.Return<Response, never, SqlClient.SqlClient | HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  const options: EventsOptions = {
+    request,
+    projectApiKey:
+      environment.posthogProjectApiKey === undefined
+        ? undefined
+        : Redacted.value(environment.posthogProjectApiKey),
+    resolveUserId: (incoming) =>
+      hostedUserId(incoming, (input) => Effect.tryPromise(() => auth.api.oauth2UserInfo(input))),
+    // Read from the service's own user row rather than from the request, so
+    // the desktop still sends nothing that names anybody.
+    readPerson,
+  };
+  if (environment.posthogIngestHost) options.host = environment.posthogIngestHost;
+  return yield* handleEvents(options);
+});
 
 /**
  * The scheduled observation's one entry, called by Vercel's cron on the
@@ -267,111 +258,109 @@ function eventsEffect(
  * tick's own secret, so the account named to eve is only ever one this tick
  * enumerated.
  */
-function observationTickEffect(
+const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")(function* (
   request: Request,
-): Effect.Effect<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
-  return Effect.gen(function* () {
-    const environment = yield* HostedEnvironment;
-    const encryptionSecret = environment.providerKeyEncryptionSecret
-      ? Redacted.value(environment.providerKeyEncryptionSecret)
-      : undefined;
-    const store = encryptionSecret
-      ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
-      : undefined;
-    const sender = environment.apnsCredentials
-      ? new ApnsSender({ credentials: environment.apnsCredentials })
-      : undefined;
-    const cronSecret =
-      environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
-    const eveOrigin = eveOriginFor(new URL(request.url).origin);
+): Effect.fn.Return<Response, unknown, SqlClient.SqlClient | HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  const encryptionSecret = environment.providerKeyEncryptionSecret
+    ? Redacted.value(environment.providerKeyEncryptionSecret)
+    : undefined;
+  const store = encryptionSecret
+    ? hostedStore({ keys: payloadKeyRing(encryptionSecret) })
+    : undefined;
+  const sender = environment.apnsCredentials
+    ? new ApnsSender({ credentials: environment.apnsCredentials })
+    : undefined;
+  const cronSecret =
+    environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
+  const eveOrigin = eveOriginFor(new URL(request.url).origin);
 
-    const options: ObservationTickOptions = {
-      request,
-      cronSecret,
-      encryptionSecret,
-      listAccounts: (limit, seenAfter) => listEligibleAccounts(limit, seenAfter),
-      forgetIneligible: (seenAfter) =>
-        store
-          ? store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter })
-          : Effect.void,
-      purgeCleared: (now) =>
-        store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
-      sweepSpeech: (now) =>
-        store === undefined
-          ? Effect.succeed(NOTHING_SWEPT)
-          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
-              sweepSpeech({ writer }, { now }),
+  const options: ObservationTickOptions = {
+    request,
+    cronSecret,
+    encryptionSecret,
+    listAccounts: (limit, seenAfter) => listEligibleAccounts(limit, seenAfter),
+    forgetIneligible: (seenAfter) =>
+      store
+        ? store.roster.forgetIneligible({ providerIds: CLOUD_PROVIDER_IDS, seenAfter })
+        : Effect.void,
+    purgeCleared: (now) =>
+      store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
+    sweepSpeech: (now) =>
+      store === undefined
+        ? Effect.succeed(NOTHING_SWEPT)
+        : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+            sweepSpeech({ writer }, { now }),
+          ),
+    pushSpeech: (now) =>
+      store === undefined || sender === undefined
+        ? Effect.succeed(NOTHING_PUSHED)
+        : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+            pushSpeech(
+              {
+                store: { writer },
+                tools: CATALOG_TOOL_SET,
+                send: (notification) => sender.send(notification),
+                forgetDevice: deviceSeams().forgetDevice,
+              },
+              { now },
             ),
-      pushSpeech: (now) =>
-        store === undefined || sender === undefined
-          ? Effect.succeed(NOTHING_PUSHED)
-          : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
-              pushSpeech(
-                {
-                  store: { writer },
-                  tools: CATALOG_TOOL_SET,
-                  send: (notification) => sender.send(notification),
-                  forgetDevice: deviceSeams().forgetDevice,
-                },
-                { now },
-              ),
-            ),
-      observe: (userId) => {
-        if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
-        return Effect.gen(function* () {
-          const rows = yield* readStoredVaultKeys(userId);
-          const outcome = yield* observeAndSnapshot({
-            userId,
-            rows,
-            secret: encryptionSecret,
+          ),
+    observe: (userId) => {
+      if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
+      return Effect.gen(function* () {
+        const rows = yield* readStoredVaultKeys(userId);
+        const outcome = yield* observeAndSnapshot({
+          userId,
+          rows,
+          secret: encryptionSecret,
+          store,
+          seams: {},
+          now: Date.now(),
+        });
+        return { complete: outcome.complete, changed: outcome.changed };
+      });
+    },
+    openTurns: (userId) => {
+      if (!store || !encryptionSecret || !cronSecret) return Effect.succeed(NOTHING_OPENED);
+      return Effect.gen(function* () {
+        const rows = yield* readStoredVaultKeys(userId);
+        const readApiKey = readApiKeyFor(rows, encryptionSecret);
+        const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
+        return yield* openAccountTurns(
+          {
             store,
-            seams: {},
-            now: Date.now(),
-          });
-          return { complete: outcome.complete, changed: outcome.changed };
-        });
-      },
-      openTurns: (userId) => {
-        if (!store || !encryptionSecret || !cronSecret) return Effect.succeed(NOTHING_OPENED);
-        return Effect.gen(function* () {
-          const rows = yield* readStoredVaultKeys(userId);
-          const readApiKey = readApiKeyFor(rows, encryptionSecret);
-          const roster = yield* readHostedRoster(store, userId, rows, encryptionSecret);
-          return yield* openAccountTurns(
-            {
-              store,
-              writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
-              eve: eveSessions<ScheduledTurn>({
-                origin: eveOrigin,
-                caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
-              }),
-              roster,
-              transcripts: hostedTranscriptReads({
-                client: yield* SqlClient.SqlClient,
-                userId,
-                roster: () => Effect.succeed(roster),
-                pluginFor: (providerId) =>
-                  cloudSessionPluginFor(providerId, {
-                    readApiKey: readApiKey(providerId),
-                    reported: () => roster.observations.get(providerId) ?? [],
-                  }),
-                now: Date.now,
-              }),
+            writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
+            eve: eveSessions<ScheduledTurn>({
+              origin: eveOrigin,
+              caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },
+            }),
+            roster,
+            transcripts: hostedTranscriptReads({
+              client: yield* SqlClient.SqlClient,
+              userId,
+              roster: () => Effect.succeed(roster),
+              pluginFor: (providerId) =>
+                cloudSessionPluginFor(providerId, {
+                  readApiKey: readApiKey(providerId),
+                  reported: () => roster.observations.get(providerId) ?? [],
+                }),
               now: Date.now,
-              report: (message) => console.warn(message),
-            },
-            userId,
-          );
-        });
-      },
-    };
+            }),
+            now: Date.now,
+            report: (message) => console.warn(message),
+          },
+          userId,
+        );
+      });
+    },
+  };
 
-    return yield* Effect.ensuring(
-      handleObservationTick(options),
-      sender ? Effect.promise(() => sender.close()) : Effect.void,
-    );
-  });
-}
+  return yield* Effect.ensuring(
+    handleObservationTick(options),
+    sender ? Effect.promise(() => sender.close()) : Effect.void,
+  );
+});
 
 /**
  * The group: each path's handler carried to an `HttpApp`, and
@@ -379,19 +368,17 @@ function observationTickEffect(
  * unreachable in production, since `vercel.json` sends each function only
  * its own path, but the same shape `auth-app.ts` answers with.
  */
-export function observationApp(): HttpApp.Default<never, SqlClient.SqlClient | HostedEnvironment> {
-  return HttpRouter.empty.pipe(
-    // `all`, not `get`/`post`: each handler decides its own method refusal,
-    // as it did before conversion, so a request to the right path on the
-    // wrong method still answers 405 rather than falling through to the
+export function observationApp(): WebRoutes<SqlClient.SqlClient | HostedEnvironment> {
+  return Layer.mergeAll(
+    // `ANY_METHOD`, not `GET`/`POST`: each handler decides its own method
+    // refusal, as it did before conversion, so a request to the right path on
+    // the wrong method still answers 405 rather than falling through to the
     // group's own 404.
-    HttpRouter.all(PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
-    HttpRouter.all(PATH.PROJECTS, effectPassthrough(projectsEffect)),
-    HttpRouter.all(PATH.EVENTS, effectPassthrough(eventsEffect)),
-    HttpRouter.all(PATH.OBSERVE, effectPassthrough(observeEffect)),
-    HttpRouter.all(PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+    HttpRouter.add(ANY_METHOD, PATH.SESSIONS_MESSAGES, effectPassthrough(sessionsMessagesEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.PROJECTS, effectPassthrough(projectsEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.EVENTS, effectPassthrough(eventsEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.OBSERVE, effectPassthrough(observeEffect)),
+    HttpRouter.add(ANY_METHOD, PATH.OBSERVATION_TICK, effectPassthrough(observationTickEffect)),
+    hostedNotFoundRoute,
   );
 }

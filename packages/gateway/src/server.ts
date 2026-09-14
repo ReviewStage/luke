@@ -1,5 +1,3 @@
-import { type Rpc, type RpcGroup, RpcMiddleware, RpcSerialization, RpcServer } from "@effect/rpc";
-import { constEof, type FromClientEncoded } from "@effect/rpc/RpcMessage";
 import {
   isRecord,
   isWireNumber,
@@ -15,19 +13,29 @@ import {
   Deferred,
   Duration,
   Effect,
-  type Either,
   Equal,
   Hash,
   HashMap,
   Layer,
-  Mailbox,
   MutableRef,
   Option,
   PubSub,
+  Queue,
   Ref,
+  type Result,
   type Scope,
   Stream,
+  type Types,
 } from "effect";
+import type { Headers } from "effect/unstable/http/Headers";
+import {
+  type Rpc,
+  type RpcGroup,
+  RpcMiddleware,
+  RpcSerialization,
+  RpcServer,
+} from "effect/unstable/rpc";
+import { constEof, type FromClientEncoded } from "effect/unstable/rpc/RpcMessage";
 import type { GatewayMethodHandler, GatewayMethodTable } from "./methods.js";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -95,7 +103,7 @@ export interface GatewayConnectedClient {
  * asking, and the admission middleware and every handler read the identity
  * back from this number and nowhere else.
  */
-export class GatewayClients extends Context.Tag("@sidecar/gateway/GatewayClients")<
+export class GatewayClients extends Context.Service<
   GatewayClients,
   {
     readonly connect: (client: GatewayConnectedClient) => Effect.Effect<number>;
@@ -103,9 +111,9 @@ export class GatewayClients extends Context.Tag("@sidecar/gateway/GatewayClients
     readonly client: (clientId: number) => Effect.Effect<Option.Option<GatewayConnectedClient>>;
     readonly clientIds: Effect.Effect<ReadonlySet<number>>;
   }
->() {}
+>()("@sidecar/gateway/GatewayClients") {}
 
-const makeGatewayClients: Effect.Effect<GatewayClients["Type"]> = Effect.gen(function* () {
+const makeGatewayClients: Effect.Effect<GatewayClients["Service"]> = Effect.gen(function* () {
   const held = yield* Ref.make(HashMap.empty<number, GatewayConnectedClient>());
   const minted = yield* Ref.make(0);
   return GatewayClients.of({
@@ -126,15 +134,21 @@ export const layerGatewayClients: Layer.Layer<GatewayClients> = Layer.effect(
 );
 
 /** Whether the host still admits new work; closed at the quit, so every mutation but the shutdown itself is refused from then on. */
-export class GatewayAdmissions extends Context.Tag("@sidecar/gateway/GatewayAdmissions")<
+export class GatewayAdmissions extends Context.Service<
   GatewayAdmissions,
-  { readonly admitting: Effect.Effect<boolean>; readonly close: Effect.Effect<void> }
->() {}
+  {
+    readonly admitting: Effect.Effect<boolean>;
+    readonly close: Effect.Effect<void>;
+  }
+>()("@sidecar/gateway/GatewayAdmissions") {}
 
-const makeGatewayAdmissions: Effect.Effect<GatewayAdmissions["Type"]> = Effect.map(
+const makeGatewayAdmissions: Effect.Effect<GatewayAdmissions["Service"]> = Effect.map(
   Ref.make(true),
   (admitting) =>
-    GatewayAdmissions.of({ admitting: Ref.get(admitting), close: Ref.set(admitting, false) }),
+    GatewayAdmissions.of({
+      admitting: Ref.get(admitting),
+      close: Ref.set(admitting, false),
+    }),
 );
 
 export const layerGatewayAdmissions: Layer.Layer<GatewayAdmissions> = Layer.effect(
@@ -170,7 +184,7 @@ export type GatewayEventListener = (event: GatewayEvent) => void;
  * revision inside its encoder, which the Rpc runtime calls as one, and the
  * host reports a change from a collaborator's own synchronous callback.
  */
-export class GatewayEventLog extends Context.Tag("@sidecar/gateway/GatewayEventLog")<
+export class GatewayEventLog extends Context.Service<
   GatewayEventLog,
   {
     /**
@@ -209,7 +223,7 @@ export class GatewayEventLog extends Context.Tag("@sidecar/gateway/GatewayEventL
      */
     readonly listen: (listener: GatewayEventListener) => () => void;
   }
->() {}
+>()("@sidecar/gateway/GatewayEventLog") {}
 
 function newestSequence(events: Chunk.Chunk<GatewayEvent>): number {
   return Option.match(Chunk.last(events), {
@@ -218,76 +232,74 @@ function newestSequence(events: Chunk.Chunk<GatewayEvent>): number {
   });
 }
 
-function makeGatewayEventLog(
+const makeGatewayEventLog = /* @__PURE__ */ Effect.fnUntraced(function* (
   options: GatewayEventLogOptions,
-): Effect.Effect<GatewayEventLog["Type"]> {
-  return Effect.gen(function* () {
-    const window = Math.max(1, options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW);
-    const ring = MutableRef.make(Chunk.empty<GatewayEvent>());
-    const bus = yield* PubSub.unbounded<GatewayEvent>();
-    const listeners = new Set<GatewayEventListener>();
-    const publish = (
-      kind: GatewayEventKind,
-      payload: WireValue,
-      identity: { sessionKey?: string; runId?: string } = {},
-    ): GatewayEvent => {
-      const events = MutableRef.get(ring);
-      const emitted: GatewayEvent = {
-        eventId: options.createEventId(),
-        sequence: newestSequence(events) + 1,
-        kind,
-        at: options.now(),
-        ...(identity.sessionKey !== undefined ? { sessionKey: identity.sessionKey } : undefined),
-        ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
-        payload,
-      };
-      MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
-      // The unbounded bus takes every event, so the offer is the publish an
-      // effect would have awaited, made where the caller is not a fiber.
-      bus.unsafeOffer(emitted);
-      for (const listener of [...listeners]) listener(emitted);
-      return emitted;
+): Effect.fn.Return<GatewayEventLog["Service"]> {
+  const window = Math.max(1, options.replayWindow ?? GATEWAY_SERVER_DEFAULTS.REPLAY_WINDOW);
+  const ring = MutableRef.make(Chunk.empty<GatewayEvent>());
+  const bus = yield* PubSub.unbounded<GatewayEvent>();
+  const listeners = new Set<GatewayEventListener>();
+  const publish = (
+    kind: GatewayEventKind,
+    payload: WireValue,
+    identity: { sessionKey?: string; runId?: string } = {},
+  ): GatewayEvent => {
+    const events = MutableRef.get(ring);
+    const emitted: GatewayEvent = {
+      eventId: options.createEventId(),
+      sequence: newestSequence(events) + 1,
+      kind,
+      at: options.now(),
+      ...(identity.sessionKey !== undefined ? { sessionKey: identity.sessionKey } : undefined),
+      ...(identity.runId !== undefined ? { runId: identity.runId } : undefined),
+      payload,
     };
-    return GatewayEventLog.of({
-      publish,
-      emit: (kind, payload, identity) => Effect.sync(() => publish(kind, payload, identity)),
-      replayFrom: (lastSequence) =>
-        Effect.sync(() => {
-          const events = MutableRef.get(ring);
-          const sequence = newestSequence(events);
-          if (lastSequence >= sequence) {
-            return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events: [] };
-          }
-          const oldest = Option.map(Chunk.head(events), (first) => first.sequence);
-          if (Option.isNone(oldest) || oldest.value > lastSequence + 1) {
-            return {
-              kind: GATEWAY_RECONNECT_KIND.SNAPSHOT,
-              sequence,
-              snapshot: options.snapshot(),
-            };
-          }
+    MutableRef.set(ring, Chunk.takeRight(Chunk.append(events, emitted), window));
+    // The unbounded bus takes every event, so the offer is the publish an
+    // effect would have awaited, made where the caller is not a fiber.
+    PubSub.publishUnsafe(bus, emitted);
+    for (const listener of [...listeners]) listener(emitted);
+    return emitted;
+  };
+  return GatewayEventLog.of({
+    publish,
+    emit: (kind, payload, identity) => Effect.sync(() => publish(kind, payload, identity)),
+    replayFrom: (lastSequence) =>
+      Effect.sync(() => {
+        const events = MutableRef.get(ring);
+        const sequence = newestSequence(events);
+        if (lastSequence >= sequence) {
+          return { kind: GATEWAY_RECONNECT_KIND.REPLAY, events: [] };
+        }
+        const oldest = Option.map(Chunk.head(events), (first) => first.sequence);
+        if (Option.isNone(oldest) || oldest.value > lastSequence + 1) {
           return {
-            kind: GATEWAY_RECONNECT_KIND.REPLAY,
-            events: Chunk.toReadonlyArray(
-              Chunk.filter(events, (event) => event.sequence > lastSequence),
-            ),
+            kind: GATEWAY_RECONNECT_KIND.SNAPSHOT,
+            sequence,
+            snapshot: options.snapshot(),
           };
-        }),
-      sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
-      events: Stream.fromPubSub(bus, { scoped: true }),
-      revision: () => ({
-        configuration: options.configurationRevision(),
-        sequence: newestSequence(MutableRef.get(ring)),
-      }),
-      listen: (listener) => {
-        listeners.add(listener);
-        return () => {
-          listeners.delete(listener);
+        }
+        return {
+          kind: GATEWAY_RECONNECT_KIND.REPLAY,
+          events: Chunk.toReadonlyArray(
+            Chunk.filter(events, (event) => event.sequence > lastSequence),
+          ),
         };
-      },
-    });
+      }),
+    sequence: Effect.sync(() => newestSequence(MutableRef.get(ring))),
+    events: Effect.map(PubSub.subscribe(bus), Stream.fromSubscription),
+    revision: () => ({
+      configuration: options.configurationRevision(),
+      sequence: newestSequence(MutableRef.get(ring)),
+    }),
+    listen: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
   });
-}
+});
 
 export function layerGatewayEventLog(
   options: GatewayEventLogOptions,
@@ -298,23 +310,28 @@ export function layerGatewayEventLog(
 /**
  * The three middlewares, in the order a request meets them: admission (the
  * protocol version, who may call what, the closed door, and the key a
- * mutation must carry), the revision checks, and the ledger, which wraps the
- * handler so it can answer from what it remembers instead of running it.
+ * mutation must carry), the revision checks, and the ledger, which answers
+ * from what it remembers instead of running the handler it was handed.
  * Each fails with the refusal family the envelope already carries.
+ *
+ * Every middleware wraps: it is handed the handler's own effect and answers
+ * one, so a check that used to answer `void` before the handler ran now runs
+ * its checks and hands the same effect on, and the ledger, which always
+ * wrapped, reads the effect where it used to read a `next` field.
  */
-export class GatewayAdmission extends RpcMiddleware.Tag<GatewayAdmission>()(
+export class GatewayAdmission extends RpcMiddleware.Service<GatewayAdmission>()(
   "@sidecar/gateway/GatewayAdmission",
-  { failure: GatewayRefusalSchema },
+  { error: GatewayRefusalSchema },
 ) {}
 
-export class GatewayRevisionCheck extends RpcMiddleware.Tag<GatewayRevisionCheck>()(
+export class GatewayRevisionCheck extends RpcMiddleware.Service<GatewayRevisionCheck>()(
   "@sidecar/gateway/GatewayRevisionCheck",
-  { failure: GatewayRefusalSchema },
+  { error: GatewayRefusalSchema },
 ) {}
 
-export class GatewayLedger extends RpcMiddleware.Tag<GatewayLedger>()(
+export class GatewayLedger extends RpcMiddleware.Service<GatewayLedger>()(
   "@sidecar/gateway/GatewayLedger",
-  { failure: GatewayRefusalSchema, wrap: true },
+  { error: GatewayRefusalSchema },
 ) {}
 
 /**
@@ -351,7 +368,11 @@ export interface GatewayServerLayerOptions extends GatewayEventLogOptions {
 function methodOf(rpc: Rpc.AnyWithProps): Effect.Effect<GatewayMethod, UnknownMethodRefusal> {
   return isGatewayMethod(rpc._tag)
     ? Effect.succeed(rpc._tag)
-    : Effect.fail(new UnknownMethodRefusal({ message: `no handler stands for ${rpc._tag}` }));
+    : Effect.fail(
+        new UnknownMethodRefusal({
+          message: `no handler stands for ${rpc._tag}`,
+        }),
+      );
 }
 
 /** The flag the method's own entry declared; an Rpc carrying none is not the protocol's, and the server does not guess for it. */
@@ -370,13 +391,13 @@ function layerGatewayAdmission(
     Effect.gen(function* () {
       const clients = yield* GatewayClients;
       const admissions = yield* GatewayAdmissions;
-      return GatewayAdmission.of(({ clientId, rpc, headers }) =>
+      return GatewayAdmission.of((handler, { client: caller, rpc, headers }) =>
         Effect.gen(function* () {
           const fields = gatewayHeaderFields(Object.entries(headers));
           const version = gatewayVersionRefusal(fields.protocolVersion);
           if (Option.isSome(version)) return yield* Effect.fail(version.value);
           const method = yield* methodOf(rpc);
-          const client = yield* clients.client(clientId);
+          const client = yield* clients.client(caller.id);
           if (Option.isNone(client)) {
             return yield* Effect.fail(
               new UnauthorizedRefusal({
@@ -390,7 +411,9 @@ function layerGatewayAdmission(
             : role === GATEWAY_CLIENT_ROLE.OPERATOR || NODE_METHODS.has(method);
           if (!allowed) {
             return yield* Effect.fail(
-              new UnauthorizedRefusal({ message: `${role} may not call ${method}` }),
+              new UnauthorizedRefusal({
+                message: `${role} may not call ${method}`,
+              }),
             );
           }
           const changes = mutates(rpc);
@@ -406,6 +429,7 @@ function layerGatewayAdmission(
               }),
             );
           }
+          return yield* handler;
         }),
       );
     }),
@@ -417,7 +441,7 @@ function layerGatewayRevisionCheck(
 ): Layer.Layer<GatewayRevisionCheck> {
   return Layer.succeed(
     GatewayRevisionCheck,
-    GatewayRevisionCheck.of(({ headers }) =>
+    GatewayRevisionCheck.of((handler, { headers }) =>
       Effect.suspend(() => {
         const expected = gatewayHeaderFields(Object.entries(headers)).expectedRevision;
         if (expected?.configurationRevision !== undefined) {
@@ -440,17 +464,18 @@ function layerGatewayRevisionCheck(
             );
           }
         }
-        return Effect.void;
+        return handler;
       }),
     ),
   );
 }
 
-type LedgerRun = Effect.Effect<RpcMiddleware.SuccessValue, GatewayRefusal>;
+/** What the middleware hands on: the handler still to run, whose error channel carries the marker the Rpc runtime keeps for an error no middleware has handled. */
+type LedgerRun = Effect.Effect<RpcMiddleware.SuccessValue, GatewayRefusal | Types.unhandled>;
 
 interface LedgerAnswer {
   readonly paramsText: string;
-  readonly answer: Either.Either<RpcMiddleware.SuccessValue, GatewayRefusal>;
+  readonly answer: Result.Result<RpcMiddleware.SuccessValue, GatewayRefusal | Types.unhandled>;
 }
 
 /**
@@ -499,21 +524,28 @@ export function layerGatewayLedger(options: GatewayServerLayerOptions): Layer.La
             capacity,
             timeToLive: Duration.infinity,
             lookup: (asked: LedgerEntry) =>
-              Effect.map(Effect.either(asked.run), (answer) => ({
+              Effect.map(Effect.result(asked.run), (answer) => ({
                 paramsText: asked.paramsText,
                 answer,
               })),
           }),
         );
       }
-      return GatewayLedger.of(({ rpc, payload, headers, next }) => {
+      return GatewayLedger.of((next, { rpc, payload, headers }) => {
         const key = gatewayHeaderFields(Object.entries(headers)).idempotencyKey;
         const ledger = isGatewayMethod(rpc._tag) ? ledgers.get(rpc._tag) : undefined;
         if (key === undefined || ledger === undefined) return next;
         const paramsText = JSON.stringify(payload);
-        return Effect.flatMap(ledger.get(new LedgerEntry(key, paramsText, next)), (held) =>
+        const asked = new LedgerEntry(key, paramsText, next);
+        // An interruption is not an answer, so the key it was asked under is
+        // dropped where the interruption is seen rather than left standing
+        // over a lookup that will never settle.
+        const held = Cache.get(ledger, asked).pipe(
+          Effect.onInterrupt(() => Cache.invalidate(ledger, asked)),
+        );
+        return Effect.flatMap(held, (held) =>
           held.paramsText === paramsText
-            ? held.answer
+            ? Effect.fromResult(held.answer)
             : Effect.fail(
                 new IdempotencyConflictRefusal({
                   message: "that idempotency key was already used with other parameters",
@@ -539,7 +571,11 @@ function readLastSequence(params: WireRecord): Effect.Effect<number, InvalidPara
   const lastSequence = params.lastSequence;
   return isWireNumber(lastSequence) && lastSequence >= 0
     ? Effect.succeed(lastSequence)
-    : Effect.fail(new InvalidParamsRefusal({ message: "lastSequence must be a whole number" }));
+    : Effect.fail(
+        new InvalidParamsRefusal({
+          message: "lastSequence must be a whole number",
+        }),
+      );
 }
 
 /**
@@ -551,7 +587,7 @@ function readLastSequence(params: WireRecord): Effect.Effect<number, InvalidPara
 function layerGatewayMethods(
   options: GatewayServerLayerOptions,
 ): Layer.Layer<Rpc.ToHandler<GatewayServerRpc>, never, GatewayEventLog | GatewayClients> {
-  return Layer.unwrapEffect(
+  return Layer.unwrap(
     Effect.gen(function* () {
       const log = yield* GatewayEventLog;
       const clients = yield* GatewayClients;
@@ -566,8 +602,15 @@ function layerGatewayMethods(
         Effect.flatMap(readLastSequence(params), (lastSequence) =>
           Effect.map(log.replayFrom(lastSequence), (answer) =>
             answer.kind === GATEWAY_RECONNECT_KIND.REPLAY
-              ? { kind: answer.kind, events: answer.events.map(gatewayEventToWire) }
-              : { kind: answer.kind, sequence: answer.sequence, snapshot: answer.snapshot },
+              ? {
+                  kind: answer.kind,
+                  events: answer.events.map(gatewayEventToWire),
+                }
+              : {
+                  kind: answer.kind,
+                  sequence: answer.sequence,
+                  snapshot: answer.snapshot,
+                },
           ),
         );
       const methods: GatewayMethodTable = {
@@ -579,15 +622,20 @@ function layerGatewayMethods(
         const handler = methods[method];
         return (
           payload: WireRecord,
-          asked: { readonly clientId: number; readonly headers: Readonly<Record<string, string>> },
+          asked: {
+            readonly client: Rpc.ServerClient;
+            readonly headers: Headers;
+          },
         ): Effect.Effect<WireValue | undefined, GatewayRefusal> =>
           Effect.gen(function* () {
             if (!handler) {
               return yield* Effect.fail(
-                new UnknownMethodRefusal({ message: `no handler stands for ${method}` }),
+                new UnknownMethodRefusal({
+                  message: `no handler stands for ${method}`,
+                }),
               );
             }
-            const client = yield* clients.client(asked.clientId);
+            const client = yield* clients.client(asked.client.id);
             if (Option.isNone(client)) {
               return yield* Effect.fail(
                 new UnauthorizedRefusal({
@@ -610,7 +658,7 @@ function layerGatewayMethods(
             // A handler that throws rather than failing is the request's own
             // internal refusal, as it was when the table answered promises:
             // one method's defect refuses that request and no other.
-            Effect.catchAllDefect((defect) =>
+            Effect.catchDefect((defect) =>
               Effect.fail(
                 new InternalRefusal({
                   message: defect instanceof Error ? defect.message : String(defect),
@@ -664,19 +712,17 @@ export interface GatewayInProcessConnection {
   readonly close: Effect.Effect<void>;
 }
 
-export class GatewayInProcessProtocol extends Context.Tag(
-  "@sidecar/gateway/GatewayInProcessProtocol",
-)<
+export class GatewayInProcessProtocol extends Context.Service<
   GatewayInProcessProtocol,
   {
     readonly connect: (client: GatewayConnectedClient) => Effect.Effect<GatewayInProcessConnection>;
   }
->() {}
+>()("@sidecar/gateway/GatewayInProcessProtocol") {}
 
 interface InProcessClient {
   /** The envelope id each Rpc request id stands for, so an answer is echoed under the id the client wrote. */
-  readonly wireIds: Map<string, string>;
-  readonly pending: Map<string, Deferred.Deferred<string>>;
+  readonly wireIds: Map<string | number, string>;
+  readonly pending: Map<string | number, Deferred.Deferred<string>>;
   next: number;
   ended: boolean;
 }
@@ -698,22 +744,23 @@ function refusalFrame(
  */
 const makeGatewayInProcessProtocol: Effect.Effect<
   {
-    readonly protocol: RpcServer.Protocol["Type"];
-    readonly inProcess: GatewayInProcessProtocol["Type"];
+    readonly protocol: RpcServer.Protocol["Service"];
+    readonly inProcess: GatewayInProcessProtocol["Service"];
   },
   never,
   RpcSerialization.RpcSerialization | GatewayClients
 > = Effect.gen(function* () {
-  const parser = (yield* RpcSerialization.RpcSerialization).unsafeMake();
+  const serialization = yield* RpcSerialization.RpcSerialization;
+  const parser = serialization.makeUnsafe();
   const decoder = new TextDecoder();
   const clients = yield* GatewayClients;
-  const disconnects = yield* Mailbox.make<number>();
+  const disconnects = yield* Queue.make<number>();
   const held = new Map<number, InProcessClient>();
 
   const frameOf = (encoded: string | Uint8Array | undefined): string | undefined =>
     encoded instanceof Uint8Array ? decoder.decode(encoded) : encoded;
 
-  const answer = (client: InProcessClient, requestId: string, frame: string) =>
+  const answer = (client: InProcessClient, requestId: string | number, frame: string) =>
     Effect.suspend(() => {
       const pending = client.pending.get(requestId);
       client.pending.delete(requestId);
@@ -774,13 +821,17 @@ const makeGatewayInProcessProtocol: Effect.Effect<
                 { discard: true },
               )
             : Effect.void;
-          return Effect.zipRight(abandoned, clients.disconnect(clientId));
+          return Effect.andThen(abandoned, clients.disconnect(clientId));
         }),
       clientIds: Effect.sync(() => new Set(held.keys())),
       initialMessage: Effect.succeedNone,
       supportsAck: false,
       supportsTransferables: false,
       supportsSpanPropagation: false,
+      // Every request here is awaited on its own `Deferred`, so a request that
+      // expects no answer is not something this seam carries.
+      supportsNotifications: false,
+      codecFor: serialization.codecFor,
     });
   });
 
@@ -885,9 +936,9 @@ function layerGatewayInProcess(
  * its client effects and the caller that composed them is what runs them.
  */
 export interface GatewayInProcessHost {
-  readonly protocol: GatewayInProcessProtocol["Type"];
-  readonly log: GatewayEventLog["Type"];
-  readonly admissions: GatewayAdmissions["Type"];
+  readonly protocol: GatewayInProcessProtocol["Service"];
+  readonly log: GatewayEventLog["Service"];
+  readonly admissions: GatewayAdmissions["Service"];
 }
 
 /**

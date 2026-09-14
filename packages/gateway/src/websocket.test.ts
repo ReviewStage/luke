@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Context, Effect, ExecutionStrategy, Exit, Fiber, Layer, Scope } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, Scope } from "effect";
 import { WebSocket } from "ws";
 import { gatewayClient } from "./client.js";
 import type { GatewayMethodTable } from "./methods.js";
@@ -35,8 +35,8 @@ const OPERATOR: GatewayClientIdentity = {
 };
 
 interface Hosted {
-  readonly binding: GatewaySocketBinding["Type"];
-  readonly log: GatewayEventLog["Type"];
+  readonly binding: GatewaySocketBinding["Service"];
+  readonly log: GatewayEventLog["Service"];
   readonly effects: string[];
   readonly shutdowns: () => number;
   /** Takes the host away while the test still stands, as a quit would. */
@@ -71,8 +71,8 @@ const hosted = (
       // A read that never answers, so a socket can die with a request still out.
       [GATEWAY_METHOD.RUN_WAIT]: () => Effect.never,
     };
-    const scope = yield* Scope.fork(yield* Effect.scope, ExecutionStrategy.sequential);
-    const context = yield* Scope.extend(
+    const scope = yield* Scope.fork(yield* Effect.scope);
+    const context = yield* Scope.provide(
       Layer.build(
         layerGatewaySocket({
           methods: methods,
@@ -315,12 +315,12 @@ it.live(
           await held;
           return authenticate(headers);
         });
-        const refused = yield* Effect.fork(connect(h));
+        const refused = yield* Effect.forkChild(connect(h));
         // The host starts to leave while the credential is still being checked.
         yield* Effect.sleep("20 millis");
         yield* h.binding.closeAdmissions;
         release?.();
-        assert.deepEqual(yield* refused, {
+        assert.deepEqual(yield* Fiber.join(refused), {
           ok: false,
           failure: GATEWAY_HANDSHAKE_REFUSAL.SHUTTING_DOWN,
         });
@@ -367,7 +367,7 @@ it.live(
           await never;
           return bearerAuthentication(TOKEN)(headers);
         });
-        const attempt = yield* Effect.fork(connect(h));
+        const attempt = yield* Effect.forkChild(connect(h));
         yield* Effect.sleep("20 millis");
         const outcome = yield* Effect.race(
           Effect.as(h.close, "closed"),
@@ -375,7 +375,7 @@ it.live(
         );
         assert.equal(outcome, "closed");
         // The attempt is refused rather than left waiting on a host that has gone.
-        assert.equal((yield* attempt).ok, false);
+        assert.equal((yield* Fiber.join(attempt)).ok, false);
       }),
     ),
 );
@@ -391,7 +391,9 @@ it.live("a client that dies with a request still out leaves the host answering t
         transport: first.connection,
         createId: () => crypto.randomUUID(),
       });
-      const waiting = yield* Effect.fork(client.call(GATEWAY_METHOD.RUN_WAIT, { runId: "run-1" }));
+      const waiting = yield* Effect.forkChild(
+        client.call(GATEWAY_METHOD.RUN_WAIT, { runId: "run-1" }),
+      );
       yield* settle;
       assert.equal(yield* h.binding.connections, 1);
       // The socket dies with the read still out: its answer lands nowhere and

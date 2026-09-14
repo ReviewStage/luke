@@ -8,9 +8,9 @@ export const AGENT_TRACE_DIRECTORY_VARIABLE = "LUKE_TRACE_DIR";
  * `ConfigProvider` the caller loads it under — the host's `Environment` seam
  * in the app, a map in a test. Absent means no writer at all rather than a
  * default directory: the trace exists only for an unpackaged, live run whose
- * shell named a directory. `Config.string` never fails on a present value, so
+ * shell named a directory. `Config.String` never fails on a present value, so
  * the read answers an `Option` and no refusal.
  */
 export const agentTraceDirectory: Config.Config<Option.Option<string>> = Config.option(
-  Config.string(AGENT_TRACE_DIRECTORY_VARIABLE),
+  Config.String(AGENT_TRACE_DIRECTORY_VARIABLE),
 );

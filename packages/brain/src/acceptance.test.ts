@@ -62,7 +62,8 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Clock, Duration, Effect, TestClock, type TestServices } from "effect";
+import { Clock, Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
@@ -263,11 +264,11 @@ function host(
   overrides: Partial<BrainAgentOptions> = {},
 ): Effect.Effect<Host> {
   return Effect.gen(function* () {
-    const clock = yield* Effect.clock;
+    const clock = yield* Clock.Clock;
     const store = new BrainStateStore({
       repository,
       createGenerationId: () => `gen-${++ids}`,
-      now: () => clock.unsafeCurrentTimeMillis(),
+      now: () => clock.currentTimeMillisUnsafe(),
     });
     const performed: string[] = [];
     const session = normalizeSession(claude, {
@@ -336,7 +337,7 @@ async function settle(): Promise<void> {
  * arms one wait of `WAKE_COALESCE_MS` on the agent's clock, and advancing
  * past it is what opens the turn those wakes were held for.
  */
-const runCoalescingWindow = (): Effect.Effect<void, never, TestServices.TestServices> =>
+const runCoalescingWindow = (): Effect.Effect<void> =>
   Effect.gen(function* () {
     yield* TestClock.adjust(Duration.millis(BRAIN_DEFAULTS.WAKE_COALESCE_MS));
     yield* Effect.promise(() => settle());

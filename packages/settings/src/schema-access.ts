@@ -1,7 +1,7 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
 import { APP_SETTING_ID, type AppGuideSetting, type AppSettingId } from "@sidecar/guide";
 import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Either, Schema } from "effect";
+import { Result, Schema } from "effect";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import { settingGuardFromEither } from "./schema-builders.js";
 import type {
@@ -202,14 +202,14 @@ export function settingEntryGuard(
   key: string,
   value: UnparsedWireValue,
 ): SettingGuardResult<unknown> {
-  if (value === undefined) return settingGuardFromEither(Either.right(undefined));
+  if (value === undefined) return settingGuardFromEither(Result.succeed(undefined));
   const parsed = APP_SETTING_SCHEMA[field].guard({ [key]: value });
   // SAFETY: The guard validated the map; indexing recovers the single entry under test.
   const kept = parsed.valid ? (parsed.value as WireRecord | undefined)?.[key] : undefined;
-  return settingGuardFromEither(kept === undefined ? Either.left(undefined) : Either.right(kept));
+  return settingGuardFromEither(kept === undefined ? Result.fail(undefined) : Result.succeed(kept));
 }
 
-export const SettingsResetScopeSchema = Schema.Literal(...Object.values(SETTINGS_RESET_SCOPE));
+export const SettingsResetScopeSchema = Schema.Literals(Object.values(SETTINGS_RESET_SCOPE));
 
 const readsSettingsResetScope = Schema.is(SettingsResetScopeSchema);
 

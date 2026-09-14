@@ -99,25 +99,24 @@ export function liveCreateRequest(session: LiveSessionConfig, sdpOffer: string) 
 
 /**
  * The creation answer: the session's id, kept opaque, and the SDP answer the
- * renderer applies as its remote description. Anything else the service adds
- * is ignored; an answer without both is refused whole.
+ * renderer applies as its remote description. An answer without both is
+ * refused whole. Anything else the service adds is ignored by the read rather
+ * than by the declaration — `readEither(liveCreateAnswerSchema, { excess:
+ * EXCESS_KEYS.DROP })` — since which keys a read tolerates is the read's to
+ * decide.
  */
-const keptText = Schema.String.pipe(
-  Schema.filter((value) => value.trim().length > 0, {
-    schemaId: Schema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
+const keptText = Schema.String.check(
+  Schema.isNonEmpty(),
+  Schema.makeFilter<string>((value) => value.trim().length > 0),
 );
 
 export const liveCreateAnswerSchema = Schema.Struct({
-  session: Schema.Struct({ id: keptText }).annotations({
-    parseOptions: { onExcessProperty: "ignore" },
-  }),
+  session: Schema.Struct({ id: keptText }),
   transport: Schema.Struct({
     type: Schema.Literal(LIVE_TRANSPORT_TYPE),
     sdp: keptText,
-  }).annotations({ parseOptions: { onExcessProperty: "ignore" } }),
-}).annotations({ parseOptions: { onExcessProperty: "ignore" } });
+  }),
+});
 
 export type LiveCreateAnswer = typeof liveCreateAnswerSchema.Type;
 

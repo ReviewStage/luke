@@ -37,7 +37,7 @@ export function admitToolCall(
       return Effect.succeed(refused(ACTION_REFUSAL.UNREADABLE));
     }
     if (!isRecord(parsed)) return Effect.succeed(refused(ACTION_REFUSAL.UNREADABLE));
-    return Effect.catchAll(admitEffect({ kind: spec.kind, fields: parsed }, context), (refusal) =>
+    return Effect.catch(admitEffect({ kind: spec.kind, fields: parsed }, context), (refusal) =>
       Effect.succeed(refused(refusal.reason)),
     );
   });

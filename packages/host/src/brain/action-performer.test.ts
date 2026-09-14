@@ -25,9 +25,14 @@ import {
   type Session,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
-import { ACTION_RESULT_STATUS, UNKNOWN_ACTION_STATUS, type WireRecord } from "@sidecar/wire";
+import {
+  ACTION_RESULT_STATUS,
+  EXCESS_KEYS,
+  UNKNOWN_ACTION_STATUS,
+  type WireRecord,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Effect, Either, Fiber, Option } from "effect";
+import { Deferred, Effect, Fiber, Result } from "effect";
 import { test } from "vitest";
 import {
   type BrainActionPerformerDependencies,
@@ -114,7 +119,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -260,7 +265,10 @@ test("every answer is the envelope: a session action's target as the roster held
   });
 
   for (const envelope of [sent, stopped, created]) {
-    assert.deepEqual(Either.getOrUndefined(readEither(ACTION_OUTPUT)(envelope)), envelope);
+    assert.deepEqual(
+      Result.getOrUndefined(readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(envelope)),
+      envelope,
+    );
   }
 });
 
@@ -621,8 +629,8 @@ it.effect(
       const h = performer({
         refreshSessions: () =>
           Deferred.succeed(started, undefined).pipe(
-            Effect.zipRight(Deferred.await(release)),
-            Effect.zipRight(
+            Effect.andThen(Deferred.await(release)),
+            Effect.andThen(
               Effect.sync(() => {
                 finished = true;
               }),
@@ -643,7 +651,7 @@ it.effect(
         isRevoked: () => controller.signal.aborted,
         signal: controller.signal,
       };
-      const pending = yield* Effect.fork(performCall(h.actions, MESSAGE_CALL, execution));
+      const pending = yield* Effect.forkChild(performCall(h.actions, MESSAGE_CALL, execution));
       yield* Deferred.await(started);
       controller.abort();
       const outcome = yield* Fiber.join(pending);
@@ -694,7 +702,7 @@ it.effect(
         };
         // Only a creation reads the defaults, so each held read is exercised by the
         // act that actually waits on it.
-        const pending = yield* Effect.fork(
+        const pending = yield* Effect.forkChild(
           performCall(
             h.actions,
             held === "refreshSessions" ? MESSAGE_CALL : CREATE_CALL,
@@ -702,7 +710,7 @@ it.effect(
           ),
         );
         yield* waitFor(() => invoked);
-        assert.equal(Option.isNone(yield* pending.poll), true);
+        assert.equal(pending.pollUnsafe(), undefined);
         controller.abort();
         const outcome = yield* Fiber.join(pending);
         assert.equal(outcome.status, ACTION_OUTPUT_STATUS.REFUSED);

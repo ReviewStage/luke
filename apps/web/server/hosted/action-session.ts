@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Either, type ParseResult } from "effect";
+import { Effect, Result, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_KIND,
   ACTION_RESULT_STATUS,
@@ -34,7 +34,7 @@ import type { HostedVaultRoute } from "./vault-route.js";
  */
 export type HostedActionEffect<Answer> = Effect.Effect<
   Answer,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 >;
 
@@ -190,10 +190,10 @@ function admitActionRequest(
       return errorResponse(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN);
     }
 
-    const parsed = yield* Effect.either(Effect.tryPromise(() => request.json()));
-    if (Either.isLeft(parsed)) return invalidRequest();
+    const parsed = yield* Effect.result(Effect.tryPromise(() => request.json()));
+    if (Result.isFailure(parsed)) return invalidRequest();
     // SAFETY: request.json() returns unknown; isRecord below validates the shape.
-    const body = parsed.right as UnparsedWireValue;
+    const body = parsed.success as UnparsedWireValue;
     if (!isRecord(body)) return invalidRequest();
 
     const providerId = text(body.providerId);
@@ -227,57 +227,55 @@ function actionAnswer(executed: ActionExecutionAnswer): Response {
  * caller gets instead: a rejection naming the missing key, or a 503 for a
  * ciphertext this deployment's secret cannot open.
  */
-function apiKeyOrAnswer(
+const apiKeyOrAnswer = /* @__PURE__ */ Effect.fn("apiKeyOrAnswer")(function* (
   readKey: HostedVaultRoute["readKey"],
   userId: string,
   providerId: CloudAgentProviderId,
   secret: string,
-): Effect.Effect<
+): Effect.fn.Return<
   { apiKey: string } | Response,
-  SqlError | ParseResult.ParseError,
+  SqlError | Schema.SchemaError,
   SqlClient.SqlClient
 > {
-  return Effect.gen(function* () {
-    const keyRow = yield* readKey(userId, providerId);
-    if (!keyRow) {
-      return refusedAnswer(
-        ACTION_RESULT_STATUS.REJECTED,
-        "No provider key stored. Add a key for this provider in settings.",
-      );
-    }
-    try {
-      return { apiKey: decryptProviderKey(keyRow.ciphertext, secret) };
-    } catch {
-      return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
-    }
-  });
-}
+  const keyRow = yield* readKey(userId, providerId);
+  if (!keyRow) {
+    return refusedAnswer(
+      ACTION_RESULT_STATUS.REJECTED,
+      "No provider key stored. Add a key for this provider in settings.",
+    );
+  }
+  try {
+    return { apiKey: decryptProviderKey(keyRow.ciphertext, secret) };
+  } catch {
+    return errorResponse(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE);
+  }
+});
 
 /** Admits and delivers one action aimed at a cloud session or project on the user's behalf. */
-export function handleSessionAction(options: SessionActionOptions): HostedActionEffect<Response> {
-  return Effect.gen(function* () {
-    const admission = yield* admitActionRequest(options);
-    if (admission instanceof Response) return admission;
-    const { userId, secret, providerId, body } = admission;
-    const { kind } = options;
+export const handleSessionAction = /* @__PURE__ */ Effect.fn("handleSessionAction")(function* (
+  options: SessionActionOptions,
+): Effect.fn.Return<Response, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  const admission = yield* admitActionRequest(options);
+  if (admission instanceof Response) return admission;
+  const { userId, secret, providerId, body } = admission;
+  const { kind } = options;
 
-    const asked = HOSTED_ACTION_FIELDS[kind](body);
-    if (asked === undefined) return invalidRequest();
-    const fields: WireRecord = { provider_id: providerId, ...asked };
+  const asked = HOSTED_ACTION_FIELDS[kind](body);
+  if (asked === undefined) return invalidRequest();
+  const fields: WireRecord = { provider_id: providerId, ...asked };
 
-    const unsupported = (options.unsupportedReason ?? ((id) => actionUnsupportedReason(kind, id)))(
-      providerId,
-    );
-    if (unsupported) return refusedAnswer(ACTION_RESULT_STATUS.UNSUPPORTED, unsupported);
+  const unsupported = (options.unsupportedReason ?? ((id) => actionUnsupportedReason(kind, id)))(
+    providerId,
+  );
+  if (unsupported) return refusedAnswer(ACTION_RESULT_STATUS.UNSUPPORTED, unsupported);
 
-    const key = yield* apiKeyOrAnswer(options.readKey, userId, providerId, secret);
-    if (key instanceof Response) return key;
+  const key = yield* apiKeyOrAnswer(options.readKey, userId, providerId, secret);
+  if (key instanceof Response) return key;
 
-    const roster = yield* options.roster(userId, providerId, secret);
-    const execute = options.execute ?? executeSessionAction;
-    return actionAnswer(yield* execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
-  });
-}
+  const roster = yield* options.roster(userId, providerId, secret);
+  const execute = options.execute ?? executeSessionAction;
+  return actionAnswer(yield* execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
+});
 
 /**
  * The roster a deployed route admits against: the stored snapshot, or the

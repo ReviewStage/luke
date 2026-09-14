@@ -170,7 +170,7 @@ function decide(
   context: AdmitContext,
 ): Promise<ValidatedAction | Refusal> {
   return runTest(
-    Effect.catchAll(
+    Effect.catch(
       admitEffect(request, context),
       (refusal): Effect.Effect<ValidatedAction | Refusal> =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: refusal.reason }),

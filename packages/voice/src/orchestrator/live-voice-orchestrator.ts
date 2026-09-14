@@ -5,7 +5,7 @@ import {
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
-import { Deferred, Effect, Exit, Fiber, FiberId, Runtime, type Scope } from "effect";
+import { type Context, Deferred, Effect, Exit, Fiber, type Scope } from "effect";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -66,8 +66,8 @@ export interface LiveVoiceBridge {
 export interface LiveVoiceOrchestratorOptions {
   bridge: LiveVoiceBridge;
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
-  /** The runtime the notice strip's clocks are forked on, ahead of any call standing to fork the lifecycle on instead. */
-  runtime: Runtime.Runtime<never>;
+  /** The services the notice strip's clocks are run under, since the strip is armed from synchronous callbacks that belong to no fiber. */
+  services: Context.Context<never>;
 }
 
 /** Nobody heard on either side, which is what a call that is gone carries. */
@@ -117,10 +117,10 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
 export class LiveVoiceOrchestrator {
   readonly #bridge: LiveVoiceBridge;
   readonly #createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #services: Context.Context<never>;
   readonly #strip = new NoticeStrip({
     onChanged: () => this.#touch(),
-    fork: (effect) => Runtime.runFork(this.#runtime)(effect),
+    fork: (effect) => Effect.runForkWith(this.#services)(effect),
   });
   #call: LiveVoiceCall | undefined;
   #surroundings: LiveVoiceSurroundings = {
@@ -144,7 +144,7 @@ export class LiveVoiceOrchestrator {
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
   #opening: Deferred.Deferred<LiveVoiceCall | undefined> | undefined;
   /** The standing call's whole life, in the scope it was acquired into; interrupting this is what `stop` releases it with. */
-  #lifecycle: Fiber.RuntimeFiber<void> | undefined;
+  #lifecycle: Fiber.Fiber<void> | undefined;
   /** Completed once the standing call should end, which is what lets its lifecycle fiber close the scope and release it. */
   #ending: Deferred.Deferred<void> | undefined;
   /**
@@ -164,7 +164,7 @@ export class LiveVoiceOrchestrator {
   constructor(options: LiveVoiceOrchestratorOptions) {
     this.#bridge = options.bridge;
     this.#createCall = options.createCall;
-    this.#runtime = options.runtime;
+    this.#services = options.services;
   }
 
   surround(surroundings: LiveVoiceSurroundings): void {
@@ -185,7 +185,7 @@ export class LiveVoiceOrchestrator {
    * session was opening, unmutes nothing.
    */
   beginTalk(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#surroundings.voiceAvailable === false) {
         const unavailable = yield* this.#bridge.hostedUnavailableNote();
         if (unavailable) this.#strip.showNotice(unavailable);
@@ -241,7 +241,7 @@ export class LiveVoiceOrchestrator {
    * opening, it cancels that press's unmute, so the session opens muted.
    */
   stopSpeaking(): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#pressHeld = false;
       // A session still being opened has no peer to mute yet; the press
       // remembers the key is no longer held and leaves the session muted.
@@ -277,7 +277,7 @@ export class LiveVoiceOrchestrator {
    * for as long as the key is still down.
    */
   obeySessionChange(change: VoiceLiveSessionChanged): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       switch (change.phase) {
         case LIVE_SESSION_PHASE.WANTED: {
           if (this.#surroundings.voiceAvailable === false) return;
@@ -354,7 +354,7 @@ export class LiveVoiceOrchestrator {
   #endCall(): void {
     const ending = this.#ending;
     this.#ending = undefined;
-    if (ending) Deferred.unsafeDone(ending, Exit.void);
+    if (ending) Deferred.doneUnsafe(ending, Exit.void);
   }
 
   /**
@@ -363,11 +363,11 @@ export class LiveVoiceOrchestrator {
    * it rather than offering the host a second peer.
    */
   #ensureSession(input: { byPress: boolean }): Effect.Effect<LiveVoiceCall | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#call?.standing) return this.#call;
       const negotiating = this.#opening;
       if (negotiating) return yield* Deferred.await(negotiating);
-      const opened = Deferred.unsafeMake<LiveVoiceCall | undefined>(FiberId.none);
+      const opened = Deferred.makeUnsafe<LiveVoiceCall | undefined>();
       this.#opening = opened;
       this.#openedByPress = input.byPress;
       this.#strip.clear();
@@ -379,13 +379,15 @@ export class LiveVoiceOrchestrator {
       this.#call = call;
       this.#talkOpening = input.byPress;
       this.#touch();
-      // Started on the asking fiber's own runtime rather than forked as a
-      // child of it: the call outlives the press that asked for it, and a
-      // forked fiber begins on the next scheduler task, which would leave the
-      // press's own open — and the connecting status it reports — a task
-      // behind the view this verb has already touched.
-      this.#lifecycle = Runtime.runFork(yield* Effect.runtime<never>())(
+      // Detached from the asking fiber rather than a child of it, because the
+      // call outlives the press that asked for it, and started on this stack
+      // rather than deferred, because a fiber that begins on the next
+      // scheduler task would leave the press's own open — and the connecting
+      // status it reports — a task behind the view this verb has already
+      // touched.
+      this.#lifecycle = yield* Effect.forkDetach(
         Effect.scoped(this.#lifecycleEffect(call, input, opened)),
+        { startImmediately: true },
       );
       return yield* Deferred.await(opened);
     });
@@ -405,7 +407,7 @@ export class LiveVoiceOrchestrator {
     input: { byPress: boolean },
     opened: Deferred.Deferred<LiveVoiceCall | undefined>,
   ): Effect.Effect<void, never, Scope.Scope> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const standing = yield* Effect.acquireRelease(call.open({ byPress: input.byPress }), () =>
         call.close(),
       );
@@ -421,7 +423,7 @@ export class LiveVoiceOrchestrator {
       }
       this.#touch();
       yield* Deferred.succeed(opened, call);
-      const ending = Deferred.unsafeMake<void>(FiberId.none);
+      const ending = Deferred.makeUnsafe<void>();
       this.#ending = ending;
       yield* Deferred.await(ending);
     }).pipe(Effect.onExit(() => Effect.asVoid(Deferred.succeed(opened, undefined))));

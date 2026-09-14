@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Duration, Effect, Exit, Fiber, Schedule, Scope, TestClock } from "effect";
+import { Duration, Effect, Exit, Fiber, Schedule, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import { cadenceGate } from "./cadence.js";
 
 it.effect("a disarm ends the fibers an arming forked from inside an uninterruptible region", () =>
   Effect.gen(function* () {
     const beats: number[] = [];
-    let armedFiber: Fiber.RuntimeFiber<number, never> | undefined;
+    let armedFiber: Fiber.Fiber<number, never> | undefined;
     const armed = Effect.gen(function* () {
       armedFiber = yield* Effect.forkScoped(
         Effect.interruptible(
@@ -29,7 +30,7 @@ it.effect("a disarm ends the fibers an arming forked from inside an uninterrupti
 
     yield* gate.disarm;
     assert.ok(armedFiber !== undefined);
-    assert.equal(Exit.isInterrupted(yield* Fiber.await(armedFiber)), true);
+    assert.equal(Exit.hasInterrupts(yield* Fiber.await(armedFiber)), true);
 
     yield* TestClock.adjust("1 minute");
     assert.deepEqual(beats, [0, 1, 2]);

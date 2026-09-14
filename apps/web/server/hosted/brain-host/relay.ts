@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import {
   ACTION_RESULT_STATUS,
@@ -149,11 +149,7 @@ export interface RelayStanding {
  * on. The relay runs nothing: `brainHost`'s `relay` composes this into the
  * effect it already answers, and a test runs it on its own database.
  */
-type RelayEffect<Value> = Effect.Effect<
-  Value,
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient
->;
+type RelayEffect<Value> = Effect.Effect<Value, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
 export interface StreamRelaySeams {
   /** The three writes the relay makes. */
@@ -289,7 +285,7 @@ export class StreamRelay {
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
       case "actions.requested": {
         const { turnId, stepIndex, actions } = event.data;
-        return Effect.gen(this, function* () {
+        return Effect.gen({ self: this }, function* () {
           for (const action of actions) {
             if (action.kind !== TOOL_CALL_KIND) continue;
             yield* this.#toolCall(
@@ -378,7 +374,7 @@ export class StreamRelay {
     deliveryIds: readonly string[],
     standing: RelayStanding,
   ): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       // A start eve emits again finds its turn already under way and leaves what it accumulated standing.
       if (standing.state.get().turns[eveTurnId]) return;
       const kind = standing.turn;
@@ -439,7 +435,7 @@ export class StreamRelay {
       // failed write, a defect — leaves the turn nowhere in relay state, so
       // the start eve emits again opens it from the beginning, and the failure
       // is eve's to see.
-      Effect.tapErrorCause(() =>
+      Effect.tapCause(() =>
         Effect.sync(() => standing.state.update((state) => this.#without(state, eveTurnId))),
       ),
     );
@@ -451,7 +447,7 @@ export class StreamRelay {
   }
 
   #received(eveTurnId: string, text: string, standing: RelayStanding): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
@@ -494,7 +490,7 @@ export class StreamRelay {
 
   /** A step opens once: a start eve re-emits finds its step held and tells nothing again. */
   #stepStarted(eveTurnId: string, stepIndex: number, standing: RelayStanding): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       const key = String(stepIndex);
@@ -521,7 +517,7 @@ export class StreamRelay {
     input: UnparsedWireValue,
     standing: RelayStanding,
   ): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       if (
@@ -553,7 +549,7 @@ export class StreamRelay {
     settlement: ToolCallSettlement,
     standing: RelayStanding,
   ): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       // A result eve emits again finds its call already settled and does nothing more, offer included.
@@ -604,7 +600,7 @@ export class StreamRelay {
     text: string,
     standing: RelayStanding,
   ): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       const held = turn.steps[String(stepIndex)]?.parts ?? [];
@@ -630,7 +626,7 @@ export class StreamRelay {
     ended: BrainRequestStatus,
     standing: RelayStanding,
   ): RelayEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
       let status = ended;
@@ -696,7 +692,7 @@ export class StreamRelay {
 
   /** Stamps one event with the conversation, the turn's store id, and the next sequence number, and hands it to the writer; answers whether the writer took it. */
   #tell(eveTurnId: string, standing: RelayStanding, body: BrainRunEventBody): RelayEffect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       let sequence = 0;
       standing.state.update((state) =>
         withTurn(state, eveTurnId, (turn) => {

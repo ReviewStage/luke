@@ -1,4 +1,3 @@
-import type * as HttpClient from "@effect/platform/HttpClient";
 import {
   type AccountToken,
   brainOutputReplayable,
@@ -26,6 +25,7 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { HTTP_METHOD, HTTP_STATUS, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import type { Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type BrainTransport, hostedBrainTransport } from "./client.js";
 import { COMPACTION_POLICY } from "./compaction.js";
 import {
@@ -52,7 +52,7 @@ export interface HostedModelAdapterOptions extends AccountToken {
   serviceBaseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
-  /** The runtime a request effect is run on; `Runtime.defaultRuntime` for a caller that gave none. */
+  /** The services a request effect is run on; an empty `Context` for a caller that gave none. */
   execution?: ExecutionRuntime;
   now?: () => number;
   requestTimeoutMs?: number;

@@ -21,7 +21,7 @@
  * own, so a sign-out disarms the loop while the host still stands and the
  * host's close disarms whatever a sign-out missed.
  */
-import { Deferred, Duration, Effect, FiberId, Schedule, type Scope } from "effect";
+import { Deferred, Duration, Effect, Schedule, type Scope } from "effect";
 import { type CadenceGate, cadenceGate } from "./effect/cadence.js";
 import { scheduleRepeat } from "./effect/timers.js";
 
@@ -61,7 +61,7 @@ export class ObservationLoop {
    */
   readonly #pass: Effect.Effect<void> = Effect.suspend(() =>
     this.#armed
-      ? Effect.catchAllDefect(this.refresh, (defect) =>
+      ? Effect.catchDefect(this.refresh, (defect) =>
           Effect.sync(() => {
             this.#report(
               `Observation pass failed: ${defect instanceof Error ? defect.message : String(defect)}`,
@@ -85,7 +85,7 @@ export class ObservationLoop {
       Schedule.spaced(Duration.millis(this.#options.intervalMs)),
       this.#pass,
     ).pipe(
-      Effect.zipRight(
+      Effect.andThen(
         Effect.addFinalizer(() =>
           Effect.sync(() => {
             this.#generation += 1;
@@ -125,7 +125,7 @@ export class ObservationLoop {
     }
     const generation = this.#generation;
     this.#running = true;
-    this.#idle ??= Deferred.unsafeMake<void>(FiberId.none);
+    this.#idle ??= Deferred.makeUnsafe<void>();
     return Effect.ensuring(
       this.#options.run(generation),
       Effect.suspend(() => {
@@ -140,10 +140,7 @@ export class ObservationLoop {
           return after ?? Effect.void;
         }
         this.#queued = false;
-        return Effect.zipRight(
-          after ?? Effect.void,
-          Effect.asVoid(Effect.forkDaemon(this.refresh)),
-        );
+        return Effect.andThen(after ?? Effect.void, Effect.asVoid(Effect.forkDetach(this.refresh)));
       }),
     );
   });
@@ -163,7 +160,7 @@ export class ObservationLoop {
     const idle = this.#idle;
     if (idle === undefined) return;
     this.#idle = undefined;
-    Deferred.unsafeDone(idle, Effect.void);
+    Deferred.doneUnsafe(idle, Effect.void);
   }
 }
 

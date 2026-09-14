@@ -1,11 +1,11 @@
 import { pathToFileURL } from "node:url";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
-import * as Migrator from "@effect/sql/Migrator";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { Config, Effect, Layer, Redacted } from "effect";
+import * as Migrator from "effect/unstable/sql/Migrator";
 import { Client } from "pg";
 import { runWebMigrations } from "./effect-migrator.js";
-import { createPool } from "./index.js";
+import { POOL_LIMITS } from "./index.js";
 
 const MIGRATION_LOCK = {
   NAMESPACE: 1_280_654_853,
@@ -17,7 +17,7 @@ type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
 function lockFailure(cause: unknown): Migrator.MigrationError {
   return new Migrator.MigrationError({
     cause,
-    reason: "locked",
+    kind: "Locked",
     message: "Could not hold the migration advisory lock",
   });
 }
@@ -28,52 +28,46 @@ function lockFailure(cause: unknown): Migrator.MigrationError {
  * migration runs; the two finalizers close in reverse, which is what makes the
  * connection close even when the unlock itself fails.
  */
-export function withMigrationLock<A, E, R>(
+export const withMigrationLock = /* @__PURE__ */ Effect.fnUntraced(function* <A, E, R>(
   connection: MigrationConnection,
   migrate: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | Migrator.MigrationError, R> {
-  return Effect.gen(function* () {
-    yield* Effect.acquireRelease(
-      Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
-      () => Effect.promise(() => connection.end()),
-    );
-    yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () =>
-          connection.query("select pg_advisory_lock($1, $2)", [
-            MIGRATION_LOCK.NAMESPACE,
-            MIGRATION_LOCK.RESOURCE,
-          ]),
-        catch: lockFailure,
-      }),
-      () =>
-        Effect.promise(() =>
-          connection.query("select pg_advisory_unlock($1, $2)", [
-            MIGRATION_LOCK.NAMESPACE,
-            MIGRATION_LOCK.RESOURCE,
-          ]),
-        ),
-    );
-    return yield* migrate;
-  }).pipe(Effect.scoped);
-}
+) {
+  yield* Effect.acquireRelease(
+    Effect.tryPromise({ try: () => connection.connect(), catch: lockFailure }),
+    () => Effect.promise(() => connection.end()),
+  );
+  yield* Effect.acquireRelease(
+    Effect.tryPromise({
+      try: () =>
+        connection.query("select pg_advisory_lock($1, $2)", [
+          MIGRATION_LOCK.NAMESPACE,
+          MIGRATION_LOCK.RESOURCE,
+        ]),
+      catch: lockFailure,
+    }),
+    () =>
+      Effect.promise(() =>
+        connection.query("select pg_advisory_unlock($1, $2)", [
+          MIGRATION_LOCK.NAMESPACE,
+          MIGRATION_LOCK.RESOURCE,
+        ]),
+      ),
+  );
+  return yield* migrate;
+}, Effect.scoped);
 
 /**
  * The unpooled URL, because the migration holds one session's advisory lock and
  * a pooler is free to answer two statements on two sessions.
  */
-const migrationConnectionString = Config.redacted("DATABASE_URL_UNPOOLED");
+const migrationConnectionString = Config.Redacted("DATABASE_URL_UNPOOLED");
 
 const migrateConfiguredDatabase = Effect.gen(function* () {
-  const url = Redacted.value(yield* migrationConnectionString);
-  const client = PgClient.layerFromPool({
-    acquire: Effect.acquireRelease(
-      Effect.sync(() => createPool(url)),
-      (pool) => Effect.promise(() => pool.end()),
-    ),
-  });
+  const redacted = yield* migrationConnectionString;
+  const url = Redacted.value(redacted);
+  const client = PgClient.layer({ url: redacted, maxConnections: POOL_LIMITS.max });
   yield* withMigrationLock(new Client({ connectionString: url }), runWebMigrations()).pipe(
-    Effect.provide(Layer.mergeAll(client, NodeContext.layer)),
+    Effect.provide(Layer.mergeAll(client, NodeServices.layer)),
   );
 });
 

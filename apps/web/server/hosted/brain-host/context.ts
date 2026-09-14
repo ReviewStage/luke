@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import { isTextUIPart, isToolUIPart, type ToolSet } from "ai";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
@@ -103,11 +103,7 @@ export function readRecentMessages(
   target: ConversationTarget,
   tools: ToolSet,
   limit: number,
-): Effect.Effect<
-  readonly StoredUIMessage[],
-  SqlError | ParseResult.ParseError,
-  SqlClient.SqlClient
-> {
+): Effect.Effect<readonly StoredUIMessage[], SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(
     listRecentMessages(target.userId, target.conversationId, tools, limit),
     (read) => (read.ok ? read.value.map((record) => record.message) : []),

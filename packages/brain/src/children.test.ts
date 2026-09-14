@@ -48,9 +48,9 @@ it.effect(
       });
       // The run is waiting on its first inference: the completion is steered in,
       // and a retry that arrives while it is still being decided joins it.
-      const steered = yield* Effect.fork(h.agent.deliverChildCompletion(...completion));
+      const steered = yield* Effect.forkChild(h.agent.deliverChildCompletion(...completion));
       yield* Effect.promise(() => settle());
-      const again = yield* Effect.fork(h.agent.deliverChildCompletion(...completion));
+      const again = yield* Effect.forkChild(h.agent.deliverChildCompletion(...completion));
       open();
       assert.deepEqual(yield* Fiber.join(steered), { delivered: true });
       assert.deepEqual(yield* Fiber.join(again), { delivered: true });
@@ -146,7 +146,9 @@ it.effect(
         childId: "child-1",
         resultText: "the child's report",
       });
-      const pending = yield* Effect.fork(h.agent.deliverChildCompletion(...completion));
+      const pending = yield* Effect.forkChild(h.agent.deliverChildCompletion(...completion), {
+        startImmediately: true,
+      });
       open();
       const steered = yield* Fiber.join(pending);
       assert.equal(steered.delivered, false);
@@ -180,7 +182,7 @@ it.effect(
       const h = yield* effectHarness({ client });
       const runId = acceptedRunId(yield* submit(h, "keep going"));
       yield* Effect.promise(() => settle());
-      const pending = yield* Effect.fork(
+      const pending = yield* Effect.forkChild(
         h.agent.deliverChildCompletion(
           ...childCompletion({
             completionId: "completion:child-2",

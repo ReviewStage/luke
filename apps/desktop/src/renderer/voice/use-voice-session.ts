@@ -1,5 +1,4 @@
-import * as Atom from "@effect-atom/atom/Atom";
-import { useAtomValue } from "@effect-atom/atom-react/Hooks";
+import { useAtomValue } from "@effect/atom-react/Hooks";
 import { sanitizedTraceEvent } from "@sidecar/devtrace/vocabulary";
 import { appSettingsView } from "@sidecar/settings/wire";
 import {
@@ -7,7 +6,8 @@ import {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
 } from "@sidecar/voice/orchestrator";
-import { Duration, Effect, FiberId, Runtime, Schedule } from "effect";
+import { Duration, Effect, Schedule } from "effect";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -19,7 +19,7 @@ import {
 } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { hostedVoiceUnavailableNote } from "../microphone-access";
-import { rendererRegistry, rendererRuntimeNow } from "../renderer-runtime";
+import { rendererRegistry, rendererServicesNow } from "../renderer-runtime";
 import { appSettingsNow, appStateNow, useAppState } from "../use-app-state";
 import { outputSilent } from "../volume-hint";
 import { LiveCall } from "./live-call";
@@ -83,7 +83,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   };
   orchestratorRef.current ??= new LiveVoiceOrchestrator({
     bridge,
-    runtime: rendererRuntimeNow(),
+    services: rendererServicesNow(),
     createCall: (events) => {
       const call = new LiveCall({
         events,
@@ -111,7 +111,7 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           }),
         onRemoteStream: (remote) => rendererRegistry.set(remoteStreamAtom, remote),
         onLocalStream: (local) => rendererRegistry.set(localStreamAtom, local),
-        runtime: rendererRuntimeNow(),
+        services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
         // construction because a session outlives any one version of the
         // document that says whether a writer stands behind the bridge.
@@ -128,11 +128,11 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   /**
    * Every verb of the orchestrator is an Effect, and this window is the edge
    * that runs one: a key press, a command, or the host's own word starts a
-   * fiber of the renderer's own runtime, which is the same runtime the call
-   * beneath already forks its session's life on.
+   * fiber under the renderer's own services, which are the same services the
+   * call beneath already runs its session's life under.
    */
   const drive = useCallback((effect: Effect.Effect<unknown>) => {
-    Runtime.runFork(rendererRuntimeNow())(effect);
+    Effect.runForkWith(rendererServicesNow())(effect);
   }, []);
   const audioContext = useRef<AudioContext | undefined>(undefined);
   /**
@@ -215,16 +215,16 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
     // the captions draw while nothing is heard. A session opened for a
     // briefing is exactly the one with no user gesture behind it to satisfy a
     // playback gate, so the refusal is retried for as long as the stream
-    // stands rather than swallowed once, on the renderer's own runtime rather
-    // than a timer seam.
-    const fiber = Runtime.runFork(rendererRuntimeNow())(
+    // stands rather than swallowed once, under the renderer's own services
+    // rather than a timer seam.
+    const fiber = Effect.runForkWith(rendererServicesNow())(
       Effect.retry(
         Effect.tryPromise(() => element.play()),
         Schedule.spaced(Duration.millis(REMOTE_AUDIO_RETRY_MS)),
       ),
     );
     return () => {
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     };
   }, [remoteAudio, remote]);
 

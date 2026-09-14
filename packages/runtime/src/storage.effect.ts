@@ -24,9 +24,9 @@ import {
   conversationRecordFromWire,
 } from "./storage.js";
 
-export const CompactionSourceSchema = Schema.Literal(...Object.values(COMPACTION_SOURCE));
+export const CompactionSourceSchema = Schema.Literals(Object.values(COMPACTION_SOURCE));
 
-export const ArchiveReasonSchema = Schema.Literal(...Object.values(ARCHIVE_REASON));
+export const ArchiveReasonSchema = Schema.Literals(Object.values(ARCHIVE_REASON));
 
 /** Which stored shape a wire value failed to read back as. */
 export const STORAGE_DECODE_REFUSAL = {

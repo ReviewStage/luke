@@ -222,16 +222,16 @@ const heldMemory = (performances: {
     return { memory, started, release };
   });
 
-it.scoped(
+it.effect(
   "the node's memory performs a distinct invocation once and answers a duplicate from the first performance",
   () =>
     Effect.gen(function* () {
       const performances = { count: 0 };
       const held = yield* heldMemory(performances);
-      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      const first = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.await(held.started);
-      const duplicateWhilePending = yield* Effect.fork(held.memory.take(INVOCATION));
-      yield* Effect.yieldNow();
+      const duplicateWhilePending = yield* Effect.forkChild(held.memory.take(INVOCATION));
+      yield* Effect.yieldNow;
       assert.equal(performances.count, 1);
       yield* Deferred.succeed(held.release, undefined);
       const answered = yield* Fiber.join(first);
@@ -245,16 +245,16 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a duplicate is answered from the performance the first frame opened even where that frame's own caller gave up",
   () =>
     Effect.gen(function* () {
       const performances = { count: 0 };
       const held = yield* heldMemory(performances);
-      const first = yield* Effect.fork(held.memory.take(INVOCATION));
+      const first = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.await(held.started);
       yield* Fiber.interrupt(first);
-      const duplicate = yield* Effect.fork(held.memory.take(INVOCATION));
+      const duplicate = yield* Effect.forkChild(held.memory.take(INVOCATION));
       yield* Deferred.succeed(held.release, undefined);
       assert.deepEqual(yield* Fiber.join(duplicate), {
         invocationId: "i-1",
@@ -265,7 +265,7 @@ it.scoped(
 );
 
 for (const kind of ["in-process", "loopback"] as const) {
-  it.scopedLive(
+  it.live(
     `[${kind}] a node registered over a connection is invoked through it, and a repeated frame performs once`,
     () =>
       Effect.gen(function* () {
@@ -470,7 +470,7 @@ it.live(
     ),
 );
 
-it.scopedLive(
+it.live(
   "a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events",
   () =>
     Effect.gen(function* () {
@@ -582,7 +582,7 @@ it.live(
     ),
 );
 
-it.scopedLive(
+it.live(
   "a fresh client with no baseline adopts the host as it stands rather than replaying the window before it arrived",
   () =>
     Effect.gen(function* () {
@@ -623,7 +623,7 @@ it.scopedLive(
     }),
 );
 
-it.scopedLive(
+it.live(
   "an event of the new host arriving during adoption is held and delivered after it, whatever the old cursor said, and an adoption supersedes a reconnection still out",
   () =>
     Effect.gen(function* () {
@@ -659,7 +659,7 @@ it.scopedLive(
       const client = yield* gatewayClient({
         transport: {
           request: (request) =>
-            Effect.async<GatewayResponse>((resume) => {
+            Effect.callback<GatewayResponse>((resume) => {
               const answering = Effect.runFork(doorOf(doors, current).request(request));
               pendingAnswers.push(() => resume(Fiber.join(answering)));
             }),

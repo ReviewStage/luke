@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { Duplex } from "node:stream";
-import type * as HttpClient from "@effect/platform/HttpClient";
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, FiberSet, type Layer, Option, type ParseResult, type Scope } from "effect";
+import { Effect, FiberSet, type Layer, Option, type Schema, type Scope } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type WebSocket, WebSocketServer } from "ws";
 import {
   HOSTED_API_ERROR,
@@ -193,7 +193,7 @@ export function listening(
   host: string,
 ): Effect.Effect<number, never, Scope.Scope> {
   return Effect.acquireRelease(
-    Effect.async<number>((resume) => {
+    Effect.callback<number>((resume) => {
       const failed = (error: Error) => resume(Effect.die(error));
       voice.server.once("error", failed);
       voice.server.listen(port, host, () => {
@@ -204,7 +204,7 @@ export function listening(
       });
     }),
     () =>
-      Effect.async<void>((resume) => {
+      Effect.callback<void>((resume) => {
         voice.server.close(() => resume(Effect.void));
       }),
   );
@@ -336,7 +336,7 @@ function sessionsInputAdmitted(frame: SessionCreateFrame): boolean {
  * the service makes on the session's behalf, and nothing else — every other
  * refusal is a frame the desktop is answered with.
  */
-type SessionFailure = SqlError | ParseResult.ParseError;
+type SessionFailure = SqlError | Schema.SchemaError;
 
 type SessionEffect<A> = Effect.Effect<A, SessionFailure, SqlClient.SqlClient | Scope.Scope>;
 
@@ -400,7 +400,7 @@ export class VoiceService {
             }),
         ),
         (server) =>
-          Effect.async<void>((resume) => {
+          Effect.callback<void>((resume) => {
             server.close(() => resume(Effect.void));
           }),
       );
@@ -419,7 +419,18 @@ export class VoiceService {
         sockets,
         fibers,
         (session) => {
-          fork(session);
+          // Begun on a fiber of the set, and begun by the scheduler rather
+          // than on the stack of whoever asked. v4's `runForkWith`, which
+          // `FiberSet.runtime` forks through, evaluates the effect where it
+          // is called, so a session's word to the desktop reported from
+          // inside the exchange's own reading fiber would be written to the
+          // socket in the middle of that read, ahead of the very frame the
+          // relay's reader is queued to forward and that the report is about.
+          // The yield is what puts this fiber's first step behind the wakes
+          // already queued, which is the order the desktop is owed: every
+          // server frame as it arrived, and then the service's own word about
+          // the last of them.
+          fork(Effect.andThen(Effect.yieldNow, session));
         },
       );
       yield* Effect.acquireRelease(
@@ -445,7 +456,7 @@ export class VoiceService {
    * fibers to finalize under their own timeouts.
    */
   get #drain(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#options.server.serve(undefined);
       for (const socket of this.#sockets.clients) {
         socket.close(SOCKET_CLOSE_CODE.GOING_AWAY);
@@ -479,7 +490,7 @@ export class VoiceService {
    * session but that one of its own rows did not land.
    */
   #session(socket: WebSocket, admission: Admission): Effect.Effect<void> {
-    return Effect.catchAll(
+    return Effect.catch(
       Effect.tryPromise(() => this.#run(Effect.scoped(this.#serve(socket, admission)))),
       () =>
         Effect.sync(() => {
@@ -515,7 +526,7 @@ export class VoiceService {
    * nothing of itself behind.
    */
   #serve(socket: WebSocket, admission: Admission): SessionEffect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const upstream = this.#upstream;
       if (upstream === undefined) return;
       const { route } = admission;
@@ -527,7 +538,7 @@ export class VoiceService {
       });
       yield* Effect.sync(() => socket.resume());
       const refuse = (reason: HostedApiError): Effect.Effect<void> =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           this.#log({ event: LOG_EVENT.SESSION_REFUSED, route, reason });
           if (!(yield* desktop.isOpen)) return;
           yield* desktop.send({ text: JSON.stringify({ error: reason }) });
@@ -627,7 +638,7 @@ export class VoiceService {
             ? undefined
             : (closed) =>
                 Effect.ignore(
-                  Effect.gen(this, function* () {
+                  Effect.gen({ self: this }, function* () {
                     yield* this.#record.close({
                       sessionId,
                       seconds: closed.usage.seconds,
@@ -692,7 +703,7 @@ export class VoiceService {
         this.#log({ event: LOG_EVENT.EXCHANGE_ATTACHED, route });
         return { exchange };
       }),
-      Effect.catchAll(() =>
+      Effect.catch(() =>
         Effect.sync(() => {
           this.#log({ event: LOG_EVENT.EXCHANGE_FAILED, route });
           return { refused: true } as const;
@@ -703,7 +714,7 @@ export class VoiceService {
 
   /** The exchange's stop, whose failure is the service's to report and never the relay's to inherit. */
   #stopExchange(exchange: AttachedExchange): Effect.Effect<void> {
-    return Effect.catchAll(
+    return Effect.catch(
       Effect.tryPromise(() => exchange.stop()),
       () =>
         Effect.sync(() => {
@@ -756,7 +767,7 @@ export class VoiceService {
     admission: Admission,
     frame: SessionCreateFrame,
   ): SessionEffect<Opened> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const { route } = admission;
       if (route === VOICE_ROUTE.INTRODUCTION) {
         if (!introductionInputAdmitted(frame)) return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
@@ -828,7 +839,7 @@ export class VoiceService {
   #admitAccount(
     admission: SessionsAdmission,
   ): Effect.Effect<AdmittedAccount, SessionFailure, SqlClient.SqlClient> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const accountId = yield* this.#accounts.resolveUserId(admission.bearer);
       if (accountId === undefined) return { refusal: HOSTED_API_ERROR.INVALID_TOKEN };
       if (
@@ -855,7 +866,7 @@ export class VoiceService {
     admission: Admission,
     frame: SessionAttachFrame,
   ): SessionEffect<Opened> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (admission.route !== VOICE_ROUTE.SESSIONS) {
         return { refusal: HOSTED_API_ERROR.INVALID_REQUEST };
       }
@@ -895,7 +906,7 @@ export class VoiceService {
     upstream: LiveUpstream,
     sessionId: string,
   ): Effect.Effect<WebSocket | undefined, never, Scope.Scope> {
-    return Effect.catchAll(upstream.attach(sessionId), () => Effect.succeed(undefined));
+    return Effect.catch(upstream.attach(sessionId), () => Effect.succeed(undefined));
   }
 
   #recordUsage(
@@ -918,15 +929,14 @@ export class VoiceService {
     const timeoutMs = this.#options.firstFrameTimeoutMs ?? SERVICE_DEFAULTS.FIRST_FRAME_TIMEOUT_MS;
     return desktop.next.pipe(
       Effect.map((frame) => {
-        const text = Option.flatMapNullable(frame, frameText);
+        const text = Option.flatMapNullishOr(frame, frameText);
         if (Option.isNone(text)) return undefined;
         const payload = decodeLivePayload(text.value);
         return payload === undefined ? undefined : sessionOpeningFrameFromWire(payload);
       }),
-      Effect.timeoutTo({
+      Effect.timeoutOrElse({
         duration: timeoutMs,
-        onTimeout: () => undefined,
-        onSuccess: (opening) => opening,
+        orElse: () => Effect.succeed(undefined),
       }),
     );
   }

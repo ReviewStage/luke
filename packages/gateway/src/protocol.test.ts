@@ -119,7 +119,7 @@ function answeringLate(
     events: (sink) => transport.events(sink),
     request: (request) =>
       Effect.tap(transport.request(request), () =>
-        Effect.async<void>((resume) => {
+        Effect.callback<void>((resume) => {
           schedule(() => resume(Effect.void));
         }),
       ),
@@ -141,7 +141,7 @@ function client(transport: GatewayTransport, onSnapshot?: (snapshot: WireValue) 
  * a shape that only works because it never left the process fails here.
  */
 for (const kind of ["in-process", "loopback"] as const) {
-  it.scopedLive(
+  it.live(
     `[${kind}] a mutation carries an idempotency key, and the same key finds the first answer once`,
     () =>
       Effect.gen(function* () {
@@ -181,7 +181,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(`[${kind}] two retries in flight together await one decision`, () =>
+  it.live(`[${kind}] two retries in flight together await one decision`, () =>
     Effect.gen(function* () {
       const h = yield* harness();
       const c = yield* client(transportFor(kind, h.host));
@@ -197,7 +197,7 @@ for (const kind of ["in-process", "loopback"] as const) {
     }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] a request built over a replaced lifetime or configuration is refused before its handler`,
     () =>
       Effect.gen(function* () {
@@ -229,7 +229,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] unknown methods, unsupported versions, thrown handlers, and typed refusals all answer as errors`,
     () =>
       Effect.gen(function* () {
@@ -255,21 +255,19 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
-    `[${kind}] a node may only offer itself; the operator's methods are refused to it`,
-    () =>
-      Effect.gen(function* () {
-        const h = yield* harness();
-        const node = yield* client(transportFor(kind, h.host, NODE));
-        const refused = yield* node.call(GATEWAY_METHOD.RUN_LIST);
-        assert.equal(refused.ok, false);
-        if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
-        const hello = yield* node.call(GATEWAY_METHOD.HELLO);
-        assert.equal(hello.ok, true);
-      }),
+  it.live(`[${kind}] a node may only offer itself; the operator's methods are refused to it`, () =>
+    Effect.gen(function* () {
+      const h = yield* harness();
+      const node = yield* client(transportFor(kind, h.host, NODE));
+      const refused = yield* node.call(GATEWAY_METHOD.RUN_LIST);
+      assert.equal(refused.ok, false);
+      if (!refused.ok) assert.equal(refused.error.code, GATEWAY_ERROR.UNAUTHORIZED);
+      const hello = yield* node.call(GATEWAY_METHOD.HELLO);
+      assert.equal(hello.ok, true);
+    }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] events arrive numbered in order, and a gap is filled from the host's log before anything later is delivered`,
     () =>
       Effect.gen(function* () {
@@ -295,7 +293,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] an event emitted while a reconnection is in flight is delivered once it settles, not at the next gap`,
     () =>
       Effect.gen(function* () {
@@ -332,7 +330,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] a reconnection past the replay window is answered with a snapshot, never a silent skip`,
     () =>
       Effect.gen(function* () {
@@ -369,7 +367,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] a disconnected transport answers every request disconnected rather than hanging`,
     () =>
       Effect.gen(function* () {
@@ -384,7 +382,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scopedLive(
+  it.live(
     `[${kind}] a disconnected required node answers a typed unavailable and nothing records the action as done`,
     () =>
       Effect.gen(function* () {
@@ -436,7 +434,7 @@ test("a method outside the vocabulary is refused by the writer before it reaches
   assert.equal(gatewayRequestFromWire(envelope), undefined);
 });
 
-it.scopedLive(
+it.live(
   "a delayed answer still lands, and a late acknowledgement after it changes nothing more",
   () =>
     Effect.gen(function* () {
@@ -450,7 +448,7 @@ it.scopedLive(
       });
       const c = yield* client(transport);
       let answered = false;
-      const pending = yield* Effect.fork(
+      const pending = yield* Effect.forkChild(
         Effect.tap(c.call(GATEWAY_METHOD.RUN_LIST), () =>
           Effect.sync(() => {
             answered = true;

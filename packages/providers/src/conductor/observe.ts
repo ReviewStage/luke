@@ -75,118 +75,116 @@ export interface ConductorPassCache {
  * — the identity read once per credential, the projects a creation is later
  * held to — and `cloudPass` clears it whenever the credential changes.
  */
-export function conductorObservations(
+export const conductorObservations = /* @__PURE__ */ Effect.fn("conductorObservations")(function* (
   request: CloudRequest,
   now: number,
   cache: ConductorPassCache,
-): Effect.Effect<readonly ProviderSessionObservation[], AdapterFailure> {
-  return Effect.gen(function* () {
-    const userId = yield* identity(request, cache);
-    if (!userId) return [];
+): Effect.fn.Return<readonly ProviderSessionObservation[], AdapterFailure> {
+  const userId = yield* identity(request, cache);
+  if (!userId) return [];
 
-    // Every fan-out below is bounded by the page sizes in
-    // CONDUCTOR_ADAPTER_DEFAULTS — a bounded run of pages of the user's own
-    // open workspaces, one page of chats per workspace — and workspaces and
-    // chats are never capped beyond that: a conversation is never dropped to
-    // spare a request. The projects are read for their own sake: they are
-    // where a new workspace can be created, not where the workspaces come
-    // from.
-    cache.projects = yield* listProjects(request);
-    const workspaces = (yield* listWorkspaces(request, userId))
-      // The listing was asked for this user's workspaces, but the records
-      // answer for themselves: Conductor does not attribute a workspace Luke
-      // can prove belongs to this user unless it reports a creator, and
-      // unattributed org workspaces stay out of a personal sidecar.
-      .filter((workspace) => workspace.creatorId === userId)
-      .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
+  // Every fan-out below is bounded by the page sizes in
+  // CONDUCTOR_ADAPTER_DEFAULTS — a bounded run of pages of the user's own
+  // open workspaces, one page of chats per workspace — and workspaces and
+  // chats are never capped beyond that: a conversation is never dropped to
+  // spare a request. The projects are read for their own sake: they are
+  // where a new workspace can be created, not where the workspaces come
+  // from.
+  cache.projects = yield* listProjects(request);
+  const workspaces = (yield* listWorkspaces(request, userId))
+    // The listing was asked for this user's workspaces, but the records
+    // answer for themselves: Conductor does not attribute a workspace Luke
+    // can prove belongs to this user unless it reports a creator, and
+    // unattributed org workspaces stay out of a personal sidecar.
+    .filter((workspace) => workspace.creatorId === userId)
+    .sort((first, second) => second.lastActivityAt - first.lastActivityAt);
 
-    // The listing already dropped the workspaces it marked archived or
-    // deleted, so these lifecycle reads cover only the workspaces still
-    // standing: they carry each one's activity words and failure message,
-    // and they catch a filing-away the listing has not caught up with — a
-    // workspace standing archived or deleted here is dropped all the same,
-    // before its chats are ever asked for, which is what makes a press of
-    // the archive control clear the rows it acted on within the pass that
-    // follows it. A lifecycle that could not be read keeps its workspace: a
-    // transient failure costs that workspace's activity words and failure
-    // message, never its rows.
-    const workspaceLifecycles = new Map(
-      (yield* Effect.forEach(
-        workspaces,
-        (workspace) =>
-          Effect.map(
-            tolerateItemFailureEffect(workspaceLifecycle(request, workspace.id)),
-            (lifecycle) => (lifecycle ? ([workspace.id, lifecycle] as const) : undefined),
-          ),
-        { concurrency: "unbounded" },
-      )).filter(isDefined),
-    );
-    const openWorkspaces = workspaces.filter((workspace) => {
-      const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
-      return !lifecycleStatus || !CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(lifecycleStatus);
-    });
-
-    const sessions = (yield* Effect.forEach(
-      openWorkspaces,
-      (workspace) => tolerateItemFailureEffect(listSessions(request, workspace)),
-      { concurrency: "unbounded" },
-    ))
-      .filter(isDefined)
-      .flat();
-
-    // The transcripts read rides beside the status reads: one bounded query
-    // for every observed session, so a failed or missing answer costs an
-    // agent kind, never the pass. That holds even for a credential
-    // refusal: a key an org scopes away from the query endpoint alone still
-    // reads the roster, and the roster reads above are what judge the
-    // credential — so this one read swallows everything rather than letting
-    // an enrichment 403 clear every observed row.
-    const [transcripts, reportedStatuses] = yield* Effect.all(
-      [
-        Effect.orElseSucceed(sessionTranscripts(request, sessions), () => undefined),
-        Effect.forEach(
-          sessions,
-          (session) => tolerateItemFailureEffect(sessionStatus(request, session.id)),
-          { concurrency: "unbounded" },
+  // The listing already dropped the workspaces it marked archived or
+  // deleted, so these lifecycle reads cover only the workspaces still
+  // standing: they carry each one's activity words and failure message,
+  // and they catch a filing-away the listing has not caught up with — a
+  // workspace standing archived or deleted here is dropped all the same,
+  // before its chats are ever asked for, which is what makes a press of
+  // the archive control clear the rows it acted on within the pass that
+  // follows it. A lifecycle that could not be read keeps its workspace: a
+  // transient failure costs that workspace's activity words and failure
+  // message, never its rows.
+  const workspaceLifecycles = new Map(
+    (yield* Effect.forEach(
+      workspaces,
+      (workspace) =>
+        Effect.map(
+          tolerateItemFailureEffect(workspaceLifecycle(request, workspace.id)),
+          (lifecycle) => (lifecycle ? ([workspace.id, lifecycle] as const) : undefined),
         ),
-      ],
       { concurrency: "unbounded" },
-    );
-
-    // The workspaces every observed chat of which was positively seen settled
-    // — reporting idle or errored — judged from this pass's own statuses. An
-    // archive is a workspace-level action, so it is offered only for these: a
-    // chat still working, and just as much one whose status could not be read
-    // at all, keeps the whole workspace off the list, because filing away a
-    // workspace whose state Luke has not actually seen stop could take a live
-    // turn with it. The chats already filed away never reached this pass, so
-    // they neither settle a workspace nor hold one open.
-    const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
-    sessions.forEach((session, index) => {
-      const settled =
-        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
-        reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
-      if (!settled) settledWorkspaceIds.delete(session.workspace.id);
-    });
-
-    // One row per chat, each grouped under its workspace. The grouping names
-    // the workspace once, which leaves each chat free to say what it alone is
-    // doing, be opened where it alone lives, and take the message meant for it
-    // rather than for whichever sibling most needed a person.
-    return sessions
-      .map((session, index) =>
-        observationFor(
-          session,
-          reportedStatuses[index],
-          transcripts,
-          workspaceLifecycles.get(session.workspace.id),
-          settledWorkspaceIds,
-          now,
-        ),
-      )
-      .filter(isDefined);
+    )).filter(isDefined),
+  );
+  const openWorkspaces = workspaces.filter((workspace) => {
+    const lifecycleStatus = workspaceLifecycles.get(workspace.id)?.status;
+    return !lifecycleStatus || !CONDUCTOR_RETIRED_WORKSPACE_STATUSES.has(lifecycleStatus);
   });
-}
+
+  const sessions = (yield* Effect.forEach(
+    openWorkspaces,
+    (workspace) => tolerateItemFailureEffect(listSessions(request, workspace)),
+    { concurrency: "unbounded" },
+  ))
+    .filter(isDefined)
+    .flat();
+
+  // The transcripts read rides beside the status reads: one bounded query
+  // for every observed session, so a failed or missing answer costs an
+  // agent kind, never the pass. That holds even for a credential
+  // refusal: a key an org scopes away from the query endpoint alone still
+  // reads the roster, and the roster reads above are what judge the
+  // credential — so this one read swallows everything rather than letting
+  // an enrichment 403 clear every observed row.
+  const [transcripts, reportedStatuses] = yield* Effect.all(
+    [
+      Effect.orElseSucceed(sessionTranscripts(request, sessions), () => undefined),
+      Effect.forEach(
+        sessions,
+        (session) => tolerateItemFailureEffect(sessionStatus(request, session.id)),
+        { concurrency: "unbounded" },
+      ),
+    ],
+    { concurrency: "unbounded" },
+  );
+
+  // The workspaces every observed chat of which was positively seen settled
+  // — reporting idle or errored — judged from this pass's own statuses. An
+  // archive is a workspace-level action, so it is offered only for these: a
+  // chat still working, and just as much one whose status could not be read
+  // at all, keeps the whole workspace off the list, because filing away a
+  // workspace whose state Luke has not actually seen stop could take a live
+  // turn with it. The chats already filed away never reached this pass, so
+  // they neither settle a workspace nor hold one open.
+  const settledWorkspaceIds = new Set(sessions.map((session) => session.workspace.id));
+  sessions.forEach((session, index) => {
+    const settled =
+      reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.IDLE ||
+      reportedStatuses[index]?.status === CONDUCTOR_SESSION_STATUS.ERROR;
+    if (!settled) settledWorkspaceIds.delete(session.workspace.id);
+  });
+
+  // One row per chat, each grouped under its workspace. The grouping names
+  // the workspace once, which leaves each chat free to say what it alone is
+  // doing, be opened where it alone lives, and take the message meant for it
+  // rather than for whichever sibling most needed a person.
+  return sessions
+    .map((session, index) =>
+      observationFor(
+        session,
+        reportedStatuses[index],
+        transcripts,
+        workspaceLifecycles.get(session.workspace.id),
+        settledWorkspaceIds,
+        now,
+      ),
+    )
+    .filter(isDefined);
+});
 
 function identity(
   request: CloudRequest,
@@ -234,31 +232,26 @@ function listProjects(request: CloudRequest): Effect.Effect<ConductorProject[], 
  * could not be read fails the pass whole rather than quietly retiring
  * every row a later page was holding.
  */
-function listWorkspaces(
+const listWorkspaces = /* @__PURE__ */ Effect.fnUntraced(function* (
   request: CloudRequest,
   userId: string,
-): Effect.Effect<ConductorWorkspace[], AdapterFailure> {
-  return Effect.gen(function* () {
-    const workspaces: ConductorWorkspace[] = [];
-    let offset = 0;
-    for (let page = 0; page < CONDUCTOR_DEFAULTS.MAXIMUM_WORKSPACE_PAGES; page += 1) {
-      const body = yield* request(
-        [CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES],
-        {
-          [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_DEFAULTS.WORKSPACE_PAGE_SIZE),
-          [CONDUCTOR_QUERY.OFFSET]: String(offset),
-          [CONDUCTOR_QUERY.CREATOR]: userId,
-          [CONDUCTOR_QUERY.INCLUDE_ARCHIVED]: "false",
-        },
-      );
-      const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
-      workspaces.push(...records.map(workspaceFromRecord).filter(isDefined));
-      offset += records.length;
-      if (body[CONDUCTOR_FIELD.HAS_MORE] !== true || records.length === 0) break;
-    }
-    return workspaces;
-  });
-}
+): Effect.fn.Return<ConductorWorkspace[], AdapterFailure> {
+  const workspaces: ConductorWorkspace[] = [];
+  let offset = 0;
+  for (let page = 0; page < CONDUCTOR_DEFAULTS.MAXIMUM_WORKSPACE_PAGES; page += 1) {
+    const body = yield* request([CONDUCTOR_ROUTE_SEGMENT.V0, CONDUCTOR_ROUTE_SEGMENT.WORKSPACES], {
+      [CONDUCTOR_QUERY.LIMIT]: String(CONDUCTOR_DEFAULTS.WORKSPACE_PAGE_SIZE),
+      [CONDUCTOR_QUERY.OFFSET]: String(offset),
+      [CONDUCTOR_QUERY.CREATOR]: userId,
+      [CONDUCTOR_QUERY.INCLUDE_ARCHIVED]: "false",
+    });
+    const records = recordsFromPage(body, CONDUCTOR_FIELD.DATA);
+    workspaces.push(...records.map(workspaceFromRecord).filter(isDefined));
+    offset += records.length;
+    if (body[CONDUCTOR_FIELD.HAS_MORE] !== true || records.length === 0) break;
+  }
+  return workspaces;
+});
 
 function listSessions(
   request: CloudRequest,
@@ -425,7 +418,10 @@ function advertisementsFor(
   });
   // A rename is documented for any open workspace, and every workspace here
   // is open — the filed-away ones never made it past the lifecycle read.
-  advertises.push({ kind: ACTION_KIND.RENAME_WORKSPACE, target: session.workspace.id });
+  advertises.push({
+    kind: ACTION_KIND.RENAME_WORKSPACE,
+    target: session.workspace.id,
+  });
   return advertises;
 }
 

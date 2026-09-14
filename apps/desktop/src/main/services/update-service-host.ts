@@ -54,10 +54,10 @@ export interface UpdateServiceHostDependencies {
  * `start()` is what the launch calls once it has reached the right point in
  * its own order, never this function's own return.
  */
-export function createUpdateServiceHost(
-  dependencies: UpdateServiceHostDependencies,
-): Effect.Effect<UpdateServiceHost, never, Scope.Scope> {
-  return Effect.gen(function* () {
+export const createUpdateServiceHost = /* @__PURE__ */ Effect.fn("createUpdateServiceHost")(
+  function* (
+    dependencies: UpdateServiceHostDependencies,
+  ): Effect.fn.Return<UpdateServiceHost, never, Scope.Scope> {
     const { config, recordProductEvent } = dependencies;
 
     const lastRunVersionFile = jsonStateFile<{ version: string }>({
@@ -128,5 +128,5 @@ export function createUpdateServiceHost(
         void config.openExternal(UPDATE_ENDPOINT.CHANGELOG_PAGE_URL);
       },
     };
-  });
-}
+  },
+);

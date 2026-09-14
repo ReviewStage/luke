@@ -5,7 +5,7 @@ import { WingFace as LukeFace, MicrophoneIcon } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion, WORDMARK_ART } from "@sidecar/surface";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
-import { type Effect, Runtime } from "effect";
+import { Effect } from "effect";
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -15,7 +15,7 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "../act";
 import { NotchWings } from "../notch-wings";
 import { PANEL_PRESENTATION } from "../panel-state";
-import { rendererRuntimeNow } from "../renderer-runtime";
+import { rendererServicesNow } from "../renderer-runtime";
 import { sessionTally } from "../session-model";
 import { parseMilliseconds } from "../session-motion";
 import { appStateNow } from "../use-app-state";
@@ -364,13 +364,14 @@ function IntroductionFlight({
   }, []);
 
   /**
-   * The one place this window's own `LiveCall` use reaches the renderer's
-   * runtime, the same edge `use-voice-session.ts`'s hook and `LiveCall`
-   * itself already run their own fibers on: every verb the takeover asks of
-   * its call comes through here rather than each press converting its own.
+   * The one place this window's own `LiveCall` use reaches the renderer's own
+   * services, the same edge `use-voice-session.ts`'s hook and `LiveCall`
+   * itself already run their own fibers under: every verb the takeover asks
+   * of its call comes through here rather than each press converting its own.
    */
   const runCallEffect = useCallback(
-    <A,>(effect: Effect.Effect<A>): Promise<A> => Runtime.runPromise(rendererRuntimeNow())(effect),
+    <A,>(effect: Effect.Effect<A>): Promise<A> =>
+      Effect.runPromiseWith(rendererServicesNow())(effect),
     [],
   );
 
@@ -447,7 +448,7 @@ function IntroductionFlight({
         setRemoteStream(stream);
       },
       onLocalStream: () => undefined,
-      runtime: rendererRuntimeNow(),
+      services: rendererServicesNow(),
       onWireEvent: (direction, event) => {
         if (appStateNow()?.run.agentTraceEnabled !== true) return;
         window.sidecar.recordAgentTrace({ direction, event: sanitizedTraceEvent(event) });

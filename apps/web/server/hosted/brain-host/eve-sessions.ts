@@ -1,6 +1,11 @@
 import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
-import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "../../core.js";
+import { Schema as EffectSchema, Result } from "effect";
+import {
+  EXCESS_KEYS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
 /**
@@ -57,32 +62,28 @@ const SESSION_NOT_ACTIVE_RETRY_MS = [250, 500, 1_000] as const;
 const ACCEPTED_STATUS = 202;
 const CONFLICT_STATUS = 409;
 
-const ignoringExtraKeys = { parseOptions: { onExcessProperty: "ignore" } } as const;
+const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
-const trimmedText = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  EffectSchema.filter((value) => value.trim().length > 0, {
-    schemaId: EffectSchema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
-
-const openedSession = EffectSchema.Struct({ sessionId: trimmedText }).annotations(
-  ignoringExtraKeys,
-);
+/**
+ * Each answer names what this build reads of it and nothing more; every read
+ * below drops the keys eve names beside them, so a newer eve that widens an
+ * answer is still read here. The tolerance stands at the read rather than on
+ * the declaration, because v4 settles parse options there.
+ */
+const openedSession = EffectSchema.Struct({ sessionId: trimmedText });
 const acceptedDelivery = EffectSchema.Struct({
   sessionId: trimmedText,
   deliveryId: trimmedText,
-}).annotations(ignoringExtraKeys);
-const refusedSend = EffectSchema.Struct({ code: trimmedText }).annotations(ignoringExtraKeys);
+});
+const refusedSend = EffectSchema.Struct({ code: trimmedText });
 
 const EVE_CANCEL_STATUS = { ACCEPTED: "accepted", NO_ACTIVE_TURN: "no_active_turn" } as const;
 const cancelAnswer = EffectSchema.Struct({
-  status: EffectSchema.Literal(...Object.values(EVE_CANCEL_STATUS)),
-}).annotations(ignoringExtraKeys);
+  status: EffectSchema.Literals(Object.values(EVE_CANCEL_STATUS)),
+});
+
+/** Every answer eve hands back is read with the keys this build does not name dropped. */
+const DROPPING_EXCESS = { excess: EXCESS_KEYS.DROP } as const;
 
 /** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
 export const EVE_SEND_OUTCOME = {
@@ -223,11 +224,11 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
       const response = await post(EVE_SESSION_PATH, turnHeaders(message), {
         message: message.message,
       });
-      const opened = readEither(openedSession)(await bodyOf(response));
-      if (response.status !== ACCEPTED_STATUS || Either.isLeft(opened)) {
+      const opened = readEither(openedSession, DROPPING_EXCESS)(await bodyOf(response));
+      if (response.status !== ACCEPTED_STATUS || Result.isFailure(opened)) {
         return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
       }
-      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.right.sessionId };
+      return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
     },
     async send(sessionId, message) {
       for (let attempt = 0; ; attempt += 1) {
@@ -236,32 +237,32 @@ export function eveSessions<Turn extends BrainHostTurn = BrainHostTurn>(
         });
         const body = await bodyOf(response);
         if (response.status === CONFLICT_STATUS) {
-          const refused = readEither(refusedSend)(body);
-          if (Either.isRight(refused) && refused.right.code === EVE_SESSION_NOT_ACTIVE) {
+          const refused = readEither(refusedSend, DROPPING_EXCESS)(body);
+          if (Result.isSuccess(refused) && refused.success.code === EVE_SESSION_NOT_ACTIVE) {
             const wait = SESSION_NOT_ACTIVE_RETRY_MS[attempt];
             if (wait === undefined) return { outcome: EVE_SEND_OUTCOME.RETIRED };
             await sleep(wait);
             continue;
           }
         }
-        const accepted = readEither(acceptedDelivery)(body);
-        if (response.status !== ACCEPTED_STATUS || Either.isLeft(accepted)) {
+        const accepted = readEither(acceptedDelivery, DROPPING_EXCESS)(body);
+        if (response.status !== ACCEPTED_STATUS || Result.isFailure(accepted)) {
           return { outcome: EVE_SEND_OUTCOME.FAILED, status: response.status };
         }
         return {
           outcome: EVE_SEND_OUTCOME.ACCEPTED,
-          sessionId: accepted.right.sessionId,
-          deliveryId: accepted.right.deliveryId,
+          sessionId: accepted.success.sessionId,
+          deliveryId: accepted.success.deliveryId,
         };
       }
     },
     async cancel(sessionId, eveTurnId) {
       const response = await post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId });
-      const answer = readEither(cancelAnswer)(await bodyOf(response));
-      if (!response.ok || Either.isLeft(answer)) {
+      const answer = readEither(cancelAnswer, DROPPING_EXCESS)(await bodyOf(response));
+      if (!response.ok || Result.isFailure(answer)) {
         return { outcome: EVE_CANCEL_OUTCOME.FAILED, status: response.status };
       }
-      return answer.right.status === EVE_CANCEL_STATUS.ACCEPTED
+      return answer.success.status === EVE_CANCEL_STATUS.ACCEPTED
         ? { outcome: EVE_CANCEL_OUTCOME.ACCEPTED }
         : { outcome: EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN };
     },

@@ -1,5 +1,5 @@
-import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, ManagedRuntime } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { expect, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { testSqlClient } from "./support/sql-client";

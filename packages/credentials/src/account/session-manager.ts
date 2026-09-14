@@ -1,4 +1,4 @@
-import { Cause, Effect, Either, Fiber, PubSub, type Scope, Stream } from "effect";
+import { Cause, Effect, Fiber, PubSub, Result, type Scope, Stream } from "effect";
 import {
   LOOPBACK_CONSENT_CANCELLED,
   type LoopbackConsent,
@@ -72,10 +72,10 @@ function asError(cause: unknown): Error {
  * leaving still leaves this machine.
  */
 function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effect.Effect<void> {
-  return Effect.catchAllCause(effect, (cause) =>
+  return Effect.catchCause(effect, (cause) =>
     // An interruption is not a failure of the step and is never written down
     // as one: it is the caller ending this fiber, and it stands.
-    Cause.isInterruptedOnly(cause)
+    Cause.hasInterruptsOnly(cause)
       ? Effect.interrupt
       : Effect.sync(() => {
           process.stderr.write(`${what}: ${asError(Cause.squash(cause)).message}\n`);
@@ -120,14 +120,14 @@ export class AccountSessionManager {
   /**
    * Every snapshot this session settles on, in order, as the subscription a
    * subscriber's own fiber pumps rather than a callback this class runs: the
-   * subscribe is the acquire (`Stream.fromPubSub`'s own `scoped: true`) and
-   * the subscriber's scope closing is the release, so nothing here holds a
+   * subscribe is the acquire (`PubSub.subscribe`, a scoped effect) and the
+   * subscriber's scope closing is the release, so nothing here holds a
    * handle to give back.
    */
   readonly changes: Effect.Effect<Stream.Stream<AccountSnapshot>, never, Scope.Scope>;
   #account: AccountSnapshot = { status: ACCOUNT_STATUS.SIGNED_OUT };
   #generation = 0;
-  #signInRunning: Fiber.RuntimeFiber<AccountSnapshot, Error> | undefined;
+  #signInRunning: Fiber.Fiber<AccountSnapshot, Error> | undefined;
   #cancelSignIn: (() => void) | undefined;
 
   private constructor(
@@ -136,7 +136,7 @@ export class AccountSessionManager {
   ) {
     this.#options = options;
     this.#changesPubSub = changesPubSub;
-    this.changes = Stream.fromPubSub(this.#changesPubSub, { scoped: true });
+    this.changes = PubSub.subscribe(this.#changesPubSub).pipe(Effect.map(Stream.fromSubscription));
     this.refreshOnce = singleFlightEffect(() => this.refresh());
   }
 
@@ -157,7 +157,7 @@ export class AccountSessionManager {
   }
 
   signOut(options: { revokeRemote?: boolean } = {}): Effect.Effect<AccountSnapshot> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       // Everything up to the cleared account is one uninterruptible step, as
       // the promise it replaces was by construction: the departure is reported
       // before the credential is cleared and the cadences are disarmed, so a
@@ -178,7 +178,7 @@ export class AccountSessionManager {
 
   /** The departure as this machine keeps it, answering the account that left. */
   #clearAccount(): Effect.Effect<StoredAccount | undefined> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       this.#generation += 1;
       this.#account = { status: ACCOUNT_STATUS.SIGNED_OUT };
       yield* this.#publishChange();
@@ -200,13 +200,13 @@ export class AccountSessionManager {
   }
 
   deleteEverywhere(): Effect.Effect<AccountSnapshot, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
       if (!stored)
         return yield* Effect.fail(new Error("No stored account credential to delete with"));
-      const deleted = yield* Effect.either(this.#deleteHosted(stored.accessToken));
-      if (Either.isLeft(deleted)) {
-        if (!accessTokenNeedsRefresh(deleted.left)) return yield* Effect.fail(deleted.left);
+      const deleted = yield* Effect.result(this.#deleteHosted(stored.accessToken));
+      if (Result.isFailure(deleted)) {
+        if (!accessTokenNeedsRefresh(deleted.failure)) return yield* Effect.fail(deleted.failure);
         const generation = this.#generation;
         const tokens = yield* this.#options.client.refresh(stored.refreshToken);
         yield* this.#storeCurrent(generation, { ...stored, ...tokens });
@@ -217,37 +217,37 @@ export class AccountSessionManager {
   }
 
   refresh(): Effect.Effect<void> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const stored = yield* this.#options.store.readAccount();
       if (!stored || !this.#options.requiresAccount) return;
       const generation = this.#generation;
-      const identity = yield* Effect.either(
+      const identity = yield* Effect.result(
         this.#options.client.userInfo(stored.accessToken, stored.provider),
       );
-      if (Either.isRight(identity)) {
-        if (sameIdentity(stored, identity.right)) return;
-        if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.right))))
+      if (Result.isSuccess(identity)) {
+        if (sameIdentity(stored, identity.success)) return;
+        if (!(yield* this.#storeCurrent(generation, mergedIdentity(stored, identity.success))))
           return;
         yield* this.#publishChange();
         return;
       }
-      if (!accessTokenNeedsRefresh(identity.left)) return;
-      const renewed = yield* Effect.either(this.#options.client.refresh(stored.refreshToken));
-      if (Either.isLeft(renewed)) {
+      if (!accessTokenNeedsRefresh(identity.failure)) return;
+      const renewed = yield* Effect.result(this.#options.client.refresh(stored.refreshToken));
+      if (Result.isFailure(renewed)) {
         if (
-          accountFailureAction(renewed.left) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
+          accountFailureAction(renewed.failure) === ACCOUNT_FAILURE_ACTION.SIGN_OUT &&
           this.#isCurrent(generation)
         ) {
           yield* this.signOut();
         }
         return;
       }
-      const tokens = renewed.right;
+      const tokens = renewed.success;
       // The renewed tokens are already stored by the time the identity read
       // below is made, so a read that fails leaves the account signed in on
       // them rather than undoing the renewal.
       yield* Effect.ignore(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           if (!(yield* this.#storeCurrent(generation, { ...stored, ...tokens }))) return;
           const next = yield* this.#options.client.userInfo(tokens.accessToken, stored.provider);
           const merged = mergedIdentity({ ...stored, ...tokens }, next);
@@ -274,7 +274,7 @@ export class AccountSessionManager {
     // is interruptible, and an ask interrupted there leaves the consent
     // standing for the developer's own press, exactly as the held promise did.
     return Effect.uninterruptibleMask((restore) =>
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         if (this.#account.status === ACCOUNT_STATUS.SIGNED_IN) return this.#account;
         if (this.#signInRunning) return yield* restore(Fiber.join(this.#signInRunning));
         this.#account = { status: ACCOUNT_STATUS.SIGNING_IN };
@@ -282,12 +282,7 @@ export class AccountSessionManager {
         yield* this.#publishChange();
         const consent = this.#consent(provider, generation);
         this.#cancelSignIn = () => consent.cancel();
-        // `Effect.interruptible` because a fork inherits the mask above, and
-        // the trip's own scope has to be able to close on the deadline and on
-        // a withdrawal rather than run to its end whatever happens.
-        const fiber = yield* Effect.forkDaemon(
-          Effect.interruptible(this.#trip(consent, generation)),
-        );
+        const fiber = yield* Effect.forkDetach(this.#trip(consent, generation));
         this.#signInRunning = fiber;
         return yield* restore(Fiber.join(fiber));
       }),
@@ -298,7 +293,7 @@ export class AccountSessionManager {
     consent: LoopbackConsent<AccountSnapshot>,
     generation: number,
   ): Effect.Effect<AccountSnapshot, Error> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const outcome = yield* Effect.scoped(consent.signInEffect());
       if (!("reason" in outcome)) {
         yield* this.#publishChange();
@@ -333,7 +328,11 @@ export class AccountSessionManager {
         timedOut: "Sign-in timed out.",
       },
       authorizationUrl: ({ state, redirectUri, codeChallenge }) =>
-        this.#options.client.authorizeUrl({ redirectUri, state, codeChallenge }),
+        this.#options.client.authorizeUrl({
+          redirectUri,
+          state,
+          codeChallenge,
+        }),
       exchange: (input) => this.#exchange(provider, generation, input),
       openExternal: (url) => this.#options.openExternal(url),
     });
@@ -357,7 +356,7 @@ export class AccountSessionManager {
         redirectUri: input.redirectUri,
       }),
       use: (tokens) =>
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           const identity = yield* this.#options.client.userInfo(tokens.accessToken, provider);
           if (!(yield* this.#storeCurrent(generation, { ...tokens, ...identity }))) {
             return yield* Effect.fail(new Error(LOOPBACK_CONSENT_CANCELLED));
@@ -372,11 +371,11 @@ export class AccountSessionManager {
       onRevokeFailure: (error) => {
         process.stderr.write(`Rejected account token revocation failed: ${error.message}\n`);
       },
-    }).pipe(Effect.catchAll((error) => Effect.succeed({ reason: error.message })));
+    }).pipe(Effect.catch((error) => Effect.succeed({ reason: error.message })));
   }
 
   #storeCurrent(generation: number, stored: StoredAccount): Effect.Effect<boolean> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (!this.#isCurrent(generation)) return false;
       const next = yield* this.#options.store.setAccount(stored);
       if (!this.#isCurrent(generation)) return false;
@@ -408,5 +407,9 @@ function sameIdentity(stored: StoredAccount, identity: AccountIdentity): boolean
 }
 
 function mergedIdentity(stored: StoredAccount, identity: AccountIdentity): StoredAccount {
-  return { accessToken: stored.accessToken, refreshToken: stored.refreshToken, ...identity };
+  return {
+    accessToken: stored.accessToken,
+    refreshToken: stored.refreshToken,
+    ...identity,
+  };
 }

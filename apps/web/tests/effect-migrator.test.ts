@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { FileSystem } from "@effect/platform/FileSystem";
-import { Path } from "@effect/platform/Path";
-import { NodeContext } from "@effect/platform-node";
-import * as SqlClient from "@effect/sql/SqlClient";
-import type { SqlError } from "@effect/sql/SqlError";
+import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, Layer } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { Path } from "effect/Path";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   bootstrapFromDrizzleHistory,
   DRIZZLE_MIGRATIONS_TABLE,
@@ -22,8 +22,10 @@ interface RecordedMigration {
   readonly name: string;
 }
 
-function withPlatform<A, E>(layer: Layer.Layer<A, E>): Layer.Layer<A | NodeContext.NodeContext, E> {
-  return Layer.provideMerge(layer, NodeContext.layer);
+function withPlatform<A, E>(
+  layer: Layer.Layer<A, E>,
+): Layer.Layer<A | NodeServices.NodeServices, E> {
+  return Layer.provideMerge(layer, NodeServices.layer);
 }
 
 const recorded = Effect.gen(function* () {
@@ -130,12 +132,12 @@ it.layer(withPlatform(testSqlClient))(
 it.effect("the loader numbers each entry as the journal's index plus one", () =>
   Effect.gen(function* () {
     assert.deepEqual(yield* resolved, declaredBy(yield* webMigrationJournal()));
-  }).pipe(Effect.provide(NodeContext.layer)),
+  }).pipe(Effect.provide(NodeServices.layer)),
 );
 
 /** A database of its own per test: `it.layer` would share one across the group. */
 function onFreshDatabase<A, E>(
-  effect: Effect.Effect<A, E, SqlClient.SqlClient | NodeContext.NodeContext>,
+  effect: Effect.Effect<A, E, SqlClient.SqlClient | NodeServices.NodeServices>,
 ): Effect.Effect<A, E | SqlError> {
   return Effect.provide(effect, withPlatform(unmigratedPgliteSqlClient));
 }

@@ -22,7 +22,6 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
     "@sidecar/brain": "workspace:*",
     "@sidecar/gateway": "workspace:*",
     "@sidecar/hosted": "workspace:*",

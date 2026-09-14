@@ -126,7 +126,7 @@ function assertSubset(
 const readsStringLiteral = Schema.is(Schema.String);
 
 /** Every literal an Effect Schema declares, in the order it declares them. */
-function schemaLiterals<A extends string>(schema: Schema.Schema<A>): readonly string[] {
+function schemaLiterals<A extends string>(schema: Schema.Codec<A>): readonly string[] {
   const nodes = SchemaAST.isUnion(schema.ast) ? schema.ast.types : [schema.ast];
   return nodes.flatMap((node) =>
     SchemaAST.isLiteral(node) && readsStringLiteral(node.literal) ? [node.literal] : [],
@@ -136,7 +136,7 @@ function schemaLiterals<A extends string>(schema: Schema.Schema<A>): readonly st
 /** The analytics vocabulary's own comparisons run through its Effect Schema declarations. */
 function assertSameSchemaSet<A extends string>(
   swiftValues: readonly string[],
-  schema: Schema.Schema<A>,
+  schema: Schema.Codec<A>,
   label: string,
 ): void {
   assertSameValues(swiftValues, schemaLiterals(schema), label);
@@ -144,7 +144,7 @@ function assertSameSchemaSet<A extends string>(
 
 function assertSchemaSubset<A extends string>(
   swiftValues: readonly string[],
-  schema: Schema.Schema<A>,
+  schema: Schema.Codec<A>,
   label: string,
 ): void {
   const isMember = Schema.is(schema);

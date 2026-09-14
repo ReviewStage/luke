@@ -4,7 +4,7 @@ import type { BrainStateRepository } from "@sidecar/brain";
 import { CREDENTIAL_REFERENCE_KIND, memoryChildStore } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Effect, Runtime } from "effect";
+import { Context, Effect } from "effect";
 import { type BrainWiringDependencies, wireBrain } from "./wiring.js";
 
 /**
@@ -15,7 +15,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -85,13 +85,13 @@ function dependencies(overrides: Partial<BrainWiringDependencies> = {}) {
     skillRoots: () => [],
     runnable: () => false,
     dropBriefings: () => undefined,
-    execution: Runtime.defaultRuntime,
+    execution: Context.empty(),
     ...overrides,
   };
   return { wiring, loads };
 }
 
-it.scoped("with no model to run on, a rebuild opens no conversation and loads no store", () =>
+it.effect("with no model to run on, a rebuild opens no conversation and loads no store", () =>
   Effect.gen(function* () {
     const { wiring, loads } = dependencies();
     const brains = yield* wireBrain(wiring);

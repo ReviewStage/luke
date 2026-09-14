@@ -144,12 +144,12 @@ node --input-type=module -e '
 # (below) can only see files inside one directory; this walks the door's
 # actual relative-import graph, the way the barrel/vocabulary check above
 # walks its export lists, so a later re-export cannot quietly reintroduce
-# `@effect/platform-node` a few files deep.
+# `@effect/platform-node` or `effect/unstable/sql` a few files deep.
 node --input-type=module -e '
   import { readFile } from "node:fs/promises";
   import path from "node:path";
   const root = path.join(process.argv[1], "packages/runtime/src");
-  const forbidden = /^(node:|@effect\/(platform-node|sql))/;
+  const forbidden = /^(node:|@effect\/platform-node|effect\/unstable\/sql)/;
   const seen = new Set();
   const offenders = [];
   const walk = async (file) => {
@@ -317,14 +317,14 @@ fi
 # nothing.
 #
 # The function sources are checked alongside the packages because the builder
-# treats them identically: `apps/web/api` and `apps/web/server` are the entry
-# points of the very graph the doors in `server/core.ts` exist to pull in, so a
-# rule enforced on the packages alone leaves the two directories nearest the
-# failure uncovered. Side-effect imports count — a door is spelled `import "…"`
-# with no names, and an extensionless one fails exactly the same way.
+# treats them identically: `apps/web/server` — whose `routes/` subtree holds one
+# module per deployed function — is the entry point of the very graph the doors
+# in `server/core.ts` exist to pull in, so a rule enforced on the packages alone
+# leaves the directory nearest the failure uncovered. Side-effect imports count
+# — a door is spelled `import "…"` with no names, and an extensionless one fails
+# exactly the same way.
 extensionless_imports=$(grep -rEn '(from|import) "\.\.?/[^"]*"' \
     "$SIDECAR_REPO_ROOT"/packages/*/src \
-    "$SIDECAR_REPO_ROOT"/apps/web/api \
     "$SIDECAR_REPO_ROOT"/apps/web/server |
     grep -vE '\.(js|css)"' || true)
 if [[ -n "$extensionless_imports" ]]; then
@@ -530,7 +530,7 @@ if ! grep -Eq "^## ${desktop_version//./\\.}( |$)" "$SIDECAR_REPO_ROOT/CHANGELOG
     exit 1
 fi
 
-# Effect's Context.Tag identity is per module instance: two resolved copies of
+# Effect's Context.Service identity is per module instance: two resolved copies of
 # "effect" in the dependency tree mint two tags that fail their own equality
 # check. The catalog is what pins every package to the one resolved version, so
 # a literal version here is the one thing that can quietly reintroduce a second
@@ -600,7 +600,7 @@ for ported in "${openclaw_ported_files[@]}"; do
         printf 'error: this check names a file that no longer exists: %s\n' "$ported" >&2
         exit 1
     fi
-    openclaw_effect_imports+=$(grep -nE 'from "(effect|@effect/[^"]+)"|require\("(effect|@effect/[^"]+)"\)' \
+    openclaw_effect_imports+=$(grep -nE 'from "(effect(/[^"]+)?|@effect/[^"]+)"|require\("(effect(/[^"]+)?|@effect/[^"]+)"\)' \
         "$SIDECAR_REPO_ROOT/$ported" | sed "s|^|$ported:|" || true)
 done
 if [[ -n "$openclaw_effect_imports" ]]; then
@@ -628,7 +628,14 @@ node --input-type=module -e '
     agents.indexOf("## Effect idioms"),
     agents.indexOf("## TypeScript"),
   );
-  const stillRuns = /\b(?:Effect|Runtime|ManagedRuntime)\.(?:runPromise|runPromiseExit|runSync|runSyncExit|runFork|runCallback|make)\s*\(|\bNodeRuntime\.runMain\s*\(|\bruntimeExit\s*\(|\bdetachOn\s*\(|\brunWeb\s*\(/;
+  // The same runners `no-run-promise-outside-edges` bans, spelled as a regex
+  // because this check reads text rather than an AST. Keep the two in step:
+  // v4 removed `Runtime<R>`, so what a caller used to carry as a runtime it
+  // hands to a `run*With` instead, and the `Runtime` namespace is down to
+  // `makeRunMain`. Longest alternative first, so `runPromiseExitWith` is not
+  // read as a `runPromise` that failed to be followed by its parenthesis.
+  const stillRuns =
+    /\b(?:Effect|ManagedRuntime)\.run(?:PromiseExit|Promise|SyncExit|Sync|Fork|Callback)(?:With)?\s*\(|\bManagedRuntime\.make\s*\(|\b(?:Runtime\.makeRunMain|NodeRuntime\.runMain)\s*\(|\b(?:runtimeExit|detachOn|runWeb)\s*\(/;
   const stillPrimitive = /\b(?:setTimeout|setInterval|watch)\s*\(|new\s+(?:Promise|AbortController)\b/;
   const groups = [
     { name: "runtimeEdges", named: true, pattern: null },
@@ -703,7 +710,7 @@ node --input-type=module -e '
   }
 ' "$SIDECAR_REPO_ROOT"
 
-# `@effect/platform-node` and `@effect/sql*` reach `node:` modules, so an import
+# `@effect/platform-node` and `effect/unstable/sql` reach `node:` modules, so an import
 # of either compiles and bundles happily and then fails where there is no Node:
 # the sandboxed renderer. The renderer's `node:` grep above catches the direct
 # reach; this catches the Effect layer that would carry it in behind a bare
@@ -711,10 +718,10 @@ node --input-type=module -e '
 # isolation guard in apps/web/tests/build-output.test.ts is what proves each one
 # loads.)
 node_reaching_effect=$(grep -rEn --include='*.ts' --include='*.tsx' \
-    '"@effect/(platform-node|sql)' \
+    '"(@effect/platform-node|effect/unstable/sql)' \
     "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" || true)
 if [[ -n "$node_reaching_effect" ]]; then
-    printf 'error: @effect/platform-node and @effect/sql* reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
+    printf 'error: @effect/platform-node and effect/unstable/sql reach node: modules and must not be imported by the renderer — put the layer behind the runtime edge that builds it:\n%s\n' \
         "$node_reaching_effect" >&2
     exit 1
 fi

@@ -104,8 +104,8 @@ function settingsWriter(
             ? Effect.void
             : Effect.tryPromise({ try: async () => apply(saved), catch: (error) => error }),
         ),
-        Effect.catchAll(() => refuse(ACT[kind].refusal)),
-        Effect.catchAllDefect(() => refuse(ACT[kind].refusal)),
+        Effect.catch(() => refuse(ACT[kind].refusal)),
+        Effect.catchDefect(() => refuse(ACT[kind].refusal)),
       );
     },
   };

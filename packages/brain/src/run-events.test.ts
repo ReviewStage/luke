@@ -89,10 +89,10 @@ import {
 function reading(agent: BrainAgent, body: (event: BrainRunEvent) => void): Effect.Effect<void> {
   return Effect.gen(function* () {
     const scope = yield* Scope.make();
-    const stream = yield* Scope.extend(agent.runEvents, scope);
-    yield* Effect.forkDaemon(
+    const stream = yield* Scope.provide(agent.runEvents, scope);
+    yield* Effect.forkDetach(
       Stream.runForEach(stream, (event) =>
-        Effect.catchAllDefect(
+        Effect.catchDefect(
           Effect.sync(() => body(event)),
           () => Effect.void,
         ),
@@ -172,12 +172,12 @@ const messageAbc = (callId: string) =>
 /** The tools the turns below call, as the storage reader is registered with them. */
 const STORED_TOOLS: ToolSet = {
   [BRAIN_TOOL.READ_TRANSCRIPT]: tool({
-    inputSchema: Schema.standardSchemaV1(
+    inputSchema: Schema.toStandardSchemaV1(
       Schema.Struct({ provider_id: Schema.String, provider_session_id: Schema.String }),
     ),
   }),
   [ACTION_TOOL.SEND_SESSION_MESSAGE]: tool({
-    inputSchema: Schema.standardSchemaV1(
+    inputSchema: Schema.toStandardSchemaV1(
       Schema.Struct({
         provider_id: Schema.String,
         provider_session_id: Schema.String,
@@ -567,7 +567,7 @@ it.effect(
       const reads: SessionIdentity[] = [];
       const h = yield* effectHarness({
         readTranscript: (identity): Effect.Effect<ProviderTranscriptResult> =>
-          Effect.async<ProviderTranscriptResult>((resume) => {
+          Effect.callback<ProviderTranscriptResult>((resume) => {
             reads.push(identity);
             answer = () => {
               resume(

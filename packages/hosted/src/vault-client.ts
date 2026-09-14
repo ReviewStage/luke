@@ -1,8 +1,8 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import type { CloudAgentProviderId } from "@sidecar/session";
 import { HTTP_METHOD } from "@sidecar/wire";
 import { Effect, type Layer } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { type AccountCallEffects, accountBearer, accountCall } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";

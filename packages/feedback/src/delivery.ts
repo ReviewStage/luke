@@ -1,10 +1,10 @@
-import * as FetchHttpClient from "@effect/platform/FetchHttpClient";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
-import type * as HttpClientResponse from "@effect/platform/HttpClientResponse";
 import { HTTP_METHOD, text } from "@sidecar/wire";
 import { Data, Duration, Effect, type Layer } from "effect";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
+import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import type { FeedbackResult, FeedbackSubmission } from "./submission.js";
 
 const FEEDBACK_ENVIRONMENT = {
@@ -87,7 +87,7 @@ export interface FeedbackDeliveryEffects {
   ): Effect.Effect<FeedbackResult, never, HttpClient.HttpClient>;
 }
 
-/** The delivery as effects over `@effect/platform`'s `HttpClient` tag. */
+/** The delivery as effects over `effect/unstable/http`'s `HttpClient` tag. */
 export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): FeedbackDeliveryEffects {
   const url = text(options.url) ?? FEEDBACK_DEFAULTS.URL;
   const requestTimeoutMs = options.requestTimeoutMs ?? FEEDBACK_DEFAULTS.REQUEST_TIMEOUT_MS;
@@ -103,7 +103,7 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
     const request = HttpClientRequest.make(HTTP_METHOD.POST)(url, {
       body: HttpBody.raw(JSON.stringify(submission), { contentType: JSON_CONTENT_TYPE }),
     });
-    return Effect.catchAll(HttpClient.execute(request), (error) =>
+    return Effect.catch(HttpClient.execute(request), (error) =>
       Effect.fail(new FeedbackTransportError({ errorName: errorName(error.cause) })),
     );
   }
@@ -113,16 +113,16 @@ export function feedbackDelivery(options: FeedbackDeliveryOptions = {}): Feedbac
     requestTimeoutMs,
     deliver: (submission) =>
       requested(submission).pipe(
-        Effect.timeoutFail({
+        Effect.timeoutOrElse({
           duration: deadline,
-          onTimeout: () => new FeedbackTransportError({ errorName: DEADLINE_ERROR_NAME }),
+          orElse: () => Effect.fail(new FeedbackTransportError({ errorName: DEADLINE_ERROR_NAME })),
         }),
         Effect.map((response): FeedbackResult => {
           if (answeredOk(response.status)) return { delivered: true };
           report(`Feedback delivery failed with status ${response.status}`);
           return { delivered: false, reason: FEEDBACK_REFUSAL.REFUSED };
         }),
-        Effect.catchAll((failure) => {
+        Effect.catch((failure) => {
           report(`Feedback delivery did not complete: ${failure.errorName ?? "unknown error"}`);
           return Effect.succeed<FeedbackResult>({
             delivered: false,

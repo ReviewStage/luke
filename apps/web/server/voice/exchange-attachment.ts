@@ -1,6 +1,6 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Exit, type ParseResult, Scope } from "effect";
+import { Effect, Exit, type Schema, Scope } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { standingMain } from "../hosted/brain-host/main.js";
 import type { HostedStoreContext } from "../hosted/store/index.js";
@@ -63,7 +63,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     session: Parameters<ExchangeAttachment>[0],
   ): Effect.Effect<
     HostedLiveExchange,
-    SqlError | ParseResult.ParseError | ExchangeCannotStand,
+    SqlError | Schema.SchemaError | ExchangeCannotStand,
     Scope.Scope | SqlClient.SqlClient
   > =>
     Effect.gen(function* () {
@@ -98,7 +98,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
     const scope = await deps.run(Scope.make());
     const close = () => deps.run(Scope.close(scope, Exit.void));
     try {
-      const exchange = await deps.run(Scope.extend(standing(session), scope));
+      const exchange = await deps.run(Scope.provide(standing(session), scope));
       return { ...exchange, stop: close };
     } catch (error) {
       await close();

@@ -403,8 +403,8 @@ test("a turn's inputs travel into the transcript with the checkpoint, and option
   Effect.runSync(
     Effect.gen(function* () {
       const scope = yield* Scope.make();
-      const stream = yield* Scope.extend(agent.runEvents, scope);
-      yield* Effect.forkDaemon(
+      const stream = yield* Scope.provide(agent.runEvents, scope);
+      yield* Effect.forkDetach(
         Stream.runForEach(stream, (event) => Effect.sync(() => events.push(event))),
       );
     }),

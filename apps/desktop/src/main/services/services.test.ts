@@ -3,7 +3,7 @@ import { setImmediate as immediate } from "node:timers/promises";
 import { runModeFor } from "@sidecar/host";
 import { HostAssemblyTag, hostStandingLayer, layersInOrder } from "@sidecar/host/effect";
 import { temporaryDirectory } from "@sidecar/runtime/testing";
-import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime, Runtime, Stream } from "effect";
+import { Context, Effect, Exit, Fiber, Layer, ManagedRuntime, Stream } from "effect";
 import { test } from "vitest";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { UpdaterEngine, UpdaterEngineEvents } from "../update-service";
@@ -15,7 +15,9 @@ import { serviceLayer } from "./service-layer";
 import { createUpdateServiceHost, type UpdateServiceHost } from "./update-service-host";
 
 /** The test's own handle on the updater Layer builds, to read the value a scoped Layer otherwise discards. */
-class UpdatesTag extends Context.Tag("test/services/updates")<UpdatesTag, UpdateServiceHost>() {}
+class UpdatesTag extends Context.Service<UpdatesTag, UpdateServiceHost>()(
+  "test/services/updates",
+) {}
 
 /**
  * The services that reach Electron cannot be constructed here at all:
@@ -235,10 +237,10 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     ...fixtureConfig(stateRoot),
     runMode: runModeFor({ capture: false, fixture: false }),
   };
-  const state = new AppStateStore(initialAppState(config, true), Runtime.defaultRuntime);
+  const state = new AppStateStore(initialAppState(config, true), Context.empty());
   const snapshots: string[] = [];
   const watching = Effect.runSync(
-    Effect.forkDaemon(
+    Effect.forkDetach(
       Stream.runForEach(state.changes, (held) =>
         Effect.sync(() => snapshots.push(held.update.status)),
       ),
@@ -249,7 +251,7 @@ test("the updater's timers are handles the stop takes back, and a restart tears 
     order.push("teardown");
   });
   const runtime = ManagedRuntime.make(
-    Layer.scoped(
+    Layer.effect(
       UpdatesTag,
       createUpdateServiceHost({
         config,

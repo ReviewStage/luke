@@ -1,5 +1,5 @@
 import type { BrainAgent, Detach } from "@sidecar/brain";
-import { Cause, Effect, Fiber } from "effect";
+import { Cause, Effect, Fiber, Semaphore } from "effect";
 
 /**
  * Who owns the standing brain agent through a transition. A key or account
@@ -36,7 +36,7 @@ type RetirementOutcome = { ok: true } | { ok: false; error: Error };
  * for that transition to answer with.
  */
 function settledOutcome(drain: Effect.Effect<void>): Effect.Effect<RetirementOutcome> {
-  return Effect.catchAllCause(
+  return Effect.catchCause(
     Effect.as(drain, { ok: true } as const),
     (cause): Effect.Effect<RetirementOutcome> => {
       const squashed = Cause.squash(cause);
@@ -53,7 +53,7 @@ export class BrainHost {
   readonly #detach: Detach;
   #agent: BrainAgent | undefined;
   #unfollow: Effect.Effect<void> | undefined;
-  #retiring: Fiber.RuntimeFiber<RetirementOutcome>[] = [];
+  #retiring: Fiber.Fiber<RetirementOutcome>[] = [];
   #transitions = 0;
   /**
    * One permit held for the whole of a transition, handed to the transitions
@@ -61,7 +61,7 @@ export class BrainHost {
    * back like any other, so a build that threw leaves nothing installed and
    * the next transition still installs.
    */
-  readonly #queue = Effect.unsafeMakeSemaphore(1);
+  readonly #queue = Semaphore.makeUnsafe(1);
 
   constructor(dependencies: BrainHostDependencies) {
     this.#dependencies = dependencies;
@@ -101,8 +101,8 @@ export class BrainHost {
     this.#retiring.push(
       this.#detach(
         settledOutcome(
-          Effect.zipRight(
-            Effect.catchAllCause(previous.stop(), () => Effect.void),
+          Effect.andThen(
+            Effect.catchCause(previous.stop(), () => Effect.void),
             unfollow ?? Effect.void,
           ),
         ),
@@ -121,7 +121,7 @@ export class BrainHost {
       this.retire();
       const transition = ++this.#transitions;
       return this.#queue.withPermits(1)(
-        Effect.gen(this, function* () {
+        Effect.gen({ self: this }, function* () {
           // Every retirement queued so far drains before a successor stands. A
           // drain that failed has still ended, and its failure is this
           // transition's to answer with, as it always was.

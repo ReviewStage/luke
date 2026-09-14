@@ -1,6 +1,6 @@
 import { CLOUD_AGENT_PROVIDER_ID, type CloudAgentProviderId } from "@sidecar/session";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import { Schema as EffectSchema, SchemaTransformation } from "effect";
 import { countedNumber } from "./service-wire.js";
 
 /**
@@ -9,7 +9,10 @@ import { countedNumber } from "./service-wire.js";
  *
  * Every declaration below is composed directly as an Effect `Schema` and
  * exported under its own name; `vault-client.ts` reads one through
- * `readEither` and shows it through `emitJsonSchema`.
+ * `readEither` and shows it through `emitJsonSchema`. Each answer is a plain
+ * struct: that a key a newer service added is dropped rather than refused is
+ * the read's own grain now, and the body read behind `ask` drops one by
+ * default.
  */
 
 /** Maximum length the vault accepts for a provider API key. */
@@ -27,22 +30,15 @@ export function vaultKeyIsStorable(key: string): boolean {
 
 const CLOUD_AGENT_PROVIDER_NAMES = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
-/**
- * A record that ignores a key a newer service added, which is what an answer
- * does. Each record states its own rule, because Effect hands a struct's
- * parse options down to the structs inside it.
- */
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
 /** A member set read with its ends trimmed. */
 function trimmedEnum<const Member extends string>(members: readonly Member[]) {
   return verbatimJsonSchema(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.Literal(...members), {
-      strict: false,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }),
+    EffectSchema.Trim.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.Literals(members),
+        SchemaTransformation.passthroughSupertype(),
+      ),
+    ),
     { type: "string", enum: members },
   );
 }
@@ -53,7 +49,7 @@ export interface VaultKeyStoreAnswer {
 }
 
 /** Anything other than `{ stored: true }` is not a store that landed. */
-export const vaultKeyStoreAnswerSchema = tolerantRecord({
+export const vaultKeyStoreAnswerSchema = EffectSchema.Struct({
   stored: EffectSchema.Literal(true),
 });
 
@@ -73,10 +69,10 @@ export interface VaultKeysListAnswer {
  * silently missing from the list is a key the panel offers no way to replace
  * or delete, which is worse than a list that plainly did not read.
  */
-export const vaultKeysListAnswerSchema = tolerantRecord({
+export const vaultKeysListAnswerSchema = EffectSchema.Struct({
   keys: EffectSchema.mutable(
     EffectSchema.Array(
-      tolerantRecord({
+      EffectSchema.Struct({
         providerId: trimmedEnum(CLOUD_AGENT_PROVIDER_NAMES),
         updatedAt: countedNumber,
       }),
@@ -89,4 +85,4 @@ export interface VaultKeyDeleteAnswer {
   deleted: boolean;
 }
 
-export const vaultKeyDeleteAnswerSchema = tolerantRecord({ deleted: EffectSchema.Boolean });
+export const vaultKeyDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Boolean });

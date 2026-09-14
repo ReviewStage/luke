@@ -1,6 +1,6 @@
-import { SqlClient, SqlSchema } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
-import { Effect, Option, type ParseResult, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { HostedQuota } from "../core.js";
 
 /**
@@ -31,7 +31,7 @@ export function utcDayEnd(dayKey: string): number {
 }
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-type QuotaFailure = SqlError | ParseResult.ParseError;
+type QuotaFailure = SqlError | Schema.SchemaError;
 
 /** What a meter seam answers: an effect over the ambient client, composed into the request that spent it. */
 export type QuotaEffect<A> = Effect.Effect<A, QuotaFailure, SqlClient.SqlClient>;
@@ -46,13 +46,13 @@ const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.
  * rather than an outcome a caller could act on.
  */
 function required<A>(row: Option.Option<A>, absent: string): Effect.Effect<A> {
-  return Option.match(row, { onNone: () => Effect.dieMessage(absent), onSome: Effect.succeed });
+  return Option.match(row, { onNone: () => Effect.die(new Error(absent)), onSome: Effect.succeed });
 }
 
 const HostedUsageWriteSchema = Schema.Struct({ userId: Schema.String, day: Schema.String });
 const HostedUsageCallsRowSchema = Schema.Struct({ calls: Schema.Number });
 
-const spendHostedUsage = SqlSchema.findOne({
+const spendHostedUsage = SqlSchema.findOneOption({
   Request: HostedUsageWriteSchema,
   Result: HostedUsageCallsRowSchema,
   execute: (write) =>
@@ -104,7 +104,7 @@ export interface IntroductionSpend {
 const IntroductionUsageWriteSchema = Schema.Struct({ caller: Schema.String, day: Schema.String });
 const IntroductionUsageMintsRowSchema = Schema.Struct({ mints: Schema.Number });
 
-const spendIntroductionUsage = SqlSchema.findOne({
+const spendIntroductionUsage = SqlSchema.findOneOption({
   Request: IntroductionUsageWriteSchema,
   Result: IntroductionUsageMintsRowSchema,
   execute: (write) =>
@@ -148,7 +148,7 @@ export const VOICE_SECONDS_OUTCOME = {
 export type VoiceSecondsOutcome =
   (typeof VOICE_SECONDS_OUTCOME)[keyof typeof VOICE_SECONDS_OUTCOME];
 
-const findUserId = SqlSchema.findOne({
+const findUserId = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
   execute: (userId) => statement((sql) => sql`select id from "user" where id = ${userId} limit 1`),
@@ -164,8 +164,8 @@ const VoiceSessionUsageInsertSchema = Schema.Struct({
 const insertVoiceSessionUsage = SqlSchema.findAll({
   Request: VoiceSessionUsageInsertSchema,
   Result: Schema.Struct({
-    sessionId: Schema.propertySignature(Schema.String).pipe(Schema.fromKey("session_id")),
-  }),
+    sessionId: Schema.String,
+  }).pipe(Schema.encodeKeys({ sessionId: "session_id" })),
   execute: (write) =>
     statement(
       (sql) => sql`

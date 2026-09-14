@@ -34,7 +34,8 @@ import {
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
-import { Chunk, Duration, Effect, FiberId, Runtime, Scope, TestClock } from "effect";
+import { Context, Duration, Effect, Scope } from "effect";
+import { TestClock } from "effect/testing";
 import type { TestContext } from "vitest";
 import { type BrainWiring, wireBrain } from "./wiring.js";
 
@@ -74,7 +75,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -138,13 +139,13 @@ interface Composed {
 }
 
 /**
- * The child service's timer seam, over whichever runtime a test is running
- * on — the ambient `TestClock` under `it.effect` — so an archive delay
+ * The child service's timer seam, over whichever services a test is running
+ * under — the ambient `TestClock` under `it.effect` — so an archive delay
  * advances on the same clock a test drives rather than firing on its own.
  */
-function childTimersOn(runtime: Runtime.Runtime<never>) {
-  const fork = Runtime.runFork(runtime);
-  const armed = new Map<ScheduledTimer, Fiber.RuntimeFiber<void>>();
+function childTimersOn(services: Context.Context<never>) {
+  const fork = Effect.runForkWith(services);
+  const armed = new Map<ScheduledTimer, Fiber.Fiber<void>>();
   return {
     schedule: (callback: () => void, delayMs: number): ScheduledTimer => {
       const handle: ScheduledTimer = {};
@@ -160,7 +161,7 @@ function childTimersOn(runtime: Runtime.Runtime<never>) {
       const fiber = armed.get(timer);
       if (fiber === undefined) return;
       armed.delete(timer);
-      fiber.unsafeInterruptAsFork(FiberId.none);
+      fiber.interruptUnsafe();
     },
   };
 }
@@ -221,7 +222,7 @@ async function composed(
   let ids = 0;
   const workspace = await temporaryDirectory(t, "luke-children-");
   const building = wireBrain({
-    execution: Runtime.defaultRuntime,
+    execution: Context.empty(),
     repositoryFor: (sessionKey) => {
       let repository = repositories.get(sessionKey);
       if (!repository) {
@@ -298,10 +299,10 @@ async function composed(
     ...overrides,
   });
   // The wiring's generation clocks read the clock and arm their waits in the
-  // scope it is built in, which is the one `it.scoped` gives this test and
+  // scope it is built in, which is the one `it.effect` gives this test and
   // closes when it ends. No store here enables automatic reset, so what those
-  // clocks arm is nothing and the default runtime this is built on is the only
-  // clock they would have asked.
+  // clocks arm is nothing and the default clock this is built under is the
+  // only one they would have asked.
   const wiring = await Effect.runPromise(Effect.provideService(building, Scope.Scope, scope));
   return {
     wiring,
@@ -344,14 +345,14 @@ async function ask(c: Composed, question: string, submissionId = "s-1"): Promise
   return accepted.outcome === BRAIN_SUBMISSION_OUTCOME.ACCEPTED ? accepted.runId : "";
 }
 
-it.scoped(
+it.effect(
   "a spawn from main runs the child in its own conversation at depth one and hands the completion back to main as its own turn",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       const c = yield* Effect.promise(() =>
-        composed(t, scope, delegatingScript(), { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, delegatingScript(), { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       const runId = yield* Effect.promise(() => ask(c, "look into the last commit"));
@@ -398,13 +399,13 @@ it.scoped(
       assert.equal(completionTurns.length, 1);
       // The child's conversation stands for an hour after its end, then archives.
       const hour = 60 * 60 * 1000;
-      const sleeps = Chunk.toReadonlyArray(yield* TestClock.sleeps());
-      assert.ok(
-        sleeps.some((instant) => instant > hour - 10_000 && instant <= hour),
-        "the archive is armed for an hour after the end",
-      );
+      // v4's TestClock keeps its pending sleeps private, so what the archive is
+      // armed for is read from the clock's own edge: ten seconds short of the
+      // hour nothing has archived, and crossing it archives.
       assert.deepEqual(c.archived, []);
-      yield* TestClock.adjust(Duration.millis(hour));
+      yield* TestClock.adjust(Duration.millis(hour - 10_000));
+      assert.deepEqual(c.archived, []);
+      yield* TestClock.adjust(Duration.millis(10_000));
       yield* waitFor(() => c.archived.length > 0);
       assert.deepEqual(c.archived, [child.childSessionKey]);
       assert.equal(c.wiring.current(child.childSessionKey), undefined);
@@ -413,11 +414,11 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a child spawning a child counts one deeper, and at the depth cap the delegation tools are gone",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       // Every child spawns another until refused; the last child answers text.
       const script: Script = (seen) => {
@@ -433,7 +434,7 @@ it.scoped(
         return textAnswer("ok");
       };
       const c = yield* Effect.promise(() =>
-        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       yield* Effect.promise(() => ask(c, "go deep"));
@@ -462,11 +463,11 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "a fork carries the requester's context into the child and an isolated child sees none of it",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       const script: Script = (seen) => {
         if (seen.answeringTool) return textAnswer("ok");
@@ -486,7 +487,7 @@ it.scoped(
         return textAnswer(MAIN_SECRET);
       };
       const c = yield* Effect.promise(() =>
-        composed(t, scope, script, { childTimers: childTimersOn(runtime) }),
+        composed(t, scope, script, { childTimers: childTimersOn(services) }),
       );
       yield* c.wiring.rebuild();
       // Main first says something memorable, so its context holds a secret to fork.
@@ -521,11 +522,11 @@ it.scoped(
     }),
 );
 
-it.scoped(
+it.effect(
   "Start fresh cancels a conversation's descendants first, and their cancellation is a completion owed to it",
   (t) =>
     Effect.gen(function* () {
-      const runtime = yield* Effect.runtime<never>();
+      const services = yield* Effect.context<never>();
       const scope = yield* Effect.scope;
       let releaseChild: (() => void) | undefined;
       const script: Script = (seen) => {
@@ -547,7 +548,7 @@ it.scoped(
             }
             return script(seen, calls);
           },
-          { childTimers: childTimersOn(runtime) },
+          { childTimers: childTimersOn(services) },
         ),
       );
       yield* c.wiring.rebuild();
@@ -572,7 +573,7 @@ it.scoped(
     }),
 );
 
-it.scopedLive(
+it.live(
   "a reset capture that was skipped reports nothing, while one that failed is said so; the reset proceeds either way",
   (t) =>
     Effect.gen(function* () {

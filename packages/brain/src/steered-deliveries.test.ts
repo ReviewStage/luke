@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Effect, Fiber, Option } from "effect";
+import { Effect } from "effect";
 import { SteeredDeliveries } from "./steered-deliveries.js";
 
 /** The rule in one place: on disk is delivered; ingested but never checkpointed, or never ingested, is not. */
 
 const assertPending = (effect: Effect.Effect<boolean>): Effect.Effect<void> =>
   Effect.gen(function* () {
-    const fiber = yield* Effect.fork(effect);
-    yield* Effect.yieldNow();
-    assert.equal(Option.isNone(yield* Fiber.poll(fiber)), true);
+    const fiber = yield* Effect.forkChild(effect);
+    yield* Effect.yieldNow;
+    assert.equal(fiber.pollUnsafe(), undefined);
   });
 
 it.effect(

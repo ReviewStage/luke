@@ -14,7 +14,7 @@
  * by an observation pass; that pass is an effect now, so the wake forks into
  * the observation's own scope where it is armed and the three calls are gone.
  */
-import { Effect, ExecutionStrategy, Exit, Option, Scope, SynchronizedRef } from "effect";
+import { Effect, Exit, Option, Scope, SynchronizedRef } from "effect";
 
 /**
  * A cadence the owner arms and disarms by hand, as a pair of effects rather
@@ -37,20 +37,19 @@ export const cadenceGate = (
 ): Effect.Effect<CadenceGate, never, Scope.Scope> =>
   Effect.gen(function* () {
     const home = yield* Effect.scope;
-    const standing = yield* SynchronizedRef.make(Option.none<Scope.CloseableScope>());
+    const standing = yield* SynchronizedRef.make(Option.none<Scope.Closeable>());
     const disarm = SynchronizedRef.updateEffect(standing, (current) =>
       Option.match(current, {
         onNone: () => Effect.succeed(current),
-        onSome: (scope) =>
-          Effect.as(Scope.close(scope, Exit.void), Option.none<Scope.CloseableScope>()),
+        onSome: (scope) => Effect.as(Scope.close(scope, Exit.void), Option.none<Scope.Closeable>()),
       }),
     );
     const arm = SynchronizedRef.updateEffect(standing, (current) =>
       Option.isSome(current)
         ? Effect.succeed(current)
         : Effect.gen(function* () {
-            const scope = yield* Scope.fork(home, ExecutionStrategy.sequential);
-            yield* Scope.extend(armed, scope);
+            const scope = yield* Scope.fork(home);
+            yield* Scope.provide(armed, scope);
             return Option.some(scope);
           }),
     );

@@ -20,12 +20,13 @@ import { Effect, Fiber } from "effect";
  * uninterruptible region is one nothing inside it may interrupt either,
  * including the deadline `account-call` races against its own request, which
  * would then never win and never end a hung write. The call is forked as a
- * daemon and made interruptible again, so the deadline ends it exactly as it
- * did when the client ran the request on a fiber of its own, and a caller
- * that ended under the call still neither cuts it nor drops what it earns.
+ * daemon, and a fork is interruptible whatever the status of the fiber that
+ * made it, so the deadline ends it exactly as it did when the client ran the
+ * request on a fiber of its own, and a caller that ended under the call still
+ * neither cuts it nor drops what it earns.
  */
 export function carriedHostedCall<Answer>(call: Effect.Effect<Answer>): Effect.Effect<Answer> {
-  return Effect.flatMap(Effect.forkDaemon(Effect.interruptible(call)), Fiber.join);
+  return Effect.flatMap(Effect.forkDetach(call), Fiber.join);
 }
 
 /** What a caller hears of a service call that ended short of the provider's own answer. */
@@ -95,23 +96,23 @@ export function hostedActionResult(
  * write's answer reaches its caller no later than it did when the poke was a
  * detached promise.
  */
-export function settleHostedWrite<Result extends SessionWriteResult>(
+export const settleHostedWrite = /* @__PURE__ */ Effect.fn("settleHostedWrite")(function* <
+  Result extends SessionWriteResult,
+>(
   result: Result,
   providerId: CloudAgentProviderId,
   counted: ProductSessionAction,
   refresh: Effect.Effect<void>,
   recordProductEvent: RecordProductEvent,
-): Effect.Effect<Result> {
-  return Effect.gen(function* () {
-    if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) yield* refresh;
-    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
-      yield* Effect.sync(() =>
-        recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
-          provider_id: providerId,
-          session_action: counted,
-        }),
-      );
-    }
-    return result;
-  });
-}
+): Effect.fn.Return<Result> {
+  if (result.status !== ACTION_RESULT_STATUS.UNSUPPORTED) yield* refresh;
+  if (result.status === ACTION_RESULT_STATUS.ACCEPTED) {
+    yield* Effect.sync(() =>
+      recordProductEvent(PRODUCT_EVENT.SESSION_ACTION_SEND, {
+        provider_id: providerId,
+        session_action: counted,
+      }),
+    );
+  }
+  return result;
+});

@@ -1,14 +1,5 @@
 import { scheduleOnce } from "@sidecar/runtime/effect";
-import {
-  Duration,
-  Effect,
-  type Fiber,
-  FiberId,
-  Runtime,
-  Schedule,
-  ScheduleDecision,
-  Scope,
-} from "effect";
+import { type Context, Duration, Effect, type Fiber, Pull, Schedule, Scope } from "effect";
 import {
   UPDATE_STATUS,
   type UpdateProgress,
@@ -101,18 +92,38 @@ const PUBLISHING_RETRY_DELAYS_MS: readonly [number, ...number[]] = [
 
 /**
  * The delay sequence as a `Schedule`, so the budget a version spends is data
- * a schedule steps through rather than an index counted by hand. Stepped
- * directly through `Schedule#step` rather than through a `ScheduleDriver`:
- * the driver's own `next` sleeps out the delay it returns, where this needs
+ * a schedule steps through rather than an index counted by hand. One
+ * `Schedule.duration` per delay, sequenced with `Schedule.concat`: each
+ * recurs once after its own delay and then hands over, so the chain recurs
+ * as many times as there are delays and completes. Stepped directly through
+ * `Schedule.toStep` rather than the sleeping step `Schedule.toStepWithSleep`
+ * hands back: that one sleeps out the delay it decided on, where this needs
  * the delay back to arm a cancellable fiber of its own — one a fresh check
  * can collapse mid-wait.
  */
 function publishingRetrySchedule(
   delaysMs: readonly [number, ...number[]],
-): Schedule.Schedule<Duration.Duration> {
-  const [first, ...rest] = delaysMs;
-  return Schedule.fromDelays(Duration.millis(first), ...rest.map(Duration.millis));
+): Schedule.Schedule<Duration.Duration, undefined> {
+  return delaysMs
+    .map((delayMs) => Schedule.duration(Duration.millis(delayMs)))
+    .reduce((earlier, later) => Schedule.concat(earlier, later));
 }
+
+/**
+ * One acquired step of that schedule. A v4 schedule keeps its state inside
+ * the closure `Schedule.toStep` hands back rather than in a value the caller
+ * carries step to step, so a version's spent budget is this function's own
+ * and a later version is a fresh acquisition. A step past the last delay
+ * answers `Cause.done` from then on, which is what keeps an exhausted
+ * version exhausted. The pair is the step's output and the delay it decided
+ * on; only the delay is arming anything here. The step reads nothing of its
+ * input — the delay a slot is worth is the schedule's own — so the input is
+ * named `undefined` rather than left the `unknown` a schedule accepts.
+ */
+type PublishingRetryStep = (
+  now: number,
+  input: undefined,
+) => Pull.Pull<[Duration.Duration, Duration.Duration], never, Duration.Duration>;
 
 /** The updater lifecycle, as electron-updater announces it. */
 export interface UpdaterEngineEvents {
@@ -192,19 +203,20 @@ export interface UpdateServiceOptions {
  */
 export class UpdateService {
   /**
-   * The service as the effect that builds it, since nothing here may run on
-   * a runtime of its own: the launch's own scope is what the timed check,
-   * the first check, and a publishing retry fork into, and the launch's own
-   * runtime is what a synchronous caller's `start`/`check`/`install`
-   * steps or forks its effects on, captured once here rather than defaulted,
-   * so a bridge that ran on the ambient default runtime can never stand in
-   * for the one runtime the launch actually disposes.
+   * The service as the effect that builds it, since nothing here may run
+   * under services of its own: the launch's own scope is what the timed
+   * check, the first check, and a publishing retry fork into, and the
+   * launch's own services are what a synchronous caller's
+   * `start`/`check`/`install` steps or forks its effects under, read once out
+   * of the fiber building this rather than defaulted, so a bridge can never
+   * run under the empty context plain `Effect.runSync` stands for in place of
+   * the one the launch actually holds.
    */
   static make(options: UpdateServiceOptions): Effect.Effect<UpdateService, never, Scope.Scope> {
     return Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const runtime = yield* Effect.runtime<never>();
-      return new UpdateService(options, scope, runtime);
+      const services = yield* Effect.context<never>();
+      return new UpdateService(options, scope, services);
     });
   }
 
@@ -214,9 +226,9 @@ export class UpdateService {
   readonly #lastRunVersion: LastRunVersionStore | undefined;
   readonly #intervalMs: number;
   readonly #justUpdatedFirstCheckDelayMs: number;
-  readonly #publishingRetrySchedule: Schedule.Schedule<Duration.Duration>;
+  readonly #publishingRetrySchedule: Schedule.Schedule<Duration.Duration, undefined>;
   readonly #report: (line: string) => void;
-  readonly #runtime: Runtime.Runtime<never>;
+  readonly #services: Context.Context<never>;
   /** Every fiber the service forks — the timed check, the first check, and a publishing retry — lands here. */
   readonly #scope: Scope.Scope;
   #snapshot: UpdateSnapshot;
@@ -224,17 +236,17 @@ export class UpdateService {
   #installing = false;
   #started = false;
   #stopped = false;
-  #publishingRetry: Fiber.RuntimeFiber<void> | undefined;
+  #publishingRetry: Fiber.Fiber<void> | undefined;
   /**
    * The timed check and the first check `start()` forks, tracked so `stop()`
    * can interrupt them directly when the scope they forked into is not this
    * class's own to close.
    */
-  #repeatingCheck: Fiber.RuntimeFiber<unknown> | undefined;
-  #firstCheck: Fiber.RuntimeFiber<unknown> | undefined;
+  #repeatingCheck: Fiber.Fiber<unknown> | undefined;
+  #firstCheck: Fiber.Fiber<unknown> | undefined;
   #publishingVersion: string | undefined;
-  /** `#publishingRetrySchedule`'s own state, carried step to step for `#publishingVersion`. */
-  #publishingScheduleState: unknown;
+  /** `#publishingRetrySchedule` acquired for `#publishingVersion`, holding that version's spent budget. */
+  #publishingRetryStep: PublishingRetryStep | undefined;
   /**
    * The version a live publishing wait is about, or undefined outside one.
    * Distinct from `#publishingVersion`, which keys the spent budget and must
@@ -246,13 +258,13 @@ export class UpdateService {
   private constructor(
     options: UpdateServiceOptions,
     scope: Scope.Scope,
-    runtime: Runtime.Runtime<never>,
+    services: Context.Context<never>,
   ) {
     this.#currentVersion = options.currentVersion;
     this.#onChange = options.onChange;
     this.#engine = options.engine;
     this.#lastRunVersion = options.lastRunVersion;
-    this.#runtime = runtime;
+    this.#services = services;
     this.#scope = scope;
     this.#intervalMs = options.intervalMs ?? UPDATE_CHECK_DEFAULTS.INTERVAL_MS;
     this.#justUpdatedFirstCheckDelayMs =
@@ -329,7 +341,7 @@ export class UpdateService {
     // press or timed tick mid-wait collapses the pending timer rather than
     // stacking a second check behind it.
     if (this.#publishingRetry) {
-      this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
+      this.#publishingRetry.interruptUnsafe();
       this.#publishingRetry = undefined;
     }
     this.#move({ ...this.#base(UPDATE_STATUS.CHECKING) });
@@ -380,7 +392,7 @@ export class UpdateService {
       this.#report(`Updated: ${previous} -> ${this.#currentVersion}`);
       this.#move({ ...this.#base(UPDATE_STATUS.UPDATED), previousVersion: previous });
     }
-    const runSync = Runtime.runSync(this.#runtime);
+    const runSync = Effect.runSyncWith(this.#services);
     const work = Effect.sync(() => void this.check());
     // The interval never fires at the fork itself: the whole repeat is
     // pushed back by one interval, so the cadence lands at `intervalMs`,
@@ -418,9 +430,9 @@ export class UpdateService {
     this.#stopped = true;
     const publishingRetry = this.#publishingRetry;
     this.#publishingRetry = undefined;
-    publishingRetry?.unsafeInterruptAsFork(FiberId.none);
-    this.#repeatingCheck?.unsafeInterruptAsFork(FiberId.none);
-    this.#firstCheck?.unsafeInterruptAsFork(FiberId.none);
+    publishingRetry?.interruptUnsafe();
+    this.#repeatingCheck?.interruptUnsafe();
+    this.#firstCheck?.interruptUnsafe();
   }
 
   /**
@@ -431,17 +443,21 @@ export class UpdateService {
    * it still failing lands on the error row rather than a fresh schedule.
    */
   #armPublishingRetry(version: string): boolean {
-    if (version !== this.#publishingVersion) {
+    const runSync = Effect.runSyncWith(this.#services);
+    let step = this.#publishingRetryStep;
+    if (version !== this.#publishingVersion || step === undefined) {
       this.#publishingVersion = version;
-      this.#publishingScheduleState = this.#publishingRetrySchedule.initial;
+      step = runSync(Schedule.toStep(this.#publishingRetrySchedule));
+      this.#publishingRetryStep = step;
     }
-    const runSync = Runtime.runSync(this.#runtime);
-    const [state, delay, decision] = runSync(
-      this.#publishingRetrySchedule.step(Date.now(), undefined, this.#publishingScheduleState),
+    // A schedule past its last delay ends in `Cause.done` rather than a
+    // failure, which is the exhausted budget and not an error to report.
+    const spent = runSync(
+      Pull.catchDone(step(Date.now(), undefined), () => Effect.succeed(undefined)),
     );
-    if (ScheduleDecision.isDone(decision)) return false;
-    this.#publishingScheduleState = state;
-    if (this.#publishingRetry) this.#publishingRetry.unsafeInterruptAsFork(FiberId.none);
+    if (spent === undefined) return false;
+    const [, delay] = spent;
+    if (this.#publishingRetry) this.#publishingRetry.interruptUnsafe();
     const work = Effect.sync(() => void this.check());
     this.#publishingRetry = runSync(
       Effect.provideService(scheduleOnce(Duration.toMillis(delay), work), Scope.Scope, this.#scope),

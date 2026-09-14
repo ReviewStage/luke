@@ -1,7 +1,7 @@
-import type { SqlClient } from "@effect/sql";
-import type { SqlError } from "@effect/sql/SqlError";
 import type { ToolSet } from "ai";
-import { Effect, type ParseResult } from "effect";
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRAIN_TOOL,
   isRecord,
@@ -27,7 +27,7 @@ import { readMessageById, type SpeechOffer } from "./store/index.js";
 export function briefingWordsOf(
   tools: ToolSet,
   offer: SpeechOffer,
-): Effect.Effect<string | undefined, SqlError | ParseResult.ParseError, SqlClient.SqlClient> {
+): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   return Effect.map(
     readMessageById(offer.userId, offer.conversationId, tools, offer.messageId),
     (read) => {

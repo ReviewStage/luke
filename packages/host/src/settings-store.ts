@@ -1,5 +1,3 @@
-import type { PlatformError } from "@effect/platform/Error";
-import * as FileSystem from "@effect/platform/FileSystem";
 import { APPLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
 import {
   CREDENTIAL_PROVIDER_LIST,
@@ -35,7 +33,9 @@ import {
   type WireRecord,
   type WireValue,
 } from "@sidecar/wire";
-import { Effect, Either, Redacted } from "effect";
+import { Effect, Redacted, Result, Semaphore } from "effect";
+import * as FileSystem from "effect/FileSystem";
+import type { PlatformError } from "effect/PlatformError";
 // The reader owns the shape it is fed: what this store resolves a stored
 // connection into is exactly what `readAppleCalendarConnection` promises it.
 import type { AppleCalendarConnection } from "./apple-calendar.js";
@@ -454,8 +454,8 @@ function defaultPersistedSettings(): PersistedSettings {
 /**
  * The throwing parse this store's earlier body kept; `SettingsParseRefusal`
  * over `parsePersistedSettingsEither` in `./effect/settings-store-io.js` is
- * what a caller reads today, and this stays private to that Either's own
- * `Either.try` rather than a second parse a caller could reach directly.
+ * what a caller reads today, and this stays private to that Result's own
+ * `Result.try` rather than a second parse a caller could reach directly.
  */
 export function parsePersistedSettingsThrowing(source: string): PersistedSettings {
   const parsed = JSON.parse(source);
@@ -505,7 +505,7 @@ export class SettingsStore {
    * nothing behind, so the next reader tries the file again.
    */
   #held: PersistedSettings | undefined;
-  readonly #reads = Effect.unsafeMakeSemaphore(1);
+  readonly #reads = Semaphore.makeUnsafe(1);
   #resolved = new Map<CredentialProviderId, ResolvedApiKey>();
   /** Decrypted accounts, cached like the keys so timers never drum the Keychain. */
   #resolvedCalendarAccounts: readonly CalendarAccountCredential[] | undefined;
@@ -515,7 +515,7 @@ export class SettingsStore {
    * before the first lands, and both would read the same stored keys before
    * either wrote, so the later write would drop the other provider's key.
    */
-  readonly #writes = Effect.unsafeMakeSemaphore(1);
+  readonly #writes = Semaphore.makeUnsafe(1);
 
   get<Field extends AppSettingField>(
     field: Field,
@@ -529,7 +529,7 @@ export class SettingsStore {
     field: Field,
     value: AppSettingValue<Field>,
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         if (persisted[field] === value) return undefined;
         const next: PersistedSettings = { ...persisted };
@@ -556,7 +556,7 @@ export class SettingsStore {
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
     // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
     const entry = value as UnparsedWireValue;
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
         const current = persisted[field] as WireRecord | undefined;
@@ -584,7 +584,7 @@ export class SettingsStore {
     SettingsUpdateResult & { changed: readonly AccountPreferenceField[] },
     PlatformError
   > {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const changed: AccountPreferenceField[] = [];
       yield* this.#mutate((persisted) => {
         if (expected && persisted.account?.email !== expected.accountEmail) return undefined;
@@ -628,7 +628,7 @@ export class SettingsStore {
     accountEmail: string,
     preferences: AccountPreferences,
   ): Effect.Effect<boolean, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       let saved = false;
       yield* this.#mutate((persisted) => {
         if (persisted.account?.email !== accountEmail) return undefined;
@@ -654,7 +654,7 @@ export class SettingsStore {
   ): Effect.Effect<SettingsUpdateResult & { cleared: boolean }, PlatformError> {
     // SAFETY: a setting entry's own value is one of the wire values it was parsed from.
     const held = expected as UnparsedWireValue;
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const cleared = yield* this.#mutate((persisted) => {
         // SAFETY: KeyedAppSettingField identifies fields whose stored value is a wire record.
         const current = persisted[field] as WireRecord | undefined;
@@ -681,7 +681,7 @@ export class SettingsStore {
   }
 
   snapshot(): Effect.Effect<AppSettings, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const persisted = yield* this.#load();
       const voiceAvailable = yield* this.#voiceAvailable();
       const sources = yield* Effect.forEach(
@@ -798,7 +798,7 @@ export class SettingsStore {
 
   /** Stores both OAuth tokens under one Keychain-backed ciphertext. */
   setAccount(account: StoredAccount): Effect.Effect<AccountSnapshot, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (!this.#secretStorageUsable()) {
         throw new Error("Encrypted credential storage is unavailable on this system.");
       }
@@ -924,7 +924,7 @@ export class SettingsStore {
     providerId: CredentialProviderId,
     apiKey: string | undefined,
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const keyFormat = CREDENTIAL_PROVIDER_LIST.find(
         (candidate) => candidate.id === providerId,
       )?.keyFormat;
@@ -975,7 +975,7 @@ export class SettingsStore {
     refreshToken: string,
     selectedCalendarIds: readonly string[],
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const id = calendarIdentifierText(accountId);
       const normalized = refreshToken.trim();
       const rejection = !id
@@ -1023,7 +1023,7 @@ export class SettingsStore {
 
   /** Disconnects one account, deleting its stored grant with it. */
   removeCalendarAccount(accountId: string): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate(
         (persisted) => {
           const existing = persisted.calendarAccounts ?? [];
@@ -1051,7 +1051,7 @@ export class SettingsStore {
     calendarId: string,
     selected: boolean,
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const id = calendarIdentifierText(calendarId);
       if (!id)
         return {
@@ -1105,7 +1105,7 @@ export class SettingsStore {
    * connected, and the failing read is what says to sign in again.
    */
   readCalendarAccounts(): Effect.Effect<readonly CalendarAccountCredential[], PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       if (this.#resolvedCalendarAccounts) return this.#resolvedCalendarAccounts;
       const persisted = yield* this.#load();
       const accounts: CalendarAccountCredential[] = [];
@@ -1129,7 +1129,7 @@ export class SettingsStore {
   connectAppleCalendar(
     selectedCalendarIds: readonly string[],
   ): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) =>
         persisted.appleCalendar
           ? undefined
@@ -1146,7 +1146,7 @@ export class SettingsStore {
    * the system grant stays macOS's, withdrawable in System Settings.
    */
   disconnectAppleCalendar(): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) =>
         persisted.appleCalendar ? withAppleCalendar(persisted, undefined) : undefined,
       );
@@ -1191,7 +1191,7 @@ export class SettingsStore {
    * asked for the value it holds.
    */
   resetSettings(scope: SettingsResetScope): Effect.Effect<SettingsUpdateResult, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       yield* this.#mutate((persisted) => {
         const next: PersistedSettings = { ...persisted };
         for (const field of APP_SETTING_FIELDS) {
@@ -1223,7 +1223,7 @@ export class SettingsStore {
     invalidate?: () => void,
   ): Effect.Effect<boolean, PlatformError> {
     return this.#writes.withPermits(1)(
-      Effect.gen(this, function* () {
+      Effect.gen({ self: this }, function* () {
         const persisted = yield* this.#load();
         const mutated = mutate(persisted);
         if (!mutated) return false;
@@ -1261,7 +1261,7 @@ export class SettingsStore {
    * thousands of times a day for a value only the user can change.
    */
   #resolveApiKey(provider: CredentialProvider): Effect.Effect<ResolvedApiKey, PlatformError> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const cached = this.#resolved.get(provider.id);
       if (cached) return cached;
       const stored = yield* this.#storedApiKey(provider);
@@ -1344,7 +1344,7 @@ export class SettingsStore {
         : // A corrupt settings file is replaced by the next write rather than
           // failing app start, so a refusal here falls back to defaults exactly
           // as an absent file does.
-          Either.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
+          Result.getOrElse(parsePersistedSettingsEither(source), defaultPersistedSettings),
     );
   }
 

@@ -39,7 +39,7 @@ judgment call is a reason to stop and ask, not to tick it.
 - [ ] Every `CLAUDE.md`/`AGENTS.md` sentence naming a changed part is edited; root pair stays byte-identical. (CI for pair existence; manual for wording)
 - [ ] `PRIVACY.md` unchanged, or the change is a product decision called out in the PR body.
 - [ ] Package `package.json` deps match what the sources import by bare specifier; `effect` via `catalog:`. (CI)
-- [ ] Barrel/door rule: no Node-reaching Effect module (`@effect/platform-node`, `@effect/sql*`) behind a barrel the renderer or a web function opens. (CI: existing renderer `node:` grep plus a new grep for those specifiers in renderer bundles)
+- [ ] Barrel/door rule: no Node-reaching Effect module (`@effect/platform-node`, `effect/unstable/sql`) behind a barrel the renderer or a web function opens. (CI: existing renderer `node:` grep plus a new grep for those specifiers in renderer bundles)
 
 ## Notes
 

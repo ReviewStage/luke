@@ -1,6 +1,6 @@
-import { SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither, wireRefusal } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Either } from "effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { wireUuidSchema, writtenText } from "./service-wire.js";
 
 /**
@@ -23,20 +23,13 @@ import { wireUuidSchema, writtenText } from "./service-wire.js";
  * Every declaration below is composed directly as an Effect `Schema` and
  * exported under its own name; `decodeTurnEventFrame` below and
  * `apps/web/server/hosted/turn-event-stream.ts` read one through
- * `readEither`.
+ * `readEither`, with `{ excess: EXCESS_KEYS.DROP }`, because an event a newer
+ * service widened is still the event this build knows.
  */
-
-/**
- * A record that ignores a key a newer service added, which is what an answer
- * does. Each record states its own rule, because Effect hands a struct's
- * parse options down to the structs inside it.
- */
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
 
 /** An integer at or above its minimum, the way `s.wholeNumber({ minimum })` reads one. */
 function wholeNumber(minimum: number) {
-  return EffectSchema.Int.pipe(EffectSchema.greaterThanOrEqualTo(minimum));
+  return EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(minimum));
 }
 
 export const TURN_EVENT_KIND = {
@@ -95,27 +88,27 @@ const eventBase = {
   seq: wholeNumber(1),
 } as const;
 
-export const turnEventSchema = EffectSchema.Union(
-  tolerantRecord({
+export const turnEventSchema = EffectSchema.Union([
+  EffectSchema.Struct({
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.SLOW_STEP),
-    step: EffectSchema.Literal(...Object.values(TURN_SLOW_STEP)),
+    step: EffectSchema.Literals(Object.values(TURN_SLOW_STEP)),
   }),
-  tolerantRecord({
+  EffectSchema.Struct({
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.ACTIONS_SETTLED),
   }),
-  tolerantRecord({
+  EffectSchema.Struct({
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.REPLY_SENTENCE),
     sentence: writtenText,
   }),
-  tolerantRecord({
+  EffectSchema.Struct({
     ...eventBase,
     kind: EffectSchema.Literal(TURN_EVENT_KIND.ENDED),
-    end: EffectSchema.Literal(...Object.values(TURN_END)),
+    end: EffectSchema.Literals(Object.values(TURN_END)),
   }),
-).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /**
  * The stream's framing, as the Server-Sent Events format has it: one frame is
@@ -165,7 +158,9 @@ export function decodeTurnEventFrame(frame: string): TurnEvent | undefined {
   } catch {
     return undefined;
   }
-  const event = Either.getOrUndefined(readEither(turnEventSchema)(parsed));
+  const event = Result.getOrUndefined(
+    readEither(turnEventSchema, { excess: EXCESS_KEYS.DROP })(parsed),
+  );
   if (event === undefined || id !== String(event.seq)) return undefined;
   return event;
 }

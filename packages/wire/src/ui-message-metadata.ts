@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { wireRefusal } from "./effect/json-schema.js";
-import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
+import { EXCESS_KEYS, SCHEMA_REFUSAL } from "./schema-vocabulary.js";
 
 /**
  * What a stored message says about itself beside its parts. The message
@@ -18,7 +18,7 @@ import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  * Every shape below is an Effect `Schema.Struct`, declared and exported
  * directly: a caller reads one with `readEither` and shows it with
  * `emitJsonSchema`, both from `@sidecar/wire/effect`. The
- * `Schema.standardSchemaV1` twins beside `USER_MESSAGE_METADATA` and
+ * `Schema.toStandardSchemaV1` twins beside `USER_MESSAGE_METADATA` and
  * `ASSISTANT_MESSAGE_METADATA` are what the ai SDK's `validateUIMessages`
  * takes directly.
  */
@@ -32,7 +32,7 @@ export const MESSAGE_ROLE = {
 
 export type MessageRole = (typeof MESSAGE_ROLE)[keyof typeof MESSAGE_ROLE];
 
-export const MessageRoleSchema = EffectSchema.Literal(...Object.values(MESSAGE_ROLE));
+export const MessageRoleSchema = EffectSchema.Literals(Object.values(MESSAGE_ROLE));
 
 /** Who wrote a message: the developer, Luke's own judgment, the voice model, or a child run. */
 export const MESSAGE_AUTHOR = {
@@ -44,7 +44,7 @@ export const MESSAGE_AUTHOR = {
 
 export type MessageAuthor = (typeof MESSAGE_AUTHOR)[keyof typeof MESSAGE_AUTHOR];
 
-export const MessageAuthorSchema = EffectSchema.Literal(...Object.values(MESSAGE_AUTHOR));
+export const MessageAuthorSchema = EffectSchema.Literals(Object.values(MESSAGE_AUTHOR));
 
 /** How a developer's ask arrived. */
 export const MESSAGE_CHANNEL = {
@@ -54,7 +54,7 @@ export const MESSAGE_CHANNEL = {
 
 export type MessageChannel = (typeof MESSAGE_CHANNEL)[keyof typeof MESSAGE_CHANNEL];
 
-export const MessageChannelSchema = EffectSchema.Literal(...Object.values(MESSAGE_CHANNEL));
+export const MessageChannelSchema = EffectSchema.Literals(Object.values(MESSAGE_CHANNEL));
 
 /**
  * What the brain wrote a user row down for itself about: the words a turn
@@ -85,31 +85,27 @@ export const OBSERVATION_SOURCE = {
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
 
-export const ObservationSourceSchema = EffectSchema.Literal(...Object.values(OBSERVATION_SOURCE));
+export const ObservationSourceSchema = EffectSchema.Literals(Object.values(OBSERVATION_SOURCE));
 
-/** A struct whose keys stop at the ones it names, the way a strict wire record does. */
-const strict = { parseOptions: { onExcessProperty: "error" as const } };
+/**
+ * A read whose keys stop at the ones the declaration names, the way a strict
+ * wire record does. Effect v4 settles parse options at the read rather than on
+ * the declaration, so the two standard schemas below state it here; every
+ * other reader of these shapes goes through `readEither`, which refuses an
+ * unnamed key already.
+ */
+const STRICT_READ = { parseOptions: { onExcessProperty: EXCESS_KEYS.REFUSE } } as const;
 
 /** A text trimmed of its ends, refused when nothing but whitespace remains, the way `s.text` reads one. */
-const trimmedText = EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-  strict: true,
-  decode: (value) => value.trim(),
-  encode: (value) => value,
-}).pipe(
-  EffectSchema.filter((value) => value.length > 0, {
-    schemaId: EffectSchema.MinLengthSchemaId,
-    jsonSchema: { minLength: 1 },
-  }),
-);
+const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
 
 /** An identifier another table minted: a voice session's, a delegation's, a message's. */
-const identifier = trimmedText.pipe(EffectSchema.maxLength(128));
+const identifier = trimmedText.check(EffectSchema.isMaxLength(128));
 
 /** An integer at or above zero, the way `s.wholeNumber({ minimum: 0 })` reads one. */
-const nonNegativeInteger = EffectSchema.Number.pipe(
-  EffectSchema.finite(),
-  EffectSchema.int(),
-  EffectSchema.greaterThanOrEqualTo(0),
+const nonNegativeInteger = EffectSchema.Finite.check(
+  EffectSchema.isInt(),
+  EffectSchema.isGreaterThanOrEqualTo(0),
 );
 
 /** A millisecond offset into a voice session's own clock, never a wall-clock instant. */
@@ -125,7 +121,7 @@ const spanInstant = nonNegativeInteger;
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
-}).annotations(strict);
+});
 
 export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
 
@@ -135,13 +131,13 @@ export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADAT
  * session's clock whose two ends come together or not at all and run forward.
  */
 const SPOKEN_ASK_STRUCT = EffectSchema.Struct({
-  author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER, MESSAGE_AUTHOR.VOICE_MODEL),
+  author: EffectSchema.Literals([MESSAGE_AUTHOR.DEVELOPER, MESSAGE_AUTHOR.VOICE_MODEL]),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.VOICE),
   voice_session_id: EffectSchema.optional(identifier),
   delegation_id: EffectSchema.optional(identifier),
   from_ms: EffectSchema.optional(spanInstant),
   to_ms: EffectSchema.optional(spanInstant),
-}).annotations(strict);
+});
 
 export type SpokenAskMetadata = EffectSchema.Schema.Type<typeof SPOKEN_ASK_STRUCT>;
 
@@ -152,28 +148,30 @@ function coherentSpan(metadata: SpokenAskMetadata): boolean {
   return metadata.from_ms <= metadata.to_ms;
 }
 
-const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.pipe(EffectSchema.filter(coherentSpan));
+const SPOKEN_ASK_METADATA = SPOKEN_ASK_STRUCT.check(EffectSchema.makeFilter(coherentSpan));
 
 /** An observation arrives on no channel: the brain's own note of what opened the turn or what the host handed it. */
 const OBSERVATION_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.BRAIN),
   source: ObservationSourceSchema,
-}).annotations(strict);
+});
 
 export type ObservationMetadata = EffectSchema.Schema.Type<typeof OBSERVATION_METADATA>;
 
 export type UserMessageMetadata = TypedAskMetadata | SpokenAskMetadata | ObservationMetadata;
 
 /** What a user row says about itself. */
-export const USER_MESSAGE_METADATA = EffectSchema.Union(
+export const USER_MESSAGE_METADATA = EffectSchema.Union([
   TYPED_ASK_METADATA,
   SPOKEN_ASK_METADATA,
   OBSERVATION_METADATA,
-).annotations(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
+]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
 /** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for a user row's metadata. */
-export const USER_MESSAGE_METADATA_STANDARD_SCHEMA =
-  EffectSchema.standardSchemaV1(USER_MESSAGE_METADATA);
+export const USER_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.toStandardSchemaV1(
+  USER_MESSAGE_METADATA,
+  STRICT_READ,
+);
 
 /**
  * A compaction row's account of what it folded: the first message the model
@@ -185,25 +183,26 @@ export const USER_MESSAGE_METADATA_STANDARD_SCHEMA =
 export const COMPACTION_METADATA = EffectSchema.Struct({
   first_kept_message_id: identifier,
   tokens_before: EffectSchema.optional(nonNegativeInteger),
-}).annotations(strict);
+});
 
 export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_METADATA>;
 
 /** What an assistant row says about itself. */
 export const ASSISTANT_MESSAGE_METADATA = EffectSchema.Struct({
-  author: EffectSchema.Literal(
+  author: EffectSchema.Literals([
     MESSAGE_AUTHOR.BRAIN,
     MESSAGE_AUTHOR.VOICE_MODEL,
     MESSAGE_AUTHOR.CHILD,
-  ),
+  ]),
   compaction: EffectSchema.optional(COMPACTION_METADATA),
-}).annotations(strict);
+});
 
 export type AssistantMessageMetadata = EffectSchema.Schema.Type<typeof ASSISTANT_MESSAGE_METADATA>;
 
 /** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for an assistant row's metadata. */
-export const ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.standardSchemaV1(
+export const ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.toStandardSchemaV1(
   ASSISTANT_MESSAGE_METADATA,
+  STRICT_READ,
 );
 
 /** The metadata a stored message of either speaking role carries. */

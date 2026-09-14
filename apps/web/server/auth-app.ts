@@ -1,12 +1,12 @@
+import { Effect, Layer } from "effect";
 import {
-  type HttpApp,
   type HttpMethod,
   HttpRouter,
   HttpServerRequest,
   HttpServerResponse,
-} from "@effect/platform";
-import { Effect } from "effect";
-import { HOSTED_REFUSAL, hostedRefusalResponse } from "./hosted/http-effect.js";
+} from "effect/unstable/http";
+import { hostedNotFoundRoute } from "./hosted/http-effect.js";
+import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The auth surface as the one route group this function serves: Better Auth's
@@ -63,16 +63,20 @@ function bodylessAnswer(answer: Response): HttpServerResponse.HttpServerResponse
  * OAuth callbacks are made of. A HEAD is the exception the helper above
  * covers, since there the record is all the web handler reads.
  */
-function authPassthrough(handle: WebRequestHandler): HttpApp.Default {
-  return Effect.gen(function* () {
-    const incoming = yield* HttpServerRequest.HttpServerRequest;
-    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-    const answer = yield* Effect.promise(() => handle(request));
-    return incoming.method === BODYLESS_METHOD.HEAD
-      ? bodylessAnswer(answer)
-      : HttpServerResponse.raw(answer);
-  });
-}
+const authPassthrough = /* @__PURE__ */ Effect.fn("authPassthrough")(function* (
+  handle: WebRequestHandler,
+): Effect.fn.Return<
+  HttpServerResponse.HttpServerResponse,
+  never,
+  HttpServerRequest.HttpServerRequest
+> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const answer = yield* Effect.promise(() => handle(request));
+  return incoming.method === BODYLESS_METHOD.HEAD
+    ? bodylessAnswer(answer)
+    : HttpServerResponse.raw(answer);
+});
 
 /**
  * The group, which is the passthrough on the auth path set and the hosted
@@ -80,11 +84,9 @@ function authPassthrough(handle: WebRequestHandler): HttpApp.Default {
  * function, so the refusal says what the group declares rather than what a
  * caller can reach.
  */
-export function authApp(handle: WebRequestHandler): HttpApp.Default {
-  return HttpRouter.empty.pipe(
-    HttpRouter.all(AUTH_PATH_SET, authPassthrough(handle)),
-    Effect.catchTag("RouteNotFound", () =>
-      Effect.succeed(hostedRefusalResponse(HOSTED_REFUSAL.NOT_FOUND)),
-    ),
+export function authApp(handle: WebRequestHandler): WebRoutes<never> {
+  return Layer.mergeAll(
+    HttpRouter.add(ANY_METHOD, AUTH_PATH_SET, authPassthrough(handle)),
+    hostedNotFoundRoute,
   );
 }

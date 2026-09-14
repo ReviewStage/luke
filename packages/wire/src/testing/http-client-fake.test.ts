@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import * as HttpBody from "@effect/platform/HttpBody";
-import * as HttpClient from "@effect/platform/HttpClient";
-import * as HttpClientRequest from "@effect/platform/HttpClientRequest";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as HttpBody from "effect/unstable/http/HttpBody";
+import * as HttpClient from "effect/unstable/http/HttpClient";
+import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import { HTTP_METHOD } from "../json.js";
 import { fakeCloudApi, recordedRoutes } from "./cloud-fake.js";
 import { fakeHttpClient } from "./http-client-fake.js";
@@ -66,15 +66,15 @@ it.effect("a fake client hands a refused status back rather than failing", () =>
   }),
 );
 
-it.effect("a rejected responder reaches the caller as a transport request error", () =>
+it.effect("a rejected responder reaches the caller as a transport error", () =>
   Effect.gen(function* () {
     const failure = new Error("socket closed");
     const client = fakeHttpClient(() => Promise.reject(failure));
 
     const error = yield* Effect.flip(client.get(ADDRESS));
 
-    assert.equal(error._tag, "RequestError");
-    assert.equal(error.reason, "Transport");
+    assert.equal(error._tag, "HttpClientError");
+    assert.equal(error.reason._tag, "TransportError");
     assert.equal(error.cause, failure);
   }),
 );

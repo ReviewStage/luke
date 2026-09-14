@@ -1,5 +1,5 @@
-import type { SqlClient } from "@effect/sql";
 import { Effect } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,
@@ -472,6 +472,6 @@ export function handleAdminMetrics(
   const now = (options.now ?? Date.now)();
   return options.readMetrics(now, adminMetricsScope(request.url), windowDays).pipe(
     Effect.map((metrics) => jsonResponse(ADMIN_HTTP_STATUS.OK, metrics)),
-    Effect.catchAllCause((cause) => unavailableSeam("admin metrics read failed", cause)),
+    Effect.catchCause((cause) => unavailableSeam("admin metrics read failed", cause)),
   );
 }

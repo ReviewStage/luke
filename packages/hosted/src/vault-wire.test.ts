@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { CLOUD_AGENT_PROVIDER_ID } from "@sidecar/session";
-import type { UnparsedWireValue } from "@sidecar/wire";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   VAULT_KEY_MAX_LENGTH,
@@ -12,11 +12,12 @@ import {
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
 
-function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
   value: UnparsedWireValue,
-): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
 test("a storable key is non-empty, whitespace-free, and bounded", () => {

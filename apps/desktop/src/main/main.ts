@@ -64,7 +64,7 @@ const quit = desktopQuit();
  */
 const closeRuntime = (runtime: { readonly disposeEffect: Effect.Effect<void> }) =>
   Effect.gen(function* () {
-    const closing = yield* Effect.forkDaemon(runtime.disposeEffect);
+    const closing = yield* Effect.forkDetach(runtime.disposeEffect);
     const closed = yield* Effect.timeoutOption(
       Fiber.join(closing),
       Duration.millis(RUNTIME_CLOSE_WAIT_MS),

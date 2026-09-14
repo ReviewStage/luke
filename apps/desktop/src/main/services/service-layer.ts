@@ -20,10 +20,10 @@ export const serviceLayer = (
   service: DesktopService,
   report: (message: string) => void,
 ): Layer.Layer<never> =>
-  Layer.scopedDiscard(
-    Effect.zipRight(
+  Layer.effectDiscard(
+    Effect.andThen(
       Effect.addFinalizer(() =>
-        Effect.catchAllDefect(
+        Effect.catchDefect(
           Effect.promise(() => service.stop()),
           (cause) =>
             Effect.sync(() => {
@@ -46,10 +46,10 @@ export const effectServiceLayer = (
   service: EffectDesktopService,
   report: (message: string) => void,
 ): Layer.Layer<never> =>
-  Layer.scopedDiscard(
-    Effect.zipRight(
+  Layer.effectDiscard(
+    Effect.andThen(
       Effect.addFinalizer(() =>
-        Effect.catchAllDefect(service.stop(), (cause) =>
+        Effect.catchDefect(service.stop(), (cause) =>
           Effect.sync(() => {
             report(
               `the ${service.name} service did not stop cleanly: ${cause instanceof Error ? cause.message : String(cause)}`,

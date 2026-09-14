@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type * as HttpClient from "@effect/platform/HttpClient";
 import { fakeHttpClientLayer, runTest } from "@sidecar/wire/testing";
 import { Effect, type Layer } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import { CLOUD_AGENT_PROVIDER_ID, type WireRecord } from "../server/core";
 import {

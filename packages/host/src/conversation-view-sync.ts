@@ -26,7 +26,7 @@ import {
   unparsedWire,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either } from "effect";
+import { Result } from "effect";
 
 /**
  * One device's own picture of the Conversation, kept the way D2's contract
@@ -296,7 +296,7 @@ export class ConversationViewSync {
           rating:
             event.payload === undefined
               ? undefined
-              : Either.getOrUndefined(
+              : Result.getOrUndefined(
                   readEither(RATING_EVENT_PAYLOAD)(unparsedWire(event.payload)),
                 ),
           newerThanFold: false,
@@ -631,7 +631,7 @@ function offerExpiresAt(event: ConversationReadEvent): number {
   const payload =
     event.payload === undefined
       ? undefined
-      : Either.getOrUndefined(
+      : Result.getOrUndefined(
           readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(unparsedWire(event.payload)),
         );
   return payload?.expiresAt ?? event.createdAt;

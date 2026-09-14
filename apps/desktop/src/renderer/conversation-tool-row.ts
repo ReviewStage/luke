@@ -22,19 +22,29 @@ import {
   storedToolName,
   TOOL_PART_STATE,
 } from "@sidecar/session";
-import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import {
+  EXCESS_KEYS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Either, type Schema } from "effect";
+import { Result, type Schema } from "effect";
 import type { SessionView } from "./session-model";
 
-/** A request read against its schema; downstream code reads `ok`/`value` exactly as it did against the facade. */
+/**
+ * A request read against its schema; downstream code reads `ok`/`value` exactly
+ * as it did against the facade. A key the declaration does not name is dropped
+ * rather than refused, which is the grain the action request schemas were
+ * declared with before parse options moved to the read.
+ */
 function parsedRequest<Value, Encoded>(
-  schema: Schema.Schema<Value, Encoded>,
+  schema: Schema.Codec<Value, Encoded>,
   input: UnparsedWireValue,
 ): { readonly ok: true; readonly value: Value } | { readonly ok: false } {
-  return Either.match(readEither(schema)(input), {
-    onRight: (value) => ({ ok: true, value }),
-    onLeft: () => ({ ok: false }),
+  return Result.match(readEither(schema, { excess: EXCESS_KEYS.DROP })(input), {
+    onSuccess: (value) => ({ ok: true, value }),
+    onFailure: () => ({ ok: false }),
   });
 }
 
@@ -126,8 +136,10 @@ const UNREADABLE_ENVELOPE = "The record of this action's answer could not be rea
 function envelopeOf(part: StoredToolPart): ActionOutputEnvelope | undefined {
   if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return undefined;
   // SAFETY: a stored part's output is JSON the store holds as jsonb; the wire boundary is where it is read.
-  const read = readEither(ACTION_OUTPUT)(unparsedWire(part.output as WireBoundaryInput));
-  return Either.getOrUndefined(read);
+  const read = readEither(ACTION_OUTPUT, { excess: EXCESS_KEYS.DROP })(
+    unparsedWire(part.output as WireBoundaryInput),
+  );
+  return Result.getOrUndefined(read);
 }
 
 /** What became of the action and, where it did not simply land, why. */

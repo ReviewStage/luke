@@ -3,10 +3,15 @@ import {
   type ConversationViewToolKinds,
   type NamedConversationViewToolKind,
 } from "@sidecar/session";
-import { type UnparsedWireValue, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
+import {
+  EXCESS_KEYS,
+  type UnparsedWireValue,
+  unparsedWire,
+  type WireBoundaryInput,
+} from "@sidecar/wire";
 import { emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { jsonSchema, type Tool, type ToolSet, tool } from "ai";
-import { Either, type Schema } from "effect";
+import { Result, type Schema } from "effect";
 import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
 
 /**
@@ -22,7 +27,7 @@ import { brainToolCatalog, brainToolRegistry, TOOL_GROUP } from "./tools.js";
  * the build, so a caller builds each once and holds it.
  */
 
-function validatedInput(schema: Schema.Schema<unknown, UnparsedWireValue>) {
+function validatedInput(schema: Schema.Codec<unknown, UnparsedWireValue>) {
   return jsonSchema<unknown>(
     // SAFETY: the wire schema's node is JSON Schema in the strict form a function tool takes; a
     // round trip is its plain-object form, which is what the SDK's schema type names.
@@ -30,10 +35,14 @@ function validatedInput(schema: Schema.Schema<unknown, UnparsedWireValue>) {
     {
       validate: (value) => {
         // SAFETY: the SDK hands the part's input back as it was stored, which is JSON; the read is the validation.
-        const read = readEither(schema)(unparsedWire(value as WireBoundaryInput));
-        return Either.match(read, {
-          onRight: (value) => ({ success: true as const, value }),
-          onLeft: (refused) => ({
+        // A key the tool's schema does not name is dropped rather than refused, so a row stored
+        // under a wider schema than this build declares still reads as the call it was.
+        const read = readEither(schema, { excess: EXCESS_KEYS.DROP })(
+          unparsedWire(value as WireBoundaryInput),
+        );
+        return Result.match(read, {
+          onSuccess: (value) => ({ success: true as const, value }),
+          onFailure: (refused) => ({
             success: false as const,
             error: new Error(`${refused.refusal} at ${refused.path.map(String).join(".")}`),
           }),

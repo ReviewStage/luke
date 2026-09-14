@@ -5,7 +5,8 @@ import {
   type GatewayShutdownSteps,
   shutdownGatewayEffect,
 } from "@sidecar/gateway";
-import { Deferred, Effect, Fiber, TestClock } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 
 /** Waits for a real condition to become true, ticking Effect's own scheduler rather than a fixed drain. */
@@ -13,7 +14,7 @@ function waitFor(condition: () => boolean, rounds = 300): Effect.Effect<void> {
   return Effect.gen(function* () {
     for (let round = 0; round < rounds; round += 1) {
       if (condition()) return;
-      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow();
+      for (let tick = 0; tick < 100; tick += 1) yield* Effect.yieldNow;
     }
     assert.ok(condition(), "the condition did not hold in time");
   });
@@ -57,7 +58,7 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleFlush, "flush"),
       );
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
       );
       yield* waitFor(() => order.includes("settled"));
@@ -83,7 +84,7 @@ it.effect(
     Effect.gen(function* () {
       const order: string[] = [];
       const steps = yield* shutdownStepsFlushingEvents(baseSteps(order), Effect.never);
-      const fiber = yield* Effect.fork(shutdownGatewayEffect(steps, { deadlineMs: 20 }));
+      const fiber = yield* Effect.forkChild(shutdownGatewayEffect(steps, { deadlineMs: 20 }));
       yield* TestClock.adjust(20);
       const outcome = yield* Fiber.join(fiber);
       assert.equal(outcome.settled, false);
@@ -133,7 +134,7 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleClose, "live"),
       );
-      const fiber = yield* Effect.fork(
+      const fiber = yield* Effect.forkChild(
         shutdownGatewayEffect(steps, { deadlineMs: GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS }),
       );
       yield* waitFor(() => order.includes("settled"));
@@ -155,7 +156,9 @@ it.effect(
         baseSteps(order),
         heldWork(order, settleClose, "live"),
       );
-      const hangingFiber = yield* Effect.fork(shutdownGatewayEffect(hanging, { deadlineMs: 20 }));
+      const hangingFiber = yield* Effect.forkChild(
+        shutdownGatewayEffect(hanging, { deadlineMs: 20 }),
+      );
       yield* TestClock.adjust(20);
       const outcome = yield* Fiber.join(hangingFiber);
       assert.equal(outcome.settled, false);

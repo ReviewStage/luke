@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { Effect, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";

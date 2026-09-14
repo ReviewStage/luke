@@ -122,7 +122,7 @@ let standing: VoiceServer | undefined;
  */
 function standService(voice: VoiceServer): void {
   void runWeb(
-    Effect.scoped(Effect.zipRight(VoiceService.make(voiceFunctionOptions(voice)), Effect.never)),
+    Effect.scoped(Effect.andThen(VoiceService.make(voiceFunctionOptions(voice)), Effect.never)),
   ).catch(() => undefined);
 }
 

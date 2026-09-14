@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, it } from "@effect/vitest";
 import { GATEWAY_EVENT, type GatewayEventKind } from "@sidecar/gateway";
 import { DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
-import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option, TestClock } from "effect";
+import { Config, ConfigProvider, Duration, Effect, Fiber, Layer, Option } from "effect";
+import { TestClock } from "effect/testing";
 import { ACCOUNT_BASE_URL_VARIABLE } from "../host-kernel.js";
 import { runModeFor } from "../run-mode.js";
 import type { GatewayService } from "../service.js";
@@ -59,10 +60,7 @@ const kernelLayerOver = (input: TestSeams) =>
       Layer.succeed(StateRoot, input.stateRoot),
       Layer.succeed(RunMode, input.runMode),
       Layer.succeed(AppIdentity, { appVersion: input.appVersion, packaged: input.packaged }),
-      Layer.succeed(
-        Environment,
-        ConfigProvider.fromMap(new Map(Object.entries(input.environment))),
-      ),
+      Layer.succeed(Environment, ConfigProvider.fromEnvRecord(input.environment)),
       Layer.succeed(SecretCipherTag, input.cipher),
       Layer.succeed(IdSource, { create: input.createId }),
       reporterLayer(input.report),
@@ -120,9 +118,9 @@ describe("the seam tags", () => {
         kernelLayerOver(seams({ environment: { LUKE_TRACE_DIR: "/traces" } })),
       );
 
-      assert.equal(yield* environment.load(Config.string("LUKE_TRACE_DIR")), "/traces");
+      assert.equal(yield* Config.String("LUKE_TRACE_DIR").parse(environment), "/traces");
       assert.deepEqual(
-        yield* environment.load(Config.option(Config.string(ACCOUNT_BASE_URL_VARIABLE))),
+        yield* Config.option(Config.String(ACCOUNT_BASE_URL_VARIABLE)).parse(environment),
         Option.none(),
       );
     }),
@@ -199,9 +197,9 @@ describe("the late service", () => {
       const late = yield* lateService<number>();
 
       assert.deepEqual(yield* late.peek, Option.none());
-      const waiting = yield* Effect.fork(late.value);
+      const waiting = yield* Effect.forkChild(late.value);
       yield* TestClock.adjust("1 minute");
-      assert.deepEqual(yield* Fiber.poll(waiting), Option.none());
+      assert.equal(waiting.pollUnsafe(), undefined);
 
       assert.equal(yield* late.set(4), true);
       assert.equal(yield* Fiber.join(waiting), 4);
@@ -235,7 +233,7 @@ describe("the late service", () => {
       // The drain that answers a set-once is a fork of its own, so a call
       // made right after the set is waited past that fork's own resumption
       // rather than assumed delivered by the next statement.
-      yield* Effect.yieldNow();
+      yield* Effect.yieldNow;
       held.kernel.emit(GATEWAY_EVENT.SETTINGS_CHANGED, {});
       assert.equal(yield* held.late.value, service);
       assert.equal(yield* held.late.set(stubService()), false);
@@ -265,7 +263,7 @@ describe("the late service", () => {
         // The fork that drains what queued ahead of the merge is a daemon of
         // this test's own runtime, not this fiber, so it is waited out rather
         // than assumed to have run by the next statement.
-        yield* Effect.yieldNow();
+        yield* Effect.yieldNow;
 
         assert.deepEqual(emitted, [GATEWAY_EVENT.SETTINGS_CHANGED, GATEWAY_EVENT.ACCOUNT_CHANGED]);
       }),

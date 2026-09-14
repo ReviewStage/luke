@@ -40,7 +40,7 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
 }
 
 for (const kind of ["in-process", "loopback"] as const) {
-  it.scoped(
+  it.effect(
     `[${kind}] a node the host needs that is not connected answers unavailable through the protocol`,
     () =>
       Effect.gen(function* () {
@@ -85,7 +85,7 @@ for (const kind of ["in-process", "loopback"] as const) {
       }),
   );
 
-  it.scoped(`[${kind}] a hello's snapshot carries the nodes as they stand and nothing else`, () =>
+  it.effect(`[${kind}] a hello's snapshot carries the nodes as they stand and nothing else`, () =>
     Effect.gen(function* () {
       const f = yield* fixture(kind);
       const hello = yield* f.client.call(GATEWAY_METHOD.HELLO);

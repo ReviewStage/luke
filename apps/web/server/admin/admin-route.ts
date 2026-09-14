@@ -41,7 +41,7 @@ function configured(name: string): boolean {
  */
 function resolveSessionViewer(
   request: Request,
-): Effect.Effect<AdminViewer | undefined, Cause.UnknownException> {
+): Effect.Effect<AdminViewer | undefined, Cause.UnknownError> {
   return Effect.tryPromise(async () => {
     const authenticated = await auth.api.getSession({ headers: request.headers });
     const account = authenticated?.user;

@@ -6,7 +6,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
-import { Effect, Schema as EffectSchema } from "effect";
+import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
 import { BRAIN_TOOL } from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON } from "./refusals.js";
@@ -39,57 +39,46 @@ export interface WorkspaceToolContext extends ToolContext {
 export type WorkspaceToolModule = ToolModule<WireRecord, WorkspaceToolContext>;
 
 /** A text trimmed and refused when left with nothing. */
-function trimmedText(description: string): EffectSchema.Schema<string, string> {
+function trimmedText(description: string): EffectSchema.Codec<string, string> {
   return describeWire(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-      strict: true,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }).pipe(
-      EffectSchema.filter((value) => value.trim().length > 0, {
-        schemaId: EffectSchema.MinLengthSchemaId,
-        jsonSchema: { minLength: 1 },
-      }),
+    EffectSchema.String.pipe(
+      EffectSchema.decodeTo(
+        EffectSchema.String.check(EffectSchema.isNonEmpty()),
+        SchemaTransformation.trim(),
+      ),
     ),
     description,
   );
 }
 
 /** A text trimmed and admitted even when left with nothing. */
-function trimmedTextAllowingEmpty(description: string): EffectSchema.Schema<string, string> {
+function trimmedTextAllowingEmpty(description: string): EffectSchema.Codec<string, string> {
   return describeWire(
-    EffectSchema.transform(EffectSchema.String, EffectSchema.String, {
-      strict: true,
-      decode: (value) => value.trim(),
-      encode: (value) => value,
-    }),
+    EffectSchema.String.pipe(
+      EffectSchema.decodeTo(EffectSchema.String, SchemaTransformation.trim()),
+    ),
     description,
   );
 }
 
-const tolerantRecord = <Fields extends EffectSchema.Struct.Fields>(fields: Fields) =>
-  EffectSchema.Struct(fields).annotations({ parseOptions: { onExcessProperty: "ignore" } });
-
-/** Effect's `Schema` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
-function erase<A, I>(
-  schema: EffectSchema.Schema<A, I>,
-): EffectSchema.Schema<unknown, UnparsedWireValue> {
+/** Effect's `Codec` is invariant in its decoded type, so a concrete struct is erased to the module shape's type. */
+function erase(schema: EffectSchema.Top): EffectSchema.Codec<unknown, UnparsedWireValue> {
   return EffectSchema.make(schema.ast);
 }
 
 const FILE_NAME = trimmedText("The file's name relative to the workspace.");
 
-const READ_WORKSPACE_FILE_INPUT = erase(tolerantRecord({ name: FILE_NAME }));
+const READ_WORKSPACE_FILE_INPUT = erase(EffectSchema.Struct({ name: FILE_NAME }));
 
 const WRITE_WORKSPACE_FILE_INPUT = erase(
-  tolerantRecord({
+  EffectSchema.Struct({
     name: FILE_NAME,
     content: trimmedTextAllowingEmpty("The file's whole new content."),
   }),
 );
 
 const LOAD_SKILL_INPUT = erase(
-  tolerantRecord({
+  EffectSchema.Struct({
     location: trimmedText("The SKILL.md location exactly as listed."),
   }),
 );

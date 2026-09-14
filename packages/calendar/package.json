@@ -14,7 +14,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@effect/platform": "catalog:",
     "@sidecar/credentials": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"

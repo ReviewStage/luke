@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import * as SqlClient from "@effect/sql/SqlClient";
+import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
-import { Effect, Either, ManagedRuntime, Schema } from "effect";
+import { Effect, ManagedRuntime, Result, Schema } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
-import { Pool } from "pg";
 import {
   ACTION_TOOL,
   BRAIN_TURN_TRIGGER,
@@ -16,7 +16,7 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import { sqlClientOverPool } from "../../server/db/sql-client";
+import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
@@ -49,9 +49,7 @@ const LOCAL_DEV_PRINCIPAL = "local-dev";
 const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
-const ACCEPTED_SESSION = Schema.Struct({ sessionId: Schema.String }).annotations({
-  parseOptions: { onExcessProperty: "ignore" },
-});
+const ACCEPTED_SESSION = Schema.Struct({ sessionId: Schema.String });
 
 type Run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A>;
 
@@ -132,8 +130,7 @@ export default defineEval({
       return t.skip("no database and vault secret are named; the fixture writes nowhere");
     }
     const { connectionString, secret } = named;
-    const pool = new Pool({ connectionString, max: 1 });
-    const runtime = ManagedRuntime.make(sqlClientOverPool(pool));
+    const runtime = ManagedRuntime.make(sqlClientOverUrl(connectionString));
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
@@ -149,8 +146,12 @@ export default defineEval({
         body: JSON.stringify({ message: "remember that I prefer short replies" }),
       });
       assert.equal(opened.status, 202);
-      const accepted = Either.getOrUndefined(
-        readEither(ACCEPTED_SESSION)(unparsedWire(await opened.json())),
+      // eve names more of an accepted session than the one field read here,
+      // so the read drops what it does not name.
+      const accepted = Result.getOrUndefined(
+        readEither(ACCEPTED_SESSION, { excess: EXCESS_KEYS.DROP })(
+          unparsedWire(await opened.json()),
+        ),
       );
       assert.ok(accepted);
       // The door admits a session once its first event has recorded it on the conversation row.
@@ -202,7 +203,6 @@ export default defineEval({
       assert.equal(runtimeSessionId, accepted.sessionId);
     } finally {
       await runtime.dispose();
-      await pool.end();
     }
   },
 });

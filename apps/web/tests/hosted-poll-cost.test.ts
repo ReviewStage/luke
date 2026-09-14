@@ -9,8 +9,9 @@ import {
 } from "@sidecar/hosted";
 import type { ConversationViewMessage } from "@sidecar/session";
 import { readStoredUIMessages } from "@sidecar/session/ui-messages";
+import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, type Schema as EffectSchema, Either } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { afterAll, test } from "vitest";
 import {
   ConversationViewSync,
@@ -95,14 +96,17 @@ function options(userId: string, req: Request): ResourceReadOptions {
 
 async function answered<Value, Encoded>(
   response: Response,
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
 ): Promise<Value> {
   assert.equal(response.status, 200);
   // SAFETY: the response body is the route's own JSON; the schema read is the validation.
   const body = (await response.json()) as UnparsedWireValue;
-  const read = readEither(schema)(body);
-  if (Either.isLeft(read)) assert.fail(`${read.left.refusal} at ${read.left.path.join(".")}`);
-  return read.right;
+  // An answer's family was declared tolerant, so the read drops a key a newer
+  // service may have added rather than refusing the answer for it.
+  const read = readEither(schema, { excess: EXCESS_KEYS.DROP })(body);
+  if (Result.isFailure(read))
+    assert.fail(`${read.failure.refusal} at ${read.failure.path.join(".")}`);
+  return read.success;
 }
 
 async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessagesPage> {

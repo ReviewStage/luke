@@ -69,7 +69,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   }
 
   protected carryRequest(request: GatewayRequest): Effect.Effect<GatewayResponse> {
-    return Effect.gen(this, function* () {
+    return Effect.gen({ self: this }, function* () {
       const carried = gatewayRequestFromWire(throughText(gatewayRequestToWire(request)));
       if (!carried) {
         return gatewayRefusal(
@@ -82,7 +82,7 @@ export class TextLoopbackTransport extends ServerBoundTransport {
       const delay = this.#options.responseDelayMs ?? 0;
       if (delay > 0) {
         const schedule = this.#options.schedule ?? ((work, ms) => setTimeout(work, ms));
-        yield* Effect.async<void>((resume) => {
+        yield* Effect.callback<void>((resume) => {
           schedule(() => resume(Effect.void), delay);
         });
       }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type Schema as EffectSchema, Either } from "effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { emitJsonSchema, readEither } from "./effect/json-schema.js";
 import { type UnparsedWireValue, unparsedWire } from "./json.js";
@@ -14,29 +14,29 @@ import {
 } from "./ui-message-metadata.js";
 
 function parse<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): Value | undefined {
-  return Either.getOrUndefined(readEither(schema)(value));
+  return Result.getOrUndefined(readEither(schema)(value));
 }
 
 function refusalOf<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): string {
-  return Either.match(readEither(schema)(value), {
-    onLeft: (refused) => refused.refusal,
-    onRight: () => "admitted",
+  return Result.match(readEither(schema)(value), {
+    onFailure: (refused) => refused.refusal,
+    onSuccess: () => "admitted",
   });
 }
 
 function pathOf<Value, Encoded>(
-  schema: EffectSchema.Schema<Value, Encoded>,
+  schema: EffectSchema.Codec<Value, Encoded>,
   value: UnparsedWireValue,
 ): SchemaPath {
-  return Either.match(readEither(schema)(value), {
-    onLeft: (refused) => refused.path,
-    onRight: () => [],
+  return Result.match(readEither(schema)(value), {
+    onFailure: (refused) => refused.path,
+    onSuccess: () => [],
   });
 }
 

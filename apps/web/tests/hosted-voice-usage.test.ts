@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import * as SqlClient from "@effect/sql/SqlClient";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { recordVoiceSeconds, utcDayKey, VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 

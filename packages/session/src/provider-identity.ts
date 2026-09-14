@@ -23,7 +23,7 @@ export const PROVIDER_ID = {
 
 export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
 
-export const ProviderIdSchema = Schema.Literal(...Object.values(PROVIDER_ID));
+export const ProviderIdSchema = Schema.Literals(Object.values(PROVIDER_ID));
 
 export interface ProviderIdentity {
   readonly id: ProviderId;
@@ -75,7 +75,7 @@ export const CLOUD_AGENT_PROVIDER_ID = {
 export type CloudAgentProviderId =
   (typeof CLOUD_AGENT_PROVIDER_ID)[keyof typeof CLOUD_AGENT_PROVIDER_ID];
 
-export const CloudAgentProviderIdSchema = Schema.Literal(...Object.values(CLOUD_AGENT_PROVIDER_ID));
+export const CloudAgentProviderIdSchema = Schema.Literals(Object.values(CLOUD_AGENT_PROVIDER_ID));
 
 const readsCloudAgentProviderId = Schema.is(CloudAgentProviderIdSchema);
 
@@ -121,7 +121,7 @@ export const HOSTED_AGENT_ID = {
 
 export type HostedAgentId = (typeof HOSTED_AGENT_ID)[keyof typeof HOSTED_AGENT_ID];
 
-export const HostedAgentIdSchema = Schema.Literal(...Object.values(HOSTED_AGENT_ID));
+export const HostedAgentIdSchema = Schema.Literals(Object.values(HOSTED_AGENT_ID));
 
 /** The registry's own order, for the same reason `PROVIDER_ID_LIST` keeps one. */
 export const HOSTED_AGENT_ID_LIST: readonly HostedAgentId[] = Object.values(HOSTED_AGENT_ID);

@@ -212,7 +212,9 @@ it.live("the frames one socket exchange carries, in order", () =>
     yield* send("request-node-register", GATEWAY_METHOD.NODE_REGISTER, { nodeId: NODE_ID });
     yield* answered(4, "the registration answered");
 
-    const invoked = yield* Effect.fork(nodes.invoke(CAPABILITY, { url: "https://example.test" }));
+    const invoked = yield* Effect.forkChild(
+      nodes.invoke(CAPABILITY, { url: "https://example.test" }),
+    );
     yield* Effect.promise(() =>
       until(() => frames(GATEWAY_FRAME.INVOCATION).length === 1, "the invocation reached the node"),
     );

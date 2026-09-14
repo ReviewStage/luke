@@ -70,7 +70,7 @@ function crossesTheWire(request: GatewayRequest | undefined): GatewayRequest | u
   return request === undefined ? undefined : gatewayRequestFromWire(gatewayRequestToWire(request));
 }
 
-it.scoped("a setting's value travels as the method's value field", () =>
+it.effect("a setting's value travels as the method's value field", () =>
   Effect.gen(function* () {
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
@@ -93,7 +93,7 @@ it.scoped("a setting's value travels as the method's value field", () =>
   }),
 );
 
-it.scoped("a cleared setting travels as an absent value field, so the clear reaches the host", () =>
+it.effect("a cleared setting travels as an absent value field, so the clear reaches the host", () =>
   Effect.gen(function* () {
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
@@ -115,7 +115,7 @@ it.scoped("a cleared setting travels as an absent value field, so the clear reac
   }),
 );
 
-it.scoped("every clearable plain setting crosses the wire when cleared", () =>
+it.effect("every clearable plain setting crosses the wire when cleared", () =>
   Effect.gen(function* () {
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);
@@ -139,7 +139,7 @@ it.scoped("every clearable plain setting crosses the wire when cleared", () =>
   }),
 );
 
-it.scoped("a forgotten entry travels as an absent value field", () =>
+it.effect("a forgotten entry travels as an absent value field", () =>
   Effect.gen(function* () {
     const { transport, requests } = recordingTransport();
     const operator = yield* operatorOver(transport);

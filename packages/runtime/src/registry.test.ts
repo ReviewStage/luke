@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Either } from "effect";
+import { Result } from "effect";
 import { test } from "vitest";
 import { agentId } from "./identifiers.js";
 import {
@@ -73,7 +73,7 @@ test("both context engines stand in the table, each under its own item format, a
   );
   assert.notDeepEqual(RESPONSES_ITEM_FORMAT, UI_MESSAGE_ITEM_FORMAT);
   for (const contextEngineId of Object.values(BUILTIN_CONTEXT_ENGINE)) {
-    assert.ok(Either.isRight(resolveConfigurationEither(configuration({ contextEngineId }))));
+    assert.ok(Result.isSuccess(resolveConfigurationEither(configuration({ contextEngineId }))));
   }
 });
 
@@ -84,14 +84,14 @@ function refusalOf(outcome: ConfigurationOutcome) {
 
 /** The refusal a resolution answered, or nothing when it resolved. */
 function refusalCodeOf(resolution: ReturnType<typeof resolveConfigurationEither>) {
-  return Either.isLeft(resolution) ? resolution.left.code : undefined;
+  return Result.isFailure(resolution) ? resolution.failure.code : undefined;
 }
 
 test("resolution checks every name and answers a frozen configuration", () => {
   const resolved = resolveConfigurationEither(configuration());
-  assert.ok(Either.isRight(resolved));
-  assert.ok(Object.isFrozen(resolved.right));
-  assert.ok(Object.isFrozen(resolved.right.toolPolicy));
+  assert.ok(Result.isSuccess(resolved));
+  assert.ok(Object.isFrozen(resolved.success));
+  assert.ok(Object.isFrozen(resolved.success.toolPolicy));
 
   assert.equal(
     refusalCodeOf(
@@ -161,15 +161,15 @@ test("the store's own publish and the Either door answer the same values", () =>
   const published = store.publish(configuration());
   const either = resolveConfigurationEither(configuration());
   assert.ok(published.outcome === CONFIGURATION_OUTCOME.RESOLVED);
-  assert.ok(Either.isRight(either));
-  assert.deepEqual(either.right, published.configuration);
+  assert.ok(Result.isSuccess(either));
+  assert.deepEqual(either.success, published.configuration);
 
   const refused = resolveConfigurationEither(
     configuration({ modelAdapterId: BUILTIN_MODEL_ADAPTER.HOSTED }),
   );
-  assert.ok(Either.isLeft(refused));
-  assert.equal(refused.left._tag, "ConfigurationRefused");
-  assert.equal(refused.left.code, CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH);
+  assert.ok(Result.isFailure(refused));
+  assert.equal(refused.failure._tag, "ConfigurationRefused");
+  assert.equal(refused.failure.code, CONFIGURATION_REFUSAL.CREDENTIAL_KIND_MISMATCH);
 });
 
 test("a duplicate id in a built-in table is a type error, never a run-time refusal", () => {
@@ -198,7 +198,7 @@ test("a pairing the built-ins rule out is a type error, never a run-time refusal
 
   // @ts-expect-error a name no built-in holds is refused by the derived id union.
   const unknownAdapter = configuration({ modelAdapterId: "no-such-adapter" });
-  assert.equal(resolveConfigurationEither(unknownAdapter).pipe(Either.isLeft), true);
+  assert.equal(resolveConfigurationEither(unknownAdapter).pipe(Result.isFailure), true);
 });
 
 test("two agents are two isolated stores", () => {
