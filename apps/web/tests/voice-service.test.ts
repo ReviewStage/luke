@@ -8,6 +8,7 @@ import {
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
+import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -1086,7 +1087,26 @@ test("the desktop's own instruction append, the stop as an older build sent it, 
   assert.equal(refused.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
 });
 
-test("the desktop's idle report and stop are read by the service and forwarded nowhere; one that is not a report is refused", async () => {
+test("a beat naming the brain's own kind, or carrying a value its script does not mention, is refused with the close before it reaches anything", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  const { desktop, upstream } = await openSession(context);
+
+  await send(desktop.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+    kind: PROACTIVE_SPEECH_KIND.BRIEFING,
+    briefing: "One agent finished.",
+  });
+  const end = await desktop.closed;
+  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(end.reason, UNPERMITTED_FRAME_REASON);
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  const refused = context.log.find((entry) => entry.event === LOG_EVENT.FRAME_REFUSED);
+  assert.ok(refused && refused.event === LOG_EVENT.FRAME_REFUSED);
+  assert.equal(refused.type, VOICE_SERVICE_FRAME.SESSION_BEAT);
+});
+
+test("the desktop's idle report, stop, and beat are read by the service and forwarded nowhere; one that is not a report is refused", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
   const { desktop, upstream } = await openSession(context);
@@ -1094,6 +1114,11 @@ test("the desktop's idle report and stop are read by the service and forwarded n
   await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true });
   await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: false });
   await send(desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_STOP });
+  // With no exchange standing, a beat is read and nobody speaks it.
+  await send(desktop.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+    kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+  });
   assert.equal(await upstream.arrives(), false);
   assert.equal(await desktop.arrives(), false);
 
@@ -1114,7 +1139,7 @@ test("the desktop's idle report and stop are read by the service and forwarded n
   await upstream.closed;
   const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
   assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
-  assert.equal(ended.reportsRead, 3);
+  assert.equal(ended.reportsRead, 4);
   assert.equal(ended.refusedUnpermitted, 1);
   assert.equal(ended.framesToUpstream, 0);
 });

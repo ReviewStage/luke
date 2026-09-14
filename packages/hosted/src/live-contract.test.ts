@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { LIVE_INPUT_BOUNDS, LIVE_VOICE } from "@sidecar/live";
+import {
+  LIVE_INPUT_BOUNDS,
+  LIVE_VOICE,
+  OBSERVED_VALUE_LENGTH,
+  PROACTIVE_SPEECH_KIND,
+} from "@sidecar/live";
 import { SCHEMA_REFUSAL, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import {
@@ -12,11 +17,13 @@ import {
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionAttachFrameFromWire,
+  sessionBeatFrameFromWire,
   sessionCreatedFrameFromWire,
   sessionCreateFrameFromWire,
   sessionCreateFrameRead,
   sessionOpeningFrameFromWire,
   sessionReportFrameFromWire,
+  sessionSpokenFrameFromWire,
   sessionStopFrameFromWire,
   VOICE_SERVICE_FRAME,
   webSocketOrigin,
@@ -207,8 +214,73 @@ test("a session.stop frame is the type alone, and a report frame is either it or
   assert.equal(sessionOpeningFrameFromWire(stop), undefined);
 });
 
-test("the frame types are six distinct members", () => {
-  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 6);
+test("a session.beat frame names its kind and only the bounded values that kind's script may mention", () => {
+  const arrival = {
+    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+    kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+    sessionTitle: "  Fix the flaky test  ",
+    talkKeyLabel: "Right Option",
+  };
+  assert.deepEqual(sessionBeatFrameFromWire(arrival), {
+    ...arrival,
+    sessionTitle: "Fix the flaky test",
+  });
+  const bare = { type: VOICE_SERVICE_FRAME.SESSION_BEAT, kind: PROACTIVE_SPEECH_KIND.ARRIVAL };
+  assert.deepEqual(sessionBeatFrameFromWire(bare), bare);
+  const calendar = {
+    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+    kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
+  };
+  assert.deepEqual(sessionBeatFrameFromWire(calendar), calendar);
+  const launch = {
+    type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+    kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+    firstName: "Ada",
+  };
+  assert.deepEqual(sessionBeatFrameFromWire(launch), launch);
+  // A value the kind's script does not mention, a briefing (the brain's words are never the
+  // desktop's to send), a value past the bound, a blank one, and a sentence of the desktop's own.
+  assert.equal(sessionBeatFrameFromWire({ ...calendar, sessionTitle: "x" }), undefined);
+  assert.equal(sessionBeatFrameFromWire({ ...launch, sessionTitle: "x" }), undefined);
+  assert.equal(sessionBeatFrameFromWire({ ...bare, firstName: "Ada" }), undefined);
+  assert.equal(
+    sessionBeatFrameFromWire({ ...bare, kind: PROACTIVE_SPEECH_KIND.BRIEFING, briefing: "Hi" }),
+    undefined,
+  );
+  assert.equal(
+    sessionBeatFrameFromWire({ ...launch, firstName: "a".repeat(OBSERVED_VALUE_LENGTH + 1) }),
+    undefined,
+  );
+  assert.equal(sessionBeatFrameFromWire({ ...launch, firstName: "   " }), undefined);
+  assert.equal(sessionBeatFrameFromWire({ ...bare, content: "Say hello." }), undefined);
+  // The report union admits it beside the activity and the stop.
+  assert.deepEqual(sessionReportFrameFromWire(launch), launch);
+  assert.equal(sessionOpeningFrameFromWire(launch), undefined);
+});
+
+test("a session.spoken frame is the kind alone, any kind spoken, and ignores a key a newer service adds", () => {
+  for (const kind of Object.values(PROACTIVE_SPEECH_KIND)) {
+    const spoken = { type: VOICE_SERVICE_FRAME.SESSION_SPOKEN, kind };
+    assert.deepEqual(sessionSpokenFrameFromWire(spoken), spoken);
+    assert.deepEqual(sessionSpokenFrameFromWire({ ...spoken, later: 1 }), spoken);
+  }
+  assert.equal(
+    sessionSpokenFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_SPOKEN, kind: "greeting" }),
+    undefined,
+  );
+  assert.equal(sessionSpokenFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_SPOKEN }), undefined);
+  // It is the service's to send, never the desktop's: the report union refuses it.
+  assert.equal(
+    sessionReportFrameFromWire({
+      type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+      kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+    }),
+    undefined,
+  );
+});
+
+test("the frame types are eight distinct members", () => {
+  assert.equal(new Set(Object.values(VOICE_SERVICE_FRAME)).size, 8);
 });
 
 test("the voice service origin is the service's own origin in socket form", () => {

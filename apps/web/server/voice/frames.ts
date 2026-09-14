@@ -74,6 +74,7 @@ export const SESSIONS_CLIENT_EVENTS: readonly string[] = [LIVE_CLIENT_EVENT.CLOS
 export const SESSIONS_REPORT_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
   VOICE_SERVICE_FRAME.SESSION_STOP,
+  VOICE_SERVICE_FRAME.SESSION_BEAT,
 ];
 
 /** The `type` of one frame, or nothing when the frame is not a JSON record naming one. */
