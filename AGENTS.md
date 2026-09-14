@@ -114,8 +114,8 @@ in for the missing job before the first release.
   calendar hold observes, or the announcements switch off or the spoken
   introduction owed on a Mac, each restated by its heartbeat as an instant one
   to two hours ahead so it lapses with the Mac that asserts it), means nothing
-  is pushed and nothing expires until it lifts; and an offer past its own
-  instant is the sweep's to end, never pushed stale. A phone or watch reporting itself present is no reason to wait, since
+  is pushed and nothing expires until it lifts; and an offer past its own instant is the sweep's to end, never pushed
+  stale. A phone or watch reporting itself present is no reason to wait, since
   neither can say a briefing (`SPEAKING_PLATFORMS`). The mark precedes the send:
   `markSpeechPushed` settles the offer under the conversation's lock, only a
   mark that landed is sent, and the next tick finds it settled, so what is
@@ -142,11 +142,6 @@ in for the missing job before the first release.
 
 ## Effect idioms
 
-Before writing any Effect code, first read `node_modules/effect/AGENTS.md`
-**completely**, and follow the links in the file when required. If you need to
-learn more about particular Effect apis and concepts that the guide doesn't
-cover, search through the source code in `node_modules/effect/src`.
-
 Effect is the repository's infrastructure library, replacing what used to be
 hand-rolled: a Schema that both parses and emits JSON Schema, disposables,
 an event emitter, independent backoff loops, `setInterval` loops, a
@@ -155,19 +150,13 @@ an injected clock seam, and a fake clock beside it. `effect` is pinned at
 `4.0.0-rc.115` through the pnpm catalog in `pnpm-workspace.yaml` and nowhere
 else — every workspace that reaches it declares `"effect": "catalog:"`, so one
 copy resolves across the repository, which is what keeps a `Context.Service`
-minted in one package the same service in another. The pin is **exact, not a
-range**: this is a release candidate, and an rc line takes breaking changes
-between patches, so a caret would let a `pnpm install` move the repository to a
-different Effect without a diff saying so. What used to be four sibling
-packages is now one: `@effect/platform`, `@effect/rpc`, `@effect/sql` and
-`@effect/experimental` were consolidated into `effect` itself and are reached
-at `effect/unstable/http`, `effect/unstable/rpc`, `effect/unstable/sql` and
-`effect/unstable/*` — an `unstable` path is a correct v4 import that may take a
-breaking change in a minor. Only the packages that could not merge remain
-separate, each on the same `4.0.0-rc.115` and each through the catalog:
-`@effect/platform-node`, `@effect/sql-pg`, `@effect/atom-react`, and
-`@effect/vitest`. The pin is re-evaluated once Effect ships `4.0.0` stable, at
-which point the exactness is what should be revisited first.
+minted in one package the same service in another. `@effect/platform`,
+`@effect/rpc`, `@effect/sql`, and `@effect/experimental` are consolidated into
+`effect` itself and reached at `effect/unstable/*`; `@effect/platform-node`,
+`@effect/sql-pg`, `@effect/atom-react`, and `@effect/vitest` stay separate, each
+on the same `4.0.0-rc.115` through the same catalog. The pin is an exact release
+candidate rather than a range, moved deliberately, and re-evaluated once Effect
+ships `4.0.0` stable.
 
 ### Where an Effect may run
 
@@ -176,11 +165,11 @@ in `tools/oxlint/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/sr
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
 (the layer that runtime is built from), the two renderer roots
 `apps/desktop/src/renderer/index.tsx` and `apps/desktop/src/renderer/voice/index.tsx`
-(one browser registry each, so the panel and the voice window never
-share one), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's
-runtime is built from: `Atom.runtime`'s layer is built, and the registry's
-`get` reads it, the moment a root first reaches it, so the edge is here rather
-than at each of the two roots that import it), the renderer's own fiber sites —
+(one browser registry each, so the panel and the voice window never share
+one), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's
+runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
+reads it, the moment a root first reaches it, so the edge is here rather than
+at each of the two roots that import it), the renderer's own fiber sites —
 `apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
 panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
 strip forks its own clock the same way the voice window's does), and the
@@ -188,13 +177,11 @@ voice window's `apps/desktop/src/renderer/voice/live-call.ts` and
 `apps/desktop/src/renderer/voice/use-voice-session.ts` — the web's own
 module-scope memoized runtime `apps/web/server/runtime.ts` and the four doors
 that hold its `runWeb`: `apps/web/server/route-effect.ts` (the adaptor every
-function module under `apps/web/server/routes/**` exports its router through —
-`routeFromHttpRouter`, named for the `HttpRouter` it builds a web handler from,
-v4 having dropped the `HttpApp` module the old name was taken from — which
-reads that runtime once per instance and lets the handler it builds do its own
-running), `apps/web/server/hosted/store-route.ts` (the same door for a hosted
-store route, whose handler is composed over the ambient `SqlClient` rather than
-a router), `apps/web/server/voice/function.ts`
+function module under `apps/web/server/routes/**` exports its `HttpRouter`
+through, which reads that runtime once per instance and lets the handler it
+builds do its own running), `apps/web/server/hosted/store-route.ts` (the same
+door for a hosted store route, whose handler is composed over the ambient
+`SqlClient` rather than a router), `apps/web/server/voice/function.ts`
 (the voice service, stood for a function instance's life rather than for a
 request, so there is no request fiber to compose it into) and
 `apps/web/server/seed-clients.ts` (the OAuth client seeding command, run as
@@ -213,23 +200,15 @@ foreign boundaries the effects around them compose over rather than
 replace, `apps/web/server/db/migrate.ts` (the migration command, through
 `NodeRuntime.runMain`), `apps/web/scripts/preview-probe.ts` (the deployed-shape
 probe, same terms), and `tools/trace-export/src/cli.ts` (the trace command).
-
-`Effect.runPromise`, `Effect.runSync`, `Effect.runFork` and their
-`runPromiseExit`/`runSyncExit`/`runCallback` siblings belong nowhere else — and
-neither does the `…With` form of any of them. That form is where a `Runtime<R>`
-went: v4 removed the type, so services a caller used to carry as a runtime it
-carries as a `Context` and hands to `Effect.runForkWith(context)(effect)`,
-which is every bit the run its v3 spelling was. Everything between the edges
-returns an Effect and lets its caller decide. The oxlint rule
-`no-run-promise-outside-edges` enforces this against that same file's
-`runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists, over all twelve
-`Effect.run*`/`run*With` members plus `ManagedRuntime.make`,
-`Runtime.makeRunMain` and `NodeRuntime.runMain`, and it reads
-`apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime` as the runs they
-are, so a module that holds the edge's runner rather than `Effect.runPromise`
-itself is no less visible to it. `scripts/repository-checks.sh` spells the same
-set as a regex to catch the other direction — a row that outlived the run it
-was written for — so the two must be kept in step.
+`Effect.runPromise`, `Effect.runSync`, `Effect.runFork`, their
+`runPromiseExit`/`runSyncExit`/`runCallback` siblings, and the `…With` form of
+any of them — which is where a `Runtime<R>` went, v4 having removed the type —
+belong nowhere else — everything between the edges returns an Effect and lets its caller
+decide — which the oxlint rule `no-run-promise-outside-edges` enforces against
+that same file's `runtimeEdges`, `runShims`, and `runOnHandedRuntime` lists,
+reading `apps/web/server/runtime.ts`'s own `runWeb` and `webRuntime` as the
+runs they are, so a module that holds the edge's runner rather than
+`Effect.runPromise` itself is no less visible to it;
 `no-raw-async-primitives` enforces the equivalent for `setTimeout`,
 `setInterval`, `new Promise`, `AbortController`, and `fs.watch` against its
 `rawAsyncPrimitives` list. A file on those two run lists that is not a runtime
@@ -241,24 +220,15 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 ### The permanent adaptors
 
 - **`packages/brain/src/effect/carry.ts`** — `detachOn`, the brain's detach
-  door: `Effect.runForkWith` evaluates the effect on the calling stack, while
-  `Effect.forkChild`, `forkIn`, and `forkDetach` hand the work to the scheduler
-  instead, and only a run makes `BrainAgent#enqueue`'s acquisition (what
-  `busy()` reads) stand in the step that detached. v4's
-  `forkDetach(…, { startImmediately: true })` says detached-and-started in one
-  combinator, but it only exists *inside* a fiber, and every caller here is a
-  synchronous non-fiber collaborator, so the door stays a run.
-  `packages/brain/src/agent.ts`'s `BrainAgent#enqueue` holds `detachOn`'s
-  returned door on the services the caller handed it and starts a turn on the
-  calling stack through it, which is why it is named on the run allowlist's
-  `runOnHandedRuntime` rows rather than left for a new file to fork through
-  unseen; the desktop composition that held the same door beside it is
-  deleted (LUKE-206), and nothing on a Mac composes an agent now. The
-  dispatch between a `ManagedRuntime` and a bare
-  `Context` is `ManagedRuntime.isManagedRuntime`, v4 having stopped exporting
-  `ManagedRuntime.TypeId`, and a fiber that must die with a scope is registered
-  through `Fiber.runIn` rather than a `scope` option `Effect.RunOptions` no
-  longer has. The same file's `runtimeExit` is the shared door
+  door: `Effect.runForkWith` evaluates on the calling stack, while
+  `Effect.forkChild`, `forkIn`, and `forkDetach` exist only inside a fiber and
+  every caller here is a synchronous non-fiber collaborator; and only a run
+  makes `BrainAgent#enqueue`'s acquisition (what `busy()` reads) stand in the
+  step that detached. `packages/brain/src/agent.ts`'s `BrainAgent#enqueue`
+  holds `detachOn`'s returned door on the services the caller handed it and
+  starts a turn on the calling stack through it, which is why it is named on
+  the run allowlist's `runOnHandedRuntime` rows rather than left for a new file
+  to fork through unseen. The same file's `runtimeExit` is the shared door
   `packages/brain/src/client.ts`'s `BrainTransport#send` (`runCall`) and
   `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` both run
   through, because every caller of the brain's model transport still holds a
@@ -286,21 +256,19 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   (`state-store.ts`'s port), imports nothing from `effect`, and stays a
   promise face because the port it stands on does.
 - **`packages/brain/src/generation.ts`** — `retireGeneration`'s `Scope.close`
-  alone. Which generation stands is a `MutableRef`, so the fence a replacement
-  raises is up before the caller's next statement with no run anywhere in the
-  open, and construction needs no run either now that v4 spells it
-  `Scope.makeUnsafe`/`Scope.forkUnsafe`. What is left is the close: two
-  synchronous finalizers (the abort signal every wait settles on, the runtime's
-  own context) that must stand nowhere before the caller's next statement — and
-  a `Scope` is what already states reverse order and closing exactly once, so
-  the row is bookkeeping for a synchronous fence rather than a deletion owed.
+  over `Effect.runSync`: which generation stands is a `MutableRef`, so the
+  fence a replacement raises is up before the caller's next statement with no
+  run anywhere in the open, but the close is two synchronous finalizers
+  (the abort signal every wait settles on, the runtime's own context) that
+  must stand nowhere before the caller's next statement either — a `Scope` is
+  what already states reverse order and closing exactly once, so the row is
+  bookkeeping for a synchronous fence rather than a deletion owed.
 - **`packages/credentials/src/single-flight.ts`** — the check-and-create of
   the one `Deferred` every concurrent caller joins is an uninterruptible step
   that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks
-  the flight it decided on as a detached root fiber (`Effect.runFork`, which in
-  v4 is `runForkWith(Context.empty())`) rather than a fiber of whoever asked
-  first, because a caller that gives up on its own await must not take the
-  flight the other callers are still joined to.
+  the flight it decided on as a detached root fiber (`Effect.runFork`) rather
+  than a fiber of whoever asked first, because a caller that gives up on its
+  own await must not take the flight the other callers are still joined to.
 - **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
   promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the two
   composers that hand it on hand it to seams outside this repository's host
@@ -310,9 +278,7 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   sign-in's page (`packages/calendar/src/oauth.ts`) — and the session opens a
   row press reaches wrap the same door in `Effect.tryPromise`; so what would
   end this row is a decision about those two seams rather than an
-  implementation detail of this door. The roster subscriber's created-workspace
-  open, the synchronous listener that once stood third here, went with the
-  local brain's session actions (LUKE-206).
+  implementation detail of this door.
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty
@@ -321,26 +287,19 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   object, and the ordering those callers and this file's own tests depend on —
   a listener's patch is not lost, a re-announce lands before the caller's next
   statement — is what turning them into effects a caller awaits would give up.
-  `runSyncWith` is as synchronous as the `Runtime.runSync` it replaced: it
-  evaluates on a `MixedScheduler("sync")`, flushes, and reads the exit, with no
-  task scheduled in between.
 - **`apps/desktop/src/main/update-service.ts`** — synchronous Electron
   IPC/menu callers (start, check, install) bridge into fibers on the services
   the launch handed them, on the same terms as `app-state.ts` beside it.
 - **`packages/gateway/src/client.ts`** — `GatewayClient#take` forks its
   reconnection with `Effect.runForkWith` on the calling stack, because a gap
   must open its reconnection on the tick that found it: `take` is the
-  transport's own synchronous callback with no fiber to fork from, so
-  `forkChild({ startImmediately: true })` is not available to it at all, and a
+  transport's own synchronous callback with no fiber to fork from, and a
   scheduler-deferred fork would move the in-flight count
   `node-invocations.test.ts` asserts on the statement right after a publish.
-  The fiber is tied to its scope with `Fiber.runIn`.
 - **`packages/voice/src/orchestrator/live-voice-orchestrator.ts`** — the notice
-  strip's two clocks, whose `showError`/`showNotice` are synchronous statements
-  armed from callbacks belonging to no fiber, start on the services the
-  orchestrator was constructed with. The standing call's lifecycle no longer
-  needs this door: v4 says detached-and-started-at-once as
-  `forkDetach(…, { startImmediately: true })`, and that is what it uses.
+  strip's two clocks, armed from callbacks belonging to no fiber of their own,
+  start on the services the orchestrator was constructed with; the standing
+  call's lifecycle is a `forkDetach` and needs no door.
 - **`packages/runtime/src/children.effect.ts` and
   `packages/runtime/src/queue.effect.ts`** — each wraps an OpenClaw port
   (`children.ts`, `queue.ts`) that awaits promises and may not import
@@ -354,72 +313,29 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   `apps/web/eve/evals/brain-host.eval.ts`, and
   `packages/wire/src/testing/effect.ts` each build a runner (a
   `ManagedRuntime` over a throwaway database, a `SqlClient` that refuses every
-  statement) so a suite or an offline eval
-  still written on `node:assert` or a plain fixture can hold a promise where
-  an effect is described; a test body is its own edge.
-
-`packages/host/src/compose-calendars.ts` was a row here and is one no longer.
-It forked the announcement hold onto a captured runtime because a v3 finalizer
-was a synchronous callback with no fiber of its own to yield on; in v4 a
-finalizer is an Effect on a fiber, and
-`Effect.forkDetach(…, { startImmediately: true })` says what it needed in one
-combinator. The captured runtime and the run are gone.
+  statement) so a suite or an offline eval still written on `node:assert` or a
+  plain fixture can hold a promise where an effect is described; a test body is
+  its own edge.
 
 ### Vocabulary
 
 `SchemaRead` (`@sidecar/wire`) is the boundary result vocabulary a Schema
 decode answers when the result crosses IPC or the wire — a `Result` inside a
-process (v4's name for what v3 called `Either`, with `failure`/`success` in
-place of `left`/`right`), a `SchemaRead` where a caller on the other side of a
-process boundary reads it: `apps/desktop/src/shared/messages/acts.ts`,
+process, a `SchemaRead` where a caller on the other side of a process boundary
+reads it: `apps/desktop/src/shared/messages/acts.ts`,
 `packages/hosted/src/reads-wire.ts`, `packages/hosted/src/live-contract.ts`,
 `packages/wire/src/effect/json-schema.ts`, `packages/brain/src/ui-message-context.ts`,
-and `apps/web/server/hosted/store/message-reads.ts` all produce or read it. The
-repository's own helpers still carry the older name in their spelling —
-`readEither`, `resolveConfigurationEither`, `readStoredUIMessagesEither`,
-`settingGuardFromEither` — and answer a `Result`; renaming them is a vocabulary
-decision nobody has taken, not a migration owed.
+and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 ### Idioms
 
-- A named function whose whole body is `return Effect.gen(function* () { … })`
-  is written as `Effect.fn`/`Effect.fnUntraced` instead, the generator itself
-  rather than a wrapper around one. Which of the two is not a matter of taste:
-  **`Effect.fn("name")` at an exported operation boundary** — one unit of
-  request or provider work, the name matching the binding — and
-  **`Effect.fnUntraced` for a module-private helper or anything on a per-row,
-  per-event, or per-message path**, because `Effect.fn` attaches a span and the
-  default `Tracer` is `nativeTracer`, which allocates an in-memory span per call
-  and exports it nowhere; on a hot path that is pure cost. Never `.pipe` off an
-  `Effect.fn` — trailing combinators are extra arguments to it. An anonymous
-  inline `Effect.gen` stays what it is; the rule is about wrappers, not
-  generators.
-- Three things that bite when converting one, each found by a suite rather than
-  by `tsc`:
-  - **`Effect.fn`'s span is observable in a failure.** The `Cause` gains
-    annotations naming the function, so a test asserting structurally on an
-    `Exit` or a `Cause` sees a different value. `withMigrationLock`
-    (`apps/web/server/db/migrate.ts`) is `fnUntraced` for exactly this reason.
-  - **`Effect.fn` is not timing-neutral against a bare `Effect.gen`.** The span
-    wrapper defers the body relative to the caller, which is enough to reorder a
-    `forkScoped` reader against what it was meant to have consumed.
-  - **A converted binding is a top-level call, and esbuild cannot prove it
-    side-effect-free.** A `function` declaration shook out of a bundle when
-    unused; `const f = Effect.fn(…)(…)` does not, and drags its imports in with
-    it. Every converted binding carries `/* @__PURE__ */`, which is worth ~3.6 KB
-    on the panel bundle and ~2.7 KB on the voice window's.
-- A function with a statement *before* its `return Effect.gen(…)` is not this
-  pattern and is left alone: moving that statement inside the generator turns
-  work done once per call into work done once per run.
 - Schema at the boundary a value crosses, never a hand-written parser beside a
   hand-written shape.
 - Runtime only at an edge above; everywhere else returns an Effect.
 - `Scope`, not a `dispose()` a caller must remember to call.
 - `Schedule`, not a hand-rolled interval or backoff loop.
 - `TestClock`, not a fake clock: a test that waits on time advances the clock
-  rather than arming a real `setTimeout` its own runner has to outlive. There
-  is no counterpart to v3's `TestClock.sleeps`, so a test that asserted on the
-  set of pending sleeps has to assert on what the sleep does instead.
+  rather than arming a real `setTimeout` its own runner has to outlive.
 - `MutableRef` for a synchronous facade over state a synchronous caller reads
   and writes as statements, when the fence it stands for must be up before the
   caller's next statement (`generation.ts` above).
@@ -431,109 +347,21 @@ decision nobody has taken, not a migration owed.
   interrupted, so the race never resolves.
 - `Effect.forkDetach` and a join for a deadline that must run inside an
   uninterruptible region, since the fork itself has to survive the region even
-  when its result does not, and the fiber it detaches is interruptible whatever
-  the region around the fork, so the deadline still has something to end.
-- A fork does **not** inherit the interrupt status of whoever forked it.
-  `forkUnsafe` defaults `uninterruptible` to `false`, so a fiber forked from
-  inside an `Effect.acquireRelease` acquire, a finalizer, or any other
-  uninterruptible region is interruptible unless it asks not to be; inheritance
-  is the opt-in `uninterruptible: "inherit"`. The wrappers this repository wrote
-  for the v3 rule — an `Effect.interruptible(…)` standing as the immediate
-  argument of a `fork*` — are gone, so an `Effect.interruptible(…)` that remains
-  is one restoring interruptibility inside a region that really is
-  uninterruptible around it, and is load-bearing.
-- `startImmediately: true` on `forkChild`/`forkDetach`/`forkScoped`/`forkIn`
-  evaluates the child on the calling stack. This is new ground: v3 could not
-  say detached-and-started-at-once, and two permanent adaptors existed only for
-  the gap. Reach for it before reaching for a run.
-- `Effect.gen({ self: this }, …)`, not `Effect.gen(this, …)`, and
-  `Fiber.runIn(fiber, scope)` for a fiber that must die with a scope —
-  `Effect.RunOptions` has no `scope`.
+  when its result does not.
+- A fork does not inherit the interrupt status of whoever forked it, so a body
+  forked from inside an `Effect.acquireRelease` acquire, a finalizer, or any
+  other uninterruptible region is interruptible unless it asks not to be.
 - A discarded Effect, Stream, or Layer statement is a bug, not a fire-and-forget:
   `pnpm discarded-effect` refuses an expression statement of one of those
   types, `void` and `await` included, because an Effect is not thenable and a
-  description a caller walks past runs nothing. It reads v4's brand properties
-  (`~effect/Effect`, `~effect/Stream`, `~effect/Layer`) and excludes
-  `~effect/Exit`, which extends `Effect` and has already run.
-- Effect's `Clock` does not unref its timer: `sleepMillis` arms a bare
-  `setTimeout`, and the only `unref` in the core is `ChildProcessSpawner`'s. So
-  a wait armed on the clock references the host's event loop for as long as it
-  stands, and a store with an automatic reset enabled holds its host open for
-  as long as its generation does: mind this when the caller is a process that
-  would otherwise exit. The one keep-alive interval Effect arms for itself is
-  inside `Runtime.makeRunMain`, which is why a `runMain` process stays up for
-  its root fiber's whole life and exits when that fiber ends.
-- Five v4 behaviours the suites caught, each of which reads as a bug rather
-  than a difference:
-  - `Queue.takeAll` **waits** on an empty queue rather than answering empty.
-    `Queue.clear` is what drains one.
-  - `Runtime.defaultTeardown` maps an interrupts-only exit to code 130, and the
-    worker runner ends a worker by interrupting it, so an orderly worker
-    shutdown reads as a crash unless the teardown says otherwise.
-  - `ConfigProvider.fromEnv()` copies `process.env` eagerly and the Reference
-    default is cached, so a test that sets an environment variable after the
-    first read never sees it. `ConfigProvider.layer(Effect.sync(() =>
-    ConfigProvider.fromEnv()))` is the fix `apps/web/server/runtime.ts` uses.
-  - Fork scheduling inverted: `forkUnsafe` goes through `setImmediate` and an
-    async resume continues synchronously, so `fork(x)` followed by `release()`
-    no longer runs `x`'s head first. `{ startImmediately: true }` is the
-    remedy where the old ordering was the point.
-  - The same inversion the other way round, and it bites a fork nobody wrote as
-    one: `FiberSet.runtime`'s forker is `Effect.runForkWith`, which evaluates on
-    the calling stack, where v3's `Runtime.runFork` scheduled the first step as
-    a task. A fiber begun through such a set therefore runs its head *inside*
-    whoever asked for it, ahead of wakes already queued on the scheduler — which
-    is how `apps/web/server/voice/service.ts`'s `#begin` came to write a
-    session's word to the desktop from within the exchange's own reading fiber,
-    ahead of the very frame the relay was queued to forward and that the word
-    was about. `Effect.andThen(Effect.yieldNow, …)` at the fork door puts the
-    first step back behind those wakes; the scheduler's buckets are FIFO within
-    a priority, so the order is stated rather than raced for. Reach for it when
-    a fiber's first step must *not* stand in the step that made it — the mirror
-    of `startImmediately: true` above.
-- `packages/devtrace/src/trace-writer.ts` formats a trace line with a plain
-  `traceLine(entry, now)` rather than a `Logger`: v4's `Logger.Options.fiber`
-  is a live `Fiber` rather than the identifier and annotation maps the old
-  synchronous formatter read. The bytes are unchanged and still pass through
-  `sanitizedTraceEvent`.
+  description a caller walks past runs nothing.
+- Effect's `Clock` does not unref its timer: a wait armed on it references the
+  host's event loop for as long as it stands, so a store with an automatic
+  reset enabled holds its host open for as long as its generation does: mind
+  this when the caller is a process that would otherwise exit.
 - A bundle-budget baseline moves only for a deliberate library adoption, never
   for drift a deletion happened to leave behind (`apps/desktop/bundle-budget.json`,
-  checked with 5% slack). The v4 adoption was such a move: the panel's bundle
-  fell from 635,847 to 586,626 gzipped bytes and the voice window's from
-  323,364 to 270,260, and holding the old baseline would have left the check
-  tolerating a regression it exists to catch.
-
-### The v4 modules this repository looked at and does not use
-
-Each was read against the code that would have adopted it and declined for a
-reason of its own, so that the next sweep reads this instead of repeating the
-search.
-
-- **`Newtype`** — `packages/runtime/src/identifiers.ts` is a hand-rolled
-  newtype, but its `Identifier<Brand> = string & { … }` is *assignable to
-  `string`*, and the repository leans on that everywhere: `SessionKey | string`
-  parameters, `split`, `join`. Effect's `Newtype` is opaque and unwrapped
-  through `Newtype.value`, so adopting it is a breaking change to every caller
-  rather than an idiom.
-- **`Latch`** — a latch is a gate that opens and closes again. Every
-  non-test `Deferred` here is one-shot, or carries a value or an `Exit` (a
-  latch carries neither and has no error channel), or belongs to a single
-  operation. Nothing re-gates.
-- **`Filter`** — the refinements here are single-step and `Schema`-backed.
-  The one composable-looking site is the settings guards, and composition is
-  precisely what would break them: `Filter.compose` types `Fail` as
-  `FailL | FailR`, which would widen each guard's fallback default out of its
-  own setting's type.
-- **`UndefinedOr`** the module — `?.` and `??` already say `map` and
-  `getOrElse` in less. `Schema.UndefinedOr` at a boundary is a different thing
-  and is in use.
-- **`Context.Reference`** for the host's seams — `packages/host/src/effect/kernel.ts`
-  states the invariant deliberately: every seam is a requirement, so a
-  composition that did not state one cannot build. A reference with a default
-  trades that compile-time refusal for a silent fallback. `Environment` and
-  `HostedEnvironment` must *especially* not become references: a reference's
-  default is computed once and cached, which is the exact `process.env`
-  snapshot bug `apps/web/server/runtime.ts` exists to avoid.
+  checked with 5% slack).
 
 ## TypeScript
 

@@ -34,13 +34,10 @@ built as a scoped layer whose build runs `start` and whose scope closing runs
   what began, in reverse, at once.
 - **A cadence forks its scope from the one its composer was built in**
   (`cadenceGate`), so its fibers run on the host's own services and the host's
-  close ends them whatever became of the stop. The bodies an arming forks are
-  interruptible whatever the region the arming was reached from — a composer's
-  start, an acquire, a finalizer — because **v4 forks do not inherit**:
-  `forkUnsafe` defaults `uninterruptible` to `false`, and inheritance is the
-  opt-in `uninterruptible: "inherit"`. So a disarm's interruption always has
-  something to land on, and nothing here marks a forked body interruptible to
-  say so.
+  close ends them whatever became of the stop. A fork does not inherit the
+  interrupt status of whoever made it, so a body armed from inside an
+  uninterruptible region — a composer's start, an acquire, a finalizer — is
+  still one the disarm's interruption can end.
 
 A method two composers claim fails the build with `DuplicateGatewayMethod`, so
 that one does not need stating here. `client.bootstrap` is the one method no
