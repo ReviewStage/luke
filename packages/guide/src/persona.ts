@@ -97,16 +97,17 @@ const LUKE_BANNED_PHRASES: readonly string[] = [
 const LUKE_BANNED_WORDS: readonly string[] = [
   "utilize",
   "leverage",
-  "ensure",
+  "delve",
+  "robust",
+  "streamline",
+  "enhance",
   "encountered",
   "proceed",
   "currently",
   "successfully",
   "additionally",
-  "however",
   "regarding",
   "functionality",
-  "implement",
 ];
 
 const BREVITY_LINES: readonly string[] = [
