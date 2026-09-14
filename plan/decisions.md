@@ -3549,3 +3549,16 @@ LUKE-202 §2 (a Mac with no call open never speaks a briefing since E5-3; the of
 ## 2026-09-14 01:05Z — Dean rules LUKE-202 §2: the Mac opens a muted session for an open briefing offer
 
 Dean: "I agree with LUKE-202 recommendation. Let's do it." Ruling as recorded at 00:55Z: when the account's changes feed shows an open briefing offer and this Mac is present (input within two minutes, screen unlocked) and not quiet (no meeting hold, announcements on, the spoken introduction not owed — the three holds the heartbeat's `quietUntil` carries since #1386), the desktop opens a muted session; the service's briefing look claims and speaks the offer; the holder's idle close ends the session. Deterministic trigger from observed rows, never model output; one session at a time with a debounce; the phone's two-minute grace unchanged. `PRIVACY.md`'s sentence about a session opening on the Mac's own decision extends to briefings. Staffed on W-200 after #1391; orchestrator-word PR.
+
+
+## 2026-09-14 01:45Z — rulings from three surveys: G1b filed (LUKE-206), G2 closed, BYOK §8, LUKE-207
+
+**G2 (LUKE-144) closed** on six self-pressed PRs (#1389 #1392 #1393 #1394 #1397 #1398). Rulings: the `ConversationEntry` name survives as the voice captions vocabulary until the voice lane renames it (acceptance amended); the child `sessions_history` tool stays in `packages/brain`, shared with the hosted tool set; the local brain composition is not G2's.
+
+**G1b filed as LUKE-206** — the local brain composition (`composeBrain` → `wireBrain` → `BrainAgent.make` in `packages/host`) still runs on main although LUKE-143 is Done; since E5-3 nothing it decides reaches the developer. Plan-sanctioned (LUKE-138: "deleted in G1"). Staffed on the LUKE-143 worker. Its `PRIVACY.md`/root `AGENTS.md` sentences about "Luke's judgment on this Mac" move with it — orchestrator-word.
+
+**LUKE-205 (BYOK) §8 rulings:** the runtime registry's OpenAI vocabulary stays (OpenClaw-port vocabulary); two wire value sets narrow — `session_source` loses `keyed` and `LIVE_SESSION_OUTCOME` loses `no-api-key`, members nothing will emit again; a launch drops the OpenAI ciphertext an earlier build stored (the #1298 posture). #1401 (1a) and #1403 (1b-i) merged on the ordinary gate.
+
+**LUKE-193 closed by #1264** (2026-09-12): the counted-event hold across launches was already built and `PRIVACY.md` already says it; the ticket's PostHog readings predate the fix. Verification is a PostHog read, not code.
+
+**LUKE-207 filed** from the LUKE-159 Mac pass: the turn cursor's `changed_at` is a `timestamptz` read back as text, so its wire form follows the database session's zone; two store tests fail on a `-0700` Mac and pass under `TZ=UTC`. Fix: render in UTC in SQL or pin the session zone, plus a non-UTC test. No schema change.
