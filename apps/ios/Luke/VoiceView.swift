@@ -224,11 +224,9 @@ struct VoiceView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 14) {
+                    // Tagged for the proxy, as every scroll target in this app is.
                     ForEach(captions) { row in
-                        switch row.speaker {
-                        case .user: DeveloperMessageBubble(words: row.words)
-                        case .assistant: AgentMessageBubble(words: row.words)
-                        }
+                        captionBubble(row).id(row.rowId)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
@@ -255,6 +253,14 @@ struct VoiceView: View {
         }
         .frame(maxHeight: .infinity)
         .animation(.easeInOut(duration: 0.15), value: captions.isEmpty)
+    }
+
+    @ViewBuilder
+    private func captionBubble(_ row: LiveCaptionRow) -> some View {
+        switch row.speaker {
+        case .user: DeveloperMessageBubble(words: row.words)
+        case .assistant: AgentMessageBubble(words: row.words)
+        }
     }
 
     private var bottomControls: some View {
