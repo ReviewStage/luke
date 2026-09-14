@@ -161,11 +161,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const reports: ReportHandlers = {
     ...windowSurfaceReports({ recordProductEvent }),
     ...voiceRuntimeReports(voiceRuntime),
-    // The voice window's appends to the conversation, carried to the host's
-    // store under this window's opaque reporter, and relayed back to every
-    // other panel's Conversation by the host's change event.
-    appendConversationLines: (context, entries) =>
-      run(operator.host.appendConversation(entries, windows.reporterOf(context.sender))),
     reportAppGuide: (_context, snapshot) => run(operator.reportGuide(snapshot)),
     answerBrainAppAction: (_context, requestId, answer) =>
       native.answerAppAction(requestId, answer),
