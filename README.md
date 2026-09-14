@@ -42,9 +42,8 @@ behalf.
 The **Conversation** tab draws the conversation Luke's own service keeps for
 your account, the same thread on every Mac you sign in on, showing its 200
 most recent turns. Its one control, Clear, asks the service to mark that
-conversation deleted and open a fresh one. Luke's judgment on this Mac holds
-its own lines and working memory in memory alone while he runs, and writes
-nothing of them to disk. When Luke thinks on the service he also silently
+conversation deleted and open a fresh one; nothing on this Mac holds a copy
+of the thread. When Luke thinks on the service he also silently
 keeps a small memory of useful preferences, personal context, goals, and
 recurring constraints; ask him what he remembers, correct something, or tell
 him to forget it.
