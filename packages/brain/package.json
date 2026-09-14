@@ -5,9 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./envelope": "./src/envelope.js",
     "./requests": "./src/requests.js",
-    "./testing": "./src/testing.js",
     "./tool-set": "./src/tool-set.js",
     "./ui-message-context": "./src/ui-message-context.js"
   },
@@ -28,7 +26,6 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

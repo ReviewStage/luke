@@ -1,6 +1,6 @@
 import { ACTION_OUTPUT_STATUS } from "@sidecar/actions";
 import { type EffectiveToolPolicy, TOOL_EFFECT, TOOL_EXECUTION } from "@sidecar/runtime";
-import type { CompactionSource, RuntimeCompaction, SessionKey } from "@sidecar/runtime/vocabulary";
+import type { CompactionSource, SessionKey } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -12,7 +12,7 @@ import {
 import type { UIMessage } from "ai";
 import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
 import { BRAIN_TOOL } from "./tools.js";
-import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
+import type { BrainTurnTrigger } from "./turn.js";
 
 /**
  * What a turn tells whoever is listening, as it happens, whichever kind of
@@ -30,9 +30,9 @@ import { BRAIN_TURN_TRIGGER, type BrainTurnTrigger } from "./turn.js";
  * messages the turn completed as AI SDK `UIMessage`s, a compaction it folded,
  * and its end with the status, the usage split four ways, and the response
  * ids. Every event carries the conversation's key, the turn's id, and its
- * place in the turn's sequence, numbered from one by the turn's one teller
- * (`TurnEvents`), which fires them in order, so a consumer can verify it
- * heard the turn whole. A listener that throws ends no turn.
+ * place in the turn's sequence, numbered from one by the turn's one teller,
+ * the hosted brain host's relay, which fires them in order, so a consumer can
+ * verify it heard the turn whole. A listener that throws ends no turn.
  */
 
 export const BRAIN_RUN_EVENT = {
@@ -93,23 +93,6 @@ export const BRAIN_TURN_ORIGIN = {
 } as const;
 
 export type BrainTurnOrigin = (typeof BRAIN_TURN_ORIGIN)[keyof typeof BRAIN_TURN_ORIGIN];
-
-/** The origin a turn's trigger amounts to: an ask is the developer's spoken one, and a child's task is the child's. */
-export function turnOriginOf(trigger: BrainTurnTrigger): BrainTurnOrigin {
-  switch (trigger) {
-    case BRAIN_TURN_TRIGGER.ASK:
-      return BRAIN_TURN_ORIGIN.SPOKEN;
-    case BRAIN_TURN_TRIGGER.CHILD_TASK:
-      return BRAIN_TURN_ORIGIN.CHILD;
-    case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:
-      return BRAIN_TURN_ORIGIN.CHILD_COMPLETION;
-    case BRAIN_TURN_TRIGGER.HOLD_RELEASED:
-      return BRAIN_TURN_ORIGIN.HOLD_RELEASE;
-    case BRAIN_TURN_TRIGGER.WAKE:
-    case BRAIN_TURN_TRIGGER.ROSTER:
-      return BRAIN_TURN_ORIGIN.OBSERVATION;
-  }
-}
 
 /** How a tool call settled, in the AI SDK's own words for a tool part's state. */
 export const TOOL_CALL_SETTLEMENT = {
@@ -255,17 +238,6 @@ export type BrainRunEventBody =
 
 export type BrainRunEvent = BrainRunEventBody & BrainRunEventBase;
 
-/** A compaction the runtime reported, as the turn's event carries it. */
-export function turnCompactionOf(
-  compaction: RuntimeCompaction & { compacted: true },
-): TurnCompaction {
-  return {
-    source: compaction.source,
-    dropped: compaction.dropped,
-    ...(compaction.summary !== undefined ? { summary: compaction.summary } : undefined),
-  };
-}
-
 /** How a tool's result reads as a tool part's settlement: an answer, or a refusal carrying the output's own reason. */
 export function toolCallSettlementOf(
   outputJson: string,
@@ -295,23 +267,6 @@ export function slowStepOf(policy: EffectiveToolPolicy, name: string): SlowStepK
   }
   if (name === BRAIN_TOOL.READ_TRANSCRIPT) return SLOW_STEP_KIND.TRANSCRIPT_READ;
   return undefined;
-}
-
-/**
- * Whether a call the policy offers only reads: not an act the performer
- * carries, not a write, and not the tool that speaks, so nothing it began
- * outlives the answer that asked for it. A name the policy does not offer is
- * not vouched for, and reads as a call that is not a read.
- */
-export function toolCallOnlyReads(policy: EffectiveToolPolicy, name: string): boolean {
-  const tool = policy.allowed.find((candidate) => candidate.schema.name === name);
-  if (!tool) return false;
-  return tool.execution !== TOOL_EXECUTION.PERFORMER && tool.effect === TOOL_EFFECT.READ;
-}
-
-/** Whether an answer's words may be relayed as they come: it asked for nothing, or for reads alone. */
-export function answerOnlyReads(policy: EffectiveToolPolicy, names: readonly string[]): boolean {
-  return names.every((name) => toolCallOnlyReads(policy, name));
 }
 
 const SENTENCE_BOUNDARY = /(?<=[.!?…]["'”’)\]]*)\s+|\n+/;

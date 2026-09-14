@@ -160,11 +160,6 @@ export interface ChildCompletionRecord {
   readonly lastError?: string;
 }
 
-/** The one completion id a child ever has. */
-export function completionIdFor(childId: string): string {
-  return `completion:${childId}`;
-}
-
 /**
  * What a spawn hands back once the record is durable: the child's actual
  * identifiers, the model it resolved to, and the context it actually

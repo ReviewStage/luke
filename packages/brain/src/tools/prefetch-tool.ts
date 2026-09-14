@@ -101,7 +101,7 @@ export const PLAN_READS_TOOL = {
 } as const satisfies PlanReadsTool;
 
 /** One session as the planner is shown it: a position to name it by and the fields that tell it apart. */
-export interface PrefetchSessionOption {
+interface PrefetchSessionOption {
   option: number;
   title: string;
   provider: string;

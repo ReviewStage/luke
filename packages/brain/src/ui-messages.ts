@@ -98,12 +98,6 @@ export function userMetadataOf(
   }
 }
 
-/** What the notes the host hands a turn beside its words say about themselves. */
-export const HOSTED_WORDS_METADATA = {
-  RECALLED_NOTES: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.RECALLED_NOTES },
-  ACTIVITY_NOTICES: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ACTIVITY_NOTICES },
-} as const satisfies Record<string, UserMessageMetadata>;
-
 /** The message a text the turn was handed amounts to: the developer's ask, an observation, a steered ask, a note. */
 export function userMessage(id: string, text: string, metadata: UserMessageMetadata): UIMessage {
   return {

@@ -1,25 +1,4 @@
 export {
-  BRAIN_DEFAULTS,
-  BrainAgent,
-  type BrainAgentOptions,
-  type BrainFlushMarkerStore,
-  type BrainWorkspaceAccess,
-  LOOK_SUBJECT,
-} from "./agent.js";
-export { BACKEND_PREAMBLE, type BrainPromptVoice, brainPromptVoice } from "./backend-preamble.js";
-export { toolLoopRuntimeOver } from "./builtins.js";
-export { type Detach, detachOn, runtimeExit } from "./effect/carry.js";
-export {
-  type BrainPersistedState,
-  type BrainStateLoad,
-  type BrainStateRepository,
-  type BrainTranscriptCursors,
-  brainPersistedStateFromWire,
-  freshBrainState,
-} from "./envelope.js";
-export { BrainGenerationClock } from "./generation-clock.js";
-export { runMemoryHousekeeping } from "./housekeeping.js";
-export {
   askInputText,
   BRAIN_INPUT_MARKER,
   holdReleasedInputText,
@@ -27,18 +6,8 @@ export {
   wakeInputText,
 } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
-export type { BrainJournalEntry } from "./journal.js";
-export { UNKNOWN_ACTION_STATUS } from "./journal.js";
 export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
-export type { BrainObservationEntry } from "./observation-inbox.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
-export {
-  type BrainAnticipation,
-  type BrainAnticipationFacts,
-  PREFETCH_BOUNDS,
-  PREFETCH_PLANNER_PROMPT,
-  PREFETCH_SUMMARY_PROMPT,
-} from "./read-prefetch.js";
 export {
   addModelUsage,
   BRAIN_REQUEST_FAILURE,
@@ -92,8 +61,6 @@ export {
   sessionContextText,
   workspaceProjectContextText,
 } from "./standing-context.js";
-export { BrainStateStore } from "./state-store.js";
-export type { BrainChildAccess } from "./tool-executor.js";
 export {
   ACTION_TOOLS,
   type ActionAdmissionReads,
@@ -114,6 +81,7 @@ export {
 export { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./tools/read-tools.js";
 export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
 export {
+  type BrainWorkspaceAccess,
   WORKSPACE_TOOLS,
   type WorkspaceToolContext,
   type WorkspaceToolModule,
@@ -137,15 +105,7 @@ export {
   type BrainPrefetchTraceRecord,
   type BrainTurnTraceRecord,
 } from "./trace.js";
-export {
-  BRAIN_TURN_KIND,
-  BRAIN_TURN_TRIGGER,
-  type BrainTurnDescription,
-  type BrainTurnPreparation,
-  type BrainTurnTrigger,
-  runOriginOf,
-} from "./turn.js";
-export { TurnEvents, type TurnEventsOptions } from "./turn-events.js";
+export { BRAIN_TURN_TRIGGER, type BrainTurnTrigger, runOriginOf } from "./turn.js";
 export {
   AssistantMessageBuilder,
   STEP_START_PART,
