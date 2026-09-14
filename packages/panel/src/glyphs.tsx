@@ -84,6 +84,17 @@ export function ThumbsDownIcon(): React.JSX.Element {
   );
 }
 
+/** Three dots in a line: more of a row's controls, folded behind one press. */
+export function EllipsisIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <circle cx="5" cy="12" r="1.1" fill="currentColor" />
+      <circle cx="12" cy="12" r="1.1" fill="currentColor" />
+      <circle cx="19" cy="12" r="1.1" fill="currentColor" />
+    </Glyph>
+  );
+}
+
 export function PencilIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
