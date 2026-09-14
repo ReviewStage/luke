@@ -47,6 +47,8 @@ function captionSizeStyle(
 export interface UseCaptionPresentationOptions {
   /** Luke's own words this frame, or nothing while he is not speaking. */
   lukeCaptions: readonly string[] | undefined;
+  /** The developer's own words this frame, or nothing while none are being said. */
+  developerCaptions: readonly string[] | undefined;
   voiceError: string | undefined;
   voiceNotice: string | undefined;
   /** Who is being heard, which decides what the strip may show over a fault or a notice. */
@@ -82,7 +84,8 @@ export interface CaptionPresentation {
 export function useCaptionPresentation(
   options: UseCaptionPresentationOptions,
 ): CaptionPresentation {
-  const { lukeCaptions, speakers, fixtureSpeaking, volumeHint, leavingPanel } = options;
+  const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking, volumeHint, leavingPanel } =
+    options;
   const [textElement, textHeight] = useMeasuredHeight();
   const element = useRef<HTMLSpanElement>(null);
   const [padding, setPadding] = useState(0);
@@ -115,18 +118,24 @@ export function useCaptionPresentation(
     speakers,
     notice: options.voiceNotice,
   });
-  // What the caption block is being handed live this frame: Luke's words, a
-  // failure borrowing their strip, or a notice borrowing it more quietly.
+  // What the caption block is being handed live this frame: Luke's words, the
+  // developer's own words while nothing of Luke's is being said, a failure
+  // borrowing their strip, or a notice borrowing it more quietly. The session
+  // is full duplex, so both speakers can carry words at once; the strip is
+  // one block and Luke's reply is the one worth reading over a read-back.
   const stripText = errorNotice ?? noticeShown;
-  const liveTexts = lukeCaptions ?? (stripText === undefined ? undefined : [stripText]);
+  const liveTexts =
+    lukeCaptions ?? developerCaptions ?? (stripText === undefined ? undefined : [stripText]);
   // Words is the resting tone, kept even when nothing is drawn, so a frame
   // with no words never snapshots a coloured tone into the strip hold.
   const liveTone: CaptionTone =
-    lukeCaptions !== undefined || stripText === undefined
+    lukeCaptions !== undefined || (developerCaptions === undefined && stripText === undefined)
       ? CAPTION_TONE.WORDS
-      : errorNotice !== undefined
-        ? CAPTION_TONE.ERROR
-        : CAPTION_TONE.NOTICE;
+      : developerCaptions !== undefined
+        ? CAPTION_TONE.ASK
+        : errorNotice !== undefined
+          ? CAPTION_TONE.ERROR
+          : CAPTION_TONE.NOTICE;
 
   /**
    * The pointer's hold on the strip. The words leave with the reply that

@@ -215,7 +215,10 @@ text, your name and email address, and any screenshot you attached to the
 feedback form. The Conversation tab is blocked from recordings, so neither the words in your
 conversation with Luke nor the things he remembers about you are included, and
 the feedback form's message field is blocked the same way, since a thumbs down
-can open it prefilled with those words. Text you type into a field is replaced
+can open it prefilled with those words. The caption strip under Luke's shape is
+not blocked: with Captions on, it draws his spoken words and yours as you speak
+to him, so a recording made while you talk to Luke includes what you said. Text
+you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it; the fixed list above does not cover those

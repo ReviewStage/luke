@@ -459,6 +459,7 @@ export function App(): React.JSX.Element {
   // A capture run always draws the fixture's words: the voice window that
   // otherwise decides the captions does not stand in one.
   const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
+  const developerCaptions = fixtureSpeaking ? undefined : voiceView.developerCaptions;
 
   // The hint rides the caption it explains, and only over a silence the
   // helper actually reported. "Got it" quiets it for this stretch of silence
@@ -470,6 +471,7 @@ export function App(): React.JSX.Element {
       !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   const caption = useCaptionPresentation({
     lukeCaptions,
+    developerCaptions,
     voiceError,
     voiceNotice,
     speakers,
@@ -1078,7 +1080,9 @@ export function App(): React.JSX.Element {
         className="voice-caption"
         ref={caption.ref}
         data-tone={caption.tone}
-        {...(caption.tone !== CAPTION_TONE.WORDS ? { role: "status" } : { "aria-hidden": true })}
+        {...(caption.tone === CAPTION_TONE.WORDS || caption.tone === CAPTION_TONE.ASK
+          ? { "aria-hidden": true }
+          : { role: "status" })}
       >
         <span className="voice-caption-stack" ref={caption.textRef}>
           {caption.settled.map((words, index) => (
