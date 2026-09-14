@@ -249,9 +249,16 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
                     .words(id: id, speaker: speaker, text: text, at: at, unspoken: unspoken, rateable: rateable)
             }
             if toolCalls.isEmpty { return rows }
-            return [
-                .toolCallsFold(id: "\(message.id):tools", rows: toolCalls, at: view.createdAt),
-            ] + rows
+            let fold = ConversationRow.toolCallsFold(
+                id: "\(message.id):tools", rows: toolCalls, at: view.createdAt
+            )
+            let insertAt = rows.firstIndex { row in
+                if case .words = row { return true }
+                return false
+            } ?? rows.endIndex
+            var ordered = rows
+            ordered.insert(fold, at: insertAt)
+            return ordered
         }
     }
 }
