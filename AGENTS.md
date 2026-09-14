@@ -302,15 +302,17 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   first, because a caller that gives up on its own await must not take the
   flight the other callers are still joined to.
 - **`packages/host/src/host-kernel.ts`** — `openExternalThroughNode`, the one
-  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the three
+  promise door the kernel keeps over `NodeRegistry#invoke`'s effect: the two
   composers that hand it on hand it to seams outside this repository's host
   package — the account session manager's consent
   (`packages/credentials/src/loopback-consent.ts`, whose `openExternal` is a
-  `void | Promise<void>` and whose `reopen()` is synchronous), the calendar
-  sign-in's page (`packages/calendar/src/oauth.ts`), and the roster
-  subscriber's created-workspace open, a synchronous listener — so what would
-  end this row is a decision about those seams rather than an implementation
-  detail of this door.
+  `void | Promise<void>` and whose `reopen()` is synchronous) and the calendar
+  sign-in's page (`packages/calendar/src/oauth.ts`) — and the session opens a
+  row press reaches wrap the same door in `Effect.tryPromise`; so what would
+  end this row is a decision about those two seams rather than an
+  implementation detail of this door. The roster subscriber's created-workspace
+  open, the synchronous listener that once stood third here, went with the
+  local brain's session actions (LUKE-206).
 - **`apps/desktop/src/main/app-state.ts`** — `AppStateStore`'s `snapshot`,
   `update`, and `touch` run their `SubscriptionRef` operation through
   `Effect.runSyncWith` on the services the launch handed them, never an empty

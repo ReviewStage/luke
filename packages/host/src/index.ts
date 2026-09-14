@@ -28,6 +28,6 @@ export {
 } from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { createGatewayService } from "./service.js";
-export { OPEN_REFUSAL, type SessionActionPerformer } from "./session-action-performer.js";
+export { OPEN_REFUSAL, type SessionOpens } from "./session-opens.js";
 export type { SessionRowActions } from "./session-row-actions.js";
 export { openSocketOverWs } from "./voice/socket-over-ws.js";

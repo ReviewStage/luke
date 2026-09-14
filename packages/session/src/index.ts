@@ -40,5 +40,4 @@ export * from "./transcript-lines.js";
 export * from "./ui-messages/tool-parts.js";
 export * from "./urgency.js";
 export * from "./workspace-agents.js";
-export * from "./workspace-opens.js";
 export * from "./workspace-projects.js";

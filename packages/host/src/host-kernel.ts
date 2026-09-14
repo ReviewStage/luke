@@ -10,7 +10,7 @@ import {
   type HostNodeOpenKind,
 } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
-import { NodeAnswerLostError } from "./session-action-performer.js";
+import { NodeAnswerLostError } from "./session-opens.js";
 import type { SecretCipher } from "./settings-store.js";
 
 export interface HostSeams {
