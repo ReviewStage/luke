@@ -18,14 +18,13 @@ export interface VoiceWindowSurface {
   owns(webContents: WebContents): boolean;
 }
 
-/** The host's one live session, as the voice window's six acts reach it through the operator client. */
+/** The host's one live session, as the voice window's five acts reach it through the operator client. */
 type LiveSessionActs = Pick<
   HostOperator,
   | "createLiveSession"
   | "endLiveSession"
   | "reportLiveTransport"
   | "reportLiveActivity"
-  | "reportLiveTalk"
   | "stopSpeaking"
 >;
 
@@ -55,7 +54,6 @@ type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_END_LIVE_SESSION
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
   | typeof ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY
-  | typeof ACT_KIND.VOICE_REPORT_LIVE_TALK
   | typeof ACT_KIND.VOICE_STOP_SPEAKING
   | typeof ACT_KIND.VOICE_DIAGNOSTICS
   | typeof ACT_KIND.MICROPHONE_OPEN_SETTINGS
@@ -100,8 +98,6 @@ export function voiceRuntimeActRows(
       voice
         ? Effect.as(liveSession.reportLiveActivity(idle), undefined)
         : Effect.succeed(undefined),
-    [ACT_KIND.VOICE_REPORT_LIVE_TALK]: (_payload, { voice }) =>
-      voice ? Effect.as(liveSession.reportLiveTalk(), undefined) : Effect.succeed(undefined),
     // The stop key, pressed in the voice window that owns the session; a
     // panel has no session to stop and is answered false.
     [ACT_KIND.VOICE_STOP_SPEAKING]: (_payload, { voice }) =>

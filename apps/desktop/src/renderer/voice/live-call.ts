@@ -65,8 +65,6 @@ interface LiveCallActs {
   endSession: () => void;
   reportTransport: (state: LiveTransportState) => void;
   reportActivity: (idle: boolean) => void;
-  /** The microphone went live, acknowledged by the session: the developer is talking to it. */
-  reportTalk: () => void;
 }
 
 export interface LiveCallOptions {
@@ -420,7 +418,6 @@ export class LiveCall implements LiveVoiceCall {
       if (!acknowledged || !this.#peer?.microphone) return false;
       this.#peer.microphone.enabled = true;
       this.#micLive = true;
-      this.#options.acts.reportTalk();
       this.#armIdle();
       this.#refreshStatus();
       return true;

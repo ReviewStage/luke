@@ -92,7 +92,6 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
           endSession: () => tell(ACT_KIND.VOICE_END_LIVE_SESSION),
           reportTransport: (state) => tell(ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT, { state }),
           reportActivity: (idle) => tell(ACT_KIND.VOICE_REPORT_LIVE_ACTIVITY, { idle }),
-          reportTalk: () => tell(ACT_KIND.VOICE_REPORT_LIVE_TALK),
         },
         createPeerConnection: () => new RTCPeerConnection(),
         createSilence: createBrowserSilence,

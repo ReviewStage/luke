@@ -36,12 +36,11 @@ test("a long briefing is several appends, each under the bound", () => {
   for (const append of appends) assert.ok(estimatedTokens(append) <= APPEND_TOKEN_BOUND);
 });
 
-test("every scripted beat is one append under the bound, and none opens with an instruction", () => {
+test("every onboarding beat is one append under the bound, and none opens with an instruction", () => {
   for (const turn of [
     arrivalOf({}),
     arrivalOf({ sessionTitle: "Fix flaky checkout test", talkKeyLabel: "Right Option" }),
     { kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING, decidedAt: DECIDED_AT } as const,
-    { kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW, decidedAt: DECIDED_AT } as const,
   ]) {
     const appends = speechAppends(turn);
     assert.equal(appends.length, 1);
@@ -49,21 +48,6 @@ test("every scripted beat is one append under the bound, and none opens with an 
     assert.equal(speechOpening(turn), undefined);
   }
   assert.equal(speechOpening(briefingOf("News.")), undefined);
-});
-
-test("the audition's line is the same append every time it is asked for, since a voice is what it demonstrates", () => {
-  const first = speechAppends({
-    kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
-    decidedAt: DECIDED_AT,
-  });
-  const later = speechAppends({
-    kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
-    decidedAt: DECIDED_AT + 60_000,
-  });
-
-  assert.deepEqual(first, later);
-  assert.equal(first.length, 1);
-  assert.ok((first[0] ?? "").length > 0);
 });
 
 test("the launch greeting is an opening pair under the bound and no commentary of its own", () => {

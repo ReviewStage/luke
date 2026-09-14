@@ -200,7 +200,6 @@ function build(
   const transports: LiveTransportState[] = [];
   const activity: boolean[] = [];
   let ends = 0;
-  let talks = 0;
   const remote: (MediaStream | undefined)[] = [];
   const local: (MediaStream | undefined)[] = [];
   const wire: string[] = [];
@@ -225,9 +224,6 @@ function build(
       },
       reportTransport: (state) => transports.push(state),
       reportActivity: (idle) => activity.push(idle),
-      reportTalk: () => {
-        talks += 1;
-      },
     },
     createPeerConnection: () => peer,
     createSilence: () => silence,
@@ -297,9 +293,6 @@ function build(
     transports,
     activity,
     ends: () => ends,
-    get talks() {
-      return talks;
-    },
     remote,
     local,
     wire,
@@ -405,12 +398,9 @@ it.effect(
       yield* settle;
       assert.deepEqual(f.sentTypes(), [LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE]);
       assert.equal(f.track.enabled, false);
-      // The host hears of the microphone only once the session has acknowledged it.
-      assert.equal(f.talks, 0);
       f.acknowledge(LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED);
       assert.equal(yield* Fiber.join(unmuting), true);
       assert.equal(f.track.enabled, true);
-      assert.equal(f.talks, 1);
       assert.equal(f.call.listening, true);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.LISTENING);
       const muting = yield* Effect.forkChild(f.call.mute());

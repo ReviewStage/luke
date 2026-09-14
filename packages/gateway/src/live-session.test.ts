@@ -45,11 +45,10 @@ const LIVE_METHODS = [
   GATEWAY_METHOD.VOICE_END_LIVE_SESSION,
   GATEWAY_METHOD.VOICE_REPORT_LIVE_TRANSPORT,
   GATEWAY_METHOD.VOICE_REPORT_LIVE_ACTIVITY,
-  GATEWAY_METHOD.VOICE_REPORT_LIVE_TALK,
   GATEWAY_METHOD.VOICE_STOP_SPEAKING,
 ] as const;
 
-test("the six live session methods are in the vocabulary, and every one of them mutates", () => {
+test("the five live session methods are in the vocabulary, and every one of them mutates", () => {
   for (const method of LIVE_METHODS) {
     assert.equal(isGatewayMethod(method), true);
     assert.equal(isMutatingGatewayMethod(method), true);
