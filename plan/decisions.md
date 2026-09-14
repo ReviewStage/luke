@@ -3567,3 +3567,12 @@ Dean: "I agree with LUKE-202 recommendation. Let's do it." Ruling as recorded at
 ## 2026-09-14 03:05Z — LUKE-205 (BYOK removal) nearly complete: seven PRs on the ordinary gate, the docs PR pending
 
 Landed: #1401 (1a, a key of the developer's own stands no brain), #1403 (1b-i, acceptance on the hosted adapter), #1405 (1b-ii, the keyed model adapter and transport deleted), #1412 (2a, no live session on a personal key), #1414 (2b, the assembler and the store read no key and no source), #1417 (3, the voice-source setting and the Provider section deleted), #1419 (4, the OpenAI credential deleted; a launch drops the key it stored). Two wire value sets narrowed as ruled: `session_source` loses `keyed` (analytics allowlist) and `LIVE_SESSION_OUTCOME` loses `no-api-key` (gateway value; no Apple reader). The hosted vault's provider keys are untouched. #1422 (5, PRIVACY.md and README describe voice on the account alone) is the orchestrator-word close.
+
+
+## 2026-09-14 04:50Z — LUKE-206 rulings; LUKE-205 docs PR pressed; one escalation
+
+**LUKE-205 (BYOK) closes** with #1422 pressed: `PRIVACY.md` says voice runs through the service on the account alone, the Mac never reaches OpenAI on a key of the developer's own, and a key an earlier build stored is removed unread at the next launch; the README loses the OpenAI-key bullet.
+
+**LUKE-206 (G1b) rulings, orchestrator's:** a PR in flight rebases on every move of main (the "hold" rule applied only to PRs held for sequencing). The orphaned Gateway method and event names nothing answers or emits stay in `protocol.ts` as the protocol's own test vocabulary with a note — no contract change, no churn PR; a low ticket covers re-pointing the tests later. **Escalated to Dean:** 4b's depth — whether to delete the whole dead app-action chain through the errand UI (~2,000 lines; the hosted brain has no path to app actions, so "Luke changes a setting when asked" is already lost since E5-3) or only the main-process half. Recommendation: delete it all, and decide separately whether the hosted brain should regain app actions through a desktop channel.
+
+**Effect 4 landed** (#1416) under Charles's lane; the preview-probe job passes on it. LUKE-208 filed (voice test flake, fixed pauses racing socket events).
