@@ -64,6 +64,21 @@ export function frameText(frame: VoiceFrame): string | undefined {
   return "text" in frame ? frame.text : undefined;
 }
 
+/**
+ * The text frames a door took off a paused socket before its consumers stood,
+ * handed to those consumers the way the socket itself would have handed them:
+ * emitted on the socket's own `message` event, so every listener standing on
+ * it, the reader this module registers and the sideband's alike, hears each
+ * once, in the order it arrived, and as the text it arrived as. Called while
+ * the socket is still paused, so nothing the socket itself emits can land
+ * between two of them; the caller resumes the socket once these are through.
+ */
+export function replayHeldFrames(socket: WebSocket, held: readonly string[]): void {
+  for (const text of held) {
+    socket.emit("message", Buffer.from(text, "utf8"), false);
+  }
+}
+
 export interface VoiceSocketOptions {
   /**
    * How many bytes the peer may send before this closes the socket, counted

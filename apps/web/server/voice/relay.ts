@@ -27,14 +27,18 @@ import {
 } from "./socket.js";
 
 /**
- * The pipe between one device socket and one OpenAI sideband, once both
- * stand. Each side's frames are a `Stream` read by a fiber of the session's
- * own scope, and they cross as the bytes they arrived as; the service reads
- * each frame's `type` and nothing else of it, drops reflected audio by that
- * type on every route, on the introduction route admits only what a renderer's
- * own data channel would carry, and on the sessions route admits from the
- * device only the hang-up, its idle report, and its stop, closing the socket
- * on anything else. The two reports are the frames read past their type: they
+ * The pipe between one device socket and one OpenAI socket, once both stand:
+ * the sideband the service attached to a WebRTC session, or, on the audio
+ * route, the primary socket that is the session itself. Each side's frames
+ * are a `Stream` read by a fiber of the session's own scope, and they cross as
+ * the bytes they arrived as; the service reads each frame's `type` and
+ * nothing else of it, drops reflected audio by that type on the sessions and
+ * introduction routes and the echo of the device's own audio on the audio
+ * route, on the introduction route admits only what a renderer's own data
+ * channel would carry, on the sessions route admits from the device only the
+ * hang-up, its idle report, and its stop, and on the audio route the same
+ * with the device's own audio beside them, closing the socket on anything
+ * else. The two reports are the frames read past their type: they
  * are the service's own vocabulary, handed to the exchange that holds the
  * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:

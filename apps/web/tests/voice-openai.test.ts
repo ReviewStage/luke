@@ -16,6 +16,7 @@ import {
   liveStartRequest,
 } from "../server/live";
 import { createLiveUpstream } from "../server/voice/openai";
+import { textFrame } from "./support/voice-fakes";
 
 /**
  * The primary-socket door against an OpenAI on this machine: the session
@@ -53,17 +54,6 @@ const PROTOCOL_HEADERS: ReadonlySet<string> = new Set([
   "sec-websocket-version",
   "sec-websocket-extensions",
 ]);
-
-/** One unmasked text frame, short enough that its length is the second byte. */
-const TEXT_FRAME = { FIN_TEXT: 0x81, LONGEST_PAYLOAD: 125 } as const;
-
-function textFrame(text: string): Buffer {
-  const payload = Buffer.from(text, "utf8");
-  if (payload.byteLength > TEXT_FRAME.LONGEST_PAYLOAD) {
-    throw new Error("A framed test payload must stay within one length byte");
-  }
-  return Buffer.concat([Buffer.from([TEXT_FRAME.FIN_TEXT, payload.byteLength]), payload]);
-}
 
 function startedEvent(): string {
   return JSON.stringify({

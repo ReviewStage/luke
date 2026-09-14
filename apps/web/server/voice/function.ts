@@ -14,7 +14,6 @@ import { recordVoiceSeconds, spendHostedMeter, spendIntroductionMeter } from "..
 import { runWeb } from "../runtime.js";
 import type { VoiceAccounts } from "./accounts.js";
 import { deploymentExchange } from "./deployment-exchange.js";
-import { VOICE_ROUTE } from "./frames.js";
 import { LOG_EVENT, standardOutputLog } from "./log.js";
 import {
   type VoiceServer,
@@ -26,8 +25,9 @@ import { voiceSessionRecord } from "./session-record.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function
- * instance. The two `api/voice` functions each export the server this builds,
- * so the same service answers both upgrades and the path decides the route.
+ * instance. The three `api/voice` functions each export the server this
+ * builds, so the same service answers every upgrade and the path decides the
+ * route.
  * A missing `OPENAI_API_KEY` leaves the service refusing every upgrade with
  * 503, the hosted tier's kill switch, rather than failing to load.
  *
@@ -76,9 +76,10 @@ const REPORT_REASON_BOUND = 120;
  * wrote, up to the colon after which every reporter on the exchange path puts
  * the detail (a driver's or a parser's own message, which can carry the
  * value it refused), and bounded, so the function's log says which thing
- * happened and never what was said. The platform beside it is the session's
- * own, read from the device row its handshake resolved, so a report only
- * phones make can be counted without any line being read further.
+ * happened and never what was said. The route and the platform beside it are
+ * the session's own, the platform read from the device row its handshake
+ * resolved, so a report only phones make, or only the audio route's sessions
+ * make, can be counted without any line being read further.
  */
 function reportReason(message: string): string {
   const colon = message.indexOf(":");
@@ -103,7 +104,7 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
       report: (reported) =>
         standardOutputLog({
           event: LOG_EVENT.EXCHANGE_REPORTED,
-          route: VOICE_ROUTE.SESSIONS,
+          route: reported.route,
           reason: reportReason(reported.message),
           platform: reported.platform,
         }),

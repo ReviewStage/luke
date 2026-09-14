@@ -26,6 +26,7 @@ import {
   voiceWriter,
 } from "../hosted/store/index.js";
 import type { StoreWriter } from "../hosted/store/writer.js";
+import type { VoiceRoute } from "./frames.js";
 import { type HostedLiveBrain, hostedLiveBrain } from "./live-brain.js";
 import {
   type HostedBriefingDelivery,
@@ -96,6 +97,8 @@ export interface HostedLiveExchangeOptions {
 
 /** One signed-in session the sessions route created or re-attached, as an exchange is offered it. */
 export interface AttachedSession {
+  /** The route the session was opened on, which is what a report about it is written down under. */
+  readonly route: VoiceRoute;
   readonly accountId: string;
   readonly sessionId: string;
   /** The device the handshake named and the account was shown to hold; none where the device sent none or the route re-attached. */
@@ -126,12 +129,14 @@ export type ExchangeAttachment = (
 
 /**
  * Something a standing exchange reported of itself, as the composition that
- * offered it writes it down: the reporter's own sentence, and the platform of
- * the session it was reported for, so a failure only phones see is visible in
- * the function's log without the sentence being read past its first colon.
+ * offered it writes it down: the reporter's own sentence, and the route and
+ * the platform of the session it was reported for, so a failure only phones
+ * see, or only the audio route sees, is visible in the function's log without
+ * the sentence being read past its first colon.
  */
 export interface ExchangeReport {
   readonly message: string;
+  readonly route: VoiceRoute;
   readonly platform: DevicePlatform | undefined;
 }
 

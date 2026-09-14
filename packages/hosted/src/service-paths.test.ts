@@ -23,12 +23,13 @@ test("Clear stands beside the Conversation's reads under the same prefix", () =>
   );
 });
 
-test("the voice service's paths are two distinct function routes of the service", () => {
+test("the voice service's paths are three distinct function routes of the service", () => {
   assert.deepEqual(Object.values(VOICE_SERVICE_PATH), [
     "/api/voice/sessions",
     "/api/voice/introduction",
+    "/api/voice/audio",
   ]);
-  assert.equal(new Set(Object.values(VOICE_SERVICE_PATH)).size, 2);
+  assert.equal(new Set(Object.values(VOICE_SERVICE_PATH)).size, 3);
   const taken = new Set<string>(Object.values(HOSTED_SERVICE_PATH));
   for (const path of Object.values(VOICE_SERVICE_PATH)) assert.equal(taken.has(path), false);
 });

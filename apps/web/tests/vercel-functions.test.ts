@@ -51,7 +51,7 @@ import {
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
-test("both voice functions carry the 800 second maximum duration", () => {
+test("every voice function carries the 800 second maximum duration", () => {
   for (const path of Object.values(VOICE_SERVICE_PATH)) {
     assert.equal(FUNCTION_MAX_DURATION_SECONDS.get(path), VOICE_FUNCTION_MAX_DURATION_SECONDS);
   }

@@ -33,7 +33,7 @@ export const LOG_EVENT = {
   EXCHANGE_FAILED: "exchange-failed",
   /** The standing exchange reported something of itself: which of its fixed sentences, and nothing of the detail behind it. */
   EXCHANGE_REPORTED: "exchange-reported",
-  /** The device sent a frame the sessions route does not admit; its socket was closed on it. */
+  /** The device sent a frame its signed-in route does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
   SESSION_ENDED: "session-ended",
   /** A session's own `voice_sessions` write failed; the route is all it says, as every other line is. */
@@ -59,7 +59,7 @@ export interface RelayCounts {
   droppedUnpermitted: number;
   /** Reports in the service's own vocabulary the device sent after the handshake, read here and never forwarded. */
   reportsRead: number;
-  /** Device frames the sessions route refused, closing the socket; at most one, since the first ends the socket. */
+  /** Device frames a signed-in route refused, closing the socket; at most one, since the first ends the socket. */
   refusedUnpermitted: number;
 }
 
