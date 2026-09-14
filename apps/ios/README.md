@@ -371,9 +371,9 @@ on — stand two thumbs, above Copy in the message's menu. A press is the one wr
 `MessageRatingClient` puts the verdict and this device's id to
 `PUT /api/conversation/messages/{id}/rating` through the same `authorized()`
 retry and holder fence every phone client runs under, the answer is recorded
-locally as the rating event it made, and the verdict shown — filled in the
-menu, and as a small filled thumb under the bubble — is the rating the
-service folded onto the message, amended by any newer `rating` event read
+locally as the rating event it made, and the verdict shown — the filled thumb
+in the menu, and nothing on the message itself — is the rating the service
+folded onto the message, amended by any newer `rating` event read
 since — this device's own, or another's — so a verdict given on the Mac shows
 here and one given here shows there, and a fresh launch reads no events from
 the record's beginning: the events cursor seeds from the change signal's head

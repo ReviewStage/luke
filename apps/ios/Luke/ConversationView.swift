@@ -12,10 +12,10 @@ import SwiftUI
 /// holds it; a turn Luke opened himself leads with his face and never wears
 /// a reply's bubble. Behind a press and hold on each of Luke's messages, a
 /// reply's bubble or his own judgment's row alike, stand two thumbs, the one
-/// write this screen makes: a verdict on that message,
-/// sent to the service under the account's fence and drawn back from the
-/// latest rating event as a small filled thumb under the bubble, so a verdict
-/// given on the Mac shows here and one given here shows there.
+/// write this screen makes: a verdict on that message, sent to the service
+/// under the account's fence and drawn back from the latest rating event as
+/// the filled thumb in that menu and nowhere on the message itself, so a
+/// verdict given on the Mac shows here and one given here shows there.
 /// The screen polls the change signal while it stands in the foreground and
 /// draws only what it holds in memory.
 ///
@@ -287,7 +287,12 @@ private struct ConversationRowView: View {
         case .luke:
             VStack(alignment: .leading, spacing: 3) {
                 AgentMessageBubble(words: text) { ratingItems(rateable) }
-                underline(rateable: rateable, unspoken: unspoken, leading: 14)
+                if unspoken {
+                    Text("Not spoken")
+                        .font(.caption2)
+                        .foregroundStyle(Color.inkTertiary)
+                        .padding(.leading, 14)
+                }
             }
         case .note:
             Text(text)
@@ -298,17 +303,14 @@ private struct ConversationRowView: View {
         case .own:
             // Luke's own words are his message all the same: the same menu a
             // reply's bubble opens, on the row that wears none.
-            VStack(alignment: .leading, spacing: 3) {
-                OwnJudgmentRow {
-                    MarkdownMessageView(text)
-                        .foregroundStyle(Color.inkSecondary)
-                }
-                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12))
-                .contextMenu {
-                    ratingItems(rateable)
-                    MessageCopyAction(words: text)
-                }
-                underline(rateable: rateable, unspoken: unspoken, leading: 26)
+            OwnJudgmentRow {
+                MarkdownMessageView(text)
+                    .foregroundStyle(Color.inkSecondary)
+            }
+            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12))
+            .contextMenu {
+                ratingItems(rateable)
+                MessageCopyAction(words: text)
             }
         }
     }
@@ -324,35 +326,15 @@ private struct ConversationRowView: View {
             )
         }
     }
-
-    /// The quiet line under one of Luke's messages: the verdict standing on
-    /// it, and whether a briefing went unheard. Nothing is drawn when neither
-    /// holds, so the row's height is the words' alone.
-    @ViewBuilder
-    private func underline(rateable: RateableMessage?, unspoken: Bool, leading: CGFloat) -> some View {
-        let rating = rateable.flatMap { ratings[$0.messageId] }
-        if rating != nil || unspoken {
-            HStack(spacing: 8) {
-                if let rating {
-                    RatingMark(rating: rating)
-                }
-                if unspoken {
-                    Text("Not spoken")
-                        .font(.caption2)
-                        .foregroundStyle(Color.inkTertiary)
-                }
-            }
-            .padding(.leading, leading)
-        }
-    }
 }
 
 /// Two thumbs in the press-and-hold menu of one of Luke's messages, the way
 /// a chat rates a reply: the verdict standing is drawn filled, a press on the
 /// other moves the verdict, and a press on the filled one sends the same
-/// verdict again, since a rating is a fact stated and never an edit. Both
-/// stand above Copy, and both are disabled rather than hidden while this
-/// installation has no device row to rate as.
+/// verdict again, since a rating is a fact stated and never an edit. The
+/// menu is the only place the verdict shows; the message itself wears no
+/// mark of it. Both items stand above Copy, and both are disabled rather
+/// than hidden while this installation has no device row to rate as.
 private struct RatingMenuItems: View {
     let rating: MessageRating?
     let enabled: Bool
@@ -376,33 +358,11 @@ private struct RatingMenuItems: View {
     }
 }
 
-/// The verdict standing on one of Luke's messages, drawn under the bubble in
-/// the quiet voice the "Not spoken" line uses: a filled thumb and nothing
-/// else, so a rating given on either device is visible without opening the
-/// menu, and a press on it does nothing; the menu is where a verdict is given.
-private struct RatingMark: View {
-    let rating: MessageRating
-
-    var body: some View {
-        Image(systemName: rating.symbol(filled: true))
-            .font(.caption2)
-            .foregroundStyle(Color.inkTertiary)
-            .accessibilityLabel(rating.markLabel)
-    }
-}
-
 extension MessageRating {
     fileprivate var menuTitle: String {
         switch self {
         case .up: "Thumbs Up"
         case .down: "Thumbs Down"
-        }
-    }
-
-    fileprivate var markLabel: String {
-        switch self {
-        case .up: "Rated thumbs up"
-        case .down: "Rated thumbs down"
         }
     }
 
