@@ -3,7 +3,7 @@ import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS, UTTERANCE_SETTLE_MARGIN_MS } from
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import { test } from "vitest";
-import { LiveCaptions } from "./live-captions";
+import { LiveCaptions, SETTLED_ROW_HOLD_MS } from "./live-captions";
 
 function fixture() {
   let now = 10_000;
@@ -72,5 +72,20 @@ test("a fragment that ends before it starts, or says nothing, draws no row", () 
   f.captions.append(TRANSCRIPT_SPEAKER.USER, "late", 900, 400);
   assert.equal(f.reports.length, 0);
   f.captions.append(TRANSCRIPT_SPEAKER.USER, "   ", 0, 100);
+  assert.equal(f.latest().length, 0);
+});
+
+test("a settled row stays among the rows for the hold, then leaves them", () => {
+  const f = fixture();
+  f.captions.append(TRANSCRIPT_SPEAKER.USER, "what needs me", 0, 900);
+  f.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  f.captions.tick();
+  assert.equal(f.latest()[0]?.settled, true);
+  f.advance(SETTLED_ROW_HOLD_MS - 1);
+  f.captions.tick();
+  assert.equal(f.latest().length, 1);
+  assert.equal(f.latest()[0]?.settled, true);
+  f.advance(1);
+  f.captions.tick();
   assert.equal(f.latest().length, 0);
 });

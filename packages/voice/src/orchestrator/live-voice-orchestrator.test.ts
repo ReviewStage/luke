@@ -494,11 +494,20 @@ test("the view reports each edge once, counts the exchange on its opening edge u
     speaking?.liveConversationEntries.map((entry) => entry.kind),
     [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
   );
-  // A settled row leaves the live lines: the host has written it by then.
+  // A settled row stays among the live lines while the captions hold it: the
+  // service's row for it reaches this Mac on a later poll, and the panel is
+  // what retires the live one against it.
   call.events.onCaptions([
     row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
   ]);
+  await settleFibers();
+  assert.deepEqual(
+    f.views.at(-1)?.liveConversationEntries.map((entry) => entry.kind),
+    [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
+  );
+  // Once the captions let it go, so do the live lines.
+  call.events.onCaptions([row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished")]);
   await settleFibers();
   assert.deepEqual(
     f.views.at(-1)?.liveConversationEntries.map((entry) => entry.kind),

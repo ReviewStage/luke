@@ -589,8 +589,8 @@ export function announcedWords(part: StoredToolPart): string | undefined {
   return isRecord(input) && isWireString(input.briefing) ? input.briefing : undefined;
 }
 
-/** The text a user row says, every text part joined as paragraphs. */
-function userWords(message: StoredUIMessage): string {
+/** The text a stored message says, every text part joined as paragraphs. */
+export function messageWords(message: StoredUIMessage): string {
   return message.parts
     .filter(isTextPart)
     .map((part) => part.text)
@@ -648,7 +648,7 @@ function drawsWords(
 
 /** What the rating's draft quotes of a message: its text parts whole, or the briefing of a message that has none. */
 function quotedWords(message: StoredUIMessage, lastWords: StoredPart | undefined): string {
-  const text = userWords(message);
+  const text = messageWords(message);
   if (text.length > 0 || lastWords === undefined || !isStoredToolPart(lastWords)) return text;
   return announcedWords(lastWords) ?? "";
 }
@@ -695,7 +695,7 @@ function messageRows(
             <BubbleRow
               key={message.id}
               voice={voice}
-              words={userWords(message)}
+              words={messageWords(message)}
               at={view.createdAt}
               copy={voice === VOICE.YOU}
             />
@@ -894,7 +894,7 @@ export function ConversationTurns({
             message.message.role === MESSAGE_ROLE.USER &&
             message.message.metadata.author === MESSAGE_AUTHOR.DEVELOPER
           ) {
-            ask = userWords(message.message);
+            ask = messageWords(message.message);
           }
           return rows;
         });

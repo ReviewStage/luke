@@ -538,7 +538,9 @@ export class LiveCall implements LiveVoiceCall {
   #onRows(rows: readonly LiveCaptionRow[]): void {
     this.#options.events.onCaptions(rows);
     if (this.#captionTick !== undefined) this.#disarm(this.#captionTick);
-    if (rows.every((row) => row.settled) || this.#ended) {
+    // A settled row still ages toward leaving the list, so the clock runs
+    // until no row is drawn at all.
+    if (rows.length === 0 || this.#ended) {
       this.#captionTick = undefined;
       return;
     }

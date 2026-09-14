@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { CONVERSATION_ENTRY_KIND, type ConversationViewTurnGroup } from "@sidecar/session";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
@@ -140,4 +141,24 @@ test("the wait's age is worded once it is worth a word", () => {
   assert.equal(thinkingElapsedLabel(NOW, NOW + 9_999), undefined);
   assert.equal(thinkingElapsedLabel(NOW, NOW + 10_000), "Still thinking · 0:10");
   assert.equal(thinkingElapsedLabel(NOW, NOW + 605_000), "Still thinking · 10:05");
+});
+
+test("a live line the stored thread already holds is drawn once, as the stored row", () => {
+  // The single turn's developer line and Luke's answer, as the settled live rows would still say them.
+  const stored = SINGLE_TURN.flatMap((group) => group.messages);
+  const developer = stored.find((message) => message.message.role === MESSAGE_ROLE.USER);
+  const luke = stored.find((message) => message.message.role === MESSAGE_ROLE.ASSISTANT);
+  assert.ok(developer && luke);
+  const said = (message: (typeof stored)[number]) =>
+    message.message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n\n");
+  const twins = render(SINGLE_TURN, {
+    live: [
+      { kind: CONVERSATION_ENTRY_KIND.ASK, words: `  ${said(developer).toUpperCase()} ` },
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: said(luke) },
+      { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "And one more thing" },
+    ],
+  });
+  // Only the line the thread does not hold yet is drawn live.
+  assert.equal(count(twins, 'data-streaming="true"'), 1);
+  assert.ok(twins.includes("And one more thing"));
 });
