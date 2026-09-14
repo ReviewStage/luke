@@ -114,8 +114,9 @@ export class ObservationLoop {
   readonly refresh: Effect.Effect<void> = Effect.suspend(() => {
     if (!this.#options.gate()) {
       // A follow-up that found the gate closed runs nothing, and nothing else
-      // will end the settling it was queued under.
-      this.#settle();
+      // will end the settling it was queued under; a poke that finds the gate
+      // closed while a pass still runs leaves the settling to that pass.
+      if (!this.#running) this.#settle();
       return Effect.void;
     }
     if (this.#running) {

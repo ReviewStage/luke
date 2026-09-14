@@ -136,6 +136,32 @@ it.effect("a follow-up that finds the gate closed still settles the wait", () =>
   }),
 );
 
+it.effect(
+  "a poke that finds the gate closed while a pass still runs does not settle the wait early",
+  () =>
+    Effect.gen(function* () {
+      let enabled = true;
+      const pending = yield* Deferred.make<void>();
+      const loop = new ObservationLoop({
+        gate: () => enabled,
+        intervalMs: 60_000,
+        run: () => Deferred.await(pending),
+      });
+      const running = yield* Effect.fork(loop.refresh);
+      yield* Effect.yieldNow();
+      const waiting = yield* Effect.fork(loop.settled);
+      enabled = false;
+      // The gate dropped mid-pass; a poke now runs nothing, and must not tell
+      // the waiter the roster is written while the pass is still writing it.
+      yield* loop.refresh;
+      yield* turns;
+      assert.equal(Option.isNone(yield* waiting.poll), true, "the pass is still running");
+      yield* Deferred.succeed(pending, undefined);
+      yield* running.await;
+      yield* Fiber.join(waiting);
+    }),
+);
+
 it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;
