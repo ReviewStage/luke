@@ -10,13 +10,6 @@ export { BACKEND_PREAMBLE, type BrainPromptVoice, brainPromptVoice } from "./bac
 export { toolLoopRuntimeOver } from "./builtins.js";
 export { type Detach, detachOn, runtimeExit } from "./effect/carry.js";
 export {
-  BRAIN_EMBEDDING_MODEL,
-  BRAIN_EMBEDDINGS_PATH,
-  type BrainEmbeddingsRequest,
-  brainEmbeddingsRequest,
-  embeddingsVectors,
-} from "./embedding-adapters.js";
-export {
   type BrainPersistedState,
   type BrainStateLoad,
   type BrainStateRepository,
@@ -25,7 +18,6 @@ export {
   freshBrainState,
 } from "./envelope.js";
 export { BrainGenerationClock } from "./generation-clock.js";
-export { HostedModelAdapter } from "./hosted-model-adapter.js";
 export { runMemoryHousekeeping } from "./housekeeping.js";
 export {
   askInputText,
@@ -37,13 +29,7 @@ export {
 export { brainToolNotes } from "./instructions.js";
 export type { BrainJournalEntry } from "./journal.js";
 export { UNKNOWN_ACTION_STATUS } from "./journal.js";
-export {
-  BRAIN_RATE_LIMIT_COOLDOWN_MS,
-  BRAIN_RATE_LIMIT_RETRY_AFTER_BOUND_MS,
-  RETRY_AFTER_HEADER,
-  rateLimitWaitMs,
-} from "./model-adapter-shared.js";
-export { BRAIN_OPENAI_DEFAULTS, BRAIN_PREFETCH_MODEL } from "./model-defaults.js";
+export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
 export type { BrainObservationEntry } from "./observation-inbox.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
@@ -81,7 +67,6 @@ export {
   responsesModelAnswer,
   userMessageItem,
 } from "./responses-api.js";
-export { RESPONSES_OPERATION, type RespondOperation } from "./responses-model-adapter.js";
 export {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,

@@ -10,7 +10,7 @@ import {
   type AccountSnapshot,
   isAccountProvider,
 } from "@sidecar/credentials/snapshot";
-import { AgentTraceWriter, agentTraceDirectory, tracedModelAdapter } from "@sidecar/devtrace";
+import { AgentTraceWriter, agentTraceDirectory } from "@sidecar/devtrace";
 import {
   carried,
   GATEWAY_EVENT,
@@ -97,11 +97,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
   const environment = yield* Environment;
   const identity = yield* AppIdentity;
   const { runMode, report } = kernel;
-  // The services the host is being built on, threaded through
-  // `VoiceCapabilityAssembler` to every model adapter it builds, so the
-  // promise each of those still answers is run under the host's own
-  // services rather than under an ambient empty set.
-  const execution = yield* Effect.context<never>();
   const late = yield* lateService<AccountLinks>();
   /**
    * The device row's id, mirrored for the one link a caller reads from a
@@ -228,7 +223,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
     credentialsUsable: () => runMode.sendsNetwork && capabilitiesActive(),
     fixtureRun: () => !runMode.sendsNetwork,
     accountSignedIn: () => session.snapshot.status === ACCOUNT_STATUS.SIGNED_IN,
-    hostedServiceBaseUrl: kernel.hostedServiceBaseUrl,
     // The voice functions live on the account service's origin, so its
     // development override reaches them too; a voice override of its own stands
     // where a `vercel dev` serves the functions apart, and a packaged build takes neither.
@@ -239,13 +233,6 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
     openSocket: openSocketOverWs,
     refreshAccount: session.refreshOnce,
     deviceId: () => MutableRef.get(deviceIdReader)(),
-    execution,
-    ...(agentTrace
-      ? {
-          wrapBrainModel: (model) =>
-            tracedModelAdapter(model, (record) => agentTrace.recordBrainRequest(record), execution),
-        }
-      : undefined),
   });
 
   /**

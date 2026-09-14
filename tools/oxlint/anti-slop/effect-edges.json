@@ -29,7 +29,6 @@
     "apps/web/tests/support/hosted-store-database.ts",
     "apps/web/tests/support/no-database.ts",
     "apps/web/tests/support/sql-client.ts",
-    "packages/brain/src/client.ts",
     "packages/brain/src/effect/carry.ts",
     "packages/brain/src/generation.ts",
     "packages/credentials/src/single-flight.ts",

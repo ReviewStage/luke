@@ -308,18 +308,18 @@ and `userIdForAuthorization(authorization, userInfo)` each answer
 `Effect<OAuthUserInfo | undefined, UnknownException>`: the auth service's own
 `oauth2UserInfo` is a promise of Better Auth's, so it is wrapped with
 `Effect.tryPromise` once where an endpoint is constructed —
-`hostedVaultUserInfo` in `server/hosted/vault-route.ts`, the brain group's in
-`server/hosted/brain-route.ts`, the voice function's own, the brain host's
-seam, and the observation group's inline one — and nowhere else. What that
+`hostedVaultUserInfo` in `server/hosted/vault-route.ts`, the voice function's
+own, the brain host's seam, and the observation group's inline one — and
+nowhere else. What that
 call throws is still one indistinguishable nothing: the resolution recovers
 it, so a missing header, an expired token, and a refusing auth service are
 the same 401 they always were, and no route repeats the recovery.
 
 Every caller yields it. `HostedStoreRoute.resolveUserId`
-(`server/hosted/store-route.ts`) and the seams of the devices-and-vault, brain,
-and voice-mint groups are Effect-shaped fields, so `brain-ask.ts`,
+(`server/hosted/store-route.ts`) and the seams of the devices-and-vault and
+voice-mint groups are Effect-shaped fields, so `brain-ask.ts`,
 `turn-event-stream.ts`, `conversation-clear.ts`, `change-signal.ts`,
-`resource-reads.ts`, and the three groups' gates read the bearer on their own
+`resource-reads.ts`, and the two groups' gates read the bearer on their own
 fiber instead of wrapping a promise in `Effect.promise`. One caller is a
 promise of somebody else's: eve's `AuthFn`, which
 `apps/web/eve/channels/eve.ts` satisfies by running the resolution once at
@@ -339,8 +339,8 @@ warm invocation reaches the services the cold one built. A group's routes are
 a layer rather than a value because that is what an `HttpRouter` registration
 is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
-provides per request from the context `runWeb` read. The brain group's four
-routes, the three mint routes, the auth group,
+provides per request from the context `runWeb` read. The three mint routes,
+the auth group,
 the actions group, the five routes behind the observation group below, the
 account group's `server/routes/account/delete.ts` and
 `server/routes/account/preferences.ts`, the devices and vault group's three
@@ -450,19 +450,19 @@ handed to the group as the effects they are rather than run at the seam, and
 that store names no database and reaches no auth session, so `tests/hosted-account-store.test.ts`
 exercises the erasure's cascade and the snapshot's replacement against a real
 dialect; the analytics erasure key and project are
-read from `HostedEnvironment` instead, the way the brain group's own key and
-model override are, and the erasure call itself runs over the ambient
+read from `HostedEnvironment` instead, the way the hosted tier's own key is,
+and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
 `server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
 keep the promise-shaped handlers they always answered with, now read only by
 their own tests and as the byte-identity oracle `tests/account-app.test.ts`
 checks the group against, with the environment handed in directly the way
-`tests/support/brain-call.ts` hands it to the brain group. `fixtures/account-route/`
+`tests/support/mint-call.ts` hands it to the mint group. `fixtures/account-route/`
 records what the group answers for a delete, a read, a write, a refused
 method, an invalid token, an invalid body, and a path outside the group, with
 `content-length` checked against the body it frames and then dropped before
-comparing, the way `tests/brain-app.test.ts` holds it.
+comparing.
 
 ## The devices and vault group
 
@@ -472,8 +472,8 @@ key vault's on `/api/vault/key` (store, delete) and `/api/vault/keys` (list),
 each dispatched by an `Effect.gen` that reads the method off
 `HttpServerRequest`, reads the bearer, checks the device brake or the vault
 secret (`HostedEnvironment`'s `providerKeyEncryptionSecret`, the same
-environment-at-build-time rule the brain group's key and model override
-read), reads the body through `readJsonBodyEffect`, and decodes it through
+environment-at-build-time rule the hosted tier's key is read under), reads
+the body through `readJsonBodyEffect`, and decodes it through
 the hosted wire's own Effect declarations
 (`readEither(effectSchema(deviceRegisterRequestSchema))` and its heartbeat and
 forget siblings; the vault's provider id and key are read by hand, the way the
@@ -1057,65 +1057,6 @@ Enable the WebSockets feature on the Vercel team, make sure Fluid compute is
 on for the project, and set `OPENAI_API_KEY`; `LUKE_LIVE_MODEL` optionally pins
 the model. Nothing else: no separate service, secret, or origin. Tests run against a fake OpenAI on loopback and an in-memory account side
 (`tests/voice-service.test.ts`, `tests/support/voice-fakes.ts`).
-
-## Hosted brain inference
-
-`server/routes/brain/capabilities.ts` and the three routes under
-`server/routes/brain/v2/` run
-Luke's brain on the deployment's own OpenAI key for a signed-in client that
-carries none of its own. They are exact-path files like the voice route,
-resolved to a user through the same bearer seam, and the three POST routes are
-the only hosted routes with a raised function duration:
-`server/function-durations.ts` gives the inference and the token count 120 seconds so the 90-second upstream
-ceiling the brain shares with its keyed client can pass, and the embedding 60.
-
-One HTTP request is one model call and nothing more. A client GETs the
-capabilities first — the model, the operations, the registered tool names, the
-bounds, the reasoning efforts — and fails on a service that lacks them rather
-than falling back. It then POSTs one operation with the prompt it prepared and
-the tool names it means to offer. The readers in `brain-contract.ts` of
-`@sidecar/hosted` are the whole admission policy — the body is read as it
-streams and cut at 2 MiB whatever its `Content-Length` says, the prompt is
-bounded to its own 200,000-character envelope and refused past it rather than
-cut, the input array is capped at 2,000 items each of which must take one of
-the forms the brain replays, and every tool name must be one this service
-registers a schema for, so a caller can never upload a schema. The service
-then fixes the model, the upstream, its credential, the output budget's
-ceiling, and the reasoning summary from its own build and posts once, leaving
-OpenAI's `store` at its default so the response stands with OpenAI under its
-own retention, named back by the id the desktop keeps on the run. An inference's
-answer is handed down as it came, once it is known to be a Responses payload
-every item of which the same admission would replay next turn; an answer this
-route could not replay is a 502, because the client would keep it verbatim and
-every later turn of that memory would fail here. The service compacts
-nothing: a client folds its own context behind a summary it asks for as an
-ordinary inference. The service runs no tool, holds no memory, reaches no
-provider, and stores and logs nothing of the request, the reply, or the
-encrypted items that travel in them.
-
-Each request spends the attention review meter before the upstream call, so a
-refused upstream still counts; an upstream that rate limits answers a bounded
-`Retry-After` the client cools down for, and the allowance was still spent.
-`LUKE_BRAIN_MODEL` optionally overrides the model, under the name the
-desktop's keyed client honours; a blank value is treated as absent, and
-nothing in a request can name one. Without `OPENAI_API_KEY` the routes answer
-503 like the rest of the hosted tier. Neither is read at an invocation:
-`server/hosted/environment.ts` resolves both from `Config` as the runtime's
-services are built, once per warm instance, and drops a blank there, so the
-group sees one absence and the key travels as a `Redacted` the whole way.
-
-`server/brain-app.ts` is the group those four functions serve. Each path is
-its own function and the group declares all four, so a function answers its
-own path and the hosted vocabulary's `not-found` anywhere else; every path is
-declared for every method, because the method an operation documents is the
-endpoint's own `method-not-allowed` and a router keyed by method would have
-turned that into a `not-found` the desktop's clients do not read. A refusal
-travels on the failure channel and the answer on the success one, and the
-group merges them into the one response it hands the platform.
-`fixtures/brain-route/` records what each operation and each refusal answers
-— the status, the headers, and the body bytes — recorded from the
-promise-shaped routes the group replaced and unchanged by the conversion. The existing mint and device routes are
-untouched by these routes and keep their contracts for released clients.
 
 ## The turn event stream
 

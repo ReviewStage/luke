@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
 import { Effect } from "effect";
-import { HttpRouter } from "effect/unstable/http";
+import { HttpRouter, HttpServerRequest } from "effect/unstable/http";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { brainApp } from "../server/brain-app.js";
+import { HTTP_METHOD } from "../server/core.js";
+import { HostedEnvironment } from "../server/hosted/environment.js";
 import {
   HOSTED_HTTP_STATUS,
   jsonResponse,
   readJsonBody as readJsonBodyPromise,
 } from "../server/hosted/http.js";
 import {
+  HOSTED_REFUSAL,
   hostedJsonResponse,
+  hostedMethod,
   hostedRefusalResponse,
   readJsonBodyEffect,
 } from "../server/hosted/http-effect.js";
@@ -18,9 +21,10 @@ import { routeFromHttpRouter } from "../server/route-effect.js";
 import { disposeWebRuntime } from "../server/runtime.js";
 
 /**
- * The adaptor's proof: a route built from a route layer answers what the
- * promise-shaped route beside it answers, byte for byte, on the answer and on
- * every refusal of the gate.
+ * The adaptor's proof: a route built from a route layer reads the request it
+ * was handed and the services the web runtime built, answers the gate's own
+ * refusals, and answers what the promise-shaped body read beside it answers,
+ * byte for byte, on the answer and on every refusal.
  */
 
 /**
@@ -42,7 +46,8 @@ afterEach(async () => {
 });
 
 const OPENAI_API_KEY = "OPENAI_API_KEY";
-const CAPABILITIES = "https://luke.test/api/brain/capabilities";
+const GATE_PATH = "/api/gate";
+const GATE = `https://luke.test${GATE_PATH}`;
 const BODIES = "https://luke.test/api/bodies";
 const BODY_BOUND_BYTES = 64;
 const API_KEY = "sk-test";
@@ -50,16 +55,31 @@ const USER_ID = "user-1";
 const AUTHORIZATION = "Bearer token";
 
 /**
- * The group as one function serves it. The key is the environment's, which is
- * what `HostedEnvironment` reads as the runtime's services are built, so a
- * case naming another key ends the runtime before it asks for the next.
+ * The gate every hosted group runs its requests through, as one route: the
+ * method, the tier switched on, and the caller signed in. The key is the
+ * environment's, which is what `HostedEnvironment` reads as the runtime's
+ * services are built, so a case naming another key ends the runtime before
+ * it asks for the next.
  */
-function capabilitiesRoute(userId: string | undefined) {
+function gateRoute(
+  resolveUserId: (authorization: string | undefined) => Effect.Effect<string | undefined>,
+) {
   return routeFromHttpRouter(
-    brainApp({
-      resolveUserId: () => Effect.succeed(userId),
-      spend: () => Effect.die(new Error("capabilities spend nothing")),
-    }),
+    HttpRouter.add(
+      ANY_METHOD,
+      GATE_PATH,
+      Effect.gen(function* () {
+        yield* hostedMethod(HTTP_METHOD.GET);
+        const environment = yield* HostedEnvironment;
+        if (environment.openAiKey === undefined) {
+          return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
+        }
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const userId = yield* resolveUserId(request.headers.authorization);
+        if (!userId) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_TOKEN);
+        return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { userId });
+      }).pipe(Effect.catch((refusal) => Effect.succeed(hostedRefusalResponse(refusal)))),
+    ),
   );
 }
 
@@ -77,8 +97,8 @@ async function recorded(response: Response): Promise<RecordedResponse> {
   };
 }
 
-function capabilitiesRequest(method: string): Request {
-  return new Request(CAPABILITIES, { method, headers: { authorization: AUTHORIZATION } });
+function gateRequest(method: string): Request {
+  return new Request(GATE, { method, headers: { authorization: AUTHORIZATION } });
 }
 
 const CASES = [
@@ -100,16 +120,11 @@ const CASES = [
 
 test("the route reads a bearer the request carries", async () => {
   const seen: (string | undefined)[] = [];
-  const route = routeFromHttpRouter(
-    brainApp({
-      resolveUserId: (authorization) => {
-        seen.push(authorization);
-        return Effect.succeed(USER_ID);
-      },
-      spend: () => Effect.die(new Error("capabilities spend nothing")),
-    }),
-  );
-  const response = await route.fetch(capabilitiesRequest("GET"));
+  const route = gateRoute((authorization) => {
+    seen.push(authorization);
+    return Effect.succeed(USER_ID);
+  });
+  const response = await route.fetch(gateRequest("GET"));
   assert.equal(response.status, HOSTED_HTTP_STATUS.OK);
   assert.deepEqual(seen, [AUTHORIZATION]);
 });
@@ -157,7 +172,7 @@ test("the route built from a route layer answers the gate's own refusals", async
   for (const entry of CASES) {
     vi.stubEnv(OPENAI_API_KEY, entry.apiKey ?? "");
     gate.push(
-      (await capabilitiesRoute(entry.userId).fetch(capabilitiesRequest(entry.method))).status,
+      (await gateRoute(() => Effect.succeed(entry.userId)).fetch(gateRequest(entry.method))).status,
     );
     await disposeWebRuntime();
   }

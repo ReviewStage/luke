@@ -93,7 +93,7 @@ const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]
 export const EXPECTED_STATUS = {
   [PROBE_DOOR.BYPASS_SECRET]: new Map([
     [SITE_ROOT_PATH, PROBE_STATUS.OK],
-    ["/api/brain/capabilities", PROBE_STATUS.UNAUTHORIZED],
+    ["/api/observe", PROBE_STATUS.UNAUTHORIZED],
     ["/api/observation/tick", PROBE_STATUS.UNAUTHORIZED],
     ["/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/brain/ask", PROBE_STATUS.METHOD_NOT_ALLOWED],
@@ -103,7 +103,7 @@ export const EXPECTED_STATUS = {
     [EVE_HEALTH_PATH, PROBE_STATUS.OK],
   ]),
   [PROBE_DOOR.OPTIONS_ALLOWLIST]: new Map([
-    ["/api/brain/capabilities", PROBE_STATUS.METHOD_NOT_ALLOWED],
+    ["/api/observe", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/observation/tick", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/devices", PROBE_STATUS.METHOD_NOT_ALLOWED],
     ["/api/brain/ask", PROBE_STATUS.METHOD_NOT_ALLOWED],

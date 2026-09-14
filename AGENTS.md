@@ -230,14 +230,13 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   holds `detachOn`'s returned door on the services the caller handed it and
   starts a turn on the calling stack through it, which is why it is named on
   the run allowlist's `runOnHandedRuntime` rows rather than left for a new file
-  to fork through unseen. The same file's `runtimeExit` is the shared door
-  `packages/brain/src/client.ts`'s `BrainTransport#send` (`runCall`) and
-  `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` both run
-  through, because every caller of the brain's model transport still holds a
+  to fork through unseen. The same file's `runtimeExit` is the door
+  `packages/devtrace/src/brain-trace.ts`'s `tracedModelAdapter` runs
+  through, because every caller of a model adapter still holds a
   promise and the `ModelAdapter` interface it answers is one: `compaction.ts`
   is a port of OpenClaw `b7528507` that awaits `model.respond` and imports
-  nothing from `effect`, so no adapter above this transport can answer an
-  effect while that port stands.
+  nothing from `effect`, so no adapter can answer an effect while that port
+  stands.
 - **`packages/runtime/src/execution.ts`**'s `ModelAdapter`, `EmbeddingAdapter`,
   and `MaybePromise` vocabulary, and **`packages/brain/src/transcript-recorder.ts`**'s
   `RecordingContextEngine` — each answers in a `Promise` or a bare value

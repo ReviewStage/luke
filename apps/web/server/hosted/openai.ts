@@ -8,13 +8,7 @@
 import { HTTP_METHOD } from "@sidecar/wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type {
-  BrainEmbeddingsRequest,
-  BrainInputTokensRequest,
-  BrainResponsesRequest,
-  realtimeClientSecretRequest,
-  remoteRealtimeClientSecretRequest,
-} from "../core.js";
+import type { realtimeClientSecretRequest, remoteRealtimeClientSecretRequest } from "../core.js";
 import { accountCall, callAnswered, fixedBearer } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
@@ -24,9 +18,8 @@ export const HOSTED_OPENAI_ENVIRONMENT = {
   API_KEY: "OPENAI_API_KEY",
   /** The same override names the desktop honours, so one convention configures both. */
   REALTIME_MODEL: "LUKE_REALTIME_MODEL",
+  /** The hosted brain host's model, under the same convention; the build's own default otherwise. */
   BRAIN_MODEL: "LUKE_BRAIN_MODEL",
-  /** The read prefetch's small model, under the same convention; the build's own default otherwise. */
-  PREFETCH_MODEL: "LUKE_BRAIN_PREFETCH_MODEL",
 } as const;
 
 export const HOSTED_OPENAI_DEFAULTS = {
@@ -38,10 +31,7 @@ export const HOSTED_OPENAI_DEFAULTS = {
 export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
   | ReturnType<typeof remoteRealtimeClientSecretRequest>
-  | ReturnType<typeof introductionClientSecretRequest>
-  | BrainResponsesRequest
-  | BrainInputTokensRequest
-  | BrainEmbeddingsRequest;
+  | ReturnType<typeof introductionClientSecretRequest>;
 
 export interface OpenAiUpstreamOptions {
   apiKey: string;
@@ -51,8 +41,9 @@ export interface OpenAiUpstreamOptions {
 /**
  * Posts one build-fixed document to OpenAI, resolving to nothing on a network
  * fault so a caller answers 502 without ever holding an error that could name
- * the key. The caller's own cancellation is the run's interruption: a turn
- * dropped mid-call drops the request with it, over the ambient `HttpClient`.
+ * the key. The caller's own cancellation is the run's interruption: a request
+ * dropped mid-call drops the upstream call with it, over the ambient
+ * `HttpClient`.
  */
 export function postOpenAiEffect(
   path: string,

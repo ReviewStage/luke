@@ -9,13 +9,7 @@ import {
   type ActionOutputEnvelope,
   acceptedActionOutput,
 } from "@sidecar/actions";
-import {
-  HOSTED_BRAIN_CONTRACT_VERSION,
-  HOSTED_BRAIN_OPERATION,
-  HOSTED_SERVICE_PATH,
-  hostedBrainBounds,
-  RESPONSES_INPUT_ITEM_TYPE,
-} from "@sidecar/hosted";
+import { RESPONSES_INPUT_ITEM_TYPE } from "@sidecar/hosted";
 import { primedNotesText } from "@sidecar/memory";
 import {
   BUILTIN_CONTEXT_ENGINE,
@@ -41,8 +35,9 @@ import {
   MAIN_SESSION_KEY,
   MEMORY_SCOPE_KIND,
   type MemoryDefinition,
+  MODEL_FAILURE,
+  MODEL_RESPONSE_OUTCOME,
   type ModelAdapter,
-  REASONING_EFFORT,
   RUN_END_REASON,
   RUN_ORIGIN,
   RUNTIME_EVENT,
@@ -56,21 +51,22 @@ import {
 import { normalizeSession, SESSION_STATUS, type SessionProvider } from "@sidecar/session";
 import {
   ACTION_RESULT_STATUS,
+  HTTP_STATUS,
   isRecord,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Clock, Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { BRAIN_DEFAULTS, BrainAgent, type BrainAgentOptions, LOOK_SUBJECT } from "./agent.js";
 import { toolLoopRuntimeOver } from "./builtins.js";
 import { ResponsesContextEngine } from "./context-engine.js";
-import { HostedModelAdapter } from "./hosted-model-adapter.js";
 import { BRAIN_INPUT_MARKER } from "./input-items.js";
 import { brainToolNotes } from "./instructions.js";
+import { failed } from "./model-adapter-shared.js";
+import { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
 import {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
@@ -79,9 +75,11 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
 } from "./requests.js";
+import { BRAIN_RESPONSES_PATH, responsesModelAnswer } from "./responses-api.js";
 import { ToolLoopAgentRuntime } from "./runtime.js";
 import { BrainStateStore } from "./state-store.js";
 import {
+  bareModelAdapter,
   type FakeBrainStateRepository,
   fakeActionPerformer,
   fakeBrainStateRepository,
@@ -92,13 +90,12 @@ import { BRAIN_WAKE_KIND } from "./wake-events.js";
 import { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";
 
 /**
- * The execution contract, run through the real host against the one
- * transport this build ships — the hosted adapter over a fake service
- * speaking the hosted contract to a fake OpenAI behind it — and then through
- * a second runtime that shares nothing with OpenAI Responses, to prove the
- * host has no Responses-specific dependency: it stores whatever stamp the
- * runtime writes, refuses to run a compatible-looking host over a foreign
- * stamp, and keeps the memory whole while it refuses.
+ * The execution contract, run through the real host against a bare Responses
+ * adapter over a fake OpenAI, and then through a second runtime that shares
+ * nothing with OpenAI Responses, to prove the host has no Responses-specific
+ * dependency: it stores whatever stamp the runtime writes, refuses to run a
+ * compatible-looking host over a foreign stamp, and keeps the memory whole
+ * while it refuses.
  */
 
 const NOW = 1_800_000_000_000;
@@ -174,68 +171,43 @@ function fakeUpstream(answers: (() => Response)[]) {
 }
 
 /**
- * A fake hosted service speaking the hosted contract as the real handlers
- * do: capabilities on GET, the request's prompt and named tools relayed to
- * the fake upstream as instructions and selected schemas, the allowance spent
- * per operation, and a spent allowance answered as the real service answers
- * it. The real handlers are tested in `apps/web`; this keeps the contract
- * shape in view where the adapter is exercised through the host.
+ * A bare Responses adapter over the fake OpenAI: the prompt as instructions,
+ * the offered tools' registered schemas, and the input array, posted once per
+ * inference and read back as a Responses answer. A 429 stands it down for the
+ * wait its header names, as any transport would.
  */
-function fakeService(upstream: ReturnType<typeof fakeUpstream>, allowance: { remaining: number }) {
+function upstreamModel(upstream: ReturnType<typeof fakeUpstream>): ModelAdapter {
   const catalog = hostedBrainToolCatalog();
-  const calls: UpstreamCall[] = [];
-  const fetch = async (url: string, init: RequestInit): Promise<Response> => {
-    if (url.endsWith(HOSTED_SERVICE_PATH.BRAIN_CAPABILITIES)) {
-      return Response.json({
-        contract: HOSTED_BRAIN_CONTRACT_VERSION,
-        model: "gpt-hosted",
-        operations: Object.values(HOSTED_BRAIN_OPERATION),
-        tools: [...catalog.keys()],
-        bounds: hostedBrainBounds(),
-        reasoningEfforts: Object.values(REASONING_EFFORT),
-      });
-    }
-    // SAFETY: the adapter sends JSON.stringify output.
-    const body = JSON.parse(String(init.body)) as UnparsedWireValue;
-    assert.ok(isRecord(body));
-    calls.push({ url, body });
-    if (allowance.remaining <= 0) {
-      return Response.json(
+  let quietUntil = 0;
+  return bareModelAdapter({
+    model: "gpt-hosted",
+    quietUntil: () => (quietUntil > NOW ? quietUntil : undefined),
+    respond: async (items, options) => {
+      const response = await upstream.fetch(
+        `${BRAIN_OPENAI_DEFAULTS.BASE_URL}${BRAIN_RESPONSES_PATH}`,
         {
-          error: "quota-exhausted",
-          quota: { used: 5000, limit: 5000, resetsAt: NOW + 3_600_000 },
+          method: "POST",
+          body: JSON.stringify({
+            model: "gpt-hosted",
+            instructions: options.prompt,
+            tools: options.tools.map((tool) => catalog.get(tool.name)),
+            input: items,
+          }),
         },
-        { status: 429 },
       );
-    }
-    allowance.remaining -= 1;
-    assert.ok(Array.isArray(body.tools));
-    const tools = body.tools.filter(isWireString).map((name) => catalog.get(name));
-    assert.ok(tools.every((tool) => tool !== undefined));
-    return upstream.fetch(`${"https://api.openai.com/v1"}/responses`, {
-      method: "POST",
-      body: JSON.stringify({
-        model: "gpt-hosted",
-        instructions: body.prompt,
-        tools,
-        input: body.input,
-      }),
-    });
-  };
-  return { fetch, calls };
-}
-
-const allowance = { remaining: 1_000 };
-
-/** The hosted adapter over the fake service, which relays to the fake upstream handed here. */
-function hostedModel(upstream: ReturnType<typeof fakeUpstream>): ModelAdapter {
-  return new HostedModelAdapter({
-    serviceBaseUrl: "https://luke.test",
-    readAccessToken: () => Effect.succeed("account-token"),
-    refreshAccount: () => Effect.void,
-    httpClient: fakeHttpClientLayer(fakeService(upstream, allowance).fetch),
-    now: () => NOW,
-    report: () => undefined,
+      if (response.status === HTTP_STATUS.TOO_MANY_REQUESTS) {
+        quietUntil = NOW + Number(response.headers.get("retry-after") ?? "0") * 1000;
+        return { outcome: MODEL_RESPONSE_OUTCOME.THROTTLED, until: quietUntil };
+      }
+      // SAFETY: response.json returns a runtime value; responsesModelAnswer validates it as wire.
+      const payload = (await response.json().catch(() => undefined)) as
+        | UnparsedWireValue
+        | undefined;
+      return (
+        (payload === undefined ? undefined : responsesModelAnswer(payload)) ??
+        failed(MODEL_FAILURE.MALFORMED, "response carried no output")
+      );
+    },
   });
 }
 
@@ -349,7 +321,7 @@ test("multi-step tools run in order with encrypted items replayed, and the actio
     () => payload([reasoning("rs_2"), actionCall("call_2")]),
     () => payload([message("Sent twice.")]),
   ]);
-  const h = Effect.runSync(host(toolLoopRuntimeOver, hostedModel(upstream)));
+  const h = Effect.runSync(host(toolLoopRuntimeOver, upstreamModel(upstream)));
   const record = await h.ask("send the tests twice");
   assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
   assert.equal(record?.text, "Sent twice.");
@@ -386,7 +358,7 @@ test("a cancel mid-run refuses the action not yet dispatched and keeps the one t
   const upstream = fakeUpstream([() => payload([actionCall("call_1"), actionCall("call_2")])]);
   let performedCount = 0;
   const h = Effect.runSync(
-    host(toolLoopRuntimeOver, hostedModel(upstream), fakeBrainStateRepository(), async () => {
+    host(toolLoopRuntimeOver, upstreamModel(upstream), fakeBrainStateRepository(), async () => {
       performedCount += 1;
       if (performedCount === 1) {
         await new Promise<void>((resolve) => {
@@ -429,7 +401,7 @@ test("malformed output, a provider-declared failure, and a rate limit each end t
     () => Response.json({ status: "failed", error: { code: "server_error" }, output: [] }),
     () => new Response("", { status: 429, headers: { "retry-after": "30" } }),
   ]);
-  const h = Effect.runSync(host(toolLoopRuntimeOver, hostedModel(upstream)));
+  const h = Effect.runSync(host(toolLoopRuntimeOver, upstreamModel(upstream)));
   const malformed = await h.ask("first");
   assert.equal(malformed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(malformed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -454,7 +426,7 @@ test("persistence interrupted before an action refuses the action; interrupted a
     () => payload([actionCall("call_1")]),
     () => payload([message("done")]),
   ]);
-  const h = Effect.runSync(host(toolLoopRuntimeOver, hostedModel(upstream), repository));
+  const h = Effect.runSync(host(toolLoopRuntimeOver, upstreamModel(upstream), repository));
   await Effect.runPromise(h.agent.ready());
   // Acceptance and start land; the checkpoint before the action is refused.
   let writes = 0;
@@ -470,30 +442,6 @@ test("persistence interrupted before an action refuses the action; interrupted a
   assert.equal(record?.performedActions, 0);
   await Effect.runPromise(h.agent.stop());
 });
-test("a spent allowance ends the run as a failure, holds later wakes until the day resets, and spends nothing more", async () => {
-  const upstream = fakeUpstream([]);
-  const exhausted = { remaining: 0 };
-  const model = new HostedModelAdapter({
-    serviceBaseUrl: "https://luke.test",
-    readAccessToken: () => Effect.succeed("account-token"),
-    refreshAccount: () => Effect.void,
-    httpClient: fakeHttpClientLayer(fakeService(upstream, exhausted).fetch),
-    now: () => NOW,
-    report: () => undefined,
-  });
-  const h = Effect.runSync(host(toolLoopRuntimeOver, model));
-  const record = await h.ask("anything?");
-  assert.equal(record?.status, BRAIN_REQUEST_STATUS.FAILED);
-  assert.equal(model.quietUntil(), NOW + 3_600_000);
-  await Effect.runPromise(
-    h.agent.wake([{ kind: BRAIN_WAKE_KIND.ROSTER, identity: ABC, atMs: NOW }]),
-  );
-  await settle();
-  assert.equal(h.agent.pendingWakes(), 1);
-  assert.equal(upstream.calls.length, 0);
-  await Effect.runPromise(h.agent.stop());
-});
-
 /**
  * A second runtime that shares nothing with OpenAI Responses: its items are
  * its own records, its stamp is its own, it answers a fixed script, and it
@@ -628,7 +576,7 @@ it.effect(
         "read_transcript",
         "not_a_tool",
       ]);
-      const model = hostedModel(fakeUpstream([]));
+      const model = upstreamModel(fakeUpstream([]));
       const h = yield* host(() => runtime, model, repository);
       const record = yield* Effect.promise(() => h.ask("do the scripted thing"));
       assert.equal(record?.status, BRAIN_REQUEST_STATUS.SUCCEEDED);
@@ -670,7 +618,7 @@ it.effect(
       const repository = fakeBrainStateRepository();
       const scripted = yield* host(
         () => new ScriptedRuntime([ACTION_TOOL.SEND_SESSION_MESSAGE]),
-        hostedModel(fakeUpstream([])),
+        upstreamModel(fakeUpstream([])),
         repository,
       );
       const first = yield* Effect.promise(() => scripted.ask("scripted first"));
@@ -680,7 +628,7 @@ it.effect(
       assert.ok(before);
 
       const upstream = fakeUpstream([() => payload([message("never asked")])]);
-      const responses = yield* host(toolLoopRuntimeOver, hostedModel(upstream), repository);
+      const responses = yield* host(toolLoopRuntimeOver, upstreamModel(upstream), repository);
       yield* responses.agent.ready();
       const refused = yield* responses.agent.submitAsk({
         submissionId: "over-foreign",
@@ -707,7 +655,7 @@ it.effect(
       // The scripted runtime reads it again, and a Clear is the other way forward.
       const again = yield* host(
         () => new ScriptedRuntime([]),
-        hostedModel(fakeUpstream([])),
+        upstreamModel(fakeUpstream([])),
         repository,
       );
       assert.equal(yield* again.agent.incompatibility(), undefined);
@@ -761,7 +709,7 @@ test("an ingest held across a cancel that resolves after the successor turn bega
     () => payload([message("LATE_WORDS")]),
     () => payload([message("fresh reply")]),
   ]);
-  const h = Effect.runSync(host(heldIngestRuntime, hostedModel(upstream), repository));
+  const h = Effect.runSync(host(heldIngestRuntime, upstreamModel(upstream), repository));
   HeldIngestEngine.hold = true;
   const accepted = await Effect.runPromise(
     h.agent.submitAsk({
@@ -799,7 +747,7 @@ test("a model failure after a recorded act restores the context to the action's 
     () => new Response("", { status: 500 }),
     () => payload([message("after")]),
   ]);
-  const h = Effect.runSync(host(toolLoopRuntimeOver, hostedModel(upstream), repository));
+  const h = Effect.runSync(host(toolLoopRuntimeOver, upstreamModel(upstream), repository));
   const failed = await h.ask("send then fail");
   assert.equal(failed?.status, BRAIN_REQUEST_STATUS.FAILED);
   assert.equal(failed?.failure, BRAIN_REQUEST_FAILURE.MODEL);
@@ -839,7 +787,7 @@ test("a model failure after a recorded act restores the context to the action's 
 /**
  * The desktop's own preparation, as `wiring.ts` composes it: the built-in
  * registries, a configuration over a real workspace, the facts gathered under
- * it, and the pure builder. Stood up here so the prompt a hosted turn sends
+ * it, and the pure builder. Stood up here so the prompt a turn sends
  * upstream can be compared byte for byte with what those stages built.
  */
 async function workspacePreparation() {
@@ -876,11 +824,11 @@ async function workspacePreparation() {
   return { workspace, prepareTurn, built };
 }
 
-test("a hosted turn sends upstream the prompt the three stages built from the workspace, byte for byte, with the persona once", async () => {
+test("a turn sends upstream the prompt the three stages built from the workspace, byte for byte, with the persona once", async () => {
   const preparation = await workspacePreparation();
   const upstream = fakeUpstream([() => payload([message("Hello.")])]);
   const h = Effect.runSync(
-    host(toolLoopRuntimeOver, hostedModel(upstream), fakeBrainStateRepository(), undefined, {
+    host(toolLoopRuntimeOver, upstreamModel(upstream), fakeBrainStateRepository(), undefined, {
       prepareTurn: preparation.prepareTurn,
     }),
   );
@@ -923,7 +871,7 @@ test("a conversation that starts fresh is primed once with the recent daily note
     () => payload([message("Again.")]),
   ]);
   const h = Effect.runSync(
-    host(toolLoopRuntimeOver, hostedModel(upstream), fakeBrainStateRepository(), undefined, {
+    host(toolLoopRuntimeOver, upstreamModel(upstream), fakeBrainStateRepository(), undefined, {
       memory,
     }),
   );
