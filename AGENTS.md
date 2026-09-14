@@ -35,6 +35,8 @@ in for the missing job before the first release.
   scans for secrets, so this rule is the whole of the check.
 - Session replay records the rendered panel with no allowlist in front of it, so
   drawing something new on the panel decides what leaves the machine.
+- Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
+  user explicitly approved the addition.
 
 ## The scheduled pass and the briefing push
 
