@@ -119,8 +119,11 @@ final class WatchVoiceSessionModel {
     /// `session.close` goes as the one Live client event the route forwards
     /// from the watch, the session answers `session.closed`, and the service
     /// ends the socket normally. The socket is let go on the guide's bound if
-    /// that close never comes back. An open still under way is disowned: the
-    /// session it lands is closed the same way rather than adopted.
+    /// that close never comes back, or never got out: a send waits on a path
+    /// for as long as the path is down, so the bound is on the whole of the
+    /// hang-up and not on the answer alone. An open still under way is
+    /// disowned: the session it lands is closed the same way rather than
+    /// adopted.
     func hangUp() {
         pressHeld = false
         stopCapturing()
@@ -134,7 +137,6 @@ final class WatchVoiceSessionModel {
         status = .closing
         session.hangUp()
         Task { [weak self] in
-            await session.settleSends()
             try? await Task.sleep(for: LivePeerBounds.sessionClose)
             guard let self, self.session === session else { return }
             session.close()
@@ -177,7 +179,7 @@ final class WatchVoiceSessionModel {
         do {
             try await WatchVoiceAudioSession.activate()
         } catch {
-            failed(Self.audioNote)
+            if thisOpening == openings, !closing { failed(Self.audioNote) }
             return nil
         }
         let outcome = await client.createAudio(voice: voice)
