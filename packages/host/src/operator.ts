@@ -9,7 +9,7 @@ import {
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
 import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireBoolean, isWireString, type WireValue } from "@sidecar/wire";
+import { isRecord, type WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
 import { REJECTED_SUBMISSION } from "./brain/publication.js";
@@ -33,17 +33,8 @@ export interface GatewayOperator {
   /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
   deleteConversation: (sessionKey?: SessionKey) => Effect.Effect<boolean>;
   onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
-  onConversationChanged: (listener: (change: GatewayConversationChange) => void) => () => void;
   /** The underlying client, for the calls the typed surface above does not name. */
   readonly client: GatewayClient;
-}
-
-interface GatewayConversationChange {
-  sessionKey: string;
-  entries: readonly WireValue[];
-  cleared: boolean;
-  /** The opaque reporter whose report produced the change, minted by this client for one window, so the relay can skip echoing it. */
-  reporter?: string;
 }
 
 function runsFromWire(value: WireValue | undefined): readonly BrainRequestSnapshot[] {
@@ -109,20 +100,5 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
       ),
     onRunsChanged: (listener) =>
       on(GATEWAY_EVENT.RUNS_CHANGED, (payload) => runsFromWire(payload), listener),
-    onConversationChanged: (listener) =>
-      on(
-        GATEWAY_EVENT.CONVERSATION_CHANGED,
-        (payload): GatewayConversationChange | undefined => {
-          if (!isRecord(payload) || !isWireString(payload.sessionKey)) return undefined;
-          if (!Array.isArray(payload.entries) || !isWireBoolean(payload.cleared)) return undefined;
-          return {
-            sessionKey: payload.sessionKey,
-            entries: payload.entries,
-            cleared: payload.cleared,
-            ...(isWireString(payload.reporter) ? { reporter: payload.reporter } : undefined),
-          };
-        },
-        listener,
-      ),
   };
 }

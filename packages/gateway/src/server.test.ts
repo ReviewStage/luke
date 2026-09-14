@@ -303,7 +303,7 @@ it.effect(
       yield* log.emit(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
       yield* log.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
       yield* log.emit(
-        GATEWAY_EVENT.CONVERSATION_CHANGED,
+        GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
         { lines: 1 },
         { sessionKey: FIXTURE_SESSION_KEY },
       );

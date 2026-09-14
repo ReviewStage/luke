@@ -11,15 +11,9 @@ function harness(marks: boolean) {
     const marker = yield* Deferred.make<boolean>();
     const flow = deleteConversationFlow({
       now: () => NOW,
-      fence: (deletedAt) => {
-        calls.push(`fence:${deletedAt}`);
-      },
       fenceBrain: (deletedAt) => {
         calls.push(`fenceBrain:${deletedAt}`);
         return Effect.runPromise(Deferred.await(marker));
-      },
-      erase: (deletedAt) => {
-        calls.push(`erase:${deletedAt}`);
       },
       report: (message) => {
         calls.push(`report:${message}`);
@@ -31,27 +25,26 @@ function harness(marks: boolean) {
   });
 }
 
-it.effect("both fences run before anything is awaited, and the erasure follows the marker", () =>
-  Effect.gen(function* () {
-    const h = yield* harness(true);
-    assert.deepEqual(h.calls, [`fence:${NOW}`, `fenceBrain:${NOW}`]);
-    yield* h.release;
-    assert.equal(yield* Fiber.join(h.running), CONVERSATION_DELETE_OUTCOME.COMPLETE);
-    assert.deepEqual(h.calls, [`fence:${NOW}`, `fenceBrain:${NOW}`, `erase:${NOW}`]);
-  }),
-);
-
 it.effect(
-  "a marker that does not stand refuses the deletion with the fences standing and nothing erased",
+  "the fence runs before anything is awaited, and the deletion completes on the marker",
   () =>
     Effect.gen(function* () {
-      const h = yield* harness(false);
+      const h = yield* harness(true);
+      assert.deepEqual(h.calls, [`fenceBrain:${NOW}`]);
       yield* h.release;
-      assert.equal(yield* Fiber.join(h.running), CONVERSATION_DELETE_OUTCOME.REFUSED);
-      assert.deepEqual(h.calls, [
-        `fence:${NOW}`,
-        `fenceBrain:${NOW}`,
-        "report:Delete conversation incomplete: the brain's memory could not be marked erased",
-      ]);
+      assert.equal(yield* Fiber.join(h.running), CONVERSATION_DELETE_OUTCOME.COMPLETE);
+      assert.deepEqual(h.calls, [`fenceBrain:${NOW}`]);
     }),
+);
+
+it.effect("a marker that does not stand refuses the deletion with the fence standing", () =>
+  Effect.gen(function* () {
+    const h = yield* harness(false);
+    yield* h.release;
+    assert.equal(yield* Fiber.join(h.running), CONVERSATION_DELETE_OUTCOME.REFUSED);
+    assert.deepEqual(h.calls, [
+      `fenceBrain:${NOW}`,
+      "report:Delete conversation incomplete: the brain's memory could not be marked erased",
+    ]);
+  }),
 );

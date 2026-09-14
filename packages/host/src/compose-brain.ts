@@ -106,20 +106,10 @@ export const composeBrain = (
 
     /**
      * The conversations the local brain holds, in memory and for this run
-     * alone: each thread is shared by every panel window and gone at the
-     * next launch. A window's report is appended under an opaque reporter
-     * the client minted, so the history event can skip echoing it to the
-     * window that reported it, and the reporter names nothing about the
-     * window to anyone else.
+     * alone: the directory and each conversation's envelope, gone at the next
+     * launch. No lines are held here: the Conversation is the service's.
      */
-    const conversations = wireHeldConversations({
-      now,
-      createEventId: createId,
-      onConversationChanged: (sessionKey, entries, except) => {
-        publish((service) => service.conversationChanged(sessionKey, entries, except));
-      },
-      report,
-    });
+    const conversations = wireHeldConversations({ now });
     let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
 
     const memoryMaintenance = wireMemoryMaintenance({

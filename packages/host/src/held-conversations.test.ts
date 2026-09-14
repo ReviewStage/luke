@@ -3,33 +3,20 @@ import {
   ARCHIVE_REASON,
   CONVERSATION_KIND,
   MAIN_SESSION_KEY,
-  type SessionKey,
   sessionKey,
   threadSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
 import { test } from "vitest";
 import { wireHeldConversations } from "./held-conversations.js";
 
 const NOW = 1_800_000_000_000;
 const OPENED = threadSessionKey("opened");
-const LINE = { kind: CONVERSATION_ENTRY_KIND.ASK, words: "kept for the run" } as const;
 
 function wiring() {
-  const changed: { sessionKey: SessionKey; entries: readonly ConversationEntry[] }[] = [];
-  let ids = 0;
   let clock = NOW;
-  const held = wireHeldConversations({
-    now: () => clock,
-    createEventId: () => `id-${++ids}`,
-    onConversationChanged: (sessionKey, entries) => {
-      changed.push({ sessionKey, entries });
-    },
-    report: () => undefined,
-  });
+  const held = wireHeldConversations({ now: () => clock });
   return {
     held,
-    changed,
     tick: () => {
       clock += 1;
       return clock;
@@ -37,8 +24,8 @@ function wiring() {
   };
 }
 
-test("main is listed from the start; a conversation the brain opens is listed as this run's, takes lines, and a key not listed takes none", async () => {
-  const { held, changed } = wiring();
+test("main is listed from the start, and a conversation the brain opens is listed as this run's", async () => {
+  const { held } = wiring();
   assert.deepEqual(
     held.directory().map((record) => record.sessionKey),
     [MAIN_SESSION_KEY],
@@ -55,21 +42,12 @@ test("main is listed from the start; a conversation the brain opens is listed as
   });
   assert.equal(held.isTemporary(OPENED), true);
   assert.equal(held.holds(OPENED), true);
-  assert.equal(await held.recordConversationEntry(LINE, NOW, OPENED), true);
-  assert.deepEqual(held.thread(OPENED).entries(), [{ ...LINE, eventId: "id-1", recordedAt: NOW }]);
-  assert.deepEqual(changed, [{ sessionKey: OPENED, entries: held.thread(OPENED).entries() }]);
-  assert.equal(
-    await held.recordConversationEntry(LINE, NOW, sessionKey("agent:main:thread:nope")),
-    false,
-  );
-  assert.equal(await held.recordConversationEntry(LINE, NOW), true);
-  assert.equal(held.thread().entries().length, 1);
+  assert.equal(held.holds(sessionKey("agent:main:thread:nope")), false);
 });
 
-test("archiving retires a listed record and keeps its thread; main is never archived; listing an archived record brings it back", async () => {
+test("archiving retires a listed record; main is never archived; listing an archived record brings it back", async () => {
   const { held, tick } = wiring();
   await held.ensureConversation(OPENED, CONVERSATION_KIND.CHILD, "Child");
-  await held.recordConversationEntry(LINE, NOW, OPENED);
   const archivedAt = tick();
   assert.equal(await held.archive(OPENED), true);
   assert.deepEqual(
@@ -85,7 +63,6 @@ test("archiving retires a listed record and keeps its thread; main is never arch
       archiveReason: ARCHIVE_REASON.USER,
     },
   );
-  assert.equal(held.thread(OPENED).entries().length, 1);
   assert.equal(await held.archive(OPENED), false, "an archived record is not archived twice");
   assert.equal(await held.archive(MAIN_SESSION_KEY), false);
   assert.equal(await held.archive(threadSessionKey("never-opened")), false);
@@ -99,28 +76,6 @@ test("archiving retires a listed record and keeps its thread; main is never arch
     lastActivityAt: relisted,
     temporary: true,
   });
-});
-
-test("an erasure takes the lines recorded at or before the instant and leaves a later line as the conversation's next", async () => {
-  const { held, tick } = wiring();
-  await held.ensureConversation(OPENED, CONVERSATION_KIND.THREAD, "Thread");
-  assert.equal(await held.recordConversationEntry(LINE, NOW, OPENED), true);
-  held.thread(OPENED).fence(NOW);
-  const after = tick();
-  assert.equal(
-    await held.recordConversationEntry({ ...LINE, words: "after" }, after, OPENED),
-    true,
-  );
-  held.erase(OPENED, NOW);
-  assert.deepEqual(
-    held
-      .thread(OPENED)
-      .entries()
-      .map((entry) => entry.words),
-    ["after"],
-  );
-  // Erasing a conversation with no thread yet is nothing to do, not a failure.
-  held.erase(threadSessionKey("never-opened"), NOW);
 });
 
 test("each conversation's envelope is one repository for the run, held across saves and shared between the brains built over it", () => {
