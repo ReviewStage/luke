@@ -54,10 +54,6 @@ struct VoiceView: View {
     @State private var pressBeganAt: TimeInterval?
     @State private var settingsShown = false
     @State private var microphoneNote: String?
-    /// Whether the system's microphone dialog stands over a press. It takes
-    /// the touch with it, so the gesture's end under it is the dialog's, not
-    /// a tap to latch on.
-    @State private var askingForMicrophone = false
 
     var body: some View {
         ZStack {
@@ -126,7 +122,8 @@ struct VoiceView: View {
     /// be requested from. The dialog takes the press with it: a press that
     /// raised it is over whatever the touch reports, and a grant opens
     /// nothing until the next press, as a hold let go of under the Mac's
-    /// dialog opens nothing there.
+    /// dialog opens nothing there. A press the grant refuses latches nothing
+    /// either: a latch is only ever taken with the microphone granted.
     private func beginPress() {
         guard let call else { return }
         microphoneNote = nil
@@ -154,13 +151,12 @@ struct VoiceView: View {
         case .granted:
             return true
         case .denied:
+            isLatched = false
             microphoneNote = Self.microphoneRefusedNote
             return false
         case .undetermined:
-            askingForMicrophone = true
             isLatched = false
             let granted = await AVAudioApplication.requestRecordPermission()
-            askingForMicrophone = false
             isLatched = false
             if !granted { microphoneNote = Self.microphoneRefusedNote }
             return false
@@ -410,11 +406,11 @@ struct VoiceView: View {
                 )
                 pressBeganAt = nil
                 isPressing = false
-                // The end the system's dialog forced is nobody's tap.
-                guard !askingForMicrophone else { return }
                 switch release {
                 case .latch:
-                    isLatched = true
+                    // A tap the system's dialog cut short, or one the grant
+                    // refuses, leaves nothing to hold open.
+                    isLatched = AVAudioApplication.shared.recordPermission == .granted
                 case .send:
                     isLatched = false
                     endPress()
