@@ -1,7 +1,4 @@
-import {
-  type CredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials/vocabulary";
+import type { CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
   SETTING_PAGE,
   SETTINGS_PAGE as SETTINGS_VIEW,
@@ -44,17 +41,14 @@ export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
 export { SETTING_PAGE };
 
 /**
- * Which page draws a provider's credential row. Every key lives under
- * Connections except the one voice runs on: the OpenAI row stands in the
- * Provider section on the Voice page, beside the feature it enables. This
- * is what brings a credential entry back from the key slot to the page it
- * began on — restoring Connections around an entry begun on the Voice page
- * would land the answer on a page nobody was looking at.
+ * Which page draws a provider's credential row: every key lives under
+ * Connections. This is what brings a credential entry back from the key slot
+ * to the page it began on, and it stays a question of the provider so a row
+ * drawn elsewhere one day answers for itself rather than landing the answer
+ * on a page nobody was looking at.
  */
-export function credentialSettingsPage(providerId: CredentialProviderId): SettingsView {
-  return providerId === VOICE_CREDENTIAL_PROVIDER_ID
-    ? SETTINGS_VIEW.VOICE
-    : SETTINGS_VIEW.CONNECTIONS;
+export function credentialSettingsPage(_providerId: CredentialProviderId): SettingsView {
+  return SETTINGS_VIEW.CONNECTIONS;
 }
 
 /**

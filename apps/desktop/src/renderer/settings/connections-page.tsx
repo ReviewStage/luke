@@ -107,8 +107,7 @@ export function CalendarIntegrations({
 /**
  * The services Luke connects to that are not agents: the calendars, signed
  * into rather than pasted into, so each is a mark, a name and one button, with its own one-line answer to what
- * connecting it buys. The OpenAI key is not here: it lives at the top of the
- * Voice page, beside the feature it turns on.
+ * connecting it buys.
  */
 export function IntegrationsSection({
   input,

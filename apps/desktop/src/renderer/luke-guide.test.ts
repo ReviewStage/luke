@@ -30,7 +30,6 @@ function settings(overrides: Partial<AppSettingsView> = {}): AppSettingsView {
   return settingsView({
     credentialSources: {
       [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-      [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
     },
     voiceAvailable: true,
     preferBuiltInMicrophone: true,
@@ -95,7 +94,6 @@ const GUIDE_FACT_LABELS: readonly string[] = [
   "How long a conversation lasts",
   "Voice",
   "Cloud providers",
-  "OpenAI",
   "Apple Calendar",
   "Google Calendar",
   "Conductor",

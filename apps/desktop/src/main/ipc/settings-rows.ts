@@ -1,5 +1,4 @@
 import { APPLE_CALENDAR_ACCESS, CALENDAR_PRIVACY_PANE_URL } from "@sidecar/calendar/vocabulary";
-import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, type AppSettingField } from "@sidecar/settings";
 import type { AppSettings, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -161,14 +160,6 @@ export function settingsActRows(
       write(
         ACT_KIND.CREDENTIAL_SET_API_KEY,
         host.setProviderApiKey(providerId, apiKey, reporterOf(sender)),
-        async (result) => {
-          // The voice key is what the talk key is claimed for: once the host
-          // has rebuilt the voice on it, the key moves — claimed now that
-          // there is something to talk to, or given back now that there is not.
-          if (!result.reason && providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-            await hotkeys.reapply(HOTKEY_RANK.TALK);
-          }
-        },
       ),
     [ACT_KIND.SETTING_UPDATE]: (payload, { sender }) => {
       const holder = chordHolder(payload);

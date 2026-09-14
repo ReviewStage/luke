@@ -38,7 +38,6 @@ test("an entry belongs to one provider, so no other line draws a field", () => {
   const current = control(held);
 
   assert.equal(entryForProvider(current, CREDENTIAL_PROVIDER_ID.CONDUCTOR), held);
-  assert.equal(entryForProvider(current, CREDENTIAL_PROVIDER_ID.OPENAI), undefined);
   assert.equal(
     entryForProvider(control(), CREDENTIAL_PROVIDER_ID.CONDUCTOR),
     undefined,
@@ -68,13 +67,6 @@ test("deleting a key ends the entry that was going to replace it", () => {
     true,
     "a field left open over a key that no longer exists holds the panel for nothing",
   );
-});
-
-test("deleting one provider's key leaves another's entry alone", () => {
-  const held = entry({ providerId: CREDENTIAL_PROVIDER_ID.OPENAI });
-
-  assert.equal(removalEndsEntry(held, CREDENTIAL_PROVIDER_ID.CONDUCTOR, undefined), false);
-  assert.equal(removalEndsEntry(undefined, CREDENTIAL_PROVIDER_ID.CONDUCTOR, undefined), false);
 });
 
 test("a delete that was refused ends nothing, because it removed nothing", () => {
