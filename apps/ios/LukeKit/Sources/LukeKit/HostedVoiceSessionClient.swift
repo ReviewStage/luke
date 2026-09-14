@@ -330,6 +330,8 @@ public final class HostedVoiceSession {
     private var standingActivity: SessionActivityFrame?
     private var closedByClient = false
     private var sendChain: Task<Void, Never>?
+    /// Whoever is waiting for the sends held through a gap to reach a connection, or for the session to give up on one.
+    private var flushWaiters: [CheckedContinuation<Void, Never>] = []
     private var reader: Task<Void, Never>?
 
     fileprivate init(
@@ -395,11 +397,26 @@ public final class HostedVoiceSession {
         heldSends = nil
         socket.close()
         reader?.cancel()
+        resumeFlushWaiters()
     }
 
-    /// Awaits every send queued so far; for a test that reads what the socket was sent.
-    func settleSends() async {
+    /// Awaits every send queued so far: what a caller about to `close()` the
+    /// socket waits on, so a hang-up it just sent is on the wire before the
+    /// socket goes, and what a test reads the socket after. A send made in a
+    /// gap is held for the connection that comes after it, so this waits for
+    /// that connection to stand and carry it, or for the session to give up
+    /// on one; a caller with a bound of its own races this against it.
+    public func settleSends() async {
+        if heldSends != nil {
+            await withCheckedContinuation { flushWaiters.append($0) }
+        }
         await sendChain?.value
+    }
+
+    private func resumeFlushWaiters() {
+        let waiting = flushWaiters
+        flushWaiters = []
+        for waiter in waiting { waiter.resume() }
     }
 
     private func send(_ frame: VoiceServiceOutgoingFrame) {
@@ -475,6 +492,7 @@ public final class HostedVoiceSession {
         heldSends = nil
         if let standingActivity { enqueue(VoiceServiceOutgoingFrame.activity(standingActivity).text, on: recovered) }
         for frame in pending { enqueue(frame.text, on: recovered) }
+        resumeFlushWaiters()
         return true
     }
 
@@ -509,6 +527,7 @@ public final class HostedVoiceSession {
 
     private func finish(code: Int?) {
         heldSends = nil
+        resumeFlushWaiters()
         continuation.yield(.closed(code: code))
         continuation.finish()
     }

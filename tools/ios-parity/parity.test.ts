@@ -28,6 +28,7 @@ import {
 import {
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_VOICE_SESSION_SOURCE,
   ProductAccountActionSchema,
   ProductEventClientSchema,
   ProductEventNameSchema,
@@ -60,6 +61,9 @@ import {
   PROACTIVE_SPEECH_KIND,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
+  TRANSCRIPT_SPEAKER,
+  UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -386,6 +390,36 @@ test("the sessions socket path, idle window, and reattach cadence are the deskto
     swiftStaticNumberList(source, "reattachDelaysMs"),
     HOSTED_REATTACH_DELAYS_MS,
     "a cadence of the phone's own tries a lost connection on other terms than the Mac's",
+  );
+});
+
+test("LiveTranscriptSpeaker is TRANSCRIPT_SPEAKER", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/LiveCaptions.swift`), "LiveTranscriptSpeaker"),
+    TRANSCRIPT_SPEAKER,
+    "a speaker the phone cannot name draws a caption row under nobody",
+  );
+});
+
+test("the caption rows group and settle on the desktop's bounds", () => {
+  const source = swift(`${KIT}/LiveCaptions.swift`);
+  assert.equal(
+    swiftStaticNumber(source, "utteranceGapMs"),
+    UTTERANCE_GAP_MS,
+    "a gap of the phone's own splits an utterance the record keeps whole",
+  );
+  assert.equal(
+    swiftStaticNumber(source, "utteranceSettleMarginMs"),
+    UTTERANCE_SETTLE_MARGIN_MS,
+    "a margin of the phone's own settles a row before or after the record does",
+  );
+});
+
+test("every ProductVoiceSessionSource is a PRODUCT_VOICE_SESSION_SOURCE", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductVoiceSessionSource"),
+    Object.values(PRODUCT_VOICE_SESSION_SOURCE),
+    "a session source outside the allowlist is refused with its batch",
   );
 });
 
