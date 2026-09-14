@@ -27,11 +27,11 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.SETTINGS_RESET]: { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: "voice" } },
   [ACT_KIND.CREDENTIAL_SET_API_KEY]: {
     kind: ACT_KIND.CREDENTIAL_SET_API_KEY,
-    payload: { providerId: "openai", apiKey: "sk-test" },
+    payload: { providerId: "conductor", apiKey: "sk-test" },
   },
   [ACT_KIND.CREDENTIAL_OPEN_API_KEYS]: {
     kind: ACT_KIND.CREDENTIAL_OPEN_API_KEYS,
-    payload: { providerId: "openai" },
+    payload: { providerId: "conductor" },
   },
   [ACT_KIND.CALENDAR_CONNECT_GOOGLE]: { kind: ACT_KIND.CALENDAR_CONNECT_GOOGLE },
   [ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN]: { kind: ACT_KIND.CALENDAR_CANCEL_GOOGLE_SIGN_IN },

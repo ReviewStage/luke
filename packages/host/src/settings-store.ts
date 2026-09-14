@@ -4,6 +4,7 @@ import {
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
+  isCredentialProviderId,
 } from "@sidecar/credentials";
 import {
   ACCOUNT_STATUS,
@@ -893,6 +894,25 @@ export class SettingsStore {
     return Effect.map(this.#resolveApiKey(provider), (resolved) =>
       resolved.source === CREDENTIAL_SOURCE.ENCRYPTED_FILE ? resolved.apiKey : undefined,
     );
+  }
+
+  /**
+   * Drops the ciphertext of every provider this build no longer names, so a
+   * key an earlier build stored (the developer's own OpenAI key, until
+   * LUKE-205) does not stay on disk with nothing reading it. A ciphertext is
+   * never decrypted to be dropped. Answers whether the file moved.
+   */
+  retireStoredApiKeys(): Effect.Effect<boolean, PlatformError> {
+    return this.#mutate((persisted) => {
+      const kept = Object.fromEntries(
+        Object.entries(persisted.apiKeys).filter(([providerId]) =>
+          isCredentialProviderId(providerId),
+        ),
+      );
+      return Object.keys(kept).length === Object.keys(persisted.apiKeys).length
+        ? undefined
+        : { ...persisted, apiKeys: kept };
+    });
   }
 
   /**

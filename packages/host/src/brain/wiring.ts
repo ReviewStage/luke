@@ -146,8 +146,8 @@ export interface BrainWiringDependencies extends ChildWiringDependencies {
   flushMarker?: (sessionKey: SessionKey) => BrainFlushMarkerStore | undefined;
 }
 
-/** The configuration fields a client may set over the protocol; everything else is the build's or the credential policy's. */
-export interface SettableConfigurationPatch {
+/** The configuration fields a client could set over the protocol; everything else is the build's or the credential policy's. */
+interface SettableConfigurationPatch {
   reasoningEffort?: string;
   maximumOutputTokens?: number;
 }

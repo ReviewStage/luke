@@ -13,8 +13,6 @@
  * barrel says: every name here has a client that reaches it, and a name a
  * client does not reach yet is added when one arrives.
  */
-export { REJECTED_SUBMISSION } from "./brain/publication.js";
-export type { ConversationOperations } from "./conversation-operations.js";
 export type { MachinePresence } from "./device-presence.js";
 export type { HostSeams } from "./host-kernel.js";
 export { INTRODUCTION_HANDOFF_READY_MS } from "./introduction-flow.js";
@@ -28,7 +26,6 @@ export {
   type HostNodeOpenKind,
   isHostNodeOpenKind,
 } from "./node-capabilities.js";
-export { createGatewayOperator, type GatewayOperator } from "./operator.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { createGatewayService } from "./service.js";
 export { OPEN_REFUSAL, type SessionActionPerformer } from "./session-action-performer.js";

@@ -31,7 +31,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       ...APP_SETTING_DEFAULTS,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.NONE,
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.NONE,
       },
       secretStorage: SECRET_STORAGE.UNKNOWN,
       showInDock: false,

@@ -28,10 +28,8 @@ import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot"
 import type { CredentialSource } from "@sidecar/credentials/vocabulary";
 import {
   CLOUD_AGENT_PROVIDER_LIST,
-  CREDENTIAL_PROVIDERS,
   CREDENTIAL_SOURCE,
   SECRET_STORAGE,
-  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials/vocabulary";
 import {
   APP_UPDATE_ACTION,
@@ -216,30 +214,6 @@ function integrationFacts(settings: AppSettingsView): AppGuideFact[] {
       "projects that key lists.",
   });
   return facts;
-}
-
-/**
- * The one key that is neither an agent's nor an integration's, described where
- * its row lives: after Permissions on the Voice page, beside the feature it turns on.
- */
-function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGuideFact {
-  const openai = CREDENTIAL_PROVIDERS[VOICE_CREDENTIAL_PROVIDER_ID];
-  const source = settings.credentialSources[openai.id];
-  const hosted = voiceAvailable && source === CREDENTIAL_SOURCE.NONE;
-  return {
-    label: openai.displayName,
-    detail:
-      `${openai.displayName} (${connectionWord(source)}). ` +
-      (hosted
-        ? `Voice and session review run on the signed-in Luke account; a key of the ` +
-          `developer's own runs them through OpenAI instead, billed by OpenAI. `
-        : source === CREDENTIAL_SOURCE.NONE
-          ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
-          : `Voice and session review run on this key: nothing through Luke's ` +
-            `service, and OpenAI bills you for what you use. `) +
-      `The key is typed by hand into Luke's settings — never read from the ` +
-      `environment, never spoken, and never repeated back.`,
-  };
 }
 
 /** The row's button, in the words a spoken update ask names an action by. */
@@ -534,7 +508,6 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
           },
         ]),
     providersFact(input.settings),
-    voiceKeyFact(input.settings, input.voiceAvailable),
     ...integrationFacts(input.settings),
     ...(input.settings.secretStorage === SECRET_STORAGE.UNAVAILABLE
       ? [

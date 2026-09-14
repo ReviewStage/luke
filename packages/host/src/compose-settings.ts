@@ -5,11 +5,7 @@ import {
   type RecordProductEvent,
 } from "@sidecar/analytics";
 import { ProductEventSender } from "@sidecar/analytics/sender";
-import {
-  CREDENTIAL_PROVIDERS,
-  isCredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials";
+import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_EVENT,
@@ -68,7 +64,6 @@ interface SettingsLinks {
   refreshAccount: () => Effect.Effect<void, unknown>;
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
   readonly cloudKeyHeld: Effect.Effect<void>;
-  applyVoiceCredential: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
   /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
@@ -842,11 +837,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
             (saved) =>
               saved.reason
                 ? Effect.void
-                : Effect.gen(function* () {
-                    if (providerId === VOICE_CREDENTIAL_PROVIDER_ID) {
-                      yield* linked((links) => links.applyVoiceCredential);
-                      yield* emitSettings();
-                    }
+                : Effect.sync(() => {
                     recordProductEvent(
                       apiKey?.trim()
                         ? PRODUCT_EVENT.PROVIDER_CONNECT
@@ -904,8 +895,13 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
           productEvents.drop,
         );
         // The settings read once so the file is warm for the composers built
-        // after this one, waited on by none of them.
-        yield* Effect.forkScoped(Effect.ignore(store.snapshot()));
+        // after this one, waited on by none of them. The read first drops the
+        // ciphertext of any key this build no longer names — the developer's
+        // own OpenAI key, until LUKE-205 — so a key nothing reads does not
+        // stay on disk.
+        yield* Effect.forkScoped(
+          Effect.ignore(Effect.andThen(store.retireStoredApiKeys(), store.snapshot())),
+        );
         // The two chains this composer holds, each drained by a fiber of the
         // composer's own lifetime scope: the scope closing interrupts both
         // before the stop above gives back what the start took.

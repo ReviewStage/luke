@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import {
-  CREDENTIAL_PROVIDER_LIST,
-  VOICE_CREDENTIAL_PROVIDER_ID,
-} from "@sidecar/credentials/vocabulary";
+import { CREDENTIAL_PROVIDER_LIST } from "@sidecar/credentials/vocabulary";
 import { test } from "vitest";
 import {
   credentialSettingsPage,
@@ -12,18 +9,11 @@ import {
 } from "./settings-views";
 
 test("a credential entry returns to the page its row is drawn on", () => {
-  // The OpenAI row lives in Provider on the Voice page and every other key
-  // lives under Connections. An entry's trip to
-  // the key slot has to end back on the page it began on, or the check beside
-  // the provider lands on a page nobody is looking at.
+  // Every key lives under Connections. An entry's trip to the key slot has to
+  // end back on the page it began on, or the check beside the provider lands
+  // on a page nobody is looking at.
   for (const provider of CREDENTIAL_PROVIDER_LIST) {
-    assert.equal(
-      credentialSettingsPage(provider.id),
-      provider.id === VOICE_CREDENTIAL_PROVIDER_ID
-        ? SETTINGS_VIEW.VOICE
-        : SETTINGS_VIEW.CONNECTIONS,
-      provider.id,
-    );
+    assert.equal(credentialSettingsPage(provider.id), SETTINGS_VIEW.CONNECTIONS, provider.id);
   }
 });
 

@@ -9,6 +9,12 @@ import {
   responsesModelAnswer,
   toolLoopRuntimeOver,
 } from "@sidecar/brain";
+import {
+  BRAIN_SUBMISSION_OUTCOME,
+  BRAIN_SUBMISSION_REJECTION,
+  type BrainSubmission,
+  type BrainSubmissionResult,
+} from "@sidecar/brain/requests";
 import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import {
   type BareResponsesModel,
@@ -18,11 +24,9 @@ import {
 } from "@sidecar/brain/testing";
 import { MAIN_SESSION_KEY, type ModelResponse } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
-import { Context, Effect, type Scope } from "effect";
+import { Context, Effect } from "effect";
 import { BrainHost } from "../brain/host.js";
 import { followBrainRequests } from "../brain/publication.js";
-import type { GatewayOperator } from "../operator.js";
-import { operatorOverBrain } from "./operator-over-brain.js";
 
 /** The instant every clock in a brain fixture reads. */
 const NOW = 1_800_000_000_000;
@@ -35,7 +39,8 @@ export interface BrainHarness {
     client: BareResponsesModel,
     options?: Partial<BrainAgentOptions>,
   ) => Effect.Effect<BrainAgent>;
-  readonly submit: GatewayOperator["submit"];
+  /** Submits to the brain that stands, or answers the absent refusal when none does. */
+  readonly submit: (submission: BrainSubmission) => Effect.Effect<BrainSubmissionResult>;
   readonly submitMany: (count: number, from?: number) => Effect.Effect<string[]>;
   readonly broadcasts: (readonly BrainRequestSnapshot[])[];
 }
@@ -59,8 +64,8 @@ export function heldModel(): BareResponsesModel & { release: (answer: ModelRespo
  * The real agent, store, host, follower, and submission path composed as the
  * main process composes them, with only the model synthetic.
  */
-export const brainHarness = /* @__PURE__ */ Effect.fn("brainHarness")(
-  function* (): Effect.fn.Return<BrainHarness, never, Scope.Scope> {
+export function brainHarness(): Effect.Effect<BrainHarness> {
+  return Effect.sync(() => {
     const repository = fakeBrainStateRepository();
     let ids = 0;
     const store = new BrainStateStore({
@@ -82,21 +87,31 @@ export const brainHarness = /* @__PURE__ */ Effect.fn("brainHarness")(
         }),
       publishEmpty: () => broadcasts.push([]),
     });
-    /** Submits as a client does, through the operator over the standing brain. */
-    const { submit } = yield* operatorOverBrain({ current: () => host.current() });
-    const submitMany = /* @__PURE__ */ Effect.fnUntraced(function* (count: number, from = 0) {
-      const runIds: string[] = [];
-      for (let index = from; index < from + count; index += 1) {
-        const result = yield* submit({
-          submissionId: `sub-${index}`,
-          question: `ask ${index}`,
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        });
-        assert.equal(result.outcome, "accepted");
-        if (result.outcome === "accepted") runIds.push(result.runId);
-      }
-      return runIds;
-    });
+    /** Submits to the standing brain, as the service's submit method did before it went (LUKE-206). */
+    const submit = (submission: BrainSubmission): Effect.Effect<BrainSubmissionResult> =>
+      Effect.suspend(() => {
+        const agent = host.current();
+        return agent
+          ? agent.submitAsk(submission)
+          : Effect.succeed({
+              outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
+              reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
+            });
+      });
+    const submitMany = (count: number, from = 0) =>
+      Effect.gen(function* () {
+        const runIds: string[] = [];
+        for (let index = from; index < from + count; index += 1) {
+          const result = yield* submit({
+            submissionId: `sub-${index}`,
+            question: `ask ${index}`,
+            origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
+          });
+          assert.equal(result.outcome, "accepted");
+          if (result.outcome === "accepted") runIds.push(result.runId);
+        }
+        return runIds;
+      });
     const build = (
       client: BareResponsesModel,
       options: Partial<BrainAgentOptions> = {},
@@ -133,8 +148,8 @@ export const brainHarness = /* @__PURE__ */ Effect.fn("brainHarness")(
       submitMany,
       broadcasts,
     };
-  },
-);
+  });
+}
 
 /** A raw Responses payload as the adapter would normalize it. */
 export function answerOf(payload: WireRecord): ModelResponse {

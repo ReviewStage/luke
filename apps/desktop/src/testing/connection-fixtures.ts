@@ -39,7 +39,6 @@ export function connectionInput(overrides: Partial<ConnectionInput> = {}): Conne
       appleCalendarAvailable: true,
       credentialSources: {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
       },
     }),
     credentials: {

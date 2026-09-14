@@ -1,10 +1,6 @@
 import type { BrainAgent, BrainRequestRecord } from "@sidecar/brain";
-import {
-  BRAIN_SUBMISSION_OUTCOME,
-  BRAIN_SUBMISSION_REJECTION,
-  isTerminalBrainRequestStatus,
-} from "@sidecar/brain/requests";
-import type { BrainAskSubmissionResult, BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
+import { isTerminalBrainRequestStatus } from "@sidecar/brain/requests";
+import type { BrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import { Deferred, Effect, Fiber, Queue } from "effect";
 
 /** What the publication owner reaches: every window, and the drain. */
@@ -17,12 +13,6 @@ export interface BrainPublicationDependencies {
    */
   onPublication?: (settled: Effect.Effect<void>) => void;
 }
-
-/** The one refusal a window is answered when no brain can take its ask, and what the operator reads for an answer it cannot. */
-export const REJECTED_SUBMISSION: BrainAskSubmissionResult = {
-  outcome: BRAIN_SUBMISSION_OUTCOME.REJECTED,
-  reason: BRAIN_SUBMISSION_REJECTION.ABSENT,
-};
 
 /** The part of the agent publication reads and marks: the live record, and the end's mark. */
 export type BrainPublicationAgent = Pick<BrainAgent, "request" | "markConversationRecorded">;

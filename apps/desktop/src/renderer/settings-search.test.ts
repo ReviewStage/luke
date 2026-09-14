@@ -38,7 +38,6 @@ function everythingDrawn(): SettingsSearchInput {
       credentialSources: {
         ...settings().credentialSources,
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
-        [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
       },
       calendarSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],

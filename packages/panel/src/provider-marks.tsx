@@ -39,7 +39,6 @@
  */
 
 import { APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID } from "@sidecar/calendar/vocabulary";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import {
   HOSTED_AGENT_ID,
   type HostedAgentId,
@@ -299,20 +298,6 @@ function GoogleCalendarMark({ className }: MarkProps): React.JSX.Element {
   );
 }
 
-function OpenAiMark({ className }: MarkProps): React.JSX.Element {
-  return (
-    <svg
-      className={className}
-      data-mark={CREDENTIAL_PROVIDER_ID.OPENAI}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path fill="currentColor" d={OPENAI_PATH} />
-    </svg>
-  );
-}
-
 function ChatGptMark({ className }: MarkProps): React.JSX.Element {
   return (
     <svg
@@ -422,14 +407,13 @@ export type MarkId =
   | HostedAgentId
   | SessionApplicationId
   | typeof APPLE_CALENDAR_ID
-  | typeof GOOGLE_CALENDAR_ID
-  | typeof CREDENTIAL_PROVIDER_ID.OPENAI;
+  | typeof GOOGLE_CALENDAR_ID;
 
 export const MarkIdSchema = Schema.Union([
   ProviderIdSchema,
   HostedAgentIdSchema,
   SessionApplicationIdSchema,
-  Schema.Literals([APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID, CREDENTIAL_PROVIDER_ID.OPENAI]),
+  Schema.Literals([APPLE_CALENDAR_ID, GOOGLE_CALENDAR_ID]),
 ]);
 
 const PROVIDER_MARKS = {
@@ -444,7 +428,6 @@ const PROVIDER_MARKS = {
   [HOSTED_AGENT_ID.GEMINI_CLI]: GeminiCliMark,
   [GOOGLE_CALENDAR_ID]: GoogleCalendarMark,
   [HOSTED_AGENT_ID.GROK_BUILD]: GrokBuildMark,
-  [CREDENTIAL_PROVIDER_ID.OPENAI]: OpenAiMark,
   [PROVIDER_ID.OMP]: OmpMark,
   [HOSTED_AGENT_ID.OPENCODE]: OpenCodeMark,
   [SESSION_APPLICATION_ID.SUPERSET]: SupersetMark,
