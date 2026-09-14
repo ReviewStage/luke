@@ -11,7 +11,9 @@
  * bridges to a promise. The one thing a pass still does outside its own fiber
  * is the follow-up a coalesced poke earns: `refresh` answers as soon as the
  * pass it waited on is done, and the queued pass behind it is a daemon,
- * exactly as the detached promise it replaces was.
+ * exactly as the detached promise it replaces was. A caller whose decision
+ * needs that follow-up's result too yields `settled` after `refresh`: it
+ * answers once no pass is running and none is queued behind it.
  *
  * The loop no longer arms itself. `cadence` is what an arming stands up, and
  * whoever owns the edge that arms it — the account gate opening and closing,
@@ -19,7 +21,7 @@
  * own, so a sign-out disarms the loop while the host still stands and the
  * host's close disarms whatever a sign-out missed.
  */
-import { Duration, Effect, Schedule, type Scope } from "effect";
+import { Deferred, Duration, Effect, FiberId, Schedule, type Scope } from "effect";
 import { type CadenceGate, cadenceGate } from "./effect/cadence.js";
 import { scheduleRepeat } from "./effect/timers.js";
 
@@ -44,6 +46,13 @@ export class ObservationLoop {
   #running = false;
   #queued = false;
   #armed = false;
+  /**
+   * Open from the moment a pass begins until a pass ends with nothing queued
+   * behind it, so a follow-up a coalesced poke earned keeps it open across
+   * the gap between the pass that queued it and the daemon that runs it.
+   * Nothing while the loop is idle.
+   */
+  #idle: Deferred.Deferred<void> | undefined;
 
   /**
    * One pass of the cadence's own, and what a pass nobody awaits owes the
@@ -103,13 +112,20 @@ export class ObservationLoop {
   }
 
   readonly refresh: Effect.Effect<void> = Effect.suspend(() => {
-    if (!this.#options.gate()) return Effect.void;
+    if (!this.#options.gate()) {
+      // A follow-up that found the gate closed runs nothing, and nothing else
+      // will end the settling it was queued under; a poke that finds the gate
+      // closed while a pass still runs leaves the settling to that pass.
+      if (!this.#running) this.#settle();
+      return Effect.void;
+    }
     if (this.#running) {
       this.#queued = true;
       return Effect.void;
     }
     const generation = this.#generation;
     this.#running = true;
+    this.#idle ??= Deferred.unsafeMake<void>(FiberId.none);
     return Effect.ensuring(
       this.#options.run(generation),
       Effect.suspend(() => {
@@ -119,7 +135,10 @@ export class ObservationLoop {
         // behind it — running the hook there would draw the roster again over
         // the empty one the stop just published.
         const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
-        if (!this.#queued) return after ?? Effect.void;
+        if (!this.#queued) {
+          this.#settle();
+          return after ?? Effect.void;
+        }
         this.#queued = false;
         return Effect.zipRight(
           after ?? Effect.void,
@@ -128,6 +147,24 @@ export class ObservationLoop {
       }),
     );
   });
+
+  /**
+   * Answers once no pass is running and no follow-up is queued behind one; at
+   * once while the loop is idle. `refresh` alone answers as soon as the pass
+   * it found running is done, which may be before the follow-up its own poke
+   * earned has run, so a decision that must read what that follow-up wrote
+   * yields `refresh` and then this.
+   */
+  readonly settled: Effect.Effect<void> = Effect.suspend(() =>
+    this.#idle ? Deferred.await(this.#idle) : Effect.void,
+  );
+
+  #settle(): void {
+    const idle = this.#idle;
+    if (idle === undefined) return;
+    this.#idle = undefined;
+    Deferred.unsafeDone(idle, Effect.void);
+  }
 }
 
 /**
