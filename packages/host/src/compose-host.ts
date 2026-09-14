@@ -113,7 +113,16 @@ export const hostAssemblyLayer: Layer.Layer<
     const account = yield* composeAccount({ settings });
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
     const observation = yield* composeObservation({ settings, account, observationGate });
-    const calendars = yield* composeCalendars({ settings, observationGate });
+    // The live composer is built after this one and decides the beats on its
+    // record and its hold, so the two hands are set once it stands.
+    let onboardingWritten: () => void = () => undefined;
+    let announcementHoldRead: () => void = () => undefined;
+    const calendars = yield* composeCalendars({
+      settings,
+      observationGate,
+      onOnboardingWritten: () => onboardingWritten(),
+      onAnnouncementHoldRead: () => announcementHoldRead(),
+    });
     const devices = yield* composeDevices({ account, calendars, settings });
     const conversation = composeConversation({
       kernel,
@@ -135,8 +144,8 @@ export const hostAssemblyLayer: Layer.Layer<
     // service's since E5-3, and what a session speaks unprompted is what the
     // hosted brain decided and put on offer. The local brain stands until
     // LUKE-143 deletes it, so what it decides is written down as decided and
-    // said nowhere from here. What else the desktop's queue spoke, the two
-    // onboarding beats, is LUKE-202's.
+    // said nowhere from here. The onboarding beats and the launch greeting are
+    // decided by the live composer below and spoken by the service on its ask.
     const brain: BrainComposer = yield* composeBrain({
       account,
       observation,
@@ -145,7 +154,9 @@ export const hostAssemblyLayer: Layer.Layer<
         dropBriefings: () => undefined,
       },
     });
-    const live = yield* composeLive({ settings, account, observation });
+    const live = yield* composeLive({ settings, account, observation, calendars });
+    onboardingWritten = live.requestOnboardingBeat;
+    announcementHoldRead = live.onAnnouncementHoldRead;
 
     const supervisor = yield* observationSupervisor([
       observation.loop,
@@ -191,11 +202,13 @@ export const hostAssemblyLayer: Layer.Layer<
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
       yield* capabilities.arm;
+      live.requestOnboardingBeat();
     });
 
     /** The gate closing: the cadences disarmed, and then what a sign-out alone means. */
     const closeCapabilities = Effect.gen(function* () {
       yield* capabilities.disarm;
+      live.withdrawBeats();
       conversation.reset();
       observation.stopObservation();
       settings.forgetVaultKeys();
@@ -224,6 +237,7 @@ export const hostAssemblyLayer: Layer.Layer<
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
       onFirstSignIn: calendars.recordFirstSignIn,
+      onFirstSignInArrival: live.seedArrivalOnFirstSignIn,
       retireBrain: () => brain.wiring.retire(),
       rebuildBrain: () => brain.wiring.rebuild(),
       releaseDevice: (stored) => devices.release(stored),
@@ -398,6 +412,9 @@ export const hostAssemblyLayer: Layer.Layer<
           yield* openCapabilities;
         } else {
           yield* account.applyVoiceCredential;
+          // The ask decides for itself that no account stands; it is made all
+          // the same so a launch reads one rule and not two.
+          live.requestOnboardingBeat();
         }
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
