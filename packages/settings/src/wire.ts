@@ -1,11 +1,10 @@
 import type { ActionResult } from "@sidecar/wire";
-import { VOICE_SOURCE } from "./schema.js";
 import { APP_SETTING_DEFAULTS, type StoredAppSettings } from "./schema-access.js";
 import type { RuntimeStatus } from "./status.js";
 
 export type { AccountCalendar, ObservedAccountCalendars } from "@sidecar/calendar/observation";
-export type { SettingsResetScope, VoiceSource } from "./schema.js";
-export { SETTINGS_RESET_SCOPE, VOICE_SOURCE } from "./schema.js";
+export type { SettingsResetScope } from "./schema.js";
+export { SETTINGS_RESET_SCOPE } from "./schema.js";
 export type {
   AppSettingField,
   AppSettingValue,
@@ -22,7 +21,7 @@ export interface AppSettings {
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
-type ResolvedSettingField = "voice" | "voiceSource" | "formFactor";
+type ResolvedSettingField = "voice" | "formFactor";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & RuntimeStatus;
@@ -32,7 +31,6 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     ...settings.stored,
     ...settings.status,
     voice: settings.stored.voice ?? APP_SETTING_DEFAULTS.voice,
-    voiceSource: settings.stored.voiceSource ?? VOICE_SOURCE.ACCOUNT,
     formFactor: settings.stored.formFactor ?? APP_SETTING_DEFAULTS.formFactor,
   };
 }

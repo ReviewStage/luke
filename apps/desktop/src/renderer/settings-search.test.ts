@@ -3,12 +3,10 @@ import {
   CLOUD_AGENT_PROVIDER_LIST,
   CREDENTIAL_PROVIDER_ID,
   CREDENTIAL_SOURCE,
-  VOICE_CREDENTIAL_PROVIDER,
 } from "@sidecar/credentials/vocabulary";
 import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { test } from "vitest";
 import {
   type SettingsSearchEntry,
@@ -42,8 +40,6 @@ function everythingDrawn(): SettingsSearchInput {
         [CREDENTIAL_PROVIDER_ID.CONDUCTOR]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
         [CREDENTIAL_PROVIDER_ID.OPENAI]: CREDENTIAL_SOURCE.ENCRYPTED_FILE,
       },
-      // The key half live is what draws the OpenAI row on the front page.
-      voiceSource: VOICE_SOURCE.KEY,
       calendarSignInAvailable: true,
       calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
     }),
@@ -108,19 +104,16 @@ test("a row a page is not drawing is not offered", () => {
     assert.ok(wide.includes(label), `${label} is offered once its row is drawn`);
   }
 
-  // The ways out — and the Provider section, key row included —
-  // belong to a signed-in account alone.
+  // The ways out belong to a signed-in account alone.
   const signedOut = labels(settingsSearchEntries(searchInput({ accountDrawn: false })));
   assert.ok(!signedOut.includes("Sign out"));
   assert.ok(!signedOut.includes("Delete account"));
-  assert.ok(!signedOut.includes("Provider"));
-  assert.ok(!signedOut.includes("OpenAI API key"));
 
-  // On the account, the key row is not drawn — the section's own entry is
-  // what a key-shaped query finds, because its toggle is where a key begins.
+  // Voice runs on the account alone, so no row offers a key for it and no
+  // key-shaped query finds one.
   const hosted = settingsSearchEntries(searchInput());
   assert.ok(!labels(hosted).includes("OpenAI API key"));
-  assert.ok(labels(found(searchSettings(hosted, "openai"))).includes("Provider"));
+  assert.deepEqual(labels(found(searchSettings(hosted, "openai"))), []);
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {
@@ -170,30 +163,26 @@ test("the kept rows come back grouped under their pages, in the pages' order", (
   assert.deepEqual(labels(shortcuts.groups[0]?.items ?? []), ["Talk to Luke", "Stop Luke"]);
   assert.equal(shortcuts.matched, 2);
 
-  // "key" lands on Voice and two later pages; the groups keep the front
-  // page's navigation order.
+  // "key" lands on the talk and stop keys and on the cloud agents' keys, and
+  // on nothing under Voice: voice runs on the account, so no key row stands
+  // there. The groups keep the front page's navigation order.
   const keys = searchSettings(entries, "key");
   assert.ok(keys);
-  assert.equal(keys.groups[0]?.page, SETTINGS_VIEW.VOICE);
   const pages = keys.groups.map((group) => group.page);
   assert.deepEqual(
     pages,
-    [SETTINGS_VIEW.VOICE, SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
+    [SETTINGS_VIEW.SHORTCUTS, SETTINGS_VIEW.CONNECTIONS],
     "groups follow the nav's order",
   );
 });
 test("the rows that are not settings are found by what they are", () => {
   const entries = settingsSearchEntries(everythingDrawn());
 
-  // Every key row answers to "api key": the voice key on the Voice page and
-  // each cloud agent's under Connections. Each is named the way its own row
-  // names it, because a result reads the row's own name rather than a second
-  // record of it.
+  // Every key row answers to "api key": each cloud agent's under Connections,
+  // and none under Voice. Each is named the way its own row names it, because
+  // a result reads the row's own name rather than a second record of it.
   const keyRows = found(searchSettings(entries, "api key"));
-  assert.equal(
-    keyRows.find((entry) => entry.id === VOICE_CREDENTIAL_PROVIDER.id)?.page,
-    SETTINGS_VIEW.VOICE,
-  );
+  assert.ok(keyRows.every((entry) => entry.page !== SETTINGS_VIEW.VOICE));
   const keys = labels(keyRows);
   for (const provider of CLOUD_AGENT_PROVIDER_LIST) {
     assert.ok(keys.includes(provider.displayName), provider.displayName);

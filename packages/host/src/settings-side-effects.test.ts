@@ -29,10 +29,8 @@ it.effect(
         });
       const effects: SideEffects = hostSettingSideEffects({
         setVoice: () => step("setVoice"),
-        applyVoiceCredential: step("applyVoiceCredential"),
         refreshAnnouncementHold: step("refreshAnnouncementHold"),
         reportPresence: step("reportPresence"),
-        emitSettings: () => step("emitSettings"),
       });
 
       yield* effects[SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]({ settings: SETTINGS });

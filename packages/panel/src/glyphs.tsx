@@ -8,7 +8,6 @@
  * brand mark, and it inherits `currentColor` like the rest.
  */
 
-import { FACE_ART } from "@sidecar/surface";
 import React from "react";
 
 // `tsx` executes imported workspace-package JSX with the classic runtime.
@@ -184,51 +183,6 @@ export function FolderIcon(): React.JSX.Element {
     <Glyph>
       <path d="M3.4 6.2a1.8 1.8 0 0 1 1.8-1.8h4l2 2.4h7.6a1.8 1.8 0 0 1 1.8 1.8v9.2a1.8 1.8 0 0 1-1.8 1.8H5.2a1.8 1.8 0 0 1-1.8-1.8Z" />
     </Glyph>
-  );
-}
-
-/**
- * Luke himself, still: the same mark `design/brand/luke-mark-*.svg` is cut
- * from, drawn here from the generated artwork rather than loaded, for the
- * reason the face is — it inherits `currentColor`, so it reads as a letter in
- * whatever line holds it. The only glyph in this file that is a brand mark;
- * it earns that because what it stands for is Luke, not a thing Luke does.
- *
- * Cropped to the mark's own window rather than the face's, which is wider so
- * the motions have room to leave it. Nothing here moves: none of the face's
- * classes are worn, so no generated motion rule can reach it.
- */
-export function LukeIcon(): React.JSX.Element {
-  return (
-    <svg
-      className="settings-icon"
-      viewBox={FACE_ART.MARK_VIEW_BOX}
-      fill="none"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <g transform={FACE_ART.TILT}>
-        <path
-          d={FACE_ART.SMILE}
-          stroke="currentColor"
-          strokeWidth={FACE_ART.STROKE_WIDTH}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle
-          cx={FACE_ART.EYE_X.LEFT}
-          cy={FACE_ART.EYE_Y}
-          r={FACE_ART.EYE_RADIUS}
-          fill="currentColor"
-        />
-        <circle
-          cx={FACE_ART.EYE_X.RIGHT}
-          cy={FACE_ART.EYE_Y}
-          r={FACE_ART.EYE_RADIUS}
-          fill="currentColor"
-        />
-      </g>
-    </svg>
   );
 }
 
