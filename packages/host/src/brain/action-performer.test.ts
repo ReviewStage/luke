@@ -17,7 +17,6 @@ import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import { CAPTIONS_GUIDE, performCall } from "@sidecar/brain/testing";
 import { APP_SETTING_KIND, EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import {
   normalizeSession,
   type ObservedWorkspaceProject,
@@ -129,7 +128,6 @@ function performer(
   }),
 ) {
   const performed: CarriedSessionAction[] = [];
-  const recorded: ConversationEntry[] = [];
   const appActions: BrainAppActionRequest["action"][] = [];
   let facts: readonly RememberedFact[] = [];
   const dependencies: BrainActionPerformerDependencies = {
@@ -170,22 +168,18 @@ function performer(
         appActions.push(action);
         return { status: ACTION_RESULT_STATUS.ACCEPTED };
       }),
-    recordConversationEntry: (entry) => {
-      recorded.push(entry);
-    },
     ...overrides,
   };
   return {
     actions: createBrainActionPerformer(dependencies),
     performed,
-    recorded,
     appActions,
     facts: () => facts,
   };
 }
 
 test("a session action reaches the performer only for a session the roster holds", async () => {
-  const { actions, performed, recorded } = performer();
+  const { actions, performed } = performer();
   const identity = '"provider_id":"claude-code","provider_session_id":"session-a"';
 
   const landed = await Effect.runPromise(
@@ -201,9 +195,6 @@ test("a session action reaches the performer only for a session the roster holds
   assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(performed.length, 1);
   assert.equal(performed[0]?.kind, "message");
-  // The ask is recorded as the developer's, before the outcome is known.
-  assert.equal(recorded.length, 1);
-  assert.equal(recorded[0]?.kind, "action");
 
   const stranger = await Effect.runPromise(
     performCall(
@@ -459,17 +450,15 @@ test("an app action is validated against the reported guide before a renderer ca
   assert.equal(appActions.length, 1);
 });
 
-test("an action in a turn Luke opened himself runs under the same validators and is recorded as his own", async () => {
-  const { actions, performed, recorded } = performer();
+test("an action in a turn Luke opened himself runs under the same validators", async () => {
+  const { actions, performed } = performer();
   const outcome = await Effect.runPromise(performCall(actions, MESSAGE_CALL, observationTurn()));
   assert.equal(outcome.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.equal(performed.length, 1);
-  assert.equal(recorded.length, 1);
-  assert.equal(recorded[0]?.kind, "own-action");
 });
 
 test("an admitted action with no turn standing is refused at the carrier, the host's last gate, before any effect", async () => {
-  const { actions, performed, recorded, appActions, facts } = performer({
+  const { actions, performed, appActions, facts } = performer({
     appGuide: () => CAPTIONS_GUIDE,
   });
   const standing = {
@@ -530,14 +519,13 @@ test("an admitted action with no turn standing is refused at the carrier, the ho
     }
   }
   assert.deepEqual(performed, []);
-  assert.deepEqual(recorded, []);
   assert.deepEqual(appActions, []);
   assert.deepEqual(facts(), []);
 });
 
-test("a turn revoked while the roster refreshed is refused before the effect, and nothing is recorded", async () => {
+test("a turn revoked while the roster refreshed is refused before the effect", async () => {
   let revoked = false;
-  const { actions, performed, recorded } = performer({
+  const { actions, performed } = performer({
     refreshSessions: () =>
       Effect.sync(() => {
         revoked = true;
@@ -553,12 +541,11 @@ test("a turn revoked while the roster refreshed is refused before the effect, an
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.equal(refused.reason, ACTION_REFUSAL.TURN_OVER);
   assert.deepEqual(performed, []);
-  assert.deepEqual(recorded, []);
 });
 
 test("a turn revoked while the creation defaults were read is refused before the effect", async () => {
   let revoked = false;
-  const { actions, performed, recorded } = performer({
+  const { actions, performed } = performer({
     workspaceProjects: () => [LISTED_PROJECT],
     workspaceDefaults: Effect.sync(() => {
       revoked = true;
@@ -574,7 +561,6 @@ test("a turn revoked while the creation defaults were read is refused before the
   );
   assert.equal(refused.status, ACTION_OUTPUT_STATUS.REFUSED);
   assert.deepEqual(performed, []);
-  assert.deepEqual(recorded, []);
 });
 
 test("a revoked turn reaches no memory write and no renderer action", async () => {
@@ -667,7 +653,6 @@ it.effect(
       yield* Deferred.succeed(release, undefined);
       yield* waitFor(() => finished);
       assert.deepEqual(h.performed, []);
-      assert.deepEqual(h.recorded, []);
     }),
 );
 
@@ -725,7 +710,6 @@ it.effect(
         release?.();
         yield* waitFor(() => finished);
         assert.deepEqual(h.performed, [], `${held}: the late read dispatched nothing`);
-        assert.deepEqual(h.recorded, []);
       }
     }),
 );

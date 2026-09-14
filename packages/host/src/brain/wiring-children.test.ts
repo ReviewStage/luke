@@ -31,7 +31,6 @@ import {
   MEMORY_SCOPE_KIND,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import type { Fiber } from "effect";
@@ -136,7 +135,6 @@ interface Composed {
   completions: Map<string, ChildCompletionRecord>;
   ensured: { sessionKey: SessionKey; name: string }[];
   archived: SessionKey[];
-  history: Map<SessionKey, ConversationEntry[]>;
 }
 
 /**
@@ -220,7 +218,6 @@ async function composed(
   };
   const ensured: Composed["ensured"] = [];
   const archived: SessionKey[] = [];
-  const history = new Map<SessionKey, ConversationEntry[]>();
   let ids = 0;
   const workspace = await temporaryDirectory(t, "luke-children-");
   const building = wireBrain({
@@ -252,7 +249,6 @@ async function composed(
         lastActivityAt: NOW,
       },
     ],
-    conversationLines: (sessionKey) => history.get(sessionKey) ?? [],
     childStore: () => childStore,
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
@@ -276,7 +272,6 @@ async function composed(
       notebook: { remember: async () => true, forget: async () => true },
       performAppAction: (): Effect.Effect<WireRecord> =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED }),
-      recordConversationEntry: () => undefined,
     },
     roster: () => ({ text: "", identities: [], sessions: [] }),
     standingContext: () => "",
@@ -316,7 +311,6 @@ async function composed(
     completions,
     ensured,
     archived,
-    history,
   };
 }
 

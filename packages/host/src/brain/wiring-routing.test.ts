@@ -203,7 +203,6 @@ async function composed(t: TestContext, scope: Scope.Scope, gate?: Gate): Promis
     },
     archiveConversation: async () => true,
     conversationDirectory: () => [],
-    conversationLines: () => [],
     childStore: () => memoryChildStore(),
     parallelism: () => 8,
     createId: () => `id-${++ids}`,
@@ -227,7 +226,6 @@ async function composed(t: TestContext, scope: Scope.Scope, gate?: Gate): Promis
       notebook: { remember: async () => true, forget: async () => true },
       performAppAction: (): Effect.Effect<WireRecord> =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED }),
-      recordConversationEntry: () => undefined,
     },
     roster: () => ({
       text: roster.map((held) => `- ${held.title}`).join("\n"),

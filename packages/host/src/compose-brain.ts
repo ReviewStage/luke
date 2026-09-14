@@ -24,7 +24,6 @@ import {
   MEMORY_SCOPE_KIND,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { conversationLinesText, recentConversationEntries } from "@sidecar/session";
 import { VOICE_SOURCE } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
@@ -146,17 +145,16 @@ export const composeBrain = (
 
     /**
      * What a conversation is handed beside the roster, by which conversation it
-     * is. The recent exchange reaches every conversation, so an observed
-     * session's knows what the developer was just told before it briefs; the
-     * remembered facts reach every conversation too, recalled by the memory
-     * provider rather than rendered here. The app guide and the projects a
-     * workspace could be created in belong to the conversations the developer
-     * actually holds; an observed session's conversation and a child's brief
+     * is. The recent exchange is no longer rendered here: the Conversation is
+     * the service's record since E5-3, and the hosted brain reads it as
+     * messages; the remembered facts reach every conversation recalled by the
+     * memory provider rather than rendered here. The app guide and the
+     * projects a workspace could be created in belong to the conversations the
+     * developer actually holds; an observed session's conversation and a child's brief
      * one session or one task, and would pay for both on every call and every
      * iteration of their tool loops.
      */
     function standingContext(sessionKey: SessionKey): string {
-      const sessions = observation.actableSessions();
       const kind = conversationKindOf(sessionKey);
       const developerHeld = kind === CONVERSATION_KIND.MAIN || kind === CONVERSATION_KIND.THREAD;
       const defaults = observation.heldWorkspaceDefaults();
@@ -170,10 +168,6 @@ export const composeBrain = (
               ),
             ]
           : []),
-        conversationLinesText(
-          recentConversationEntries(conversations.thread().entries()),
-          sessions,
-        ),
         ...(developerHeld ? [appGuideContextText(appGuide)] : []),
       ]
         .filter((part): part is string => part !== undefined && part.trim().length > 0)
@@ -217,7 +211,6 @@ export const composeBrain = (
       },
       archiveConversation: (sessionKey) => conversations.archive(sessionKey),
       conversationDirectory: () => conversations.directory(),
-      conversationLines: (sessionKey) => conversations.thread(sessionKey).entries(),
       childStore: () => conversations.childStore(),
       createId,
       report,
@@ -253,7 +246,6 @@ export const composeBrain = (
           forget: () => Promise.resolve(false),
         },
         performAppAction: (action) => performAppAction(action),
-        recordConversationEntry: conversations.recordConversationEntry,
       },
       roster: observation.roster,
       standingContext,

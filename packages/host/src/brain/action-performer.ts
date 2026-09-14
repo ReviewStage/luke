@@ -11,7 +11,6 @@ import {
   type RememberedFact,
   refusedActionOutput,
   type SessionActionKind,
-  sessionActionConversationEntry,
   type ValidatedAction,
 } from "@sidecar/actions";
 import type {
@@ -21,10 +20,8 @@ import type {
 } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
 import type { AppGuideSnapshot } from "@sidecar/guide";
-import { isRunOrigin, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
+import { isRunOrigin } from "@sidecar/runtime/vocabulary";
 import {
-  CONVERSATION_ENTRY_KIND,
-  type ConversationEntry,
   type ObservedWorkspaceProject,
   type Session,
   workspaceAgentModels,
@@ -72,8 +69,6 @@ export interface BrainActionPerformerDependencies {
   notebook: BrainNotebookWriter;
   /** Carries an app action only a renderer can perform, and answers what became of it. */
   performAppAction: (action: BrainAppActionRequest["action"]) => Effect.Effect<WireRecord>;
-  /** Records the ask a carried session action was, so the thread holds it. */
-  recordConversationEntry: (entry: ConversationEntry) => void;
 }
 
 const REFUSAL = {
@@ -202,18 +197,6 @@ export function createBrainActionPerformer(
       // now rather than at render, when the session may be renamed or gone.
       const sessions = dependencies.sessions();
       const target = actionTargetSnapshot(action, sessions);
-      // The ask is recorded before the outcome is known: a refusal still leaves
-      // the developer having asked it, and the reply voicing the outcome is
-      // recorded as what Luke said.
-      dependencies.recordConversationEntry(
-        sessionActionConversationEntry(
-          action,
-          sessions,
-          execution.origin === RUN_ORIGIN.USER
-            ? CONVERSATION_ENTRY_KIND.ACTION
-            : CONVERSATION_ENTRY_KIND.OWN_ACTION,
-        ),
-      );
       // The performer awaits once more of its own before a create or a spawn,
       // so the execution rides along to be asked again there.
       return actionOutputFromResult(
