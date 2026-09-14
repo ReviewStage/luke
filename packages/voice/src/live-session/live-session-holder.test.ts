@@ -32,7 +32,7 @@ import {
 } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
+import { LiveSessionHolder, VOICE_PREVIEW_SESSION, WANTED_WORD } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted session, over a scripted source and
@@ -756,4 +756,119 @@ it.effect(
       // Dropped rather than held: the kind may be asked for again.
       assert.equal(f.holder.speakBeat(ARRIVAL), true);
     }),
+);
+
+const PREVIEW: SessionBeatFrame = {
+  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+  kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
+};
+
+it.effect(
+  "a voice chosen with nothing standing auditions in a session of its own: wanted is announced, the line goes through the door once the session starts, and the session is given back once the line has been heard",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      const sideband = yield* f.open();
+      assert.deepEqual(f.beats, [PREVIEW]);
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.VOICE_PREVIEW]);
+      // Heard is not finished: the session stands while the words run out.
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.LINGER_MS - 1));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* settle();
+      assert.deepEqual(sideband.sent, [{ type: LIVE_CLIENT_EVENT.CLOSE, event_id: "id-1" }]);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 3);
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect(
+  "a voice chosen while the last audition's session stands closes it and asks for another, so the voice chosen last is the one heard and two auditions never speak over each other",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      const first = yield* f.open();
+      assert.deepEqual(f.beats, [PREVIEW]);
+      // A second choice, and a third while the second's close is still out:
+      // the close each asks for is one session's, and one `wanted` follows.
+      assert.equal(f.holder.previewVoice(), true);
+      assert.equal(f.holder.previewVoice(), true);
+      yield* settle();
+      first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 2);
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), false);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.STARTED,
+        LIVE_SESSION_PHASE.CLOSING,
+        LIVE_SESSION_PHASE.CLOSED,
+        LIVE_SESSION_PHASE.WANTED,
+      ]);
+      // The session the peer opens for that word speaks one audition, not three.
+      const second = yield* f.open();
+      assert.deepEqual(f.beats, [PREVIEW, PREVIEW]);
+      assert.notEqual(second, first);
+    }),
+);
+
+it.effect(
+  "an audition whose line is never heard gives its session back at the ceiling rather than leaving one standing for the run",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      const sideband = yield* f.open();
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.CEILING_MS - 1));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      yield* TestClock.adjust(Duration.millis(1));
+      yield* settle();
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), false);
+    }),
+);
+
+it.effect(
+  "an ordinary session is left alone: no audition begins while one stands, since a conversation keeps the voice it opened with",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      assert.equal(f.holder.previewVoice(), false);
+      assert.deepEqual(f.beats, []);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(f.holder.sessionStands(), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.STARTED]);
+    }),
+);
+
+it.effect(
+  "a briefing spoken into the audition's session makes it a session with a turn in it, which a later choice leaves standing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      yield* f.open();
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.BRIEFING);
+      assert.equal(f.holder.previewVoice(), false);
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+    }),
+);
+
+it.effect("nothing is auditioned while voice is unavailable, so no word goes out for it", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.sourceAvailable = false;
+    assert.equal(f.holder.previewVoice(), false);
+    assert.deepEqual(phases(f.changes), []);
+  }),
 );

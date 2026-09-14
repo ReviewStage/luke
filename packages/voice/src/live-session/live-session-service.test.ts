@@ -1275,6 +1275,29 @@ it.effect(
 );
 
 it.effect(
+  "an audition's session keeps nothing Luke says on it, since demonstrating a voice is not a turn of the conversation, while the developer's own words on it are still written",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW, decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
+      sideband.acknowledge(0, 100, 200);
+      sideband.output("Hi, what can I help you with?", 300, 1200);
+      sideband.input("Is that you?", 1300, 2000);
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.deepEqual(f.spoken, [PROACTIVE_SPEECH_KIND.VOICE_PREVIEW]);
+      assert.deepEqual(f.record.luke, []);
+      assert.deepEqual(
+        f.record.developer.map((line) => line.text),
+        ["Is that you?"],
+      );
+    }),
+);
+
+it.effect(
   "a muted microphone never carries the stop instruction, whether Luke is silent or mid-sentence",
   () =>
     Effect.gen(function* () {

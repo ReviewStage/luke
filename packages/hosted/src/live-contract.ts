@@ -228,8 +228,8 @@ export interface SessionStopFrame {
 /**
  * A beat the desktop asks the service to speak. Each kind names exactly the
  * observed values its script may mention, each bounded as `@sidecar/live`
- * bounds a value before it enters an append; the calendar line mentions
- * nothing observed and carries nothing.
+ * bounds a value before it enters an append; the calendar line and the voice
+ * picker's audition mention nothing observed and carry nothing.
  */
 export type SessionBeatFrame =
   | {
@@ -249,6 +249,11 @@ export type SessionBeatFrame =
       kind: typeof PROACTIVE_SPEECH_KIND.LAUNCH;
       /** The signed-in account's first name, as the account service reported it. */
       firstName?: string;
+    }
+  | {
+      type: typeof VOICE_SERVICE_FRAME.SESSION_BEAT;
+      /** The picker's audition, whose line is fixed by the build and mentions nothing observed. */
+      kind: typeof PROACTIVE_SPEECH_KIND.VOICE_PREVIEW;
     };
 
 /** Any frame the desktop sends after the handshake in this vocabulary, read by the service and forwarded nowhere. */
@@ -423,6 +428,10 @@ export const sessionBeatFrameSchema = schemaAs<SessionBeatFrame>(
       type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
       kind: Schema.Literal(PROACTIVE_SPEECH_KIND.LAUNCH),
       firstName: beatValue,
+    }),
+    Schema.Struct({
+      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_BEAT),
+      kind: Schema.Literal(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW),
     }),
   ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED)),
 );

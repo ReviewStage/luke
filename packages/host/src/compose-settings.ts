@@ -48,7 +48,11 @@ import { AppIdentity, type Environment, SecretCipher } from "./effect/seams.js";
 import { settingsOverrides } from "./effect/settings-overrides.js";
 import { heldProductEvents } from "./held-product-events.js";
 import { removeRetiredStore } from "./retired-store.js";
-import { hostSettingSideEffects } from "./settings-side-effects.js";
+import {
+  hostSettingSideEffects,
+  SETTING_WRITE_ORIGIN,
+  type SettingWriteOrigin,
+} from "./settings-side-effects.js";
 import { apiKeyRejection, SettingsStore, type StoredAccount } from "./settings-store.js";
 import { vaultStepBearer } from "./vault-step-bearer.js";
 import { type VaultStepEra, vaultStepEraStands } from "./vault-step-era.js";
@@ -67,6 +71,8 @@ interface SettingsLinks {
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
   readonly cloudKeyHeld: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
+  /** The voice just chosen here, auditioned in a session of its own so the developer hears it. */
+  readonly previewVoice: Effect.Effect<void>;
   /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
   /** The device heartbeat sent now, so the quiet instant the pause or the meeting setting moved reaches the service at once. */
@@ -672,6 +678,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
 
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
+      previewVoice: linked((links) => links.previewVoice),
       refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
       reportPresence: linked((links) => links.reportPresence),
     });
@@ -679,15 +686,16 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
     const applyHostSettingSideEffect = (
       field: AppSettingField,
       settings: SettingsUpdateResult["settings"],
+      origin: SettingWriteOrigin,
     ): Effect.Effect<void> =>
-      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored });
+      sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({ settings: settings.stored, origin });
 
     const applyAccountPreferenceSideEffects = /* @__PURE__ */ Effect.fnUntraced(function* (
       result: SettingsUpdateResult,
       changed: readonly AccountPreferenceField[],
     ): Effect.fn.Return<void> {
       for (const field of changed) {
-        yield* applyHostSettingSideEffect(field, result.settings);
+        yield* applyHostSettingSideEffect(field, result.settings, SETTING_WRITE_ORIGIN.SYNCED);
       }
       if (
         changed.includes(APP_SETTING_SCHEMA.workspaceAgentDefaults.field) ||
@@ -749,7 +757,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
                 ? Effect.void
                 : Effect.gen(function* () {
                     recordSettingUpdate(field, saved.settings);
-                    yield* applyHostSettingSideEffect(field, saved.settings);
+                    yield* applyHostSettingSideEffect(
+                      field,
+                      saved.settings,
+                      SETTING_WRITE_ORIGIN.CHOSEN,
+                    );
                   }),
             "Could not save that setting on this system.",
             reporterOf(params),
@@ -787,7 +799,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
                 ? Effect.void
                 : Effect.gen(function* () {
                     recordSettingUpdate(field, saved.settings);
-                    yield* applyHostSettingSideEffect(field, saved.settings);
+                    yield* applyHostSettingSideEffect(
+                      field,
+                      saved.settings,
+                      SETTING_WRITE_ORIGIN.CHOSEN,
+                    );
                   }),
             "Could not save that setting on this system.",
             reporterOf(params),
@@ -811,7 +827,11 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
                       const definition = APP_SETTING_SCHEMA[field];
                       if (!("resetScope" in definition) || definition.resetScope !== scope)
                         continue;
-                      yield* applyHostSettingSideEffect(field, saved.settings);
+                      yield* applyHostSettingSideEffect(
+                        field,
+                        saved.settings,
+                        SETTING_WRITE_ORIGIN.RESET,
+                      );
                     }
                   }),
             "Could not reset those settings on this system.",

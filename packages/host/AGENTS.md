@@ -70,7 +70,9 @@ append, and every beat's words are the build's script the service speaks. It
 appends nothing at all. What it decides is which beat is owed (`compose-live.ts`
 over `arrival-flow.ts` and the onboarding record: the arrival beat once per
 install, the calendar line while the gate shows, the launch greeting once per
-run after the arrival has played, none of them under a hold), and it announces
+run after the arrival has played, and the voice picker's audition each time a
+voice is chosen here — never on a reset or on a preference syncing in from
+another device — none of them under a hold), and it announces
 `wanted` for one so the peer opens a muted session to say it into; the
 service's `session.spoken` frame is what settles `arrivalSpokenAt` and the
 first-announcement count, which stay this side's. It announces `wanted` for a

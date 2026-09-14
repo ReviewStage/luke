@@ -4,7 +4,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import type { SessionBeatFrame } from "@sidecar/hosted";
+import { type SessionBeatFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -22,7 +22,18 @@ import {
   seedItemTokens,
 } from "@sidecar/live";
 import type { ConversationEntry } from "@sidecar/session";
-import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Queue, Scope, Stream } from "effect";
+import {
+  Clock,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FiberSet,
+  Queue,
+  Scope,
+  Stream,
+} from "effect";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import {
@@ -53,9 +64,14 @@ import type { BeatKind } from "./proactive-queue.js";
  * the close. It appends no thinking, no commentary, and no reply, and decides
  * no briefing; the one session it wants of its own is the muted one a beat
  * needs, announced as the `wanted` phase when a beat is asked for and no
- * session stands. The renderer's hang-up and the peer's transport are the
- * only reasons a session ends from this side, and the service's idle close
- * reaches it as the `session.closed` the relay forwards.
+ * session stands. The voice picker's audition is such a beat with a session
+ * of its own: the voice a session speaks with is fixed when the session is
+ * created, so a voice just chosen is heard by closing the audition's last
+ * session and opening one under the voice the write has stored, and that
+ * session is given back on the audition's own clock. The renderer's hang-up,
+ * the peer's transport, and that clock are the only reasons a session ends
+ * from this side, and the service's idle close reaches it as the
+ * `session.closed` the relay forwards.
  *
  * Built by `make` for the scope of the composition that holds it, on the
  * same terms as `LiveSessionService`: each session stands in a scope of its
@@ -115,6 +131,28 @@ export const WANTED_WORD = {
   STANDS_MS: 30_000,
 } as const;
 
+/**
+ * The audition's own session, bounded on both sides. GPT Live fixes a
+ * session's voice when the session is created and documents no preview of its
+ * own, so the one way to hear a chosen voice is a session created with it,
+ * and the one thing said into it is the picker's fixed line. It is closed
+ * shortly after that line has been heard rather than the instant it settles,
+ * because a commentary settles as spoken when the output first runs past it
+ * and closing then would cut the words off; and it is closed on the ceiling
+ * where the line was never heard at all — refused, or a model that said
+ * nothing — so an audition never leaves a session standing for the run.
+ */
+export const VOICE_PREVIEW_SESSION = {
+  LINGER_MS: 6_000,
+  CEILING_MS: 20_000,
+} as const;
+
+/** The audition's beat: the kind alone, since its words are the build's and it mentions nothing observed. */
+const VOICE_PREVIEW_BEAT: SessionBeatFrame = {
+  type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+  kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
+};
+
 export class LiveSessionHolder {
   readonly #options: LiveSessionHolderOptions;
   #held: HeldSession | undefined;
@@ -124,7 +162,8 @@ export class LiveSessionHolder {
    * The beats asked for and not yet spoken, by kind: waiting for a session
    * to start, or sent to the service and not yet reported spoken. One ask per
    * kind stands at a time; a second is refused until the first is spoken,
-   * withdrawn, or lost with its session.
+   * withdrawn, or lost with its session — except the audition, which is the
+   * developer asking again and replaces the ask standing.
    */
   readonly #beats = new Map<BeatKind, { readonly beat: SessionBeatFrame; sent: boolean }>();
   /**
@@ -137,6 +176,16 @@ export class LiveSessionHolder {
    * later ask silent for the run.
    */
   #wantedAt: number | undefined;
+  /**
+   * The session opened for an audition and nothing else, while ending it is
+   * still the audition's to do: a voice chosen while it stands is heard by
+   * closing it and opening one with the new voice, since the voice a session
+   * speaks with cannot change after it is created. Anything else spoken into
+   * it, and the session's own end, give it up.
+   */
+  #auditionSession: HeldSession | undefined;
+  /** Which audition is the standing one, so a superseded one's clocks end nothing. */
+  #audition = 0;
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
   readonly #clock: Clock.Clock;
   readonly #sessions: Scope.Scope;
@@ -270,6 +319,9 @@ export class LiveSessionHolder {
       opened.onSpoken?.((kind) => this.#spoken(session, kind));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
+      // The peer answered a `wanted` an audition asked for: this session is
+      // the audition's to close, until something else is spoken into it.
+      if (this.#beats.has(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW)) this.#auditionSession = session;
       this.#options.onSessionCreated?.();
       return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
     });
@@ -438,14 +490,84 @@ export class LiveSessionHolder {
    */
   speakBeat(beat: SessionBeatFrame): boolean {
     if (this.#beats.has(beat.kind)) return false;
+    this.#arm(beat);
+    return true;
+  }
+
+  /**
+   * The voice picker's audition: the developer has just chosen a voice and is
+   * listening for it. GPT Live fixes a session's voice at creation and offers
+   * no preview of its own, so what is heard is a session created with the
+   * voice the write has already stored, saying the build's one line into it.
+   *
+   * A session opened for an earlier audition is closed first and a new one
+   * asked for, so the voice chosen last is the voice heard and two auditions
+   * never speak over each other; the word `wanted` the close is followed by
+   * is the same one a beat asks with, so the peer opens the muted session
+   * exactly as it does for any other. An ordinary session standing is left
+   * alone and nothing is auditioned: it keeps the voice it opened with, which
+   * is what the picker's own line says, and ending a conversation to
+   * demonstrate a voice would be the worse of the two. Answers whether an
+   * audition was begun.
+   */
+  previewVoice(): boolean {
+    if (this.#options.source() === undefined) return false;
+    const audition = ++this.#audition;
+    const session = this.#held;
+    if (session === undefined || session.ended) {
+      this.#beginAudition(audition);
+      return true;
+    }
+    if (this.#auditionSession !== session) return false;
+    this.#start(
+      Effect.gen({ self: this }, function* () {
+        yield* this.#end(session);
+        // Overtaken while the close was out: the audition that overtook this
+        // one has asked for its own session and this one adds nothing.
+        if (audition !== this.#audition) return;
+        this.#beginAudition(audition);
+      }),
+    );
+    return true;
+  }
+
+  /**
+   * The audition asked for: the beat waits for the session the peer is told
+   * is wanted, and the ceiling stands from here rather than from the session,
+   * so an audition whose session never comes, or whose line is never heard,
+   * still gives the session back.
+   */
+  #beginAudition(audition: number): void {
+    this.#arm(VOICE_PREVIEW_BEAT);
+    this.#endAuditionAfter(audition, VOICE_PREVIEW_SESSION.CEILING_MS);
+  }
+
+  /** A beat put where the session that speaks it will find it, and the peer told one is wanted if none stands. */
+  #arm(beat: SessionBeatFrame): void {
     this.#beats.set(beat.kind, { beat, sent: false });
     const session = this.#held;
     if (session === undefined || session.ended) {
       this.#askWanted();
-      return true;
+      return;
     }
     if (session.started) this.#sendBeats(session);
-    return true;
+  }
+
+  /**
+   * The audition's session given back on its own clock, on a fiber of the
+   * holder's own: the audition that armed it must still be the standing one,
+   * and the session must still be the audition's alone.
+   */
+  #endAuditionAfter(audition: number, delayMs: number): void {
+    this.#start(
+      Effect.gen({ self: this }, function* () {
+        yield* Effect.sleep(Duration.millis(delayMs));
+        if (audition !== this.#audition) return;
+        const session = this.#auditionSession;
+        if (session === undefined || session.ended) return;
+        yield* this.#end(session);
+      }),
+    );
   }
 
   /** Whether the peer has been told a session is wanted, within the word's own standing, and has not yet offered one. */
@@ -521,6 +643,16 @@ export class LiveSessionHolder {
   #spoken(session: HeldSession, kind: ProactiveSpeechKind): void {
     if (session.ended) return;
     if (kind !== PROACTIVE_SPEECH_KIND.BRIEFING) this.#beats.delete(kind);
+    if (kind === PROACTIVE_SPEECH_KIND.VOICE_PREVIEW) {
+      // Heard, not finished: a commentary settles as spoken when the output
+      // first runs past it, so the session stands a moment longer and the
+      // line is not cut off by the close that follows it.
+      this.#endAuditionAfter(this.#audition, VOICE_PREVIEW_SESSION.LINGER_MS);
+    } else if (this.#auditionSession === session) {
+      // Something the audition did not ask for was spoken into its session:
+      // it is a session with a turn in it now, and no longer one to close.
+      this.#auditionSession = undefined;
+    }
     this.#options.onSpoken?.(kind);
   }
 
@@ -563,6 +695,7 @@ export class LiveSessionHolder {
   #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
     session.ended = true;
     if (this.#held === session) this.#held = undefined;
+    if (this.#auditionSession === session) this.#auditionSession = undefined;
     // A beat the session ended on, sent or waiting, is not carried to the
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.
