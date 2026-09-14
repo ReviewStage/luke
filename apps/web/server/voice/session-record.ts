@@ -1,6 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { type DevicePlatform, isDevicePlatform } from "../core.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -20,12 +21,13 @@ import { findHeldDevice } from "../hosted/device-store.js";
  * the honest record, and a later connection's `session.closed` confirms it.
  * The seconds the quota meters are a separate ledger, `recordVoiceSeconds`.
  *
- * The device the session names is the one the desktop's handshake claimed,
- * and the write can name only a `devices` row the same account holds: the
- * id is read back out of that table under the account, so a claim on
- * another account's device, or on a row that has gone, leaves the column
- * null — the column's own word for a session that names no device — and a
- * briefing on offer stays unclaimed rather than claimed as someone else's.
+ * The device the session names is the one the handshake claimed, a Mac's row
+ * or a phone's alike, and the write can name only a `devices` row the same
+ * account holds: the id is read back out of that table under the account, so
+ * a claim on another account's device, or on a row that has gone, leaves the
+ * column null — the column's own word for a session that names no device —
+ * and a briefing on offer stays unclaimed rather than claimed as someone
+ * else's.
  */
 /**
  * What every method answers: an effect over the ambient client, so the socket
@@ -51,6 +53,17 @@ interface VoiceSessionDeviceClaim {
   deviceId: string;
 }
 
+/**
+ * A device row the account was shown to hold, as the session that claimed it
+ * reads it: the platform the row named, and nothing where it named a word
+ * this build does not know. It is the one place the caller's platform is
+ * read, since the row is the account's own and the header the caller sent
+ * names an id and never a platform.
+ */
+interface HeldVoiceDevice {
+  readonly platform: DevicePlatform | undefined;
+}
+
 /** A live session as the account that opened it names it. */
 interface VoiceSessionOwnership {
   userId: string;
@@ -70,8 +83,8 @@ interface VoiceSessionClose extends VoiceSessionUsage {
 
 export interface VoiceSessionRecord {
   register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<void>;
-  /** Whether the account holds the device row named: the check the door makes before a session is spent on the claim. */
-  deviceOwned(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<boolean>;
+  /** The device row the account holds under the id named, or nothing: the check the door makes before a session is spent on the claim. */
+  heldDevice(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<HeldVoiceDevice | undefined>;
   /** Whether the account created the live session named: one lookup over the indexed pair. */
   owned(input: VoiceSessionOwnership): VoiceSessionRecordEffect<boolean>;
   noteUsage(input: VoiceSessionUsage): VoiceSessionRecordEffect<void>;
@@ -173,7 +186,16 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
         delegationMode: VOICE_DELEGATION_MODE.CLIENT,
         deviceId: input.deviceId ?? null,
       }),
-    deviceOwned: (input) => Effect.map(findHeldDevice(input), Option.isSome),
+    heldDevice: (input) =>
+      Effect.map(
+        findHeldDevice(input),
+        Option.match({
+          onNone: () => undefined,
+          onSome: (row) => ({
+            platform: isDevicePlatform(row.platform) ? row.platform : undefined,
+          }),
+        }),
+      ),
     owned: (input) =>
       Effect.map(
         findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),

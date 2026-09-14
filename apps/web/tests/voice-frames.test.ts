@@ -8,7 +8,7 @@ import {
   RENDERER_SERVER_EVENTS,
 } from "../server/live";
 import {
-  desktopFrameDecision,
+  deviceFrameDecision,
   FRAME_DECISION,
   frameType,
   routeForPath,
@@ -41,7 +41,7 @@ test("a binary frame reads as nothing, a text frame as its text, and each counts
   assert.equal(frameBytes({ text: "é" }), 2);
 });
 
-test("reflected audio is dropped by type toward the desktop on both routes", () => {
+test("reflected audio is dropped by type toward the device on both routes", () => {
   for (const route of Object.values(VOICE_ROUTE)) {
     assert.equal(
       upstreamFrameDecision(LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, route),
@@ -62,7 +62,7 @@ test("a signed-in session is shown every frame OpenAI sends, unread ones include
   assert.equal(upstreamFrameDecision(undefined, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
 });
 
-test("a signed-in desktop may send the hang-up alone, is read for its idle report, its stop, and its beats, and is refused on anything else", () => {
+test("a signed-in device may send the hang-up alone, is read for its idle report, its stop, and its beats, and is refused on anything else", () => {
   assert.deepEqual(SESSIONS_CLIENT_EVENTS, [LIVE_CLIENT_EVENT.CLOSE]);
   assert.deepEqual(SESSIONS_REPORT_FRAMES, [
     VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
@@ -70,16 +70,16 @@ test("a signed-in desktop may send the hang-up alone, is read for its idle repor
     VOICE_SERVICE_FRAME.SESSION_BEAT,
   ]);
   for (const type of SESSIONS_CLIENT_EVENTS) {
-    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.FORWARD);
   }
   for (const type of SESSIONS_REPORT_FRAMES) {
-    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REPORT);
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REPORT);
   }
   assert.equal(
-    desktopFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY, VOICE_ROUTE.SESSIONS),
+    deviceFrameDecision(VOICE_SERVICE_FRAME.SESSION_ACTIVITY, VOICE_ROUTE.SESSIONS),
     FRAME_DECISION.REPORT,
   );
-  // The exchange's own appends from an older desktop build, the microphone
+  // The exchange's own appends from an older build of any platform, the microphone
   // switch that never crosses this socket, a handshake frame after the
   // handshake, and a frame whose type cannot be read: each closes the socket.
   for (const type of [
@@ -91,7 +91,7 @@ test("a signed-in desktop may send the hang-up alone, is read for its idle repor
     VOICE_SERVICE_FRAME.SESSION_ATTACH,
     undefined,
   ]) {
-    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REFUSE);
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.SESSIONS), FRAME_DECISION.REFUSE);
   }
 });
 
@@ -114,7 +114,7 @@ test("the introduction is shown exactly the renderer's server events and may sen
     );
   }
   for (const type of RENDERER_CLIENT_EVENTS) {
-    assert.equal(desktopFrameDecision(type, VOICE_ROUTE.INTRODUCTION), FRAME_DECISION.FORWARD);
+    assert.equal(deviceFrameDecision(type, VOICE_ROUTE.INTRODUCTION), FRAME_DECISION.FORWARD);
   }
   for (const type of [
     LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
@@ -123,7 +123,7 @@ test("the introduction is shown exactly the renderer's server events and may sen
     undefined,
   ]) {
     assert.equal(
-      desktopFrameDecision(type, VOICE_ROUTE.INTRODUCTION),
+      deviceFrameDecision(type, VOICE_ROUTE.INTRODUCTION),
       FRAME_DECISION.DROP_UNPERMITTED,
     );
   }

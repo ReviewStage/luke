@@ -1,4 +1,4 @@
-import type { SessionBeatFrame } from "@sidecar/hosted";
+import type { DevicePlatform, SessionBeatFrame } from "@sidecar/hosted";
 import { PROACTIVE_SPEECH_KIND, type ProactiveSpeechKind } from "@sidecar/live";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -45,7 +45,7 @@ import { observedSideband } from "./live-sideband.js";
  * and the key ring — so the writers, the ask record, and the reads hold one
  * client over one database. The session itself is still the caller's: a
  * source handed in is what creates and attaches it, or the sessions route
- * hands in a session it already created for the desktop and the exchange
+ * hands in a session it already created for the device and the exchange
  * adopts it, seeding nothing, through `adopt`. Whether the route hands one in
  * is the route's composition's decision, by build. The account's quiet is not this composition's: a held offer is
  * `speech.held` on the record and never open here, so the service's own hold
@@ -86,8 +86,8 @@ export interface HostedLiveExchangeOptions {
   readonly report: (message: string) => void;
   readonly trace?: LiveSessionServiceOptions<BriefingDelivery>["trace"];
   /**
-   * A proactive turn was spoken to its end, by kind: a beat the desktop
-   * asked for, or a briefing this exchange decided. The desktop keeps the
+   * A proactive turn was spoken to its end, by kind: a beat the device
+   * asked for, or a briefing this exchange decided. The device keeps the
    * record of the beats and the counts that follow every spoken turn, so the
    * route tells it in the service's own frame.
    */
@@ -98,13 +98,15 @@ export interface HostedLiveExchangeOptions {
 export interface AttachedSession {
   readonly accountId: string;
   readonly sessionId: string;
-  /** The device the handshake named and the account was shown to hold; none where the desktop sent none or the route re-attached. */
+  /** The device the handshake named and the account was shown to hold; none where the device sent none or the route re-attached. */
   readonly deviceId: string | undefined;
+  /** The platform that device row named, which is what a report about this session is counted by; none where no row was resolved. */
+  readonly platform: DevicePlatform | undefined;
   /** The socket the route attached to the session, which the relay pipes and the exchange reads its sideband over. */
   readonly sideband: WebSocket;
   /** Whether the session is already running: a fresh connection to a standing session finds it started, and hears no `session.started` again. */
   readonly started: boolean;
-  /** The desktop's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
+  /** The device's door for the service's word that a turn was spoken to its end; absent where the route sends it nothing of its own. */
   readonly onSpoken?: ((kind: ProactiveSpeechKind) => void) | undefined;
 }
 
@@ -122,21 +124,32 @@ export type ExchangeAttachment = (
   session: AttachedSession,
 ) => Promise<AttachedExchange | undefined>;
 
+/**
+ * Something a standing exchange reported of itself, as the composition that
+ * offered it writes it down: the reporter's own sentence, and the platform of
+ * the session it was reported for, so a failure only phones see is visible in
+ * the function's log without the sentence being read past its first colon.
+ */
+export interface ExchangeReport {
+  readonly message: string;
+  readonly platform: DevicePlatform | undefined;
+}
+
 export interface HostedLiveExchange {
   readonly service: LiveSessionService<HostedBriefingDelivery>;
   readonly brain: HostedLiveBrain;
   readonly briefings: HostedBriefings;
   readonly store: HostedStore;
   /**
-   * Runs a session the route created for the desktop: the record observes its
+   * Runs a session the route created for the device: the record observes its
    * sideband ahead of the service, and the service stands it without seeding.
    */
   adopt(opened: AdoptableSession): Effect.Effect<boolean>;
   /**
-   * A beat the desktop decided is owed, spoken by this exchange from the
+   * A beat the device decided is owed, spoken by this exchange from the
    * build's own script: the frame carries the kind and the bounded values the
    * script may mention, and the moment it was decided is this side's clock,
-   * not the desktop's word.
+   * not the device's word.
    */
   speakBeat(beat: SessionBeatFrame): void;
 }

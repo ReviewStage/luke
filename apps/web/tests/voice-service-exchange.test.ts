@@ -35,7 +35,7 @@ import {
   SEED_ROLE,
 } from "../server/live";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
-import type { AttachedSession } from "../server/voice/live-exchange";
+import type { AttachedSession, ExchangeReport } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { UNPERMITTED_FRAME_REASON } from "../server/voice/relay";
 import {
@@ -202,7 +202,7 @@ interface Stand {
   readonly target: ConversationTarget;
   readonly eve: FakeEve;
   readonly log: LogEntry[];
-  readonly reports: string[];
+  readonly reports: ExchangeReport[];
   readonly openAi: Awaited<ReturnType<typeof startFakeOpenAi>>;
   /** Every session the attachment was offered, in order, as the route described it. */
   readonly offered: AttachedSession[];
@@ -229,7 +229,7 @@ async function stand(offer: Offer): Promise<Stand> {
   const openAi = await startFakeOpenAi();
   const eve = fakeEve();
   const log: LogEntry[] = [];
-  const reports: string[] = [];
+  const reports: ExchangeReport[] = [];
   const accounts = { ...fakeAccounts(), resolveUserId: () => Effect.succeed(target.userId) };
   let release = (): void => undefined;
   const gate = new Promise<void>((resolve) => {
@@ -250,7 +250,7 @@ async function stand(offer: Offer): Promise<Stand> {
             eveOrigin: () => "https://eve.test",
             eve: () => eve,
             now: () => NOW,
-            report: (message) => reports.push(message),
+            report: (reported) => reports.push(reported),
           });
   const offered: AttachedSession[] = [];
   const exchange: VoiceServiceOptions["exchange"] =
@@ -983,6 +983,13 @@ it.effect(
       }
       const [offer] = await database.run(database.store.speech.open(context.target.userId));
       assert.ok(offer);
+      // The exchange is offered the session as the route resolved it: the
+      // phone's own row, and the platform that row named, which is what a
+      // report about this session is counted by.
+      assert.deepEqual(
+        context.offered.map((session) => [session.deviceId, session.platform]),
+        [[deviceId, DEVICE_PLATFORM.IOS]],
+      );
       // The look polls on its own cadence; nothing here asks it to look.
       const spoken = clientEvent(await upstream.next(10_000));
       assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);

@@ -21,7 +21,7 @@ import {
 
 /** The two upgrades the service answers, by the path each stands on. */
 export const VOICE_ROUTE = {
-  /** A signed-in desktop's session: the exchange is the service's, and the desktop sends the stop, the hang-up, and its idle. */
+  /** A signed-in device's session, a Mac's or a phone's: the exchange is the service's, and the device sends the stop, the hang-up, and its idle. */
   SESSIONS: "sessions",
   /** The accountless introduction: the service keeps the sideband, the caller sees captions. */
   INTRODUCTION: "introduction",
@@ -43,7 +43,7 @@ export const FRAME_DECISION = {
   DROP_UNPERMITTED: "drop-unpermitted",
   /** A report in the service's own vocabulary: read by the service, forwarded nowhere. */
   REPORT: "report",
-  /** A frame the route does not admit from the desktop: the socket is closed on it. */
+  /** A frame the route does not admit from the device: the socket is closed on it. */
   REFUSE: "refuse",
 } as const;
 
@@ -61,16 +61,18 @@ const INTRODUCTION_SERVER_EVENTS: readonly string[] = RENDERER_SERVER_EVENTS.map
 const INTRODUCTION_CLIENT_EVENTS: readonly string[] = RENDERER_CLIENT_EVENTS;
 
 /**
- * The one Live event a signed-in desktop still sends once the exchange is
+ * The one Live event a signed-in device still sends once the exchange is
  * the service's: the graceful hang-up. Every append is the exchange's, the
- * stop key's included, and the exchange stands here, so a desktop sending
+ * stop key's included, and the exchange stands here, so a device sending
  * any append is an older build or a re-wired local exchange, either of which
  * would have every answer heard twice; and no instruction text of the
- * desktop's choosing reaches the session through this route.
+ * device's choosing reaches the session through this route. A Mac and a
+ * phone send the same four frames — this hang-up and the three reports
+ * below — and the route reads them the same way, whichever sent them.
  */
 export const SESSIONS_CLIENT_EVENTS: readonly string[] = [LIVE_CLIENT_EVENT.CLOSE];
 
-/** The service-vocabulary frames a signed-in desktop sends after the handshake, read here and never forwarded: its idle, and the stop key. */
+/** The service-vocabulary frames a signed-in device sends after the handshake, read here and never forwarded: its idle, and the stop key. */
 export const SESSIONS_REPORT_FRAMES: readonly string[] = [
   VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
   VOICE_SERVICE_FRAME.SESSION_STOP,
@@ -86,7 +88,7 @@ export function frameType(text: UnparsedWireValue): string | undefined {
 }
 
 /**
- * What to do with a frame OpenAI sent toward the desktop. Reflected audio
+ * What to do with a frame OpenAI sent toward the device. Reflected audio
  * is dropped on every route. The introduction's caller is shown only what
  * a renderer's own data channel would be shown, since it holds no account
  * and the sideband is the service's, not its own.
@@ -100,17 +102,17 @@ export function upstreamFrameDecision(type: string | undefined, route: VoiceRout
 }
 
 /**
- * What to do with a frame the desktop sent toward OpenAI. A signed-in
- * desktop may send the hang-up, which passes untouched, and its idle report
- * and its stop, which the service reads for the exchange it holds; anything
- * else, an unreadable frame included, closes the socket rather than being
- * dropped, so an older desktop build after the cutover is refused where it
- * can be seen and never doubles the exchange standing here. An introduction
- * caller may send only what a renderer's data channel may, the microphone
- * switch and the hang-up, so nothing it says can append to a session
- * running on Luke's key; what it sends beside those is dropped and counted.
+ * What to do with a frame the device sent toward OpenAI. A signed-in device
+ * may send the hang-up, which passes untouched, and its idle report and its
+ * stop, which the service reads for the exchange it holds; anything else, an
+ * unreadable frame included, closes the socket rather than being dropped, so
+ * an older build of any platform after the cutover is refused where it can be
+ * seen and never doubles the exchange standing here. An introduction caller
+ * may send only what a renderer's data channel may, the microphone switch and
+ * the hang-up, so nothing it says can append to a session running on Luke's
+ * key; what it sends beside those is dropped and counted.
  */
-export function desktopFrameDecision(type: string | undefined, route: VoiceRoute): FrameDecision {
+export function deviceFrameDecision(type: string | undefined, route: VoiceRoute): FrameDecision {
   if (route === VOICE_ROUTE.SESSIONS) {
     if (type === undefined) return FRAME_DECISION.REFUSE;
     if (SESSIONS_CLIENT_EVENTS.includes(type)) return FRAME_DECISION.FORWARD;

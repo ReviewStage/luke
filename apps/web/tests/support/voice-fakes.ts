@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { DevicePlatform } from "@sidecar/hosted";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
@@ -224,8 +225,8 @@ interface RecordedClose {
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
   registered: Array<{ userId: string; sessionId: string; deviceId?: string | undefined }>;
-  /** The device rows the fake holds, by the account that holds each. */
-  devices: Array<{ userId: string; deviceId: string }>;
+  /** The device rows the fake holds, by the account that holds each and the platform each names. */
+  devices: Array<{ userId: string; deviceId: string; platform: DevicePlatform }>;
   /** Every usage snapshot, in order. */
   usage: Array<{ sessionId: string; seconds: number }>;
   closes: RecordedClose[];
@@ -249,12 +250,13 @@ export function fakeSessionRecord(): FakeSessionRecord {
         fake.registered.push(input);
         if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
       }),
-    deviceOwned: (input) =>
-      Effect.sync(() =>
-        fake.devices.some(
+    heldDevice: (input) =>
+      Effect.sync(() => {
+        const held = fake.devices.find(
           (device) => device.userId === input.userId && device.deviceId === input.deviceId,
-        ),
-      ),
+        );
+        return held === undefined ? undefined : { platform: held.platform };
+      }),
     owned: (input) => Effect.sync(() => owners.get(input.sessionId) === input.userId),
     noteUsage: (input) =>
       Effect.sync(() => {

@@ -696,48 +696,60 @@ Vercel's WebSocket guide has it; the desktop opens `wss://` on this deployment's
 `HOSTED_VOICE_SERVICE_ORIGIN` in `@sidecar/hosted`, at `VOICE_SERVICE_PATH`.
 A plain request to either path answers 426, since the path is a socket's.
 
-On `/api/voice/sessions` a signed-in desktop's handshake carries its account
+On `/api/voice/sessions` a signed-in device's handshake carries its account
 bearer, resolved through the same in-process `/oauth2/userinfo` seam every
 hosted route uses, and its daily allowance is spent by the same `hosted_usage`
-meter before any session exists, so a refused account costs no session. The
+meter before any session exists, so a refused account costs no session. A Mac
+connecting from its main process and a phone connecting from `URLSession` are
+one caller here: each presents that bearer, names its own `devices` row in
+`x-luke-device-id`, and sends the same four frames, and which of them is
+calling is read from the row the handshake resolved
+(`VoiceSessionRecord.heldDevice`) rather than from anything the caller says of
+itself. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed);
 the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
 client delegation), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
 answer, and the quota. From then on the relay is a pipe: OpenAI frames to the
-desktop untouched except `session.input_audio.append` and
+device untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so the developer's voice and
-Luke's never transit the service; and from the desktop exactly four frames
+Luke's never transit the service; and from the device exactly four frames
 (`frames.ts`, `SESSIONS_CLIENT_EVENTS` and `SESSIONS_REPORT_FRAMES`): the
 graceful hang-up's `session.close`, forwarded untouched, and three in the
 service's own vocabulary, read here and handed to the exchange rather than
 forwarded: `session.activity`, the peer's idle report; `session.stop`, the
 stop key, which the exchange answers with the one instruction it appends
 itself (`STOP_SPEAKING_INSTRUCTION`, which stands on the service alone); and
-`session.beat`, an onboarding beat or the launch greeting the desktop decided
+`session.beat`, an onboarding beat or the launch greeting the device decided
 is owed, carrying the kind and the bounded observed values its script may
 mention (one working session's title, the talk key's label, the account's
 first name), which the exchange speaks from the build's own script
-(`speechAppends`, `speechOpening` in `@sidecar/live`). So the desktop appends
-nothing to a session, and no sentence of the desktop's composing reaches one
+(`speechAppends`, `speechOpening` in `@sidecar/live`). So no device appends
+anything to a session, and no sentence of a device's composing reaches one
 through this route. One frame goes the other way in that vocabulary,
 `session.spoken`: the exchange's word, by kind alone, that a proactive turn
-was spoken to its end, sent to the desktop by the service itself (outside the
+was spoken to its end, sent to the device by the service itself (outside the
 relay's counts) because the record of the beats and the counts that follow
-every spoken turn are the desktop's. Any other desktop frame — an older build's own append, the
+every spoken turn are the device's. Any other device frame — an older build's own append, the
 microphone switch that never crosses this socket, an unreadable frame —
-closes the desktop's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
-rather than dropping it, so a desktop still running an exchange of its own is
+closes that device's socket with a policy violation (`UNPERMITTED_FRAME_REASON`)
+rather than dropping it, so a device still running an exchange of its own is
 refused where it can be seen and never doubles the one standing here; the
 session then ends as a hang-up does, seconds recorded. The relay keeps no
 conversation, reads no frame past its `type` but that one report, and logs
-status codes, outcome names, and counts.
+status codes, outcome names, and counts. Beside a refusal and an exchange's
+own report the line carries one more word, the platform of the device row the
+handshake resolved (`macos`, `ios`, `watchos`), so a failure only one kind of
+caller sees is visible in the counts; a line where no such row was read — every
+upgrade refusal, a handshake naming no device, a claim on a row the account
+does not hold, the introduction, and a re-attach, which proves the session's
+owner rather than a device — carries none.
 
 The service itself is a scope. `VoiceService.make(options)` answers
 `Effect<VoiceService, never, Scope>`, and that scope owns the `ws` server, the
 `FiberSet` each session's fiber joins, and the claim on the server the function
-exported; closing it gives up the claim, closes every desktop socket so each
+exported; closing it gives up the claim, closes every device socket so each
 relay runs its graceful close upstream, drains those fibers under their own
 timeouts, and only then closes the `ws` server. Nothing calls a `close` beside
 it, because a Vercel function is frozen between invocations and discarded with
@@ -778,7 +790,7 @@ the pipe stood, so what a caller sends while its session is being stood up is
 spent as much as what the pipe later carries, and a frame past the budget is
 not read at all — what the relay sees is the peer going, which is a hangup it
 already knows how to end. The voice never travels here: it is WebRTC's. A
-signed-in desktop's socket is bounded the same way at eight mebibytes, since
+signed-in device's socket is bounded the same way at eight mebibytes, since
 its account is spent per session and answers for what it sends.
 
 ### The live session service, attached to the sessions route
@@ -911,7 +923,7 @@ twice. **A session whose row names no device claims nothing and speaks no
 briefing**: `voice_sessions.device_id` is null until the handshake that
 creates the row carries a device the account owns, and a path that cannot
 prove which device is speaking must not speak. That is the contract, not a
-gap: the accountless introduction never claims, and a desktop that sends no
+gap: the accountless introduction never claims, and a device that sends no
 device id hears its briefings by push instead. The service's own hold stands
 empty here: a held offer is `speech.held` on the record, and the look reads
 the account's quiet instant the way the sweep and the push do, so an offer
@@ -999,7 +1011,7 @@ commit that unwires the desktop's, so both-live never exists.
 
 A WebSocket connection to a Vercel Function closes when the function reaches
 its maximum duration — `server/function-durations.ts` gives both functions
-800 seconds, the longest generally available — while the WebRTC session between the desktop
+800 seconds, the longest generally available — while the WebRTC session between the device
 and OpenAI stands on. So a socket may also open with `session.attach` naming
 a session id. The function resolves the bearer, checks that this account is
 the one the session was created for (the `voice_sessions` row written at
@@ -1024,9 +1036,9 @@ it, writes the row's `closed_at`, `close_reason`, and
 — the session row is the idempotency ledger: the seconds land only where none
 stand yet, and only then does the day's `voice_seconds` on `hosted_usage`
 move, in one transaction, so a report seen by two connections adds nothing —
-and closes both ends. A desktop that hangs up first has `session.close` sent
+and closes both ends. A device that hangs up first has `session.close` sent
 on its behalf and the sideband held for `session.closed` for 15 seconds, the
-docs' close sequence. A sideband that ends first closes the desktop socket
+docs' close sequence. A sideband that ends first closes the device's socket
 with code 1001 and reason `upstream-closed` and records nothing: the last
 unconfirmed snapshot standing with `closed_at` null is the honest record, and
 a re-attached connection's `session.closed` later confirms it. Only these
@@ -1040,8 +1052,9 @@ the seconds are what the allowance is measured in.
 
 Before any socket stands, an HTTP status on the upgrade: `401` for
 `/api/voice/sessions` without a bearer, `403` for a handshake carrying a
-browser `Origin` header (the desktop connects from its main process and never
-sends one), `503` while `OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
+browser `Origin` header (neither caller is a page: the desktop connects from
+its main process and the phone from `URLSession`), `503` while
+`OPENAI_API_KEY` is absent. Once a socket stands, one frame `{ "error": <reason> }`
 in `hostedErrorSchema`'s vocabulary, then a close with code 1008 and the same
 reason: `invalid-request` for a first frame that is not a valid `session.create`
 or `session.attach`, or an attach on the introduction; `invalid-token` for a

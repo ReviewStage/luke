@@ -8,6 +8,7 @@ import type { StoreWriter } from "../hosted/store/writer.js";
 import type { WebStoreRun } from "../runtime.js";
 import {
   type ExchangeAttachment,
+  type ExchangeReport,
   type HostedLiveExchange,
   type HostedLiveExchangeOptions,
   hostedLiveExchange,
@@ -45,7 +46,8 @@ export interface ExchangeAttachmentDeps {
   readonly emit: HostedLiveExchangeOptions["emit"];
   readonly now: () => number;
   readonly createId: () => string;
-  readonly report: (message: string) => void;
+  /** Where a standing exchange's own reports go, each named with the platform of the session it stood on. */
+  readonly report: (report: ExchangeReport) => void;
   readonly trace?: HostedLiveExchangeOptions["trace"];
 }
 
@@ -79,7 +81,9 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         emit: deps.emit,
         now: deps.now,
         createId: deps.createId,
-        report: deps.report,
+        // The exchange reports a sentence; which session it stood on is this
+        // attachment's to add, since the exchange itself is told no platform.
+        report: (message) => deps.report({ message, platform: session.platform }),
         ...(deps.trace ? { trace: deps.trace } : undefined),
         ...(session.onSpoken ? { onProactiveSpoken: session.onSpoken } : undefined),
       });
