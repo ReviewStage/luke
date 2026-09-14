@@ -32,6 +32,48 @@ it.effect("coalesces overlapping refreshes into one immediate follow-up", () =>
   }),
 );
 
+it.effect(
+  "settled answers at once on an idle loop, and otherwise after the pass in flight and the follow-up it queued",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* Deferred.make<void>();
+      const passes: number[] = [];
+      const loop = new ObservationLoop({
+        gate: () => true,
+        intervalMs: 60_000,
+        run: () =>
+          Effect.suspend(() => {
+            passes.push(passes.length);
+            return passes.length === 1 ? Deferred.await(first) : Effect.void;
+          }),
+      });
+      yield* loop.settled;
+      assert.deepEqual(passes, []);
+
+      const running = yield* Effect.fork(loop.refresh);
+      yield* Effect.yieldNow();
+      // A refresh that found the pass running answers at once; the roster it wants is not yet read.
+      yield* loop.refresh;
+      let settledAfter: number | undefined;
+      const waiting = yield* Effect.fork(
+        Effect.map(loop.settled, () => {
+          settledAfter = passes.length;
+        }),
+      );
+      yield* Effect.yieldNow();
+      assert.equal(settledAfter, undefined);
+      yield* Deferred.succeed(first, undefined);
+      yield* running.await;
+      // The pass ended with a follow-up queued: still not settled until that one has run too.
+      yield* Effect.yieldNow();
+      yield* Effect.yieldNow();
+      yield* waiting.await;
+      assert.equal(settledAfter, 2);
+      assert.deepEqual(passes, [0, 1]);
+      yield* loop.settled;
+    }),
+);
+
 it.scoped("a disarm invalidates work already in flight and prevents gated work", () =>
   Effect.gen(function* () {
     let enabled = true;

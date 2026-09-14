@@ -19,7 +19,7 @@
  * own, so a sign-out disarms the loop while the host still stands and the
  * host's close disarms whatever a sign-out missed.
  */
-import { Duration, Effect, Schedule, type Scope } from "effect";
+import { Deferred, Duration, Effect, FiberId, Schedule, type Scope } from "effect";
 import { type CadenceGate, cadenceGate } from "./effect/cadence.js";
 import { scheduleRepeat } from "./effect/timers.js";
 
@@ -44,6 +44,13 @@ export class ObservationLoop {
   #running = false;
   #queued = false;
   #armed = false;
+  /**
+   * Open while a pass runs or a follow-up is queued behind it, and settled by
+   * the pass that ends with nothing queued: what `settled` waits on, so a
+   * caller that needs the roster as a pass just read it can wait past a pass
+   * `refresh` found already running.
+   */
+  #idle: Deferred.Deferred<void> | undefined;
 
   /**
    * One pass of the cadence's own, and what a pass nobody awaits owes the
@@ -102,12 +109,24 @@ export class ObservationLoop {
     return generation === this.#generation && this.#options.gate();
   }
 
+  /**
+   * Answers once no pass is running and none is queued behind it: at once
+   * where the loop is idle, otherwise after the pass in flight and the
+   * follow-up a coalesced `refresh` earned. `refresh` alone answers at once
+   * when a pass is already running, so a caller that must read what a pass
+   * wrote yields `refresh` and then this.
+   */
+  readonly settled: Effect.Effect<void> = Effect.suspend(() =>
+    this.#idle === undefined ? Effect.void : Deferred.await(this.#idle),
+  );
+
   readonly refresh: Effect.Effect<void> = Effect.suspend(() => {
     if (!this.#options.gate()) return Effect.void;
     if (this.#running) {
       this.#queued = true;
       return Effect.void;
     }
+    this.#idle ??= Deferred.unsafeMake<void>(FiberId.none);
     const generation = this.#generation;
     this.#running = true;
     return Effect.ensuring(
@@ -119,7 +138,12 @@ export class ObservationLoop {
         // behind it — running the hook there would draw the roster again over
         // the empty one the stop just published.
         const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
-        if (!this.#queued) return after ?? Effect.void;
+        if (!this.#queued) {
+          const idle = this.#idle;
+          this.#idle = undefined;
+          if (idle !== undefined) Deferred.unsafeDone(idle, Effect.void);
+          return after ?? Effect.void;
+        }
         this.#queued = false;
         return Effect.zipRight(
           after ?? Effect.void,

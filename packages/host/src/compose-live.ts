@@ -268,6 +268,10 @@ export const composeLive = (
         // here rather than run: a link that cannot wait for it offers this
         // whole effect to the queue above instead.
         yield* observation.loop.refresh;
+        // A refresh that found a pass already running answers at once and
+        // queues a follow-up; the roster the title is read from is the one
+        // that follow-up writes, so the loop is waited settled as well.
+        yield* observation.loop.settled;
         if (!account.signedIn() || !arrivalBeatOwed(calendars.onboarding())) return;
         // The pass took time, and the hold's reads wait behind this decision
         // on the same queue: a hold that began during the pass is read here.
