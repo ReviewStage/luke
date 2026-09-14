@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
+  ACTION_KIND,
   ACTION_OUTPUT_STATUS,
   ACTION_RESULT_STATUS,
   ACTION_TOOL,
@@ -16,6 +17,7 @@ import {
   sessionKey,
   type WireRecord,
   WORKSPACE_TASK_SUPPORT,
+  type WorkspaceAgentSelection,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
@@ -295,6 +297,85 @@ test("a created workspace keeps the created session identity in its action envel
     target: { providerId: "conductor" },
     createdSession: { providerId: "conductor", providerSessionId: "workspace-created" },
   });
+});
+
+test("the carrier hands the stored agent pairing to a creation and a spawn, and to nothing else", async () => {
+  const executed: { kind: string; agentSelection?: WorkspaceAgentSelection }[] = [];
+  const roster = () =>
+    Effect.succeed(
+      hostedRosterFrom(
+        {
+          version: 1,
+          providers: [
+            {
+              providerId: "conductor",
+              keyFingerprint: "f",
+              observations: [observation(SESSION_UUID)],
+              projects: [
+                {
+                  providerProjectId: "project-1",
+                  repository: "repo",
+                  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
+                },
+              ],
+            },
+          ],
+        },
+        NOW,
+      ),
+    );
+  const stored: WorkspaceAgentSelection = { agent: "claude", model: "fable-5-1", effort: "high" };
+  const carrier = hostedActionCarrier({
+    roster,
+    defaults: () => Effect.succeed({ agentDefaults: { conductor: stored } }),
+    facts: factsWriter([]),
+    apiKey: () => Effect.succeed("conductor-key"),
+    execute: (input) =>
+      Effect.sync(() => {
+        executed.push({
+          kind: input.kind,
+          ...(input.agentSelection === undefined
+            ? undefined
+            : { agentSelection: input.agentSelection }),
+        });
+        return { result: ACTION_RESULT_STATUS.ACCEPTED, providerSessionId: "workspace-created" };
+      }),
+  });
+  const seams: HostedToolSeams = {
+    conversation: { userId: "user-a", conversationId: "c-1" },
+    roster,
+    carrier,
+    transcripts: {
+      whole: () =>
+        Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
+    },
+    workspace: {
+      read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
+      write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
+      loadSkill: () => Effect.succeed({ ok: false, reason: "no skills" }),
+    },
+    now: () => NOW,
+  };
+
+  const created = await call(seams, ASK, ACTION_TOOL.CREATE_WORKSPACE, {
+    provider_id: "conductor",
+    project_id: "project-1",
+    name: "Checkout",
+  });
+  assert.equal(created.status, ACTION_OUTPUT_STATUS.ACCEPTED);
+  const messaged = await call(seams, ASK, ACTION_TOOL.SEND_SESSION_MESSAGE, {
+    provider_id: "conductor",
+    provider_session_id: SESSION_UUID,
+    text: "hello",
+  });
+  assert.equal(messaged.status, ACTION_OUTPUT_STATUS.ACCEPTED);
+
+  // The pairing is read for the creation alone; the execution decides whether
+  // it rides, since a model the ask named outranks it there.
+  assert.deepEqual(executed, [
+    { kind: ACTION_KIND.CREATE_WORKSPACE, agentSelection: stored },
+    { kind: ACTION_KIND.MESSAGE },
+  ]);
 });
 
 test("read_transcript answers for a session the roster holds and refuses one it does not", async () => {

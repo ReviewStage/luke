@@ -35,6 +35,7 @@ import {
   type SessionActionKind,
   type SessionProviderPlugin,
   type WireRecord,
+  type WorkspaceAgentSelection,
   type WorkspaceProject,
   workspaceAgentModels,
 } from "../core.js";
@@ -353,10 +354,18 @@ export function executeSessionAction(options: {
   fields: WireRecord;
   apiKey: string;
   roster: ActionRoster;
+  /**
+   * The developer's stored agent pairing for this provider, when the caller
+   * holds one: it rides a creation or a spawn only where the ask named no
+   * model of its own, exactly as `providerWorkspaceRequest` and
+   * `providerWorkspaceAgentRequest` state, and the adapter holds it to the
+   * build's table again before anything reaches the network.
+   */
+  agentSelection?: WorkspaceAgentSelection;
   seams?: ActionExecuteSeams;
 }): Effect.Effect<ActionExecutionAnswer> {
   return Effect.suspend(() => {
-    const { kind, providerId, fields, apiKey, roster } = options;
+    const { kind, providerId, fields, apiKey, roster, agentSelection } = options;
     const unsupported = actionUnsupportedReason(kind, providerId);
     if (unsupported) {
       return Effect.succeed<ActionExecutionAnswer>({
@@ -380,13 +389,13 @@ export function executeSessionAction(options: {
             [ACTION_KIND.MESSAGE]: (action) => carried("message", providerSessionMessage(action)),
             [ACTION_KIND.CONTROL]: (action) => carried("control", providerControlRequest(action)),
             [ACTION_KIND.ADD_AGENT]: (action) =>
-              carried("spawnAgent", providerWorkspaceAgentRequest(action)),
+              carried("spawnAgent", providerWorkspaceAgentRequest(action, agentSelection)),
             [ACTION_KIND.RENAME_SESSION]: (action) =>
               carried("renameSession", providerSessionRenameRequest(action)),
             [ACTION_KIND.RENAME_WORKSPACE]: (action) =>
               carried("renameWorkspace", providerWorkspaceRenameRequest(action)),
             [ACTION_KIND.CREATE_WORKSPACE]: (action) =>
-              carried("createWorkspace", providerWorkspaceRequest(action)),
+              carried("createWorkspace", providerWorkspaceRequest(action, agentSelection)),
           }),
       ),
       Effect.catchTag("AdmitRefusal", (refusal) =>

@@ -4,7 +4,12 @@ import { Effect, type Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import { test } from "vitest";
 import type { JsonObject } from "../../../packages/wire/src/testing/json.js";
-import { ACTION_KIND, ACTION_REFUSAL, type WireRecord } from "../server/core";
+import {
+  ACTION_KIND,
+  ACTION_REFUSAL,
+  type WireRecord,
+  type WorkspaceAgentSelection,
+} from "../server/core";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
@@ -456,6 +461,7 @@ async function ask(
   api: ConductorApi,
   kind: HostedSessionActionKind,
   fields: Record<string, string>,
+  agentSelection?: WorkspaceAgentSelection,
 ): Promise<ActionExecutionAnswer> {
   const roster = await snapshotRoster(api);
   const readsBefore = api.reads.length;
@@ -466,6 +472,7 @@ async function ask(
       fields: { provider_id: "conductor", ...fields },
       apiKey: "key-1",
       roster,
+      ...(agentSelection === undefined ? undefined : { agentSelection }),
       seams: { httpClient: api.layer },
     }),
   );
@@ -768,4 +775,70 @@ test("no model named is no selection, never a guess", async () => {
   const creation = JSON.parse(api.posts[0]?.body ?? "");
   assert.equal(creation.agent, undefined);
   assert.equal(creation.model, undefined);
+});
+
+// --- The developer's stored pairing rides only where the ask left the choice open ---
+
+const STORED_SELECTION: WorkspaceAgentSelection = {
+  agent: "claude",
+  model: "fable-5-1",
+  effort: "high",
+};
+
+test("a creation that named no model rides the stored pairing, effort included", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(
+    api,
+    ACTION_KIND.CREATE_WORKSPACE,
+    { project_id: CONDUCTOR_PROJECT_ID, task: "build the thing" },
+    STORED_SELECTION,
+  );
+
+  assert.equal(answer.result, "accepted");
+  const creation = JSON.parse(api.posts[0]?.body ?? "");
+  assert.equal(creation.agent, "claude");
+  assert.equal(creation.model, "fable-5-1");
+  assert.equal(creation.effort, "high");
+});
+
+test("a model the creation named outranks the stored pairing, and brings its own effort or none", async () => {
+  const api = conductorApi("idle");
+  const answer = await ask(
+    api,
+    ACTION_KIND.CREATE_WORKSPACE,
+    { project_id: CONDUCTOR_PROJECT_ID, task: "build the thing", model: "gpt-5.6-sol" },
+    STORED_SELECTION,
+  );
+
+  assert.equal(answer.result, "accepted");
+  const creation = JSON.parse(api.posts[0]?.body ?? "");
+  assert.equal(creation.agent, "codex");
+  assert.equal(creation.model, "gpt-5.6-sol");
+  assert.equal(creation.effort, undefined);
+});
+
+test("a spawn rides the stored pairing only when it names the very agent kind asked for", async () => {
+  const same = conductorApi("idle");
+  const rode = await ask(
+    same,
+    ACTION_KIND.ADD_AGENT,
+    { provider_session_id: CONDUCTOR_SESSION_ID, agent: "claude" },
+    STORED_SELECTION,
+  );
+  assert.equal(rode.result, "accepted");
+  const spawned = JSON.parse(same.posts[0]?.body ?? "");
+  assert.equal(spawned.model, "fable-5-1");
+  assert.equal(spawned.effort, "high");
+
+  const other = conductorApi("idle");
+  const stayed = await ask(
+    other,
+    ACTION_KIND.ADD_AGENT,
+    { provider_session_id: CONDUCTOR_SESSION_ID, agent: "codex" },
+    STORED_SELECTION,
+  );
+  assert.equal(stayed.result, "accepted");
+  const bare = JSON.parse(other.posts[0]?.body ?? "");
+  assert.equal(bare.model, undefined);
+  assert.equal(bare.effort, undefined);
 });
