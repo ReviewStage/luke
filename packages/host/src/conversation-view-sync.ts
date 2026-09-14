@@ -23,6 +23,8 @@ import {
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
   SPEECH_OFFERED_EVENT_PAYLOAD,
+  type StandingRating,
+  standingRating,
   unparsedWire,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -105,9 +107,10 @@ interface HeldSpeechEvent {
 }
 
 /**
- * The latest rating event on a message. Its verdict is absent where the
- * payload did not read under the vocabulary: the event is still the
- * developer's last word by sequence, and an older verdict is not it. A mark
+ * The latest rating event on a message. Its payload is absent where it did
+ * not read under the vocabulary: the event is still the developer's last
+ * word by sequence, and an older verdict is not it; a payload that withdraws
+ * the verdict is read and stands the same way, as no rating. A mark
  * known newer than the fold — this device's own write, or an event that
  * superseded one — amends at once; one read back from the events otherwise
  * waits until the events read stands at or past the fold.
@@ -166,7 +169,7 @@ function sameTurn(a: ConversationViewTurn | undefined, b: ConversationViewTurn):
   );
 }
 
-function sameRating(a: RatingEventPayload | undefined, b: RatingEventPayload | undefined): boolean {
+function sameRating(a: StandingRating | undefined, b: StandingRating | undefined): boolean {
   return a?.rating === b?.rating && a?.note === b?.note;
 }
 
@@ -335,8 +338,9 @@ export class ConversationViewSync {
   }
 
   /**
-   * Takes a rating this device just wrote, from the answer that recorded it,
-   * so the control shows the verdict before the next read carries it back.
+   * Takes a rating this device just wrote, a verdict or its withdrawal, from
+   * the answer that recorded it, so the control shows the verdict, or none,
+   * before the next read carries it back.
    * Being this device's own write it is newer than anything held or folded,
    * so it amends at once rather than waiting on the events read; the event
    * the read later answers carries the same sequence and moves nothing.
@@ -503,15 +507,17 @@ export class ConversationViewSync {
    * The message's rating as the newest word about it: the one the service
    * folded onto the row, amended by a rating this device wrote since, and by
    * the rating events read since once the events read stands at or past the
-   * fold. A newest event whose verdict did not read leaves the message
-   * unrated, because an older verdict is not the developer's last word.
+   * fold. A newest event whose verdict did not read, or that withdrew the
+   * verdict, leaves the message unrated, because an older verdict is not the
+   * developer's last word.
    */
   #withRating(message: ConversationViewMessage): ConversationViewMessage {
     const held = this.#ratings.get(message.message.id);
     if (held === undefined || !(held.newerThanFold || this.#eventsCaughtUp)) return message;
-    if (sameRating(held.rating, message.rating)) return message;
+    const standing = standingRating(held.rating);
+    if (sameRating(standing, message.rating)) return message;
     const { rating: _folded, ...unrated } = message;
-    return held.rating === undefined ? unrated : { ...unrated, rating: held.rating };
+    return standing === undefined ? unrated : { ...unrated, rating: standing };
   }
 
   /**

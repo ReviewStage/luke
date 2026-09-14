@@ -1,20 +1,22 @@
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CONVERSATION_RATE_STATUS, type ConversationRateStatus } from "@sidecar/gateway";
 import { ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
-import { MESSAGE_RATING, type MessageRating } from "@sidecar/wire";
+import { MESSAGE_RATING, type MessageRating, RATING_WORD, type RatingWord } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 
 /**
  * Two thumbs on one of Luke's messages, behind the ellipsis in its margin,
- * the way a chat rates a reply: the
- * one the developer chose is filled, a press on the other moves the verdict,
- * and a press on the filled one sends the same verdict again, since a rating
- * is a fact stated and never an edit. The press is one act, carried to the
- * host, which writes it to the service and shows the verdict back through
- * the view every window draws — nothing here holds the verdict itself, only
- * the press still in flight and the refusal the last one met. A thumbs down
+ * the way a chat rates a reply: the one the developer chose is filled, a
+ * press on the other moves the verdict, and a press on the filled one takes
+ * the verdict back, leaving the message unrated. Each press is one more fact
+ * stated and never an edit: the withdrawal travels as a rating event of its
+ * own, saying so, and the record keeps the verdict it took back. The press is
+ * one act, carried to the host, which writes it to the service and shows the
+ * verdict back through the view every window draws — nothing here holds the
+ * verdict itself, only the press still in flight and the refusal the last
+ * one met. A thumbs down
  * offers the feedback composer, never opens it: the offer stands beside the
  * thumbs for as long as the verdict does, one press away, prefilled with the
  * rated message and the developer's ask before it, and what it holds leaves
@@ -43,6 +45,19 @@ const RATE_REFUSAL_COPY = {
 } as const satisfies Record<ConversationRateStatus, string | undefined>;
 
 const OFFER_LABEL = "Explain";
+
+/**
+ * What a press on a thumb says: the verdict the thumb stands for, or, where
+ * that verdict already stands on the message, the word that takes it back,
+ * so the filled thumb pressed again unrates the message rather than
+ * restating it.
+ */
+export function pressedRatingWord(
+  standing: MessageRating | undefined,
+  pressed: MessageRating,
+): RatingWord {
+  return standing === pressed ? RATING_WORD.WITHDRAWN : pressed;
+}
 
 /**
  * The most characters each quoted line of the offered draft carries. The
@@ -103,7 +118,10 @@ export function ConversationRatingControl({
     if (pending !== undefined) return;
     setPending(verdict);
     setRefusal(undefined);
-    void act(ACT_KIND.CONVERSATION_RATE_MESSAGE, { messageId: rated.messageId, rating: verdict })
+    void act(ACT_KIND.CONVERSATION_RATE_MESSAGE, {
+      messageId: rated.messageId,
+      rating: pressedRatingWord(rating, verdict),
+    })
       .then((result) => setRefusal(RATE_REFUSAL_COPY[result.status]))
       // The act's own rejection carries the refusal sentence the build fixed.
       .catch((refused: Error) => setRefusal(refused.message))

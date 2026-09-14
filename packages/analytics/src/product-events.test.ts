@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { WireRecord } from "@sidecar/wire";
+import { RATING_WORD, type WireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import {
   isProductSurfaceEventName,
@@ -109,6 +109,21 @@ test("a rating travels as its verdict and the message's kind, and a note or an i
     }),
     undefined,
   );
+});
+
+test("a verdict taken back is counted under the same property, as the word that took it back", () => {
+  const withdrawn = productEventFromWire({
+    name: PRODUCT_EVENT.CONVERSATION_RATED,
+    at: AT,
+    properties: {
+      [PRODUCT_EVENT_PROPERTY.RATING]: RATING_WORD.WITHDRAWN,
+      [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "reply",
+    },
+  });
+  assert.deepEqual(withdrawn?.properties, {
+    [PRODUCT_EVENT_PROPERTY.RATING]: RATING_WORD.WITHDRAWN,
+    [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: "reply",
+  });
 });
 
 test("a property valid for another event is dropped from this one", () => {

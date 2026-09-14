@@ -12,10 +12,11 @@ import SwiftUI
 /// holds it; a turn Luke opened himself leads with his face and never wears
 /// a reply's bubble. Behind a press and hold on each of Luke's messages, a
 /// reply's bubble or his own judgment's row alike, stand two thumbs, the one
-/// write this screen makes: a verdict on that message, sent to the service
-/// under the account's fence and drawn back from the latest rating event as
-/// the filled thumb in that menu and nowhere on the message itself, so a
-/// verdict given on the Mac shows here and one given here shows there.
+/// write this screen makes: a verdict on that message, or the withdrawal of
+/// the one standing, sent to the service under the account's fence and drawn
+/// back from the latest rating event as the filled thumb in that menu and
+/// nowhere on the message itself, so a verdict given on the Mac shows here
+/// and one given or taken back here shows there.
 /// The screen polls the change signal while it stands in the foreground and
 /// draws only what it holds in memory.
 ///
@@ -163,13 +164,13 @@ struct ConversationView: View {
         }
     }
 
-    /// The developer's thumb on one of Luke's messages: written to the
-    /// service, and counted as the verdict and the message's kind alone once
-    /// the service has recorded it.
-    private func rate(_ message: RateableMessage, _ rating: MessageRating) {
+    /// The developer's thumb on one of Luke's messages, or the press that
+    /// takes it back: written to the service, and counted as the word and the
+    /// message's kind alone once the service has recorded it.
+    private func rate(_ message: RateableMessage, _ word: RatingWord) {
         Task {
-            guard await conversation.rate(message, rating, account: account) else { return }
-            events.record(.conversationRated(rating: rating, kind: message.kind))
+            guard await conversation.rate(message, word, account: account) else { return }
+            events.record(.conversationRated(rating: word, kind: message.kind))
         }
     }
 
@@ -251,7 +252,7 @@ private struct ConversationRowView: View {
     let openSession: (RosterSession) -> Void
     let ratings: [String: MessageRating]
     let canRate: Bool
-    let rate: (RateableMessage, MessageRating) -> Void
+    let rate: (RateableMessage, RatingWord) -> Void
 
     var body: some View {
         switch row {
@@ -329,16 +330,18 @@ private struct ConversationRowView: View {
 }
 
 /// Two thumbs in the press-and-hold menu of one of Luke's messages, the way
-/// a chat rates a reply: the verdict standing is drawn filled, a press on the
-/// other moves the verdict, and a press on the filled one sends the same
-/// verdict again, since a rating is a fact stated and never an edit. The
-/// menu is the only place the verdict shows; the message itself wears no
-/// mark of it. Both items stand above Copy, and both are disabled rather
-/// than hidden while this installation has no device row to rate as.
+/// a chat rates a reply: the verdict standing is drawn filled and its item
+/// offers to remove it, a press on the other moves the verdict, and a press
+/// on the filled one takes the verdict back, leaving the message unrated.
+/// Each press is one more fact stated and never an edit: the withdrawal is a
+/// rating event of its own that says so. The menu is the only place the
+/// verdict shows; the message itself wears no mark of it. Both items stand
+/// above Copy, and both are disabled rather than hidden while this
+/// installation has no device row to rate as.
 private struct RatingMenuItems: View {
     let rating: MessageRating?
     let enabled: Bool
-    let rate: (MessageRating) -> Void
+    let rate: (RatingWord) -> Void
 
     var body: some View {
         thumb(.up)
@@ -349,9 +352,12 @@ private struct RatingMenuItems: View {
     private func thumb(_ verdict: MessageRating) -> some View {
         let chosen = rating == verdict
         return Button {
-            rate(verdict)
+            rate(chosen ? .withdrawn : RatingWord(verdict))
         } label: {
-            Label(verdict.menuTitle, systemImage: verdict.symbol(filled: chosen))
+            Label(
+                chosen ? verdict.removeTitle : verdict.menuTitle,
+                systemImage: verdict.symbol(filled: chosen)
+            )
         }
         .disabled(!enabled)
         .accessibilityAddTraits(chosen ? .isSelected : [])
@@ -363,6 +369,14 @@ extension MessageRating {
         switch self {
         case .up: "Thumbs Up"
         case .down: "Thumbs Down"
+        }
+    }
+
+    /// What the filled thumb's item says, since pressing it takes the verdict back.
+    fileprivate var removeTitle: String {
+        switch self {
+        case .up: "Remove Thumbs Up"
+        case .down: "Remove Thumbs Down"
         }
     }
 

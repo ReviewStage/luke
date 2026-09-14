@@ -7,13 +7,20 @@ import {
   type SessionIdentity,
   selectConversationView,
 } from "@sidecar/session";
-import { CONVERSATION_EVENT_KIND, MESSAGE_RATING, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import {
+  CONVERSATION_EVENT_KIND,
+  MESSAGE_RATING,
+  RATING_WORD,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@sidecar/wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import {
   DRAFT_QUOTE_MAX_LENGTH,
   DRAFT_SPEAKER,
+  pressedRatingWord,
   RATING_LABEL,
   ratingFeedbackDraft,
 } from "./conversation-rating";
@@ -454,6 +461,15 @@ test("each of Luke's messages carries one rating control on its last words, behi
   assert.ok(target);
   assert.equal(count(own, "id", target), 1);
   assert.ok(own.includes(`id="${target}" class="conversation-menu" popover="auto"`));
+});
+
+test("a press on the filled thumb takes the verdict back, and a press on any other thumb says its verdict", () => {
+  assert.equal(pressedRatingWord(undefined, MESSAGE_RATING.UP), MESSAGE_RATING.UP);
+  assert.equal(pressedRatingWord(undefined, MESSAGE_RATING.DOWN), MESSAGE_RATING.DOWN);
+  assert.equal(pressedRatingWord(MESSAGE_RATING.DOWN, MESSAGE_RATING.UP), MESSAGE_RATING.UP);
+  assert.equal(pressedRatingWord(MESSAGE_RATING.UP, MESSAGE_RATING.DOWN), MESSAGE_RATING.DOWN);
+  assert.equal(pressedRatingWord(MESSAGE_RATING.UP, MESSAGE_RATING.UP), RATING_WORD.WITHDRAWN);
+  assert.equal(pressedRatingWord(MESSAGE_RATING.DOWN, MESSAGE_RATING.DOWN), RATING_WORD.WITHDRAWN);
 });
 
 test("the thumbs show the message's newest rating, and a thumbs down stands the composer's offer beside them only where one can be offered", () => {

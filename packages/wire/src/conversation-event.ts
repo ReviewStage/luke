@@ -95,7 +95,7 @@ export type SpeechExpiredEventPayload = EffectSchema.Schema.Type<
   typeof SPEECH_EXPIRED_EVENT_PAYLOAD
 >;
 
-/** The developer's verdict on one of Luke's messages. */
+/** The developer's verdict as it stands on one of Luke's messages. */
 export const MESSAGE_RATING = {
   UP: "up",
   DOWN: "down",
@@ -105,20 +105,68 @@ export type MessageRating = (typeof MESSAGE_RATING)[keyof typeof MESSAGE_RATING]
 
 export const MessageRatingSchema = EffectSchema.Literals(Object.values(MESSAGE_RATING));
 
+/**
+ * The one word a rating event says that is not a verdict: the developer took
+ * the verdict back, and the message stands unrated, as it did before any
+ * thumb. A press on the filled thumb writes it, and it is never folded onto a
+ * message; a reader sees no rating where it is the newest word.
+ */
+export const RATING_WITHDRAWN = "withdrawn";
+
+/** Every word a rating event's `rating` may say: a verdict, or its withdrawal. */
+export const RATING_WORD = {
+  ...MESSAGE_RATING,
+  WITHDRAWN: RATING_WITHDRAWN,
+} as const;
+
+export type RatingWord = (typeof RATING_WORD)[keyof typeof RATING_WORD];
+
+export const RatingWordSchema = EffectSchema.Literals(Object.values(RATING_WORD));
+
 /** The most characters a rating's note may carry; it is the developer's own free text, so the bound is the whole of its shape. */
 export const maximumRatingNoteLength = 500;
 
+const ratingNote = EffectSchema.optional(
+  text.check(EffectSchema.isMaxLength(maximumRatingNoteLength)),
+);
+
 /**
- * What a `rating` event's payload holds: the verdict, and the developer's
- * note where they left one. The device that gave it and the message it is
- * about are the event row's own columns, and the turn behind the message is
- * a join away, so nothing of either is repeated here. A later rating is a
- * later event, never an update: the record keeps every verdict, and a read
- * takes the newest.
+ * What a `rating` event's payload holds: the verdict, or the word that takes
+ * one back, and the developer's note where they left one. The device that
+ * gave it and the message it is about are the event row's own columns, and
+ * the turn behind the message is a join away, so nothing of either is
+ * repeated here. A later rating is a later event, never an update: the record
+ * keeps every verdict and every withdrawal, and a read takes the newest.
  */
 export const RATING_EVENT_PAYLOAD = EffectSchema.Struct({
-  rating: MessageRatingSchema,
-  note: EffectSchema.optional(text.check(EffectSchema.isMaxLength(maximumRatingNoteLength))),
+  rating: RatingWordSchema,
+  note: ratingNote,
 });
 
 export type RatingEventPayload = EffectSchema.Schema.Type<typeof RATING_EVENT_PAYLOAD>;
+
+/**
+ * A rating as it stands on a message once the events are folded: the newest
+ * rating event's payload where that event says a verdict. A withdrawal is a
+ * rating event and never a standing rating, so what a message page or a view
+ * carries under this shape is always a thumb the developer has not taken back.
+ */
+export const STANDING_RATING = EffectSchema.Struct({
+  rating: MessageRatingSchema,
+  note: ratingNote,
+});
+
+export type StandingRating = EffectSchema.Schema.Type<typeof STANDING_RATING>;
+
+/**
+ * The newest rating event's payload as the message stands under it: the
+ * payload itself where it says a verdict, nothing where it withdraws one or
+ * where there is no payload to read, since an older verdict is not the
+ * developer's last word either way.
+ */
+export function standingRating(
+  payload: RatingEventPayload | undefined,
+): StandingRating | undefined {
+  if (payload === undefined || payload.rating === RATING_WITHDRAWN) return undefined;
+  return { ...payload, rating: payload.rating };
+}

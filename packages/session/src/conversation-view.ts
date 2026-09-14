@@ -24,6 +24,8 @@ import {
   isSpeechEventKind,
   MESSAGE_ROLE,
   type RatingEventPayload,
+  type StandingRating,
+  standingRating,
   type TurnOrigin,
   type TurnStatus,
   UNKNOWN_ACTION_STATUS,
@@ -198,7 +200,7 @@ export interface ConversationViewMessage {
    * the record keeps every rating as its own row, and the view shows the
    * newest. Absent where none was given or the newest could not be read.
    */
-  readonly rating?: RatingEventPayload;
+  readonly rating?: StandingRating;
 }
 
 /** The messages one turn produced, in sequence, under the turn row where the store holds one. */
@@ -324,7 +326,7 @@ function viewMessage(
     if (!isStoredToolPart(part)) continue;
     tools.push(describeToolPart(part, toolKindOf(part, toolKinds), speech, message.id));
   }
-  const rating = ratings.get(message.id)?.rating;
+  const rating = standingRating(ratings.get(message.id)?.rating);
   return {
     message,
     seq: row.seq,

@@ -30,6 +30,7 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -1234,7 +1235,7 @@ it.effect(
 );
 
 it.effect(
-  "a message carries its latest rating on a device's first page, a re-rating changes the next page, and the events record keeps every rating as its own row",
+  "a message carries its latest rating on a device's first page, a re-rating changes the next page, a withdrawal leaves it unrated, and the events record keeps every rating as its own row",
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
@@ -1272,6 +1273,16 @@ it.effect(
         note: "Sent the wrong session.",
       });
 
+      // The developer takes the verdict back: the next page folds no rating onto the message, and the older verdicts do not stand in for it.
+      const third = await insertEvent(userId, main, sent.id, 3, {
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+        payload: { rating: RATING_WORD.WITHDRAWN },
+      });
+      const unrated = new Device(userId, 200);
+      await unrated.catchUp();
+      assert.equal(unrated.groups.get(ids.typed)?.messages.get(2)?.rating, undefined);
+
       const EventRowSchema = EffectSchema.Struct({
         id: EffectSchema.String,
         seq: EpochMillisColumnSchema,
@@ -1286,6 +1297,7 @@ it.effect(
         [
           [first, 1, { rating: MESSAGE_RATING.UP }],
           [second, 2, { rating: MESSAGE_RATING.DOWN, note: "Sent the wrong session." }],
+          [third, 3, { rating: RATING_WORD.WITHDRAWN }],
         ],
       );
       const listed = await database.run(database.store.events.list(userId, main));
@@ -1294,6 +1306,7 @@ it.effect(
         [
           [first, CONVERSATION_EVENT_KIND.RATING],
           [second, CONVERSATION_EVENT_KIND.RATING],
+          [third, CONVERSATION_EVENT_KIND.RATING],
         ],
       );
     }),
