@@ -349,7 +349,16 @@ public final class HostedVoiceSession {
         var continuation: AsyncStream<HostedVoiceSessionEvent>.Continuation!
         events = AsyncStream(bufferingPolicy: .unbounded) { continuation = $0 }
         self.continuation = continuation
-        reader = Task { [weak self] in await self?.serve() }
+        reader = Task { [weak self] in await Self.serve(weak: self) }
+    }
+
+    /// A session dropped without a hang-up lets its connection go rather than
+    /// holding it until the service closes it; the reader never keeps the
+    /// session alive across a wait, so this runs as soon as the owner lets go.
+    deinit {
+        socket.close()
+        reader?.cancel()
+        continuation.finish()
     }
 
     /// Tells the service whether the peer has gone quiet, in the service's own
@@ -412,43 +421,61 @@ public final class HostedVoiceSession {
     }
 
     /// Reads each connection to its end and stands the next one up, until the
-    /// session ends or the phone hangs up.
-    private func serve() async {
-        while true {
-            let close = await readConnection(socket)
-            // The connection that ended is let go however it ended, so nothing of it outlives its close.
-            socket.close()
-            if closedByClient || Task.isCancelled || close == normalSocketCloseCode {
-                return finish(code: close)
+    /// session ends, the phone hangs up, or the session is dropped. The
+    /// session is held only between waits: the wait on the socket is the long
+    /// one, and it runs on the socket alone, so a session nobody holds any
+    /// more is freed and its `deinit` closes the socket the wait stands on.
+    private static func serve(weak session: HostedVoiceSession?) async {
+        weak var session = session
+        while !Task.isCancelled {
+            guard let socket = session?.socket else { return }
+            let arrival = await socket.receive()
+            guard let standing = session else {
+                socket.close()
+                return
             }
-            heldSends = []
-            guard let recovered = await recover() else { return finish(code: close) }
-            socket = recovered
-            let pending = (heldSends ?? []).filter { frame in
-                if case .activity = frame { return false }
-                return true
+            switch arrival {
+            case .frame(let text):
+                standing.hear(text)
+            case .closed(let code):
+                guard await standing.recovered(from: code) else { return }
             }
-            heldSends = nil
-            if let standingActivity { enqueue(VoiceServiceOutgoingFrame.activity(standingActivity).text, on: recovered) }
-            for frame in pending { enqueue(frame.text, on: recovered) }
         }
     }
 
-    /// One connection to its close, handing up every frame it carried.
-    private func readConnection(_ socket: any VoiceSocket) async -> Int? {
-        while !Task.isCancelled {
-            switch await socket.receive() {
-            case .closed(let code):
-                return code
-            case .frame(let text):
-                switch VoiceServiceIncomingFrame(text: text) {
-                case .liveEvent(let event): continuation.yield(.live(event))
-                case .spoken(let kind): continuation.yield(.spoken(kind))
-                case .created, .attached, .refused, .unreadable: break
-                }
-            }
+    /// One frame the service sent, handed up as what it is.
+    private func hear(_ text: String) {
+        switch VoiceServiceIncomingFrame(text: text) {
+        case .liveEvent(let event): continuation.yield(.live(event))
+        case .spoken(let kind): continuation.yield(.spoken(kind))
+        case .created, .attached, .refused, .unreadable: break
         }
-        return nil
+    }
+
+    /// The connection ended with `close`: either the session is over and the
+    /// consumer is told, or a fresh connection now stands in its place and the
+    /// sends held meanwhile are on it. Answers whether reading goes on.
+    private func recovered(from close: Int?) async -> Bool {
+        // The connection that ended is let go however it ended, so nothing of it outlives its close.
+        socket.close()
+        if closedByClient || Task.isCancelled || close == normalSocketCloseCode {
+            finish(code: close)
+            return false
+        }
+        heldSends = []
+        guard let recovered = await recover() else {
+            finish(code: close)
+            return false
+        }
+        socket = recovered
+        let pending = (heldSends ?? []).filter { frame in
+            if case .activity = frame { return false }
+            return true
+        }
+        heldSends = nil
+        if let standingActivity { enqueue(VoiceServiceOutgoingFrame.activity(standingActivity).text, on: recovered) }
+        for frame in pending { enqueue(frame.text, on: recovered) }
+        return true
     }
 
     /// The next connection, or nothing where every try failed, the service

@@ -158,6 +158,12 @@ final class URLSessionVoiceSocket: NSObject, VoiceSocket, @unchecked Sendable {
         }
     }
 
+    /// A socket nobody holds any more is a connection nobody will read; it is
+    /// closed rather than left to the service's own timeout.
+    deinit {
+        close()
+    }
+
     /// Ends the connection and lets the session behind it go; safe to call
     /// more than once, and called for every connection this socket stood for
     /// however it ended, so no session outlives its one task.

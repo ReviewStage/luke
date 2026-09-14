@@ -491,6 +491,25 @@ final class HostedVoiceSessionClientTests: XCTestCase {
     }
 
     @MainActor
+    func testASessionDroppedWithoutAHangUpClosesItsSocket() async throws {
+        let opener = ScriptedOpener([Self.answering(Self.created())])
+        var session: HostedVoiceSession? = try opened(await client(opener).create(sdpOffer: Self.sdpOffer, voice: .marin))
+        weak var dropped = session
+        let events = try XCTUnwrap(session?.events)
+        let reader = Task { @MainActor in
+            var closes: [Int?] = []
+            for await event in events { if case .closed(let code) = event { closes.append(code) } }
+            return closes
+        }
+        XCTAssertEqual(opener.sockets[0].closedByClient, false)
+        session = nil
+        await settled("the dropped session to be freed") { dropped == nil }
+        await settled("the socket to be closed") { opener.sockets[0].closedByClient }
+        let closes = await reader.value
+        XCTAssertEqual(closes, [])
+    }
+
+    @MainActor
     func testTheSessionsOwnEndIsReportedAndNothingIsTriedAgain() async throws {
         let opener = ScriptedOpener([Self.answering(Self.created())])
         let clock = Clock()
