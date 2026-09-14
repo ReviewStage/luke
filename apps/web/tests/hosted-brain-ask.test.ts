@@ -34,7 +34,7 @@ import {
   stopAsk,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { eveOrigin } from "../server/hosted/brain-host/eve-origin";
+import { deploymentEveOrigin, eveOrigin } from "../server/hosted/brain-host/eve-origin";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
@@ -450,6 +450,79 @@ test("eve's origin is the environment's where it names one and the caller's own 
     if (before === undefined) delete process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN];
     else process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN] = before;
   }
+});
+
+/** The variables a deployment with no request in hand reads its own origin from. */
+const DEPLOYMENT_VARIABLES = {
+  EVE_ORIGIN: BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN,
+  ENVIRONMENT: "VERCEL_ENV",
+  URL: "VERCEL_URL",
+  PRODUCTION_URL: "VERCEL_PROJECT_PRODUCTION_URL",
+} as const;
+
+/** Stands the deployment's variables up as the case names them, whatever this machine holds. */
+function withDeployment(
+  named: Partial<Record<keyof typeof DEPLOYMENT_VARIABLES, string>>,
+  read: () => void,
+): void {
+  const before = new Map(
+    Object.values(DEPLOYMENT_VARIABLES).map((variable) => [variable, process.env[variable]]),
+  );
+  try {
+    for (const [name, variable] of Object.entries(DEPLOYMENT_VARIABLES)) {
+      // SAFETY: the names iterated are this same object's own keys.
+      const value = named[name as keyof typeof DEPLOYMENT_VARIABLES];
+      if (value === undefined) delete process.env[variable];
+      else process.env[variable] = value;
+    }
+    read();
+  } finally {
+    for (const [variable, value] of before) {
+      if (value === undefined) delete process.env[variable];
+      else process.env[variable] = value;
+    }
+  }
+}
+
+test("a deployment with no request in hand dials the origin the environment names first", () => {
+  withDeployment(
+    {
+      EVE_ORIGIN: "https://eve.luke.test",
+      ENVIRONMENT: "production",
+      URL: "luke-abc123-luke.vercel.app",
+      PRODUCTION_URL: "tryluke.dev",
+    },
+    () => assert.equal(deploymentEveOrigin(), "https://eve.luke.test"),
+  );
+});
+
+test("production dials the project's production domain, not the host its authentication protects", () => {
+  withDeployment(
+    {
+      ENVIRONMENT: "production",
+      URL: "luke-abc123-luke.vercel.app",
+      PRODUCTION_URL: "tryluke.dev",
+    },
+    () => assert.equal(deploymentEveOrigin(), "https://tryluke.dev"),
+  );
+});
+
+test("a preview dials itself, and so does a production deployment naming no domain of its own", () => {
+  withDeployment(
+    {
+      ENVIRONMENT: "preview",
+      URL: "luke-abc123-luke.vercel.app",
+      PRODUCTION_URL: "tryluke.dev",
+    },
+    () => assert.equal(deploymentEveOrigin(), "https://luke-abc123-luke.vercel.app"),
+  );
+  withDeployment({ ENVIRONMENT: "production", URL: "luke-abc123-luke.vercel.app" }, () =>
+    assert.equal(deploymentEveOrigin(), "https://luke-abc123-luke.vercel.app"),
+  );
+});
+
+test("a machine that is neither configured nor deployed dials nothing", () => {
+  withDeployment({}, () => assert.equal(deploymentEveOrigin(), undefined));
 });
 
 test("the gates each refuse on their own: method, bearer, body, the path's id, and the wait bound", async () => {
