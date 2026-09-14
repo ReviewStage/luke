@@ -3562,3 +3562,8 @@ Dean: "I agree with LUKE-202 recommendation. Let's do it." Ruling as recorded at
 **LUKE-193 closed by #1264** (2026-09-12): the counted-event hold across launches was already built and `PRIVACY.md` already says it; the ticket's PostHog readings predate the fix. Verification is a PostHog read, not code.
 
 **LUKE-207 filed** from the LUKE-159 Mac pass: the turn cursor's `changed_at` is a `timestamptz` read back as text, so its wire form follows the database session's zone; two store tests fail on a `-0700` Mac and pass under `TZ=UTC`. Fix: render in UTC in SQL or pin the session zone, plus a non-UTC test. No schema change.
+
+
+## 2026-09-14 03:05Z — LUKE-205 (BYOK removal) nearly complete: seven PRs on the ordinary gate, the docs PR pending
+
+Landed: #1401 (1a, a key of the developer's own stands no brain), #1403 (1b-i, acceptance on the hosted adapter), #1405 (1b-ii, the keyed model adapter and transport deleted), #1412 (2a, no live session on a personal key), #1414 (2b, the assembler and the store read no key and no source), #1417 (3, the voice-source setting and the Provider section deleted), #1419 (4, the OpenAI credential deleted; a launch drops the key it stored). Two wire value sets narrowed as ruled: `session_source` loses `keyed` (analytics allowlist) and `LIVE_SESSION_OUTCOME` loses `no-api-key` (gateway value; no Apple reader). The hosted vault's provider keys are untouched. #1422 (5, PRIVACY.md and README describe voice on the account alone) is the orchestrator-word close.
