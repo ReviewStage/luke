@@ -124,11 +124,15 @@ export const hostAssemblyLayer: Layer.Layer<
       onAnnouncementHoldRead: () => announcementHoldRead(),
     });
     const devices = yield* composeDevices({ account, calendars, settings });
+    // The live composer is built after this one and decides on the offers
+    // the Conversation's events fold to, so the hand is set once it stands.
+    let briefingsOffered: (count: number) => void = () => undefined;
     const conversation = composeConversation({
       kernel,
       settings,
       account,
       devices,
+      onOpenOffers: (count) => briefingsOffered(count),
       // Both clients carry the account's own token, holder fence included, so
       // the one retry after a 401 can tell a renewed bearer from another person's.
       heads: new HostedChangesClient({
@@ -157,6 +161,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const live = yield* composeLive({ settings, account, observation, calendars });
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
+    briefingsOffered = live.briefingsOffered;
 
     const supervisor = yield* observationSupervisor([
       observation.loop,
@@ -320,7 +325,6 @@ export const hostAssemblyLayer: Layer.Layer<
       // This Mac holds no notebook: the remembered facts and their index are
       // the hosted brain's, so the status names no entries and no mode.
       memory: { status: () => Effect.succeed({ entries: 0 }) },
-      observedSessionCount: observation.observedSessionCount,
       nodes: kernel.nodes,
       now,
       createId: kernel.createId,

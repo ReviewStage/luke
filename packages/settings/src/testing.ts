@@ -5,14 +5,13 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import { LIVE_VOICE } from "@sidecar/live";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
-import { VOICE_SOURCE } from "./schema.js";
 import { APP_SETTING_DEFAULTS } from "./schema-access.js";
 import type { SettingsVisibility } from "./schema-types.js";
 import type { AppSettingsView } from "./wire.js";
 
 /**
  * What a case may move, including back to a field's stored default of nothing:
- * the view resolves `voice`, `voiceSource`, and `formFactor` to a value, and a
+ * the view resolves `voice` and `formFactor` to a value, and a
  * case that moves one to the absence the schema declares says so with
  * `undefined`.
  */
@@ -44,7 +43,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
       calendarSignInAvailable: false,
       appleCalendarAvailable: false,
       voiceAvailable: false,
-      voiceSource: VOICE_SOURCE.ACCOUNT,
       preferBuiltInMicrophone: false,
       calendarAccounts: [],
       showOnAllDisplays: false,

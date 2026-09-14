@@ -32,7 +32,7 @@ import {
 } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
-import { LiveSessionHolder } from "./live-session-holder.js";
+import { LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
 
 /**
  * The peer's holder of one hosted session, over a scripted source and
@@ -258,8 +258,16 @@ it.effect(
     Effect.gen(function* () {
       const f = yield* fixture();
       f.entries.push(
-        { kind: CONVERSATION_ENTRY_KIND.ASK, words: "What needs me?", eventId: "e1" },
-        { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "Nothing yet.", eventId: "e2" },
+        {
+          kind: CONVERSATION_ENTRY_KIND.ASK,
+          words: "What needs me?",
+          eventId: "e1",
+        },
+        {
+          kind: CONVERSATION_ENTRY_KIND.REPLY,
+          words: "Nothing yet.",
+          eventId: "e2",
+        },
       );
       const now = yield* Clock.currentTimeMillis;
       f.roster.push({
@@ -270,7 +278,10 @@ it.effect(
         lastActivityAt: now - 60_000,
       });
       const created = yield* f.holder.createSession("offer");
-      assert.deepEqual(created, { sessionId: "sess-1", sdpAnswer: "answer-for-offer" });
+      assert.deepEqual(created, {
+        sessionId: "sess-1",
+        sdpAnswer: "answer-for-offer",
+      });
       assert.equal(f.created, 1);
       assert.equal(f.holder.sessionStands(), true);
       const [seed] = f.seeds;
@@ -313,7 +324,11 @@ it.effect(
       assert.equal(yield* f.holder.createSession("offer"), undefined);
       assert.deepEqual(f.changes, [
         { sessionId: "sess-1", phase: LIVE_SESSION_PHASE.CREATED },
-        { sessionId: "sess-1", phase: LIVE_SESSION_PHASE.CLOSED, reason: "sideband-failed" },
+        {
+          sessionId: "sess-1",
+          phase: LIVE_SESSION_PHASE.CLOSED,
+          reason: "sideband-failed",
+        },
       ]);
       assert.equal(f.created, 0);
       assert.equal(f.holder.sessionStands(), false);
@@ -538,7 +553,10 @@ it.effect("creating a session while one stands closes the standing one first", (
     );
     first.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 5);
     const created = yield* Fiber.join(fiber);
-    assert.deepEqual(created, { sessionId: "sess-2", sdpAnswer: "answer-for-second" });
+    assert.deepEqual(created, {
+      sessionId: "sess-2",
+      sdpAnswer: "answer-for-second",
+    });
     assert.equal(f.created, 2);
     assert.equal(first.closed, true);
   }),
@@ -577,8 +595,11 @@ it.effect(
       const f = yield* fixture();
       assert.equal(f.holder.speakBeat(ARRIVAL), true);
       assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
-      // One ask per kind stands at a time.
+      // One ask per kind stands at a time, and a second kind asked meanwhile repeats no `wanted`.
       assert.equal(f.holder.speakBeat(ARRIVAL), false);
+      assert.equal(f.holder.speakBeat(LAUNCH), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      f.holder.withdrawBeat(PROACTIVE_SPEECH_KIND.LAUNCH);
       assert.deepEqual(f.beats, []);
       const created = yield* f.holder.createSession("offer");
       assert.ok(created);
@@ -665,6 +686,55 @@ it.effect(
         LIVE_SESSION_PHASE.WANTED,
       ]);
       assert.deepEqual(f.beats, []);
+    }),
+);
+
+it.effect(
+  "wanting a session for a briefing announces wanted while none stands, and is refused while one does",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.wantSession(), true);
+      assert.equal(f.holder.sessionWanted(), true);
+      // One word for however many reasons: a second want, or a beat asked meanwhile, repeats nothing.
+      assert.equal(f.holder.wantSession(), false);
+      assert.equal(f.holder.speakBeat(CALENDAR), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED]);
+      // A word unanswered for its standing is spent: the next reason asks afresh.
+      yield* TestClock.adjust(WANTED_WORD.STANDS_MS - 1);
+      assert.equal(f.holder.sessionWanted(), true);
+      yield* TestClock.adjust(1);
+      assert.equal(f.holder.sessionWanted(), false);
+      assert.equal(f.holder.wantSession(), true);
+      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.WANTED, LIVE_SESSION_PHASE.WANTED]);
+      // Dropped by the caller (a hold began, a sign-out): spent at once.
+      f.holder.dropWant();
+      assert.equal(f.holder.sessionWanted(), false);
+      assert.equal(f.holder.wantSession(), true);
+      const created = yield* f.holder.createSession("offer");
+      assert.ok(created);
+      assert.equal(f.holder.sessionWanted(), false);
+      // Created and not yet started: a session stands, and its exchange's look is what claims the offer.
+      assert.equal(f.holder.wantSession(), false);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+      assert.equal(f.holder.wantSession(), false);
+      sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 4);
+      yield* settle();
+      assert.equal(f.holder.wantSession(), true);
+      assert.deepEqual(phases(f.changes), [
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.WANTED,
+        LIVE_SESSION_PHASE.CREATED,
+        LIVE_SESSION_PHASE.STARTED,
+        LIVE_SESSION_PHASE.CLOSED,
+        LIVE_SESSION_PHASE.WANTED,
+      ]);
+      assert.deepEqual(f.beats, [CALENDAR]);
+      assert.deepEqual(sideband.sent, []);
     }),
 );
 

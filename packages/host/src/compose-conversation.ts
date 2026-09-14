@@ -79,7 +79,14 @@ export type ConversationReadsClient = Pick<
 export type ConversationHeadsClient = Pick<HostedChangesClient, "poll">;
 
 export interface ConversationDependencies {
-  kernel: Pick<HostKernel, "report" | "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "report" | "emit" | "now"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  /**
+   * Told, with each publish, how many briefings stand on offer to the account
+   * as the events just read say: the live composer decides on it whether to
+   * open a muted session for the service to say one here. Composed after this
+   * composer, so it is handed in as a hand rather than a link.
+   */
+  onOpenOffers?: (count: number) => void;
   settings: Pick<SettingsComposer, "recordProductEvent">;
   account: Pick<AccountComposer, "capabilitiesActive">;
   devices: Pick<DevicesComposer, "deviceId">;
@@ -128,7 +135,7 @@ function rateAnswer(status: ConversationRateStatus) {
  * from the caller, and never the message or its id.
  */
 export function composeConversation(dependencies: ConversationDependencies): ConversationComposer {
-  const { kernel, settings, account, devices, heads, client } = dependencies;
+  const { kernel, settings, account, devices, heads, client, onOpenOffers } = dependencies;
   const { runMode, report } = kernel;
 
   const registry = catalogToolSet();
@@ -147,6 +154,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     if (sync.revision === published) return;
     published = sync.revision;
     kernel.emit(GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED, carried(snapshot()));
+    onOpenOffers?.(sync.openOffers(kernel.now()));
   }
 
   /**

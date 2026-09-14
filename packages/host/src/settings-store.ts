@@ -4,7 +4,6 @@ import {
   type CredentialFormat,
   type CredentialProvider,
   type CredentialProviderId,
-  VOICE_CREDENTIAL_PROVIDER_ID,
 } from "@sidecar/credentials";
 import {
   ACCOUNT_STATUS,
@@ -20,12 +19,7 @@ import {
 } from "@sidecar/credentials/vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { type CloudAgentProviderId, isCloudAgentProviderId } from "@sidecar/session";
-import {
-  type AppSettings,
-  type SettingsResetScope,
-  type SettingsUpdateResult,
-  VOICE_SOURCE,
-} from "@sidecar/settings/wire";
+import type { AppSettings, SettingsResetScope, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { DEFAULT_PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
   ACTION_RESULT_STATUS,
@@ -718,12 +712,6 @@ export class SettingsStore {
           // Resolved the way the session source resolves it, so the panel marks
           // what would actually be heard while the persisted file remains optional.
           voice: persisted.voice ?? this.#overrides.voice ?? LIVE_DEFAULTS.VOICE,
-          // Every session runs on the account: a stored choice of the
-          // developer's own key runs nothing, so the panel is told what
-          // actually answers. The setting itself is deleted by LUKE-205's
-          // next PR; until then a file that still carries the choice is read
-          // and not honoured.
-          voiceSource: VOICE_SOURCE.ACCOUNT,
           formFactor: persisted.formFactor ?? DEFAULT_PANEL_FORM_FACTOR,
         },
         status: {
@@ -940,27 +928,14 @@ export class SettingsStore {
           const ciphertext = normalized
             ? this.#cipher.encrypt(normalized).toString("base64")
             : undefined;
-          // Connecting the key voice runs on is choosing it: someone who parked on
-          // the free allowance and later pastes a key means to use that key, and a
-          // stored preference quietly ignoring it would look like the key failed
-          // to save. Deleting one leaves the choice alone — there is nothing left
-          // for it to hold back, and it says where to land if another key arrives.
-          const chooses =
-            providerId === VOICE_CREDENTIAL_PROVIDER_ID &&
-            ciphertext !== undefined &&
-            persisted.voiceSource !== VOICE_SOURCE.KEY;
-          // A key that is already stored is not a write — unless it is also the
-          // act of choosing it, which pasting the same key back while parked on
-          // the allowance is.
-          if (persisted.apiKeys[providerId] === ciphertext && !chooses) return undefined;
+          // A key that is already stored is not a write.
+          if (persisted.apiKeys[providerId] === ciphertext) return undefined;
           // Every other provider's ciphertext is carried over, so saving one key
           // never disturbs another.
           const apiKeys = { ...persisted.apiKeys };
           if (ciphertext) apiKeys[providerId] = ciphertext;
           else delete apiKeys[providerId];
-          const next: PersistedSettings = { ...persisted, apiKeys };
-          if (chooses) next.voiceSource = VOICE_SOURCE.KEY;
-          return next;
+          return { ...persisted, apiKeys };
         },
         () => this.#resolved.delete(providerId),
       );

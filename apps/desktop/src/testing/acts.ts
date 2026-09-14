@@ -71,7 +71,6 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.SESSION_EXECUTE_CONTROL,
     payload: { identity: IDENTITY, controlId: "cancel-run" },
   },
-  [ACT_KIND.BRAIN_CANCEL_ASK]: { kind: ACT_KIND.BRAIN_CANCEL_ASK, payload: { runId: "run-1" } },
   [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
     kind: ACT_KIND.CONVERSATION_RATE_MESSAGE,
     payload: { messageId: "2b000000-0000-4000-8000-000000000202", rating: "up" },

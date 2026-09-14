@@ -330,6 +330,42 @@ test("the latest speech event on a message decides whether its announcement was 
   assert.equal(sync.cursors().events, "e4");
 });
 
+test("the briefings on offer are the messages whose latest speech event is an unexpired offer, read from the events and nothing inferred", () => {
+  const sync = new ConversationViewSync();
+  const offered = (
+    messageIdNumber: number,
+    seq: number,
+    expiresAt: number,
+  ): ConversationReadEvent => ({
+    ...speech(messageIdNumber, seq, CONVERSATION_EVENT_KIND.SPEECH_OFFERED),
+    payload: { expiresAt },
+  });
+  assert.equal(sync.openOffers(NOW), 0);
+  sync.applyEvents([offered(1, 1, NOW + 60_000), offered(2, 2, NOW + 60_000)], "e1", false);
+  assert.equal(sync.openOffers(NOW), 2);
+  // Past its own instant an offer no longer stands, whatever the events still say.
+  assert.equal(sync.openOffers(NOW + 60_000), 0);
+  // A later state on the message ends the offer: claimed here, spoken, pushed, held, or expired.
+  sync.applyEvents([speech(1, 3, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)], "e2", false);
+  assert.equal(sync.openOffers(NOW), 1);
+  sync.applyEvents([speech(2, 4, CONVERSATION_EVENT_KIND.SPEECH_HELD)], "e3", false);
+  assert.equal(sync.openOffers(NOW), 0);
+  // An offer told again is the same offer, and an earlier event arriving late changes nothing.
+  sync.applyEvents([offered(1, 1, NOW + 60_000)], "e4", false);
+  assert.equal(sync.openOffers(NOW), 0);
+  // An offer whose payload did not read expired the instant it was made (the
+  // helper stamps that instant NOW + seq), as the service reads it.
+  sync.applyEvents([speech(3, 5, CONVERSATION_EVENT_KIND.SPEECH_OFFERED)], "e5", false);
+  assert.equal(sync.openOffers(NOW + 5), 0);
+  sync.applyEvents([offered(4, 6, NOW + 60_000)], "e6", false);
+  assert.equal(sync.openOffers(NOW + 5), 1);
+  // A rating is not a speech event and ends nothing.
+  sync.applyEvents([speech(4, 7, CONVERSATION_EVENT_KIND.RATING)], "e7", false);
+  assert.equal(sync.openOffers(NOW + 5), 1);
+  sync.reset();
+  assert.equal(sync.openOffers(NOW + 5), 0);
+});
+
 test("only the newest turns are kept, and the ones let go of do not come back", () => {
   const sync = new ConversationViewSync();
   const total = CONVERSATION_VIEW_BOUNDS.MAX_GROUPS + 3;

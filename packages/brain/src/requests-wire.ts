@@ -13,7 +13,6 @@ import {
   BRAIN_SUBMISSION_REJECTION,
   type BrainRequestRecord,
   type BrainSubmissionRejection,
-  brainRequestRecordFromWire,
 } from "./requests.js";
 
 /**
@@ -51,10 +50,6 @@ export function isBrainAskSubmissionResult(
 
 /** A run's record as a renderer draws it: the brain's own record, unchanged. */
 export type BrainRequestSnapshot = BrainRequestRecord;
-
-export function isBrainRequestSnapshot(value: UnparsedWireValue): boolean {
-  return brainRequestRecordFromWire(value) !== undefined;
-}
 
 /** A run the renderer may still cancel: accepted, not yet ended. */
 export function brainRequestPending(snapshot: BrainRequestSnapshot): boolean {

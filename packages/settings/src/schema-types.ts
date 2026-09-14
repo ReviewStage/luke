@@ -25,8 +25,6 @@ export const SETTING_SECTION = {
   MAIN: "main",
   /** The voice controls, below the permission that lets Luke listen. */
   CONTROLS: "controls",
-  /** Which credential the voice runs on, drawn by the Provider section's picker. */
-  PROVIDER: "provider",
   WORKSPACES: "workspaces",
   PROVIDERS: "providers",
   CALENDAR: "calendar",
@@ -58,7 +56,6 @@ export const SETTING_SIDE_EFFECT = {
   TALK_HOTKEY: "talk-hotkey",
   STOP_HOTKEY: "stop-hotkey",
   MEDIA_DUCK: "media-duck",
-  VOICE_SOURCE: "voice-source",
   ANNOUNCEMENT_HOLD: "announcement-hold",
 } as const;
 

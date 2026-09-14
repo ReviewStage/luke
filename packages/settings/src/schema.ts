@@ -28,7 +28,7 @@ import {
   type PanelFormFactor,
 } from "@sidecar/surface";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Result, Schema } from "effect";
+import { Result } from "effect";
 import {
   choiceAnalytics,
   choiceSetting,
@@ -55,7 +55,6 @@ import {
   CONDUCTOR_ROW_PATH,
   CONNECTIONS_PAGE,
   VOICE_PAGE,
-  VOICE_SOURCE_SECTION,
 } from "./settings-paths.js";
 
 export {
@@ -74,30 +73,10 @@ export {
 // the same set and may not depend on anything here.
 export { APP_SETTING_ID, type AppSettingId, isAppSettingId };
 
-export const VOICE_SOURCE = {
-  ACCOUNT: "account",
-  KEY: "key",
-} as const;
-
-export type VoiceSource = (typeof VOICE_SOURCE)[keyof typeof VOICE_SOURCE];
-
-export const VoiceSourceSchema = Schema.Literals(Object.values(VOICE_SOURCE));
-
-const readsVoiceSource = Schema.is(VoiceSourceSchema);
-
-export function isVoiceSource(value: UnparsedWireValue): value is VoiceSource {
-  return readsVoiceSource(value);
-}
-
 /* The default-workspace row's word for no default at all. An empty value
    rather than a member of the provider set, so no provider id can collide
    with it. */
 const NO_WORKSPACE_PROVIDER = "";
-
-const VOICE_SOURCE_CHOICE = {
-  [VOICE_SOURCE.ACCOUNT]: "your Luke account",
-  [VOICE_SOURCE.KEY]: "your OpenAI key",
-} as const satisfies Record<VoiceSource, string>;
 
 /* The voice is an account preference every device applies, and every device
    reads the one Live vocabulary, so the row offers the whole of it. */
@@ -312,29 +291,6 @@ export const APP_SETTING_SCHEMA = {
     sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
     adjustable: true,
     visible: voiceControlDrawn,
-  }),
-  voiceSource: choiceSetting({
-    field: "voiceSource",
-    id: APP_SETTING_ID.VOICE_SOURCE,
-    label: "Provider",
-    description:
-      "Which credential Luke speaks and reviews sessions on: the signed-in Luke account " +
-      "or the developer's own OpenAI key. A key stays stored either way.",
-    values: [VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY],
-    say: (source) => VOICE_SOURCE_CHOICE[source],
-    absent: VOICE_SOURCE_CHOICE[VOICE_SOURCE.ACCOUNT],
-    guard: (value: UnparsedWireValue) => optional(value, isVoiceSource),
-    default: undefined,
-    page: SETTINGS_PAGE.VOICE,
-    section: SETTING_SECTION.PROVIDER,
-    order: 100,
-    manual: VOICE_SOURCE_SECTION,
-    sideEffect: SETTING_SIDE_EFFECT.VOICE_SOURCE,
-    // Drawn by the Provider section's own picker, which is where the way in
-    // to a key stands beside the choice of credential.
-    rows: SETTING_ROWS.BESPOKE,
-    adjustable: false,
-    visible: (view) => view.accountDrawn,
   }),
   preferBuiltInMicrophone: toggleSetting({
     field: "preferBuiltInMicrophone",

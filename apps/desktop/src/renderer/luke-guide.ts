@@ -56,7 +56,6 @@ import {
   settingFieldForGuideId,
   settingGuideEntries,
   spokenSettingValue,
-  VOICE_SOURCE_SECTION,
 } from "@sidecar/settings";
 import type { AppSettings, AppSettingsView, SettingsUpdateResult } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
@@ -238,7 +237,7 @@ function voiceKeyFact(settings: AppSettingsView, voiceAvailable: boolean): AppGu
           ? `Signing in — or connecting a key — is what lets Luke speak and review sessions. `
           : `Voice and session review run on this key: nothing through Luke's ` +
             `service, and OpenAI bills you for what you use. `) +
-      `The key is typed by hand into ${VOICE_SOURCE_SECTION} — never read from the ` +
+      `The key is typed by hand into Luke's settings — never read from the ` +
       `environment, never spoken, and never repeated back.`,
   };
 }
@@ -531,7 +530,7 @@ export function buildLukeGuide(input: LukeGuideInput): AppGuideSnapshot {
             label: "Voice",
             detail:
               "Off: nothing to run voice on, so no conversation can be opened. " +
-              `Signing in turns it on; a key entered in ${VOICE_SOURCE_SECTION} also works.`,
+              "Signing in turns it on.",
           },
         ]),
     providersFact(input.settings),

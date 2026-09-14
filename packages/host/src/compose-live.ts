@@ -19,19 +19,26 @@ import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@si
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Queue, Result, type Scope } from "effect";
+import { Duration, Effect, Queue, Result, type Scope } from "effect";
 import {
   arrivalBeatOwed,
   countsFirstAnnouncement,
   firstNameOf,
   launchGreetingOwed,
 } from "./arrival-flow.js";
+import {
+  BRIEFING_SESSION_DECISION,
+  briefingSessionDecision,
+  debounceRemaining,
+} from "./briefing-session.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
+import { activeUntilFrom } from "./device-presence.js";
 import { HostKernelTag } from "./effect/kernel.js";
+import { MachinePresenceReader } from "./effect/seams.js";
 import { voiceRoster } from "./voice-roster.js";
 
 export interface LiveComposer extends Composer {
@@ -49,6 +56,13 @@ export interface LiveComposer extends Composer {
   requestOnboardingBeat: () => void;
   /** Asked when the announcement hold was read again: the beat the hold kept is asked for once it has lifted. */
   onAnnouncementHoldRead: () => void;
+  /**
+   * Told how many briefings stand on offer to the account, on each publish
+   * of the Conversation: with one on offer, this Mac present, speech free,
+   * and no session standing, the peer is told a session is wanted so the
+   * service's exchange can claim and say it here (`briefing-session.ts`).
+   */
+  briefingsOffered: (openOffers: number) => void;
   /** The arrival beat's own moment, recorded at the first sign-in ever observed. */
   seedArrivalOnFirstSignIn: () => void;
   /** Every beat not yet sent is dropped; a sign-out is no reason to keep one waiting for a session. */
@@ -86,17 +100,23 @@ const BEAT_KINDS: readonly BeatKind[] = [
  * session for one when none stands. The words are the service's; what the
  * service tells back, by kind, is that a turn was spoken to its end, which
  * is what settles the arrival's moment and the first-announcement count
- * here. It reaches no brain and writes no record, so it needs no seam for
- * either. The holder stands for this composition's own scope, which is the
- * host's, and its graceful close stays a drain step of `compose-host.ts`
+ * here. It opens a muted session for a briefing the same way: when one
+ * stands on offer to the account and this Mac is present with speech free,
+ * a status edge from observed rows and never a model's word, so the
+ * service's exchange can claim and say it here rather than the phone. It
+ * reaches no brain and writes no record, so it needs no seam for either.
+ * The holder stands for this composition's own scope, which is the host's,
+ * and its graceful close stays a drain step of `compose-host.ts`
  * rather than a finalizer, so a quit ends the session inside its own
  * deadline.
  */
 export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   dependencies: LiveDependencies,
-): Effect.fn.Return<LiveComposer, never, HostKernelTag | Scope.Scope> {
+): Effect.fn.Return<LiveComposer, never, HostKernelTag | MachinePresenceReader | Scope.Scope> {
   const { settings, account, observation, calendars } = dependencies;
   const kernel = yield* HostKernelTag;
+  const machinePresence = yield* MachinePresenceReader;
+  const scope = yield* Effect.scope;
   const { now, runMode } = kernel;
 
   // What a caller asked for and nothing waits on: each decision is taken in
@@ -122,7 +142,9 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
         sign_in_age: productSignInAge(at - signedInAtMs),
       });
     }
-    calendars.writeOnboarding({ arrivalFirstAnnouncementAt: new Date(at).toISOString() });
+    calendars.writeOnboarding({
+      arrivalFirstAnnouncementAt: new Date(at).toISOString(),
+    });
   }
 
   /** The beats spoken to the end this run: each is one line, said once per run whatever re-asks it. */
@@ -155,7 +177,9 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
       }
       spokenThisRun.add(kind);
       if (kind === PROACTIVE_SPEECH_KIND.ARRIVAL && arrivalBeatOwed(calendars.onboarding())) {
-        calendars.writeOnboarding({ arrivalSpokenAt: new Date(now()).toISOString() });
+        calendars.writeOnboarding({
+          arrivalSpokenAt: new Date(now()).toISOString(),
+        });
       }
     },
   });
@@ -286,6 +310,68 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     service.speakBeat(launchGreeting());
   });
 
+  /** When this Mac last asked for a session on a briefing's account, for the debounce. */
+  let briefingSessionAskedAt: number | undefined;
+  /** The offer count as last told, and whether a hold kept a briefing back, so the hold's lift re-decides it. */
+  let lastOpenOffers = 0;
+  let briefingHeld = false;
+  /** Whether a re-decision is already armed for the debounce's end, so a burst arms one and not several. */
+  let debounceRetryArmed = false;
+
+  /**
+   * A briefing on offer, decided from observed rows and this Mac's own
+   * state and nothing a model said: the offer count the Conversation's
+   * events fold to, the presence the heartbeat reports, the hold as the
+   * beats read it, and whether a session already stands. The ask is the
+   * same `wanted` the beats announce; what is said into the session is the
+   * exchange's to claim and speak.
+   */
+  const briefingSession = (openOffers: number) =>
+    Effect.gen(function* () {
+      lastOpenOffers = openOffers;
+      if (!runMode.requiresAccount || !account.signedIn()) return;
+      if (!account.voiceCapabilities.liveSessions) return;
+      const at = now();
+      const held = yield* speechHeld;
+      // A briefing kept back by the hold is decided again when the hold's
+      // read finds speech free; the offer may have gone to the phone by then,
+      // in which case the session opened finds nothing and closes on idle.
+      briefingHeld = held && openOffers > 0;
+      const facts = {
+        openOffers,
+        present: activeUntilFrom(machinePresence.read?.(), at) !== null,
+        held,
+        // A `wanted` already out for a beat is a session on its way: one word to the peer, not two.
+        sessionStands: service.sessionStands() || service.sessionWanted(),
+        lastOpenedAt: briefingSessionAskedAt,
+        now: at,
+      };
+      const decision = briefingSessionDecision(facts);
+      if (decision !== BRIEFING_SESSION_DECISION.OPEN) {
+        // Kept back by the debounce alone: an offer that arrived inside the
+        // bound is decided again when the bound elapses, on the count then
+        // last told, since nothing else re-asks and the phone's grace would
+        // take it otherwise. One wait stands at a time.
+        const remaining = debounceRemaining(facts);
+        if (remaining !== undefined && !debounceRetryArmed) {
+          debounceRetryArmed = true;
+          yield* Effect.forkIn(
+            Effect.andThen(
+              Effect.sleep(Duration.millis(remaining)),
+              Effect.sync(() => {
+                debounceRetryArmed = false;
+                Queue.offerUnsafe(asks, briefingSession(lastOpenOffers));
+              }),
+            ),
+            scope,
+          );
+        }
+        return;
+      }
+      briefingSessionAskedAt = at;
+      service.wantSession();
+    });
+
   /**
    * The hold read again. A hold that has begun takes back every beat still
    * waiting for a session (one the service already has is the service's to
@@ -297,10 +383,17 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
       for (const kind of BEAT_KINDS) {
         if (service.withdrawBeat(kind)) beatHeld = true;
       }
+      // A `wanted` out for a briefing is taken back too, and the briefing
+      // kept for the lift; a session the peer already offered is the
+      // exchange's, and the service's own hold on the offer stands over it.
+      if (service.sessionWanted()) {
+        service.dropWant();
+        if (lastOpenOffers > 0) briefingHeld = true;
+      }
       return;
     }
-    if (!beatHeld) return;
-    yield* onboardingBeat;
+    if (beatHeld) yield* onboardingBeat;
+    if (briefingHeld) yield* briefingSession(lastOpenOffers);
   });
 
   const methods: GatewayMethodTable = {
@@ -374,12 +467,19 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     onAnnouncementHoldRead: () => {
       Queue.offerUnsafe(asks, holdRead);
     },
+    briefingsOffered: (openOffers) => {
+      Queue.offerUnsafe(asks, briefingSession(openOffers));
+    },
     seedArrivalOnFirstSignIn: () => {
       if (calendars.onboarding()?.arrivalSignedInAt !== undefined) return;
-      calendars.writeOnboarding({ arrivalSignedInAt: new Date(now()).toISOString() });
+      calendars.writeOnboarding({
+        arrivalSignedInAt: new Date(now()).toISOString(),
+      });
     },
     withdrawBeats: () => {
       for (const kind of BEAT_KINDS) service.withdrawBeat(kind);
+      // A signed-out Mac wants no session: the word out for a beat or a briefing goes with them.
+      service.dropWant();
     },
     // The session itself is closed by the drain, inside the quit's deadline,
     // before any composer stops; nothing is left here to give back.

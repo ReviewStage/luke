@@ -675,10 +675,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
 
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
-      applyVoiceCredential: linked((links) => links.applyVoiceCredential),
       refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
       reportPresence: linked((links) => links.reportPresence),
-      emitSettings,
     });
 
     const applyHostSettingSideEffect = (

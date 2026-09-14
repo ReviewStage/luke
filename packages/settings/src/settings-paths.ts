@@ -12,8 +12,6 @@
 export const SETTINGS_TAB = "the panel's Settings tab";
 
 export const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
-/** Where the hosted account and OpenAI key choices both live. */
-export const VOICE_SOURCE_SECTION = `${VOICE_PAGE}, in the Provider section after Permissions`;
 export const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
 export const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 export const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;

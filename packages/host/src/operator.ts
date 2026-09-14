@@ -7,7 +7,7 @@ import {
   isBrainAskSubmissionResult,
 } from "@sidecar/brain/requests-wire";
 import type { GatewayCallResult, GatewayClient } from "@sidecar/gateway";
-import { GATEWAY_EVENT, GATEWAY_METHOD, gatewayEventReader } from "@sidecar/gateway";
+import { GATEWAY_METHOD } from "@sidecar/gateway";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
 import { isRecord, type WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
@@ -32,7 +32,6 @@ export interface GatewayOperator {
   runs: () => Effect.Effect<readonly BrainRequestSnapshot[]>;
   /** Delete conversation on a conversation: answers whether the erasure completed or was interrupted, false only when refused. */
   deleteConversation: (sessionKey?: SessionKey) => Effect.Effect<boolean>;
-  onRunsChanged: (listener: (runs: readonly BrainRequestSnapshot[]) => void) => () => void;
   /** The underlying client, for the calls the typed surface above does not name. */
   readonly client: GatewayClient;
 }
@@ -55,7 +54,6 @@ export interface GatewayOperatorOptions {
 
 export function createGatewayOperator(options: GatewayOperatorOptions): GatewayOperator {
   const { client } = options;
-  const on = gatewayEventReader(client);
   return {
     client,
     submit: (submission, sessionKey = MAIN_SESSION_KEY) =>
@@ -98,7 +96,5 @@ export function createGatewayOperator(options: GatewayOperatorOptions): GatewayO
           isRecord(result.result) &&
           result.result.outcome === CONVERSATION_DELETE_OUTCOME.COMPLETE,
       ),
-    onRunsChanged: (listener) =>
-      on(GATEWAY_EVENT.RUNS_CHANGED, (payload) => runsFromWire(payload), listener),
   };
 }

@@ -35,7 +35,6 @@ import {
   SETTINGS_RESET_SCOPE,
   type SettingsResetScope,
   type SettingsUpdateResult,
-  VOICE_SOURCE,
 } from "@sidecar/settings/wire";
 import { PANEL_FORM_FACTOR } from "@sidecar/surface";
 import {
@@ -362,7 +361,6 @@ const SAMPLE_VALUE = {
   voiceHotkey: "Shift+Command+L",
   stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
-  voiceSource: VOICE_SOURCE.ACCOUNT,
   preferBuiltInMicrophone: false,
   announceSessions: false,
   quietDuringMeetings: false,
@@ -383,7 +381,6 @@ const SAMPLE_VALUE = {
  */
 const RESOLVED_FIELDS = new Set<AppSettingField>([
   APP_SETTING_SCHEMA.voice.field,
-  APP_SETTING_SCHEMA.voiceSource.field,
   APP_SETTING_SCHEMA.formFactor.field,
 ]);
 
@@ -830,8 +827,6 @@ test("keeps both keys when two providers are saved at once", async (t) => {
         [CREDENTIAL_PROVIDER_ID.OPENAI]: sealed("sk-stored-key"),
         [CONDUCTOR]: sealed("conductor-stored-key"),
       },
-      // Storing the voice key is choosing it, so the file records the choice.
-      voiceSource: VOICE_SOURCE.KEY,
     }),
   );
   const reopened = storeIn(directory);

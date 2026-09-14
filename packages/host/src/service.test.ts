@@ -115,7 +115,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
         directory: () => [],
       } as unknown as ConversationOperations,
       memory: { status: () => Effect.succeed({}) },
-      observedSessionCount: () => 0,
       now: () => NOW,
       createId: () => `id-${++ids}`,
     });
@@ -127,10 +126,6 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
     const operator = createGatewayOperator({
       client: yield* gatewayClient({ transport, createId: () => `request-${++ids}` }),
     });
-    const events: { kind: string; payload: WireValue }[] = [];
-    service.gateway.log.listen((event) =>
-      events.push({ kind: event.kind, payload: event.payload }),
-    );
     return {
       service,
       operator,
@@ -138,13 +133,10 @@ function fixture(transportKind: "in-process" | "loopback" = "in-process") {
       records,
       asked,
       deleted,
-      events,
       generation,
       retireBrain: () => {
         brainStands = false;
       },
-      /** The followers' report of every record, as the wiring's broadcast hands it on. */
-      report: () => service.runsReported([...records.values()]),
     };
   });
 }
@@ -176,26 +168,6 @@ for (const kind of ["in-process", "loopback"] as const) {
         const f = yield* fixture(kind);
         assert.equal(yield* f.operator.deleteConversation(MAIN_SESSION_KEY), true);
         assert.deepEqual(f.deleted, [MAIN_SESSION_KEY]);
-      }),
-  );
-
-  it.effect(
-    `[${kind}] the run list reaches the client as a numbered event it can reconcile against`,
-    () =>
-      Effect.gen(function* () {
-        const f = yield* fixture(kind);
-        const runs: number[] = [];
-        f.operator.onRunsChanged((list) => runs.push(list.length));
-        yield* f.operator.submit({
-          submissionId: "s",
-          question: "q",
-          origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
-        });
-        f.report();
-        assert.deepEqual(runs, [1]);
-        const listed = yield* f.operator.runs();
-        assert.equal(listed.length, 1);
-        assert.equal(f.operator.client.lastSequence(), 1);
       }),
   );
 

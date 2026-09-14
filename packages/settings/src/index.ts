@@ -4,7 +4,6 @@ export {
   APP_SETTING_SCHEMA,
   type AppSettingId,
   isAppSettingId,
-  isVoiceSource,
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
   SETTINGS_PAGE,
@@ -14,9 +13,6 @@ export {
   type SettingsPage,
   type SettingsResetScope,
   type SettingsVisibility,
-  VOICE_SOURCE,
-  type VoiceSource,
-  VoiceSourceSchema,
 } from "./schema.js";
 export {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -57,7 +53,6 @@ export {
   FRONT_PAGE,
   SETTINGS_TAB,
   SHORTCUTS_PAGE,
-  VOICE_SOURCE_SECTION,
 } from "./settings-paths.js";
 export {
   capturedVoiceHotkey,

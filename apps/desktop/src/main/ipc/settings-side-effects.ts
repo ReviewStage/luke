@@ -82,9 +82,5 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
       reapply(HOTKEY_RANK.STOP, settings.stored.stopHotkey, waitForDeferredEffects),
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: ({ settings }) =>
       mediaDuck.setEnabled(settings.stored.duckOtherMedia),
-    // The host rebuilt the voice; the key follows what it now has.
-    [SETTING_SIDE_EFFECT.VOICE_SOURCE]: async () => {
-      await hotkeys.reapply(HOTKEY_RANK.TALK);
-    },
   } satisfies ClientSettingSideEffects;
 }

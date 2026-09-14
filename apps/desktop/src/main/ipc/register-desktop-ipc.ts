@@ -1,8 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
-import { Effect } from "effect";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -10,7 +8,6 @@ import { ActRefused, type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
-import { brainActRows } from "./brain";
 import { sessionActRows } from "./session-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -44,17 +41,8 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // The Conversation Clear is the service's soft delete of the account's
     // main conversation, which is the thread every panel draws; a Clear the
     // service did not take leaves the thread standing and is reported to the
-    // panel as refused. Only once it landed is the thread this process holds
-    // for the local brain — the voice window's relay and the brain's context
-    // — forgotten too, so the two never disagree about whether anything was
-    // cleared.
-    clearConversation: () =>
-      Effect.gen(function* () {
-        const cleared = yield* operator.host.clearConversation();
-        if (!cleared) return false;
-        yield* Effect.forkDetach(operator.operator.deleteConversation(MAIN_SESSION_KEY));
-        return true;
-      }),
+    // panel as refused.
+    clearConversation: () => operator.host.clearConversation(),
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),
@@ -103,7 +91,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
       recordProductEvent,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
-    ...brainActRows({ operator: operator.operator }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

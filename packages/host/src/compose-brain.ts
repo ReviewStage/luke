@@ -29,20 +29,19 @@ import {
   UNKNOWN_ACTION_STATUS,
   type WireRecord,
 } from "@sidecar/wire";
-import { Cause, Effect, Queue, type Scope } from "effect";
+import { Cause, Effect, type Scope } from "effect";
 import { wireBrain } from "./brain/wiring.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { Composer } from "./composer.js";
 import { conversationOperations } from "./conversation-operations.js";
 import { startedAndStopped } from "./effect/composer.js";
-import { HostKernelTag, HostService } from "./effect/kernel.js";
+import { HostKernelTag } from "./effect/kernel.js";
 import { type HeldConversations, wireHeldConversations } from "./held-conversations.js";
 import { wireMemoryDefinitions } from "./memory-definition.js";
 import { wireMemoryMaintenance } from "./memory-maintenance.js";
 import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { removeRetiredStore } from "./retired-store.js";
-import type { GatewayService } from "./service.js";
 
 type BrainWiring = Effect.Success<ReturnType<typeof wireBrain>>;
 
@@ -65,41 +64,14 @@ export interface BrainDependencies {
 
 export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* (
   dependencies: BrainDependencies,
-): Effect.fn.Return<BrainComposer, never, HostKernelTag | HostService | Scope.Scope> {
+): Effect.fn.Return<BrainComposer, never, HostKernelTag | Scope.Scope> {
   const { account, observation, announcements } = dependencies;
   const kernel = yield* HostKernelTag;
-  const hostService = yield* HostService;
   // The services every run of the tool loop is begun under: the host's own,
   // so a turn and the host that cancels it stand on one set rather than on
   // a second one built where the work lives.
   const execution = yield* Effect.context<never>();
   const { runMode, report, now, createId } = kernel;
-
-  /**
-   * What the conversations and the wiring tell the clients, as effects taken in turn
-   * by a fiber of this composer's scope. Both doors are synchronous
-   * callbacks of collaborators that hold no fiber, and the service they
-   * speak through is what the merge composes after this composer is built,
-   * so each offers its publication here and the take awaits the service:
-   * nothing is dropped for having been reported before the merge, and the
-   * order two publications were offered in is the order they are made.
-   */
-  const publications = yield* Queue.unbounded<Effect.Effect<void>>();
-  yield* Effect.forkScoped(
-    Effect.forever(
-      Effect.flatMap(Queue.take(publications), (publication) =>
-        Effect.catchDefect(publication, (defect) =>
-          Effect.logError("a host service publication failed", defect),
-        ),
-      ),
-    ),
-  );
-  const publish = (through: (service: GatewayService) => void): void => {
-    Queue.offerUnsafe(
-      publications,
-      Effect.flatMap(hostService.value, (service) => Effect.sync(() => through(service))),
-    );
-  };
 
   /**
    * The conversations the local brain holds, in memory and for this run
@@ -207,9 +179,10 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
           tracePrefetch: (record) => account.agentTrace?.recordBrainPrefetch(record),
         }
       : undefined),
-    broadcastRequests: (snapshots) => {
-      publish((service) => service.runsReported(snapshots));
-    },
+    // The followers' reports reach no client: the desktop stopped drawing
+    // the runs and the service carries no runs event (LUKE-206). The
+    // followers still mark each run's end, which is what they are for.
+    broadcastRequests: () => undefined,
     onGenerationReplaced: (sessionKey) => {
       if (sessionKey === MAIN_SESSION_KEY) announcements.dropBriefings();
     },

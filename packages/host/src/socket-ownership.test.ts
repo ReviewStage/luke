@@ -110,7 +110,6 @@ function fakeHost(options: { persistCancellations?: boolean } = {}) {
         directory: () => [],
       } as unknown as ConversationOperations,
       memory: { status: () => Effect.succeed({}) },
-      observedSessionCount: () => 0,
       now: () => NOW,
       createId: () => `id-${++ids}`,
     });
@@ -194,12 +193,16 @@ it.live(
         yield* first.connection.close();
         yield* Effect.sleep("20 millis");
         assert.equal(f.live.get("run-1")?.status, BRAIN_REQUEST_STATUS.RUNNING);
-        // The next client's hello snapshot finds the run.
+        // The next client reads the run from the host; the hello's snapshot
+        // carries no runs, since no client draws them.
         const second = yield* client(port, "desktop-2");
         const hello = yield* second.gateway.call(GATEWAY_METHOD.HELLO);
         assert.ok(hello.ok);
-        const snapshot = recordOf(recordOf(hello.result).snapshot);
-        assert.ok(Array.isArray(snapshot.runs) && snapshot.runs.length === 1);
+        assert.equal(recordOf(recordOf(hello.result).snapshot).runs, undefined);
+        const listed = yield* second.gateway.call(GATEWAY_METHOD.RUN_LIST);
+        assert.ok(listed.ok);
+        const runs = recordOf(listed.result).runs;
+        assert.ok(Array.isArray(runs) && runs.length === 1);
         yield* second.connection.close();
       }),
     ),

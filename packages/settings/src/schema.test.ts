@@ -261,7 +261,6 @@ test("a setting says for itself whether its row is drawn", () => {
   // to a page without its row.
   const resting = settingsVisibility();
   assert.equal(settingVisible("voiceCaptions", resting), false);
-  assert.equal(settingVisible("voiceSource", resting), false);
   assert.equal(settingVisible("quietDuringMeetings", resting), false);
   // A setting that names no condition is always drawn.
   assert.equal(settingVisible("openAtLogin", resting), true);
@@ -270,7 +269,6 @@ test("a setting says for itself whether its row is drawn", () => {
     settingVisible("voiceCaptions", settingsVisibility({ voiceControlsDrawn: true })),
     true,
   );
-  assert.equal(settingVisible("voiceSource", settingsVisibility({ accountDrawn: true })), true);
   // The quiet rides the calendars: a Google account, or this Mac's own.
   assert.equal(
     settingVisible(
@@ -322,8 +320,6 @@ test("a page's section draws its own members, in the order they claim", () => {
     voice.map((row) => row.field),
     ["voice", "voiceCaptions", "duckOtherMedia", "preferBuiltInMicrophone", "announceSessions"],
   );
-  // The credential picker draws the source itself, so the controls do not.
-  assert.ok(!voice.some((row) => row.field === "voiceSource"));
   // Nothing draws a row for a setting whose condition is unmet.
   assert.deepEqual(
     settingRowsForPage(SETTINGS_PAGE.VOICE, SETTING_SECTION.CONTROLS, settingsVisibility()),

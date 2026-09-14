@@ -478,6 +478,14 @@ Send.
   ask to connect a calendar) reach the service the same way, carrying at most
   the title of one working session and the name of your talk key, and each
   waits like an announcement while a meeting or the Announce switch holds it.
+  A session also opens on its own when a briefing Luke has decided is on
+  offer to your account and this Mac is present (input within the last two
+  minutes, screen unlocked) with nothing holding him quiet, so the briefing
+  is said here rather than pushed to your phone: that opening is decided from
+  the offer's own status row and your Mac's presence, never by a model, it
+  opens at most one session a minute and none while one already stands, a
+  briefing another device claims first is left to it, and the phone's
+  two-minute grace is unchanged.
   Luke's judgment is a separate call
   to OpenAI's Responses API, made when his periodic look
   wakes the conversation following that session and when

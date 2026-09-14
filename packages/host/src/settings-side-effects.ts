@@ -26,12 +26,10 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => Effect.void;
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
   setVoice: (voice: StoredAppSettings["voice"]) => Effect.Effect<void>;
-  applyVoiceCredential: Effect.Effect<void>;
   /** The hold read again for the panel, which draws it; nothing on this side queues speech to hold since E5-3. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
   /** The device heartbeat sent now, carrying the quiet instant as it stands after the write. */
   readonly reportPresence: Effect.Effect<void>;
-  emitSettings: () => Effect.Effect<void>;
 }
 
 /**
@@ -50,8 +48,6 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
-    [SETTING_SIDE_EFFECT.VOICE_SOURCE]: () =>
-      Effect.andThen(dependencies.applyVoiceCredential, dependencies.emitSettings()),
     // The hold is the service's to apply since E5-3: a briefing is spoken by
     // the service's own exchange against the quiet instant this device's
     // heartbeat reports, which folds the pause and the meeting hold both. So

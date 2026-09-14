@@ -166,6 +166,7 @@ function harness(options: { deviceId?: string; sendsNetwork?: boolean; active?: 
       runMode: { sendsNetwork: options.sendsNetwork ?? true },
       report: (message) => reports.push(message),
       emit: (kind, payload) => emitted.push({ kind, payload }),
+      now: () => NOW,
     },
     settings: {
       recordProductEvent: (name, properties) => {

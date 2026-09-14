@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
 import { LIVE_DEFAULTS, LIVE_SESSION_OUTCOME, type LiveDiagnostics } from "@sidecar/live";
-import { VOICE_SOURCE } from "@sidecar/settings/wire";
 import { test } from "vitest";
 import {
   HOSTED_VOICE_UNAVAILABLE_NOTE,
   hostedVoiceUnavailableNote,
   microphoneAccessRow,
-  VOICE_SOURCE_DETAIL,
-  VOICE_SOURCE_LABEL,
   voiceAttentionNote,
-  voiceSourceLabel,
 } from "./microphone-access";
 
 /** A hosted diagnostics report with only what a test wants to vary. */
@@ -160,12 +156,4 @@ test("the emergency ceiling is surfaced only as temporary unavailability", () =>
     hostedVoiceUnavailableNote(diagnostics({ lastOutcome: LIVE_SESSION_OUTCOME.NO_ACCOUNT })),
     undefined,
   );
-});
-
-test("the toggle names both sources and explains each one", () => {
-  for (const source of [VOICE_SOURCE.ACCOUNT, VOICE_SOURCE.KEY]) {
-    assert.ok(VOICE_SOURCE_LABEL[source].length > 0, source);
-    assert.ok(VOICE_SOURCE_DETAIL[source].length > 0, source);
-    assert.equal(voiceSourceLabel(source), VOICE_SOURCE_LABEL[source]);
-  }
 });

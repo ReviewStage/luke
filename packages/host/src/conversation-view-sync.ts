@@ -22,6 +22,7 @@ import {
   isSpeechEventKind,
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
+  SPEECH_OFFERED_EVENT_PAYLOAD,
   unparsedWire,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -94,6 +95,13 @@ interface HeldSpeechEvent {
   readonly conversationId: string;
   readonly kind: ConversationEventKind;
   readonly seq: number;
+  /**
+   * For an offer, the instant it stops standing, as the offer's own payload
+   * says; an offer whose payload did not read is taken to have expired the
+   * instant it was made, as the service's own reading of it does. Present on
+   * the offered event alone, since a later event is a later state.
+   */
+  readonly expiresAt?: number;
 }
 
 /**
@@ -273,6 +281,9 @@ export class ConversationViewSync {
           conversationId: event.conversationId,
           kind: event.kind,
           seq: event.seq,
+          ...(event.kind === CONVERSATION_EVENT_KIND.SPEECH_OFFERED
+            ? { expiresAt: offerExpiresAt(event) }
+            : undefined),
         });
         moved = true;
         continue;
@@ -396,6 +407,23 @@ export class ConversationViewSync {
     this.#unreadable = row;
     this.#settled = true;
     this.#revision += 1;
+  }
+
+  /**
+   * How many briefings stand on offer to the account at `now`: messages whose
+   * latest speech event is the offer itself, not yet claimed, held, spoken,
+   * pushed, or expired by a later event, and not past the offer's own
+   * instant. Read from the events this device was told and nothing it
+   * inferred, so the count moves only when a row does.
+   */
+  openOffers(now: number): number {
+    let open = 0;
+    for (const event of this.#speech.values()) {
+      if (event.kind !== CONVERSATION_EVENT_KIND.SPEECH_OFFERED) continue;
+      if (event.expiresAt === undefined || event.expiresAt <= now) continue;
+      open += 1;
+    }
+    return open;
   }
 
   /** Drops everything held and every cursor: the account is leaving, and the next one's reads start from the beginning. */
@@ -596,4 +624,15 @@ export class ConversationViewSync {
     }
     return dropped;
   }
+}
+
+/** The instant an offer stops standing: its payload's, or the offer's own instant where the payload did not read. */
+function offerExpiresAt(event: ConversationReadEvent): number {
+  const payload =
+    event.payload === undefined
+      ? undefined
+      : Result.getOrUndefined(
+          readEither(SPEECH_OFFERED_EVENT_PAYLOAD)(unparsedWire(event.payload)),
+        );
+  return payload?.expiresAt ?? event.createdAt;
 }
