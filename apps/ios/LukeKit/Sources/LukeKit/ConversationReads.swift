@@ -48,8 +48,9 @@ public enum ConversationViewSourceKind: String, Sendable {
 }
 
 /// What a tool call is to the view — `CONVERSATION_VIEW_TOOL_KIND` in
-/// `@sidecar/session`: an announcement or an action draws a row of its own,
-/// and a detail draws only inside the expanded turn.
+/// `@sidecar/session`: the view still tells the Apple clients whether a call
+/// was an announcement, an action, or a detail, even though the thread now
+/// folds every stored tool call of one assistant message together.
 public enum ConversationViewToolKind: String, Sendable {
     case announce
     case action

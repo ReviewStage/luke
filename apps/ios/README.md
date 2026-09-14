@@ -221,8 +221,8 @@ thread later:
 - `ConversationToolRow` composes an action's row from the call's arguments
   and the envelope with the phone's own wording; `ConversationTurnRows` turns a
   group into rows — text bubbles, reasoning collapsed, announcements marked
-  when unspoken, actions folded under a count once a turn carries two, details
-  and refused actions folded under the turn, and a turn Luke opened himself
+  when unspoken, every stored tool call of one assistant message folded
+  together ahead of that message's words, and a turn Luke opened himself
   marked as his own judgment.
 
 The decoders are tested against the JSON fixtures the TypeScript packages

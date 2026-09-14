@@ -6,11 +6,13 @@ import SwiftUI
 /// change signal, over the one URLSession the wrist waits for a path on. The
 /// list only reads. A rating the developer gave a message is shown under
 /// its turn and offered nowhere; the phone draws the control. The developer's
-/// asks are sent bubbles and Luke's replies received ones, an action is one
-/// wrapping sentence that opens its session's screen while the roster still
-/// holds it, and a turn Luke opened himself leads with his face. The poll
-/// runs only while the app is active: the wrist dropping or the app leaving
-/// cancels it, and a poll cut short that way is not the service unreachable.
+/// asks are sent bubbles and Luke's replies received ones; every stored tool
+/// call of one assistant message stands in one fold before that message's
+/// words, a session action in the richer sentence row and every other call
+/// in the quieter tool-name-and-state row; and a turn Luke opened himself
+/// leads with his face. The poll runs only while the app is active: the wrist
+/// dropping or the app leaving cancels it, and a poll cut short that way is
+/// not the service unreachable.
 struct WatchConversationView: View {
     let conversation: ConversationStore
 
@@ -18,7 +20,7 @@ struct WatchConversationView: View {
     @Environment(WatchRosterStore.self) private var store
     @Environment(WatchNavigation.self) private var navigation
     @Environment(\.scenePhase) private var scenePhase
-    /// The reader's presses on each turn's actions fold, by turn id.
+    /// The reader's presses on each tool-call fold, by row id.
     @State private var foldChoices: [String: ConversationFoldChoice] = [:]
     /// The instant the thread's dates are read against; moves when a poll
     /// lands, when the page appears, and at midnight.
@@ -58,7 +60,7 @@ struct WatchConversationView: View {
                                 row: row,
                                 judgment: turn.rows.judgment,
                                 pending: turn.rows.pending,
-                                foldChoice: foldBinding(turn.rows.turnId),
+                                foldChoice: foldBinding(row.id),
                                 openSession: { session in navigation.open(session) }
                             )
                         }
@@ -105,10 +107,10 @@ struct WatchConversationView: View {
         }
     }
 
-    private func foldBinding(_ turnId: String) -> Binding<ConversationFoldChoice?> {
+    private func foldBinding(_ rowId: String) -> Binding<ConversationFoldChoice?> {
         Binding(
-            get: { foldChoices[turnId] },
-            set: { foldChoices[turnId] = $0 }
+            get: { foldChoices[rowId] },
+            set: { foldChoices[rowId] = $0 }
         )
     }
 
@@ -151,9 +153,7 @@ private struct WatchConversationRow: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-        case .action(_, let toolRow, _):
-            WatchActionRow(row: toolRow, judgment: judgment, openSession: openSession)
-        case .actionsFold(_, let rows, _):
+        case .toolCallsFold(_, let rows, _):
             WatchFold(
                 isExpanded: Binding(
                     get: { ConversationTurnRows.foldOpen(choice: foldChoice, pending: pending) },
@@ -162,7 +162,12 @@ private struct WatchConversationRow: View {
             ) {
                 VStack(alignment: .leading, spacing: 6) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                        WatchActionRow(row: row, judgment: judgment, openSession: openSession)
+                        switch row {
+                        case .action(_, let action):
+                            WatchActionRow(row: action, judgment: judgment, openSession: openSession)
+                        case .detail(let part):
+                            detail(part)
+                        }
                     }
                 }
             } label: {
@@ -170,22 +175,9 @@ private struct WatchConversationRow: View {
                     if judgment == .own {
                         LukeMark().foregroundStyle(.secondary).frame(width: 14, height: 14)
                     }
-                    Text("\(rows.count) actions")
+                    Text(rows.count == 1 ? "1 tool call" : "\(rows.count) tool calls")
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
-                }
-            }
-        case .details(_, let items):
-            WatchFoldRow(label: items.count == 1 ? "1 detail" : "\(items.count) details") {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(items) { item in
-                        switch item {
-                        case .tool(let part):
-                            detail(part)
-                        case .refusedAction(_, let row):
-                            WatchActionRow(row: row, judgment: judgment, openSession: openSession)
-                        }
-                    }
                 }
             }
         }
@@ -228,8 +220,8 @@ private struct WatchConversationRow: View {
         }
     }
 
-    /// A call the view classed as a detail: the turn's working, named by its
-    /// tool and its state and nothing of what it read or wrote.
+    /// A call the view classed as a detail: named by its tool and its state
+    /// and nothing of what it read or wrote.
     private func detail(_ part: ToolPart) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             HStack(spacing: 4) {

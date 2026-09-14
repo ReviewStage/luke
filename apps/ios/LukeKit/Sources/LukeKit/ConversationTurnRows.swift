@@ -23,18 +23,17 @@ public enum ConversationSpeaker: Sendable {
     case own
 }
 
-/// What a turn folds a level down: a call the view classed as a detail — a
-/// read, a workspace write, a delegation — named by its tool and state and
-/// nothing of what it read or wrote, and an action that was refused, drawn
-/// inside the turn that tried it and never as a row of its own.
-public enum ConversationDetail: Equatable, Sendable, Identifiable {
-    case tool(ToolPart)
-    case refusedAction(toolCallId: String, row: ConversationToolRow)
+/// One stored tool call of an assistant message as the thread draws it
+/// inside that message's fold: a session action keeps the richer action row,
+/// and every other tool call keeps the quieter tool-name-and-state row.
+public enum ConversationToolCall: Equatable, Sendable, Identifiable {
+    case action(toolCallId: String, row: ConversationToolRow)
+    case detail(ToolPart)
 
     public var id: String {
         switch self {
-        case .tool(let part): part.toolCallId
-        case .refusedAction(let toolCallId, _): toolCallId
+        case .action(let toolCallId, _): toolCallId
+        case .detail(let part): part.toolCallId
         }
     }
 }
@@ -67,17 +66,13 @@ public enum ConversationRow: Equatable, Sendable, Identifiable {
     )
     /// Luke's thought before what followed it, folded to a line that opens on its words.
     case reasoning(id: String, text: String)
-    /// One action, standing as a row of its own.
-    case action(id: String, row: ConversationToolRow, at: Date)
-    /// Every action of a turn that carried several, under one line that counts them.
-    case actionsFold(id: String, rows: [ConversationToolRow], at: Date)
-    /// The turn's working, under a count: closed by default.
-    case details(id: String, items: [ConversationDetail])
+    /// Every stored tool call of one assistant message, under one line that
+    /// counts them and dated by that message.
+    case toolCallsFold(id: String, rows: [ConversationToolCall], at: Date)
 
     public var id: String {
         switch self {
-        case .words(let id, _, _, _, _, _), .reasoning(let id, _), .action(let id, _, _),
-             .actionsFold(let id, _, _), .details(let id, _):
+        case .words(let id, _, _, _, _, _), .reasoning(let id, _), .toolCallsFold(let id, _, _):
             id
         }
     }
@@ -87,13 +82,13 @@ public enum ConversationRow: Equatable, Sendable, Identifiable {
     /// their own.
     public var instant: Date? {
         switch self {
-        case .words(_, _, _, let at, _, _), .action(_, _, let at), .actionsFold(_, _, let at): at
-        case .reasoning, .details: nil
+        case .words(_, _, _, let at, _, _), .toolCallsFold(_, _, let at): at
+        case .reasoning: nil
         }
     }
 }
 
-/// The reader's press on an actions fold, remembered with the turn state it
+/// The reader's press on a tool-call fold, remembered with the turn state it
 /// was made under. The fold follows the turn — open while the turn still
 /// runs, closed once it has settled — unless the reader pressed it under that
 /// same state, in which case their press holds; a press made while the turn
@@ -110,11 +105,11 @@ public struct ConversationFoldChoice: Equatable, Sendable {
 }
 
 /// One turn group as rows: each message's parts in order, drawn as what they
-/// are, the turn's actions folded under a count once there are two, and its
-/// working — details and refused actions — closing the turn under one fold.
-/// Which tool calls are announcements, actions, or details is the view's
-/// decision, read back by call id; a call the view did not describe is a
-/// detail. Pure over the group and the roster, so the screen only draws.
+/// are, and every assistant message that carried tool calls opening with one
+/// fold of them ahead of the words they produced. Which tool calls are
+/// announcements, actions, or details is the view's decision, read back by
+/// call id; a call the view did not describe still joins that fold. Pure
+/// over the group and the roster, so the screen only draws.
 public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
     public let turnId: String
     public let judgment: ConversationJudgment
@@ -132,9 +127,6 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
     /// break is measured from.
     public var closesAt: Date? { rows.compactMap(\.instant).last }
 
-    /// How many actions a turn carries before they fold under a count rather than standing as rows.
-    public static let foldFromActions = 2
-
     /// The origins the developer opened a turn by; every other origin is a wake, and the turn Luke's own.
     private static let developerOrigins: Set<TurnOrigin> = [.typed, .spoken]
     private static let pendingStatuses: Set<TurnStatus> = [.queued, .running]
@@ -151,8 +143,8 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
         return pendingStatuses.contains(turn.status)
     }
 
-    /// Whether an actions fold stands open, as the turn's state has it unless
-    /// the reader's press under that same state says otherwise.
+    /// Whether a tool-call fold stands open, as the turn's state has it
+    /// unless the reader's press under that same state says otherwise.
     public static func foldOpen(choice: ConversationFoldChoice?, pending: Bool) -> Bool {
         guard let choice, choice.pending == pending else { return pending }
         return choice.open
@@ -160,10 +152,9 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
 
     /// The row a screen asked to open at one message — a push's tap — scrolls
     /// to: the message's own row where it drew one, or the first of its parts'
-    /// rows, whose id is the message's with the part's index behind a colon
+    /// rows, whose id is the message's with a suffix behind a colon
     /// (a message id is a UUID and holds none). Nil where the message drew no
-    /// row of its own, every part folded into the turn's details, or stands
-    /// in none of these turns at all.
+    /// row of its own, or stands in none of these turns at all.
     public static func anchor(forMessage messageId: String, in turns: [ConversationTurnRows]) -> String? {
         let partPrefix = "\(messageId):"
         for turn in turns {
@@ -178,47 +169,36 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
         turnId = group.turnId
         judgment = Self.judgment(of: group.turn)
         pending = Self.pending(group.turn)
-        var drawn: [Drawn] = []
-        var details: [ConversationDetail] = []
+        var rows: [ConversationRow] = []
         for message in group.messages {
-            Self.draw(
-                message, conversationId: group.conversationId, judgment: judgment, roster: roster,
-                into: &drawn, details: &details
+            rows.append(
+                contentsOf: Self.draw(
+                    message, conversationId: group.conversationId, judgment: judgment, roster: roster
+                )
             )
         }
-        var rows = Self.placeActions(drawn, turnId: group.turnId)
-        if !details.isEmpty { rows.append(.details(id: "\(group.turnId):details", items: details)) }
         self.rows = rows
-    }
-
-    /// A row as a message hands it to its turn: drawn already, or an action
-    /// the turn decides the place of.
-    private enum Drawn {
-        case row(ConversationRow)
-        case action(id: String, row: ConversationToolRow, at: Date)
     }
 
     private static func draw(
         _ view: ConversationReadMessage,
         conversationId: String,
         judgment: ConversationJudgment,
-        roster: [RosterSession],
-        into drawn: inout [Drawn],
-        details: inout [ConversationDetail]
-    ) {
+        roster: [RosterSession]
+    ) -> [ConversationRow] {
         let message = view.message
         switch message.attribution {
         case .system:
-            return
+            return []
         case .user(let metadata):
             let text = message.parts.compactMap { part -> String? in
                 if case .text(let text) = part { return text }
                 return nil
             }.joined(separator: "\n\n")
             let speaker: ConversationSpeaker = metadata.author == .developer ? .you : .note
-            drawn.append(
-                .row(.words(id: message.id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil))
-            )
+            return [
+                .words(id: message.id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil),
+            ]
         case .assistant:
             let described = Dictionary(
                 view.tools.map { ($0.identity.toolCallId, $0) }, uniquingKeysWith: { first, _ in first }
@@ -228,75 +208,50 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
                 conversationId: conversationId,
                 kind: view.tools.contains { $0.kind == .announce } ? .announcement : .reply
             )
-            var lastWords: Int?
+            var rows: [ConversationRow] = []
+            var toolCalls: [ConversationToolCall] = []
+            var lastWordsIndex: Int?
             for (index, part) in message.parts.enumerated() {
                 let id = "\(message.id):\(index)"
                 switch part {
                 case .text(let text):
                     let speaker: ConversationSpeaker = judgment == .own ? .own : .luke
-                    drawn.append(
-                        .row(.words(id: id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil))
+                    rows.append(
+                        .words(id: id, speaker: speaker, text: text, at: view.createdAt, unspoken: false, rateable: nil)
                     )
-                    lastWords = drawn.count - 1
+                    lastWordsIndex = rows.count - 1
                 case .reasoning(let text):
-                    drawn.append(.row(.reasoning(id: id, text: text)))
+                    rows.append(.reasoning(id: id, text: text))
                 case .stepStart, .other:
                     continue
                 case .tool(let tool):
+                    if let row = ConversationToolRow(part: tool, roster: roster) {
+                        toolCalls.append(.action(toolCallId: tool.toolCallId, row: row))
+                    } else {
+                        toolCalls.append(.detail(tool))
+                    }
                     switch described[tool.toolCallId] {
                     case .announce(_, let unspoken):
                         guard let words = tool.input?[briefingArgument]?.stringValue else { continue }
-                        drawn.append(
-                            .row(.words(id: id, speaker: .luke, text: words, at: view.createdAt, unspoken: unspoken, rateable: nil))
+                        rows.append(
+                            .words(id: id, speaker: .luke, text: words, at: view.createdAt, unspoken: unspoken, rateable: nil)
                         )
-                        lastWords = drawn.count - 1
-                    case .action(_, let outcome):
-                        guard let row = ConversationToolRow(part: tool, roster: roster) else {
-                            details.append(.tool(tool))
-                            continue
-                        }
-                        if outcome == .refused {
-                            details.append(.refusedAction(toolCallId: tool.toolCallId, row: row))
-                        } else {
-                            drawn.append(.action(id: id, row: row, at: view.createdAt))
-                        }
-                    case .detail, nil:
-                        details.append(.tool(tool))
+                        lastWordsIndex = rows.count - 1
+                    case .action, .detail, nil:
+                        continue
                     }
                 }
             }
-            if let lastWords, case .row(.words(let id, let speaker, let text, let at, let unspoken, _)) = drawn[lastWords] {
-                drawn[lastWords] = .row(
+            if let lastWordsIndex,
+               case .words(let id, let speaker, let text, let at, let unspoken, _) = rows[lastWordsIndex]
+            {
+                rows[lastWordsIndex] =
                     .words(id: id, speaker: speaker, text: text, at: at, unspoken: unspoken, rateable: rateable)
-                )
             }
-        }
-    }
-
-    /// The turn's rows in order, its actions placed: each a stamped row of its
-    /// own while there are too few to fold, or all of them inside one fold
-    /// standing where the first stood.
-    private static func placeActions(_ drawn: [Drawn], turnId: String) -> [ConversationRow] {
-        let actions = drawn.compactMap { entry -> (id: String, row: ConversationToolRow, at: Date)? in
-            if case .action(let id, let row, let at) = entry { return (id, row, at) }
-            return nil
-        }
-        guard let first = actions.first, actions.count >= foldFromActions else {
-            return drawn.map { entry in
-                switch entry {
-                case .row(let row): row
-                case .action(let id, let row, let at): .action(id: id, row: row, at: at)
-                }
-            }
-        }
-        return drawn.compactMap { entry in
-            switch entry {
-            case .row(let row):
-                return row
-            case .action(let id, _, _):
-                guard id == first.id else { return nil }
-                return .actionsFold(id: "\(turnId):actions", rows: actions.map(\.row), at: first.at)
-            }
+            if toolCalls.isEmpty { return rows }
+            return [
+                .toolCallsFold(id: "\(message.id):tools", rows: toolCalls, at: view.createdAt),
+            ] + rows
         }
     }
 }

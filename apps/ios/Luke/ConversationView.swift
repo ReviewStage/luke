@@ -5,17 +5,17 @@ import SwiftUI
 /// The one long Conversation the account holds, read from the service's
 /// stored messages: the same thread the Mac's Conversation tab draws, as the
 /// per-resource reads answer it, grouped by turn. The developer's asks are
-/// sent bubbles and Luke's replies received ones; a briefing is his words in
-/// his own bubble, marked when nobody heard it; an action is a row composed
-/// on this phone from the call's arguments and its envelope, the session it
-/// reached a chip that opens that session's screen while the roster still
-/// holds it; a turn Luke opened himself leads with his face and never wears
-/// a reply's bubble. Under each of Luke's messages stand two thumbs, the one
-/// write this screen makes: a verdict on that message, sent to the service
-/// under the account's fence and drawn back from the latest rating event,
-/// so a verdict given on the Mac shows here and one given here shows there.
-/// The screen polls the change signal while it stands in the foreground and
-/// draws only what it holds in memory.
+/// sent bubbles and Luke's replies received ones; every stored tool call of
+/// one assistant message stands in one fold before that message's words, a
+/// session action in the richer sentence row and every other call in the
+/// quieter tool-name-and-state row; a briefing is still his words in his own
+/// bubble, marked when nobody heard it; and a turn Luke opened himself leads
+/// with his face and never wears a reply's bubble. Under each of Luke's
+/// messages stand two thumbs, the one write this screen makes: a verdict on
+/// that message, sent to the service under the account's fence and drawn back
+/// from the latest rating event, so a verdict given on the Mac shows here and
+/// one given here shows there. The screen polls the change signal while it
+/// stands in the foreground and draws only what it holds in memory.
 ///
 /// A briefing's notification tapped opens this screen at that briefing: the
 /// store resolves the tapped message to its row, the screen scrolls there and
@@ -35,7 +35,7 @@ struct ConversationView: View {
     @Environment(SessionsStore.self) private var store
     @Environment(ProductEventSender.self) private var events
     @Environment(\.scenePhase) private var scenePhase
-    /// The reader's presses on each turn's actions fold, by turn id.
+    /// The reader's presses on each tool-call fold, by row id.
     @State private var foldChoices: [String: ConversationFoldChoice] = [:]
     /// The instant the thread's dates are read against; moves when a poll
     /// lands, when the screen appears, and at midnight.
@@ -81,7 +81,7 @@ struct ConversationView: View {
                                 row: row,
                                 judgment: turn.judgment,
                                 pending: turn.pending,
-                                foldChoice: foldBinding(turn.turnId),
+                                foldChoice: foldBinding(row.id),
                                 openSession: { session in store.openLeavingConversation(session) },
                                 ratings: conversation.ratings,
                                 canRate: conversation.canRate,
@@ -171,10 +171,10 @@ struct ConversationView: View {
         }
     }
 
-    private func foldBinding(_ turnId: String) -> Binding<ConversationFoldChoice?> {
+    private func foldBinding(_ rowId: String) -> Binding<ConversationFoldChoice?> {
         Binding(
-            get: { foldChoices[turnId] },
-            set: { foldChoices[turnId] = $0 }
+            get: { foldChoices[rowId] },
+            set: { foldChoices[rowId] = $0 }
         )
     }
 
@@ -266,18 +266,14 @@ private struct ConversationRowView: View {
             }
         case .reasoning(_, let text):
             ReasoningRow(text: text)
-        case .action(_, let toolRow, _):
-            ActionRow(row: toolRow, judgment: judgment, openSession: openSession)
-        case .actionsFold(_, let rows, _):
-            ActionsFoldRow(
+        case .toolCallsFold(_, let rows, _):
+            ToolCallsFoldRow(
                 rows: rows,
                 judgment: judgment,
                 pending: pending,
                 choice: $foldChoice,
                 openSession: openSession
             )
-        case .details(_, let items):
-            DetailsRow(items: items, judgment: judgment, openSession: openSession)
         }
     }
 
@@ -498,11 +494,11 @@ private struct ActionRow: View {
     }
 }
 
-/// Every action a turn carried, under one line that counts them: open while
-/// the turn still runs, closed once it has settled, the reader's press
-/// holding under the state it was made in.
-private struct ActionsFoldRow: View {
-    let rows: [ConversationToolRow]
+/// Every stored tool call of one assistant message, under one line that
+/// counts them: open while the turn still runs, closed once it has settled,
+/// the reader's press holding under the state it was made in.
+private struct ToolCallsFoldRow: View {
+    let rows: [ConversationToolCall]
     let judgment: ConversationJudgment
     let pending: Bool
     @Binding var choice: ConversationFoldChoice?
@@ -517,7 +513,12 @@ private struct ActionsFoldRow: View {
         ) {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                    ActionRow(row: row, judgment: judgment, openSession: openSession)
+                    switch row {
+                    case .action(_, let action):
+                        ActionRow(row: action, judgment: judgment, openSession: openSession)
+                    case .detail(let part):
+                        detail(part)
+                    }
                 }
             }
             .padding(.top, 8)
@@ -528,7 +529,7 @@ private struct ActionsFoldRow: View {
                         .foregroundStyle(Color.inkSecondary)
                         .frame(width: 18, height: 18)
                 }
-                Text("\(rows.count) actions")
+                Text(rows.count == 1 ? "1 tool call" : "\(rows.count) tool calls")
                     .font(.subheadline)
                     .foregroundStyle(Color.inkSecondary)
             }
@@ -536,40 +537,9 @@ private struct ActionsFoldRow: View {
         .tint(Color.inkTertiary)
         .padding(.horizontal, 4)
     }
-}
 
-/// The turn's working under a count: closed by default, a native disclosure
-/// rather than a control of Luke's own.
-private struct DetailsRow: View {
-    let items: [ConversationDetail]
-    let judgment: ConversationJudgment
-    let openSession: (RosterSession) -> Void
-    @State private var open = false
-
-    var body: some View {
-        DisclosureGroup(isExpanded: $open) {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(items) { item in
-                    switch item {
-                    case .tool(let part):
-                        detail(part)
-                    case .refusedAction(_, let row):
-                        ActionRow(row: row, judgment: judgment, openSession: openSession)
-                    }
-                }
-            }
-            .padding(.top, 8)
-        } label: {
-            Text(items.count == 1 ? "1 detail" : "\(items.count) details")
-                .font(.footnote)
-                .foregroundStyle(Color.inkTertiary)
-        }
-        .tint(Color.inkTertiary)
-        .padding(.horizontal, 4)
-    }
-
-    /// A call the view classed as a detail: the turn's working, named by its
-    /// tool and its state and nothing of what it read or wrote.
+    /// A call the view classed as a detail: named by its tool and its state
+    /// and nothing of what it read or wrote.
     private func detail(_ part: ToolPart) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {

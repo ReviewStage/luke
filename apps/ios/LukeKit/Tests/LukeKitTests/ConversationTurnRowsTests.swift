@@ -13,7 +13,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         ).groups
     }
 
-    func testATypedAskDrawsTheDevelopersWordsAndOneActionRow() throws {
+    func testATypedAskDrawsTheDevelopersWordsAndOneToolCallFold() throws {
         let rows = ConversationTurnRows(group: try fixtureGroups()[0], roster: [])
         XCTAssertEqual(rows.judgment, .ask)
         XCTAssertFalse(rows.pending)
@@ -25,7 +25,9 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertEqual(text, "Tell the fixture session to run the tests.")
         XCTAssertFalse(unspoken)
         XCTAssertNil(rateable)
-        guard case .action(_, let action, _) = rows.rows[1] else { return XCTFail("the action") }
+        guard case .toolCallsFold(_, let toolCalls, _) = rows.rows[1] else { return XCTFail("the fold") }
+        XCTAssertEqual(toolCalls.count, 1)
+        guard case .action(_, let action) = toolCalls[0] else { return XCTFail("the action") }
         XCTAssertEqual(action.kind, .message)
         XCTAssertEqual(action.outcome, .accepted)
         guard case .words(_, let replySpeaker, let reply, _, _, let replyRateable) = rows.rows[2] else {
@@ -49,9 +51,9 @@ final class ConversationTurnRowsTests: XCTestCase {
         let reply = "2b000000-0000-4000-8000-000000000012"
         let briefing = "2b000000-0000-4000-8000-000000000032"
         XCTAssertEqual(ConversationTurnRows.anchor(forMessage: ask, in: turns), ask)
-        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: reply, in: turns), "\(reply):1")
-        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: briefing, in: turns), "\(briefing):0")
-        XCTAssertEqual(turns.flatMap(\.rows).map(\.id).filter { $0 == "\(briefing):0" }.count, 1)
+        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: reply, in: turns), "\(reply):tools")
+        XCTAssertEqual(ConversationTurnRows.anchor(forMessage: briefing, in: turns), "\(briefing):tools")
+        XCTAssertEqual(turns.flatMap(\.rows).map(\.id).filter { $0 == "\(briefing):tools" }.count, 1)
         XCTAssertNil(ConversationTurnRows.anchor(forMessage: "2b000000-0000-4000-8000-0000000000ff", in: turns))
         XCTAssertNil(ConversationTurnRows.anchor(forMessage: "2b000000", in: turns))
     }
@@ -83,8 +85,12 @@ final class ConversationTurnRowsTests: XCTestCase {
     func testARosterDiffTurnIsLukesOwnAndItsBriefingIsHisWords() throws {
         let rows = ConversationTurnRows(group: try fixtureGroups()[1], roster: [])
         XCTAssertEqual(rows.judgment, .own)
-        XCTAssertEqual(rows.rows.count, 1)
-        guard case .words(_, let speaker, let text, _, let unspoken, let rateable) = rows.rows[0] else {
+        XCTAssertEqual(rows.rows.count, 2)
+        guard case .toolCallsFold(_, let toolCalls, _) = rows.rows[0] else { return XCTFail("the fold") }
+        XCTAssertEqual(toolCalls.count, 1)
+        guard case .detail(let tool) = toolCalls[0] else { return XCTFail("the announce call") }
+        XCTAssertEqual(tool.toolName, "announce")
+        guard case .words(_, let speaker, let text, _, let unspoken, let rateable) = rows.rows[1] else {
             return XCTFail("the briefing")
         }
         XCTAssertEqual(speaker, .luke)
@@ -113,7 +119,7 @@ final class ConversationTurnRowsTests: XCTestCase {
                 ),
             ]
         )
-        guard case .words(_, _, _, _, let unspoken, _) = ConversationTurnRows(group: marked, roster: []).rows[0] else {
+        guard case .words(_, _, _, _, let unspoken, _) = ConversationTurnRows(group: marked, roster: []).rows[1] else {
             return XCTFail("the briefing")
         }
         XCTAssertTrue(unspoken)
@@ -154,23 +160,25 @@ final class ConversationTurnRowsTests: XCTestCase {
         )
     }
 
-    func testSeveralActionsFoldAndARefusedOneCollapsesIntoTheDetails() throws {
+    func testSeveralToolCallsFoldAheadOfTheWordsInStoredOrder() throws {
         let rows = ConversationTurnRows(group: try actedGroup(), roster: [])
         XCTAssertEqual(rows.judgment, .own)
         XCTAssertFalse(rows.pending)
-        XCTAssertEqual(rows.rows.count, 4)
+        XCTAssertEqual(rows.rows.count, 3)
         guard case .reasoning = rows.rows[0] else { return XCTFail("the thought") }
-        guard case .actionsFold(_, let folded, _) = rows.rows[1] else { return XCTFail("the fold") }
-        XCTAssertEqual(folded.map(\.outcome), [.accepted, .unknown])
+        guard case .toolCallsFold(_, let folded, _) = rows.rows[1] else { return XCTFail("the fold") }
+        XCTAssertEqual(
+            folded,
+            [
+                .action(toolCallId: "call_4a0000000000000001", row: try XCTUnwrap(ConversationToolRow(part: part(0, in: try actedGroup()), roster: []))),
+                .action(toolCallId: "call_4a0000000000000002", row: try XCTUnwrap(ConversationToolRow(part: part(1, in: try actedGroup()), roster: []))),
+                .action(toolCallId: "call_4a0000000000000003", row: try XCTUnwrap(ConversationToolRow(part: part(2, in: try actedGroup()), roster: []))),
+            ]
+        )
         guard case .words(_, let speaker, _, _, _, let rateable) = rows.rows[2] else { return XCTFail("Luke's words") }
         XCTAssertEqual(speaker, .own)
         XCTAssertEqual(rateable?.kind, .reply)
         XCTAssertEqual(rateable?.messageId, "2b000000-0000-4000-8000-000000000042")
-        guard case .details(_, let items) = rows.rows[3] else { return XCTFail("the details") }
-        XCTAssertEqual(items.count, 1)
-        guard case .refusedAction(let toolCallId, let refused) = items[0] else { return XCTFail("the refusal") }
-        XCTAssertEqual(toolCallId, "call_4a0000000000000002")
-        XCTAssertEqual(refused.outcome, .refused)
     }
 
     func testARunningTurnIsPending() throws {
@@ -214,7 +222,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertTrue(ConversationTurnRows.foldOpen(choice: openedWhileSettled, pending: true))
     }
 
-    func testAToolTheViewDidNotDescribeAndANonSessionActionAreDetails() {
+    func testAToolTheViewDidNotDescribeAndANonSessionActionStayInsideTheToolCallFold() {
         let read = ToolPart(toolName: "read_transcript", toolCallId: "c1", state: .outputAvailable, input: .object([:]), output: .object([:]))
         let remember = ToolPart(toolName: "remember_fact", toolCallId: "c2", state: .outputAvailable, input: .object([:]), output: .object(["status": .string("accepted")]))
         let message = UIMessage(
@@ -236,10 +244,10 @@ final class ConversationTurnRowsTests: XCTestCase {
         )
         let rows = ConversationTurnRows(group: group, roster: [])
         XCTAssertEqual(rows.rows.count, 2)
-        guard case .words(_, let speaker, _, _, _, _) = rows.rows[0] else { return XCTFail("the words") }
+        guard case .toolCallsFold(_, let toolCalls, _) = rows.rows[0] else { return XCTFail("the fold") }
+        XCTAssertEqual(toolCalls, [.detail(read), .detail(remember)])
+        guard case .words(_, let speaker, _, _, _, _) = rows.rows[1] else { return XCTFail("the words") }
         XCTAssertEqual(speaker, .luke)
-        guard case .details(_, let items) = rows.rows[1] else { return XCTFail("the details") }
-        XCTAssertEqual(items, [.tool(read), .tool(remember)])
     }
 
     func testAUserNoteTheBrainWroteIsNotTheDevelopersVoice() {
@@ -271,5 +279,10 @@ final class ConversationTurnRowsTests: XCTestCase {
         }
         XCTAssertNil(first)
         XCTAssertEqual(last, RateableMessage(messageId: "m", conversationId: "c", kind: .reply))
+    }
+
+    private func part(_ index: Int, in group: ConversationReadTurnGroup) throws -> ToolPart {
+        let reply = try XCTUnwrap(group.messages.first?.message)
+        return try XCTUnwrap(reply.toolParts[index])
     }
 }
