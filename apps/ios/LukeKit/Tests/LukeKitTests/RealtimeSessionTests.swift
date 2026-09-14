@@ -178,14 +178,15 @@ final class RealtimeWebSocketAuthenticationTests: XCTestCase {
 
 // MARK: - State machine tests
 
-@MainActor
 final class RealtimeSessionStateTests: XCTestCase {
-    func testInitialStatusIsIdle() {
+    @MainActor
+    func testInitialStatusIsIdle() async {
         let opts = makeOptions(ws: MockWebSocketTask())
         let session = RealtimeSession(options: opts)
         XCTAssertEqual(session.status, .idle)
     }
 
+    @MainActor
     func testConnectSetsConnectingThenTransitionsOnSessionCreated() async throws {
         let ws = MockWebSocketTask()
         var statuses: [RealtimeStatus] = []
@@ -202,6 +203,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(statuses.contains(.ready))
     }
 
+    @MainActor
     func testContextItemSentOnChannelOpen() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)
@@ -216,6 +218,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains(testContext.itemId))
     }
 
+    @MainActor
     func testPhoneComposedContextItemsFollowTheRosterItemOnChannelOpen() async throws {
         let ws = MockWebSocketTask()
         var opts = makeOptions(ws: ws)
@@ -238,6 +241,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testContextItemIdIsEscapedLikeItsText() async throws {
         let ws = MockWebSocketTask()
         var opts = makeOptions(ws: ws)
@@ -257,6 +261,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(item?["id"] as? String, hostileId, "The id travels as one string, never as structure")
     }
 
+    @MainActor
     func testTheMintedToolsAreReadOffTheConfirmedSession() async throws {
         let ws = MockWebSocketTask()
         var minted: [[String]] = []
@@ -275,6 +280,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(minted, [["open_session", "show_panel"]])
     }
 
+    @MainActor
     func testBeginAndEndTurnSendsCommit() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)
@@ -295,6 +301,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .thinking)
     }
 
+    @MainActor
     func testServerErrorBeforeResponseStartsReturnsReadyWithoutClosingConnection() async throws {
         let ws = MockWebSocketTask()
         var fatalErrors: [String] = []
@@ -321,6 +328,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(ws.closeCount, 0)
     }
 
+    @MainActor
     func testServerErrorAfterResponseStartsDoesNotEndActiveResponse() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)
@@ -340,6 +348,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(ws.closeCount, 0)
     }
 
+    @MainActor
     func testGAOutputAudioEventsPlayAndDrainBeforeReturningReady() async throws {
         let ws = MockWebSocketTask()
         let player = RecordingPlayer()
@@ -364,6 +373,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .ready)
     }
 
+    @MainActor
     func testBeginningTurnInterruptsPlaybackAndCorrectsServerConversation() async throws {
         let ws = MockWebSocketTask()
         let player = RecordingPlayer()
@@ -434,6 +444,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .listening)
     }
 
+    @MainActor
     func testInterruptionProtocolErrorsStayOutOfTheConversation() async throws {
         let ws = MockWebSocketTask()
         let player = RecordingPlayer()
@@ -468,6 +479,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .listening)
     }
 
+    @MainActor
     func testGAOutputTranscriptEventsStreamAndFinishCaption() async throws {
         let ws = MockWebSocketTask()
         var captions: [String?] = []
@@ -489,6 +501,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertNil(captions[2])
     }
 
+    @MainActor
     func testCompletedInputTranscriptReturnsDeveloperWords() async throws {
         let ws = MockWebSocketTask()
         var spokenAsks: [String] = []
@@ -505,6 +518,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(spokenAsks, ["Hello Luke"])
     }
 
+    @MainActor
     func testPressAudioBufferedDuringConnecting() async throws {
         let ws = MockWebSocketTask()
         let capturer = SequenceCapturer(chunks: [[1, 2, 3]])
@@ -526,6 +540,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains("input_audio_buffer.append"), "Should flush buffered audio on open")
     }
 
+    @MainActor
     func testReconnectPressCapturesWhileConnectionMintIsPending() async throws {
         let ws = MockWebSocketTask()
         let mintStarted = AsyncGate()
@@ -557,6 +572,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains(#""type":"response.create""#))
     }
 
+    @MainActor
     func testNewTurnWhileConnectingSupersedesPendingCommit() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -574,6 +590,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertFalse(ws.outgoing.contains { $0.contains(#""type":"response.create""#) })
     }
 
+    @MainActor
     func testInterruptionDuringToolDispatchDoesNotResumeOldResponse() async throws {
         let ws = MockWebSocketTask()
         let dispatchStarted = AsyncGate()
@@ -615,6 +632,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testPrimaryAudioDrainingDuringAnActionDoesNotReturnToReadyBeforeTheFollowUp() async throws {
         let ws = MockWebSocketTask()
         let player = ControlledDrainPlayer()
@@ -662,6 +680,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .ready)
     }
 
+    @MainActor
     func testInterruptionDuringFollowUpRequestKeepsNewTurnArmed() async throws {
         let followUpSendStarted = AsyncGate()
         let allowFollowUpSend = AsyncGate()
@@ -707,6 +726,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(dispatchedNames, ["send_session_message", "rename_workspace"])
     }
 
+    @MainActor
     func testDelayedToolFollowUpCannotActAfterInterruption() async throws {
         let ws = MockWebSocketTask()
         var dispatchedNames: [String] = []
@@ -746,6 +766,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .listening)
     }
 
+    @MainActor
     func testPrimaryPlayerStaysActiveUntilToolFollowUpFinishes() async throws {
         let ws = MockWebSocketTask()
         let primaryPlayer = ControlledDrainPlayer()
@@ -791,6 +812,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .ready)
     }
 
+    @MainActor
     func testUnarmedResponseDoneRefusesCalls() async throws {
         let ws = MockWebSocketTask()
         var dispatchedNames: [String] = []
@@ -819,6 +841,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(sent.contains("not authorized"))
     }
 
+    @MainActor
     func testArmedResponseDoneDispatchesCalls() async throws {
         let ws = MockWebSocketTask()
         var dispatchedNames: [String] = []
@@ -855,6 +878,7 @@ final class RealtimeSessionStateTests: XCTestCase {
 
     // MARK: - Typed asks
 
+    @MainActor
     func testTypedAskSendsTheDeveloperWordsAndRequestsAnArmedResponse() async throws {
         let ws = MockWebSocketTask()
         var dispatchedNames: [String] = []
@@ -893,6 +917,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(dispatchedNames, ["open_session"])
     }
 
+    @MainActor
     func testTypedAskIsRefusedWhileTheMicrophoneIsOpen() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -909,6 +934,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertFalse(ws.outgoing.contains { $0.contains("Typed over the open microphone") })
     }
 
+    @MainActor
     func testEmptyAndIdleTypedAsksAreRefused() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -924,6 +950,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertFalse(ws.outgoing.contains { $0.contains(#""type":"response.create""#) })
     }
 
+    @MainActor
     func testTypedAskIsCutAtTheSessionMessageBound() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -941,6 +968,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertFalse(sent.contains("z"))
     }
 
+    @MainActor
     func testTypedAskWhileSpeakingInterruptsTheReply() async throws {
         let ws = MockWebSocketTask()
         let player = RecordingPlayer()
@@ -996,6 +1024,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertEqual(session.status, .thinking)
     }
 
+    @MainActor
     func testTypedAskWhileThinkingCancelsThePendingResponseBeforeStartingAnother() async throws {
         let firstCreateStarted = AsyncGate()
         let allowFirstCreate = AsyncGate()
@@ -1033,6 +1062,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertLessThan(item!, newCreate!)
     }
 
+    @MainActor
     func testTypedAskHeldWhileConnectingIsSentAtChannelOpen() async throws {
         let ws = MockWebSocketTask()
         let mintStarted = AsyncGate()
@@ -1072,6 +1102,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertFalse(ws.outgoing.contains { $0.contains("input_audio_buffer.commit") })
     }
 
+    @MainActor
     func testPressedTurnWhileConnectingOwnsTheResponseOverAHeldTypedAsk() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -1095,6 +1126,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         )
     }
 
+    @MainActor
     func testCloseResetsToIdle() async throws {
         let ws = MockWebSocketTask()
         let opts = makeOptions(ws: ws)
@@ -1113,6 +1145,7 @@ final class RealtimeSessionStateTests: XCTestCase {
 
     // MARK: - Speed
 
+    @MainActor
     func testApplySpeedOnAnOpenSessionSendsOneSessionUpdate() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))
@@ -1131,6 +1164,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertTrue(updates[0].contains(#""session":{"type":"realtime""#))
     }
 
+    @MainActor
     func testSpeedChosenWhileConnectingIsSentOnceTheChannelOpens() async throws {
         let ws = MockWebSocketTask()
         let mintStarted = AsyncGate()
@@ -1167,6 +1201,7 @@ final class RealtimeSessionStateTests: XCTestCase {
         XCTAssertLessThan(contextIndex!, updateIndex!)
     }
 
+    @MainActor
     func testApplySpeedWhileIdleSendsNothing() async throws {
         let ws = MockWebSocketTask()
         let session = RealtimeSession(options: makeOptions(ws: ws))

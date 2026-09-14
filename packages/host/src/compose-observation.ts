@@ -53,6 +53,8 @@ function isSessionIdentity(value: UnparsedWireValue): value is SessionIdentity &
 export interface ObservationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
+  /** Starts one fresh observation pass and answers at once, so callers can catch the roster up. */
+  readonly refreshRoster: Effect.Effect<void>;
   readonly sessionOpens: SessionOpens;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
@@ -368,6 +370,7 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   return {
     methods,
     loop,
+    refreshRoster: pokeRefresh,
     sessionOpens,
     rosterForClients,
     onRosterChange: (listener) => {

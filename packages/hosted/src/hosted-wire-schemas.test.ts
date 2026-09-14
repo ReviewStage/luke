@@ -9,7 +9,6 @@ import {
 import { test } from "vitest";
 import * as actionWire from "./action-wire.js";
 import * as askWire from "./ask-wire.js";
-import * as brainContract from "./brain-contract.js";
 import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
@@ -24,19 +23,16 @@ import * as turnEventsWire from "./turn-events-wire.js";
 import * as vaultWire from "./vault-wire.js";
 
 /**
- * Every schema the hosted wire declares, as the JSON Schema it emits. The
- * hosted contract's own request schemas are what a model's tool call is
- * measured against on the service, so these bytes travel the same way a tool
- * definition's do, and each module's set is typed against the module itself:
- * a schema added there does not compile until it is recorded here. Every
- * module in this package declares its schemas directly as Effect's own, so
- * every set below is `RecordedEffectJsonSchemas`.
+ * Every schema the hosted wire declares, as the JSON Schema it emits. A wire
+ * schema's bytes are what a client and the service hold each other to, so
+ * they are recorded the same way a tool definition's are, and each module's
+ * set is typed against the module itself: a schema added there does not
+ * compile until it is recorded here. Every module in this package declares
+ * its schemas directly as Effect's own, so every set below is
+ * `RecordedEffectJsonSchemas`.
  */
 
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
-
-/** The registry a `registered` schema is built with, which its node never carries. */
-const FIXTURE_TOOL_CATALOG: ReadonlySet<string> = new Set(["fixture_tool"]);
 
 const EFFECT_MODULE_SCHEMAS = {
   "action-wire": {
@@ -63,13 +59,6 @@ const EFFECT_MODULE_SCHEMAS = {
     deviceForgetRequestSchema: deviceWire.deviceForgetRequestSchema,
     deviceForgetAnswerSchema: deviceWire.deviceForgetAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof deviceWire>,
-  "brain-contract": {
-    hostedBrainCapabilitiesSchema: brainContract.hostedBrainCapabilitiesSchema,
-    hostedBrainEmbedRequestSchema: brainContract.hostedBrainEmbedRequestSchema,
-    hostedBrainEmbedAnswerSchema: brainContract.hostedBrainEmbedAnswerSchema,
-    hostedBrainCountTokensAnswerSchema: brainContract.hostedBrainCountTokensAnswerSchema,
-    hostedBrainPrefetchRequestSchema: brainContract.hostedBrainPrefetchRequestSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof brainContract>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
@@ -126,23 +115,6 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof turnEventsWire>,
 } as const;
 
-/**
- * The two the contract builds rather than declares: a request schema is made
- * against the tool catalog the other side registered, which the node it emits
- * never carries, so a synthetic catalog records the same bytes the service's
- * own does.
- */
-const BUILT_SCHEMAS = [
-  [
-    "brain-contract-hostedBrainRespondRequestSchema",
-    brainContract.hostedBrainRespondRequestSchema(FIXTURE_TOOL_CATALOG),
-  ],
-  [
-    "brain-contract-hostedBrainCountTokensRequestSchema",
-    brainContract.hostedBrainCountTokensRequestSchema(FIXTURE_TOOL_CATALOG),
-  ],
-] as const satisfies readonly (readonly [string, RecordedJsonSchemaSource])[];
-
 const declaredSchemas = (
   modules: Readonly<Record<string, Readonly<Record<string, RecordedJsonSchemaSource>>>>,
 ): readonly (readonly [string, RecordedJsonSchemaSource])[] =>
@@ -150,10 +122,8 @@ const declaredSchemas = (
     Object.entries(schemas).map(([name, schema]) => [`${module}-${name}`, schema] as const),
   );
 
-const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] = [
-  ...declaredSchemas(EFFECT_MODULE_SCHEMAS),
-  ...BUILT_SCHEMAS,
-];
+const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] =
+  declaredSchemas(EFFECT_MODULE_SCHEMAS);
 
 test.for(RECORDED)("%s emits the recorded JSON Schema", async ([name, schema]) => {
   await settleJsonSchemaGolden(ROOT, name, jsonSchemaOf(schema));

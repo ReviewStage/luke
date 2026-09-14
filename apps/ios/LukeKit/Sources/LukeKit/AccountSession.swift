@@ -1,12 +1,6 @@
 import Foundation
 import Observation
 
-public enum AccountSessionError: Error, Equatable {
-    /// No usable credential stands — never signed in, signed out mid-flight,
-    /// or the refresh token was rejected outright.
-    case signedOut
-}
-
 public enum AuthState: Equatable {
     case signedOut
     case signedIn(AccountIdentity)

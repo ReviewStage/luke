@@ -34,8 +34,7 @@ import type { CloudActionExecutor } from "./performer.js";
 
 /**
  * The model the hosted brain runs on when the deployment names none: the one
- * default every brain turn shares, so the service's own turns and the relay
- * never fall back to different models.
+ * default every brain turn shares.
  */
 const DEFAULT_BRAIN_MODEL = BRAIN_OPENAI_DEFAULTS.MODEL;
 

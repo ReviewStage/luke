@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Who wrote one message of a conversation reading. Mirrors
 /// `CONVERSATION_MESSAGE_AUTHOR` in `@sidecar/session`, the same set the

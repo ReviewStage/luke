@@ -418,7 +418,7 @@ test("a creation's chip is the session its answer named, by the roster once it h
     text: UNNAMED_SESSION,
     markId: AGENT,
     identity: { providerId: PROVIDER, providerSessionId: "created-then-archived" },
-    openable: true,
+    openable: false,
   });
 
   const unnamed = toolRow(

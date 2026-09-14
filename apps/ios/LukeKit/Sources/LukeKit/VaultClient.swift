@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// The cloud providers whose API keys the hosted vault accepts. Mirrors
 /// `CLOUD_AGENT_PROVIDER_ID` in `@sidecar/session`: the raw values are the wire ids

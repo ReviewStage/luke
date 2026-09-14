@@ -289,14 +289,15 @@ interface ChipFallback {
  * The chip for the session an action named: by the roster while it holds the
  * session, by the envelope's snapshot once it does not, and by the call's own
  * words where neither says. A session the roster holds is pressable exactly
- * when its own row is; one the roster has let go is pressable by identity,
- * and the host answers with the address it last reported or refuses.
+ * when its own row is; outside the roster, the caller decides whether the
+ * identity alone is enough to press, which a created workspace's identifier is not.
  */
 function sessionChip(
   identity: SessionIdentity | undefined,
   target: ActionTargetSnapshot | undefined,
   roster: readonly SessionView[],
   fallback: ChipFallback = {},
+  options: { readonly openWhenAbsentIdentity?: boolean } = {},
 ): ToolRowChip {
   const session = rosterSession(identity, roster);
   if (session !== undefined) {
@@ -312,7 +313,7 @@ function sessionChip(
     text: target?.title ?? fallback.name ?? UNNAMED_SESSION,
     ...(markId !== undefined ? { markId } : undefined),
     ...(identity !== undefined ? { identity } : undefined),
-    openable: identity !== undefined,
+    openable: (options.openWhenAbsentIdentity ?? true) && identity !== undefined,
   };
 }
 
@@ -453,7 +454,7 @@ function composeRuns(
       // a creation whose answer named none is a name alone, or no chip at all.
       const chip: ToolRowChip | undefined =
         created !== undefined
-          ? sessionChip(created, target, roster, fallback)
+          ? sessionChip(created, target, roster, fallback, { openWhenAbsentIdentity: false })
           : name !== undefined
             ? { text: name, ...(markId !== undefined ? { markId } : undefined), openable: false }
             : undefined;

@@ -15,7 +15,7 @@ export const BRAIN_WAKE_KIND = {
   ROSTER: "roster",
 } as const;
 
-export type BrainWakeKind = (typeof BRAIN_WAKE_KIND)[keyof typeof BRAIN_WAKE_KIND];
+type BrainWakeKind = (typeof BRAIN_WAKE_KIND)[keyof typeof BRAIN_WAKE_KIND];
 
 /**
  * The transcript written since the brain last looked at a session, as the

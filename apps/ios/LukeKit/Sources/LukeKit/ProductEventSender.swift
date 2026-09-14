@@ -1,5 +1,8 @@
 import Foundation
 import Observation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Counts how Luke's own features are used, and sends nothing else — the
 /// desktop's `ProductEventSender` (`packages/analytics/src/sender.ts`)

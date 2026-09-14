@@ -629,7 +629,7 @@ const REFUSAL_AST = {
  * path: the inverse of the reading above, for a declaration whose own reader
  * has already decided both and fails its decode with what it decided.
  */
-export function refusalIssue(
+function refusalIssue(
   refusal: SchemaRefusal,
   path: SchemaPath,
   actual: unknown,

@@ -54,8 +54,6 @@ export function mintAnswer(call: MintCall): Promise<Response> {
       HttpRouter.provideRequest(
         Layer.succeed(HostedEnvironment, {
           openAiKey: apiKey === undefined ? undefined : Redacted.make(apiKey),
-          brainModel: undefined,
-          prefetchModel: undefined,
           realtimeModel: present(call.model),
           providerKeyEncryptionSecret: undefined,
           posthogPersonalApiKey: undefined,

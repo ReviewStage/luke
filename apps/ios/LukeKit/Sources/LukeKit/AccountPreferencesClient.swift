@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public struct AccountPreferencesAnswer: Sendable, Equatable {
     public let preferences: DeviceSettingsSnapshot

@@ -76,7 +76,9 @@ const REPORT_REASON_BOUND = 120;
  * wrote, up to the colon after which every reporter on the exchange path puts
  * the detail (a driver's or a parser's own message, which can carry the
  * value it refused), and bounded, so the function's log says which thing
- * happened and never what was said.
+ * happened and never what was said. The platform beside it is the session's
+ * own, read from the device row its handshake resolved, so a report only
+ * phones make can be counted without any line being read further.
  */
 function reportReason(message: string): string {
   const colon = message.indexOf(":");
@@ -98,11 +100,12 @@ export function voiceFunctionOptions(server: VoiceServer): VoiceServiceOptions {
       deploymentSecret: () => configured(OBSERVATION_ENVIRONMENT.CRON_SECRET),
       eveOrigin: deploymentEveOrigin,
       now: () => Date.now(),
-      report: (message) =>
+      report: (reported) =>
         standardOutputLog({
           event: LOG_EVENT.EXCHANGE_REPORTED,
           route: VOICE_ROUTE.SESSIONS,
-          reason: reportReason(message),
+          reason: reportReason(reported.message),
+          platform: reported.platform,
         }),
     }),
   };

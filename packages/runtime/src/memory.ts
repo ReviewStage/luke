@@ -131,12 +131,6 @@ export interface MemoryProvider {
   readonly tools: readonly MemoryTool[];
 }
 
-/** A provider bound to the scope it serves for one conversation, as the host hands it to a brain. */
-export interface MemoryDefinition {
-  readonly scope: MemoryScope;
-  readonly provider: MemoryProvider;
-}
-
 export function memoryToolNamed(provider: MemoryProvider, name: string): MemoryTool | undefined {
   return provider.tools.find((tool) => tool.name === name);
 }

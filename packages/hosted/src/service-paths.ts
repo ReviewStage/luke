@@ -40,26 +40,6 @@ export const HOSTED_SERVICE_PATH = {
    * ordinary endpoint does, so `hostedMintAnswerSchema` validates both.
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
-  /**
-   * The brain contract (see `brain-contract.ts`). GET the
-   * capabilities to learn the model, the operations, the registered tool
-   * names, and the bounds before sending anything; POST the two Responses
-   * operations with a prepared prompt and tool names, and the same admitted
-   * input array.
-   */
-  BRAIN_CAPABILITIES: "/api/brain/capabilities",
-  BRAIN_RESPOND_V2: "/api/brain/v2/respond",
-  BRAIN_COUNT_TOKENS: "/api/brain/v2/count-tokens",
-  /** Embeddings on Luke's key (POST), the third operation of the contract; its caller, the desktop's notebook index, went with LUKE-143. */
-  BRAIN_EMBED: "/api/brain/v2/embed",
-  /**
-   * The read prefetch's two small inferences (POST): planning which reads a
-   * spoken ask still being said will need, and summarizing what those reads
-   * answered for the voice. Advertised by the capabilities' own `prefetch`
-   * field rather than the operations list, so a shipped desktop's fixed
-   * reading of that list still decodes.
-   */
-  BRAIN_PREFETCH: "/api/brain/v2/prefetch",
   ACCOUNT_DELETE: "/api/account/delete",
   EVENTS: "/api/events",
   /**

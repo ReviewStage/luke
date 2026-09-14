@@ -165,7 +165,7 @@ handshake.
 | Request | Expected | Why that is the right answer |
 | --- | --- | --- |
 | `GET /` | 200 | The page is static and served from the tree. |
-| `GET /api/brain/capabilities` | 401 | Handler present; refuses a stranger. |
+| `GET /api/observe` | 401 | Handler present; refuses a stranger before reading anything. |
 | `GET /api/observation/tick` | 401 | Handler present; the cron's bearer is absent. |
 | `GET /api/devices` | 405 | Handler present; the route takes other methods. |
 | `GET /api/brain/ask` | 405 | Handler present; POST only. |

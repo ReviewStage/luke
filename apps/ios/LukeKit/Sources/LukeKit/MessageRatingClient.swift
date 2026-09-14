@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// The developer's verdict on one of Luke's messages — `MESSAGE_RATING` in
 /// `@sidecar/wire`, the stored event's own two words.

@@ -1,7 +1,7 @@
 import type { RunOrigin } from "@sidecar/runtime/vocabulary";
 import type { BrainTurnTrigger } from "./turn.js";
 
-export interface BrainToolCallTrace {
+interface BrainToolCallTrace {
   name: string;
   argumentsChars: number;
   outcomeStatus: string;

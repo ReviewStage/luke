@@ -5,7 +5,7 @@ import { payloadKeyRing } from "../hosted/encryption.js";
 import { storeWriter } from "../hosted/store/index.js";
 import type { WebStoreRun } from "../runtime.js";
 import { exchangeAttachment } from "./exchange-attachment.js";
-import type { ExchangeAttachment } from "./live-exchange.js";
+import type { ExchangeAttachment, ExchangeReport } from "./live-exchange.js";
 
 /**
  * The exchange attachment as the sessions route passes it: `exchangeAttachment`
@@ -35,7 +35,8 @@ export interface DeploymentExchangeSeams {
   /** eve as the deployment reaches it for one account; a test hands in a fake, the function composes the real client below. */
   readonly eve?: (accountId: string) => EveSessions;
   readonly now: () => number;
-  readonly report: (message: string) => void;
+  /** Where a standing exchange's own reports go, each named with the platform of the session it stood on. */
+  readonly report: (report: ExchangeReport) => void;
 }
 
 /** The deployment names no secret or origin the exchange could stand under; every session is refused on it. */
@@ -79,7 +80,7 @@ export function deploymentExchange(seams: DeploymentExchangeSeams): ExchangeAtta
             origin,
             caller: { kind: EVE_CALLER.DEPLOYMENT, secret: deploymentSecret, account: accountId },
           })),
-      // Nobody on the service reads the session's phases: the desktop reads
+      // Nobody on the service reads the session's phases: the device reads
       // its own from the frames the relay forwards, and the record is the
       // exchange's own.
       emit: () => undefined,

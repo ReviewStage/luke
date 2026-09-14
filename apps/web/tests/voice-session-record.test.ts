@@ -51,6 +51,10 @@ const readVoiceSession = (liveSessionId: string) =>
     return rows.map((row) => decodeVoiceSessionRow(row));
   });
 
+/** The device the row names, which is null for a session that named none and for a claim the account did not hold. */
+const namedDevice = (liveSessionId: string) =>
+  Effect.map(readVoiceSession(liveSessionId), (rows) => rows[0]?.device_id);
+
 it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it) => {
   it.effect(
     "a registered session names its account, keeps its first owner, and answers the owner's re-attach alone",
@@ -143,9 +147,14 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
           push: undefined,
         });
 
-        assert.equal(yield* record.deviceOwned({ userId: owner, deviceId }), true);
-        assert.equal(yield* record.deviceOwned({ userId: other, deviceId }), false);
-        assert.equal(yield* record.deviceOwned({ userId: owner, deviceId: randomUUID() }), false);
+        assert.deepEqual(yield* record.heldDevice({ userId: owner, deviceId }), {
+          platform: DEVICE_PLATFORM.MACOS,
+        });
+        assert.equal(yield* record.heldDevice({ userId: other, deviceId }), undefined);
+        assert.equal(
+          yield* record.heldDevice({ userId: owner, deviceId: randomUUID() }),
+          undefined,
+        );
 
         const owned = `live_d_owned_${randomUUID()}`;
         const foreign = `live_d_foreign_${randomUUID()}`;
@@ -153,12 +162,53 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         yield* record.register({ userId: owner, sessionId: owned, deviceId });
         yield* record.register({ userId: other, sessionId: foreign, deviceId });
         yield* record.register({ userId: owner, sessionId: none });
-        const named = (sessionId: string) =>
-          Effect.map(readVoiceSession(sessionId), (rows) => rows[0]?.device_id);
+        assert.equal(yield* namedDevice(owned), deviceId);
+        assert.equal(yield* namedDevice(foreign), null);
+        assert.equal(yield* namedDevice(none), null);
+      }),
+  );
 
-        assert.equal(yield* named(owned), deviceId);
-        assert.equal(yield* named(foreign), null);
-        assert.equal(yield* named(none), null);
+  it.effect(
+    "a phone's row is read as the phone it is, a session of its own names it, and a phone claiming a Mac's row of another account is held by neither",
+    () =>
+      Effect.gen(function* () {
+        const owner = yield* openUser;
+        const other = yield* openUser;
+        const phone = yield* registerDevice({
+          id: randomUUID(),
+          userId: owner,
+          installationId: randomUUID(),
+          platform: DEVICE_PLATFORM.IOS,
+          now: new Date(NOW),
+          push: undefined,
+        });
+        const theirMac = yield* registerDevice({
+          id: randomUUID(),
+          userId: other,
+          installationId: randomUUID(),
+          platform: DEVICE_PLATFORM.MACOS,
+          now: new Date(NOW),
+          push: undefined,
+        });
+
+        assert.deepEqual(yield* record.heldDevice({ userId: owner, deviceId: phone.deviceId }), {
+          platform: DEVICE_PLATFORM.IOS,
+        });
+        assert.equal(
+          yield* record.heldDevice({ userId: owner, deviceId: theirMac.deviceId }),
+          undefined,
+        );
+
+        const called = `live_d_phone_${randomUUID()}`;
+        const claimed = `live_d_claimed_${randomUUID()}`;
+        yield* record.register({ userId: owner, sessionId: called, deviceId: phone.deviceId });
+        yield* record.register({
+          userId: owner,
+          sessionId: claimed,
+          deviceId: theirMac.deviceId,
+        });
+        assert.equal(yield* namedDevice(called), phone.deviceId);
+        assert.equal(yield* namedDevice(claimed), null);
       }),
   );
 });

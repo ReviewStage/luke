@@ -25,8 +25,8 @@ import {
 /**
  * The account group's two endpoints, over the shape in `server/account-app.ts`.
  * Each case runs the group once — with the deployment's environment handed in
- * rather than read, the way `tests/support/brain-call.ts` hands it to the
- * brain group — against a fresh backing store, and asserts both the bytes the
+ * rather than read, the way `tests/support/mint-call.ts` hands it to the
+ * mint group — against a fresh backing store, and asserts both the bytes the
  * answer carries and what the backing store ends up holding; the goldens
  * beside the bytes are the answer itself, so a later change to the group
  * cannot move them silently.
@@ -41,8 +41,6 @@ const USER_ID = "user-1";
 
 const ENVIRONMENT: HostedEnvironmentValues = {
   openAiKey: undefined,
-  brainModel: undefined,
-  prefetchModel: undefined,
   realtimeModel: undefined,
   posthogPersonalApiKey: Redacted.make("posthog-personal-key"),
   posthogProjectId: "posthog-project-1",

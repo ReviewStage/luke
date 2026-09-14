@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// The ephemeral Realtime connection the mobile mint endpoint returns.
 public struct VoiceConnection: Sendable {

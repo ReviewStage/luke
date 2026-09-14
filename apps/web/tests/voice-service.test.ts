@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  DEVICE_PLATFORM,
+  type DevicePlatform,
   HOSTED_API_ERROR,
   hostedErrorSchema,
   sessionAttachedFrameFromWire,
@@ -1218,11 +1220,23 @@ test("the introduction never re-attaches", async () => {
 });
 
 const DEVICE_ID = "6f0b1d2e-3c4a-4b5c-8d6e-7f8091a2b3c4";
+const PHONE_DEVICE_ID = "1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
+
+/** The platform each refusal after a socket stood was counted by, in the order the refusals were written down. */
+function refusedPlatforms(context: Stand): Array<DevicePlatform | undefined> {
+  return context.log
+    .filter((entry) => entry.event === LOG_EVENT.SESSION_REFUSED)
+    .map((entry) => (entry.event === LOG_EVENT.SESSION_REFUSED ? entry.platform : undefined));
+}
 
 test("the device the handshake names is registered with the session once the account is seen to hold it", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
-  context.record.devices.push({ userId: FAKE_USER_ID, deviceId: DEVICE_ID });
+  context.record.devices.push({
+    userId: FAKE_USER_ID,
+    deviceId: DEVICE_ID,
+    platform: DEVICE_PLATFORM.MACOS,
+  });
 
   const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
     authorization: BEARER,
@@ -1242,7 +1256,11 @@ test("the device the handshake names is registered with the session once the acc
 test("a handshake naming a device the account does not hold is refused before a session is spent, and a device that does not exist is refused the same way", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
-  context.record.devices.push({ userId: "user-2", deviceId: DEVICE_ID });
+  context.record.devices.push({
+    userId: "user-2",
+    deviceId: DEVICE_ID,
+    platform: DEVICE_PLATFORM.MACOS,
+  });
   const unknownDeviceId = "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d";
 
   const refusals = [];
@@ -1268,6 +1286,85 @@ test("a handshake naming a device the account does not hold is refused before a 
   assert.deepEqual(context.accounts.spent, []);
   assert.equal(context.openAi.creates.length, 0);
   assert.deepEqual(context.record.registered, []);
+  // No row of the account's was read, whoever claimed it, so the refusals
+  // count no platform rather than the claimant's word for one.
+  assert.deepEqual(refusedPlatforms(context), [undefined, undefined]);
+});
+
+test("a phone is admitted as the Mac is: its own device row is registered with the session, the account's allowance is spent once, and a frame it is refused on counts the phone", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.record.devices.push({
+    userId: FAKE_USER_ID,
+    deviceId: PHONE_DEVICE_ID,
+    platform: DEVICE_PLATFORM.IOS,
+  });
+
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+    authorization: BEARER,
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: PHONE_DEVICE_ID,
+  });
+  assert.ok("reader" in opened);
+  const phone = opened.reader;
+  await send(phone.socket, createFrame());
+  const attach = await context.openAi.nextAttach();
+  // The reader stands the instant the attach lands, so the relay's own close
+  // is read rather than emitted to nobody.
+  const upstream = readSocket(attach.socket);
+  const created = sessionCreatedFrameFromWire(record(await phone.next()));
+  assert.ok(created);
+
+  assert.deepEqual(context.record.registered, [
+    { userId: FAKE_USER_ID, sessionId: created.sessionId, deviceId: PHONE_DEVICE_ID },
+  ]);
+  // The phone spends the account's own hosted meter, once, exactly as a Mac's
+  // session does, and is answered the same quota.
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
+  assert.deepEqual(created.quota, FAKE_QUOTA);
+
+  // The four frames are the same four, so what refuses a Mac refuses a phone,
+  // and the line it is written down on names the platform the row gave.
+  await send(phone.socket, {
+    type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+    event_id: "c1",
+    delegation_id: null,
+    content: "Say this for me.",
+  });
+  assert.equal((await phone.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+  assert.equal(record(await upstream.next()).type, LIVE_CLIENT_EVENT.CLOSE);
+  const refused = context.log.find((entry) => entry.event === LOG_EVENT.FRAME_REFUSED);
+  assert.ok(refused && refused.event === LOG_EVENT.FRAME_REFUSED);
+  assert.deepEqual(
+    { type: refused.type, platform: refused.platform },
+    { type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND, platform: DEVICE_PLATFORM.IOS },
+  );
+});
+
+test("a phone refused for a spent allowance is counted as a phone, and one naming another account's device row is counted as nothing", async () => {
+  const context = await stand();
+  onTestFinished(() => context.stop());
+  context.record.devices.push(
+    { userId: FAKE_USER_ID, deviceId: PHONE_DEVICE_ID, platform: DEVICE_PLATFORM.IOS },
+    { userId: "user-2", deviceId: DEVICE_ID, platform: DEVICE_PLATFORM.MACOS },
+  );
+  context.accounts.spendAnswer = { allowed: false, quota: FAKE_QUOTA };
+
+  for (const deviceId of [PHONE_DEVICE_ID, DEVICE_ID]) {
+    const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+      authorization: BEARER,
+      [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+    });
+    assert.ok("reader" in opened);
+    await send(opened.reader.socket, createFrame());
+    await opened.reader.closed;
+  }
+
+  // The phone's own row was read, so its refusal says which platform met the
+  // ceiling; the Mac's row belongs to another account, so nothing of it was
+  // read and its refusal names no platform at all.
+  assert.deepEqual(refusedPlatforms(context), [DEVICE_PLATFORM.IOS, undefined]);
+  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
+  assert.equal(context.openAi.creates.length, 0);
 });
 
 test("a device header in no device id's shape is refused with 400 before any socket stands", async () => {
