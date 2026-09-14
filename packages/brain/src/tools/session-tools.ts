@@ -23,7 +23,12 @@ import {
 } from "@sidecar/wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
-import { BRAIN_TOOL, maximumChildTaskLength, maximumSessionsConversationLines } from "./names.js";
+import {
+  BRAIN_TOOL,
+  maximumChildTaskLength,
+  maximumSessionsConversationLines,
+  SUBAGENTS_ACTION,
+} from "./names.js";
 import { rejection } from "./records.js";
 import { REFUSAL_REASON, SPAWN_REFUSAL_REASON } from "./refusals.js";
 import type { ToolContext, ToolModule } from "./tool-module.js";
@@ -93,11 +98,6 @@ export interface SessionToolContext extends ToolContext {
 }
 
 export type SessionToolModule = ToolModule<WireRecord, SessionToolContext>;
-
-const SUBAGENTS_ACTION = {
-  LIST: "list",
-  CANCEL: "cancel",
-} as const;
 
 /** A text trimmed and refused when left with nothing. */
 function trimmedText(description: string): EffectSchema.Codec<string, string> {

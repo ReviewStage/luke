@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ACTION_KIND, ACTION_OUTPUT_STATUS, type SessionActionKind } from "@sidecar/actions";
+import { ACTION_KIND, ACTION_OUTPUT_STATUS, type ActionKind } from "@sidecar/actions";
 import {
   isStoredToolPart,
   MESSAGE_ROLE,
@@ -7,8 +7,11 @@ import {
   type StoredToolPart,
   TOOL_PART_STATE,
 } from "@sidecar/session";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { test } from "vitest";
 import {
+  isActionRowKind,
+  TOOL_ROW_KIND,
   TOOL_ROW_STATUS,
   type ToolRow,
   type ToolRowChip,
@@ -65,11 +68,11 @@ function fixtureActionParts(): StoredToolPart[] {
   );
 }
 
-test("every session action kind composes a row, and a tool that is not one composes none", () => {
-  const kinds = new Set<SessionActionKind>();
+test("every action kind the fixtures carry composes an action row, and a brain tool composes a row of its own kind", () => {
+  const kinds = new Set<ActionKind>();
   for (const candidate of fixtureActionParts()) {
     const row = toolRow(candidate, FIXTURE_ROSTER);
-    if (row !== undefined) kinds.add(row.kind);
+    if (isActionRowKind(row.kind)) kinds.add(row.kind);
   }
   assert.deepEqual(
     [...kinds].sort(),
@@ -79,18 +82,176 @@ test("every session action kind composes a row, and a tool that is not one compo
       ACTION_KIND.CREATE_WORKSPACE,
       ACTION_KIND.MESSAGE,
       ACTION_KIND.OPEN,
+      ACTION_KIND.REMEMBER,
       ACTION_KIND.RENAME_SESSION,
       ACTION_KIND.RENAME_WORKSPACE,
+      ACTION_KIND.SETTING,
     ].sort(),
   );
+  // A transcript read names its session as a chip, the way an action's row does, under the provider's mark.
+  const read = toolRow(part("read_transcript", HELD, answered({ lines: [] })), FIXTURE_ROSTER);
+  assert.equal(read.kind, TOOL_ROW_KIND.TRANSCRIPT);
+  assert.equal(isActionRowKind(read.kind), false);
+  assert.equal(read.status, TOOL_ROW_STATUS.ACCEPTED);
+  assert.equal(read.providerId, PROVIDER);
+  assert.equal(chipOf(read)?.text, FIXTURE_TITLE.HELD);
+  assert.equal(chipOf(read)?.openable, true);
+  // A tool this build has no words for is drawn as the other, by its name.
+  const other = toolRow(part("frobnicate_widget", { a: 1 }, answered({})), FIXTURE_ROSTER);
+  assert.equal(other.kind, TOOL_ROW_KIND.OTHER);
+  assert.deepEqual(other.runs, [{ text: "Ran frobnicate widget" }]);
+});
+
+test("the brain's own tools are worded by their arguments, never their answers, and a refusal says why", () => {
+  const words = (row: ToolRow) => row.runs.map((run) => ("text" in run ? run.text : "")).join("");
+  const roster = toolRow(
+    part("list_sessions", {}, answered({ roster: "(a roster)" })),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(roster.kind, TOOL_ROW_KIND.ROSTER);
+  assert.equal(words(roster), "Looked at the roster");
+  assert.equal(roster.status, TOOL_ROW_STATUS.ACCEPTED);
+  assert.equal(roster.reason, undefined);
+
+  const search = toolRow(
+    part("memory_search", { query: "notch" }, answered({ results: [{ path: "MEMORY.md" }] })),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(search.kind, TOOL_ROW_KIND.NOTEBOOK_SEARCH);
+  assert.equal(words(search), 'Searched the notebook for "notch"');
   assert.equal(
-    toolRow(part("read_transcript", HELD, answered({ lines: [] })), FIXTURE_ROSTER),
-    undefined,
+    words(
+      toolRow(part("memory_get", { path: "USER.md" }, answered({ content: "" })), FIXTURE_ROSTER),
+    ),
+    'Read "USER.md" from the notebook',
   );
   assert.equal(
-    toolRow(part("announce", { briefing: "hi" }, answered({})), FIXTURE_ROSTER),
-    undefined,
+    words(
+      toolRow(
+        part("read_workspace_file", { name: "MEMORY.md" }, answered({ status: "accepted" })),
+        FIXTURE_ROSTER,
+      ),
+    ),
+    'Read the workspace file "MEMORY.md"',
   );
+  assert.equal(
+    words(
+      toolRow(part("load_skill", { location: "skills/x/SKILL.md" }, answered({})), FIXTURE_ROSTER),
+    ),
+    'Loaded the skill at "skills/x/SKILL.md"',
+  );
+  assert.equal(
+    words(
+      toolRow(part("sessions_spawn", { task: "…", label: "Tests" }, answered({})), FIXTURE_ROSTER),
+    ),
+    'Delegated "Tests" to a child',
+  );
+  assert.equal(
+    words(
+      toolRow(part("subagents", { action: "cancel", child_id: "c" }, answered({})), FIXTURE_ROSTER),
+    ),
+    "Cancelled a child",
+  );
+  assert.equal(
+    words(toolRow(part("subagents", {}, answered({})), FIXTURE_ROSTER)),
+    "Listed the children",
+  );
+
+  // A refusal is the tool's own record: a status other than accepted beside a reason.
+  const refused = toolRow(
+    part(
+      "write_workspace_file",
+      { name: "MEMORY.md", content: "" },
+      answered({
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "not run: this agent has no workspace",
+      }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(refused.kind, TOOL_ROW_KIND.WORKSPACE_WRITE);
+  assert.equal(words(refused), 'Wrote the workspace file "MEMORY.md"');
+  assert.equal(refused.status, TOOL_ROW_STATUS.REFUSED);
+  assert.equal(refused.reason, "not run: this agent has no workspace");
+  // Under way and failed are the part's own words, as for an action.
+  assert.equal(
+    toolRow(
+      part("memory_get", { path: "USER.md" }, { state: TOOL_PART_STATE.INPUT_AVAILABLE }),
+      FIXTURE_ROSTER,
+    ).status,
+    TOOL_ROW_STATUS.PENDING,
+  );
+  const failed = toolRow(
+    part("list_sessions", {}, { state: TOOL_PART_STATE.OUTPUT_ERROR, errorText: "boom" }),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(failed.status, TOOL_ROW_STATUS.FAILED);
+  assert.equal(failed.reason, "boom");
+});
+
+test("an action on Luke himself is worded by its request, a setting by its guide id in words", () => {
+  const words = (row: ToolRow) => row.runs.map((run) => ("text" in run ? run.text : "")).join("");
+  const setting = toolRow(
+    part(
+      "change_app_setting",
+      { setting_id: "open_at_login", value: "off" },
+      answered({ status: ACTION_OUTPUT_STATUS.ACCEPTED }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(setting.kind, ACTION_KIND.SETTING);
+  assert.equal(words(setting), 'Changed the open at login setting to "off"');
+  assert.equal(setting.status, TOOL_ROW_STATUS.ACCEPTED);
+  assert.equal(
+    words(
+      toolRow(
+        part(
+          "change_app_setting",
+          { setting_id: "invented", value: "1" },
+          answered({ status: "accepted" }),
+        ),
+        FIXTURE_ROSTER,
+      ),
+    ),
+    'Changed the invented setting to "1"',
+  );
+  assert.equal(
+    words(toolRow(part("show_panel", {}, answered({ status: "accepted" })), FIXTURE_ROSTER)),
+    "Showed the sessions tab",
+  );
+  assert.equal(
+    words(
+      toolRow(
+        part("run_update_action", { action: "check" }, answered({ status: "accepted" })),
+        FIXTURE_ROSTER,
+      ),
+    ),
+    "Checked for updates",
+  );
+  assert.equal(
+    words(
+      toolRow(
+        part(
+          "remember_fact",
+          { words: "Likes tea.", replaces: "m1" },
+          answered({ status: "accepted" }),
+        ),
+        FIXTURE_ROSTER,
+      ),
+    ),
+    'Remembered "Likes tea." in place of an earlier note',
+  );
+  const refused = toolRow(
+    part(
+      "forget_fact",
+      { id: "m1" },
+      answered({ status: ACTION_OUTPUT_STATUS.REFUSED, reason: "no such entry" }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(words(refused), "Forgot something remembered before");
+  assert.equal(refused.status, TOOL_ROW_STATUS.REFUSED);
+  assert.equal(refused.reason, "no such entry");
 });
 
 test("a chip names a held session by the roster and opens exactly when its row would", () => {
@@ -350,8 +511,8 @@ test("a call whose arguments cannot be read still draws its kind and whatever th
     ),
     FIXTURE_ROSTER,
   );
-  assert.equal(row?.kind, ACTION_KIND.MESSAGE);
-  assert.equal(row?.runs.length, 2);
+  assert.equal(row.kind, ACTION_KIND.MESSAGE);
+  assert.equal(row.runs.length, 2);
   assert.deepEqual(chipOf(row)?.identity, {
     providerId: PROVIDER,
     providerSessionId: FIXTURE_SESSION.DEPARTED,

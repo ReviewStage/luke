@@ -418,6 +418,40 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
+/** Three lines: a roster or a listing, read whole. */
+export function ListIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.4 6.6h15.2" />
+      <path d="M4.4 12h15.2" />
+      <path d="M4.4 17.4h15.2" />
+    </Glyph>
+  );
+}
+
+/** A page with lines on it: a transcript, a file, or a history, read. */
+export function DocumentIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M6.2 2.9h7.6l4.8 4.8v12.4a1.7 1.7 0 0 1-1.7 1.7H6.2a1.7 1.7 0 0 1-1.7-1.7V4.6a1.7 1.7 0 0 1 1.7-1.7Z" />
+      <path d="M13.8 2.9v4.8h4.8" />
+      <path d="M8.2 12.4h7.6" />
+      <path d="M8.2 16.2h7.6" />
+    </Glyph>
+  );
+}
+
+/** A closed notebook: Luke's own memory, searched, read, or written to. */
+export function BookIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M5.2 4.6a1.8 1.8 0 0 1 1.8-1.8h11.8v15.6H7a1.8 1.8 0 0 0-1.8 1.8Z" />
+      <path d="M5.2 20.2a1.8 1.8 0 0 0 1.8 1.8h11.8v-3.6" />
+      <path d="M9.4 7.4h6" />
+    </Glyph>
+  );
+}
+
 /** Stops the reply under way, drawn the way every chat surface draws it: a square. */
 export function StopIcon(): React.JSX.Element {
   return (

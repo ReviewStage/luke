@@ -1,13 +1,22 @@
-import { ACTION_KIND, type SessionActionKind } from "@sidecar/actions";
 import {
   ArchiveIcon,
+  BookIcon,
+  ChevronIcon,
   ControlIcon,
+  DisplayIcon,
+  DocumentIcon,
+  DownloadIcon,
   ExternalIcon,
+  ListIcon,
+  MegaphoneIcon,
   MessageIcon,
+  OptionsIcon,
   PencilIcon,
   PlusIcon,
   ProviderMark,
+  SearchIcon,
   StopIcon,
+  TrashIcon,
   WingFace,
 } from "@sidecar/panel";
 import {
@@ -23,8 +32,6 @@ import {
   type SessionControlKind,
   type SessionIdentity,
   type StoredToolPart,
-  storedToolName,
-  TOOL_PART_STATE,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
@@ -47,7 +54,15 @@ import {
   ConversationTimeBreak,
 } from "./conversation-rows";
 import { opensConversationTimeBreak } from "./conversation-time-break";
-import { TOOL_ROW_STATUS, type ToolRow, type ToolRowChip, toolRow } from "./conversation-tool-row";
+import {
+  isActionRowKind,
+  TOOL_ROW_KIND,
+  TOOL_ROW_STATUS,
+  type ToolRow,
+  type ToolRowChip,
+  type ToolRowKind,
+  toolRow,
+} from "./conversation-tool-row";
 import { MarkdownMessage } from "./markdown-message";
 import type { SessionView } from "./session-model";
 import { ThinkingDots } from "./thinking-dots";
@@ -57,12 +72,17 @@ import { ThinkingDots } from "./thinking-dots";
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
  * that opens on its summary; an announcement is Luke's briefing in his own
- * bubble, marked when nobody heard it. Every stored tool call of one
- * assistant message — reads, announcements, actions, even one whose tool
- * failed — draws inside one fold ahead of that message's words, in the call
- * order the message stored them. A session action keeps its richer row, built
- * from the call's arguments and the envelope it answered with; every other
- * tool call keeps the quieter tool-name-and-state row. A turn the developer
+ * bubble, marked when nobody heard it, and that bubble is the whole of what
+ * the announce call draws. Every other stored tool call of one assistant
+ * message — reads, actions, even one whose tool failed — draws ahead of that
+ * message's words, in the call order the message stored them: one call as
+ * the row it is, stamped like any other, and two or more inside one fold
+ * under a line that counts them, so a message that did one thing reads as
+ * that thing and a message that did many reads as one line. Every call is one
+ * row anatomy — a mark for the kind of thing it was, then a sentence with the
+ * session it reached as a chip — whether it did something to a session or to
+ * Luke, or only read a roster, a transcript, a file, or the notebook; what a
+ * read answered is never drawn. A turn the developer
  * did not open — a roster look, a hold's release, a child's end — is Luke's
  * own judgment, and everything it did leads with his face under that name and
  * never wears a reply's bubble, so what he decided for himself is never read
@@ -120,20 +140,41 @@ export function turnPending(turn: ConversationViewTurn | undefined): boolean {
 }
 
 /**
- * The mark an action row leads with, one per kind of thing that can be done
- * to a session, total over the kinds so a new kind does not compile until it
- * has one. Two renames share the pencil and two creations the plus: the mark
- * says what sort of thing happened, and the words say to what.
+ * The mark a tool call's row leads with, one per kind of thing a call can be,
+ * total over the kinds so a new kind does not compile until it has one. Two
+ * renames share the pencil, two creations and a delegation the plus, every
+ * read of a text the page, every look at a list the lines: the mark says what
+ * sort of thing happened, and the words say to what. A call to a tool this
+ * build has no words for leaves the mark's room empty rather than borrowing
+ * one that would say something untrue of it.
  */
-const ACTION_GLYPH = {
-  [ACTION_KIND.MESSAGE]: MessageIcon,
-  [ACTION_KIND.CONTROL]: ControlIcon,
-  [ACTION_KIND.OPEN]: ExternalIcon,
-  [ACTION_KIND.CREATE_WORKSPACE]: PlusIcon,
-  [ACTION_KIND.ADD_AGENT]: PlusIcon,
-  [ACTION_KIND.RENAME_WORKSPACE]: PencilIcon,
-  [ACTION_KIND.RENAME_SESSION]: PencilIcon,
-} as const satisfies Record<SessionActionKind, () => React.JSX.Element>;
+const ROW_GLYPH = {
+  [TOOL_ROW_KIND.MESSAGE]: MessageIcon,
+  [TOOL_ROW_KIND.CONTROL]: ControlIcon,
+  [TOOL_ROW_KIND.OPEN]: ExternalIcon,
+  [TOOL_ROW_KIND.CREATE_WORKSPACE]: PlusIcon,
+  [TOOL_ROW_KIND.ADD_AGENT]: PlusIcon,
+  [TOOL_ROW_KIND.RENAME_WORKSPACE]: PencilIcon,
+  [TOOL_ROW_KIND.RENAME_SESSION]: PencilIcon,
+  [TOOL_ROW_KIND.SETTING]: OptionsIcon,
+  [TOOL_ROW_KIND.PANEL]: DisplayIcon,
+  [TOOL_ROW_KIND.FEEDBACK]: MegaphoneIcon,
+  [TOOL_ROW_KIND.UPDATE]: DownloadIcon,
+  [TOOL_ROW_KIND.REMEMBER]: BookIcon,
+  [TOOL_ROW_KIND.FORGET]: TrashIcon,
+  [TOOL_ROW_KIND.ROSTER]: ListIcon,
+  [TOOL_ROW_KIND.TRANSCRIPT]: DocumentIcon,
+  [TOOL_ROW_KIND.WORKSPACE_READ]: DocumentIcon,
+  [TOOL_ROW_KIND.WORKSPACE_WRITE]: PencilIcon,
+  [TOOL_ROW_KIND.SKILL]: DocumentIcon,
+  [TOOL_ROW_KIND.DELEGATE]: PlusIcon,
+  [TOOL_ROW_KIND.CHILDREN]: ListIcon,
+  [TOOL_ROW_KIND.CONVERSATIONS]: ListIcon,
+  [TOOL_ROW_KIND.CHILD_HISTORY]: DocumentIcon,
+  [TOOL_ROW_KIND.NOTEBOOK_SEARCH]: SearchIcon,
+  [TOOL_ROW_KIND.NOTEBOOK_READ]: BookIcon,
+  [TOOL_ROW_KIND.OTHER]: undefined,
+} as const satisfies Record<ToolRowKind, (() => React.JSX.Element) | undefined>;
 
 /** A control's mark follows what its adapter said it does; a plain action keeps the bolt. */
 const CONTROL_GLYPH = {
@@ -142,8 +183,8 @@ const CONTROL_GLYPH = {
   [SESSION_CONTROL_KIND.STOP]: StopIcon,
 } as const satisfies Record<SessionControlKind, () => React.JSX.Element>;
 
-function actionGlyph(row: ToolRow): () => React.JSX.Element {
-  return row.controlKind !== undefined ? CONTROL_GLYPH[row.controlKind] : ACTION_GLYPH[row.kind];
+function rowGlyph(row: ToolRow): (() => React.JSX.Element) | undefined {
+  return row.controlKind !== undefined ? CONTROL_GLYPH[row.controlKind] : ROW_GLYPH[row.kind];
 }
 
 /** What a reader is told of an announcement no device claimed before its offer lapsed. */
@@ -303,14 +344,16 @@ function chipOf(row: ToolRow): ToolRowChip | undefined {
 }
 
 /**
- * An action Luke carried is a row rather than a bubble: what was done, in the
- * quiet voice the dates use, led by a mark for the kind of thing it was and
- * ended on the mark of the provider it reached — unless the chip already wears
- * that provider's mark, in which case the row's trailing mark stands down
- * rather than repeat it. A refused or unknown outcome says why under the
- * words; an accepted one shows the carrier's own note where it wrote one.
+ * A tool call Luke made is a row rather than a bubble: what was done or read,
+ * in the quiet voice the dates use, led by a mark for the kind of thing it
+ * was and ended on the mark of the provider it reached — unless the chip
+ * already wears that provider's mark, in which case the row's trailing mark
+ * stands down rather than repeat it. A refused or unknown outcome says why
+ * under the words; an accepted action shows the carrier's own note where it
+ * wrote one. A row of its own carries the message's stamp; one inside a fold
+ * carries none, since the fold's line carries it for all of them.
  */
-function ActionRow({
+function ToolCallRow({
   row,
   judgment,
   at,
@@ -321,7 +364,7 @@ function ActionRow({
   at?: number;
   onOpenChat?: (identity: SessionIdentity) => void;
 }): React.JSX.Element {
-  const Glyph = actionGlyph(row);
+  const Glyph = rowGlyph(row);
   const chip = chipOf(row);
   const trailingProvider =
     row.providerId !== undefined && chip?.markId !== row.providerId ? row.providerId : undefined;
@@ -332,7 +375,8 @@ function ActionRow({
       className="conversation-entry"
       data-speaker={voice.speaker}
       data-judgment={judgment}
-      data-action-kind={row.kind}
+      data-tool-kind={row.kind}
+      data-action-kind={isActionRowKind(row.kind) ? row.kind : undefined}
       data-tool-status={row.status}
     >
       <small className="visually-hidden">{voice.label}</small>
@@ -343,7 +387,7 @@ function ActionRow({
             aria-hidden="true"
             data-control={own ? undefined : row.controlKind}
           >
-            {own ? <WingFace /> : <Glyph />}
+            {own ? <WingFace /> : Glyph === undefined ? null : <Glyph />}
           </span>
           <span className="conversation-action-body">
             <span className="conversation-words">
@@ -387,36 +431,6 @@ function ActionRow({
   );
 }
 
-/** What a detail's state says of it, in one word the row draws beside the tool's name. */
-const DETAIL_STATE_LABEL = {
-  [TOOL_PART_STATE.INPUT_STREAMING]: PENDING_LABEL,
-  [TOOL_PART_STATE.INPUT_AVAILABLE]: PENDING_LABEL,
-  [TOOL_PART_STATE.OUTPUT_AVAILABLE]: "Done",
-  [TOOL_PART_STATE.OUTPUT_ERROR]: "Failed",
-} as const satisfies Record<StoredToolPart["state"], string>;
-
-/** A tool's name as a reader sees it: the underscores the model spells it with become spaces. */
-export function detailToolLabel(toolName: string): string {
-  return toolName.replaceAll("_", " ");
-}
-
-/**
- * A call the view classed as a detail — a read, a workspace write, a
- * delegation: the turn's working, named by its tool and its state and nothing
- * of what it read or wrote, drawn only inside the turn.
- */
-function DetailRow({ part }: { part: StoredToolPart }): React.JSX.Element {
-  return (
-    <li className="conversation-detail" data-tool-state={part.state}>
-      <span className="conversation-detail-name">{detailToolLabel(storedToolName(part))}</span>
-      <span className="conversation-detail-state">{DETAIL_STATE_LABEL[part.state]}</span>
-      {part.state === TOOL_PART_STATE.OUTPUT_ERROR ? (
-        <span className="conversation-action-reason">{part.errorText}</span>
-      ) : null}
-    </li>
-  );
-}
-
 /** The reader's press on a fold, remembered with the turn state it was made under. */
 export interface FoldChoice {
   readonly pending: boolean;
@@ -434,9 +448,17 @@ export function foldOpen(choice: FoldChoice | undefined, pending: boolean): bool
   return choice !== undefined && choice.pending === pending ? choice.open : pending;
 }
 
+/** How many tool calls a message carries before they fold under a count rather than standing as rows. */
+const FOLD_FROM_CALLS = 2;
+
 /**
  * The tool calls one assistant message carried, folded under a line that
- * counts them. The fold follows the turn: open while the turn still runs, so
+ * counts them, led by the disclosure chevron the settings rows use, which
+ * turns to point down while the fold stands open. The line lifts under the
+ * pointer the way a settings row does, its ground reaching a step past the
+ * chevron's edge rather than pushing the chevron off it, so the chevron and
+ * the marks of the rows it folds stand in one column whether the fold is
+ * open or closed. The fold follows the turn: open while the turn still runs, so
  * what it is doing is watched as it happens, and closed once it has settled,
  * so a finished message reads as one line; a press holds whichever the reader
  * chose until the turn's own state next changes. The element's toggle fires
@@ -483,12 +505,13 @@ function ToolCallsFold({
           }}
         >
           <summary className="conversation-turn-summary">
+            <ChevronIcon />
             {own ? (
               <span className="conversation-action-mark" aria-hidden="true">
                 <WingFace />
               </span>
             ) : null}
-            {rows.length === 1 ? "1 tool call" : `${rows.length} tool calls`}
+            <span>{`${rows.length} tool calls`}</span>
           </summary>
           <ol className="conversation-turn-rows">{rows}</ol>
         </details>
@@ -592,13 +615,37 @@ function ratingControl(
   );
 }
 
+/** One tool call as a message hands it on: the row it composes to, under the key its part stands at. */
+interface ToolCall {
+  readonly key: string;
+  readonly row: ToolRow;
+}
+
+function toolCallRow(
+  call: ToolCall,
+  judgment: Judgment,
+  at: number | undefined,
+  onOpenChat: ((identity: SessionIdentity) => void) | undefined,
+): React.JSX.Element {
+  return (
+    <ToolCallRow
+      key={call.key}
+      row={call.row}
+      judgment={judgment}
+      {...(at === undefined ? undefined : { at })}
+      {...(onOpenChat ? { onOpenChat } : undefined)}
+    />
+  );
+}
+
 /**
- * One message's rows: a user row is one bubble; an assistant row is one fold
- * of its tool calls ahead of the words those calls produced, then its visible
- * parts in order, with the rating control on its last words. Which tool calls
- * are announcements, actions, or details is the view's decision, read back by
- * call id; a call the view did not describe still joins the fold as one of the
- * message's tool calls.
+ * One message's rows: a user row is one bubble; an assistant row is its tool
+ * calls ahead of the words those calls produced — one as the row it is, two or
+ * more inside one fold — then its visible parts in order, with the rating
+ * control on its last words. Which tool calls are announcements is the view's
+ * decision, read back by call id; an announce call carrying its briefing is
+ * drawn as that bubble and as no tool call row, and every other call is a row
+ * composed from its own part.
  */
 function messageRows(
   view: ConversationViewMessage,
@@ -626,7 +673,7 @@ function messageRows(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
   const rows: React.JSX.Element[] = [];
-  const toolCalls: React.JSX.Element[] = [];
+  const toolCalls: ToolCall[] = [];
   // The control stands on the message's last words, so one message takes one.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
     drawsWords(part, described),
@@ -660,52 +707,39 @@ function messageRows(
     }
     if (!isStoredToolPart(part)) return;
     const tool = described.get(part.toolCallId);
-    const row = toolRow(part, roster);
-    toolCalls.push(
-      row !== undefined ? (
-        <ActionRow
-          key={`${key}:tool`}
-          row={row}
-          judgment={judgment}
-          {...(onOpenChat ? { onOpenChat } : undefined)}
-        />
-      ) : (
-        <DetailRow key={`${key}:tool`} part={part} />
-      ),
-    );
-    switch (tool?.kind) {
-      case CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE: {
-        const words = announcedWords(part);
-        if (words !== undefined) {
-          rows.push(
-            <BubbleRow
-              key={key}
-              voice={VOICE.LUKE}
-              words={words}
-              at={view.createdAt}
-              unspoken={tool.unspoken}
-              rating={placed}
-            />,
-          );
-        }
+    if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
+      const words = announcedWords(part);
+      if (words !== undefined) {
+        rows.push(
+          <BubbleRow
+            key={key}
+            voice={VOICE.LUKE}
+            words={words}
+            at={view.createdAt}
+            unspoken={tool.unspoken}
+            rating={placed}
+          />,
+        );
         return;
       }
-      default:
-        return;
     }
+    toolCalls.push({ key: `${key}:tool`, row: toolRow(part, roster) });
   });
-  return toolCalls.length === 0
-    ? rows
-    : [
-        <ToolCallsFold
-          key={`${message.id}:tools`}
-          rows={toolCalls}
-          pending={pending}
-          judgment={judgment}
-          at={view.createdAt}
-        />,
-        ...rows,
-      ];
+  const [only] = toolCalls;
+  if (only === undefined) return rows;
+  if (toolCalls.length < FOLD_FROM_CALLS) {
+    return [toolCallRow(only, judgment, view.createdAt, onOpenChat), ...rows];
+  }
+  return [
+    <ToolCallsFold
+      key={`${message.id}:tools`}
+      rows={toolCalls.map((call) => toolCallRow(call, judgment, undefined, onOpenChat))}
+      pending={pending}
+      judgment={judgment}
+      at={view.createdAt}
+    />,
+    ...rows,
+  ];
 }
 
 /** When a turn's rows begin and end: its earliest and latest message, which is what dates the silence around it. */
@@ -716,8 +750,8 @@ function groupSpan(group: ConversationViewTurnGroup) {
 
 /**
  * The thread as turns. Each group's messages draw in sequence, and every
- * assistant message that carried tool calls opens with one fold of them
- * before the words that followed. A turn still running ends in Luke's wait,
+ * assistant message that carried tool calls opens with them — one as a row,
+ * more as one fold — before the words that followed. A turn still running ends in Luke's wait,
  * driven by the turn row's own status and nothing else. A turn that followed
  * a long silence is dated over it, and whatever the caller hands in as
  * children — the lines still being said, the developer's place, a wait no

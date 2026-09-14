@@ -54,6 +54,7 @@
     "@sidecar/host": "workspace:*",
     "@sidecar/hosted": "workspace:*",
     "@sidecar/live": "workspace:*",
+    "@sidecar/memory": "workspace:*",
     "@sidecar/panel": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/session": "workspace:*",
