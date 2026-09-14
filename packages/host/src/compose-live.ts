@@ -19,14 +19,18 @@ import { APP_SETTING_SCHEMA, voiceHotkeyCandidates, voiceHotkeyLabel } from "@si
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { type BeatKind, LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Either, Queue, type Scope } from "effect";
+import { Duration, Effect, Either, Queue, type Scope } from "effect";
 import {
   arrivalBeatOwed,
   countsFirstAnnouncement,
   firstNameOf,
   launchGreetingOwed,
 } from "./arrival-flow.js";
-import { BRIEFING_SESSION_DECISION, briefingSessionDecision } from "./briefing-session.js";
+import {
+  BRIEFING_SESSION_DECISION,
+  briefingSessionDecision,
+  debounceRemaining,
+} from "./briefing-session.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { CalendarsComposer } from "./compose-calendars.js";
 import type { ObservationComposer } from "./compose-observation.js";
@@ -112,6 +116,7 @@ export const composeLive = (
     const { settings, account, observation, calendars } = dependencies;
     const kernel = yield* HostKernelTag;
     const machinePresence = yield* MachinePresenceReader;
+    const scope = yield* Effect.scope;
     const { now, runMode } = kernel;
 
     // What a caller asked for and nothing waits on: each decision is taken in
@@ -308,6 +313,8 @@ export const composeLive = (
     /** The offer count as last told, and whether a hold kept a briefing back, so the hold's lift re-decides it. */
     let lastOpenOffers = 0;
     let briefingHeld = false;
+    /** Whether a re-decision is already armed for the debounce's end, so a burst arms one and not several. */
+    let debounceRetryArmed = false;
 
     /**
      * A briefing on offer, decided from observed rows and this Mac's own
@@ -328,7 +335,7 @@ export const composeLive = (
         // read finds speech free; the offer may have gone to the phone by then,
         // in which case the session opened finds nothing and closes on idle.
         briefingHeld = held && openOffers > 0;
-        const decision = briefingSessionDecision({
+        const facts = {
           openOffers,
           present: activeUntilFrom(machinePresence.read?.(), at) !== null,
           held,
@@ -336,8 +343,29 @@ export const composeLive = (
           sessionStands: service.sessionStands() || service.sessionWanted(),
           lastOpenedAt: briefingSessionAskedAt,
           now: at,
-        });
-        if (decision !== BRIEFING_SESSION_DECISION.OPEN) return;
+        };
+        const decision = briefingSessionDecision(facts);
+        if (decision !== BRIEFING_SESSION_DECISION.OPEN) {
+          // Kept back by the debounce alone: an offer that arrived inside the
+          // bound is decided again when the bound elapses, on the count then
+          // last told, since nothing else re-asks and the phone's grace would
+          // take it otherwise. One wait stands at a time.
+          const remaining = debounceRemaining(facts);
+          if (remaining !== undefined && !debounceRetryArmed) {
+            debounceRetryArmed = true;
+            yield* Effect.forkIn(
+              Effect.zipRight(
+                Effect.sleep(Duration.millis(remaining)),
+                Effect.sync(() => {
+                  debounceRetryArmed = false;
+                  Queue.unsafeOffer(asks, briefingSession(lastOpenOffers));
+                }),
+              ),
+              scope,
+            );
+          }
+          return;
+        }
         briefingSessionAskedAt = at;
         service.wantSession();
       });

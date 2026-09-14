@@ -5,6 +5,7 @@ import {
   BRIEFING_SESSION_DECISION,
   type BriefingSessionFacts,
   briefingSessionDecision,
+  debounceRemaining,
 } from "./briefing-session.js";
 
 const NOW = 1_757_505_600_000;
@@ -73,4 +74,44 @@ test("a burst of offers opens one session: a second ask inside the debounce open
     BRIEFING_SESSION_DECISION.OPEN,
   );
   assert.equal(BRIEFING_SESSION.DEBOUNCE_MS, 60_000);
+});
+
+test("the debounce's remainder is answered only where the debounce alone keeps the session from opening", () => {
+  const opened = NOW;
+  assert.equal(
+    debounceRemaining({ ...OPENABLE, lastOpenedAt: opened, now: opened + 10_000 }),
+    BRIEFING_SESSION.DEBOUNCE_MS - 10_000,
+  );
+  // Nothing asked yet, or the bound elapsed: nothing to wait for.
+  assert.equal(debounceRemaining(OPENABLE), undefined);
+  assert.equal(
+    debounceRemaining({
+      ...OPENABLE,
+      lastOpenedAt: opened,
+      now: opened + BRIEFING_SESSION.DEBOUNCE_MS,
+    }),
+    undefined,
+  );
+  // Something else keeps it: the hold, the Mac away, a session standing, nothing on offer.
+  assert.equal(
+    debounceRemaining({ ...OPENABLE, held: true, lastOpenedAt: opened, now: opened + 10_000 }),
+    undefined,
+  );
+  assert.equal(
+    debounceRemaining({ ...OPENABLE, present: false, lastOpenedAt: opened, now: opened + 10_000 }),
+    undefined,
+  );
+  assert.equal(
+    debounceRemaining({
+      ...OPENABLE,
+      sessionStands: true,
+      lastOpenedAt: opened,
+      now: opened + 10_000,
+    }),
+    undefined,
+  );
+  assert.equal(
+    debounceRemaining({ ...OPENABLE, openOffers: 0, lastOpenedAt: opened, now: opened + 10_000 }),
+    undefined,
+  );
 });

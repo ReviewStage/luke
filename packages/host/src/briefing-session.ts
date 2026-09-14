@@ -50,6 +50,25 @@ export interface BriefingSessionFacts {
   readonly now: number;
 }
 
+/**
+ * How long the debounce alone keeps a session from being asked for, or
+ * nothing where something else does (or nothing does): the wait a caller
+ * arms so an offer arriving inside the bound is decided again when it
+ * elapses, rather than left to the phone.
+ */
+export function debounceRemaining(facts: BriefingSessionFacts): number | undefined {
+  if (facts.lastOpenedAt === undefined) return undefined;
+  const remaining = BRIEFING_SESSION.DEBOUNCE_MS - (facts.now - facts.lastOpenedAt);
+  if (remaining <= 0) return undefined;
+  if (
+    briefingSessionDecision({ ...facts, lastOpenedAt: undefined }) !==
+    BRIEFING_SESSION_DECISION.OPEN
+  ) {
+    return undefined;
+  }
+  return remaining;
+}
+
 /** The rule, as a function of what was read. */
 export function briefingSessionDecision(facts: BriefingSessionFacts): BriefingSessionDecision {
   if (facts.openOffers <= 0) return BRIEFING_SESSION_DECISION.NONE;
