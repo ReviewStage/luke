@@ -102,7 +102,8 @@ struct DeveloperMessageBubble: View {
     }
 }
 
-private struct MessageCopyAction: View {
+/// Copy, the item every message's press-and-hold menu ends on.
+struct MessageCopyAction: View {
     let words: String
 
     var body: some View {

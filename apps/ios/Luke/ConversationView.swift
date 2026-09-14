@@ -10,8 +10,9 @@ import SwiftUI
 /// on this phone from the call's arguments and its envelope, the session it
 /// reached a chip that opens that session's screen while the roster still
 /// holds it; a turn Luke opened himself leads with his face and never wears
-/// a reply's bubble. Behind a press and hold on each of Luke's messages stand
-/// two thumbs, the one write this screen makes: a verdict on that message,
+/// a reply's bubble. Behind a press and hold on each of Luke's messages, a
+/// reply's bubble or his own judgment's row alike, stand two thumbs, the one
+/// write this screen makes: a verdict on that message,
 /// sent to the service under the account's fence and drawn back from the
 /// latest rating event as a small filled thumb under the bubble, so a verdict
 /// given on the Mac shows here and one given here shows there.
@@ -284,30 +285,9 @@ private struct ConversationRowView: View {
         case .you:
             DeveloperMessageBubble(words: text)
         case .luke:
-            let rating = rateable.flatMap { ratings[$0.messageId] }
             VStack(alignment: .leading, spacing: 3) {
-                AgentMessageBubble(words: text) {
-                    if let rateable {
-                        RatingMenuItems(
-                            rating: rating,
-                            enabled: canRate,
-                            rate: { rate(rateable, $0) }
-                        )
-                    }
-                }
-                if rating != nil || unspoken {
-                    HStack(spacing: 8) {
-                        if let rating {
-                            RatingMark(rating: rating)
-                        }
-                        if unspoken {
-                            Text("Not spoken")
-                                .font(.caption2)
-                                .foregroundStyle(Color.inkTertiary)
-                        }
-                    }
-                    .padding(.leading, 14)
-                }
+                AgentMessageBubble(words: text) { ratingItems(rateable) }
+                underline(rateable: rateable, unspoken: unspoken, leading: 14)
             }
         case .note:
             Text(text)
@@ -316,13 +296,55 @@ private struct ConversationRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
         case .own:
-            OwnJudgmentRow {
-                MarkdownMessageView(text)
-                    .foregroundStyle(Color.inkSecondary)
+            // Luke's own words are his message all the same: the same menu a
+            // reply's bubble opens, on the row that wears none.
+            VStack(alignment: .leading, spacing: 3) {
+                OwnJudgmentRow {
+                    MarkdownMessageView(text)
+                        .foregroundStyle(Color.inkSecondary)
+                }
+                .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12))
+                .contextMenu {
+                    ratingItems(rateable)
+                    MessageCopyAction(words: text)
+                }
+                underline(rateable: rateable, unspoken: unspoken, leading: 26)
             }
         }
     }
 
+    /// The two thumbs, where the message takes a verdict; nothing otherwise.
+    @ViewBuilder
+    private func ratingItems(_ rateable: RateableMessage?) -> some View {
+        if let rateable {
+            RatingMenuItems(
+                rating: ratings[rateable.messageId],
+                enabled: canRate,
+                rate: { rate(rateable, $0) }
+            )
+        }
+    }
+
+    /// The quiet line under one of Luke's messages: the verdict standing on
+    /// it, and whether a briefing went unheard. Nothing is drawn when neither
+    /// holds, so the row's height is the words' alone.
+    @ViewBuilder
+    private func underline(rateable: RateableMessage?, unspoken: Bool, leading: CGFloat) -> some View {
+        let rating = rateable.flatMap { ratings[$0.messageId] }
+        if rating != nil || unspoken {
+            HStack(spacing: 8) {
+                if let rating {
+                    RatingMark(rating: rating)
+                }
+                if unspoken {
+                    Text("Not spoken")
+                        .font(.caption2)
+                        .foregroundStyle(Color.inkTertiary)
+                }
+            }
+            .padding(.leading, leading)
+        }
+    }
 }
 
 /// Two thumbs in the press-and-hold menu of one of Luke's messages, the way

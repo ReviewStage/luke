@@ -365,9 +365,9 @@ statuses, and the session action kinds and tool names a row is drawn for —
 equal to the TypeScript sets, which is what keeps the two platforms' rows
 saying the same set of things while each words them itself.
 
-Behind a press and hold on each of Luke's messages — a reply or a briefing,
-the assistant rows the service accepts a verdict on — stand two thumbs, above
-Copy in the bubble's menu. A press is the one write this screen makes:
+Behind a press and hold on each of Luke's messages — a reply, a briefing, or
+his own judgment's words, the assistant rows the service accepts a verdict
+on — stand two thumbs, above Copy in the message's menu. A press is the one write this screen makes:
 `MessageRatingClient` puts the verdict and this device's id to
 `PUT /api/conversation/messages/{id}/rating` through the same `authorized()`
 retry and holder fence every phone client runs under, the answer is recorded
