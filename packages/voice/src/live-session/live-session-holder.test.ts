@@ -115,8 +115,6 @@ interface Fixture {
   beats: SessionBeatFrame[];
   /** Every kind the holder told its caller was spoken, in order. */
   spoken: ProactiveSpeechKind[];
-  /** What the holder said out loud about itself, in order. */
-  said: string[];
   /** The service's word that a turn was spoken, as the source's door would deliver it. */
   tellSpoken(kind: ProactiveSpeechKind): void;
   created: number;
@@ -140,7 +138,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const reports: boolean[] = [];
     const beats: SessionBeatFrame[] = [];
     const spoken: ProactiveSpeechKind[] = [];
-    const said: string[] = [];
     let spokenListener: ((kind: ProactiveSpeechKind) => void) | undefined;
     const entries: ConversationEntry[] = [];
     const roster: RosterSeedSession[] = [];
@@ -198,9 +195,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       roster: () => roster,
       emit: (change) => changes.push(change),
       createId: () => `id-${++ids}`,
-      report: (message) => {
-        said.push(message);
-      },
+      report: () => undefined,
       onSpoken: (kind) => {
         spoken.push(kind);
       },
@@ -230,7 +225,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       beats,
       spoken,
-      said,
       tellSpoken: (kind) => {
         spokenListener?.(kind);
       },
@@ -854,13 +848,6 @@ it.effect(
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 1);
       yield* settle();
       assert.equal(f.holder.sessionStands(), false);
-      // Said out loud: a session that opened and spoke nothing is a service
-      // that could not say the line, which is otherwise indistinguishable
-      // from a picker that was never wired up.
-      assert.equal(
-        f.said.some((message) => message.includes("said nothing into it")),
-        true,
-      );
     }),
 );
 

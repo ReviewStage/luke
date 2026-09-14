@@ -194,8 +194,6 @@ export class LiveSessionHolder {
   #auditionCloseAt: number | undefined;
   /** Settled whenever that deadline moves, so the fiber waiting on it wakes to the deadline as it now stands. */
   #auditionMoved: Deferred.Deferred<void> | undefined;
-  /** Whether the line was heard on the session standing, so the ceiling can say that it was not. */
-  #auditionHeard = false;
   /** Which audition is the standing one, so a superseded one's asks end nothing. */
   #audition = 0;
   readonly #tasks: Queue.Queue<Effect.Effect<void>>;
@@ -587,7 +585,6 @@ export class LiveSessionHolder {
       return;
     }
     this.#auditionSession = session;
-    this.#auditionHeard = false;
     this.#moveAuditionClose(
       this.#clock.currentTimeMillisUnsafe() + VOICE_PREVIEW_SESSION.CEILING_MS,
     );
@@ -618,16 +615,6 @@ export class LiveSessionHolder {
         if (closeAt === undefined) return;
         const remaining = closeAt - this.#clock.currentTimeMillisUnsafe();
         if (remaining <= 0) {
-          // The ceiling rather than the line: nothing was ever heard on this
-          // session, so the service never spoke the audition — an older
-          // deployment that cannot read the beat, or one that refused it.
-          // Said out loud, because silence here looks exactly like a picker
-          // that was never wired up.
-          if (!this.#auditionHeard) {
-            this.#options.report(
-              "Voice audition: the session opened but the service said nothing into it",
-            );
-          }
           yield* this.#end(session);
           return;
         }
@@ -726,7 +713,6 @@ export class LiveSessionHolder {
       // this session's own, so a word about one already superseded closes
       // nothing that came after it.
       if (this.#auditionSession === session) {
-        this.#auditionHeard = true;
         this.#moveAuditionClose(
           this.#clock.currentTimeMillisUnsafe() + VOICE_PREVIEW_SESSION.LINGER_MS,
         );

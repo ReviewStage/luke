@@ -84,20 +84,13 @@ export interface LiveDependencies {
   calendars: CalendarsComposer;
 }
 
-/** The three beats a hold keeps back, since each is Luke speaking of his own accord. */
-const HELD_BEAT_KINDS: readonly BeatKind[] = [
+/** The beats this side decides, each withdrawn together at a sign-out or under a hold. */
+const BEAT_KINDS: readonly BeatKind[] = [
   PROACTIVE_SPEECH_KIND.ARRIVAL,
   PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
   PROACTIVE_SPEECH_KIND.LAUNCH,
+  PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
 ];
-
-/**
- * Every beat this side decides, dropped together at a sign-out. The
- * audition is among these and not among the held: the developer pressing a
- * voice is asking to hear it now, the way the talk key asks to be heard now,
- * and a hold is about Luke speaking unbidden.
- */
-const BEAT_KINDS: readonly BeatKind[] = [...HELD_BEAT_KINDS, PROACTIVE_SPEECH_KIND.VOICE_PREVIEW];
 
 /**
  * The GPT Live session as one concern of the host: the `voice.*` methods the
@@ -327,31 +320,18 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   });
 
   /**
-   * The voice picker's audition. A hold does not keep it back: the developer
-   * has just pressed a voice and is listening for it, which is a request to
-   * be spoken to now, like the talk key and unlike everything else this
-   * composer decides — and a line released when a meeting ends is a line
-   * about nothing. What does stop it is having nothing to speak with: no
-   * account, no voice on it, or the spoken introduction still standing in
-   * front of every other word. Each refusal says so, because an audition that
-   * does nothing is otherwise indistinguishable from one that was never asked
-   * for.
+   * The voice picker's audition, decided here on the same terms as a beat:
+   * an account with voice on it, no introduction standing in front of it,
+   * and speech free. It is asked for and not held for later — what the
+   * developer is listening for is the voice they just chose, and a line
+   * released when a meeting ends is a line about nothing.
    */
-  const auditionVoice = Effect.sync(() => {
-    if (!runMode.requiresAccount || !account.signedIn()) {
-      kernel.report("Voice audition: not asked — no account is signed in");
-      return;
-    }
-    if (!account.voiceCapabilities.liveSessions) {
-      kernel.report("Voice audition: not asked — voice is unavailable on this account");
-      return;
-    }
-    if (calendars.introductionOwed()) {
-      kernel.report("Voice audition: not asked — the spoken introduction is still owed");
-      return;
-    }
-    if (service.previewVoice()) return;
-    kernel.report("Voice audition: not asked — a conversation stands and keeps its own voice");
+  const auditionVoice = Effect.gen(function* () {
+    if (!runMode.requiresAccount || !account.signedIn()) return;
+    if (!account.voiceCapabilities.liveSessions) return;
+    if (calendars.introductionOwed()) return;
+    if (yield* speechHeld) return;
+    service.previewVoice();
   });
 
   /** When this Mac last asked for a session on a briefing's account, for the debounce. */
@@ -424,7 +404,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
    */
   const holdRead = Effect.gen(function* () {
     if (yield* speechHeld) {
-      for (const kind of HELD_BEAT_KINDS) {
+      for (const kind of BEAT_KINDS) {
         if (service.withdrawBeat(kind)) beatHeld = true;
       }
       // A `wanted` out for a briefing is taken back too, and the briefing
