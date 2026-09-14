@@ -681,7 +681,6 @@ export const composeSettings = (): Effect.Effect<
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
       reportPresence: linked((links) => links.reportPresence),
-      emitSettings,
     });
 
     const applyHostSettingSideEffect = (

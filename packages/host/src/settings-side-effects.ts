@@ -30,7 +30,6 @@ export interface HostSettingSideEffectDependencies {
   readonly refreshAnnouncementHold: Effect.Effect<void>;
   /** The device heartbeat sent now, carrying the quiet instant as it stands after the write. */
   readonly reportPresence: Effect.Effect<void>;
-  emitSettings: () => Effect.Effect<void>;
 }
 
 /**

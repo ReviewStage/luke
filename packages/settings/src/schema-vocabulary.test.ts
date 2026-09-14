@@ -28,8 +28,6 @@ function settlesVocabulary<Member extends string>(
   }
 }
 
-test("the voice source schema holds exactly the account and key sources", () => {});
-
 test("the reset scope schema holds exactly the scopes settings resets by", () => {
   settlesVocabulary(SettingsResetScopeSchema, Object.values(SETTINGS_RESET_SCOPE), ["appearances"]);
 });

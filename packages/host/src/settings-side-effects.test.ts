@@ -31,7 +31,6 @@ it.effect(
         setVoice: () => step("setVoice"),
         refreshAnnouncementHold: step("refreshAnnouncementHold"),
         reportPresence: step("reportPresence"),
-        emitSettings: () => step("emitSettings"),
       });
 
       yield* effects[SETTING_SIDE_EFFECT.ANNOUNCEMENT_HOLD]({ settings: SETTINGS });
