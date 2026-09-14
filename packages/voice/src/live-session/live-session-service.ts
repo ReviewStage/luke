@@ -1062,6 +1062,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         return Effect.void;
       case LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED:
         session.micLive = true;
+        // The developer opened the microphone on an audition's session: what
+        // Luke says from here is a reply to them, and is kept.
+        session.auditioning = false;
         return Effect.void;
       case LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED:
       case LIVE_SERVER_EVENT.THINKING_APPENDED:
@@ -1550,8 +1553,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
     // Marked before the append leaves, so no transcript of the line can
-    // precede the mark that keeps it out of the record.
-    if (request.kind === PROACTIVE_SPEECH_KIND.VOICE_PREVIEW) session.auditioning = true;
+    // precede the mark that keeps it out of the record; and unmarked by any
+    // other turn, since a briefing spoken into the audition's session makes
+    // it a conversation again, whose words are written down.
+    session.auditioning = request.kind === PROACTIVE_SPEECH_KIND.VOICE_PREVIEW;
     const opening = speechOpening(request.turn);
     if (opening) {
       this.#speakOpening(session, request, opening);

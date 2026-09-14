@@ -125,7 +125,7 @@ interface Fixture {
   reportsActivity: boolean;
   attachFails: boolean;
   /** The next create waits until `releaseCreate`, so a test can act while one is out. */
-  holdCreate(): Effect.Effect<void>;
+  holdCreate(): void;
   releaseCreate(): void;
   open(): Effect.Effect<FakeSideband>;
 }
@@ -240,10 +240,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       set attachFails(value: boolean) {
         state.attachFails = value;
       },
-      holdCreate: () =>
-        Effect.gen(function* () {
-          createGate = yield* Deferred.make<void>();
-        }),
+      holdCreate: () => {
+        createGate = Deferred.makeUnsafe<void>();
+      },
       releaseCreate: () => {
         const gate = createGate;
         createGate = undefined;
@@ -921,7 +920,7 @@ it.effect(
       // The peer is opening a session for the first choice; the second choice
       // lands before it stands, by which time the source has the newer voice
       // and this session can only ever speak the older one.
-      yield* f.holdCreate();
+      f.holdCreate();
       const creating = yield* Effect.forkChild(f.holder.createSession("offer"));
       yield* settle();
       assert.equal(f.holder.previewVoice(), true);
@@ -943,4 +942,34 @@ it.effect(
       yield* settle();
       assert.equal(f.holder.sessionStands(), true);
     }),
+);
+
+it.effect(
+  "the developer opening the microphone on the audition's session makes it a conversation: the ceiling leaves it standing, and a later choice leaves it alone",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      assert.equal(f.holder.previewVoice(), true);
+      const sideband = yield* f.open();
+      f.tellSpoken(PROACTIVE_SPEECH_KIND.VOICE_PREVIEW);
+      f.holder.reportTalk();
+      yield* TestClock.adjust(Duration.millis(VOICE_PREVIEW_SESSION.CEILING_MS));
+      yield* settle();
+      assert.equal(f.holder.sessionStands(), true);
+      assert.deepEqual(sideband.sent, []);
+      assert.equal(f.holder.previewVoice(), false);
+    }),
+);
+
+it.effect("a microphone report against no session, or an ordinary one, moves nothing", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.holder.reportTalk();
+    assert.deepEqual(phases(f.changes), []);
+    const sideband = yield* f.open();
+    f.holder.reportTalk();
+    yield* settle();
+    assert.equal(f.holder.sessionStands(), true);
+    assert.deepEqual(sideband.sent, []);
+  }),
 );

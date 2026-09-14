@@ -1298,6 +1298,60 @@ it.effect(
 );
 
 it.effect(
+  "a briefing spoken into the audition's session is written down, since the audition ends where a turn the developer did not ask to hear begins",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW, decidedAt: f.clock.now });
+      yield* settle();
+      sideband.acknowledge(0, 100, 200);
+      sideband.output("Hi, what can I help you with?", 300, 1200);
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.equal(f.record.luke.length, 0);
+      f.service.deliverBriefing({ briefing: "Nukualofa finished.", decidedAt: f.clock.now });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 2);
+      sideband.acknowledge(1, 5000, 5200);
+      sideband.output("Nukualofa is done.", 5300, 5800);
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.deepEqual(f.spoken, [
+        PROACTIVE_SPEECH_KIND.VOICE_PREVIEW,
+        PROACTIVE_SPEECH_KIND.BRIEFING,
+      ]);
+      assert.deepEqual(
+        f.record.luke.map((line) => line.text),
+        ["Nukualofa is done."],
+      );
+    }),
+);
+
+it.effect(
+  "the developer opening the microphone on the audition's session makes what Luke says next a reply, which is written down",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.service.speakBeat({ kind: PROACTIVE_SPEECH_KIND.VOICE_PREVIEW, decidedAt: f.clock.now });
+      yield* settle();
+      sideband.acknowledge(0, 100, 200);
+      sideband.output("Hi, what can I help you with?", 300, 1200);
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.equal(f.record.luke.length, 0);
+      sideband.receive({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_UNMUTED, event_id: "unmuted" });
+      sideband.input("Is that you?", 2000, 2600);
+      sideband.output("It is.", 3000, 3400);
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.deepEqual(
+        f.record.luke.map((line) => line.text),
+        ["It is."],
+      );
+    }),
+);
+
+it.effect(
   "a muted microphone never carries the stop instruction, whether Luke is silent or mid-sentence",
   () =>
     Effect.gen(function* () {

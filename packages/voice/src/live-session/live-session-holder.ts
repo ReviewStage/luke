@@ -68,10 +68,12 @@ import type { BeatKind } from "./proactive-queue.js";
  * of its own: the voice a session speaks with is fixed when the session is
  * created, so a voice just chosen is heard by closing the audition's last
  * session and opening one under the voice the write has stored, and that
- * session is given back on the audition's own clock. The renderer's hang-up,
- * the peer's transport, and that clock are the only reasons a session ends
- * from this side, and the service's idle close reaches it as the
- * `session.closed` the relay forwards.
+ * session is given back on the audition's own clock, unless the developer
+ * opens the microphone on it or something else is spoken into it, either of
+ * which makes it a conversation the clock leaves alone. The renderer's
+ * hang-up, the peer's transport, and that clock are the only reasons a
+ * session ends from this side, and the service's idle close reaches it as
+ * the `session.closed` the relay forwards.
  *
  * Built by `make` for the scope of the composition that holds it, on the
  * same terms as `LiveSessionService`: each session stands in a scope of its
@@ -533,8 +535,11 @@ export class LiveSessionHolder {
     if (this.#options.source() === undefined) return false;
     const audition = ++this.#audition;
     const session = this.#held;
+    // The beat waits for the session the peer is told is wanted; the ceiling
+    // stands from the session, so an audition whose line is never heard
+    // still gives the session back.
     if (session === undefined || session.ended) {
-      this.#beginAudition();
+      this.#arm(VOICE_PREVIEW_BEAT);
       return true;
     }
     if (this.#auditionSession !== session) return false;
@@ -544,20 +549,29 @@ export class LiveSessionHolder {
         // Overtaken while the close was out: the audition that overtook this
         // one has asked for its own session and this one adds nothing.
         if (audition !== this.#audition) return;
-        this.#beginAudition();
+        this.#arm(VOICE_PREVIEW_BEAT);
       }),
     );
     return true;
   }
 
   /**
-   * The audition asked for: the beat waits for the session the peer is told
-   * is wanted, and the ceiling stands from here rather than from the session,
-   * so an audition whose session never comes, or whose line is never heard,
-   * still gives the session back.
+   * The peer's microphone went live on the standing session. On an
+   * audition's session that is the developer answering the voice they just
+   * heard: the session is a conversation now, and the audition's clock no
+   * longer ends it. On any other session it means nothing here.
    */
-  #beginAudition(): void {
-    this.#arm(VOICE_PREVIEW_BEAT);
+  reportTalk(): void {
+    const session = this.#held;
+    if (session === undefined || session.ended) return;
+    this.#releaseAudition(session);
+  }
+
+  /** The session stops being the audition's to close, where it was; nothing else about it moves. */
+  #releaseAudition(session: HeldSession): void {
+    if (this.#auditionSession !== session) return;
+    this.#auditionSession = undefined;
+    this.#moveAuditionClose(undefined);
   }
 
   /**
@@ -579,7 +593,7 @@ export class LiveSessionHolder {
           // flight is the word this session answered: it is spent here, so
           // the ask below is one the peer has not already answered.
           this.#wantedAt = undefined;
-          this.#beginAudition();
+          this.#arm(VOICE_PREVIEW_BEAT);
         }),
       );
       return;
@@ -717,11 +731,10 @@ export class LiveSessionHolder {
           this.#clock.currentTimeMillisUnsafe() + VOICE_PREVIEW_SESSION.LINGER_MS,
         );
       }
-    } else if (this.#auditionSession === session) {
+    } else {
       // Something the audition did not ask for was spoken into its session:
       // it is a session with a turn in it now, and no longer one to close.
-      this.#auditionSession = undefined;
-      this.#moveAuditionClose(undefined);
+      this.#releaseAudition(session);
     }
     this.#options.onSpoken?.(kind);
   }
@@ -765,10 +778,7 @@ export class LiveSessionHolder {
   #tearDown(session: HeldSession, reason: string): Effect.Effect<void> {
     session.ended = true;
     if (this.#held === session) this.#held = undefined;
-    if (this.#auditionSession === session) {
-      this.#auditionSession = undefined;
-      this.#moveAuditionClose(undefined);
-    }
+    this.#releaseAudition(session);
     // A beat the session ended on, sent or waiting, is not carried to the
     // next: the caller decides again at its next reason to, and a beat that
     // was spoken settled itself before this.

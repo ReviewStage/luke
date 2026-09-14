@@ -456,6 +456,12 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
       service.reportActivity(report.idle);
       return Effect.succeed({});
     },
+    // The developer's microphone going live on the standing session: an
+    // audition's session becomes a conversation and its clock leaves it alone.
+    [GATEWAY_METHOD.VOICE_REPORT_LIVE_TALK]: () => {
+      service.reportTalk();
+      return Effect.succeed({});
+    },
     // The stop key alone: the mute the peer sends on its own says nothing
     // about Luke's output, so this is the one ask that tells him to stop.
     [GATEWAY_METHOD.VOICE_STOP_SPEAKING]: () =>
