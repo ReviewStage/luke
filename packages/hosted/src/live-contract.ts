@@ -2,6 +2,8 @@ import {
   type InitialItem,
   LIVE_INPUT_BOUNDS,
   LIVE_VOICE_LIST,
+  type LiveAudioFormat,
+  LiveAudioFormatSchema,
   type LiveVoice,
   OBSERVED_VALUE_LENGTH,
   PROACTIVE_SPEECH_KIND,
@@ -22,11 +24,14 @@ import { Result, Schema, SchemaGetter } from "effect";
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
 
 /**
- * The desktop's contract with the hosted voice service: the two Vercel
- * Functions of Luke's own service that hold the GPT Live project key, create
- * the session at OpenAI (`POST /v1/live/sessions`), attach the trusted
- * sideband themselves, and then carry Live events between the desktop and
- * OpenAI untouched. The desktop reaches them over one WebSocket per function
+ * A device's contract with the hosted voice service: the three Vercel
+ * Functions of Luke's own service that hold the GPT Live project key. Two
+ * create a WebRTC session at OpenAI (`POST /v1/live/sessions`) from the
+ * device's offer, attach the trusted sideband themselves, and then carry Live
+ * events between the device and OpenAI untouched; the third opens a primary
+ * WebSocket to OpenAI of the service's own for a device with no WebRTC, and
+ * carries that device's audio up and Luke's down over the one socket beside
+ * the events. A device reaches each over one WebSocket per function
  * connection, and what travels on that socket before the Live events do is
  * declared here, once, for both ends.
  */
@@ -111,9 +116,9 @@ export function hostedVoiceServiceOrigin(options: {
  * connection, which the platform closes at the function's maximum duration.
  */
 export const VOICE_SERVICE_FRAME = {
-  /** The desktop's opening frame for a new session: the offer, the voice, and the seed. */
+  /** The device's opening frame for a new session: the offer, the voice, and the seed; or, on the audio route, the voice and the format. */
   SESSION_CREATE: "session.create",
-  /** The service's answer once OpenAI has created the session and the sideband stands. */
+  /** The service's answer once OpenAI has created the session and the sideband stands, or once the service's own socket to it has started. */
   SESSION_CREATED: "session.created",
   /** The desktop's opening frame on a fresh connection to a session this account created. */
   SESSION_ATTACH: "session.attach",
@@ -196,6 +201,31 @@ export interface SessionCreateFrame {
 /** The service's answer, and the allowance the session was spent against. */
 export interface SessionCreatedFrame extends LiveSessionCreated {
   type: typeof VOICE_SERVICE_FRAME.SESSION_CREATED;
+  quota?: HostedQuota;
+}
+
+/**
+ * The opening frame of a device that has no WebRTC of its own and streams
+ * PCM through the service instead: the voice, and the one format the session
+ * carries in both directions, chosen from `LIVE_AUDIO_FORMAT`. No offer,
+ * since the service's own socket to OpenAI is the transport, and no seed,
+ * since the phone seeds nothing and the watch follows it.
+ */
+export interface SessionAudioCreateFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATE;
+  voice: LiveVoice;
+  format: LiveAudioFormat;
+}
+
+/**
+ * The service's answer on the audio route: the id `session.started` named,
+ * which is the only place a session of the service's own socket names itself,
+ * and the allowance the session was spent against. No SDP answer, since
+ * nothing negotiated one.
+ */
+export interface SessionAudioCreatedFrame {
+  type: typeof VOICE_SERVICE_FRAME.SESSION_CREATED;
+  sessionId: string;
   quota?: HostedQuota;
 }
 
@@ -383,6 +413,14 @@ const SESSION_ID_CHARS = 256;
 
 const sessionId = text(SESSION_ID_CHARS);
 
+export const sessionAudioCreateFrameSchema = schemaAs<SessionAudioCreateFrame>(
+  Schema.Struct({
+    type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATE),
+    voice: Schema.Literals(LIVE_VOICE_LIST),
+    format: LiveAudioFormatSchema,
+  }),
+);
+
 export const sessionAttachFrameSchema = schemaAs<SessionAttachFrame>(
   Schema.Struct({
     type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACH),
@@ -509,6 +547,12 @@ export function sessionCreateFrameRead(value: UnparsedWireValue): SchemaRead<Ses
   return read(sessionCreateFrameSchema, value);
 }
 
+export function sessionAudioCreateFrameFromWire(
+  value: UnparsedWireValue,
+): SessionAudioCreateFrame | undefined {
+  return admitted(sessionAudioCreateFrameSchema, value);
+}
+
 export function sessionAttachFrameFromWire(
   value: UnparsedWireValue,
 ): SessionAttachFrame | undefined {
@@ -589,4 +633,20 @@ export function sessionCreatedFrameFromWire(
   value: UnparsedWireValue,
 ): SessionCreatedFrame | undefined {
   return admittedAnswer(sessionCreatedFrameSchema, value);
+}
+
+export const sessionAudioCreatedFrameSchema = schemaAs<SessionAudioCreatedFrame>(
+  omittingUndefinedKeys(
+    Schema.Struct({
+      type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_CREATED),
+      sessionId,
+      quota: Schema.optionalKey(droppedField(hostedQuotaSchema)),
+    }),
+  ),
+);
+
+export function sessionAudioCreatedFrameFromWire(
+  value: UnparsedWireValue,
+): SessionAudioCreatedFrame | undefined {
+  return admittedAnswer(sessionAudioCreatedFrameSchema, value);
 }

@@ -24,9 +24,12 @@ the host, and a web function alike.
   is given a format. One format carries **both directions** and is fixed at
   startup, so the default — PCM16 at 16 kHz, ruled on 2026-09-14 — is Luke's
   voice as much as the device's microphone, and changing it is a product
-  decision. `session.start` stands beside the creation request rather than in
-  `LIVE_CLIENT_EVENT`, which is the in-session set a renderer's channel and the
-  service's frame decisions are stated over.
+  decision. `session.start` and the primary socket's own
+  `session.input_audio.append` stand beside the creation request rather than
+  in `LIVE_CLIENT_EVENT`, which is the in-session set a renderer's channel is
+  stated over: a renderer never starts a session or appends audio, and the
+  service's one route that forwards a device's audio names the append by its
+  own constant.
 - `instructions.ts` is the Live prompting guide's starter template with its
   brackets filled in and one block beside them, the speaking policies. **Every
   other optional control from the guide's appendix is absent until listening

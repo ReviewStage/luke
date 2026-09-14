@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import {
+  LIVE_AUDIO_ENCODING,
+  LIVE_AUDIO_FORMAT,
   LIVE_INPUT_BOUNDS,
   LIVE_VOICE,
   OBSERVED_VALUE_LENGTH,
@@ -17,6 +19,8 @@ import {
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionAttachFrameFromWire,
+  sessionAudioCreatedFrameFromWire,
+  sessionAudioCreateFrameFromWire,
   sessionBeatFrameFromWire,
   sessionCreatedFrameFromWire,
   sessionCreateFrameFromWire,
@@ -153,6 +157,57 @@ test("the created session read on its own is the id and the answer, both require
   );
   assert.equal(liveSessionCreatedFromWire({ sessionId: "live_123" }), undefined);
   assert.equal(liveSessionCreatedFromWire({ sdpAnswer: SDP }), undefined);
+});
+
+test("an audio session.create frame is the voice and one of the four formats, with no offer and no seed", () => {
+  const audio = {
+    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+    voice: LIVE_VOICE.MARIN,
+    format: LIVE_AUDIO_FORMAT.PCM16_16K,
+  };
+  assert.deepEqual(sessionAudioCreateFrameFromWire(audio), audio);
+  for (const format of Object.values(LIVE_AUDIO_FORMAT)) {
+    assert.deepEqual(sessionAudioCreateFrameFromWire({ ...audio, format })?.format, format);
+  }
+  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, sdp: SDP }), undefined);
+  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, input: [] }), undefined);
+  assert.equal(
+    sessionAudioCreateFrameFromWire({
+      type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+      voice: LIVE_VOICE.MARIN,
+    }),
+    undefined,
+  );
+  assert.equal(
+    sessionAudioCreateFrameFromWire({
+      ...audio,
+      format: { type: LIVE_AUDIO_ENCODING.PCM16, rate: 8_000 },
+    }),
+    undefined,
+  );
+  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, voice: "hal" }), undefined);
+  assert.equal(sessionAudioCreateFrameFromWire({ ...audio, model: "gpt-live-1" }), undefined);
+  // The two create frames share a type and admit each other's shape on neither side.
+  assert.equal(sessionAudioCreateFrameFromWire(createFrame()), undefined);
+  assert.equal(sessionCreateFrameFromWire(audio), undefined);
+  assert.equal(sessionOpeningFrameFromWire(audio), undefined);
+});
+
+test("an audio session.created frame is the id and the quota, with no SDP answer, ignoring what a newer service adds", () => {
+  const created = { type: VOICE_SERVICE_FRAME.SESSION_CREATED, sessionId: "live_123" };
+  assert.deepEqual(sessionAudioCreatedFrameFromWire({ ...created, later: true }), created);
+  const quota = { used: 2, limit: 30, resetsAt: 1_800_000_000_000 };
+  assert.deepEqual(sessionAudioCreatedFrameFromWire({ ...created, quota }), { ...created, quota });
+  const misquoted = sessionAudioCreatedFrameFromWire({ ...created, quota: { used: -1 } });
+  assert.ok(misquoted);
+  assert.equal("quota" in misquoted, false);
+  assert.equal(
+    sessionAudioCreatedFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_CREATED }),
+    undefined,
+  );
+  assert.equal(sessionAudioCreatedFrameFromWire({ ...created, sessionId: "  " }), undefined);
+  // The WebRTC reader still wants its answer, so a Mac cannot mistake the audio route's for its own.
+  assert.equal(sessionCreatedFrameFromWire(created), undefined);
 });
 
 test("a session.attach frame is the type and one session id, and nothing else", () => {

@@ -3,7 +3,12 @@ import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { test } from "vitest";
-import { LIVE_CLIENT_EVENT, RENDERER_CLIENT_EVENTS, RENDERER_SERVER_EVENTS } from "./events.js";
+import {
+  LIVE_CLIENT_EVENT,
+  LIVE_SERVER_EVENT,
+  RENDERER_CLIENT_EVENTS,
+  RENDERER_SERVER_EVENTS,
+} from "./events.js";
 import { LIVE_SCENE, sessionInstructions } from "./instructions.js";
 import { developerSeedItem } from "./seed.js";
 import {
@@ -11,9 +16,12 @@ import {
   LIVE_AUDIO_FORMAT,
   LIVE_DEFAULT_AUDIO_FORMAT,
   LIVE_DELEGATION_TYPE,
+  LIVE_INPUT_AUDIO_APPEND,
   LIVE_SESSION_START,
   LIVE_SESSIONS_PATH,
   LIVE_TRANSPORT_TYPE,
+  type LiveAudioFormat,
+  LiveAudioFormatSchema,
   liveAttachPath,
   liveCreateAnswerSchema,
   liveCreateRequest,
@@ -110,6 +118,34 @@ test("the four formats are the API's own, and a session with no format named is 
     }).audio.format,
     LIVE_AUDIO_FORMAT.G711_ULAW_8K,
   );
+});
+
+test("the format schema admits each of the four formats as itself and refuses every other pairing", () => {
+  const read = readEither(LiveAudioFormatSchema);
+  for (const format of Object.values(LIVE_AUDIO_FORMAT)) {
+    const admitted: LiveAudioFormat | undefined = Result.getOrUndefined(read({ ...format }));
+    assert.deepEqual(admitted, format);
+  }
+  for (const refused of [
+    { type: LIVE_AUDIO_ENCODING.PCM16, rate: 8_000 },
+    { type: LIVE_AUDIO_ENCODING.G711_ULAW, rate: 16_000 },
+    { type: LIVE_AUDIO_ENCODING.G711_ALAW, rate: 24_000 },
+    { type: "audio/opus", rate: 48_000 },
+    { type: LIVE_AUDIO_ENCODING.PCM16 },
+    { rate: 16_000 },
+    { type: LIVE_AUDIO_ENCODING.PCM16, rate: 16_000, channels: 1 },
+    "audio/pcm",
+  ]) {
+    assert.equal(Result.isFailure(read(refused)), true);
+  }
+});
+
+test("the audio append is the primary socket's own client event, named as its reflection is and outside the renderer's set", () => {
+  assert.equal(LIVE_INPUT_AUDIO_APPEND, LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND);
+  const inSessionEvents: readonly string[] = Object.values(LIVE_CLIENT_EVENT);
+  assert.equal(inSessionEvents.includes(LIVE_INPUT_AUDIO_APPEND), false);
+  const rendererEvents: readonly string[] = RENDERER_CLIENT_EVENTS;
+  assert.equal(rendererEvents.includes(LIVE_INPUT_AUDIO_APPEND), false);
 });
 
 test("a primary session takes the caller's voice, model, and history on the same terms", () => {

@@ -30,6 +30,7 @@ const MODULE_SCHEMAS = {
   session: {
     LiveTransportTypeSchema: session.LiveTransportTypeSchema,
     LiveDelegationTypeSchema: session.LiveDelegationTypeSchema,
+    LiveAudioFormatSchema: session.LiveAudioFormatSchema,
     liveCreateAnswerSchema: session.liveCreateAnswerSchema,
     NoAccountRefusal: session.NoAccountRefusal,
     DisabledByFixtureRefusal: session.DisabledByFixtureRefusal,
