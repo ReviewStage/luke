@@ -1,14 +1,17 @@
 import AVFoundation
 
 public enum PCMAudio {
-    /// Float32 mono at 24 kHz — `AVAudioPlayerNode`'s native scheduling
-    /// format, at the rate the Realtime wire speaks. A new value per call
-    /// rather than one shared: `AVAudioFormat` is not `Sendable`, so each
-    /// owner holds its own and nothing crosses an isolation boundary.
-    public static func format() -> AVAudioFormat {
+    /// Float32 mono at the rate the wire speaks — `AVAudioPlayerNode`'s native
+    /// scheduling format. The phone's Realtime mint speaks at 24 kHz
+    /// (`PressAudioBuffer.sampleRate`), the default; the watch's audio route
+    /// speaks at the rate of the `LiveAudioFormat` its session was created
+    /// under. A new value per call rather than one shared: `AVAudioFormat` is
+    /// not `Sendable`, so each owner holds its own and nothing crosses an
+    /// isolation boundary.
+    public static func format(sampleRate: Int = PressAudioBuffer.sampleRate) -> AVAudioFormat {
         AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(PressAudioBuffer.sampleRate),
+            sampleRate: Double(sampleRate),
             channels: 1,
             interleaved: false
         )!
@@ -58,17 +61,18 @@ public enum PCMAudioSessionPolicy: Sendable {
     }
 }
 
-/// Plays 24 kHz PCM16 mono audio through the speaker using
+/// Plays PCM16 mono audio at the rate given through the speaker using
 /// `AVAudioPlayerNode`, converting incoming Int16 samples to Float32 —
 /// `AVAudioEngine`'s native format — before scheduling them.
 public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
-    private let format = PCMAudio.format()
+    private let format: AVAudioFormat
     private let policy: PCMAudioSessionPolicy
 
-    public init(policy: PCMAudioSessionPolicy) {
+    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
         self.policy = policy
+        format = PCMAudio.format(sampleRate: sampleRate)
         if policy.configuresSession {
             let audioSession = AVAudioSession.sharedInstance()
             try? audioSession.setCategory(
@@ -122,16 +126,18 @@ public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
     }
 }
 
-/// Captures 24 kHz PCM16 mono audio from the microphone using
+/// Captures PCM16 mono audio at the rate given from the microphone using
 /// `AVAudioEngine`: taps the input node at its hardware format, converts each
 /// frame through `AVAudioConverter`, and yields Int16 samples to the stream.
 public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let policy: PCMAudioSessionPolicy
+    private let sampleRate: Int
     private var hasTap = false
 
-    public init(policy: PCMAudioSessionPolicy) {
+    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
         self.policy = policy
+        self.sampleRate = sampleRate
     }
 
     public func start() throws -> AsyncStream<[Int16]> {
@@ -155,7 +161,7 @@ public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
         // simulator can briefly report while its microphone route changes.
         // Reject it before installTap so the turn can fail normally instead
         // of terminating the app.
-        let targetFormat = PCMAudio.format()
+        let targetFormat = PCMAudio.format(sampleRate: sampleRate)
         guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0,
               let converter = AVAudioConverter(from: hwFormat, to: targetFormat)
         else {

@@ -3,17 +3,22 @@ import XCTest
 
 @testable import LukeKit
 
-/// The sessions-socket frames the phone writes and reads, held to the JSON
-/// Schema goldens `packages/hosted/fixtures/json-schema/live-contract-*.json`
-/// commits for `packages/hosted/src/live-contract.ts`: every frame the phone
-/// sends validates against the schema the service reads it by, and every
-/// frame the phone reads is decoded from a document that validates against
-/// the schema the service writes it by. The bytes are the point, so the
-/// goldens are read as they stand rather than restated here.
+/// The voice-socket frames the phone and the watch write and read, held to
+/// the JSON Schema goldens `packages/hosted/fixtures/json-schema/live-contract-*.json`
+/// commits for `packages/hosted/src/live-contract.ts` and
+/// `packages/live/fixtures/json-schema/session-*.json` for
+/// `packages/live/src/session.ts`: every frame a device sends validates
+/// against the schema the service reads it by, and every frame a device reads
+/// is decoded from a document that validates against the schema the service
+/// writes it by. The bytes are the point, so the goldens are read as they
+/// stand rather than restated here.
 final class VoiceServiceContractFixtureTests: XCTestCase {
     private enum Golden {
         static let create = "live-contract-sessionCreateFrameSchema.json"
         static let created = "live-contract-sessionCreatedFrameSchema.json"
+        static let audioCreate = "live-contract-sessionAudioCreateFrameSchema.json"
+        static let audioCreated = "live-contract-sessionAudioCreatedFrameSchema.json"
+        static let audioFormat = "session-LiveAudioFormatSchema.json"
         static let attach = "live-contract-sessionAttachFrameSchema.json"
         static let attached = "live-contract-sessionAttachedFrameSchema.json"
         static let activity = "live-contract-sessionActivityFrameSchema.json"
@@ -31,6 +36,10 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
 
     private func schema(_ name: String) throws -> [String: Any] {
         try RepositoryFixtures.json(RepositoryFixtures.jsonSchema, name)
+    }
+
+    private func liveSchema(_ name: String) throws -> [String: Any] {
+        try RepositoryFixtures.json(RepositoryFixtures.liveJsonSchema, name)
     }
 
     private func document(_ text: String) throws -> Any {
@@ -65,6 +74,52 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
             ((try schema(Golden.create)["properties"] as? [String: Any])?["voice"] as? [String: Any])?["enum"] as? [String]
         )
         XCTAssertEqual(Set(LiveVoice.allCases.map(\.rawValue)), Set(voices))
+    }
+
+    func testTheAudioCreateFrameIsTheVoiceAndTheFormat() throws {
+        let frame = VoiceServiceOutgoingFrame.createAudio(SessionAudioCreateFrame(voice: .cedar, format: .default))
+        try assertConforms(frame.text, to: Golden.audioCreate)
+        let object = try XCTUnwrap(try document(frame.text) as? [String: Any])
+        XCTAssertEqual(object["type"] as? String, "session.create")
+        XCTAssertEqual(object["voice"] as? String, "cedar")
+        XCTAssertEqual(object["format"] as? [String: Any] as NSDictionary?, ["type": "audio/pcm", "rate": 16000])
+        XCTAssertEqual(Set(object.keys), ["type", "voice", "format"])
+        // Without an offer it is not a frame the sessions route opens on.
+        XCTAssertNotEqual(JSONSchemaCheck.violations(try document(frame.text), against: try schema(Golden.opening)), [])
+    }
+
+    func testEveryAudioFormatIsOneTheGoldensAdmitAndNoOther() throws {
+        var admitted: Set<String> = []
+        for format in LiveAudioFormat.allCases {
+            let frame = VoiceServiceOutgoingFrame.createAudio(SessionAudioCreateFrame(voice: .marin, format: format))
+            try assertConforms(frame.text, to: Golden.audioCreate)
+            let wire = try text(format.wire)
+            let violations = JSONSchemaCheck.violations(try document(wire), against: try liveSchema(Golden.audioFormat))
+            XCTAssertEqual(violations, [], "\(Golden.audioFormat) refuses \(wire)")
+            admitted.insert(wire)
+        }
+        // The golden's branches are exactly the formats: one encoding at one rate each, nothing the watch cannot name.
+        let branches = try XCTUnwrap(try liveSchema(Golden.audioFormat)["anyOf"] as? [[String: Any]])
+        let golden = try branches.map { branch -> String in
+            let properties = try XCTUnwrap(branch["properties"] as? [String: [String: Any]])
+            let type = try XCTUnwrap((properties["type"]?["enum"] as? [String])?.first)
+            let rate = try XCTUnwrap((properties["rate"]?["enum"] as? [Int])?.first)
+            return try text(["type": type, "rate": rate])
+        }
+        XCTAssertEqual(Set(golden), admitted)
+        XCTAssertEqual(golden.count, LiveAudioFormat.allCases.count)
+        XCTAssertEqual(LiveAudioFormat.default, .pcm16At16k)
+        XCTAssertEqual(LiveAudioFormat.default.rate, 16000)
+        XCTAssertEqual(LiveAudioFormat.default.encoding, .pcm16)
+    }
+
+    func testTheAudioAppendCarriesTheSamplesAsBase64AndNothingElse() throws {
+        let frame = VoiceServiceOutgoingFrame.inputAudio(base64: PCM16Audio.base64([1, -2]))
+        XCTAssertEqual(
+            try document(frame.text) as? [String: String],
+            ["type": "session.input_audio.append", "audio": "AQD+/w=="]
+        )
+        XCTAssertEqual(VoiceServiceContract.inputAudioAppend, "session.input_audio.append")
     }
 
     func testTheAttachFrameNamesTheSessionAlone() throws {
@@ -116,7 +171,7 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         try assertConforms(full, to: Golden.created)
         try assertConforms(try text(quota), to: Golden.quota)
         XCTAssertEqual(
-            VoiceServiceIncomingFrame(text: full),
+            VoiceServiceIncomingFrame(text: full, route: .sessions),
             .created(
                 SessionCreatedFrame(
                     sessionId: Self.sessionId, sdpAnswer: Self.sdpAnswer,
@@ -129,7 +184,7 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         let bare = try text(["type": "session.created", "sessionId": Self.sessionId, "sdpAnswer": Self.sdpAnswer])
         try assertConforms(bare, to: Golden.created)
         XCTAssertEqual(
-            VoiceServiceIncomingFrame(text: bare),
+            VoiceServiceIncomingFrame(text: bare, route: .sessions),
             .created(SessionCreatedFrame(sessionId: Self.sessionId, sdpAnswer: Self.sdpAnswer, quota: nil))
         )
     }
@@ -140,9 +195,55 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
             "quota": ["used": -1, "limit": 50, "resetsAt": 1], "later": true,
         ])
         XCTAssertEqual(
-            VoiceServiceIncomingFrame(text: widened),
+            VoiceServiceIncomingFrame(text: widened, route: .sessions),
             .created(SessionCreatedFrame(sessionId: Self.sessionId, sdpAnswer: Self.sdpAnswer, quota: nil))
         )
+    }
+
+    func testTheAudioRouteReadsSessionCreatedWithoutAnAnswer() throws {
+        let quota: [String: Any] = ["used": 3, "limit": 50, "resetsAt": 1_800_003_600_000]
+        let full = try text(["type": "session.created", "sessionId": Self.sessionId, "quota": quota])
+        try assertConforms(full, to: Golden.audioCreated)
+        XCTAssertEqual(
+            VoiceServiceIncomingFrame(text: full, route: .audio),
+            .audioCreated(
+                SessionAudioCreatedFrame(
+                    sessionId: Self.sessionId,
+                    quota: HostedQuota(json: .object([
+                        "used": .number(3), "limit": .number(50), "resetsAt": .number(1_800_003_600_000),
+                    ]))
+                )
+            )
+        )
+        let bare = try text(["type": "session.created", "sessionId": " \(Self.sessionId) "])
+        XCTAssertEqual(
+            VoiceServiceIncomingFrame(text: bare, route: .audio),
+            .audioCreated(SessionAudioCreatedFrame(sessionId: Self.sessionId, quota: nil))
+        )
+        // The same document on the sessions route lacks the answer that route's golden requires.
+        XCTAssertNotEqual(JSONSchemaCheck.violations(try document(bare), against: try schema(Golden.created)), [])
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: bare, route: .sessions), .unreadable)
+        // An answering frame drops a key it does not name, an SDP answer included, and a quota it cannot read.
+        let widened = try text([
+            "type": "session.created", "sessionId": Self.sessionId, "sdpAnswer": Self.sdpAnswer,
+            "quota": ["used": -1, "limit": 50, "resetsAt": 1], "later": true,
+        ])
+        XCTAssertEqual(
+            VoiceServiceIncomingFrame(text: widened, route: .audio),
+            .audioCreated(SessionAudioCreatedFrame(sessionId: Self.sessionId, quota: nil))
+        )
+        for object: [String: Any] in [
+            ["type": "session.created", "sessionId": String(repeating: "x", count: 257)],
+            ["type": "session.created"],
+        ] {
+            let text = try text(object)
+            XCTAssertNotEqual(JSONSchemaCheck.violations(try document(text), against: try schema(Golden.audioCreated)), [])
+            XCTAssertEqual(VoiceServiceIncomingFrame(text: text, route: .audio), .unreadable, text)
+        }
+        // The contract trims the id and refuses what is left empty, a filter the golden cannot state.
+        let blank = try text(["type": "session.created", "sessionId": "  "])
+        XCTAssertEqual(JSONSchemaCheck.violations(try document(blank), against: try schema(Golden.audioCreated)), [])
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: blank, route: .audio), .unreadable)
     }
 
     func testAnAnswerOutsideTheGoldensBoundsIsUnreadable() throws {
@@ -159,7 +260,7 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         ] {
             let text = try text(object)
             XCTAssertNotEqual(JSONSchemaCheck.violations(try document(text), against: try schema(Self.golden(for: object))), [])
-            XCTAssertEqual(VoiceServiceIncomingFrame(text: text), .unreadable, text)
+            XCTAssertEqual(VoiceServiceIncomingFrame(text: text, route: .sessions), .unreadable, text)
         }
     }
 
@@ -173,7 +274,7 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         ] {
             let text = try text(object)
             XCTAssertEqual(JSONSchemaCheck.violations(try document(text), against: try schema(Self.golden(for: object))), [])
-            XCTAssertEqual(VoiceServiceIncomingFrame(text: text), .unreadable, text)
+            XCTAssertEqual(VoiceServiceIncomingFrame(text: text, route: .sessions), .unreadable, text)
         }
     }
 
@@ -187,7 +288,7 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
 
     func testSessionAttachedIsReadFromTheShapeTheGoldenWrites() throws {
         let frame = try text(["type": "session.attached", "sessionId": " \(Self.sessionId) "])
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: frame), .attached(SessionAttachedFrame(sessionId: Self.sessionId)))
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: frame, route: .sessions), .attached(SessionAttachedFrame(sessionId: Self.sessionId)))
         try assertConforms(try text(["type": "session.attached", "sessionId": Self.sessionId]), to: Golden.attached)
     }
 
@@ -199,17 +300,17 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         for kind in ProactiveSpeechKind.allCases {
             let frame = try text(["type": "session.spoken", "kind": kind.rawValue])
             try assertConforms(frame, to: Golden.spoken)
-            XCTAssertEqual(VoiceServiceIncomingFrame(text: frame), .spoken(kind))
+            XCTAssertEqual(VoiceServiceIncomingFrame(text: frame, route: .sessions), .spoken(kind))
         }
     }
 
     func testARefusalIsTheHostedErrorDocument() throws {
         let refusal = try text(["error": "quota-exhausted"])
         try assertConforms(refusal, to: Golden.hostedError)
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: refusal), .refused(.quotaExhausted, quota: nil))
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: refusal, route: .sessions), .refused(.quotaExhausted, quota: nil))
         let withQuota = try text(["error": " invalid-token ", "quota": ["used": 50, "limit": 50, "resetsAt": 7]])
         XCTAssertEqual(
-            VoiceServiceIncomingFrame(text: withQuota),
+            VoiceServiceIncomingFrame(text: withQuota, route: .sessions),
             .refused(
                 .invalidToken,
                 quota: HostedQuota(json: .object(["used": .number(50), "limit": .number(50), "resetsAt": .number(7)]))
@@ -221,27 +322,59 @@ final class VoiceServiceContractFixtureTests: XCTestCase {
         for error in errors {
             XCTAssertNotNil(HostedAPIError(rawValue: error), error)
         }
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: try text(["error": "something-newer"])), .unreadable)
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: try text(["error": "something-newer"]), route: .sessions), .unreadable)
     }
 
     func testEverythingElseNamingATypeIsARelayedLiveEvent() throws {
         let delta = try text([
             "type": "session.output_transcript.delta", "event_id": "e2", "delta": "session.spoken", "start_ms": 0,
         ])
-        guard case .liveEvent(let event) = VoiceServiceIncomingFrame(text: delta) else {
+        for route in [VoiceServiceRoute.sessions, .audio] {
+            guard case .liveEvent(let event) = VoiceServiceIncomingFrame(text: delta, route: route) else {
+                return XCTFail("a transcript delta is a live event")
+            }
+            XCTAssertEqual(event.type, "session.output_transcript.delta")
+            XCTAssertEqual(event.payload["delta"]?.stringValue, "session.spoken")
+            XCTAssertEqual(event.payload["event_id"]?.stringValue, "e2")
+        }
+    }
+
+    func testLukesAudioIsReadOffTheRelayedDeltaOnTheAudioRoute() throws {
+        let delta = try text(["type": "session.output_audio.delta", "delta": PCM16Audio.base64([300, -300, 0])])
+        guard case .liveEvent(let event) = VoiceServiceIncomingFrame(text: delta, route: .audio) else {
+            return XCTFail("an audio delta is a live event")
+        }
+        XCTAssertEqual(event.type, VoiceServiceContract.outputAudioDelta)
+        XCTAssertEqual(PCM16Audio.samples(in: event), [300, -300, 0])
+        XCTAssertNil(LiveServerEvent(json: event.payload), "the renderer grammar shows no audio")
+        let transcript = try text(["type": "session.output_transcript.delta", "event_id": "e2", "delta": "hi", "start_ms": 0, "end_ms": 5])
+        guard case .liveEvent(let words) = VoiceServiceIncomingFrame(text: transcript, route: .audio) else {
             return XCTFail("a transcript delta is a live event")
         }
-        XCTAssertEqual(event.type, "session.output_transcript.delta")
-        XCTAssertEqual(event.payload["delta"]?.stringValue, "session.spoken")
-        XCTAssertEqual(event.payload["event_id"]?.stringValue, "e2")
+        XCTAssertNil(PCM16Audio.samples(in: words))
+        XCTAssertEqual(
+            LiveServerEvent(json: words.payload),
+            .outputTranscriptDelta(LiveTranscriptDelta(eventId: "e2", delta: "hi", startMs: 0, endMs: 5))
+        )
+        for broken: [String: Any] in [
+            ["type": "session.output_audio.delta", "delta": "not base64!"],
+            ["type": "session.output_audio.delta", "delta": "AQAB"],
+            ["type": "session.output_audio.delta"],
+        ] {
+            let text = try text(broken)
+            guard case .liveEvent(let event) = VoiceServiceIncomingFrame(text: text, route: .audio) else {
+                return XCTFail("still a live event")
+            }
+            XCTAssertNil(PCM16Audio.samples(in: event), text)
+        }
     }
 
     func testWhatIsNeitherADocumentNorATypedFrameIsUnreadable() throws {
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: "not a document"), .unreadable)
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: "[1, 2]"), .unreadable)
-        XCTAssertEqual(VoiceServiceIncomingFrame(text: try text(["delta": "hi"])), .unreadable)
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: "not a document", route: .sessions), .unreadable)
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: "[1, 2]", route: .sessions), .unreadable)
+        XCTAssertEqual(VoiceServiceIncomingFrame(text: try text(["delta": "hi"]), route: .sessions), .unreadable)
         for own in [VoiceServiceOutgoingFrame.stop, .activity(SessionActivityFrame(idle: true))] {
-            XCTAssertEqual(VoiceServiceIncomingFrame(text: own.text), .unreadable)
+            XCTAssertEqual(VoiceServiceIncomingFrame(text: own.text, route: .sessions), .unreadable)
         }
     }
 }

@@ -7,10 +7,14 @@ import XCTest
 /// handshake and its refusals, the create exchange, the re-attach after a
 /// dropped connection on the desktop's own cadence, and what is held, dropped,
 /// and restated across the gap. Every case mirrors one in
-/// `packages/voice/src/live-session-source.test.ts`.
+/// `packages/voice/src/live-session-source.test.ts`. The audio route's cases
+/// follow: the same handshake at the other path, the create that names a
+/// format, the audio that rides the socket both ways, and the one connection
+/// that is the session's whole life.
 final class HostedVoiceSessionClientTests: XCTestCase {
     private static let serviceURL = URL(string: "https://voice.example.test")!
     private static let sessionsURL = URL(string: "wss://voice.example.test/api/voice/sessions")!
+    private static let audioURL = URL(string: "wss://voice.example.test/api/voice/audio")!
     private static let sdpOffer = "v=0\r\no=- 1 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
     private static let sdpAnswer = "v=0\r\no=- 2 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n"
     private static let sessionId = "ls_123"
@@ -25,6 +29,12 @@ final class HostedVoiceSessionClientTests: XCTestCase {
 
     private static func attached(_ id: String = sessionId) -> [String: Any] {
         ["type": "session.attached", "sessionId": id]
+    }
+
+    private static func audioCreated(quota: Bool = true) -> [String: Any] {
+        var frame: [String: Any] = ["type": "session.created", "sessionId": sessionId]
+        if quota { frame["quota"] = ["used": 3, "limit": 50, "resetsAt": 1_800_003_600_000] }
+        return frame
     }
 
     // MARK: - Fakes
@@ -232,7 +242,23 @@ final class HostedVoiceSessionClientTests: XCTestCase {
         return session
     }
 
+    @MainActor
+    private func opened(_ opening: HostedAudioSessionOpening, file: StaticString = #filePath, line: UInt = #line) throws
+        -> HostedAudioSession
+    {
+        guard case .opened(let session) = opening else {
+            XCTFail("no audio session opened: \(opening)", file: file, line: line)
+            throw XCTSkip()
+        }
+        return session
+    }
+
     private func refusal(_ opening: HostedVoiceSessionOpening) -> HostedVoiceSessionRefusal? {
+        if case .refused(let refusal) = opening { return refusal }
+        return nil
+    }
+
+    private func refusal(_ opening: HostedAudioSessionOpening) -> HostedVoiceSessionRefusal? {
         if case .refused(let refusal) = opening { return refusal }
         return nil
     }
@@ -248,15 +274,23 @@ final class HostedVoiceSessionClientTests: XCTestCase {
         XCTAssertTrue(condition(), "waited for \(waitedFor)", file: file, line: line)
     }
 
-    /// Reads the session's events off the test's task as they arrive.
+    /// Reads a session's events off the test's task as they arrive.
     @MainActor
     private final class Reader {
         private(set) var events: [HostedVoiceSessionEvent] = []
         private var task: Task<Void, Never>?
 
-        init(_ session: HostedVoiceSession) {
+        convenience init(_ session: HostedVoiceSession) {
+            self.init(events: session.events)
+        }
+
+        convenience init(_ session: HostedAudioSession) {
+            self.init(events: session.events)
+        }
+
+        private init(events: AsyncStream<HostedVoiceSessionEvent>) {
             task = Task { @MainActor [weak self] in
-                for await event in session.events { self?.events.append(event) }
+                for await event in events { self?.events.append(event) }
             }
         }
 
@@ -768,5 +802,166 @@ final class HostedVoiceSessionClientTests: XCTestCase {
         XCTAssertEqual(reader.closes, [1001])
         XCTAssertEqual(opener.sockets.count, 2)
         XCTAssertEqual(clock.slept, [.milliseconds(0)])
+    }
+
+    // MARK: - The audio route
+
+    @MainActor
+    func testAnAudioSessionOpensAtTheAudioPathUnderTheSameHandshakeAndNamesItsFormat() async throws {
+        let opener = ScriptedOpener([Self.answering(Self.audioCreated())])
+        let session = try opened(await client(opener).createAudio(voice: .cedar))
+        let socket = try XCTUnwrap(opener.sockets.first)
+        XCTAssertEqual(socket.url, Self.audioURL)
+        XCTAssertEqual(socket.headers, VoiceHandshakeHeaders(bearer: "token-1", deviceId: Self.deviceId))
+        XCTAssertNil(socket.headers.fields[URLSessionVoiceSocket.originField])
+        XCTAssertEqual(socket.sent.count, 1)
+        let create = try XCTUnwrap(socket.sentObjects.first)
+        XCTAssertEqual(create["type"] as? String, "session.create")
+        XCTAssertEqual(create["voice"] as? String, "cedar")
+        XCTAssertEqual(create["format"] as? [String: Any] as NSDictionary?, ["type": "audio/pcm", "rate": 16000])
+        XCTAssertNil(create["sdp"])
+        XCTAssertNil(create["input"])
+        XCTAssertEqual(session.sessionId, Self.sessionId)
+        XCTAssertEqual(session.format, .pcm16At16k)
+        XCTAssertEqual(session.quota?.used, 3)
+        XCTAssertFalse(socket.closedByClient)
+        session.close()
+        XCTAssertEqual(
+            HostedVoiceSessionClient.audioURL(serviceURL: URL(string: "http://localhost:3000")!),
+            URL(string: "ws://localhost:3000/api/voice/audio")
+        )
+    }
+
+    @MainActor
+    func testAnAudioSessionIsRefusedAsASessionsRouteOneIs() async throws {
+        for (script, expected) in [
+            (Self.refusing(status: 503), HostedVoiceSessionRefusal.hostedUnavailable),
+            (Self.refusing(status: 403), .httpError(status: 403)),
+            ({ $0.opening = .failed }, .networkError),
+            (Self.answering(["error": "quota-exhausted", "quota": ["used": 50, "limit": 50, "resetsAt": 9]]), .quotaExhausted(nil)),
+            (Self.answering(["error": "invalid-token"]), .notSignedIn),
+            (Self.answeringText(#"{"type":"session.attached","sessionId":"ls_1"}"#), .malformedResponse),
+            (Self.answeringText(#"{"type":"session.created","sessionId":""}"#), .malformedResponse),
+            (Self.answeringText("not a document"), .malformedResponse),
+            (Self.closingOnSend(code: 1011), .hostedUnavailable),
+        ] as [((FakeSocket) -> Void, HostedVoiceSessionRefusal)] {
+            let opener = ScriptedOpener([script])
+            let opening = await client(opener).createAudio(voice: .marin)
+            switch (refusal(opening), expected) {
+            case (.quotaExhausted(let quota), .quotaExhausted):
+                XCTAssertEqual(quota?.used, 50)
+            case (let outcome, _):
+                XCTAssertEqual(outcome, expected)
+            }
+            if case .opened(let session) = opening { session.close() }
+            XCTAssertEqual(opener.sockets.first?.closedByClient, true)
+        }
+        // An answer carrying more than this route's shape names is read for what it names, the rest dropped, as `admittedAnswer` reads it.
+        let widened = ScriptedOpener([Self.answering(Self.created())])
+        let session = try opened(await client(widened).createAudio(voice: .marin))
+        XCTAssertEqual(session.sessionId, Self.sessionId)
+        session.close()
+    }
+
+    @MainActor
+    func testA401OnTheAudioRouteRenewsTheBearerOnceToo() async throws {
+        let opener = ScriptedOpener([Self.refusing(status: 401), Self.answering(Self.audioCreated(quota: false))])
+        let account = Session()
+        let session = try opened(await client(opener, session: account).createAudio(voice: .marin))
+        XCTAssertEqual(account.refreshes, 1)
+        XCTAssertEqual(opener.sockets.map(\.headers.bearer), ["token-1", "token-fresh"])
+        XCTAssertEqual(opener.sockets.map(\.url), [Self.audioURL, Self.audioURL])
+        XCTAssertNil(session.quota)
+        session.close()
+    }
+
+    @MainActor
+    func testTheDevicesAudioAndReportsRideTheSocketInOrder() async throws {
+        let opener = ScriptedOpener([Self.answering(Self.audioCreated())])
+        let session = try opened(await client(opener).createAudio(voice: .marin))
+        session.appendAudio([1, -2])
+        session.appendAudio([])
+        session.reportActivity(idle: true)
+        session.stopSpeaking()
+        session.appendAudio([0, 0])
+        session.reportActivity(idle: false)
+        session.hangUp()
+        await session.settleSends()
+        let sent = opener.sockets[0].sentObjects
+        XCTAssertEqual(sent.map { $0["type"] as? String }, [
+            "session.create", "session.input_audio.append", "session.activity", "session.stop",
+            "session.input_audio.append", "session.activity", "session.close",
+        ])
+        XCTAssertEqual(sent[1]["audio"] as? String, "AQD+/w==")
+        XCTAssertEqual(sent[1].count, 2)
+        XCTAssertEqual(sent[2]["idle"] as? Bool, true)
+        XCTAssertEqual(sent[4]["audio"] as? String, "AAAAAA==")
+        XCTAssertEqual(sent[5]["idle"] as? Bool, false)
+        XCTAssertEqual(sent[6].count, 1)
+        session.close()
+        session.appendAudio([5])
+        await session.settleSends()
+        XCTAssertEqual(opener.sockets[0].sent.count, 7)
+    }
+
+    @MainActor
+    func testLukesAudioAndTheCaptionsAreHandedUpAsRelayedEvents() async throws {
+        let opener = ScriptedOpener([Self.answering(Self.audioCreated())])
+        let session = try opened(await client(opener).createAudio(voice: .marin))
+        let reader = Reader(session)
+        let socket = opener.sockets[0]
+        socket.deliver(["type": "session.output_audio.delta", "delta": PCM16Audio.base64([7, -7])])
+        socket.deliver(["type": "session.output_transcript.delta", "event_id": "e2", "delta": "Hi", "start_ms": 0, "end_ms": 4])
+        socket.deliver(["type": "session.spoken", "kind": "briefing"])
+        socket.deliverText("not a document")
+        socket.deliver(["type": "session.created", "sessionId": Self.sessionId])
+        await settled("the events to land") { reader.events.count == 3 }
+        XCTAssertEqual(reader.liveTypes, ["session.output_audio.delta", "session.output_transcript.delta"])
+        guard case .live(let audio) = reader.events[0] else { return XCTFail("audio first") }
+        XCTAssertEqual(PCM16Audio.samples(in: audio), [7, -7])
+        XCTAssertEqual(reader.events[2], .spoken(.briefing))
+        session.close()
+        await settled("the close to land") { reader.closes.count == 1 }
+        XCTAssertEqual(reader.closes, [nil])
+        XCTAssertTrue(socket.closedByClient)
+    }
+
+    @MainActor
+    func testTheConnectionEndingEndsTheAudioSessionAndNothingIsTriedAgain() async throws {
+        for code in [1000, 1001, 1006] {
+            let opener = ScriptedOpener([Self.answering(Self.audioCreated())])
+            let clock = Clock()
+            let session = try opened(await client(opener, clock: clock).createAudio(voice: .marin))
+            let reader = Reader(session)
+            opener.sockets[0].closeFromServer(code: code)
+            await settled("the close to land") { reader.closes.count == 1 }
+            XCTAssertEqual(reader.closes, [code])
+            XCTAssertEqual(opener.sockets.count, 1, "no attach on a primary socket")
+            XCTAssertEqual(clock.slept, [])
+            XCTAssertTrue(opener.sockets[0].closedByClient)
+            session.appendAudio([1])
+            session.reportActivity(idle: true)
+            await session.settleSends()
+            XCTAssertEqual(opener.sockets[0].sentTypes, ["session.create"])
+        }
+    }
+
+    @MainActor
+    func testAnAudioSessionDroppedWithoutAHangUpClosesItsSocket() async throws {
+        let opener = ScriptedOpener([Self.answering(Self.audioCreated())])
+        var session: HostedAudioSession? = try opened(await client(opener).createAudio(voice: .marin))
+        weak var dropped = session
+        let events = try XCTUnwrap(session?.events)
+        let reader = Task { @MainActor in
+            var closes: [Int?] = []
+            for await event in events { if case .closed(let code) = event { closes.append(code) } }
+            return closes
+        }
+        XCTAssertEqual(opener.sockets[0].closedByClient, false)
+        session = nil
+        await settled("the dropped session to be freed") { dropped == nil }
+        await settled("the socket to be closed") { opener.sockets[0].closedByClient }
+        let closes = await reader.value
+        XCTAssertEqual(closes, [])
     }
 }

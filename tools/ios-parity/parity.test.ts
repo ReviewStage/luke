@@ -53,9 +53,14 @@ import {
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
+  LIVE_AUDIO_ENCODING,
+  LIVE_AUDIO_FORMAT,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
+  LIVE_DEFAULT_AUDIO_FORMAT,
   LIVE_IDLE_WINDOW_MS,
+  LIVE_INPUT_AUDIO_APPEND,
+  LIVE_SERVER_EVENT,
   LIVE_STATUS,
   LIVE_VOICE,
   PROACTIVE_SPEECH_KIND,
@@ -92,7 +97,9 @@ import { Schema, SchemaAST } from "effect";
 import { test } from "vitest";
 
 import {
+  swiftEnumCases,
   swiftEnumRawValues,
+  swiftStaticCase,
   swiftStaticNumber,
   swiftStaticNumberList,
   swiftStaticString,
@@ -423,6 +430,58 @@ test("every ProductVoiceSessionSource is a PRODUCT_VOICE_SESSION_SOURCE", () => 
   );
 });
 
+test("the audio socket path and its two audio event types are the contract's", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  assert.equal(
+    `/${swiftStaticString(source, "audioPath")}`,
+    VOICE_SERVICE_PATH.AUDIO,
+    "a path the service does not answer opens no session for the watch",
+  );
+  assert.equal(
+    swiftStaticString(source, "inputAudioAppend"),
+    LIVE_INPUT_AUDIO_APPEND,
+    "audio sent under another type is refused by the route, which closes the socket",
+  );
+  assert.equal(
+    swiftStaticString(source, "outputAudioDelta"),
+    LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA,
+    "Luke's audio relayed under a type the watch does not read plays nothing",
+  );
+});
+
+test("LiveAudioEncoding is LIVE_AUDIO_ENCODING", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "LiveAudioEncoding"),
+    LIVE_AUDIO_ENCODING,
+    "an encoding named otherwise is refused by the format schema at the door",
+  );
+});
+
+test("LiveAudioFormat is LIVE_AUDIO_FORMAT, rate for rate, with the same default", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  const cases = swiftEnumCases(source, "LiveAudioFormat");
+  assertSameValues(
+    [...cases.values()],
+    Object.keys(LIVE_AUDIO_FORMAT),
+    "a format the watch names that the table does not is refused at startup",
+  );
+  const rates = swiftSwitchNumbers(source, "LiveAudioFormat", "rate", "Int");
+  const formats = new Map(Object.entries(LIVE_AUDIO_FORMAT));
+  for (const [caseName, key] of cases) {
+    assert.equal(
+      rates.get(caseName),
+      formats.get(key)?.rate,
+      `${key}: a rate the guide does not pair with the encoding is refused at startup`,
+    );
+  }
+  const defaultKey = cases.get(swiftStaticCase(source, "default"));
+  assert.deepEqual(
+    defaultKey === undefined ? undefined : formats.get(defaultKey),
+    LIVE_DEFAULT_AUDIO_FORMAT,
+    "a default of the watch's own would speak at another rate than the one ruled",
+  );
+});
+
 test("RealtimeVoice is REALTIME_VOICE", () => {
   assertSameSet(
     swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoice"),
@@ -724,6 +783,26 @@ test("a computed property inside the body is not part of the case list", () => {
       ["fast", 1.5],
     ],
   );
+});
+
+test("an enum's cases are read with their raw values, and a static case by its name", () => {
+  const source = [
+    "public enum Format: String, CaseIterable, Sendable {",
+    '    case pcm16At24k = "PCM16_24K"',
+    "    case ulaw",
+    "",
+    "    public static let `default`: Format = .ulaw",
+    "}",
+  ].join("\n");
+  assert.deepEqual(
+    [...swiftEnumCases(source, "Format")],
+    [
+      ["pcm16At24k", "PCM16_24K"],
+      ["ulaw", "ulaw"],
+    ],
+  );
+  assert.equal(swiftStaticCase(source, "default"), "ulaw");
+  assert.throws(() => swiftStaticCase(source, "other"), /found 0/u);
 });
 
 test("a static list reads its numbers in order", () => {

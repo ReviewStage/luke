@@ -353,6 +353,26 @@ which replaced the phone's own 180-second idle close; the client only carries
 it. Nothing on the phone sends `session.beat`, which is the desktop's, and no
 frame of the phone's composing carries instruction text.
 
+The same client speaks the service's third route for the watch, which has no
+WebRTC: `createAudio` opens `/api/voice/audio` (`VOICE_SERVICE_PATH.AUDIO`)
+under the same handshake, sends `session.create` naming the synced voice and
+a `LiveAudioFormat` (`LIVE_AUDIO_FORMAT`, defaulting to
+`LIVE_DEFAULT_AUDIO_FORMAT`, PCM16 at 16 kHz, each held equal by
+`tools/ios-parity` and to the goldens
+`live-contract-sessionAudioCreateFrameSchema.json`,
+`live-contract-sessionAudioCreatedFrameSchema.json`, and
+`packages/live/fixtures/json-schema/session-LiveAudioFormatSchema.json`), and
+reads the route's own `session.created`, which names the session and no SDP
+answer. The `HostedAudioSession` it hands back sends the watch's PCM as
+`session.input_audio.append` (`LIVE_INPUT_AUDIO_APPEND`, base64 of
+little-endian samples, `PCM16Audio`), the same `session.activity`,
+`session.stop`, and `session.close` the phone sends, and nothing else the
+route would refuse; it hands up Luke's audio as the relayed
+`session.output_audio.delta` (`PCM16Audio.samples(in:)`) beside the captions.
+A primary socket at OpenAI has no attach, so the session is its one
+connection: when the service's function invocation ends, the session is over
+and `closed` reaches the consumer at once, with nothing tried again.
+
 ## Conversation
 
 The Luke tab's toolbar opens the Conversation: the one long thread the

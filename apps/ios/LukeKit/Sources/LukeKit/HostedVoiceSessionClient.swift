@@ -1,15 +1,19 @@
 import Foundation
 
 /// The phone's `HostedLiveSessionSource`
-/// (`packages/voice/src/live-session-source.ts`): the signed-in account's
-/// voice sessions through Luke's own service, over the sessions socket
-/// `packages/hosted/src/live-contract.ts` declares. The service holds the GPT
-/// Live key, creates the session at OpenAI, attaches the trusted sideband, and
-/// runs the exchange; what the phone holds is the WebRTC peer (H1) and this
-/// socket, which carries the offer out, the answer back, the relayed Live
-/// events, and the four frames of the service's own vocabulary the phone may
-/// send. Nothing here appends to a session, and no frame of the phone's
-/// composing carries instruction text: the route refuses it
+/// (`packages/voice/src/live-session-source.ts`), and the watch's client of
+/// the same service: the signed-in account's voice sessions through Luke's
+/// own service, over the sockets `packages/hosted/src/live-contract.ts`
+/// declares. The service holds the GPT Live key, creates the session at
+/// OpenAI, and runs the exchange. On the sessions route what the phone holds
+/// is the WebRTC peer (H1) and this socket, which carries the offer out, the
+/// answer back, the relayed Live events, and the four frames of the service's
+/// own vocabulary the phone may send. On the audio route the watch, which has
+/// no WebRTC, holds this socket alone: the service opens the session's
+/// primary socket to OpenAI itself and the watch's PCM goes up and Luke's
+/// comes down over this one connection, beside the same events and reports.
+/// Nothing here appends to a session, and no frame of a device's composing
+/// carries instruction text: both routes refuse it
 /// (`apps/web/server/voice/frames.ts`).
 
 /// Why no session was opened, named as the desktop's `LIVE_SESSION_OUTCOME`
@@ -31,21 +35,30 @@ public enum HostedVoiceSessionRefusal: Equatable, Sendable {
     case malformedResponse
 }
 
-/// What the client answered a creation with.
+/// What the client answered a creation on the sessions route with.
 public enum HostedVoiceSessionOpening {
     case opened(HostedVoiceSession)
     case refused(HostedVoiceSessionRefusal)
 }
 
+/// What the client answered a creation on the audio route with.
+public enum HostedAudioSessionOpening {
+    case opened(HostedAudioSession)
+    case refused(HostedVoiceSessionRefusal)
+}
+
 /// What a standing session tells its one consumer, in arrival order.
 public enum HostedVoiceSessionEvent: Equatable, Sendable {
-    /// A Live server event the service relayed as the session emitted it.
+    /// A Live server event the service relayed as the session emitted it;
+    /// on the audio route, Luke's audio among them.
     case live(LiveServerEventFrame)
     /// The service's own word that a proactive turn was spoken to its end.
     case spoken(ProactiveSpeechKind)
-    /// The session's socket ended for good: the session closed, the phone
-    /// hung up, or every try at re-attaching a lost connection failed. The
-    /// code is the close frame's where one arrived. Nothing follows it.
+    /// The session's socket ended for good: the session closed, the device
+    /// hung up, the function the audio route's socket stood on reached its
+    /// end, or every try at re-attaching a lost sessions-route connection
+    /// failed. The code is the close frame's where one arrived. Nothing
+    /// follows it.
     case closed(code: Int?)
 }
 
@@ -79,7 +92,8 @@ private enum ReattachAttempt {
 
 @MainActor
 public final class HostedVoiceSessionClient {
-    private let url: URL
+    private let sessionsURL: URL
+    private let audioURL: URL
     private let session: any AccountTokenProviding
     private let deviceId: @MainActor () -> String?
     private let opener: any VoiceSocketOpener
@@ -88,8 +102,8 @@ public final class HostedVoiceSessionClient {
     private let sleep: VoiceSleep
 
     /// - Parameters:
-    ///   - serviceURL: The hosted service origin; the socket opens at
-    ///     `VoiceServiceContract.sessionsPath` under it with the scheme swapped for its socket form.
+    ///   - serviceURL: The hosted service origin; a socket opens at
+    ///     `VoiceServiceContract.sessionsPath` or `audioPath` under it with the scheme swapped for its socket form.
     ///   - session: The account whose bearer every handshake carries, read fresh per attempt.
     ///   - deviceId: This installation's device row id as `DeviceRegistrar` holds it, read at each creation.
     ///   - opener: The socket seam.
@@ -105,7 +119,8 @@ public final class HostedVoiceSessionClient {
         reattachDelays: [Duration] = VoiceServiceContract.reattachDelaysMs.map { .milliseconds($0) },
         sleep: @escaping VoiceSleep = { try await Task.sleep(for: $0) }
     ) {
-        url = Self.sessionsURL(serviceURL: serviceURL)
+        sessionsURL = Self.sessionsURL(serviceURL: serviceURL)
+        audioURL = Self.audioURL(serviceURL: serviceURL)
         self.session = session
         self.deviceId = deviceId
         self.opener = opener
@@ -117,9 +132,18 @@ public final class HostedVoiceSessionClient {
     /// The sessions socket address under the service origin: `https` becomes
     /// `wss` and `http` becomes `ws`, the way `webSocketOrigin` swaps them.
     static func sessionsURL(serviceURL: URL) -> URL {
+        socketURL(serviceURL: serviceURL, path: VoiceServiceContract.sessionsPath)
+    }
+
+    /// The audio socket address under the service origin, on the same terms.
+    static func audioURL(serviceURL: URL) -> URL {
+        socketURL(serviceURL: serviceURL, path: VoiceServiceContract.audioPath)
+    }
+
+    private static func socketURL(serviceURL: URL, path: String) -> URL {
         var components = URLComponents(url: serviceURL, resolvingAgainstBaseURL: false) ?? URLComponents()
         components.scheme = components.scheme == "http" ? "ws" : "wss"
-        components.path = "/" + VoiceServiceContract.sessionsPath
+        components.path = "/" + path
         components.query = nil
         components.fragment = nil
         return components.url ?? serviceURL
@@ -132,23 +156,13 @@ public final class HostedVoiceSessionClient {
     /// recycles. A refused bearer is renewed once and retried once under the
     /// same holder, as every hosted call on the phone is.
     public func create(sdpOffer: String, voice: LiveVoice) async -> HostedVoiceSessionOpening {
-        let deviceId = deviceId()
         let socket: any VoiceSocket
-        do {
-            socket = try await session.authorized { token in
-                try await self.openSocket(headers: VoiceHandshakeHeaders(bearer: token, deviceId: deviceId))
-            }
-        } catch let refused as UpgradeRefused {
-            return .refused(Self.refusal(status: refused.status))
-        } catch is AccountSessionError {
-            return .refused(.notSignedIn)
-        } catch let opening as OpenFailure {
-            return .refused(opening.refusal)
-        } catch {
-            return .refused(.networkError)
+        switch await openCreating(at: sessionsURL) {
+        case .opened(let opened): socket = opened
+        case .refused(let refusal): return .refused(refusal)
         }
         let frame = VoiceServiceOutgoingFrame.create(SessionCreateFrame(sdp: sdpOffer, voice: voice))
-        switch await firstFrame(on: socket, after: frame) {
+        switch await firstFrame(on: socket, after: frame, route: .sessions) {
         case .frame(.created(let created)):
             // The session holds the client it re-attaches through: a caller that
             // keeps only the session must still get its connection back.
@@ -170,6 +184,62 @@ public final class HostedVoiceSessionClient {
         }
     }
 
+    /// One session on the audio route, for a device that streams its audio
+    /// through the service: the same handshake as `create`, `session.create`
+    /// naming the voice and the format as the first frame, and the audio
+    /// route's `session.created` as the first frame back. The socket that
+    /// answered is the session's for as long as the service's function
+    /// invocation stands, and no longer: a primary socket has no attach, so
+    /// the session ends with its one connection.
+    public func createAudio(voice: LiveVoice, format: LiveAudioFormat = .default) async -> HostedAudioSessionOpening {
+        let socket: any VoiceSocket
+        switch await openCreating(at: audioURL) {
+        case .opened(let opened): socket = opened
+        case .refused(let refusal): return .refused(refusal)
+        }
+        let frame = VoiceServiceOutgoingFrame.createAudio(SessionAudioCreateFrame(voice: voice, format: format))
+        switch await firstFrame(on: socket, after: frame, route: .audio) {
+        case .frame(.audioCreated(let created)):
+            return .opened(HostedAudioSession(created: created, format: format, socket: socket))
+        case .frame(.refused(let reason, let quota)):
+            socket.close()
+            return .refused(Self.refusal(reason: reason, quota: quota))
+        case .frame:
+            socket.close()
+            return .refused(.malformedResponse)
+        case .closed, .silent:
+            socket.close()
+            return .refused(.hostedUnavailable)
+        }
+    }
+
+    private enum CreatingSocket {
+        case opened(any VoiceSocket)
+        case refused(HostedVoiceSessionRefusal)
+    }
+
+    /// The socket a creation opens on either route: under the bearer and the
+    /// device row on its handshake, with a refused bearer renewed once and
+    /// retried once under the same holder, as every hosted call on a device is.
+    private func openCreating(at url: URL) async -> CreatingSocket {
+        let deviceId = deviceId()
+        do {
+            return .opened(
+                try await session.authorized { token in
+                    try await self.openSocket(url: url, headers: VoiceHandshakeHeaders(bearer: token, deviceId: deviceId))
+                }
+            )
+        } catch let refused as UpgradeRefused {
+            return .refused(Self.refusal(status: refused.status))
+        } catch is AccountSessionError {
+            return .refused(.notSignedIn)
+        } catch let opening as OpenFailure {
+            return .refused(opening.refusal)
+        } catch {
+            return .refused(.networkError)
+        }
+    }
+
     /// A socket that would not open, carried out of `authorized` as the refusal it reads as.
     private struct OpenFailure: Error {
         let refusal: HostedVoiceSessionRefusal
@@ -179,7 +249,7 @@ public final class HostedVoiceSessionClient {
     /// settle within the request deadline. A 401 is thrown as `UpgradeRefused`
     /// so the caller's `authorized` renews and retries; every other end is the
     /// refusal it names.
-    private func openSocket(headers: VoiceHandshakeHeaders) async throws -> any VoiceSocket {
+    private func openSocket(url: URL, headers: VoiceHandshakeHeaders) async throws -> any VoiceSocket {
         let socket = opener.socket(url: url, headers: headers)
         guard let opening = await within(requestTimeout, { await socket.open() }) else {
             socket.close()
@@ -204,9 +274,12 @@ public final class HostedVoiceSessionClient {
         case silent
     }
 
-    /// Sends the request frame and takes the service's one answer, or the close
-    /// or silence that came instead of it, within the request deadline.
-    private func firstFrame(on socket: any VoiceSocket, after request: VoiceServiceOutgoingFrame) async -> FirstFrame {
+    /// Sends the request frame and takes the service's one answer, read as the
+    /// route answers it, or the close or silence that came instead of it,
+    /// within the request deadline.
+    private func firstFrame(
+        on socket: any VoiceSocket, after request: VoiceServiceOutgoingFrame, route: VoiceServiceRoute
+    ) async -> FirstFrame {
         do {
             try await socket.send(request.text)
         } catch {
@@ -214,7 +287,7 @@ public final class HostedVoiceSessionClient {
         }
         guard let arrival = await within(requestTimeout, { await socket.receive() }) else { return .silent }
         switch arrival {
-        case .frame(let text): return .frame(VoiceServiceIncomingFrame(text: text))
+        case .frame(let text): return .frame(VoiceServiceIncomingFrame(text: text, route: route))
         case .closed: return .closed
         }
     }
@@ -228,7 +301,7 @@ public final class HostedVoiceSessionClient {
     /// the service's decision and ends the attempts.
     private func attachOnce(sessionId: String) async -> ReattachAttempt {
         guard let token = try? await session.validAccessToken() else { return .refused }
-        let socket = opener.socket(url: url, headers: VoiceHandshakeHeaders(bearer: token, deviceId: nil))
+        let socket = opener.socket(url: sessionsURL, headers: VoiceHandshakeHeaders(bearer: token, deviceId: nil))
         guard let opening = await within(requestTimeout, { await socket.open() }) else {
             socket.close()
             return .failed
@@ -243,7 +316,7 @@ public final class HostedVoiceSessionClient {
             socket.close()
             return .failed
         }
-        switch await firstFrame(on: socket, after: .attach(SessionAttachFrame(sessionId: sessionId))) {
+        switch await firstFrame(on: socket, after: .attach(SessionAttachFrame(sessionId: sessionId)), route: .sessions) {
         case .frame(.attached(let attached)) where attached.sessionId == sessionId:
             return .attached(socket)
         case .frame(.unreadable), .closed, .silent:
@@ -442,9 +515,13 @@ public final class HostedVoiceSession {
     /// session is held only between waits: the wait on the socket is the long
     /// one, and it runs on the socket alone, so a session nobody holds any
     /// more is freed and its `deinit` closes the socket the wait stands on.
+    /// The loop ends on an arrival and never on cancellation alone: a hang-up
+    /// closes the socket and cancels this task in one breath, and a reader
+    /// that left between two waits would leave the close unread and the
+    /// consumer never told.
     private static func serve(weak session: HostedVoiceSession?) async {
         weak var session = session
-        while !Task.isCancelled {
+        while true {
             guard let socket = session?.socket else { return }
             let arrival = await socket.receive()
             guard let standing = session else {
@@ -462,10 +539,10 @@ public final class HostedVoiceSession {
 
     /// One frame the service sent, handed up as what it is.
     private func hear(_ text: String) {
-        switch VoiceServiceIncomingFrame(text: text) {
+        switch VoiceServiceIncomingFrame(text: text, route: .sessions) {
         case .liveEvent(let event): continuation.yield(.live(event))
         case .spoken(let kind): continuation.yield(.spoken(kind))
-        case .created, .attached, .refused, .unreadable: break
+        case .created, .audioCreated, .attached, .refused, .unreadable: break
         }
     }
 
@@ -528,6 +605,148 @@ public final class HostedVoiceSession {
     private func finish(code: Int?) {
         heldSends = nil
         resumeFlushWaiters()
+        continuation.yield(.closed(code: code))
+        continuation.finish()
+    }
+}
+
+/// A session on the audio route that stands: the answer the service gave, the
+/// events it relays — Luke's audio among them — and the frames the device may
+/// send it, its own audio first. The socket underneath is the session's one
+/// connection: a primary socket at OpenAI has no attach, so when the
+/// service's function invocation ends, or the network drops the connection,
+/// the session is over and `closed` reaches the consumer at once, with
+/// nothing tried again. The next press opens a new session.
+@MainActor
+public final class HostedAudioSession {
+    public let sessionId: String
+    /// The allowance the session was spent against, where the service said.
+    public let quota: HostedQuota?
+    /// The format the session was created under, which is the format of every sample sent and received.
+    public let format: LiveAudioFormat
+
+    /// Everything the session tells the device, ending with `closed`. Held
+    /// from the session's making, so nothing said before the consumer comes
+    /// is lost.
+    public let events: AsyncStream<HostedVoiceSessionEvent>
+
+    private let continuation: AsyncStream<HostedVoiceSessionEvent>.Continuation
+    private let socket: any VoiceSocket
+    private var closedByClient = false
+    private var finished = false
+    private var sendChain: Task<Void, Never>?
+    private var reader: Task<Void, Never>?
+
+    fileprivate init(created: SessionAudioCreatedFrame, format: LiveAudioFormat, socket: any VoiceSocket) {
+        sessionId = created.sessionId
+        quota = created.quota
+        self.format = format
+        self.socket = socket
+        var continuation: AsyncStream<HostedVoiceSessionEvent>.Continuation!
+        events = AsyncStream(bufferingPolicy: .unbounded) { continuation = $0 }
+        self.continuation = continuation
+        reader = Task { [weak self] in await Self.serve(weak: self) }
+    }
+
+    /// A session dropped without a hang-up lets its connection go rather than
+    /// holding it until the service closes it; the reader never keeps the
+    /// session alive across a wait, so this runs as soon as the owner lets go.
+    deinit {
+        socket.close()
+        reader?.cancel()
+        continuation.finish()
+    }
+
+    /// One chunk of the device's own audio, in the session's format, as
+    /// `session.input_audio.append`: the one thing this route admits that the
+    /// sessions route does not. The guide asks that input keep running
+    /// through silence, so a caller sends its silence this way too.
+    public func appendAudio(_ samples: [Int16]) {
+        guard !samples.isEmpty else { return }
+        send(.inputAudio(base64: PCM16Audio.base64(samples)))
+    }
+
+    /// Tells the service whether the device has gone quiet, in the service's own vocabulary.
+    public func reportActivity(idle: Bool) {
+        send(.activity(SessionActivityFrame(idle: idle)))
+    }
+
+    /// The stop control: asks the service to tell the model to stop and wait.
+    public func stopSpeaking() {
+        send(.stop)
+    }
+
+    /// The hang-up: the one Live client event the route forwards. The session
+    /// answers `session.closed` among its events and the service then ends the
+    /// socket normally, which is what `closed` reports.
+    public func hangUp() {
+        send(.liveClose)
+    }
+
+    /// Ends the socket without a word to the session: what the device does
+    /// when the session is already over, or when it will not wait for it to
+    /// be. The consumer is told `closed` here rather than by the reader, which
+    /// the cancellation may catch between two waits with the close unread.
+    public func close() {
+        guard !closedByClient else { return }
+        closedByClient = true
+        reader?.cancel()
+        finish(code: nil)
+    }
+
+    /// Awaits every send queued so far; for a hang-up that waits its frame onto the wire, and for a test that reads what the socket was sent.
+    public func settleSends() async {
+        await sendChain?.value
+    }
+
+    private func send(_ frame: VoiceServiceOutgoingFrame) {
+        guard !closedByClient, !finished else { return }
+        let text = frame.text
+        let preceding = sendChain
+        let socket = socket
+        // Sends ride one queue so a stop cannot overtake the audio before it.
+        sendChain = Task {
+            await preceding?.value
+            try? await socket.send(text)
+        }
+    }
+
+    /// Reads the one connection to its end. The session is held only between
+    /// waits, so a session nobody holds any more is freed and its `deinit`
+    /// closes the socket the wait stands on; the loop ends on an arrival, as
+    /// the sessions route's does, never on cancellation alone.
+    private static func serve(weak session: HostedAudioSession?) async {
+        weak var session = session
+        while true {
+            guard let socket = session?.socket else { return }
+            let arrival = await socket.receive()
+            guard let standing = session else {
+                socket.close()
+                return
+            }
+            switch arrival {
+            case .frame(let text):
+                standing.hear(text)
+            case .closed(let code):
+                standing.finish(code: code)
+                return
+            }
+        }
+    }
+
+    private func hear(_ text: String) {
+        switch VoiceServiceIncomingFrame(text: text, route: .audio) {
+        case .liveEvent(let event): continuation.yield(.live(event))
+        case .spoken(let kind): continuation.yield(.spoken(kind))
+        case .created, .audioCreated, .attached, .refused, .unreadable: break
+        }
+    }
+
+    /// The connection ended, however it ended: the socket is let go so nothing of it outlives its close, and the consumer is told once.
+    private func finish(code: Int?) {
+        guard !finished else { return }
+        finished = true
+        socket.close()
         continuation.yield(.closed(code: code))
         continuation.finish()
     }
