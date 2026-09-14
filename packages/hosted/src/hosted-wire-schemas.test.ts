@@ -61,6 +61,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof deviceWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
+    sessionAudioCreateFrameSchema: liveContract.sessionAudioCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
     sessionOpeningFrameSchema: liveContract.sessionOpeningFrameSchema,
     sessionActivityFrameSchema: liveContract.sessionActivityFrameSchema,
@@ -71,6 +72,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     liveSessionCreatedSchema: liveContract.liveSessionCreatedSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
+    sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
   "mint-wire": {
     hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
