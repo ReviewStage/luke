@@ -18,6 +18,7 @@ import {
 } from "./feedback-entry";
 import { encodeFeedbackImage } from "./feedback-images";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
+import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { PANEL_STAND_DOWN, type SettingsView, standDownReturnPage } from "./settings-views";
 import { appStateNow } from "./use-app-state";
 import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
@@ -35,8 +36,15 @@ export interface UseFeedbackComposerOptions {
   presentation: PanelPresentation;
   /** Whether motion is reduced, which shortens the landing's hold. */
   stillMotion: boolean;
-  /** Where leaving the composer comes back to. */
+  /** Which settings page leaving the composer comes back to. */
   standDownPage: RefObject<SettingsView>;
+  /**
+   * Which tab leaving the composer comes back to: the one it was begun from.
+   * Shared with the key slot, so each begin has to write it — a note begun
+   * over the Conversation and left to the tab a key entry last remembered
+   * would land a Cancel on Settings, where nothing was being done.
+   */
+  standDownTab: RefObject<PanelTab>;
 }
 
 export interface FeedbackComposer {
@@ -49,10 +57,12 @@ export interface FeedbackComposer {
   confirming: { confirmation: FeedbackConfirmation; play: number } | undefined;
   /**
    * Opens the composer for a kind and stands the panel down to its shape.
-   * Reports whether the draft was placed, so the spoken path can say what it
-   * found.
+   * `returnTo` is the tab the ask was pressed on, where leaving comes back
+   * to; the Feedback section's own buttons stand on Settings, so that is the
+   * default. Reports whether the draft was placed, so the spoken path can
+   * say what it found.
    */
-  begin: (kind: FeedbackKind, fromPanel: boolean, draft?: string) => boolean;
+  begin: (kind: FeedbackKind, fromPanel: boolean, draft?: string, returnTo?: PanelTab) => boolean;
   /** Leaves the shape and keeps the draft — Escape's meaning here. */
   dismiss: () => void;
   latest: () => FeedbackEntry | undefined;
@@ -73,7 +83,7 @@ export interface FeedbackComposer {
  */
 export function useFeedbackComposer(options: UseFeedbackComposerOptions): FeedbackComposer {
   const { act } = useAct();
-  const { surface, presentation, stillMotion, standDownPage } = options;
+  const { surface, presentation, stillMotion, standDownPage, standDownTab } = options;
   const [notice, setNotice] = useState<string>();
   const [confirming, setConfirming] = useState<{
     confirmation: FeedbackConfirmation;
@@ -199,14 +209,23 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
    * back rather than discarded, and a starting draft lands only in an empty
    * one. Reports whether the draft was placed, so the spoken path can say
    * what it found; where leaving returns you follows the latest ask, not the
-   * first.
+   * first — the tab it was pressed on, and on Settings the front page.
    */
   const begin = useCallback(
-    (kind: FeedbackKind, fromPanel: boolean, draft?: string): boolean => {
+    (
+      kind: FeedbackKind,
+      fromPanel: boolean,
+      draft?: string,
+      returnTo: PanelTab = PANEL_TAB.SETTINGS,
+    ): boolean => {
       setNotice(undefined);
-      // The Feedback section is on the front page, so that is where leaving
-      // the composer — or the thank-you the send lands in — comes back to.
+      // Leaving the composer — or the thank-you the send lands in — comes back
+      // to the tab the ask was pressed on: the Feedback section on the
+      // settings front page, or the Conversation whose thumbs down offered it.
+      // Both are written here, because the tab is shared with the key slot and
+      // a return is a fact about what was begun, not about what was begun last.
       standDownPage.current = standDownReturnPage({ kind: PANEL_STAND_DOWN.FEEDBACK });
+      standDownTab.current = returnTo;
       // Asking to write again is the confirmation's end: the composer takes
       // the shape back, and the return the landing held is dropped unrun.
       dropConfirmation();
@@ -222,7 +241,7 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
       entry.standDown();
       return opened.drafted;
     },
-    [dropConfirmation, entry.apply, entry.latest, entry.standDown, standDownPage],
+    [dropConfirmation, entry.apply, entry.latest, entry.standDown, standDownPage, standDownTab],
   );
 
   /**
