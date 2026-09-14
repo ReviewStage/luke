@@ -29,17 +29,6 @@ function harness({ marks = true } = {}) {
   const dependencies: ConversationOperationsDependencies = {
     conversations: {
       directory: () => [record(THREAD)],
-      // SAFETY: the operations reach the thread for its fence alone.
-      thread: (sessionKey) =>
-        ({
-          entries: () => [],
-          fence: (deletedAt: number) => {
-            calls.push(`fence:${sessionKey}:${deletedAt}`);
-          },
-        }) as unknown as ReturnType<ConversationOperationsDependencies["conversations"]["thread"]>,
-      erase: (sessionKey, deletedAt) => {
-        calls.push(`erase:${sessionKey}:${deletedAt}`);
-      },
     },
     brain: {
       // SAFETY: the deletion reaches the store for its synchronous fence and the successor's id alone.
@@ -62,7 +51,7 @@ function harness({ marks = true } = {}) {
 }
 
 it.effect(
-  "Delete conversation fences the thread and the brain's generation, then forgets what stood at or before the press while the successor lifetime stands; nothing is retired or reopened",
+  "Delete conversation fences the brain's generation and completes once the successor's marker stands; nothing is retired or reopened",
   () =>
     Effect.gen(function* () {
       const { operations, calls } = harness();
@@ -70,11 +59,7 @@ it.effect(
         yield* operations.deleteConversation(THREAD),
         CONVERSATION_DELETE_OUTCOME.COMPLETE,
       );
-      assert.deepEqual(calls, [
-        `fence:${THREAD}:${NOW}`,
-        `clear:${THREAD}:${NOW}`,
-        `erase:${THREAD}:${NOW}`,
-      ]);
+      assert.deepEqual(calls, [`clear:${THREAD}:${NOW}`]);
       assert.deepEqual(
         operations.directory().map((record) => record.sessionKey),
         [THREAD],
@@ -83,7 +68,7 @@ it.effect(
 );
 
 it.effect(
-  "a marker the brain's store will not write refuses the deletion with the fences standing and nothing erased",
+  "a marker the brain's store will not write refuses the deletion with the fence standing",
   () =>
     Effect.gen(function* () {
       const { operations, calls } = harness({ marks: false });
@@ -92,7 +77,6 @@ it.effect(
         CONVERSATION_DELETE_OUTCOME.REFUSED,
       );
       assert.deepEqual(calls, [
-        `fence:${THREAD}:${NOW}`,
         `clear:${THREAD}:${NOW}`,
         "report:Delete conversation incomplete: the brain's memory could not be marked erased",
       ]);

@@ -10,16 +10,10 @@ import { type ConversationKind, isConversationKind, type SessionKey } from "./id
 
 /**
  * The vocabulary of conversation state as the host and the brain speak it:
- * a conversation's record in the directory, what an append answered, and
- * the transcript's events. Nothing here names a database; whoever holds the
- * state, in memory here or in Luke's service, speaks these shapes.
+ * a conversation's record in the directory and the transcript's events.
+ * Nothing here names a database; whoever holds the state, in memory here or
+ * in Luke's service, speaks these shapes.
  */
-
-/** What an append answered: whether the store changed, and the lines it now holds. */
-export interface ConversationAppendOutcome<Entry> {
-  changed: boolean;
-  entries: readonly Entry[];
-}
 
 /**
  * Where a compaction came from. This build folds a context one way, behind a

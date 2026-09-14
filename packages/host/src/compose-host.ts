@@ -145,7 +145,7 @@ export const hostAssemblyLayer: Layer.Layer<
         dropBriefings: () => undefined,
       },
     });
-    const live = yield* composeLive({ settings, account, observation, brain });
+    const live = yield* composeLive({ settings, account, observation });
 
     const supervisor = yield* observationSupervisor([
       observation.loop,
