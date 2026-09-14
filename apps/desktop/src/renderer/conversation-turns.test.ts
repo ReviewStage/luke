@@ -456,8 +456,12 @@ test("Luke's reply keeps copy and an ellipsis menu in one side rail, and the thu
   assert.equal(count(ratedLuke, "class", "conversation-rating-details"), 1);
   assert.equal(count(ratedLuke, "class", "conversation-rating-thumb"), 0);
   assert.ok(
-    ratedLuke.indexOf('class="conversation-bubble-actions"') <
+    ratedLuke.indexOf('class="conversation-bubble-stack"') <
       ratedLuke.indexOf('class="conversation-rating-details"'),
+  );
+  assert.ok(
+    ratedLuke.indexOf('class="conversation-rating-details"') <
+      ratedLuke.indexOf('class="conversation-bubble-actions"'),
   );
   assert.equal(
     count(render([groupOf(FIXTURE_TURN.OWN)], OPEN), "class", "conversation-rating-toggle"),

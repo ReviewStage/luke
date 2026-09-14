@@ -221,30 +221,26 @@ function BubbleRow({
   /** The rating control, on the last words of one of Luke's messages and nowhere else. */
   rating?: ConversationBubbleRating;
 }): React.JSX.Element {
-  const controls =
-    rating === undefined ? (
-      copy ? (
-        <span className="conversation-bubble-actions">
-          <ConversationCopyButton words={words} />
-        </span>
-      ) : null
-    ) : (
-      <ConversationRatingControl
-        rated={rating.rated}
-        rating={rating.rating}
-        {...(rating.onOfferFeedback ? { onOfferFeedback: rating.onOfferFeedback } : undefined)}
-      >
-        {({ toggle, details }) => (
-          <>
-            <span className="conversation-bubble-actions">
-              {copy ? <ConversationCopyButton words={words} /> : null}
-              {toggle}
-            </span>
-            {details}
-          </>
-        )}
-      </ConversationRatingControl>
-    );
+  const bubble = (
+    <span className="conversation-bubble">
+      <MarkdownMessage words={words} className="conversation-words" />
+      {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
+    </span>
+  );
+
+  const withActions = (
+    actions: React.JSX.Element | null,
+    details: React.JSX.Element | null = null,
+  ): React.JSX.Element => (
+    <>
+      {voice.speaker === CONVERSATION_ENTRY_SPEAKER.YOU ? actions : null}
+      <span className="conversation-bubble-stack">
+        {bubble}
+        {details}
+      </span>
+      {voice.speaker === CONVERSATION_ENTRY_SPEAKER.YOU ? null : actions}
+    </>
+  );
   return (
     <li
       className="conversation-entry"
@@ -254,15 +250,37 @@ function BubbleRow({
       <small className="visually-hidden">{voice.label}</small>
       <div
         className="conversation-message"
-        data-bubble-actions={controls === null ? undefined : voice.speaker}
+        data-bubble-actions={
+          (copy || rating !== undefined) && voice.speaker !== CONVERSATION_ENTRY_SPEAKER.EVENT
+            ? voice.speaker
+            : undefined
+        }
       >
-        <span className="conversation-bubble-stack">
-          <span className="conversation-bubble">
-            <MarkdownMessage words={words} className="conversation-words" />
-            {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
-          </span>
-        </span>
-        {controls}
+        {rating === undefined ? (
+          withActions(
+            copy ? (
+              <span className="conversation-bubble-actions">
+                <ConversationCopyButton words={words} />
+              </span>
+            ) : null,
+          )
+        ) : (
+          <ConversationRatingControl
+            rated={rating.rated}
+            rating={rating.rating}
+            {...(rating.onOfferFeedback ? { onOfferFeedback: rating.onOfferFeedback } : undefined)}
+          >
+            {({ toggle, details }) =>
+              withActions(
+                <span className="conversation-bubble-actions">
+                  {copy ? <ConversationCopyButton words={words} /> : null}
+                  {toggle}
+                </span>,
+                details,
+              )
+            }
+          </ConversationRatingControl>
+        )}
       </div>
       <RowStamp at={at} />
     </li>

@@ -1,6 +1,6 @@
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CONVERSATION_RATE_STATUS, type ConversationRateStatus } from "@sidecar/gateway";
-import { ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
+import { OptionsIcon, ThumbsDownIcon, ThumbsUpIcon } from "@sidecar/panel";
 import { MESSAGE_RATING, type MessageRating } from "@sidecar/wire";
 import { useEffect, useId, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -47,7 +47,6 @@ const RATED_MENU_LABEL = {
   [MESSAGE_RATING.UP]: "Message rated thumbs up. Change rating",
   [MESSAGE_RATING.DOWN]: "Message rated thumbs down. Change rating",
 } as const satisfies Record<MessageRating, string>;
-const MENU_GLYPH = "...";
 
 /**
  * The most characters each quoted line of the offered draft carries. The
@@ -144,7 +143,6 @@ export function ConversationRatingControl({
   const menu = (
     <fieldset
       className="conversation-rating-menu"
-      aria-label={MENU_LABEL}
       onBlur={(event) => {
         const next = event.relatedTarget;
         if (next instanceof Node && event.currentTarget.contains(next)) return;
@@ -168,8 +166,8 @@ export function ConversationRatingControl({
         disabled={pending !== undefined}
         onClick={() => setMenuOpen((open) => !open)}
       >
-        <span className="conversation-rating-toggle-glyph" aria-hidden="true">
-          {MENU_GLYPH}
+        <span className="conversation-rating-toggle-icon" aria-hidden="true">
+          <OptionsIcon />
         </span>
       </button>
       {menuOpen ? (

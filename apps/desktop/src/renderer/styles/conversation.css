@@ -164,42 +164,27 @@
   flex-direction: column;
 }
 
-/* A bubble with side controls becomes a two-column row: the bubble and the
-   rail beside it, with any thumbs-down follow-up in a second line below. The
-   sent side flips the order so copy stays on the bubble's outside edge. */
+/* A bubble with side controls keeps one inline row: the bubble and its
+   utility controls stay adjacent, with any thumbs-down follow-up under the
+   bubble's own words rather than on a full-width rail. */
 .conversation-message[data-bubble-actions] {
-  display: grid;
-  align-items: center;
-  column-gap: 4px;
-  row-gap: 4px;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .conversation-bubble-stack {
-  grid-area: bubble;
   display: flex;
   min-width: 0;
   flex-direction: column;
 }
 
-.conversation-message[data-bubble-actions="luke"] {
-  grid-template-columns: minmax(0, max-content) auto;
-  grid-template-areas:
-    "bubble rail"
-    "details details";
-  justify-content: flex-start;
-}
-
-.conversation-message[data-bubble-actions="you"] {
-  grid-template-columns: auto minmax(0, max-content);
-  grid-template-areas: "rail bubble";
-  justify-content: flex-end;
-}
-
 .conversation-bubble-actions {
-  grid-area: rail;
   display: inline-flex;
+  flex: 0 0 auto;
   align-items: center;
+  align-self: flex-start;
   gap: 2px;
+  margin-top: 4px;
 }
 
 /* Copy stays hover-revealed because it is an occasional utility, not a
@@ -230,6 +215,12 @@
 .conversation-copy:hover {
   background: var(--raised);
   color: var(--text-primary);
+}
+
+.conversation-copy svg,
+.conversation-rating-toggle-icon svg {
+  width: 13px;
+  height: 13px;
 }
 
 /* Luke's turn, in the bubble his reply will fill: his face, three dots, and
@@ -555,13 +546,16 @@ button.conversation-action-chip:focus-visible {
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
-  padding: 1px 6px 0;
+  padding: 2px 0 0;
 }
 
 .conversation-rating-menu {
   position: relative;
   display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
   min-width: 0;
+  min-inline-size: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -612,12 +606,10 @@ button.conversation-action-chip:focus-visible {
   color: var(--text-secondary);
 }
 
-.conversation-rating-toggle-glyph {
-  transform: translateY(-1px);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  line-height: 1;
+.conversation-rating-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .conversation-rating-popover {
@@ -633,15 +625,11 @@ button.conversation-action-chip:focus-visible {
 }
 
 .conversation-rating-details {
-  grid-area: details;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-}
-
-.conversation-message[data-bubble-actions="luke"] .conversation-rating-details {
-  padding-left: 10px;
+  padding: 2px 10px 0;
 }
 
 .conversation-rating-thumb,
@@ -686,18 +674,23 @@ button.conversation-action-chip:focus-visible {
 }
 
 .conversation-rating-offer {
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: 8px;
-  background: var(--raised);
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  margin-left: calc(-1 * var(--conversation-toggle-overhang));
+  padding: 0 var(--conversation-toggle-overhang);
+  border-radius: 7px;
+  background: transparent;
   color: var(--text-secondary);
+  cursor: pointer;
   font-size: 10.5px;
   font-weight: 620;
+  line-height: 1.4;
 }
 
 .conversation-rating-offer:hover,
 .conversation-rating-offer:focus-visible {
-  background: var(--selected);
+  background: var(--raised);
   color: var(--text-primary);
 }
 
@@ -712,6 +705,10 @@ button.conversation-action-chip:focus-visible {
    flush with its words rather than the bubble's padding. */
 .conversation-entry[data-own-words] .conversation-rating {
   padding: 2px 0 0;
+}
+
+.conversation-entry[data-own-words] .conversation-rating-details {
+  padding-inline: 0;
 }
 
 /* An announcement nobody heard says so beside its words, so a briefing that
