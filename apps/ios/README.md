@@ -365,22 +365,25 @@ statuses, and the session action kinds and tool names a row is drawn for —
 equal to the TypeScript sets, which is what keeps the two platforms' rows
 saying the same set of things while each words them itself.
 
-Under each of Luke's messages — a reply or a briefing, the assistant rows
-the service accepts a verdict on — stand two thumbs. A press is the one
-write this screen makes: `MessageRatingClient` puts the verdict and this
-device's id to `PUT /api/conversation/messages/{id}/rating` through the same
-`authorized()` retry and holder fence every phone client runs under, the
-answer is recorded locally as the rating event it made, and the control's
-state is the rating the service folded onto the message, amended by any
-newer `rating` event read since — this device's own, or another's — so a
-verdict given on the Mac shows here and one given here shows there, and a
-fresh launch reads no events from the record's beginning: the events cursor
-seeds from the change signal's head like the turns'. A second press is a
-second event, never an edit. The watch, which draws no control, constructs
-the store without a rating client. The developer's own ask and the brain's notes to itself draw no thumbs,
-since the service refuses a rating on either; the count that follows a
-recorded rating carries the verdict and whether the message was a reply or a
-briefing, never the message or its id.
+Behind a press and hold on each of Luke's messages — a reply or a briefing,
+the assistant rows the service accepts a verdict on — stand two thumbs, above
+Copy in the bubble's menu. A press is the one write this screen makes:
+`MessageRatingClient` puts the verdict and this device's id to
+`PUT /api/conversation/messages/{id}/rating` through the same `authorized()`
+retry and holder fence every phone client runs under, the answer is recorded
+locally as the rating event it made, and the verdict shown — filled in the
+menu, and as a small filled thumb under the bubble — is the rating the
+service folded onto the message, amended by any newer `rating` event read
+since — this device's own, or another's — so a verdict given on the Mac shows
+here and one given here shows there, and a fresh launch reads no events from
+the record's beginning: the events cursor seeds from the change signal's head
+like the turns'. A second press is a second event, never an edit. The watch,
+which draws no menu, constructs the store without a rating client. The
+developer's own ask and the brain's notes to itself offer no thumbs, since
+the service refuses a rating on either; before this installation's device row
+is registered the two items are disabled rather than hidden; the count that
+follows a recorded rating carries the verdict and whether the message was a
+reply or a briefing, never the message or its id.
 
 The whole scroll carries PostHog's `postHogMask()`, the way the desktop's
 Conversation subtree carries the recording library's blocking class, so the
