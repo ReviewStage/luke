@@ -17,7 +17,6 @@ import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Scope } from "effect";
 import type { AccountComposer } from "./compose-account.js";
-import type { BrainComposer } from "./compose-brain.js";
 import type { ObservationComposer } from "./compose-observation.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
@@ -32,7 +31,6 @@ export interface LiveDependencies {
   settings: SettingsComposer;
   account: AccountComposer;
   observation: ObservationComposer;
-  brain: BrainComposer;
 }
 
 /**
@@ -43,24 +41,27 @@ export interface LiveDependencies {
  * and briefing is appended by the service's own exchange over the same
  * socket, and the record is the account's on the service. What this side
  * still does is create the session for the peer's offer, seeded from the
- * desk and the recent conversation as this Mac sees them; end it on the
- * peer's hang-up or the drain; send the stop key's one instruction; and
- * carry the peer's idle to the service, which decides the idle close. It
- * reaches no brain and writes no record, so it needs no seam for either. The
- * holder stands for this composition's own scope, which is the host's, and
- * its graceful close stays a drain step of `compose-host.ts` rather than a
- * finalizer, so a quit ends the session inside its own deadline.
+ * desk as this Mac sees it; end it on the peer's hang-up or the drain; send
+ * the stop key's one instruction; and carry the peer's idle to the service,
+ * which decides the idle close. It reaches no brain and writes no record, so
+ * it needs no seam for either. The holder stands for this composition's own
+ * scope, which is the host's, and its graceful close stays a drain step of
+ * `compose-host.ts` rather than a finalizer, so a quit ends the session
+ * inside its own deadline.
  */
 export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
   dependencies: LiveDependencies,
 ): Effect.fn.Return<LiveComposer, never, HostKernelTag | Scope.Scope> {
-  const { settings, account, observation, brain } = dependencies;
+  const { settings, account, observation } = dependencies;
   const kernel = yield* HostKernelTag;
   const { runMode } = kernel;
 
   const service = yield* LiveSessionHolder.make({
     source: () => account.voiceCapabilities.liveSessions,
-    conversationEntries: () => brain.conversations.thread().entries(),
+    // This Mac keeps no conversation lines to seed a session from: the
+    // Conversation is the service's record, and what the session is told of
+    // it is the exchange's to append over the socket.
+    conversationEntries: () => [],
     roster: () => voiceRoster(observation.rosterForClients()),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     createId: kernel.createId,

@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import { type BrainDelivery, workspaceProjectContextText } from "@sidecar/brain";
 import type { BrainAppActionRequest } from "@sidecar/brain/requests-wire";
-import { CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials";
 import {
   carried,
   GATEWAY_METHOD,
@@ -24,7 +23,6 @@ import {
   MEMORY_SCOPE_KIND,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import { VOICE_SOURCE } from "@sidecar/settings";
 import {
   ACTION_RESULT_STATUS,
   isRecord,
@@ -105,20 +103,10 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
 
   /**
    * The conversations the local brain holds, in memory and for this run
-   * alone: each thread is shared by every panel window and gone at the
-   * next launch. A window's report is appended under an opaque reporter
-   * the client minted, so the history event can skip echoing it to the
-   * window that reported it, and the reporter names nothing about the
-   * window to anyone else.
+   * alone: the directory and each conversation's envelope, gone at the next
+   * launch. No lines are held here: the Conversation is the service's.
    */
-  const conversations = wireHeldConversations({
-    now,
-    createEventId: createId,
-    onConversationChanged: (sessionKey, entries, except) => {
-      publish((service) => service.conversationChanged(sessionKey, entries, except));
-    },
-    report,
-  });
+  const conversations = wireHeldConversations({ now });
   let appGuide: AppGuideSnapshot = EMPTY_APP_GUIDE;
 
   const memoryMaintenance = wireMemoryMaintenance({
@@ -253,13 +241,10 @@ export const composeBrain = /* @__PURE__ */ Effect.fn("composeBrain")(function* 
     deliver: announcements.deliverBriefing,
     model: () => account.voiceCapabilities.brainModel,
     prefetchModel: () => account.voiceCapabilities.prefetchModel,
-    credential: () =>
-      account.voiceCapabilities.voiceSource === VOICE_SOURCE.KEY
-        ? {
-            kind: CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY,
-            providerId: CREDENTIAL_PROVIDER_ID.OPENAI,
-          }
-        : { kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT },
+    // The one credential a brain on this Mac runs on: the signed-in
+    // account, through Luke's hosted service. A key of the developer's own
+    // is nothing the brain reaches.
+    credential: () => ({ kind: CREDENTIAL_REFERENCE_KIND.HOSTED_ACCOUNT }),
     workspaceDirectory: kernel.agentWorkspacePath,
     skillRoots: () => [kernel.agentSkillsPath()],
     runnable: () =>

@@ -14,11 +14,13 @@ import {
   type LiveSessionCreated,
   type SessionActivityFrame,
   type SessionAttachFrame,
+  type SessionBeatFrame,
   type SessionCreateFrame,
   type SessionStopFrame,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionCreatedFrameFromWire,
+  sessionSpokenFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
   VOICE_SERVICE_PATH,
@@ -38,6 +40,7 @@ import {
   liveCreateAnswerSchema,
   liveCreateRequest,
   liveSessionConfig,
+  type ProactiveSpeechKind,
 } from "@sidecar/live";
 import {
   EXCESS_KEYS,
@@ -142,6 +145,20 @@ export interface LiveSessionOpened extends LiveSessionCreated {
    * and offers no door.
    */
   stopSpeaking?(): void;
+  /**
+   * Asks the service to speak one of the build-fixed beats into this
+   * session, in the service's own vocabulary: the kind and the bounded
+   * observed values its script may mention, never a sentence composed here.
+   * A session with no service between has no one to ask and offers no door.
+   */
+  speakBeat?(beat: SessionBeatFrame): void;
+  /**
+   * Tells the listener each proactive turn the service reports spoken to its
+   * end, by kind, as the service's own frame on the same socket says it; the
+   * sideband never sees that frame. A session with no service between has
+   * nothing to report and offers no door.
+   */
+  onSpoken?(listener: (kind: ProactiveSpeechKind) => void): void;
 }
 
 /**
@@ -1029,7 +1046,15 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           matches: (data) => sessionActivityFrameFromWire(decodeLivePayload(data)) !== undefined,
         },
       });
-      const sideband = this.holdSideband(socket);
+      // The service's own word on a spoken turn rides the same socket as the
+      // session's events and is taken off it here, before the sideband's Live
+      // grammar would read it as nothing.
+      const spokenListeners = new Set<(kind: ProactiveSpeechKind) => void>();
+      const sideband = this.holdSideband(
+        withoutSpokenFrames(socket, (kind) => {
+          for (const listener of [...spokenListeners]) listener(kind);
+        }),
+      );
       return {
         ...opened.created,
         attach: () => Effect.succeed(sideband),
@@ -1053,9 +1078,44 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           const frame: SessionStopFrame = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
           socket.send(JSON.stringify(frame));
         },
+        // A beat rides the same socket, held through a gap like any send. The
+        // exchange a re-attached connection stands is a fresh one, so a beat
+        // sent before the gap and not yet spoken is not said again behind it:
+        // the desktop learns of it as unspoken when the session ends.
+        speakBeat: (beat) => {
+          socket.send(JSON.stringify(beat));
+        },
+        onSpoken: (listener) => {
+          spokenListeners.add(listener);
+        },
       };
     });
   }
+}
+
+/**
+ * The socket with the service's `session.spoken` frames taken off its
+ * arrivals and told to the listener, so the sideband over it reads only what
+ * the session said. Every frame is checked by the frame's own schema; the
+ * substring test ahead of it is only what keeps a transcript delta from being
+ * decoded twice.
+ */
+function withoutSpokenFrames(
+  socket: LiveSocket,
+  onSpoken: (kind: ProactiveSpeechKind) => void,
+): LiveSocket {
+  return {
+    send: (data) => socket.send(data),
+    close: () => socket.close(),
+    arrivals: Stream.filter(socket.arrivals, (arrival) => {
+      if ("close" in arrival) return true;
+      if (!arrival.frame.includes(VOICE_SERVICE_FRAME.SESSION_SPOKEN)) return true;
+      const spoken = sessionSpokenFrameFromWire(decodeLivePayload(arrival.frame));
+      if (spoken === undefined) return true;
+      onSpoken(spoken.kind);
+      return false;
+    }),
+  };
 }
 
 export type IntroductionLiveSessionOptions = Omit<ServiceSourceOptions, "voice">;

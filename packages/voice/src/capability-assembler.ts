@@ -1,9 +1,4 @@
-import {
-  BRAIN_PREFETCH_MODEL,
-  HostedModelAdapter,
-  openAiModelAdapter,
-  RESPONSES_OPERATION,
-} from "@sidecar/brain";
+import { HostedModelAdapter, RESPONSES_OPERATION } from "@sidecar/brain";
 import { VOICE_CREDENTIAL_PROVIDER_ID } from "@sidecar/credentials/vocabulary";
 import { HOSTED_VOICE_SERVICE_ORIGIN } from "@sidecar/hosted";
 import type { LiveDiagnostics } from "@sidecar/live";
@@ -144,13 +139,12 @@ export class VoiceCapabilityAssembler {
   }
 
   /**
-   * The model adapter the brain's turns run on, or nothing. It follows the voice
-   * source exactly: the developer's own key runs turns directly, a signed-in
+   * The model adapter the brain's turns run on, or nothing. A signed-in
    * account with the account source runs them through Luke's hosted service
-   * on Luke's key, and a fixture or evidence run, or a run with neither, has
-   * no brain, so nothing is announced and an ask meets the honest refusal.
-   * The key is read only when the key source is chosen, so an account-source
-   * run never spends a stored personal key.
+   * on Luke's key; a fixture or evidence run, a run with no account, or a
+   * run on the developer's own key source has no brain, so nothing is
+   * announced and an ask meets the honest refusal. A key of the developer's
+   * own is never what a brain turn runs on.
    */
   get brainModel(): ModelAdapter | undefined {
     return this.#brainModel;
@@ -158,10 +152,9 @@ export class VoiceCapabilityAssembler {
 
   /**
    * The small model the read prefetch plans and summarizes on, under the same
-   * source as the brain's model: the build-fixed prefetch model on the
-   * developer's key, or the hosted service's prefetch operation on the
-   * account, which the service advertises or not. Nothing when no brain may
-   * stand, and then nothing is read ahead.
+   * source as the brain's model: the hosted service's prefetch operation on
+   * the account, which the service advertises or not. Nothing when no brain
+   * may stand, and then nothing is read ahead.
    */
   get prefetchModel(): ModelAdapter | undefined {
     return this.#prefetchModel;
@@ -238,25 +231,14 @@ export class VoiceCapabilityAssembler {
         .pipe(Effect.orElseSucceed(() => undefined));
       if (!isCurrent()) return { latest: false, isCurrent };
 
-      const builtBrainModel = policy.useKey
-        ? openAiModelAdapter(apiKey, {
-            ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-          })
-        : policy.useHosted
-          ? new HostedModelAdapter(seams)
-          : undefined;
+      const builtBrainModel = policy.useHosted ? new HostedModelAdapter(seams) : undefined;
       this.#brainModel =
         builtBrainModel && this.#options.wrapBrainModel
           ? this.#options.wrapBrainModel(builtBrainModel)
           : builtBrainModel;
-      const builtPrefetchModel = policy.useKey
-        ? openAiModelAdapter(apiKey, {
-            model: BRAIN_PREFETCH_MODEL,
-            ...(this.#options.execution ? { execution: this.#options.execution } : undefined),
-          })
-        : policy.useHosted
-          ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
-          : undefined;
+      const builtPrefetchModel = policy.useHosted
+        ? new HostedModelAdapter({ ...seams, respondOperation: RESPONSES_OPERATION.PREFETCH })
+        : undefined;
       this.#prefetchModel =
         builtPrefetchModel && this.#options.wrapBrainModel
           ? this.#options.wrapBrainModel(builtPrefetchModel)
@@ -304,9 +286,9 @@ export class VoiceCapabilityAssembler {
     if (this.#brainModel) {
       write(`Luke brain: enabled (${this.#brainModel.model ?? "model chosen by the service"})\n`);
     } else if (apiKeyConfigured) {
-      write("Luke brain: unavailable — the key was found but no adapter was built\n");
+      write("Luke brain: absent — a key of the developer's own runs no brain; sign in for one\n");
     } else {
-      write("Luke brain: absent — no OpenAI key and no signed-in account\n");
+      write("Luke brain: absent — no signed-in account\n");
     }
   }
 }

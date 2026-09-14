@@ -12,7 +12,6 @@ import {
 import { TextLoopbackTransport } from "@sidecar/gateway/testing";
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, type SessionKey } from "@sidecar/runtime/vocabulary";
-import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import { CONVERSATION_DELETE_OUTCOME } from "./brain/conversation-deletion.js";
@@ -181,33 +180,22 @@ for (const kind of ["in-process", "loopback"] as const) {
   );
 
   it.effect(
-    `[${kind}] the run list and conversation changes reach the client as numbered events it can reconcile against`,
+    `[${kind}] the run list reaches the client as a numbered event it can reconcile against`,
     () =>
       Effect.gen(function* () {
         const f = yield* fixture(kind);
         const runs: number[] = [];
         f.operator.onRunsChanged((list) => runs.push(list.length));
-        const changes: string[] = [];
-        f.operator.onConversationChanged((change) =>
-          changes.push(`${change.sessionKey}:${change.entries.length}:${change.cleared}`),
-        );
         yield* f.operator.submit({
           submissionId: "s",
           question: "q",
           origin: BRAIN_REQUEST_ORIGIN.SPOKEN,
         });
         f.report();
-        f.service.conversationChanged(
-          MAIN_SESSION_KEY,
-          [{ kind: CONVERSATION_ENTRY_KIND.ASK, words: "q" }],
-          "window-7",
-        );
-        f.service.conversationChanged(MAIN_SESSION_KEY, []);
         assert.deepEqual(runs, [1]);
-        assert.deepEqual(changes, ["agent:main:main:1:false", "agent:main:main:0:true"]);
         const listed = yield* f.operator.runs();
         assert.equal(listed.length, 1);
-        assert.equal(f.operator.client.lastSequence(), 3);
+        assert.equal(f.operator.client.lastSequence(), 1);
       }),
   );
 

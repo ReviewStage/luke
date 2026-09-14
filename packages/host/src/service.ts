@@ -37,11 +37,7 @@ import {
   type SessionKey,
   sessionKey as toSessionKey,
 } from "@sidecar/runtime/vocabulary";
-import {
-  type ConversationEntry,
-  conversationEntryToWire,
-  maximumAskLength,
-} from "@sidecar/session";
+import { maximumAskLength } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -124,12 +120,6 @@ export interface GatewayService {
   readonly nodes: NodeRegistry;
   /** The brain's whole list of records, as the followers report it, for every client to hear. */
   runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  /** One conversation's thread as every window should draw it, less the opaque reporter whose report produced it. */
-  conversationChanged: (
-    sessionKey: SessionKey,
-    entries: readonly ConversationEntry[],
-    reporter?: string,
-  ) => void;
   directoryChanged: () => void;
   observationChanged: () => void;
   configurationChanged: () => void;
@@ -483,18 +473,6 @@ export function createGatewayService(
       nodes,
       runsReported: (snapshots) => {
         emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
-      },
-      conversationChanged: (sessionKey, entries, reporter) => {
-        emit(
-          GATEWAY_EVENT.CONVERSATION_CHANGED,
-          {
-            sessionKey,
-            entries: entries.map(conversationEntryToWire),
-            cleared: entries.length === 0,
-            ...(reporter !== undefined ? { reporter } : undefined),
-          },
-          { sessionKey },
-        );
       },
       directoryChanged: () => {
         emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {

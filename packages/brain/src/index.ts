@@ -44,11 +44,7 @@ export {
   rateLimitWaitMs,
 } from "./model-adapter-shared.js";
 export type { BrainObservationEntry } from "./observation-inbox.js";
-export {
-  BRAIN_OPENAI_DEFAULTS,
-  BRAIN_PREFETCH_MODEL,
-  openAiModelAdapter,
-} from "./openai-model-adapter.js";
+export { BRAIN_OPENAI_DEFAULTS, BRAIN_PREFETCH_MODEL } from "./openai-model-adapter.js";
 export type { BrainActionExecution, BrainActionPerformer, BrainRoster } from "./performer.js";
 export {
   type BrainAnticipation,

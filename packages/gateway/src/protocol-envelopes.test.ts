@@ -393,7 +393,7 @@ it.live("a reconnection inside the window replays, and one past it is handed a s
     host.log.publish(GATEWAY_EVENT.ACCOUNT_CHANGED, { account: "second" });
     host.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: [] });
     host.log.publish(
-      GATEWAY_EVENT.CONVERSATION_CHANGED,
+      GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED,
       { lines: 1 },
       { sessionKey: FIXTURE_SESSION_KEY },
     );
