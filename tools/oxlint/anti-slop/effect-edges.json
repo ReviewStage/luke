@@ -2,7 +2,6 @@
   "runtimeEdges": [
     "apps/desktop/src/main/main.ts",
     "apps/desktop/src/main/services/compose-desktop.ts",
-    "apps/desktop/src/main/store-worker.ts",
     "apps/desktop/src/renderer/index.tsx",
     "apps/desktop/src/renderer/introduction/introduction-takeover.tsx",
     "apps/desktop/src/renderer/renderer-runtime.ts",
@@ -23,7 +22,6 @@
     "apps/web/server/runtime.ts",
     "apps/web/server/seed-clients.ts",
     "apps/web/server/voice/function.ts",
-    "packages/brain/src/store/worker-entry.ts",
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
@@ -34,9 +32,6 @@
     "packages/brain/src/client.ts",
     "packages/brain/src/effect/carry.ts",
     "packages/brain/src/generation.ts",
-    "packages/brain/src/store/database.ts",
-    "packages/brain/src/store/store-client.ts",
-    "packages/brain/src/store/testing.ts",
     "packages/credentials/src/single-flight.ts",
     "packages/devtrace/src/brain-trace.ts",
     "packages/host/src/host-kernel.ts",

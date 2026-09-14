@@ -75,8 +75,8 @@ const closeRuntime = (runtime: { readonly disposeEffect: Effect.Effect<void> }) 
   });
 
 // One Luke per machine, decided before any window, host, or composition work:
-// the losing copy must exit having started no second store worker, claimed no
-// global shortcut, and opened no window.
+// the losing copy must exit having claimed no global shortcut and opened no
+// window.
 if (app.requestSingleInstanceLock()) {
   void main();
 } else {

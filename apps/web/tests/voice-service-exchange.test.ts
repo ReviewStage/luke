@@ -3,10 +3,17 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { PROACTIVE_SPEECH_KIND, speechAppends, speechOpening } from "@sidecar/live";
+import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Scope } from "effect";
 import { afterAll } from "vitest";
-import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
+import {
+  CONVERSATION_EVENT_KIND,
+  DEVICE_PLATFORM,
+  HOSTED_API_ERROR,
+  MESSAGE_ROLE,
+} from "../server/core";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -16,7 +23,6 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { payloadKeyRing } from "../server/hosted/encryption";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
@@ -28,9 +34,10 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "../server/live";
-import { exchangeAttachment } from "../server/voice/exchange-attachment";
+import { deploymentExchange } from "../server/voice/deployment-exchange";
 import type { AttachedSession } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
+import { UNPERMITTED_FRAME_REASON } from "../server/voice/relay";
 import {
   listening,
   VoiceService,
@@ -45,6 +52,7 @@ import {
   appended,
   delegated,
   heard,
+  said,
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
@@ -67,22 +75,27 @@ import {
 /**
  * The hosted exchange attached to the sessions route, over the real store on
  * PGlite, a fake OpenAI at the far end of the sideband, and a fake eve behind
- * the ask door. What these tests hold to is the seam's whole contract: with
- * no exchange offered the service only pipes and nothing of Luke's reaches
- * the session or the record; with one offered it stands before the desktop is
- * answered, seeds nothing a second time, reads the developer's words off the
- * same sideband the relay pipes, answers through eve and appends the reply
- * upstream while the desktop still receives every server frame; one offered
- * that cannot stand refuses the session; and when the relay settles the
- * exchange's record writes are drained before the session is reported ended.
- * Every row is an account's this test created.
+ * the ask door. The exchange is offered as the route itself offers it: through
+ * `deploymentExchange`, the composition `voice/function.ts` passes, over this
+ * suite's database and secret rather than the deployment's, with eve alone
+ * handed in as a fake. What these tests hold to is the production case: the
+ * exchange stands before the desktop is answered, seeds nothing a second
+ * time, reads the developer's words off the same sideband the relay pipes,
+ * answers through eve and appends the reply upstream while the desktop still
+ * receives every server frame; the desktop's stop passes and its idle report
+ * reaches the exchange, which closes the session on it; an older desktop's
+ * own append is refused with the close; a deployment missing a secret, or an
+ * exchange that cannot stand, refuses the session; and when the relay settles
+ * the exchange's record writes are drained before the session is reported
+ * ended. The inert case stays as the statement of what the service does
+ * without a seam, a configuration nothing ships. Every row is an account's
+ * this test created.
  */
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
-const KEYS = payloadKeyRing(TEST_PAYLOAD_SECRET);
 const API_KEY = "sk-test-project-key";
 const BEARER = "Bearer account-token-1";
 const SDP_OFFER =
@@ -199,11 +212,12 @@ interface Stand {
   stop(): Promise<void>;
 }
 
-/** How the exchange is offered: as the route would, not at all, one that cannot stand, or one held until the test releases it. */
+/** How the exchange is offered: as the route does, not at all, one that cannot stand, one on a deployment missing its secret, or one held until the test releases it. */
 const OFFER = {
   NONE: "none",
   EXCHANGE: "exchange",
   FAILING: "failing",
+  UNCONFIGURED: "unconfigured",
   GATED: "gated",
 } as const;
 
@@ -228,14 +242,14 @@ async function stand(offer: Offer): Promise<Stand> {
         ? async () => {
             throw new Error("the store is not reachable");
           }
-        : exchangeAttachment({
-            context: { keys: KEYS },
+        : deploymentExchange({
             run: database.run,
-            writer,
+            encryptionSecret: () =>
+              offer === OFFER.UNCONFIGURED ? undefined : TEST_PAYLOAD_SECRET,
+            deploymentSecret: () => "deployment-secret",
+            eveOrigin: () => "https://eve.test",
             eve: () => eve,
-            emit: () => undefined,
             now: () => NOW,
-            createId: () => randomUUID(),
             report: (message) => reports.push(message),
           });
   const offered: AttachedSession[] = [];
@@ -493,6 +507,276 @@ it.effect(
         context.log.map((entry) => entry.event),
         [LOG_EVENT.EXCHANGE_FAILED, LOG_EVENT.SESSION_REFUSED],
       );
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a deployment missing the payload secret composes no exchange and refuses every session as unavailable, logged as the exchange failing",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.UNCONFIGURED);
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+          authorization: BEARER,
+        });
+        assert.ok("reader" in opened);
+        await send(opened.reader.socket, {
+          type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+          sdp: SDP_OFFER,
+          voice: LIVE_VOICE.MARIN,
+          input: SEED,
+        });
+        await context.openAi.nextAttach();
+        assert.equal(record(await opened.reader.next()).error, HOSTED_API_ERROR.UNAVAILABLE);
+        assert.equal((await opened.reader.closed).code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+      }
+      assert.deepEqual(
+        context.log.map((entry) => entry.event),
+        [
+          LOG_EVENT.EXCHANGE_FAILED,
+          LOG_EVENT.SESSION_REFUSED,
+          LOG_EVENT.EXCHANGE_FAILED,
+          LOG_EVENT.SESSION_REFUSED,
+        ],
+      );
+      assert.deepEqual(context.eve.opened, []);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "the desktop's stop is read by the relay and handed to the exchange, which appends the one instruction itself under its own id; and the desktop's idle report closes the session through the exchange",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
+
+      // The stop, as the desktop's holder sends it: the service's own frame, forwarded nowhere.
+      await send(session.desktop.socket, { type: VOICE_SERVICE_FRAME.SESSION_STOP });
+      // What reaches the session is the exchange's own instruction append: its id, no delegation, the service's text.
+      const instructed = clientEvent(await session.upstream.next(5_000));
+      assert.equal(instructed.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.ok(instructed.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.equal(instructed.delegation_id, null);
+      assert.equal(instructed.content, STOP_SPEAKING_INSTRUCTION);
+      // OpenAI acknowledges it by the exchange's id, and the desktop is shown the acknowledgment as it is shown every server frame.
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+          event_id: "ack-1",
+          client_event_id: instructed.event_id,
+          start_ms: 0,
+          end_ms: 0,
+        }),
+      );
+      assert.equal(
+        record(await session.desktop.next()).type,
+        LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+      );
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      assert.deepEqual(context.reports, []);
+
+      // The peer's idle: read by the relay, handed to the exchange, and never
+      // forwarded. Nothing was appended since the session started and no reply
+      // is in flight, so the exchange's idle window is already spent and it
+      // closes the session gracefully at once.
+      await send(session.desktop.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY,
+        idle: true,
+      });
+      const closing = clientEvent(await session.upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 9 },
+        }),
+      );
+      // The desktop is handed the close it caused, and then its socket ends normally.
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_CLOSED);
+      assert.equal((await session.desktop.closed).code, SOCKET_CLOSE_CODE.NORMAL);
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+      assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+      assert.equal(ended.reportsRead, 2);
+      assert.equal(ended.framesToUpstream, 0);
+      assert.equal(ended.seconds, 9);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a beat the desktop asks for is spoken by the exchange from the build's script with the frame's bounded values, and the desktop is told by kind once it was spoken to the end",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
+
+      // The arrival beat, as the desktop's holder sends it: the kind and the two values its script may mention.
+      const arrival = {
+        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+        kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+        sessionTitle: "Fix the flaky test",
+        talkKeyLabel: "Right Option",
+      } as const;
+      await send(session.desktop.socket, arrival);
+      // What reaches the session is the exchange's own commentary append under no delegation,
+      // the build's script with the frame's values inside it and nothing of the desktop's wording.
+      const spoken = clientEvent(await session.upstream.next(5_000));
+      assert.equal(spoken.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.ok(spoken.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(spoken.delegation_id, null);
+      const [script] = speechAppends({ ...arrival, decidedAt: 0 });
+      assert.equal(spoken.content, script);
+      assert.ok(script?.includes('titled "Fix the flaky test"'));
+      assert.ok(script?.includes("holding the Right Option key"));
+      await sendText(session.attach.socket, JSON.stringify(appended(spoken.event_id, 1000, 4000)));
+      // Output short of the append's end is not the beat spoken; output past it is.
+      await sendText(session.attach.socket, JSON.stringify(said("You're all set.", 1000, 3000)));
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      await sendText(session.attach.socket, JSON.stringify(said(" Go back to work.", 3000, 4500)));
+      // The desktop is handed every server frame, and then the service's own word by kind alone.
+      const seen: string[] = [];
+      for (let index = 0; index < 8; index += 1) {
+        const frame = record(await session.desktop.next(5_000));
+        seen.push(String(frame.type));
+        if (frame.type === VOICE_SERVICE_FRAME.SESSION_SPOKEN) {
+          assert.deepEqual(frame, {
+            type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+            kind: PROACTIVE_SPEECH_KIND.ARRIVAL,
+          });
+          break;
+        }
+      }
+      assert.deepEqual(seen, [
+        LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
+        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+      ]);
+
+      // The launch greeting speaks the guide's way: the instruction acknowledged first, then the cue.
+      const launch = {
+        type: VOICE_SERVICE_FRAME.SESSION_BEAT,
+        kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+        firstName: "Ada",
+      } as const;
+      await send(session.desktop.socket, launch);
+      const opening = speechOpening({ ...launch, decidedAt: 0 });
+      assert.ok(opening);
+      const instructed = clientEvent(await session.upstream.next(5_000));
+      assert.equal(instructed.type, LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.ok(instructed.type === LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND);
+      assert.equal(instructed.delegation_id, null);
+      assert.equal(instructed.content, opening.instruction);
+      assert.ok(opening.instruction.includes("Ada"));
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+          event_id: "ack-launch",
+          client_event_id: instructed.event_id,
+          start_ms: 5000,
+          end_ms: 5000,
+        }),
+      );
+      const cued = clientEvent(await session.upstream.next(5_000));
+      assert.equal(cued.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.ok(cued.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+      assert.equal(cued.content, opening.cue);
+      await sendText(session.attach.socket, JSON.stringify(appended(cued.event_id, 5000, 6000)));
+      await sendText(session.attach.socket, JSON.stringify(said("Hey Ada, I'm here.", 5000, 7000)));
+      const toDesktop: string[] = [];
+      for (let index = 0; index < 8; index += 1) {
+        const frame = record(await session.desktop.next(5_000));
+        toDesktop.push(String(frame.type));
+        if (frame.type === VOICE_SERVICE_FRAME.SESSION_SPOKEN) {
+          assert.deepEqual(frame, {
+            type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+            kind: PROACTIVE_SPEECH_KIND.LAUNCH,
+          });
+          break;
+        }
+      }
+      assert.deepEqual(toDesktop, [
+        LIVE_SERVER_EVENT.INSTRUCTIONS_APPENDED,
+        LIVE_SERVER_EVENT.COMMENTARY_APPENDED,
+        LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA,
+        VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+      ]);
+      assert.deepEqual(await framesWithin(session.upstream, QUIET_MS), []);
+      assert.deepEqual(context.eve.opened, []);
+
+      await hangUp(context, session);
+      const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+      assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+      assert.equal(ended.reportsRead, 2);
+      assert.equal(ended.framesToUpstream, 0);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "an older desktop build's own append is refused at the relay with the close, before it reaches the session, and the exchange still ends the session with its record",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const session = await openSession(context);
+      const upstreamSessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(upstreamSessionId)));
+      assert.equal(record(await session.desktop.next()).type, LIVE_SERVER_EVENT.SESSION_STARTED);
+
+      // What the unwired path would have sent: the local exchange speaking a reply.
+      await send(session.desktop.socket, {
+        type: LIVE_CLIENT_EVENT.COMMENTARY_APPEND,
+        event_id: "old-desktop-1",
+        delegation_id: "dl_1",
+        content: "One agent finished.",
+      });
+      const end = await session.desktop.closed;
+      assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
+      assert.equal(end.reason, UNPERMITTED_FRAME_REASON);
+      // The refused append never reached OpenAI: the next frame there is the relay's own close.
+      const closing = clientEvent(await session.upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      await sendText(
+        session.attach.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 2 },
+        }),
+      );
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      assert.deepEqual(
+        context.log.map((entry) => entry.event),
+        [
+          LOG_EVENT.EXCHANGE_ATTACHED,
+          LOG_EVENT.SESSION_CREATED,
+          LOG_EVENT.FRAME_REFUSED,
+          LOG_EVENT.USAGE_RECORDED,
+          LOG_EVENT.SESSION_ENDED,
+        ],
+      );
+      assert.deepEqual(context.eve.opened, []);
       await context.stop();
     }),
 );

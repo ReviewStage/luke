@@ -57,7 +57,7 @@ export function heldModel(): BareResponsesModel & { release: (answer: ModelRespo
 
 /**
  * The real agent, store, host, follower, and submission path composed as the
- * main process composes them, with only the model and the disk synthetic.
+ * main process composes them, with only the model synthetic.
  */
 export const brainHarness = /* @__PURE__ */ Effect.fn("brainHarness")(
   function* (): Effect.fn.Return<BrainHarness, never, Scope.Scope> {

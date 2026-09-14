@@ -260,8 +260,8 @@ it.live("every error code crosses as the recorded envelope", () =>
     delete unanswered[GATEWAY_METHOD.MEMORY_STATUS];
     const host = yield* goldenHost({
       ...unanswered,
-      [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
-        Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
+      [GATEWAY_METHOD.RUN_CANCEL]: () =>
+        Effect.fail(new NotFoundRefusal({ message: "no run has that id" })),
       [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
         Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
       [GATEWAY_METHOD.NODE_INVOKE]: () =>
@@ -333,7 +333,7 @@ it.live("every error code crosses as the recorded envelope", () =>
       {
         code: GATEWAY_ERROR.NOT_FOUND,
         transport,
-        request: requestFor(GATEWAY_METHOD.CONVERSATION_LINES),
+        request: requestFor(GATEWAY_METHOD.RUN_CANCEL),
       },
       {
         code: GATEWAY_ERROR.REFUSED,

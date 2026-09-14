@@ -15,12 +15,10 @@
   "dependencies": {
     "@sidecar/actions": "workspace:*",
     "@sidecar/runtime": "workspace:*",
-    "@sidecar/session": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",

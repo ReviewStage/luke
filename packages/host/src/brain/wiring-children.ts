@@ -14,7 +14,6 @@ import {
   DEFAULT_AGENT_ID,
   type SessionKey,
 } from "@sidecar/runtime/vocabulary";
-import type { ConversationEntry } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 
@@ -35,8 +34,6 @@ export interface ChildWiringDependencies {
   archiveConversation: (sessionKey: SessionKey) => Promise<boolean>;
   /** The directory as it stands, for `sessions_list`. */
   conversationDirectory: () => readonly ConversationRecord[];
-  /** One conversation's lines as they stand, for `sessions_history` over a child. */
-  conversationLines: (sessionKey: SessionKey) => readonly ConversationEntry[];
   /** Where child records and completions stand between launches. */
   childStore: () => ChildStore;
   /** The clock the child service's delivery retries and archive delays run on; absent means the process's own timers. */
@@ -144,13 +141,10 @@ export function wireChildren(
           dependencies.archiveConversation(record.childSessionKey),
         );
       }),
-    lines: (record, limit) =>
-      Effect.sync(() =>
-        dependencies
-          .conversationLines(record.childSessionKey)
-          .slice(-limit)
-          .map((entry) => `${entry.kind}: ${entry.words}`),
-      ),
+    // A child's conversation keeps no lines on this side: the relayed thread
+    // that held them went with the exchange, so `sessions_history` over a
+    // child answers an empty history rather than one this Mac never wrote.
+    lines: () => Effect.succeed([]),
   };
 
   const deliverer: EffectCompletionDeliverer = {

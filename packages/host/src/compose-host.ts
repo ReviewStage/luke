@@ -6,7 +6,6 @@ import {
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
-import { PROACTIVE_SPEECH_KIND } from "@sidecar/live";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
 import {
@@ -16,7 +15,6 @@ import {
 } from "@sidecar/runtime/vocabulary";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
-import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import { composeAccount } from "./compose-account.js";
@@ -45,12 +43,9 @@ import {
   RunMode,
   type SecretCipher,
   ShutdownSignal,
-  type StoreWorker,
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
-import { conversationLiveRecord } from "./voice/conversation-live-record.js";
-import { brainAgentLiveBrain } from "./voice/live-brain-adapter.js";
 
 /** The eight concerns, by the name each is built under. */
 export const HOST_CONCERN = {
@@ -68,7 +63,7 @@ export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
- * gated on it, the store is open before the brain's credential transition
+ * gated on it, the brain's workspace is seeded before its credential transition
  * installs a runtime over it, and the loops are armed only once every owner
  * of one has started. The quit is this order reversed.
  */
@@ -102,7 +97,6 @@ export const hostAssemblyLayer: Layer.Layer<
   | SecretCipher
   | AppIdentity
   | MachinePresenceReader
-  | StoreWorker
   | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.effect(
@@ -120,7 +114,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const observationGate = () => runMode.observesProviders && account.capabilitiesActive();
     const observation = yield* composeObservation({ settings, account, observationGate });
     const calendars = yield* composeCalendars({ settings, observationGate });
-    const devices = yield* composeDevices({ account, calendars });
+    const devices = yield* composeDevices({ account, calendars, settings });
     const conversation = composeConversation({
       kernel,
       settings,
@@ -137,31 +131,21 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
-    // Annotated because the brain and the live session are each other's
-    // cycle — a briefing reaches the live service, and the service hands a
-    // held one back to the brain that decided it — and an inferred type
-    // would be reading itself through the other.
+    // The local brain's briefings reach no session: the exchange is the
+    // service's since E5-3, and what a session speaks unprompted is what the
+    // hosted brain decided and put on offer. The local brain stands until
+    // LUKE-143 deletes it, so what it decides is written down as decided and
+    // said nowhere from here. What else the desktop's queue spoke, the two
+    // onboarding beats, is LUKE-202's.
     const brain: BrainComposer = yield* composeBrain({
       account,
       observation,
       announcements: {
-        deliverBriefing: (delivery) => live.service.deliverBriefing(delivery),
-        dropBriefings: () => live.service.dropBriefings(),
+        deliverBriefing: () => undefined,
+        dropBriefings: () => undefined,
       },
     });
-    // The brain and record the live session speaks through are built here,
-    // where the brain composer stands, and handed to the composer as
-    // `@sidecar/voice/effect` layers rather than as constructor arguments.
-    const liveBrain = yield* brainAgentLiveBrain({ agent: () => brain.wiring.current() });
-    const liveRecord = conversationLiveRecord({
-      recordConversationEntry: (entry, recordedAt, sessionKey) =>
-        brain.store.recordConversationEntry(entry, recordedAt, sessionKey),
-      createEventId: kernel.createId,
-    });
-    const live = yield* Effect.provide(
-      composeLive({ settings, account, calendars, observation, brain }),
-      Layer.mergeAll(liveBrainLayer(liveBrain), liveRecordLayer(liveRecord)),
-    );
+    const live = yield* composeLive({ settings, account, observation, brain });
 
     const supervisor = yield* observationSupervisor([
       observation.loop,
@@ -207,7 +191,6 @@ export const hostAssemblyLayer: Layer.Layer<
       if (!account.capabilitiesActive()) return;
       observation.startObservation();
       yield* capabilities.arm;
-      live.requestOnboardingBeat();
     });
 
     /** The gate closing: the cadences disarmed, and then what a sign-out alone means. */
@@ -216,8 +199,6 @@ export const hostAssemblyLayer: Layer.Layer<
       conversation.reset();
       observation.stopObservation();
       settings.forgetVaultKeys();
-      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.ARRIVAL);
-      live.service.withdrawBeat(PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING);
       yield* account.applyVoiceCredential;
       yield* settings.emitSettings();
     });
@@ -232,30 +213,23 @@ export const hostAssemblyLayer: Layer.Layer<
       applyVoiceCredential: account.applyVoiceCredential,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
-      reconcileSpeech: Effect.sync(() => live.service.reconcile()),
+      refreshAnnouncementHold: calendars.refreshAnnouncementHold,
+      reportPresence: devices.reportPresence,
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,
       workspaceProjectOffered: (providerId, providerProjectId) =>
         Effect.sync(() => observation.workspaceProjectOffered(providerId, providerProjectId)),
     });
+    yield* calendars.link({ reportPresence: devices.reportPresence });
     yield* account.link({
       startCapabilities: openCapabilities,
       stopCapabilities: closeCapabilities,
       onFirstSignIn: calendars.recordFirstSignIn,
-      onFirstSignInArrival: live.seedArrivalOnFirstSignIn,
       retireBrain: () => brain.wiring.retire(),
       rebuildBrain: () => brain.wiring.rebuild(),
-      syncMemory: brain.syncMemory,
       releaseDevice: (stored) => devices.release(stored),
       deviceId: () => devices.deviceId(),
     });
     yield* observation.link({ rosterLook: () => brain.wiring.rosterLook() });
-    yield* calendars.link({
-      reconcileSpeech: () => live.service.reconcile(),
-      withdrawBeat: (kind) => live.service.withdrawBeat(kind),
-      dropBriefings: () => live.service.dropBriefings(),
-      requestOnboardingBeat: live.requestOnboardingBeat,
-    });
-    yield* live.link({ releaseHeld: (briefings) => brain.wiring.releaseHeld(briefings) });
 
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
@@ -328,14 +302,10 @@ export const hostAssemblyLayer: Layer.Layer<
         configuration: () => brain.wiring.configuration(),
         updateConfiguration: (patch) => brain.wiring.updateConfiguration(patch),
       },
-      conversations: brain.conversations,
-      memory: {
-        status: () =>
-          Effect.map(brain.memoryMode, (mode) => ({
-            mode,
-            entries: brain.store.rememberedFacts().length,
-          })),
-      },
+      conversations: brain.operations,
+      // This Mac holds no notebook: the remembered facts and their index are
+      // the hosted brain's, so the status names no entries and no mode.
+      memory: { status: () => Effect.succeed({ entries: 0 }) },
       observedSessionCount: observation.observedSessionCount,
       nodes: kernel.nodes,
       now,
@@ -348,8 +318,7 @@ export const hostAssemblyLayer: Layer.Layer<
      * The explicit quit's steps. Admissions close at the server; every run and
      * child under way is cancelled; the followers' publication is let finish,
      * so an end already reached stands in Conversation; and what did not settle is
-     * counted rather than finished: the store's load at the next start marks
-     * an unsettled run interrupted and replays nothing.
+     * counted rather than finished, since nothing of it reaches the next launch.
      */
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
@@ -378,14 +347,13 @@ export const hostAssemblyLayer: Layer.Layer<
         }),
         awaitSettled: Effect.suspend(() => brain.wiring.publicationSettled()),
         persistUnresolved: Effect.sync(() => {
-          // What the next launch will find: the records as the stores last
-          // persisted them, read from the envelopes rather than from memory. A
-          // cancellation whose write did not land leaves its run queued or
-          // running on disk, and that is what the load marks interrupted and
-          // never replays, so it is counted here as unresolved.
+          // The records as the envelopes last took them, read from the
+          // envelopes rather than from the agents. A cancellation whose write
+          // did not land leaves its run queued or running there, and that is
+          // counted here as unresolved.
           const keys = new Set<SessionKey>([
             MAIN_SESSION_KEY,
-            ...brain.store.directory().map((entry) => entry.sessionKey),
+            ...brain.conversations.directory().map((entry) => entry.sessionKey),
           ]);
           let unresolved = 0;
           for (const key of keys) {
@@ -417,8 +385,7 @@ export const hostAssemblyLayer: Layer.Layer<
        * a sign-in does, and the standing scope closing is what disarms it —
        * the cadences alone, since a quit is not a sign-out. Where they do not,
        * the launch still applies the voice credential the signed-out panel is
-       * drawn from and still asks for the onboarding beat, because neither
-       * waits on an account.
+       * drawn from, because it waits on no account.
        */
       armed: Effect.gen(function* () {
         // Registered whether or not the launch opens the gate, because a
@@ -431,7 +398,6 @@ export const hostAssemblyLayer: Layer.Layer<
           yield* openCapabilities;
         } else {
           yield* account.applyVoiceCredential;
-          live.requestOnboardingBeat();
         }
         yield* Effect.forkScoped(Effect.ignore(account.session.refreshOnce()));
       }),
@@ -460,7 +426,6 @@ export const hostLayer: Layer.Layer<
   | SecretCipher
   | AppIdentity
   | MachinePresenceReader
-  | StoreWorker
   | ShutdownSignal
   | FileSystem.FileSystem
 > = Layer.provide(hostStandingLayer, hostAssemblyLayer);

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { Deferred, Effect, type Fiber, type Scope, Stream } from "effect";
+import { type SessionReportFrame, sessionReportFrameFromWire } from "../core.js";
 import {
   closeEvent,
+  decodeLivePayload,
   LIVE_SERVER_EVENT,
   type LiveClientEvent,
   type LiveServerEvent,
@@ -29,8 +31,12 @@ import {
  * stand. Each side's frames are a `Stream` read by a fiber of the session's
  * own scope, and they cross as the bytes they arrived as; the service reads
  * each frame's `type` and nothing else of it, drops reflected audio by that
- * type on every route, and on the introduction route admits only what a
- * renderer's own data channel would carry. An opening command the service
+ * type on every route, on the introduction route admits only what a renderer's
+ * own data channel would carry, and on the sessions route admits from the
+ * desktop only the hang-up, its idle report, and its stop, closing the socket
+ * on anything else. The two reports are the frames read past their type: they
+ * are the service's own vocabulary, handed to the exchange that holds the
+ * idle decision and the one instruction the stop appends, never to OpenAI. An opening command the service
  * sends of its own once `session.started` arrives follows the docs' order:
  * the command, then its acknowledgment or refusal matched by the id it was
  * sent with under a bounded wait, then whatever the service answers
@@ -83,6 +89,9 @@ export type OpeningSettled =
 /** The reason a desktop socket is closed with when OpenAI's side ended before `session.closed`. */
 export const UPSTREAM_CLOSED_REASON = "upstream-closed";
 
+/** The reason a desktop socket is closed with when it sent a frame the route does not admit. */
+export const UNPERMITTED_FRAME_REASON = "unpermitted-frame";
+
 export interface RelayOptions<R = never> {
   route: VoiceRoute;
   desktop: VoiceSocket;
@@ -95,6 +104,10 @@ export interface RelayOptions<R = never> {
   onSessionStarted?: (() => LiveClientEvent | undefined) | undefined;
   /** Asked once, with how that event was answered; an event it answers is sent upstream in turn. */
   onOpeningSettled?: ((settled: OpeningSettled) => LiveClientEvent | undefined) | undefined;
+  /** Runs on every report the desktop sent in the service's vocabulary, which is read here and forwarded nowhere. */
+  onDesktopReport?: ((report: SessionReportFrame) => void) | undefined;
+  /** Runs once, when a desktop frame is refused and the socket closed on it, with the frame's type as far as it could be read. */
+  onFrameRefused?: ((type: string | undefined) => void) | undefined;
   closeTimeoutMs?: number;
   openingTimeoutMs?: number;
 }
@@ -121,6 +134,8 @@ export function relaySession<R = never>(
       bytesToDesktop: 0,
       droppedAudio: 0,
       droppedUnpermitted: 0,
+      reportsRead: 0,
+      refusedUnpermitted: 0,
     };
     let closedSeen = false;
     let startedSeen = false;
@@ -272,8 +287,43 @@ export function relaySession<R = never>(
       closedSeen ? Effect.void : settle(FINALIZATION.UNCONFIRMED),
     );
 
+    /**
+     * A desktop frame the route does not admit closes the desktop's socket
+     * with a policy violation rather than dropping the frame: an older
+     * build's append, dropped silently, would leave the developer hearing
+     * nothing and seeing nothing, and the close is what surfaces it. The
+     * session itself ends the way a hang-up does, since the socket closing
+     * is the desktop gone, and the graceful close upstream records its
+     * seconds.
+     */
+    const refuse = Effect.fnUntraced(function* (type: string | undefined) {
+      counts.refusedUnpermitted += 1;
+      options.onFrameRefused?.(type);
+      if (yield* desktop.isOpen) {
+        yield* desktop.close(SOCKET_CLOSE_CODE.POLICY_VIOLATION, UNPERMITTED_FRAME_REASON);
+      }
+    });
+
     const onDesktopFrame = Effect.fnUntraced(function* (frame: VoiceFrame) {
-      const decision = desktopFrameDecision(frameType(frameText(frame)), route);
+      const text = frameText(frame);
+      const type = frameType(text);
+      const decision = desktopFrameDecision(type, route);
+      if (decision === FRAME_DECISION.REFUSE) {
+        yield* refuse(type);
+        return;
+      }
+      if (decision === FRAME_DECISION.REPORT) {
+        // The one frame read past its type: a report in the service's own
+        // vocabulary that is not one is a frame the route does not admit.
+        const report = sessionReportFrameFromWire(decodeLivePayload(text));
+        if (report === undefined) {
+          yield* refuse(type);
+          return;
+        }
+        counts.reportsRead += 1;
+        options.onDesktopReport?.(report);
+        return;
+      }
       if (decision !== FRAME_DECISION.FORWARD) {
         counts.droppedUnpermitted += 1;
         return;

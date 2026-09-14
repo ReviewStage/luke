@@ -9,10 +9,10 @@ import type { ContextInput } from "./execution.js";
 import { type ConversationKind, isConversationKind, type SessionKey } from "./identifiers.js";
 
 /**
- * The storage contracts the brain's store implements and the host composes
- * against. Nothing here names a database: the contracts describe what a
- * durable owner of conversation state must be able to do, and the store that
- * does it lives behind them, in the package whose state it keeps.
+ * The vocabulary of conversation state as the host and the brain speak it:
+ * a conversation's record in the directory, what an append answered, and
+ * the transcript's events. Nothing here names a database; whoever holds the
+ * state, in memory here or in Luke's service, speaks these shapes.
  */
 
 /** What an append answered: whether the store changed, and the lines it now holds. */
@@ -38,13 +38,6 @@ export const COMPACTION_SOURCE = {
 
 export type CompactionSource = (typeof COMPACTION_SOURCE)[keyof typeof COMPACTION_SOURCE];
 
-const COMPACTION_SOURCE_LIST: readonly CompactionSource[] = Object.values(COMPACTION_SOURCE);
-
-export function isCompactionSource(value: UnparsedWireValue): value is CompactionSource {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && COMPACTION_SOURCE_LIST.includes(value as CompactionSource);
-}
-
 /**
  * What one retained transcript event is. The transcript is the conversation
  * as it happened between the host, the model, and the tools — every input the
@@ -58,7 +51,7 @@ export const TRANSCRIPT_EVENT_KIND = {
   COMPACTION: "compaction",
 } as const;
 
-export interface CompactionBoundary {
+interface CompactionBoundary {
   readonly source: CompactionSource;
   /** How many retained items the fold let go of from the projection. */
   readonly dropped: number;
@@ -78,13 +71,6 @@ export type TranscriptEvent =
       readonly boundary: CompactionBoundary;
     };
 
-/** A transcript event as the store hands it back: with its place in the conversation and the lifetime it was written in. */
-export interface StoredTranscriptEvent {
-  readonly sequence: number;
-  readonly sessionId?: string;
-  readonly event: TranscriptEvent;
-}
-
 /**
  * Why a conversation left the active list. The developer's own press is one
  * reason; the others are maintenance's, ported from OpenClaw's store: a
@@ -99,11 +85,11 @@ export const ARCHIVE_REASON = {
   ACTIVE_SESSION_CAP: "active-session-cap",
 } as const;
 
-export type ArchiveReason = (typeof ARCHIVE_REASON)[keyof typeof ARCHIVE_REASON];
+type ArchiveReason = (typeof ARCHIVE_REASON)[keyof typeof ARCHIVE_REASON];
 
 const ARCHIVE_REASON_LIST: readonly ArchiveReason[] = Object.values(ARCHIVE_REASON);
 
-export function isArchiveReason(value: UnparsedWireValue): value is ArchiveReason {
+function isArchiveReason(value: UnparsedWireValue): value is ArchiveReason {
   // SAFETY: value is a string; list membership is the vocabulary check.
   return isWireString(value) && ARCHIVE_REASON_LIST.includes(value as ArchiveReason);
 }
@@ -179,7 +165,7 @@ export const ARCHIVE_ENCODING = {
   ZSTD: "zstd",
 } as const;
 
-export type ArchiveEncoding = (typeof ARCHIVE_ENCODING)[keyof typeof ARCHIVE_ENCODING];
+type ArchiveEncoding = (typeof ARCHIVE_ENCODING)[keyof typeof ARCHIVE_ENCODING];
 
 function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEncoding {
   return value === ARCHIVE_ENCODING.IDENTITY || value === ARCHIVE_ENCODING.ZSTD;

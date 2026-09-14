@@ -23,23 +23,42 @@ import {
 import { describeWire } from "@sidecar/wire/effect";
 import { Effect, Schema as EffectSchema, SchemaTransformation } from "effect";
 import { MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
-import type { NotebookMemoryAccess } from "./notebook-memory.js";
 
 /**
- * The notebook as a memory provider: `USER.md`, `MEMORY.md`, the dated notes,
- * and the search index behind the one contract the runtime's vocabulary
- * names. Recall renders the remembered facts into every turn and, into a
+ * The notebook as a memory provider: `USER.md`, `MEMORY.md`, and the dated
+ * notes, behind the one contract the runtime's vocabulary names. Recall
+ * renders the remembered facts the host hands it into every turn and, into a
  * conversation opening fresh, the recent daily notes once. Capture is the
  * housekeeping turn the host runs: the pre-compaction flush, or the reset
  * capture. The tools are the notebook's two reads, its search and its read,
- * which the index answers, each a module of the shape every tool of the
- * brain is declared in. The notebook's two writes, `remember_fact` and
- * `forget_fact`, are rows of the actions table and action tools of the
- * brain's own: admitted inside their module by the same `admitEffect()` as every
- * other action and carried by the host's performer to the store's worker, so
- * no call of theirs reaches the host raw, and nothing here carries one. The
- * provider is built over one scope and answers for no other.
+ * each a module of the shape every tool of the brain is declared in and
+ * each answered by the access the host hands in, or refused when it hands
+ * none. The notebook's two writes, `remember_fact` and `forget_fact`, are
+ * rows of the actions table and action tools of the brain's own: admitted
+ * inside their module by the same `admitEffect()` as every other action and
+ * carried by the host's performer, so no call of theirs reaches the host
+ * raw, and nothing here carries one. The provider is built over one scope
+ * and answers for no other.
  */
+
+/**
+ * The two memory tools as one conversation is offered them, each answering
+ * the record the model reads. No host builds one today: the SQLite index
+ * that answered them is gone, so the provider is handed none and both reads
+ * refuse by their own word.
+ */
+export interface NotebookMemoryAccess {
+  search(ask: {
+    readonly query: string;
+    readonly maxResults?: number;
+    readonly signal: AbortSignal;
+  }): Effect.Effect<WireRecord>;
+  get(ask: {
+    readonly path: string;
+    readonly from?: number;
+    readonly lines?: number;
+  }): Effect.Effect<WireRecord>;
+}
 
 export const NOTEBOOK_MEMORY_TOOL = {
   SEARCH: "memory_search",

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { Worker } from "node:worker_threads";
 import { NodeFileSystem } from "@effect/platform-node";
-import { type HostSeams, storeWorkerPath } from "@sidecar/host";
+import type { HostSeams } from "@sidecar/host";
 import {
   AppIdentity,
   type DuplicateGatewayMethod,
@@ -16,7 +15,6 @@ import {
   SecretCipher,
   ShutdownSignal,
   StateRoot,
-  StoreWorker,
 } from "@sidecar/host/effect";
 import { ConfigProvider, Layer } from "effect";
 import type { DesktopConfig } from "./desktop-config";
@@ -39,14 +37,6 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
     Layer.succeed(AppIdentity, { appVersion: config.appVersion, packaged: config.packaged }),
     Layer.succeed(Environment, ConfigProvider.fromEnvRecord(config.environment)),
     Layer.succeed(SecretCipher, cipher),
-    Layer.succeed(StoreWorker, {
-      create: () => {
-        if (!runMode.observesProviders) {
-          throw new Error("a fixture run keeps nothing on disk and starts no store worker");
-        }
-        return new Worker(storeWorkerPath(config.resourceDirectory), { name: "brain-store" });
-      },
-    }),
     Layer.succeed(IdSource, { create: () => randomUUID() }),
     reporterLayer(config.report),
     Layer.succeed(MachinePresenceReader, { read: machinePresence }),
@@ -64,9 +54,9 @@ function hostSeamLayersFor(dependencies: HostSeamDependencies) {
  * standing layer is a step of the desktop's own launch rather than something
  * this module builds.
  *
- * A live run keeps its state on disk under Luke's own application data; a
- * fixture or capture run keeps nothing, is network-silent, and is never asked
- * for a store worker. Either way this process is one operator over one
+ * A live run keeps its settings and workspace files on disk under Luke's own
+ * application data; a fixture or capture run keeps nothing and is
+ * network-silent. Either way this process is one operator over one
  * transport, and one node.
  */
 export function hostAssemblyLayerFor(

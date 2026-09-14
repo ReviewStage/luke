@@ -73,10 +73,12 @@ import { Effect, type Exit, Fiber, ManagedRuntime, type Scope } from "effect";
  * Whether the execution the host handed in is a built `ManagedRuntime` rather
  * than a plain `Context`. The library's own guard answers the widest
  * `ManagedRuntime` there is, which narrows neither arm of this union on its
- * own, so it is read here as the predicate over the vocabulary itself, and
- * `store-client.ts` reads it from here rather than stating it a second time.
+ * own, so it is read here as the predicate over the vocabulary itself. It was
+ * exported while the store's client read it from here rather than stating it a
+ * second time; that client went with the SQLite store, and the two dispatches
+ * below are now the whole of its use.
  */
-export const isManagedRuntime = (
+const isManagedRuntime = (
   execution: ExecutionRuntime,
 ): execution is ManagedRuntime.ManagedRuntime<never, never> =>
   ManagedRuntime.isManagedRuntime(execution);

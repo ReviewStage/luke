@@ -65,8 +65,8 @@ Give a subpath of its own to anything the barrel's other callers must not
 resolve:
 
 - **Node-reaching behavior behind a vocabulary door**
-  (`@sidecar/runtime/vocabulary`, `@sidecar/brain/store`), or the renderer bundle
-  fails to resolve `node:http` behind a string constant it wanted to draw.
+  (`@sidecar/runtime/vocabulary`, `@sidecar/gateway/websocket`), or the renderer
+  bundle fails to resolve `node:http` behind a string constant it wanted to draw.
 - **A heavy run-time dependency**, like a reader that calls the AI SDK, where the
   vocabulary beside it reaches the SDK for its types alone.
 - **Test data and scaffolding**, which must not ride into a production bundle

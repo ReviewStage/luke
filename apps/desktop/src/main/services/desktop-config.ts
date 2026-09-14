@@ -31,7 +31,7 @@ export interface DesktopConfig {
   readonly packaged: boolean;
   readonly environment: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
-  /** Where this build's own files sit: the preload, the renderer, the icons, the store worker. */
+  /** Where this build's own files sit: the preload, the renderer, the icons. */
   readonly resourceDirectory: string;
   readonly hostedServiceBaseUrl: string;
   readonly launch: DesktopLaunch;

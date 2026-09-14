@@ -139,6 +139,10 @@ export function SiteFooter(): React.JSX.Element {
           Contact
         </a>
       </div>
+      {/* The notice sits under its own rule at the foot of the column, the
+          way stagereview.app closes its footer, so the link row above stays a
+          row of links. */}
+      <p className="mt-8 border-t border-border pt-6">© 2026 Stage Inc.</p>
     </footer>
   );
 }

@@ -5,7 +5,6 @@
  * so a composer states the seams it reaches in its own requirements instead of
  * taking a kernel that holds all of them.
  */
-import type { Worker } from "node:worker_threads";
 import { type ConfigProvider, Context, Layer, Logger } from "effect";
 import type { MachinePresence } from "../device-presence.js";
 import type { RunMode as RunModeFacts } from "../run-mode.js";
@@ -40,15 +39,6 @@ export class Environment extends Context.Service<Environment, ConfigProvider.Con
 /** The Keychain-backed cipher the settings store encrypts its secrets with. */
 export class SecretCipher extends Context.Service<SecretCipher, SecretCipherSeam>()(
   "@sidecar/host/SecretCipher",
-) {}
-
-/** Spawns the brain store's worker thread; the host's store wiring connects its client to it. */
-export interface StoreWorkerSource {
-  readonly create: () => Worker;
-}
-
-export class StoreWorker extends Context.Service<StoreWorker, StoreWorkerSource>()(
-  "@sidecar/host/StoreWorker",
 ) {}
 
 /** The ids the host mints for its own records. */
@@ -123,7 +113,6 @@ export type HostSeamTags =
   | AppIdentity
   | Environment
   | SecretCipher
-  | StoreWorker
   | IdSource
   | Reporter
   | MachinePresenceReader

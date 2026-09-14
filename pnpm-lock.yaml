@@ -244,6 +244,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/panel':
         specifier: workspace:*
         version: link:../../packages/panel
@@ -368,6 +371,9 @@ importers:
       '@sidecar/guide':
         specifier: workspace:*
         version: link:../guide
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../live
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -433,9 +439,6 @@ importers:
 
   packages/brain:
     dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@sidecar/actions':
         specifier: workspace:*
         version: link:../actions
@@ -782,9 +785,6 @@ importers:
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime
-      '@sidecar/session':
-        specifier: workspace:*
-        version: link:../session
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
@@ -792,9 +792,6 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.115
     devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.115(effect@4.0.0-rc.115)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.115(effect@4.0.0-rc.115)(vitest@5.0.0(@opentelemetry/api@1.9.1)(@types/node@26.2.0)(vite@7.3.1(@types/node@26.2.0)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.12)(yaml@2.9.0)))
@@ -934,9 +931,6 @@ importers:
 
   packages/settings:
     dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
       '@sidecar/analytics':
         specifier: workspace:*
         version: link:../analytics
@@ -1079,6 +1073,9 @@ importers:
       '@sidecar/hosted':
         specifier: workspace:*
         version: link:../../packages/hosted
+      '@sidecar/live':
+        specifier: workspace:*
+        version: link:../../packages/live
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session

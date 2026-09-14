@@ -70,7 +70,10 @@ interface SettingsLinks {
   readonly cloudKeyHeld: Effect.Effect<void>;
   applyVoiceCredential: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
-  readonly reconcileSpeech: Effect.Effect<void>;
+  /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
+  readonly refreshAnnouncementHold: Effect.Effect<void>;
+  /** The device heartbeat sent now, so the quiet instant the pause or the meeting setting moved reaches the service at once. */
+  readonly reportPresence: Effect.Effect<void>;
   broadcastWorkspaceProjects: Effect.Effect<void>;
   workspaceProjectOffered: (
     providerId: string,
@@ -673,7 +676,8 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
       applyVoiceCredential: linked((links) => links.applyVoiceCredential),
-      reconcileSpeech: linked((links) => links.reconcileSpeech),
+      refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
+      reportPresence: linked((links) => links.reportPresence),
       emitSettings,
     });
 

@@ -1,8 +1,40 @@
 import Foundation
 
+/// Transcribed from `LIVE_VOICE` in `packages/live/src/voices.ts`: every
+/// voice the desktop may sync as the account's preference. The phone reads
+/// one of these and speaks the `RealtimeVoice` it maps to.
+public enum LiveVoice: String, CaseIterable, Sendable {
+    case alloy
+    case ash
+    case ballad
+    case beacon
+    case bossa
+    case cedar
+    case cinder
+    case coral
+    case delta
+    case echo
+    case gleam
+    case marin
+    case meridian
+    case quartz
+    case ripple
+    case sage
+    case shimmer
+    case stone
+    case tempo
+    case verse
+    case vesper
+    case willow
+
+}
+
 /// Transcribed from `REALTIME_VOICE` in
-/// `packages/actions/src/remote-mint-legacy.ts`, which stays the source of
-/// truth: the mint refuses a voice outside it.
+/// `packages/actions/src/remote-mint-legacy.ts`, the Live voices the Realtime
+/// API the phone still mints also speaks: the picker offers these, the mint
+/// refuses a voice outside them, and a synced Live voice outside them falls
+/// to the default here rather than reaching the mint. The default is
+/// `REALTIME_DEFAULTS.VOICE`, the same voice the desktop's Live default is.
 public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
     case alloy
     case ash
@@ -15,7 +47,19 @@ public enum RealtimeVoice: String, CaseIterable, Sendable, Identifiable {
     case shimmer
     case verse
 
-    public static let `default`: RealtimeVoice = .echo
+    public static let `default`: RealtimeVoice = .marin
+
+    /// The voice the phone speaks for a synced Live voice.
+    public init(spoken voice: LiveVoice) {
+        self = RealtimeVoice(rawValue: voice.rawValue) ?? .default
+    }
+
+    /// A stored or synced name: a Live voice the phone cannot speak falls to
+    /// the default, and a name that is no voice at all is nil.
+    public init?(syncedName name: String) {
+        guard let live = LiveVoice(rawValue: name) else { return nil }
+        self.init(spoken: live)
+    }
 
     public var id: String { rawValue }
 

@@ -30,8 +30,10 @@ import {
   rosterSeed,
   rosterSeedItem,
   rosterUpdate,
+  type SpeechOpening,
   seedItemTokens,
   speechAppends,
+  speechOpening,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   type TranscriptSpeaker,
@@ -103,8 +105,8 @@ import {
  * and the hang-up; the trusted side owns every append and the close
  * decision, one owner per action as the server-controls guide has it. The
  * service is transport-neutral on purpose — whoever holds the sideband
- * composes it: the desktop's host today, the hosted voice service where it
- * owns the exchange — so the brain is reached only through `LiveBrain`, the
+ * composes it, which since E5-3 is the hosted voice service alone, standing
+ * it on the session the desktop's holder created — so the brain is reached only through `LiveBrain`, the
  * record only through `LiveRecord`, and the session only through the
  * `LiveSessionSource` and `LiveSideband` seams. It is built by `make` in the
  * `Scope` its composition opened and runs for that scope: the verbs a caller
@@ -761,10 +763,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   stopSpeaking(): boolean {
     const session = this.#speakable();
     if (!session) return false;
+    // The stop is not something the session is worth keeping open for: the
+    // idle decision is made against what this exchange said, and a developer
+    // cutting Luke off is the opposite of that.
     session.channel.enqueue(
       Effect.suspend(() =>
         Effect.asVoid(
-          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION))),
+          session.channel.send(instructionsAppend(this.#input(null, STOP_SPEAKING_INSTRUCTION)), {
+            countsForIdle: false,
+          }),
         ),
       ),
     );
@@ -1529,6 +1536,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
+    const opening = speechOpening(request.turn);
+    if (opening) {
+      this.#speakOpening(session, request, opening);
+      return;
+    }
     const chunks = speechAppends(request.turn);
     chunks.forEach((chunk, index) => {
       const last = index === chunks.length - 1;
@@ -1552,6 +1564,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         }),
       );
     });
+  }
+
+  /**
+   * The conversations guide's greeting before the caller speaks: the
+   * instruction appended and acknowledged first, then the one commentary that
+   * has the model begin, and no cue at all for an instruction the session
+   * refused or never acknowledged, so a greeting that did not land is not
+   * begun on the strength of the cue alone.
+   */
+  #speakOpening(
+    session: StandingSession,
+    request: ProactiveRequest<Delivery>,
+    opening: SpeechOpening,
+  ): void {
+    session.channel.enqueue(
+      Effect.gen({ self: this }, function* () {
+        const instructed = yield* session.channel.send(
+          instructionsAppend(this.#input(null, opening.instruction)),
+        );
+        if (!instructed) {
+          this.#queue.release(request);
+          return;
+        }
+        const cued = yield* session.channel.send(commentaryAppend(this.#input(null, opening.cue)), {
+          onSpoken: () => {
+            this.#queue.spoken(request);
+            this.#options.onProactiveSpoken?.(request.kind);
+          },
+        });
+        if (!cued) this.#queue.release(request);
+      }),
+    );
   }
 
   #wantSession(): void {

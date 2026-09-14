@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { isRealtimeVoice } from "@sidecar/actions";
 import { PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
 import {
@@ -8,7 +7,7 @@ import {
   APP_SETTING_KIND,
   isAppSettingId,
 } from "@sidecar/guide";
-import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE } from "@sidecar/live";
+import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
 import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
 import {
@@ -338,13 +337,11 @@ test("a choice row's control offers what its own values say, worded for a contro
     (row) => row.field === "voice",
   );
   assert.ok(voice?.control);
-  // Every offered voice is one the Live API speaks and one the phone's
-  // Realtime reader still names, with the default among them; the default
-  // carries its status into the menu alone.
+  // Every voice the Live API speaks is offered, with the default among them;
+  // the default carries its status into the menu alone.
   const offered = voice.control.options.map((option) => option.value);
-  assert.ok(offered.length > 1);
+  assert.deepEqual(offered, LIVE_VOICE_LIST);
   assert.equal(offered.every(isLiveVoice), true);
-  assert.equal(offered.every(isRealtimeVoice), true);
   assert.equal(offered.includes(LIVE_DEFAULTS.VOICE), true);
   assert.deepEqual(
     voice.control.options

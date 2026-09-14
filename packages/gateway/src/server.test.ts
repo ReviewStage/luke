@@ -276,8 +276,8 @@ it.effect("every error code's recorded request is answered with the recorded env
               ([method]) => method !== GATEWAY_METHOD.MEMORY_STATUS,
             ),
           ),
-          [GATEWAY_METHOD.CONVERSATION_LINES]: () =>
-            Effect.fail(new NotFoundRefusal({ message: "no conversation stands under that key" })),
+          [GATEWAY_METHOD.RUN_CANCEL]: () =>
+            Effect.fail(new NotFoundRefusal({ message: "no run has that id" })),
           [GATEWAY_METHOD.SESSION_SEND_MESSAGE]: () =>
             Effect.fail(new RefusedRefusal({ message: "that session advertises no message" })),
           [GATEWAY_METHOD.NODE_INVOKE]: () =>

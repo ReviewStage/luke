@@ -18,6 +18,7 @@ import type { StoreWriter } from "./announce.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
+import { deploymentEveOrigin } from "./eve-origin.js";
 import type { CloudActionExecutor } from "./performer.js";
 
 /**
@@ -97,9 +98,6 @@ const findVaultRows = SqlSchema.findAll({
     ),
 });
 
-/** Vercel's own name for the deployment's host, present on every function of the deployment. */
-const VERCEL_ENVIRONMENT = { URL: "VERCEL_URL" } as const;
-
 function once<Value>(build: () => Value): () => Value {
   let built: { value: Value } | undefined;
   return () => {
@@ -155,11 +153,7 @@ export function productionBrainHostSeams(run: WebStoreRun): BrainHostSeams {
         run(conversationOwnedBy(userId, conversationId)),
     },
     deploymentSecret: () => process.env[OBSERVATION_ENVIRONMENT.CRON_SECRET]?.trim() || undefined,
-    eveOrigin: () => {
-      const named = process.env[BRAIN_HOST_ENVIRONMENT.EVE_ORIGIN]?.trim();
-      const own = process.env[VERCEL_ENVIRONMENT.URL]?.trim();
-      return named || (own ? `https://${own}` : undefined);
-    },
+    eveOrigin: deploymentEveOrigin,
     userInfo: (input) =>
       Effect.tryPromise(async () => {
         // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.

@@ -17,6 +17,7 @@ import {
   type SessionCreatedFrame,
   type SessionCreateFrame,
   type SessionOpeningFrame,
+  type SessionSpokenFrame,
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_HEADER,
@@ -27,6 +28,7 @@ import {
   greetingCue,
   greetingInstruction,
   instructionsAppend,
+  LIVE_CLIENT_EVENT,
   LIVE_INPUT_BOUNDS,
   LIVE_SCENE,
   LIVE_SESSION_OUTCOME,
@@ -127,6 +129,16 @@ export interface VoiceServer {
   readonly server: http.Server;
   /** The one service answering this server's upgrades: none until one stands, and none again once its scope closes. */
   readonly serve: (handle: VoiceUpgrade | undefined) => void;
+}
+
+/** The names this build knows a desktop frame by, so the log names the frame it refused and never a string the desktop chose. */
+const KNOWN_FRAME_TYPES: ReadonlySet<string> = new Set<string>([
+  ...Object.values(LIVE_CLIENT_EVENT),
+  ...Object.values(VOICE_SERVICE_FRAME),
+]);
+
+function knownFrameType(type: string | undefined): string | undefined {
+  return type !== undefined && KNOWN_FRAME_TYPES.has(type) ? type : undefined;
 }
 
 /** Refuses one upgrade before any socket stands, with the status the decision named. */
@@ -238,8 +250,8 @@ export interface VoiceServiceOptions {
   run: WebStoreRun;
   /**
    * The hosted exchange to stand on each signed-in session, adopted over the
-   * same sideband the relay pipes; absent, the service only pipes, and the
-   * desktop's own exchange is the one that answers.
+   * same sideband the relay pipes. The route passes one; absent, as a test
+   * may leave it, the service only pipes and nobody answers a spoken ask.
    */
   exchange?: ExchangeAttachment;
   /** The OpenAI `/v1` base; a test points it at a fake. */
@@ -407,7 +419,18 @@ export class VoiceService {
         sockets,
         fibers,
         (session) => {
-          fork(session);
+          // Begun on a fiber of the set, and begun by the scheduler rather
+          // than on the stack of whoever asked. v4's `runForkWith`, which
+          // `FiberSet.runtime` forks through, evaluates the effect where it
+          // is called, so a session's word to the desktop reported from
+          // inside the exchange's own reading fiber would be written to the
+          // socket in the middle of that read, ahead of the very frame the
+          // relay's reader is queued to forward and that the report is about.
+          // The yield is what puts this fiber's first step behind the wakes
+          // already queued, which is the order the desktop is owed: every
+          // server frame as it arrived, and then the service's own word about
+          // the last of them.
+          fork(Effect.andThen(Effect.yieldNow, session));
         },
       );
       yield* Effect.acquireRelease(
@@ -553,6 +576,16 @@ export class VoiceService {
               deviceId: opened.deviceId,
               started: opened.started,
               sideband,
+              // The service's one frame to the desktop after the handshake, sent
+              // on a fiber of the service's own set since the exchange reports
+              // it from inside its own; a desktop gone by then takes it nowhere.
+              onSpoken: (kind) => {
+                const frame: SessionSpokenFrame = {
+                  type: VOICE_SERVICE_FRAME.SESSION_SPOKEN,
+                  kind,
+                };
+                this.#begin(Effect.ignore(desktop.send({ text: JSON.stringify(frame) })));
+              },
             });
       if ("refused" in standing) {
         yield* refuse(HOSTED_API_ERROR.UNAVAILABLE);
@@ -614,6 +647,32 @@ export class VoiceService {
                     yield* this.#recordUsage(accountId, sessionId, closed.usage.seconds);
                   }),
                 ),
+        // The desktop's reports reach the exchange: its idle, which the
+        // exchange decides the idle close on; its stop, which the exchange
+        // answers with the one instruction it appends itself; and a beat it
+        // decided is owed, which the exchange speaks from the build's script.
+        // With no exchange standing a report is read and goes nowhere.
+        onDesktopReport:
+          exchange === undefined
+            ? undefined
+            : (report) => {
+                switch (report.type) {
+                  case VOICE_SERVICE_FRAME.SESSION_ACTIVITY:
+                    exchange.service.reportActivity(report.idle);
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_STOP:
+                    exchange.service.stopSpeaking();
+                    return;
+                  case VOICE_SERVICE_FRAME.SESSION_BEAT:
+                    exchange.speakBeat(report);
+                    return;
+                  default:
+                    return;
+                }
+              },
+        onFrameRefused: (type) => {
+          this.#log({ event: LOG_EVENT.FRAME_REFUSED, route, type: knownFrameType(type) });
+        },
       });
       // The relay has settled and closed both transports; the exchange ends its
       // follows and its look, closes the session it holds (already gone, which

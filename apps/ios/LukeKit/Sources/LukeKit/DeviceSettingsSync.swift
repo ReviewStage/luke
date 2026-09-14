@@ -29,7 +29,7 @@ public struct DeviceSettingsSnapshot: Equatable, Sendable {
     public static func read(from store: UserDefaults) -> DeviceSettingsSnapshot {
         let defaults = WorkspaceCreationDefaults(store: store)
         return DeviceSettingsSnapshot(
-            voice: store.string(forKey: VoiceSettingsKey.voice).flatMap(RealtimeVoice.init(rawValue:))
+            voice: store.string(forKey: VoiceSettingsKey.voice).flatMap(RealtimeVoice.init(syncedName:))
                 ?? .default,
             speed: store.string(forKey: VoiceSettingsKey.speed).flatMap(RealtimeVoiceSpeed.init(rawValue:))
                 ?? .default,
@@ -230,7 +230,7 @@ public final class DeviceSettingsSync {
                 )
             }
         return DeviceSettingsSnapshot(
-            voice: RealtimeVoice(rawValue: voice) ?? .default,
+            voice: RealtimeVoice(syncedName: voice) ?? .default,
             speed: RealtimeVoiceSpeed(rawValue: speed) ?? .default,
             workspaceProviderId: payload[Field.workspaceProvider] as? String,
             workspaceProjectIds: payload[Field.workspaceProjects] as? [String: String] ?? [:],

@@ -7,7 +7,8 @@ import { LIVE_TRACE_DECISION, type LiveTrace } from "./live-trace.js";
 
 /**
  * What Luke wants to say unprompted, waiting for a session to say it into:
- * briefings the brain decided and the two onboarding beats. Quiet — a
+ * briefings the brain decided, the two onboarding beats, and the launch
+ * greeting. Quiet — a
  * meeting's or the developer's pause — is applied here and only here: a
  * request arriving under it, or standing when it begins, is held; a held beat
  * is released with a fresh clock when the quiet ends, and a held briefing is

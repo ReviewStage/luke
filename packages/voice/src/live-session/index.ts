@@ -6,18 +6,19 @@ export {
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
-  type LiveBrainAnticipationFacts,
   type LiveBrainAsk,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
 export type { LiveRecord } from "./live-record.js";
+export { LiveSessionHolder } from "./live-session-holder.js";
 export {
   type AdoptableSession,
   ASK_UNRECORDED_NOTE,
   type BriefingDelivery,
   LiveSessionService,
   type LiveSessionServiceOptions,
+  STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
-export type { BeatKind } from "./proactive-queue.js";
+export type { BeatTurn } from "./proactive-queue.js";

@@ -23,7 +23,6 @@ import {
 import type { AppGuideSnapshot } from "@sidecar/guide";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
-  type ConversationEntry,
   type ConversationViewSnapshot,
   isSessionWriteResult,
   type ObservedWorkspaceProject,
@@ -173,10 +172,6 @@ export interface HostOperator {
     name: Name,
     properties: ProductEventPropertiesFor<Name>,
   ): Effect.Effect<void>;
-  appendConversation(
-    entries: readonly ConversationEntry[],
-    reporter: string,
-  ): Effect.Effect<boolean>;
   /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
   clearConversation(): Effect.Effect<boolean>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
@@ -469,14 +464,6 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
             event: { name, at: Date.now(), properties: carried(properties) },
           }),
         ),
-      ),
-    appendConversation: (entries, reporter) =>
-      Effect.map(
-        client.call(GATEWAY_METHOD.CONVERSATION_APPEND, {
-          entries: carried(entries),
-          ...wireReporter(reporter),
-        }),
-        (answer) => record(answer)?.accepted === true,
       ),
     clearConversation: () =>
       Effect.map(

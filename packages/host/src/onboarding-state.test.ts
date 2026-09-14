@@ -7,7 +7,6 @@ import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { type Context, Effect } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import { test } from "vitest";
-import { arrivalBeatOwed, countsFirstAnnouncement } from "./arrival-flow.js";
 import { calendarOnboardingOwed } from "./calendar-onboarding-flow.js";
 import { introductionOwed } from "./introduction-flow.js";
 import {
@@ -145,36 +144,6 @@ it.effect("an update merges over the record on disk, not over an older read", ()
     }),
   ),
 );
-
-test("the arrival beat is owed from an observed sign-in until its reply begins", () => {
-  assert.equal(arrivalBeatOwed({ arrivalSignedInAt: SIGNED_IN_AT }), true);
-  assert.equal(arrivalBeatOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }), false);
-  // The first announcement is its own count; only the spoken beat settles it.
-  assert.equal(
-    arrivalBeatOwed({ arrivalSignedInAt: SIGNED_IN_AT, arrivalFirstAnnouncementAt: LATER }),
-    true,
-  );
-  assert.equal(arrivalBeatOwed(undefined), false);
-  assert.equal(arrivalBeatOwed({ arrivalSpokenAt: LATER }), false);
-});
-
-test("the first announcement counts once, and only against an observed sign-in", () => {
-  assert.equal(countsFirstAnnouncement({ arrivalSignedInAt: SIGNED_IN_AT }), true);
-  // The beat being spoken is not the loop proving itself: the count still runs.
-  assert.equal(
-    countsFirstAnnouncement({ arrivalSignedInAt: SIGNED_IN_AT, arrivalSpokenAt: LATER }),
-    true,
-  );
-  assert.equal(
-    countsFirstAnnouncement({
-      arrivalSignedInAt: SIGNED_IN_AT,
-      arrivalFirstAnnouncementAt: LATER,
-    }),
-    false,
-  );
-  assert.equal(countsFirstAnnouncement(undefined), false);
-  assert.equal(countsFirstAnnouncement({ arrivalFirstAnnouncementAt: LATER }), false);
-});
 
 test("the calendar gate is owed until a Done or a decline answers it", () => {
   assert.equal(calendarOnboardingOwed({ calendarOnboardingRequiredAt: SIGNED_IN_AT }), true);

@@ -12,7 +12,6 @@ import { type AgentWireTrace, isAgentWireTrace } from "@sidecar/devtrace/vocabul
 import { type VoiceLiveSessionChanged, voiceLiveSessionChangedSchema } from "@sidecar/gateway";
 import { type AppGuideSnapshot, isAppGuideSnapshot } from "@sidecar/guide";
 import { liveExchangeActive } from "@sidecar/live";
-import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -24,7 +23,6 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
-import { isSessionIdentity } from "./messages/session";
 import {
   isVoiceCommand,
   isVoiceLevels,
@@ -172,38 +170,6 @@ export const BRIDGE = {
     kind: "send",
     channel: "app:set-shortcut-capturing",
     args: oneBoolean,
-  }),
-  /**
-   * The lines one window has appended to the conversation since its last
-   * report, each with the id the window minted for it. The main process
-   * appends them to the thread it owns — idempotently, so a line delivered
-   * twice is one line — and relays the thread whole to every other panel
-   * window, so the Conversation tab reads the same on every display; a window's own
-   * report is not echoed back to it. A report never replaces the thread: what
-   * the store holds is authoritative, and a window can only add to it. The
-   * relay never leaves the machine, and every line in it is one the reporting
-   * window already held on the terms the history's own module states. The
-   * answer says whether the store took them, so the window marks a line
-   * reported only then and sends a refused one again.
-   */
-  appendConversationLines: entry({
-    kind: "invoke",
-    channel: "app:append-conversation-lines",
-    args: args<[readonly ConversationEntry[]]>(
-      (v) =>
-        v.length === 1 &&
-        Array.isArray(v[0]) &&
-        v[0].every((entry) => {
-          const stored = storedConversationEntry(entry);
-          if (stored === undefined) return false;
-          // The identity is read back off the wire rather than out of the
-          // parsed line, because it is the arriving value this guard admits.
-          return (
-            stored.identity === undefined || (isRecord(entry) && isSessionIdentity(entry.identity))
-          );
-        }),
-    ),
-    result: result<boolean>(isWireBoolean),
   }),
   /**
    * One tapped live event for the development trace. Fire-and-forget on
