@@ -1,4 +1,3 @@
-import { type BrainRequestSnapshot, isBrainRequestSnapshot } from "@sidecar/brain/requests-wire";
 import type { AppleCalendarAccess } from "@sidecar/calendar/vocabulary";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
@@ -109,7 +108,6 @@ export const ACT_KIND = {
    */
   SESSION_SEND_MESSAGE: "session.sendMessage",
   SESSION_EXECUTE_CONTROL: "session.executeControl",
-  BRAIN_CANCEL_ASK: "brain.cancelAsk",
   /**
    * The developer's thumb on one of Luke's messages in the Conversation tab,
    * carried to the host, which writes it to the service as a rating event on
@@ -531,13 +529,6 @@ export const ACT = {
     }),
     result: answersSessionWrite,
     refusal: "Could not run that control on this system.",
-  },
-  [ACT_KIND.BRAIN_CANCEL_ASK]: {
-    payload: record({ runId: exactId }),
-    result: wireResult<BrainRequestSnapshot | undefined>(
-      (value) => value === undefined || isBrainRequestSnapshot(value),
-    ),
-    refusal: "Could not reach Luke's runtime to cancel that.",
   },
   [ACT_KIND.CONVERSATION_RATE_MESSAGE]: {
     payload: actSchema(conversationRateMessageParamsSchema),

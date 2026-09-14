@@ -76,7 +76,6 @@ export interface ObservationComposer extends Composer {
   /** The brain's transcript reads, each through the service's documented read of the session's conversation. */
   readonly transcripts: SessionTranscriptReads;
   session: (identity: SessionIdentity) => Session | undefined;
-  observedSessionCount: () => number;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
   /**
@@ -509,7 +508,6 @@ export const composeObservation = (
       sessionActions,
       transcripts,
       session: (identity) => sessionRegistry.get(identity),
-      observedSessionCount: () => actableSessions().length,
       rosterForClients,
       onRosterChange: (listener) => {
         rosterListeners.push(listener);

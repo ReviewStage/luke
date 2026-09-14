@@ -31,7 +31,6 @@ import {
 import type { ChildRunService, ResolvedConfiguration } from "@sidecar/runtime";
 import {
   type ChildRunRecord,
-  conversationRecordToWire,
   isIdentifier,
   MAIN_SESSION_KEY,
   type SessionKey,
@@ -84,8 +83,6 @@ export interface GatewayServiceDependencies {
   brain: GatewayBrainAccess;
   conversations: ConversationOperations;
   memory: GatewayMemoryAccess;
-  /** How many sessions the roster holds now; the observation event's whole payload. */
-  observedSessionCount: () => number;
   nodes?: NodeRegistry;
   askWaitMs?: number;
   now: () => number;
@@ -118,12 +115,6 @@ export interface GatewayService {
   /** Appends one event to the log, for a host concern with no narrower report of its own below. */
   readonly emit: (kind: GatewayEventKind, payload: WireValue) => void;
   readonly nodes: NodeRegistry;
-  /** The brain's whole list of records, as the followers report it, for every client to hear. */
-  runsReported: (snapshots: readonly BrainRequestSnapshot[]) => void;
-  directoryChanged: () => void;
-  observationChanged: () => void;
-  configurationChanged: () => void;
-  childChanged: (childId: string) => void;
 }
 
 /** A parameter that is not the shape its method takes; the reading handler answers it as an invalid-params refusal. */
@@ -293,9 +284,10 @@ export function createGatewayService(
   const nodes = dependencies.nodes ?? new NodeRegistry();
   const askWaitMs = dependencies.askWaitMs ?? BRAIN_DEFAULTS.ASK_WAIT_MS;
 
+  // What a hello or a reconnection is handed in place of the events it
+  // missed. No runs and no directory ride in it: no client draws either since
+  // the desktop stopped listening (LUKE-206), so the service tells nobody.
   const snapshot = (): WireRecord => ({
-    runs: brain.allRequests().map(brainRequestRecordToWire),
-    conversations: conversations.directory().map(conversationRecordToWire),
     configurationRevision: brain.configuration().revision,
     nodes: nodes.list().map(nodeSnapshotToWire),
   });
@@ -446,19 +438,14 @@ export function createGatewayService(
 
   return Effect.map(gatewayInProcessHost(layerOptions), (gateway) => {
     /**
-     * The log's own append, where the composers ask for it: every change
-     * below is reported to this service synchronously, from a collaborator's
-     * own callback rather than from an effect — the brain wiring's request
-     * and conversation reports, the live session's, the node registry's — so
-     * the append is the log's synchronous one, and an in-process transport
-     * delivers what it appended on the same tick.
+     * The log's own append, where the composers ask for it: every change is
+     * reported to this service synchronously, from a collaborator's own
+     * callback rather than from an effect — the live session's, the node
+     * registry's — so the append is the log's synchronous one, and an
+     * in-process transport delivers what it appended on the same tick.
      */
-    const emit = (
-      kind: GatewayEventKind,
-      payload: WireValue,
-      identity?: { sessionKey?: string; runId?: string },
-    ): void => {
-      gateway.log.publish(kind, payload, identity);
+    const emit = (kind: GatewayEventKind, payload: WireValue): void => {
+      gateway.log.publish(kind, payload);
     };
 
     nodes.onChange((list) => {
@@ -471,26 +458,6 @@ export function createGatewayService(
       emit,
       closeAdmissions: gateway.admissions.close,
       nodes,
-      runsReported: (snapshots) => {
-        emit(GATEWAY_EVENT.RUNS_CHANGED, { runs: snapshots.map(brainRequestRecordToWire) });
-      },
-      directoryChanged: () => {
-        emit(GATEWAY_EVENT.DIRECTORY_CHANGED, {
-          entries: conversations.directory().map(conversationRecordToWire),
-        });
-      },
-      observationChanged: () => {
-        emit(GATEWAY_EVENT.OBSERVATION_CHANGED, {
-          sessions: dependencies.observedSessionCount(),
-        });
-      },
-      configurationChanged: () => {
-        emit(GATEWAY_EVENT.CONFIGURATION_CHANGED, configurationToWire(brain.configuration()));
-      },
-      childChanged: (childId) => {
-        const record = brain.children.child(childId);
-        emit(GATEWAY_EVENT.CHILD_CHANGED, record ? childRecordToWire(record) : { childId });
-      },
     };
   });
 }

@@ -126,7 +126,6 @@ export {
   COMPACTION_SOURCE,
   type CompactionSource,
   type ConversationRecord,
-  conversationRecordToWire,
   TRANSCRIPT_EVENT_KIND,
   type TranscriptEvent,
 } from "./storage.js";
