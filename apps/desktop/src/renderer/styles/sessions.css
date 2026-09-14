@@ -73,9 +73,8 @@
 .options-control {
   display: inline-flex;
   align-items: center;
-  /* The wrapper is where an errand lands, and the ring takes its corners from
-     the element it marks — so the pill's radius stands here even at rest,
-     when the wrapper draws nothing and hugs the toggle's own rounded box. */
+  /* The pill's radius stands here even at rest, when the wrapper draws
+     nothing and hugs the toggle's own rounded box. */
   border-radius: 10px;
 }
 

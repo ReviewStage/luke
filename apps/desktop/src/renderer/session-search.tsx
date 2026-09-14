@@ -3,7 +3,6 @@ import { useRef } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { focusSeek } from "./focus-seek";
-import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { type ArrangedSessions, matchRanges, type SessionArrangement } from "./session-model";
 
 /**
@@ -53,9 +52,6 @@ export function SessionSearchButton({
     <button
       type="button"
       className="search-button"
-      // The magnifier is what opens the field, so it is where a search Luke
-      // ran himself is signed.
-      {...errandTargetProps(ERRAND_TARGET.LIST_SEARCH)}
       data-active={String(open)}
       aria-expanded={open}
       aria-label="Search sessions"

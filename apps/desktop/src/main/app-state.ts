@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { EMPTY_APP_GUIDE } from "@sidecar/guide";
 import { fixtureSnapshot } from "@sidecar/session/fixtures";
 import { type Context, Effect, type Stream, SubscriptionRef } from "effect";
 import type { AppState } from "#shared/messages/app-state";
@@ -172,6 +171,5 @@ export function initialAppState(
     // is the one writer of this slice.
     introduction: { playing: false },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
-    guide: EMPTY_APP_GUIDE,
   };
 }

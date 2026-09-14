@@ -21,10 +21,7 @@ export {
   HOST_NATIVE_NODE_ID,
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
-  HOST_NODE_OPEN_KIND,
   HOST_OPERATOR_CLIENT_ID,
-  type HostNodeOpenKind,
-  isHostNodeOpenKind,
 } from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
 export { createGatewayService } from "./service.js";

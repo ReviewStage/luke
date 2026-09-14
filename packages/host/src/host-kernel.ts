@@ -4,11 +4,7 @@ import { type AgentId, DEFAULT_AGENT_ID } from "@sidecar/runtime/vocabulary";
 import type { WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { MachinePresence } from "./device-presence.js";
-import {
-  HOST_NODE_CAPABILITY,
-  HOST_NODE_OPEN_KIND,
-  type HostNodeOpenKind,
-} from "./node-capabilities.js";
+import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import type { RunMode } from "./run-mode.js";
 import { NodeAnswerLostError } from "./session-opens.js";
 import type { SecretCipher } from "./settings-store.js";
@@ -75,14 +71,15 @@ export interface HostKernel {
    * The kind is what the address is, an address unless a caller says
    * otherwise; the node decides from it what its own windows owe the open.
    *
-   * A promise and not an effect: the three composers that hand this on hand it
-   * to seams outside this package — the account session manager's consent, the
-   * calendar sign-in's page, the roster subscriber's created-workspace open —
-   * each of which is a synchronous or promise-shaped callback owned by
-   * `@sidecar/credentials` and `@sidecar/calendar`, and what would end that is
-   * a decision about those seams rather than anything this kernel holds.
+   * A promise and not an effect: the two composers that hand this on hand it
+   * to seams outside this package — the account session manager's consent and
+   * the calendar sign-in's page — each a synchronous or promise-shaped
+   * callback owned by `@sidecar/credentials` and `@sidecar/calendar`, and what
+   * would end that is a decision about those seams rather than anything this
+   * kernel holds; the session opens a row press reaches wrap it in
+   * `Effect.tryPromise`.
    */
-  openExternalThroughNode: (url: string, kind?: HostNodeOpenKind) => Promise<void>;
+  openExternalThroughNode: (url: string) => Promise<void>;
   reportOpenFailure: (error: Error) => void;
   /** The agent's own directory under the state root. */
   agentRootPath: () => string;
@@ -145,9 +142,9 @@ export function hostKernelOver(parts: HostKernelParts): HostKernel {
     hostedServiceBaseUrl: hostedServiceBaseUrlFor(accountBaseUrl),
     nodes,
     emit,
-    openExternalThroughNode: async (url, kind = HOST_NODE_OPEN_KIND.ADDRESS) => {
+    openExternalThroughNode: async (url) => {
       const result = await Effect.runPromise(
-        nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url, kind }),
+        nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
       );
       if (result.status === NODE_CAPABILITY_STATUS.OK) return;
       if (result.status === NODE_CAPABILITY_STATUS.UNKNOWN) {

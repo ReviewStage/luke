@@ -44,8 +44,6 @@ const SEARCH_QUERY_STORE_DELAY_MS = 400;
 export interface UseSessionListOptions {
   state: AppStateSnapshot | undefined;
   /** The document's own settings, which the stored view is baselined against. */
-  liveSettings: AppSettingsView | undefined;
-  /** The settings the panel is drawing, held back while an errand flies. */
   settings: AppSettingsView | undefined;
   tab: PanelTab;
   /** Gets the panel out of the way of whatever a press just brought forward. */
@@ -80,10 +78,6 @@ export interface SessionList {
   closeSearch: () => void;
   /** The capsule's close putting the order back where the mark still reads it. */
   resetSort: () => void;
-  /** A narrowing an errand held back, drawn now that Luke has arrived at it. */
-  applyView: (view: Partial<SessionArrangement>) => void;
-  /** Opens the field a landed query fills, which nothing else may leave hidden. */
-  openSearchField: () => void;
 }
 
 /**
@@ -93,7 +87,7 @@ export interface SessionList {
  */
 export function useSessionList(options: UseSessionListOptions): SessionList {
   const { act, tell, updateSetting } = useAct();
-  const { state, liveSettings, settings, tab, dismissPanel, showSessionsTab } = options;
+  const { state, settings, tab, dismissPanel, showSessionsTab } = options;
   const [view, setView] = useState<SessionArrangement>(DEFAULT_SESSION_VIEW);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -146,7 +140,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
   // capture run, which must not write a developer's own settings file.
   useEffect(() => {
     if (!restored.current || state === undefined || state.run.fixtureMode) return;
-    storedFilters.current ??= liveSettings?.sessionFilters ?? [];
+    storedFilters.current ??= settings?.sessionFilters ?? [];
     const filters = view.filters;
     if (sameSessionFilters(storedFilters.current, filters)) return;
     storedFilters.current = filters;
@@ -154,7 +148,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
       APP_SETTING_SCHEMA.sessionFilters.field,
       filters.length > 0 ? filters : undefined,
     );
-  }, [state, view.filters, liveSettings?.sessionFilters]);
+  }, [state, view.filters, settings?.sessionFilters]);
 
   /**
    * The search query as last stored, on the filter selection's own terms:
@@ -172,7 +166,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
   // developer deliberately let go.
   useEffect(() => {
     if (!restored.current || state === undefined || state.run.fixtureMode) return;
-    storedQuery.current ??= liveSettings?.sessionSearchQuery ?? "";
+    storedQuery.current ??= settings?.sessionSearchQuery ?? "";
     const query = view.query;
     if (storedQuery.current === query) return;
     const store = () => {
@@ -188,7 +182,7 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
     }
     const settled = window.setTimeout(store, SEARCH_QUERY_STORE_DELAY_MS);
     return () => window.clearTimeout(settled);
-  }, [state, view.query, liveSettings?.sessionSearchQuery]);
+  }, [state, view.query, settings?.sessionSearchQuery]);
 
   // A press anywhere else is the same dismissal Escape is, and the one a sheet
   // over a list has to answer: what is behind it can only be reached by asking
@@ -390,11 +384,6 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
     () => setView((current) => ({ ...current, sort: DEFAULT_SESSION_VIEW.sort })),
     [],
   );
-  const applyView = useCallback(
-    (next: Partial<SessionArrangement>) => setView((current) => ({ ...current, ...next })),
-    [],
-  );
-  const openSearchField = useCallback(() => setSearchOpen(true), []);
 
   const visible = state ? displaySessions(state) : [];
   // The tally is taken before the list is narrowed — the capsule reports what
@@ -459,7 +448,5 @@ export function useSessionList(options: UseSessionListOptions): SessionList {
     openSearch,
     closeSearch,
     resetSort,
-    applyView,
-    openSearchField,
   };
 }

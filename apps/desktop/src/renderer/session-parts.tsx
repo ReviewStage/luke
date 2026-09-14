@@ -8,7 +8,6 @@ import {
 } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useRef } from "react";
-import { ERRAND_TARGET, errandTargetProps } from "./luke-errand";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import {
   type ArrangedSessions,
@@ -232,12 +231,6 @@ export function SessionOptionsButton({
       className="options-control"
       id={SESSION_OPTIONS_CONTROL_ID}
       data-narrowed={String(narrowed)}
-      // The control already says how the list is being shown, so it is where
-      // a narrowing or a re-ordering Luke made himself is signed. The mark
-      // sits on the wrapper rather than the toggle because while a selection
-      // stands the wrapper is the drawn pill, X segment and all, and a ring
-      // around the toggle alone would outline half a control.
-      {...errandTargetProps(ERRAND_TARGET.LIST_OPTIONS)}
     >
       <button
         ref={toggle}
@@ -269,10 +262,6 @@ export function SessionOptionsButton({
         <button
           type="button"
           className="options-clear"
-          // Asking Luke for the whole list back is this X's own action, so that
-          // is where he signs it — and the X unmounts under his tap, which
-          // the errand already treats as a control the change took away.
-          {...errandTargetProps(ERRAND_TARGET.LIST_CLEAR)}
           aria-label="Clear filters"
           title="Clear filters"
           onClick={() => {

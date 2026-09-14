@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { GATEWAY_CLIENT_ROLE, InProcessTransport } from "@sidecar/gateway";
 import type { GatewayInProcessHost } from "@sidecar/gateway/server";
-import type { AppGuideSnapshot } from "@sidecar/guide";
 import { HOST_OPERATOR_CLIENT_ID } from "@sidecar/host";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { Effect, type Scope } from "effect";
@@ -48,8 +47,6 @@ export interface OperatorClient {
   /** Stops recording now, ahead of an action that ends the account it is filed under; the host's next replay event re-answers. */
   haltSessionReplay: () => void;
   resumeSessionReplay: () => void;
-  /** The panel's description of itself, written to the document; no host reads it since the local brain went. */
-  reportGuide: (snapshot: AppGuideSnapshot) => void;
   /**
    * The introduction given to its end: the host writes the completion and
    * drops the hold it stood behind. Begun here rather than waited on, because
@@ -217,9 +214,6 @@ export const createOperatorClient = /* @__PURE__ */ Effect.fn("createOperatorCli
       }),
     haltSessionReplay: () => setSessionReplayHalted(true),
     resumeSessionReplay: () => setSessionReplayHalted(false),
-    reportGuide: (guide) => {
-      state.update({ guide });
-    },
     completeIntroduction: () => gateway.host.completeIntroduction(),
     /**
      * What every attachment owes the host: its stream adopted and this

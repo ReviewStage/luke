@@ -7,7 +7,6 @@
     ".": "./src/index.js",
     "./envelope": "./src/envelope.js",
     "./requests": "./src/requests.js",
-    "./requests-wire": "./src/requests-wire.js",
     "./testing": "./src/testing.js",
     "./tool-set": "./src/tool-set.js",
     "./ui-message-context": "./src/ui-message-context.js"

@@ -139,7 +139,6 @@ export interface PanelPresentationApi {
   presentation: PanelPresentation;
   current: () => PanelPresentation;
   pointerInside: () => boolean;
-  heldAgainstPointer: () => boolean;
   applyPresentation: (next: PanelPresentation) => void;
   applyAuthoritativeMode: (mode: WindowMode) => void;
   changeMode: (expanded: boolean) => Promise<void>;
@@ -376,7 +375,6 @@ export function usePanelPresentation(options: PanelPresentationOptions): PanelPr
     presentation,
     current: presentationOf,
     pointerInside: pointerIsInside,
-    heldAgainstPointer,
     applyPresentation,
     applyAuthoritativeMode,
     changeMode,

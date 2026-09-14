@@ -12,8 +12,8 @@ import {
 import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
-import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE, voiceHotkeyLabel } from "@sidecar/settings";
-import type { AppSettingsView, ObservedAccountCalendars } from "@sidecar/settings/wire";
+import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
+import type { ObservedAccountCalendars } from "@sidecar/settings/wire";
 import { appSettingsView } from "@sidecar/settings/wire";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
 import {
@@ -24,21 +24,14 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import {
-  type AppStateSnapshot,
-  RUN_PROFILE,
-  sessionReplayBootstrap,
-} from "#shared/messages/app-state";
+import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import type { DisplayDiagnostic } from "#shared/messages/session";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { useAct } from "./act";
-import { useAppActionCarrier } from "./app-action-carrier";
 import type { CalendarGateControl } from "./calendar-gate";
 import type { ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConsentConnectSlot } from "./consent-connect-slot";
 import { FeedbackSlot } from "./feedback-slot";
-import { LukeErrand } from "./luke-errand";
-import { buildLukeGuide } from "./luke-guide";
 import { MarkdownMessage } from "./markdown-message";
 import { NotchWings } from "./notch-wings";
 import { PanelBody } from "./panel-body";
@@ -66,7 +59,6 @@ import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
-import { useErrandFlight } from "./use-errand-flight";
 import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
@@ -151,29 +143,18 @@ export function App(): React.JSX.Element {
   const outputAudio = state?.audio.outputAudio;
   const display = state?.window.display;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
-  const [settingsView, setSettingsView, settingsViewNow] = useStateWithRef<SettingsView>(
-    SETTINGS_VIEW.ROOT,
-  );
+  const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
   const [settingsSearchOpen, setSettingsSearchOpen] = useState(false);
-  /**
-   * The settings the panel is drawing, which is the document's own unless an
-   * errand is holding one back: a switch Luke is on his way to move has to
-   * still read as it did when he set off, and the document moves the moment
-   * the store answers. Released when the run is over, so the newest word —
-   * including a change another window made mid-flight — is the document's.
-   */
-  const [heldSettings, setHeldSettings] = useState<AppSettingsView>();
-  const liveSettings = useMemo(
+  /** The settings the panel is drawing: the document's own. */
+  const settings = useMemo(
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  const settings = heldSettings ?? liveSettings;
   const sessions = useSessionList({
     state,
-    liveSettings,
     settings,
     tab,
     // The panel's own two acts, declared below: the list only ever reaches
@@ -235,47 +216,6 @@ export function App(): React.JSX.Element {
     if (!sessionReplay || !run) return;
     applySessionReplay(sessionReplayBootstrap({ run, sessionReplay }));
   }, [run, sessionReplay]);
-  /**
-   * The guide as last reported, serialized, so an identical one is not sent
-   * again. The panel rebuilds it on every version of the document — the
-   * cheapest honest trigger, since the guide reads five of its slices — and
-   * most versions move the roster and nothing the guide describes.
-   */
-  const reportedGuide = useRef<string | undefined>(undefined);
-
-  // Keep the conversation's view of Luke himself current, so a spoken question
-  // about a setting is answered from the value the store actually holds, and a
-  // change made in the panel is known to the conversation the moment it lands.
-  const publishGuide = useCallback((held: AppStateSnapshot, current: AppSettingsView) => {
-    // All three keys reach the guide labelled: it is spoken and read, so a
-    // chord belongs there as the one word macOS writes it as rather than as
-    // the keys the panel draws apart.
-    const guide = buildLukeGuide({
-      account: held.account,
-      settings: current,
-      update: held.update,
-      voiceAvailable: current.voiceAvailable,
-      microphoneStatus: held.audio.microphoneStatus,
-      // A removed key reaches the guide as the removal rather than a bare
-      // absence, so Luke says the developer deleted it instead of blaming
-      // another app for a chord nobody is contesting.
-      hotkey: {
-        ...(held.hotkeys.talk ? { hotkey: voiceHotkeyLabel(held.hotkeys.talk) } : undefined),
-        removed: current.voiceHotkey === VOICE_HOTKEY_NONE,
-        held: held.hotkeys.talkHeld,
-      },
-      ...(held.hotkeys.stop ? { stopKey: voiceHotkeyLabel(held.hotkeys.stop) } : undefined),
-      stopKeyRemoved: current.stopHotkey === VOICE_HOTKEY_NONE,
-    });
-    const wire = JSON.stringify(guide);
-    if (wire === reportedGuide.current) return;
-    reportedGuide.current = wire;
-    // The guide goes to the main process, where the brain reads it and an
-    // app act the brain asks for is validated against it; the voice itself
-    // is told nothing about the app.
-    window.sidecar.reportAppGuide(guide);
-  }, []);
-
   const changeTab = useCallback(
     (next: PanelTab) => {
       setTab(next);
@@ -321,7 +261,6 @@ export function App(): React.JSX.Element {
     presentation,
     current: presentationOf,
     pointerInside: pointerIsInside,
-    heldAgainstPointer,
     applyPresentation,
     applyAuthoritativeMode,
     changeMode,
@@ -495,30 +434,6 @@ export function App(): React.JSX.Element {
    * clears it the render it finds the field closed.
    */
   const closeSettingsSearch = useCallback(() => setSettingsSearchOpen(false), []);
-
-  const errands = useErrandFlight({
-    holdSettings: setHeldSettings,
-    applyView: sessions.applyView,
-    openSearchField: sessions.openSearchField,
-    changeTab,
-    setSettingsView,
-    tabNow,
-    settingsViewNow,
-    presentationOf,
-    pointerInside: pointerIsInside,
-    heldAgainstPointer,
-    cancelHover,
-    settle,
-  });
-
-  useAppActionCarrier({
-    presentationOf,
-    changeMode,
-    errands,
-    feedback,
-    sessionView: sessions.view,
-    publishGuide,
-  });
 
   // A capture run stages its conversation from the launch profile, since no
   // voice window stands in one: who is heard, and for the muted run the hint
@@ -702,12 +617,6 @@ export function App(): React.JSX.Element {
   const dismissVolumeHint = useCallback(() => {
     setHintDismissal({ at: Date.now(), stretch: silenceStretch });
   }, [silenceStretch]);
-
-  // Rebuilt on every version of the document and sent only where it moved: a
-  // version that touched the roster alone says nothing about Luke himself.
-  useEffect(() => {
-    if (state && settings) publishGuide(state, settings);
-  }, [state, settings, publishGuide]);
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -944,8 +853,7 @@ export function App(): React.JSX.Element {
     <div
       className="app-stage"
       // Who is being heard, so the capsule can make room for Luke's meter
-      // beside his face, and the errand reads the same two facts the face
-      // rests on.
+      // beside his face.
       data-luke-speaking={String(speakers.lukeSpeaking)}
       data-listening={String(speakers.listening)}
       // Whether there are words to draw under the shape — a caption or a
@@ -1146,18 +1054,6 @@ export function App(): React.JSX.Element {
           />
         </span>
       ) : null}
-
-      {/* Luke crossing his own panel to sign a control he moved. Drawn over
-          everything, because it passes over the panel it is crossing, and
-          answering no pointer at all — the strip's one button and the control
-          it lands on both keep every press. The tap is what lets the switch
-          be seen to move, and the way home is what lets a panel stood up for
-          the errand stand back down. */}
-      <LukeErrand
-        {...(errands.errand ? { errand: errands.errand } : undefined)}
-        onLanded={errands.onLanded}
-        onReturned={errands.onReturned}
-      />
 
       {/* Luke's words while he says them: one element in every state, under
           the housing while the shape is compact and carried to the panel's

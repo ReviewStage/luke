@@ -41,7 +41,7 @@ export function SchemaSettingRows({
           key={entry.id}
           label={entry.label}
           ariaLabel={entry.description}
-          {...(isAppSettingId(entry.id) ? { errand: entry.id } : undefined)}
+          {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
           detail={details?.[field]}
           changed={changed}
           checked={entry.value === APP_TOGGLE_VALUE.ON}
@@ -55,7 +55,7 @@ export function SchemaSettingRows({
         key={entry.id}
         label={entry.label}
         ariaLabel={entry.description}
-        {...(isAppSettingId(entry.id) ? { errand: entry.id } : undefined)}
+        {...(isAppSettingId(entry.id) ? { anchor: entry.id } : undefined)}
         detail={details?.[field]}
         changed={changed}
         value={control.value}

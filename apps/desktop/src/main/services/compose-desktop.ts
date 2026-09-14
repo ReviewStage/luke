@@ -190,28 +190,17 @@ export function composeDesktop(
         state,
       });
 
-      // The two edges no service could take as a constructor argument, because
-      // each is a cycle the concerns genuinely have: the windows are built over
-      // the machine's own duck and carry the actions its node performs, and they
-      // draw what the operator hears while the operator is reached over the
-      // host's own server. Reading one before this has run throws by name rather
-      // than answering nothing.
-      native.link({
-        sendToPrimaryPanel: (channel, payload) => windows.sendToPrimaryPanel(channel, payload),
-        standPanelsDown: () => windows.panels.standDown(),
-      });
+      // The one edge no service could take as a constructor argument, because
+      // it is a cycle the concerns genuinely have: the windows draw what the
+      // operator hears while the operator is reached over the host's own
+      // server. Reading it before this has run throws by name rather than
+      // answering nothing.
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
         recycleVoiceWindow: () => windows.recycleVoiceWindow(),
         introductionOwedChanged: () => windows.reconcileIntroduction(),
       });
-
-      // An action still waiting on a panel is refused before anything stops:
-      // the panels are going, so nothing can answer one, and the drain would
-      // otherwise wait out the action's own clock for a promise that was never
-      // going to settle.
-      quit.beforeTeardown(() => native.refusePendingActions());
 
       return { config, state, telemetry, native, updates, operator, windows, run };
     }),

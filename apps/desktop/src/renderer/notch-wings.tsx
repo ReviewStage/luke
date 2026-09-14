@@ -7,7 +7,6 @@ import {
   type VoiceLevels,
   type VoiceSpeakers,
 } from "#shared/messages/voice-view";
-import { errandOriginProps } from "./luke-errand";
 import { type FaceContext, speechFaceInputs, useFaceHover, useFaceMotion } from "./luke-face-mood";
 import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import type { ProviderTally, SessionTally } from "./session-model";
@@ -285,13 +284,7 @@ export function NotchWings({
               hover is measured against, so it holds still across those
               remounts — and hovering it is a moment the face reacts to. */}
           {placement.face ? (
-            /* The wrapper is also where an errand sets off from, for the same
-               reason the hover is measured against it: it holds still while a
-               motion transforms layers inside the drawing, so a mark peeling
-               off it starts exactly where the face is drawn. It is not
-               rendered at all while the gate has this place, which is how an
-               errand knows there is no face to leave from. */
-            <span className="wing-face" ref={faceElement} {...errandOriginProps()}>
+            <span className="wing-face" ref={faceElement}>
               <WingFace key={face.play} motion={face.motion} repeat={face.repeat} />
             </span>
           ) : null}

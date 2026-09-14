@@ -165,9 +165,9 @@ voice window is handed no credential at all — the runtime opens each voice
 session itself and hands the window only the connection answer it needs to
 hear and be heard. Quitting Luke cancels
 what was running and writes down what did not finish rather than finishing it
-on paper. The three things the app still does on this machine at the runtime's
-ask are opening an address you or Luke asked to open, carrying an action to the
-panel, and running the Calendar helper behind macOS's own consent dialog.
+on paper. The two things the app still does on this machine at the runtime's
+ask are opening an address you asked to open and running the Calendar helper
+behind macOS's own consent dialog.
 
 **Things Luke remembers about you.** When Luke runs a turn for you on our
 service, he may silently save a concise preference, personal fact, goal, or
