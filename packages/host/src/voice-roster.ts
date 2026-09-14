@@ -6,7 +6,7 @@ import type { Session } from "@sidecar/session";
  * an error line, a branch, a repository, a model, an address, a workspace, a
  * diff — and the voice is handed none of it: what it holds is a summary it
  * can answer "is anything waiting on me?" from, and every act still resolves
- * in the brain, which reads the whole roster. The mapping is where that stops,
+ * on the service, whose brain reads the whole roster. The mapping is where that stops,
  * which is why it stands alone with a test over its own field set rather than
  * inside the composer.
  *
@@ -14,7 +14,7 @@ import type { Session } from "@sidecar/session";
  * row from another between passes and never enters a rendered line.
  *
  * Luke's own voice chat is dropped, the same row `actableSessions` drops for
- * the brain: the summary presents every line as one of the developer's coding
+ * a row press: the summary presents every line as one of the developer's coding
  * agents, so a session told about itself would both say something untrue and
  * spend one of the ten slots a busy desk needs.
  */

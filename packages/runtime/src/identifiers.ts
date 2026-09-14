@@ -41,7 +41,7 @@ export interface SourceSessionRef {
 
 /** The one agent this build configures, and the name of its ordinary conversation. */
 export const DEFAULT_AGENT_ID: AgentId = agentId("main");
-export const MAIN_CONVERSATION_NAME = "main";
+const MAIN_CONVERSATION_NAME = "main";
 
 const SESSION_KEY_PREFIX = "agent";
 const SESSION_KEY_SEPARATOR = ":";
@@ -109,13 +109,6 @@ export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_
   return sessionKey(
     [SESSION_KEY_PREFIX, agent, SUBAGENT_SEGMENT, childId].join(SESSION_KEY_SEPARATOR),
   );
-}
-
-/** The child id a key addresses, or nothing for a key of any other shape. */
-export function childIdOf(key: SessionKey | string): string | undefined {
-  const parsed = parsedSessionKey(key);
-  const [segment, childId] = parsed?.rest ?? [];
-  return parsed?.rest.length === 2 && segment === SUBAGENT_SEGMENT ? childId : undefined;
 }
 
 /**

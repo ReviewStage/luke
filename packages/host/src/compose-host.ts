@@ -1,4 +1,3 @@
-import { BRAIN_REQUEST_STATUS } from "@sidecar/brain/requests";
 import {
   carried,
   GATEWAY_METHOD,
@@ -8,17 +7,11 @@ import {
 import { HostedChangesClient, HostedConversationClient } from "@sidecar/hosted";
 import { observationSupervisor } from "@sidecar/runtime";
 import { cadenceGate } from "@sidecar/runtime/effect";
-import {
-  isTerminalChildRunStatus,
-  MAIN_SESSION_KEY,
-  type SessionKey,
-} from "@sidecar/runtime/vocabulary";
 import { normalizeObservedWorkspaceProjects } from "@sidecar/session";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import { composeAccount } from "./compose-account.js";
-import { type BrainComposer, composeBrain } from "./compose-brain.js";
 import { composeCalendars } from "./compose-calendars.js";
 import { composeConversation } from "./compose-conversation.js";
 import { composeDevices } from "./compose-devices.js";
@@ -47,13 +40,12 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
-/** The eight concerns, by the name each is built under. */
+/** The seven concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   DEVICES: "devices",
   CONVERSATION: "conversation",
-  BRAIN: "brain",
   CALENDARS: "calendars",
   OBSERVATION: "observation",
   LIVE: "live",
@@ -63,16 +55,14 @@ export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
 
 /**
  * The order the launch has to keep: the account is read before anything
- * gated on it, the brain's workspace is seeded before its credential transition
- * installs a runtime over it, and the loops are armed only once every owner
- * of one has started. The quit is this order reversed.
+ * gated on it, and the loops are armed only once every owner of one has
+ * started. The quit is this order reversed.
  */
 export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.SETTINGS,
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.DEVICES,
   HOST_CONCERN.CONVERSATION,
-  HOST_CONCERN.BRAIN,
   HOST_CONCERN.CALENDARS,
   HOST_CONCERN.OBSERVATION,
   HOST_CONCERN.LIVE,
@@ -144,20 +134,10 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
-    // The local brain's briefings reach no session: the exchange is the
-    // service's since E5-3, and what a session speaks unprompted is what the
-    // hosted brain decided and put on offer. The local brain stands until
-    // LUKE-143 deletes it, so what it decides is written down as decided and
-    // said nowhere from here. The onboarding beats and the launch greeting are
-    // decided by the live composer below and spoken by the service on its ask.
-    const brain: BrainComposer = yield* composeBrain({
-      account,
-      observation,
-      announcements: {
-        deliverBriefing: () => undefined,
-        dropBriefings: () => undefined,
-      },
-    });
+    // No brain runs on this Mac: the exchange is the service's, and what a
+    // session speaks unprompted is what the hosted brain decided and put on
+    // offer. The onboarding beats and the launch greeting are decided by the
+    // live composer below and spoken by the service on its ask.
     const live = yield* composeLive({ settings, account, observation, calendars });
     onboardingWritten = live.requestOnboardingBeat;
     announcementHoldRead = live.onAnnouncementHoldRead;
@@ -242,19 +222,14 @@ export const hostAssemblyLayer: Layer.Layer<
       stopCapabilities: closeCapabilities,
       onFirstSignIn: calendars.recordFirstSignIn,
       onFirstSignInArrival: live.seedArrivalOnFirstSignIn,
-      retireBrain: () => brain.wiring.retire(),
-      rebuildBrain: () => brain.wiring.rebuild(),
       releaseDevice: (stored) => devices.release(stored),
       deviceId: () => devices.deviceId(),
     });
-    yield* observation.link({ rosterLook: () => brain.wiring.rosterLook() });
-
     const concerns = {
       [HOST_CONCERN.SETTINGS]: settings,
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.DEVICES]: devices,
       [HOST_CONCERN.CONVERSATION]: conversation,
-      [HOST_CONCERN.BRAIN]: brain,
       [HOST_CONCERN.CALENDARS]: calendars,
       [HOST_CONCERN.OBSERVATION]: observation,
       [HOST_CONCERN.LIVE]: live,
@@ -319,58 +294,17 @@ export const hostAssemblyLayer: Layer.Layer<
     yield* hostService.set(service);
 
     /**
-     * The explicit quit's steps. Admissions close at the server; every run and
-     * child under way is cancelled; the followers' publication is let finish,
-     * so an end already reached stands in Conversation; and what did not settle is
-     * counted rather than finished, since nothing of it reaches the next launch.
+     * The explicit quit's steps. Admissions close at the server, and the
+     * counted events are flushed. No run of this Mac's own is under way to
+     * cancel, settle, or count: every ask is the service's, so the drain
+     * cancels nothing and counts nothing unresolved.
      */
     const drainSteps: GatewayShutdownSteps = yield* shutdownStepsFlushingEvents(
       {
         closeAdmissions: service.closeAdmissions,
-        cancelActive: Effect.gen(function* () {
-          const cancelled: string[] = [];
-          for (const record of brain.wiring.allRequests()) {
-            if (
-              record.status !== BRAIN_REQUEST_STATUS.QUEUED &&
-              record.status !== BRAIN_REQUEST_STATUS.RUNNING
-            ) {
-              continue;
-            }
-            const agent = brain.wiring.agentForRun(record.runId);
-            if (!agent) continue;
-            cancelled.push(record.runId);
-            yield* Effect.catchDefect(agent.cancelAsk(record.runId), () => Effect.void);
-          }
-          for (const child of brain.wiring.children.children()) {
-            if (isTerminalChildRunStatus(child.status)) continue;
-            yield* Effect.promise(() =>
-              brain.wiring.children.cancel(child.childId).catch(() => undefined),
-            );
-          }
-          return cancelled;
-        }),
-        awaitSettled: Effect.suspend(() => brain.wiring.publicationSettled()),
-        persistUnresolved: Effect.sync(() => {
-          // The records as the envelopes last took them, read from the
-          // envelopes rather than from the agents. A cancellation whose write
-          // did not land leaves its run queued or running there, and that is
-          // counted here as unresolved.
-          const keys = new Set<SessionKey>([
-            MAIN_SESSION_KEY,
-            ...brain.conversations.directory().map((entry) => entry.sessionKey),
-          ]);
-          let unresolved = 0;
-          for (const key of keys) {
-            const persisted = brain.wiring.store(key).current();
-            if (!persisted) continue;
-            unresolved += persisted.requests.filter(
-              (record) =>
-                record.status === BRAIN_REQUEST_STATUS.QUEUED ||
-                record.status === BRAIN_REQUEST_STATUS.RUNNING,
-            ).length;
-          }
-          return unresolved;
-        }),
+        cancelActive: Effect.succeed([]),
+        awaitSettled: Effect.void,
+        persistUnresolved: Effect.succeed(0),
       },
       settings.flushProductEvents,
     );

@@ -205,19 +205,17 @@ node --input-type=module -e '
 
 # Admission has one home in the brain: a tool module's own `execute`, under
 # `packages/brain/src/tools/`. Nothing else of the brain, and nothing in the
-# host's brain wiring or the memory package, may call `admitEffect()` or reach
-# for it, so no path can hand the host a raw call to admit and carry in one
-# breath — the notebook's two writes included, which arrive at the host as
-# admitted actions like every other. The check reads import lists rather than
-# call sites, because a file that never imports the gauntlet cannot call it.
+# memory package, may call `admitEffect()` or reach for it, so no path can
+# hand a raw call to admit and carry in one breath. The host's own row presses
+# admit through the same gauntlet on their own terms and are outside this
+# check. The check reads import lists rather than call sites, because a file
+# that never imports the gauntlet cannot call it.
 node --input-type=module -e '
   import { readdir, readFile } from "node:fs/promises";
   import path from "node:path";
   const root = process.argv[1];
   const scopes = [
     { directory: "packages/brain/src", allowed: "packages/brain/src/tools" },
-    { directory: "packages/host/src/brain", allowed: undefined },
-    { directory: "packages/host/src", allowed: undefined, only: ["memory-definition.ts"] },
     { directory: "packages/memory/src", allowed: undefined },
   ];
   const reaching = [];
@@ -226,7 +224,6 @@ node --input-type=module -e '
     const entries = await readdir(directory, { withFileTypes: true, recursive: true });
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
-      if (scope.only && !scope.only.includes(entry.name)) continue;
       const file = path.join(entry.parentPath, entry.name);
       const relative = path.relative(root, file);
       if (scope.allowed && relative.startsWith(scope.allowed)) continue;

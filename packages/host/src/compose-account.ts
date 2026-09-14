@@ -31,7 +31,6 @@ import type { Composer } from "./composer.js";
 import { HostKernelTag, lateService } from "./effect/kernel.js";
 import { AppIdentity, Environment } from "./effect/seams.js";
 import { openSocketOverWs } from "./voice/socket-over-ws.js";
-import { transitionVoiceSource } from "./voice-source-transition.js";
 
 const ACCOUNT_CLIENT_ID = "luke-desktop";
 
@@ -48,8 +47,6 @@ interface AccountLinks {
   onFirstSignIn: () => void;
   /** The arrival beat's own moment, recorded after the account event. */
   onFirstSignInArrival: () => void;
-  retireBrain: () => Effect.Effect<void>;
-  rebuildBrain: () => Effect.Effect<void>;
   /** The device row let go of on the departing account's own token, before the credential is cleared. */
   releaseDevice: (account: StoredAccount) => Effect.Effect<void>;
   /** This installation's device row id, once registered, for the live session's handshake. */
@@ -281,20 +278,12 @@ export const composeAccount = /* @__PURE__ */ Effect.fn("composeAccount")(functi
     kernel.emit(GATEWAY_EVENT.SESSION_REPLAY_CHANGED, carried(replay));
   });
 
-  // The transition's own `PlatformError` reads as a defect, exactly as the
-  // promise this replaced rejected on the same failure.
+  // The application's own `PlatformError` reads as a defect, exactly as the
+  // promise this replaced rejected on the same failure. Nothing is built
+  // over the applied capability on this side: the assembler's publication
+  // is the whole of the transition.
   const applyVoiceCredential: Effect.Effect<void> = Effect.orDie(
-    Effect.asVoid(
-      transitionVoiceSource({
-        retire: () => Effect.flatMap(late.value, (links) => links.retireBrain()),
-        apply: () => voiceCapabilities.apply(),
-        rebuild: () =>
-          Effect.gen(function* () {
-            const links = yield* late.value;
-            yield* links.rebuildBrain();
-          }),
-      }),
-    ),
+    Effect.asVoid(voiceCapabilities.apply()),
   );
 
   const methods: GatewayMethodTable = {

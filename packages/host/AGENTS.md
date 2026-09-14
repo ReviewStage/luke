@@ -96,5 +96,5 @@ its next answer.
 `@sidecar/hosted`, but the snapshot it carries is `@sidecar/settings` vocabulary
 and `settings` already reaches `hosted`. This is the lowest package holding both.
 
-`@sidecar/host/testing` holds the brain composition and the operator a window's
-ask crosses, so nothing that ships can reach them.
+`@sidecar/host/testing` holds `testKernelLayer`, every seam the host's own tests
+compose it over a fixture state root with, so nothing that ships can reach it.
