@@ -188,3 +188,24 @@ export function swiftStaticNumber(source: string, name: string): number {
   if (Number.isNaN(value)) throw new Error(`static let ${name}: not a number`);
   return value;
 }
+
+/** The numbers a `static let <name> = [1, 2, 3]` holds, in order. */
+export function swiftStaticNumberList(source: string, name: string): readonly number[] {
+  const declaration = new RegExp(
+    String.raw`static\s+let\s+${name}\s*(?::[^=\n]+)?=\s*\[([^\]]*)\]`,
+    "gu",
+  );
+  const matches = [...source.matchAll(declaration)];
+  if (matches.length !== 1) {
+    throw new Error(`static let ${name}: expected one list declaration, found ${matches.length}`);
+  }
+  const values = (matches[0]?.[1] ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "")
+    .map((entry) => Number(entry.replaceAll("_", "")));
+  if (values.length === 0 || values.some((value) => Number.isNaN(value))) {
+    throw new Error(`static let ${name}: not a list of numbers`);
+  }
+  return values;
+}
