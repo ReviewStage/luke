@@ -58,7 +58,6 @@ export {
   MEMORY_CAPTURE_OUTCOME,
   MEMORY_CAPTURE_PHASE,
   MEMORY_SCOPE_KIND,
-  type MemoryCaptureOutcome,
   type MemoryCaptureResult,
   type MemoryCaptureTurn,
   type MemoryProvider,
