@@ -240,7 +240,7 @@ test("a child's task is the text of its first user line, cut to the wire's bound
   await line(3, MESSAGE_ROLE.USER, [{ type: "text", text: "fixture follow-up" }]);
   assert.equal(await task(), "Draft the notes. Keep them short.");
 
-  // Leading whitespace spends none of the bound; the cut falls on the words.
+  // Leading whitespace of any kind JavaScript's trim drops spends none of the bound; the cut falls on the words.
   const long = await childOf(userId, parent, { createdAt: at(2) });
   await insertMessage(database.run, {
     userId,
@@ -248,7 +248,10 @@ test("a child's task is the text of its first user line, cut to the wire's bound
     seq: 1,
     clientId: "client-1",
     role: MESSAGE_ROLE.USER,
-    parts: [{ type: "text", text: `${" ".repeat(300)}${"word ".repeat(100)}` }],
+    parts: [
+      { type: "text", text: `${"\u00a0".repeat(150)}${" \t\n".repeat(50)}${"\u3000".repeat(20)}` },
+      { type: "text", text: "word ".repeat(100) },
+    ],
   });
   assert.equal(
     (await database.run(database.store.directory.child(userId, long)))?.task,

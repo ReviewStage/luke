@@ -140,6 +140,15 @@ const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[])
 const standingChild = (sql: SqlClient.SqlClient) => sql`child.deleted_at is null`;
 
 /**
+ * The leading run a task's excerpt drops before it is cut: the whitespace
+ * JavaScript's `trim` drops, spelled for Postgres's regex, so a line padded
+ * with spaces of any kind spends none of the bound on them and the route's
+ * own trim then finds nothing more to drop at the front.
+ */
+const LEADING_WHITESPACE_SQL_REGEX =
+  "^[\\s\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+";
+
+/**
  * The task's excerpt: the text parts of the child's first user line, in
  * their order, its leading whitespace dropped so it spends none of the bound,
  * cut to the wire's bound. The cut is in characters where the wire's is in
@@ -149,7 +158,11 @@ const taskExcerpt = (sql: SqlClient.SqlClient) =>
   sql`
     (
       select left(
-        regexp_replace(string_agg(part.value ->> 'text', ' ' order by part.ordinality), '^\\s+', ''),
+        regexp_replace(
+          string_agg(part.value ->> 'text', ' ' order by part.ordinality),
+          ${LEADING_WHITESPACE_SQL_REGEX},
+          ''
+        ),
         ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS}
       )
       from (
