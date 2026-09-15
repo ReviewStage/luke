@@ -717,6 +717,10 @@ button.conversation-action-chip:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.conversation-thinking-fold-words > p + p {
+  margin-top: 0.75em;
+}
+
 /* The line a fold of tool calls opens on: the count, led by the disclosure
    chevron the settings rows use, which turns to point down while the fold
    stands open. It lifts under the pointer the way a settings row does, its
