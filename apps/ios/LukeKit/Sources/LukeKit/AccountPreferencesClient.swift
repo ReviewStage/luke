@@ -20,10 +20,6 @@ public enum AccountPreferencesClientError: Error, Equatable {
 
 private enum AccountPreferenceWireField {
     static let voice = "voice"
-    /// `RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED`: still answered for an
-    /// account that stored a pace before the phone moved onto the Live model,
-    /// which has none; read past, never written.
-    static let voiceSpeed = "voiceSpeed"
     static let defaultWorkspaceProvider = "defaultWorkspaceProvider"
     static let workspaceProjectDefaults = "workspaceProjectDefaults"
     static let workspaceAgentDefaults = "workspaceAgentDefaults"
@@ -33,7 +29,6 @@ private enum AccountPreferenceWireField {
 
     static let topLevel: Set<String> = [
         voice,
-        voiceSpeed,
         defaultWorkspaceProvider,
         workspaceProjectDefaults,
         workspaceAgentDefaults,

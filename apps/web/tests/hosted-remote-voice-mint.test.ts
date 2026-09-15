@@ -84,7 +84,7 @@ test("a phone or watch mint keeps its own narrowed session document on the share
   assert.deepEqual(sent, remoteRealtimeClientSecretRequest());
   assert.deepEqual(sent.session.tools, remoteRealtimeToolDefinitions());
   assert.notDeepEqual(sent.session.tools, realtimeClientSecretRequest().session.tools);
-  assert.equal(sent.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.PHONE));
+  assert.equal(sent.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.REMOTE));
   assert.notEqual(sent.session.instructions, realtimeClientSecretRequest().session.instructions);
   // No caller cancellation is joined here: the signal the upstream was asked
   // under is the helper's own, exactly as before the brain route shared it.

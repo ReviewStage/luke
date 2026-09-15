@@ -6,19 +6,21 @@ import { type ActionToolDefinition, remoteRealtimeToolDefinitions } from "./acti
 
 /**
  * The Realtime session document the hosted mint routes still build: the
- * phone's, until iOS and the watch move to GPT Live, and the two the installed
- * desktops of earlier releases still ask for. It lives here rather than in
- * `@sidecar/hosted` beside the credential contract because the phone's
- * document carries the phone's own action tools, declared in this package,
- * and every scene opens with the persona from `@sidecar/guide`; `hosted` is
- * wire vocabulary that reaches neither, and an edge from it to this package
- * would point behavior below transport. This is the lowest package that may
- * name both. The credential the mint answers with is read into the contract
- * where that contract lives, in `@sidecar/hosted`'s `realtime-contract.ts`.
- * The voices are the Live vocabulary's, narrowed to the ones the Realtime
- * API documents: the desktop offers every Live voice, and a synced preference
- * outside this set falls to the default on the phone before any mint reads
- * it. Everything in this file goes when the phone moves.
+ * watch's, until it moves onto the hosted exchange (LUKE-224), and the two the
+ * installed desktops of earlier releases still ask for. The phone's callers
+ * went with its move (LUKE-216, LUKE-219); nothing on the phone reads this
+ * file. It lives here rather than in `@sidecar/hosted` beside the credential
+ * contract because the watch's document carries the watch's own action
+ * tools, declared in this package, and every scene opens with the persona
+ * from `@sidecar/guide`; `hosted` is wire vocabulary that reaches neither,
+ * and an edge from it to this package would point behavior below transport.
+ * This is the lowest package that may name both. The credential the mint
+ * answers with is read into the contract where that contract lives, in
+ * `@sidecar/hosted`'s `realtime-contract.ts`. The voices are the Live
+ * vocabulary's, narrowed to the ones the Realtime API documents: the desktop
+ * and the phone offer every Live voice, and a synced preference outside this
+ * set falls to the default on the watch before any mint reads it. Everything
+ * in this file goes when the watch moves, in LUKE-224.
  */
 
 /** The endpoint that mints a client secret. */
@@ -40,7 +42,7 @@ export const REALTIME_VOICE = {
 
 export type RealtimeVoice = (typeof REALTIME_VOICE)[keyof typeof REALTIME_VOICE];
 
-/** The phone's settings offer the voices in this order. */
+/** The watch's settings offer the voices in this order. */
 export const REALTIME_VOICE_LIST: readonly RealtimeVoice[] = Object.values(REALTIME_VOICE);
 
 /** Guards a voice arriving from storage or the wire. */
@@ -50,13 +52,13 @@ export function isRealtimeVoice(value: UnparsedWireValue): value is RealtimeVoic
   return REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
 }
 
-/** The voice a Realtime session is minted with for a Live voice the phone chose or synced. */
+/** The voice a Realtime session is minted with for a Live voice the watch chose or synced. */
 export function realtimeVoiceFor(voice: LiveVoice): RealtimeVoice {
   return isRealtimeVoice(voice) ? voice : REALTIME_DEFAULTS.VOICE;
 }
 
 /**
- * Every pace the phone can speak at, as a multiple of the voice's natural
+ * Every pace the watch can speak at, as a multiple of the voice's natural
  * rate. The API accepts anything from 0.25 to 1.5; the offered steps are the
  * ones that stay intelligible, spaced widely enough to be told apart by ear.
  */
@@ -69,7 +71,7 @@ export const REALTIME_VOICE_SPEED = {
 
 export type RealtimeVoiceSpeed = (typeof REALTIME_VOICE_SPEED)[keyof typeof REALTIME_VOICE_SPEED];
 
-/** The phone's settings offer the speeds in this order, slowest to fastest. */
+/** The watch's settings offer the speeds in this order, slowest to fastest. */
 export const REALTIME_VOICE_SPEED_LIST: readonly RealtimeVoiceSpeed[] =
   Object.values(REALTIME_VOICE_SPEED);
 
@@ -97,7 +99,7 @@ export interface RealtimeSessionOptions {
 
 const REALTIME_SESSION_TYPE = "realtime";
 
-/** The rate the phone's press captures PCM at; audio read at any other rate is not heard at all. */
+/** The rate the watch's press captures PCM at; audio read at any other rate is not heard at all. */
 const PRESS_AUDIO_SAMPLE_RATE = 24_000;
 
 /**
@@ -182,11 +184,12 @@ const DESKTOP: readonly string[] = [
 ];
 
 /**
- * The phone's call carries the roster as context and the session actions as
+ * The watch's call carries the roster as context and the session actions as
  * its own tools, so it keeps the resolution rules those need until it too is
- * given a brain.
+ * given a brain (LUKE-224). The phone's call, which shared these rules, is
+ * the hosted brain's now and reads none of them.
  */
-const PHONE: readonly string[] = [
+const REMOTE: readonly string[] = [
   "On a call:",
   "- The roster is private context, not a report: answer out of it, never read it out.",
   "- Follow the developer's lead and preserve their exact requested scope. Never expand an agent's",
@@ -235,7 +238,7 @@ const INTRODUCTION: readonly string[] = [
 /** The rules each Realtime scene adds over what every minted session is told. */
 export const REALTIME_SCENE = {
   DESKTOP,
-  PHONE,
+  REMOTE,
   INTRODUCTION,
 } as const;
 
@@ -312,13 +315,13 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
 }
 
 /**
- * The request body for the phone's mint. The call carries the roster itself
+ * The request body for the watch's mint. The call carries the roster itself
  * and actions through its own tools, so it keeps the rules that resolve
  * agents from that roster and the actions the mobile action endpoints serve.
  */
 export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
   return {
-    session: realtimeSessionConfig(REALTIME_SCENE.PHONE, remoteRealtimeToolDefinitions(), options),
+    session: realtimeSessionConfig(REALTIME_SCENE.REMOTE, remoteRealtimeToolDefinitions(), options),
   };
 }
 

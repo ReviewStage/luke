@@ -40,7 +40,7 @@ export interface VoiceMintPreferences {
  * desktop only sends values it validated, so anything else is a bug or an
  * impostor, and both should hear no. A Live voice the Realtime API does not
  * speak is the one repair: a preference the desktop synced is a real voice
- * the phone cannot mint yet, so it is minted at the default. A strict-fields allowlist additionally
+ * the watch cannot mint yet, so it is minted at the default. A strict-fields allowlist additionally
  * refuses any field beyond it, for an endpoint whose callers earn no
  * tolerance for extras.
  */

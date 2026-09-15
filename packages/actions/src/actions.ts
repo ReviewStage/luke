@@ -45,10 +45,13 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
   /** The action's own field vocabulary: what admission reads and what the model is shown. */
   readonly request: Schema.Codec<unknown, UnparsedWireValue>;
   /**
-   * The same action as the phone offers it, where the phone's surface gives the
-   * action a different shape: an open lands on the app's own screen rather than
-   * a provider's address, and the list narrows on the axes its chips hold.
-   * Absent, the phone is handed the desktop's.
+   * The same action as the watch offers it on the legacy remote mint, where
+   * the watch's surface gives the action a different shape: an open lands on
+   * the app's own screen rather than a provider's address, and the list
+   * narrows on the axes its chips hold. Absent, the watch is handed the
+   * desktop's. The wording the model is shown still says "phone", because
+   * changing it would move the pinned tool-schema bytes for a set LUKE-224
+   * deletes whole.
    */
   readonly remote?: {
     readonly description: string;
@@ -263,16 +266,18 @@ export function actionToolDefinitions(): readonly ActionToolDefinition[] {
 }
 
 /**
- * The actions the phone carries, as tool schemas for a mobile Realtime session.
- * The session writes are the ones the hosted action endpoints serve — MESSAGE,
- * CONTROL, CREATE_WORKSPACE, ADD_AGENT, RENAME_WORKSPACE, RENAME_SESSION —
- * and the phone validates each against the roster and projects it was shown
- * before an endpoint sees it. OPEN lands on the session's own screen in the
- * app and PANEL on the app's own list, so each is performed on the phone and
- * reaches no endpoint at all.
+ * The actions the watch carries, as tool schemas for its Realtime session on
+ * the legacy remote mint; the phone dispatches no tool since its move onto the
+ * hosted exchange (LUKE-216), and this set goes with the watch's move
+ * (LUKE-224). The session writes are the ones the hosted action endpoints
+ * serve — MESSAGE, CONTROL, CREATE_WORKSPACE, ADD_AGENT, RENAME_WORKSPACE,
+ * RENAME_SESSION — and the watch validates each against the roster and
+ * projects it was shown before an endpoint sees it. OPEN lands on the
+ * session's own screen in the app and PANEL on the app's own list, so each is
+ * performed on the watch and reaches no endpoint at all.
  *
  * A setting change, the feedback composer, and the Updates row are surfaces the
- * phone does not draw. REMEMBER and FORGET are absent because the phone keeps
+ * watch does not draw. REMEMBER and FORGET are absent because the watch keeps
  * no memory: Luke's durable facts live on the Mac alone.
  */
 const REMOTE_ACTION_KINDS: ReadonlySet<string> = new Set<ActionKind>([

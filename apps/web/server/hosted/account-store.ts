@@ -1,9 +1,7 @@
-import { accountPreferencesFromStored } from "@sidecar/settings";
+import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { isRealtimeVoiceSpeed } from "../core.js";
-import type { AccountPreferencesRow, HostedAccountPreferences } from "./account-preferences.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -15,6 +13,12 @@ import { InstantColumnSchema } from "./store/database.js";
  */
 
 type AccountSeamFailure = SqlError | Schema.SchemaError;
+
+/** One account's stored snapshot: the preferences every device shares, and the instant they were written. */
+export interface AccountPreferencesRow {
+  preferences: AccountPreferences;
+  updatedAt: Date;
+}
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
 export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient>;
@@ -45,12 +49,10 @@ export function deleteAccount(
 
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
-  voiceSpeed: Schema.NullOr(Schema.Number),
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
   updatedAt: InstantColumnSchema,
 }).pipe(
   Schema.encodeKeys({
-    voiceSpeed: "voice_speed",
     defaultWorkspaceProvider: "default_workspace_provider",
     updatedAt: "updated_at",
   }),
@@ -70,7 +72,7 @@ const findPreference = SqlSchema.findOneOption({
   execute: (userId) =>
     statement(
       (sql) => sql`
-        select voice, voice_speed, default_workspace_provider, updated_at
+        select voice, default_workspace_provider, updated_at
         from account_preference
         where user_id = ${userId}
         limit 1
@@ -94,7 +96,6 @@ const findWorkspacePreferences = SqlSchema.findAll({
 function rowPreferences(
   preference: {
     voice: string | null;
-    voiceSpeed: number | null;
     defaultWorkspaceProvider: string | null;
   },
   workspacePreferences: readonly {
@@ -104,7 +105,7 @@ function rowPreferences(
     model: string | null;
     effort: string | null;
   }[],
-): HostedAccountPreferences {
+): AccountPreferences {
   const workspaceProjectDefaults: Record<string, string> = {};
   const workspaceAgentDefaults: Record<string, { agent: string; model?: string; effort?: string }> =
     {};
@@ -122,7 +123,7 @@ function rowPreferences(
     }
   }
 
-  const shared =
+  return (
     accountPreferencesFromStored({
       ...(preference.voice ? { voice: preference.voice } : undefined),
       ...(preference.defaultWorkspaceProvider
@@ -132,13 +133,8 @@ function rowPreferences(
         ? { workspaceProjectDefaults }
         : undefined),
       ...(Object.keys(workspaceAgentDefaults).length > 0 ? { workspaceAgentDefaults } : undefined),
-    }) ?? {};
-  return {
-    ...shared,
-    ...(isRealtimeVoiceSpeed(preference.voiceSpeed)
-      ? { voiceSpeed: preference.voiceSpeed }
-      : undefined),
-  };
+    }) ?? {}
+  );
 }
 
 /**
@@ -167,7 +163,6 @@ export function readAccountPreferences(
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
   voice: Schema.NullOr(Schema.String),
-  voiceSpeed: Schema.NullOr(Schema.Number),
   // Deliberately an unvalidated string, not a provider id: a shipped phone
   // echoes whatever workspace provider it last held, including ids this build
   // no longer knows, and the desktop already reads an unknown one as unset.
@@ -182,17 +177,15 @@ const upsertPreference = SqlSchema.void({
     statement(
       (sql) => sql`
         insert into account_preference
-          (user_id, voice, voice_speed, default_workspace_provider, updated_at)
+          (user_id, voice, default_workspace_provider, updated_at)
         values (
           ${write.userId},
           ${write.voice},
-          ${write.voiceSpeed},
           ${write.defaultWorkspaceProvider},
           ${write.updatedAt}
         )
         on conflict (user_id) do update set
           voice = excluded.voice,
-          voice_speed = excluded.voice_speed,
           default_workspace_provider = excluded.default_workspace_provider,
           updated_at = excluded.updated_at
       `,
@@ -247,7 +240,7 @@ interface WorkspacePreferenceWrite {
 
 function workspacePreferenceRows(
   userId: string,
-  preferences: HostedAccountPreferences,
+  preferences: AccountPreferences,
   updatedAt: Date,
 ): WorkspacePreferenceWrite[] {
   const projects = preferences.workspaceProjectDefaults ?? {};
@@ -291,7 +284,7 @@ function workspacePreferenceRows(
  */
 export function writeAccountPreferences(
   userId: string,
-  preferences: HostedAccountPreferences,
+  preferences: AccountPreferences,
 ): Effect.Effect<Date, AccountSeamFailure, SqlClient.SqlClient> {
   const updatedAt = new Date();
   return statement((sql) =>
@@ -300,7 +293,6 @@ export function writeAccountPreferences(
         yield* upsertPreference({
           userId,
           voice: preferences.voice ?? null,
-          voiceSpeed: preferences.voiceSpeed ?? null,
           defaultWorkspaceProvider: preferences.defaultWorkspaceProvider ?? null,
           updatedAt,
         });

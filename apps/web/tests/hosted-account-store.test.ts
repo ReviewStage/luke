@@ -62,7 +62,6 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const userId = yield* openUser;
       const written = yield* writeAccountPreferences(userId, {
         voice: "cedar",
-        voiceSpeed: 1.25,
         defaultWorkspaceProvider: "conductor",
         workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
         workspaceAgentDefaults: {
@@ -73,7 +72,6 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, {
         voice: "cedar",
-        voiceSpeed: 1.25,
         defaultWorkspaceProvider: "conductor",
         workspaceProjectDefaults: { conductor: "project-a", codex: "project-b" },
         workspaceAgentDefaults: {
@@ -113,8 +111,8 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const sql = yield* SqlClient.SqlClient;
       const userId = yield* openUser;
       yield* sql`
-        insert into account_preference (user_id, voice, voice_speed)
-        values (${userId}, ${"not-a-voice"}, ${0.5})
+        insert into account_preference (user_id, voice)
+        values (${userId}, ${"not-a-voice"})
       `;
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, {});

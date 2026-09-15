@@ -135,7 +135,7 @@ test("the phone's mint carries the phone's own acts and roster rules", () => {
     remoteNames,
   );
   assert.equal(remoteNames.includes(ASK_BRAIN_TOOL.name), false);
-  assert.equal(request.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.PHONE));
+  assert.equal(request.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.REMOTE));
 });
 
 test("the minted introduction session declares no tools and no way to choose one", () => {
