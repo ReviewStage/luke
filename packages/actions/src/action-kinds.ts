@@ -59,8 +59,6 @@ export const ACTION_KIND = {
   PANEL: "panel",
   FEEDBACK: "feedback",
   UPDATE: "update",
-  REMEMBER: "remember",
-  FORGET: "forget",
 } as const satisfies typeof ADVERTISED_ACTION_KIND & Record<string, string>;
 
 export type ActionKind = (typeof ACTION_KIND)[keyof typeof ACTION_KIND];
@@ -78,8 +76,7 @@ export type Carried<T> = T & { status?: never; reason?: never };
 /**
  * What each kind of action carries once admitted. Every field here is either the
  * developer's own bounded text or a value read back out of what the roster,
- * the projects list, the guide, or the notebook advertised — never a caller's
- * copy of one.
+ * the projects list, or the guide advertised — never a caller's copy of one.
  */
 export interface ActionPayloads {
   [ACTION_KIND.MESSAGE]: { identity: SessionIdentity; text: string };
@@ -134,13 +131,6 @@ export interface ActionPayloads {
    */
   [ACTION_KIND.FEEDBACK]: { composer: FeedbackComposerKind; draft?: string };
   [ACTION_KIND.UPDATE]: { action: AppUpdateAction };
-  [ACTION_KIND.REMEMBER]: {
-    /** One concise durable fact selected from the developer-opened turn. */
-    words: string;
-    /** The id of the fact this one stands in for, when it changes one. */
-    replaces?: string;
-  };
-  [ACTION_KIND.FORGET]: { id: string };
 }
 
 /** One action ready for the performer that carries it, for one kind or any of them. */
@@ -161,9 +151,7 @@ export type AppActionKind =
   | typeof ACTION_KIND.SETTING
   | typeof ACTION_KIND.PANEL
   | typeof ACTION_KIND.FEEDBACK
-  | typeof ACTION_KIND.UPDATE
-  | typeof ACTION_KIND.REMEMBER
-  | typeof ACTION_KIND.FORGET;
+  | typeof ACTION_KIND.UPDATE;
 
 export type CarriedSessionAction = CarriedAction<SessionActionKind>;
 export type CarriedAppAction = CarriedAction<AppActionKind>;

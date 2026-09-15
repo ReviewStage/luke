@@ -1,4 +1,4 @@
-import { ACTION_KIND, type ActionKind, type ActionToolDefinition } from "@sidecar/actions";
+import type { ActionToolDefinition } from "@sidecar/actions";
 import { type NotebookMemoryToolShape, notebookMemoryToolShapes } from "@sidecar/memory";
 import {
   type ChildPolicyContext,
@@ -141,20 +141,12 @@ function schemaOf(module: {
   return toolSchemaFromDefinition(definition);
 }
 
-/** The notebook's two writes keep the memory group beside the action groups, so `group:memory` names the whole of what the notebook does. */
-const NOTEBOOK_ACTION_KINDS: ReadonlySet<ActionKind> = new Set([
-  ACTION_KIND.REMEMBER,
-  ACTION_KIND.FORGET,
-]);
-
 function actionDescriptor(tool: ActionToolModule): ToolDescriptor {
   return {
     schema: schemaOf(tool),
     execution: TOOL_EXECUTION.PERFORMER,
     effect: TOOL_EFFECT.WRITE,
-    groups: NOTEBOOK_ACTION_KINDS.has(tool.kind)
-      ? [TOOL_GROUP.MEMORY, TOOL_GROUP.ACTIONS, tool.family]
-      : [TOOL_GROUP.ACTIONS, tool.family],
+    groups: [TOOL_GROUP.ACTIONS, tool.family],
   };
 }
 
