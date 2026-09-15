@@ -16,16 +16,12 @@ import {
   liveSessionCreatedFromWire,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
-  sessionAttachFrameFromWire,
   sessionAudioCreatedFrameFromWire,
   sessionAudioCreateFrameFromWire,
-  sessionBeatFrameFromWire,
   sessionCreatedFrameFromWire,
-  sessionCreateFrameFromWire,
   sessionOpeningFrameFromWire,
   sessionReportFrameFromWire,
   sessionSpokenFrameFromWire,
-  sessionStopFrameFromWire,
   VOICE_SERVICE_FRAME,
   webSocketOrigin,
 } from "./live-contract.js";
@@ -56,16 +52,6 @@ function createFrame(overrides: { [field: string]: UnparsedWireValue } = {}) {
     ...overrides,
   };
 }
-
-test("a session.create frame round-trips with its offer and seed as written", () => {
-  const frame = createFrame();
-  assert.deepEqual(sessionCreateFrameFromWire(frame), frame);
-});
-
-test("a session.create frame may open with no history at all", () => {
-  const parsed = sessionCreateFrameFromWire(createFrame({ input: [] }));
-  assert.deepEqual(parsed?.input, []);
-});
 
 test("a session.created frame round-trips, with or without a quota, ignoring what a newer service adds", () => {
   const created = {
@@ -123,7 +109,6 @@ test("an audio session.create frame is the voice and one of the four formats, wi
   assert.equal(sessionAudioCreateFrameFromWire({ ...audio, model: "gpt-live-1" }), undefined);
   // The two create frames share a type and admit each other's shape on neither side.
   assert.equal(sessionAudioCreateFrameFromWire(createFrame()), undefined);
-  assert.equal(sessionCreateFrameFromWire(audio), undefined);
   assert.equal(sessionOpeningFrameFromWire(audio), undefined);
 });
 
@@ -142,15 +127,6 @@ test("an audio session.created frame is the id and the quota, with no SDP answer
   assert.equal(sessionAudioCreatedFrameFromWire({ ...created, sessionId: "  " }), undefined);
   // The WebRTC reader still wants its answer, so a Mac cannot mistake the audio route's for its own.
   assert.equal(sessionCreatedFrameFromWire(created), undefined);
-});
-
-test("a session.attach frame is the type and one session id, and nothing else", () => {
-  const attach = { type: VOICE_SERVICE_FRAME.SESSION_ATTACH, sessionId: "live_123" };
-  assert.deepEqual(sessionAttachFrameFromWire(attach), attach);
-  assert.equal(sessionAttachFrameFromWire({ ...attach, sdp: SDP }), undefined);
-  assert.equal(sessionAttachFrameFromWire({ type: VOICE_SERVICE_FRAME.SESSION_ATTACH }), undefined);
-  assert.equal(sessionAttachFrameFromWire({ ...attach, sessionId: "" }), undefined);
-  assert.equal(sessionAttachFrameFromWire(createFrame()), undefined);
 });
 
 test("an opening frame is either a create or an attach, told apart by type", () => {
@@ -194,10 +170,8 @@ test("a session.activity frame is the type and one boolean, and nothing else", (
 test("a session.stop frame is the type alone, and a report frame is either it or the activity", () => {
   const stop = { type: VOICE_SERVICE_FRAME.SESSION_STOP };
   const idle = { type: VOICE_SERVICE_FRAME.SESSION_ACTIVITY, idle: true };
-  assert.deepEqual(sessionStopFrameFromWire(stop), stop);
-  assert.equal(sessionStopFrameFromWire({ ...stop, content: "Stop." }), undefined);
-  assert.equal(sessionStopFrameFromWire(idle), undefined);
   assert.deepEqual(sessionReportFrameFromWire(stop), stop);
+  assert.equal(sessionReportFrameFromWire({ ...stop, content: "Stop." }), undefined);
   assert.deepEqual(sessionReportFrameFromWire(idle), idle);
   assert.equal(sessionReportFrameFromWire({ type: "session.instructions.append" }), undefined);
   assert.equal(sessionOpeningFrameFromWire(stop), undefined);
@@ -210,40 +184,38 @@ test("a session.beat frame names its kind and only the bounded values that kind'
     sessionTitle: "  Fix the flaky test  ",
     talkKeyLabel: "Right Option",
   };
-  assert.deepEqual(sessionBeatFrameFromWire(arrival), {
+  assert.deepEqual(sessionReportFrameFromWire(arrival), {
     ...arrival,
     sessionTitle: "Fix the flaky test",
   });
   const bare = { type: VOICE_SERVICE_FRAME.SESSION_BEAT, kind: PROACTIVE_SPEECH_KIND.ARRIVAL };
-  assert.deepEqual(sessionBeatFrameFromWire(bare), bare);
+  assert.deepEqual(sessionReportFrameFromWire(bare), bare);
   const calendar = {
     type: VOICE_SERVICE_FRAME.SESSION_BEAT,
     kind: PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING,
   };
-  assert.deepEqual(sessionBeatFrameFromWire(calendar), calendar);
+  assert.deepEqual(sessionReportFrameFromWire(calendar), calendar);
   const launch = {
     type: VOICE_SERVICE_FRAME.SESSION_BEAT,
     kind: PROACTIVE_SPEECH_KIND.LAUNCH,
     firstName: "Ada",
   };
-  assert.deepEqual(sessionBeatFrameFromWire(launch), launch);
+  assert.deepEqual(sessionReportFrameFromWire(launch), launch);
   // A value the kind's script does not mention, a briefing (the brain's words are never the
   // desktop's to send), a value past the bound, a blank one, and a sentence of the desktop's own.
-  assert.equal(sessionBeatFrameFromWire({ ...calendar, sessionTitle: "x" }), undefined);
-  assert.equal(sessionBeatFrameFromWire({ ...launch, sessionTitle: "x" }), undefined);
-  assert.equal(sessionBeatFrameFromWire({ ...bare, firstName: "Ada" }), undefined);
+  assert.equal(sessionReportFrameFromWire({ ...calendar, sessionTitle: "x" }), undefined);
+  assert.equal(sessionReportFrameFromWire({ ...launch, sessionTitle: "x" }), undefined);
+  assert.equal(sessionReportFrameFromWire({ ...bare, firstName: "Ada" }), undefined);
   assert.equal(
-    sessionBeatFrameFromWire({ ...bare, kind: PROACTIVE_SPEECH_KIND.BRIEFING, briefing: "Hi" }),
+    sessionReportFrameFromWire({ ...bare, kind: PROACTIVE_SPEECH_KIND.BRIEFING, briefing: "Hi" }),
     undefined,
   );
   assert.equal(
-    sessionBeatFrameFromWire({ ...launch, firstName: "a".repeat(OBSERVED_VALUE_LENGTH + 1) }),
+    sessionReportFrameFromWire({ ...launch, firstName: "a".repeat(OBSERVED_VALUE_LENGTH + 1) }),
     undefined,
   );
-  assert.equal(sessionBeatFrameFromWire({ ...launch, firstName: "   " }), undefined);
-  assert.equal(sessionBeatFrameFromWire({ ...bare, content: "Say hello." }), undefined);
-  // The report union admits it beside the activity and the stop.
-  assert.deepEqual(sessionReportFrameFromWire(launch), launch);
+  assert.equal(sessionReportFrameFromWire({ ...launch, firstName: "   " }), undefined);
+  assert.equal(sessionReportFrameFromWire({ ...bare, content: "Say hello." }), undefined);
   assert.equal(sessionOpeningFrameFromWire(launch), undefined);
 });
 

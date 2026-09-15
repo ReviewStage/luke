@@ -16,7 +16,6 @@ import {
   type HostedActionAnswer,
   type HostedActionWorkspaceAnswer,
   hostedActionAnswerSchema,
-  hostedActionWorkspaceAnswerSchema,
 } from "./action-wire.js";
 import { HOSTED_SERVICE_PATH } from "./service-paths.js";
 
@@ -62,50 +61,14 @@ export type HostedActionWorkspaceOutcome =
   | { failure: HostedActionFailure };
 
 /**
- * A new workspace, as the creation endpoint takes it: the project the
- * provider itself listed, and the developer's own bounded words for what
- * the agent should start on. The model and effort ride only beside the agent
- * they pair with, as one selection, so the service's admission holds the
- * pairing to the build's table exactly as the desktop's did. A creation that
- * names no model starts on the account's synced `workspaceAgentDefaults`
- * pairing, model and effort both, where the developer chose one; the
- * provider's own default decides only where no pairing is stored either.
- */
-export interface HostedWorkspaceCreation {
-  providerProjectId: string;
-  agent?: string | undefined;
-  model?: string | undefined;
-  effort?: string | undefined;
-  name?: string | undefined;
-  task?: string | undefined;
-}
-
-/** Another agent in an observed workspace: one of the kinds the row's own observation listed. */
-export interface HostedAgentAddition {
-  agent: string;
-  model?: string | undefined;
-  effort?: string | undefined;
-  name?: string | undefined;
-  task?: string | undefined;
-}
-
-/** A record with the absent fields left out, so the wire carries what was asked and no `undefined`. */
-function present(fields: HostedWorkspaceCreation | HostedAgentAddition): WireRecord {
-  return Object.fromEntries(
-    Object.entries(fields).filter((entry): entry is [string, string] => entry[1] !== undefined),
-  );
-}
-
-/**
- * The desktop's side of every session action the service carries: the two a
- * row asks for — the message typed into its composer and the press of a
- * control its provider advertised — and the four the brain asks for at the
- * developer's word, a new workspace, another agent, and the two renames.
- * Each is one call on the signed-in account; the service admits it against
- * the stored snapshot the same account's rows were drawn from, builds the
- * write from that snapshot's own advertisement, and answers what the provider
- * said. Nothing here decides whether the action may run, and nothing here
- * holds a roster: the target is two identifiers and the ask is the words.
+ * The desktop's side of the two session actions a row asks for: the message
+ * typed into its composer and the press of a control its provider
+ * advertised. Each is one call on the signed-in account; the service admits
+ * it against the stored snapshot the same account's rows were drawn from,
+ * builds the write from that snapshot's own advertisement, and answers what
+ * the provider said. Nothing here decides whether the action may run, and
+ * nothing here holds a roster: the target is two identifiers and the ask is
+ * the words.
  */
 export class HostedActionClient {
   readonly #call: AccountCallEffects;
@@ -135,44 +98,6 @@ export class HostedActionClient {
     return this.#post(
       HOSTED_SERVICE_PATH.ACTION_CONTROL,
       { ...targetRecord(target), controlId },
-      hostedActionAnswerSchema,
-    );
-  }
-
-  createWorkspace(
-    providerId: CloudAgentProviderId,
-    creation: HostedWorkspaceCreation,
-  ): Effect.Effect<HostedActionWorkspaceOutcome> {
-    return this.#post(
-      HOSTED_SERVICE_PATH.ACTION_WORKSPACE,
-      { providerId, ...present(creation) },
-      hostedActionWorkspaceAnswerSchema,
-    );
-  }
-
-  addAgent(
-    target: HostedActionTarget,
-    addition: HostedAgentAddition,
-  ): Effect.Effect<HostedActionOutcome> {
-    return this.#post(
-      HOSTED_SERVICE_PATH.ACTION_AGENT,
-      { ...targetRecord(target), ...present(addition) },
-      hostedActionAnswerSchema,
-    );
-  }
-
-  renameSession(target: HostedActionTarget, name: string): Effect.Effect<HostedActionOutcome> {
-    return this.#post(
-      HOSTED_SERVICE_PATH.ACTION_RENAME_SESSION,
-      { ...targetRecord(target), name },
-      hostedActionAnswerSchema,
-    );
-  }
-
-  renameWorkspace(target: HostedActionTarget, name: string): Effect.Effect<HostedActionOutcome> {
-    return this.#post(
-      HOSTED_SERVICE_PATH.ACTION_RENAME_WORKSPACE,
-      { ...targetRecord(target), name },
       hostedActionAnswerSchema,
     );
   }

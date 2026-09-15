@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { OBSERVE_QUERY, observeAnswerFromWire } from "@sidecar/hosted";
+import { OBSERVE_QUERY, observeAnswerSchema } from "@sidecar/hosted";
 import { SESSION_STATUS } from "@sidecar/session";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   fakeConductorApi,
@@ -20,6 +22,14 @@ import { encodeObservedRoster } from "../server/hosted/observed-roster";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
 import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
+
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
+}
 
 const SECRET = "a".repeat(64);
 const KEY_ROWS: VaultKeyRow[] = [
@@ -151,7 +161,7 @@ test("a user with a snapshot is answered from it, dated, and the provider is not
   const storedBody = await stored.json();
   assert.deepEqual(storedBody, seededBody);
   assert.equal(api.requests.length, readsAfterSeeding);
-  assert.equal(observeAnswerFromWire(storedBody)?.observedAt, TEST_TIME);
+  assert.equal(parse(observeAnswerSchema, storedBody)?.observedAt, TEST_TIME);
 });
 
 test("a snapshot observed under a replaced key is not served: the read runs a pass under the new key", async () => {
@@ -344,7 +354,7 @@ test("the last activity travels under both its name and the legacy one, and is r
   assert.equal(wire.lastActivityAt, lastActivityAt);
   assert.equal(wire.observedAt, lastActivityAt);
 
-  const renamed = observeAnswerFromWire({
+  const renamed = parse(observeAnswerSchema, {
     sessions: [
       {
         providerId: "conductor",
@@ -358,7 +368,7 @@ test("the last activity travels under both its name and the legacy one, and is r
   });
   assert.equal(renamed?.sessions[0]?.lastActivityAt, 2_000);
   // A service still sending only the old name dates the session the same way.
-  const legacy = observeAnswerFromWire({
+  const legacy = parse(observeAnswerSchema, {
     sessions: [
       { providerId: "conductor", sessionId: "s", title: "T", status: "working", observedAt: 1_000 },
     ],
@@ -381,7 +391,7 @@ test("an observe answer accepts a valid answer", () => {
       },
     ],
   };
-  const answer = observeAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = parse(observeAnswerSchema, JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   assert.equal(answer.sessions.length, 1);
   assert.equal(answer.sessions[0]?.providerId, "conductor");
@@ -393,7 +403,7 @@ test("an observe answer accepts a valid answer", () => {
 });
 
 test("an observe answer drops a published-work address that is not HTTPS", () => {
-  const answer = observeAnswerFromWire({
+  const answer = parse(observeAnswerSchema, {
     sessions: [
       {
         providerId: "conductor",
@@ -409,7 +419,7 @@ test("an observe answer drops a published-work address that is not HTTPS", () =>
 });
 
 test("an observe answer drops a session address outside the openable schemes", () => {
-  const answer = observeAnswerFromWire({
+  const answer = parse(observeAnswerSchema, {
     sessions: [
       {
         providerId: "conductor",
@@ -432,7 +442,7 @@ test("an observe answer skips malformed session entries rather than failing", ()
       null,
     ],
   };
-  const answer = observeAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = parse(observeAnswerSchema, JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   // Only the well-formed entry survives.
   assert.equal(answer.sessions.length, 1);
@@ -450,7 +460,7 @@ test("an observe answer rejects an unknown status value", () => {
       },
     ],
   };
-  const answer = observeAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = parse(observeAnswerSchema, JSON.parse(JSON.stringify(raw)));
   // The malformed entry is skipped; the answer still exists with zero sessions.
   assert.ok(answer);
   assert.equal(answer.sessions.length, 0);
@@ -477,7 +487,7 @@ test("an observe answer carries the action advertisements and bounds them", () =
       },
     ],
   };
-  const answer = observeAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = parse(observeAnswerSchema, JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   const session = answer.sessions[0];
   assert.ok(session);
@@ -492,14 +502,17 @@ test("an observe answer carries the action advertisements and bounds them", () =
 });
 
 test("an observe answer returns undefined for a non-object", () => {
-  assert.equal(observeAnswerFromWire("not an object"), undefined);
-  assert.equal(observeAnswerFromWire(null), undefined);
-  assert.equal(observeAnswerFromWire(42), undefined);
+  assert.equal(parse(observeAnswerSchema, "not an object"), undefined);
+  assert.equal(parse(observeAnswerSchema, null), undefined);
+  assert.equal(parse(observeAnswerSchema, 42), undefined);
 });
 
 test("an observe answer returns undefined when sessions is not an array", () => {
-  assert.equal(observeAnswerFromWire(JSON.parse(JSON.stringify({ sessions: "wrong" }))), undefined);
-  assert.equal(observeAnswerFromWire(JSON.parse(JSON.stringify({}))), undefined);
+  assert.equal(
+    parse(observeAnswerSchema, JSON.parse(JSON.stringify({ sessions: "wrong" }))),
+    undefined,
+  );
+  assert.equal(parse(observeAnswerSchema, JSON.parse(JSON.stringify({}))), undefined);
 });
 
 // --- User id is passed through ---

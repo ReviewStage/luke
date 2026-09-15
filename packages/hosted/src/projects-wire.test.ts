@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
-import { hostedProjectsAnswerFromWire } from "./projects-wire.js";
+import { hostedProjectsAnswerSchema } from "./projects-wire.js";
+
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
+}
 
 const PROJECT = {
   providerId: "conductor",
@@ -10,19 +21,19 @@ const PROJECT = {
 };
 
 test("an answer that listed no agent choices still lists its projects", () => {
-  assert.deepEqual(hostedProjectsAnswerFromWire({ projects: [PROJECT] }), {
+  assert.deepEqual(parse(hostedProjectsAnswerSchema, { projects: [PROJECT] }), {
     projects: [PROJECT],
     agentModels: [],
   });
-  assert.deepEqual(hostedProjectsAnswerFromWire({ projects: [], agentModels: "none" }), {
+  assert.deepEqual(parse(hostedProjectsAnswerSchema, { projects: [], agentModels: "none" }), {
     projects: [],
     agentModels: [],
   });
-  assert.equal(hostedProjectsAnswerFromWire({ agentModels: [] }), undefined);
+  assert.equal(parse(hostedProjectsAnswerSchema, { agentModels: [] }), undefined);
 });
 
 test("an agent offered without the models it runs under is no choice, so its row goes", () => {
-  const answer = hostedProjectsAnswerFromWire({
+  const answer = parse(hostedProjectsAnswerSchema, {
     projects: [PROJECT],
     agentModels: [
       { providerId: "conductor", agent: "claude", models: [], efforts: [] },
