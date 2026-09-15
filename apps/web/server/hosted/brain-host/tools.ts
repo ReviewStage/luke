@@ -53,9 +53,9 @@ import type { HostedTranscriptReads } from "./transcript.js";
  * machine — an open, an app setting, the panel, the feedback composer, the
  * updater — and the groups behind
  * seams the service does not wire: delegation and skills, and the notebook's
- * two reads, which the index behind them does not stand here. The notebook's
- * two writes stay, admitted like every other action. The turn's own layer
- * still withholds `announce` from an ask.
+ * two reads, which the index behind them does not stand here. The workspace
+ * tools stay, so `USER.md` is written the way every other workspace file
+ * is. The turn's own layer still withholds `announce` from an ask.
  */
 const HOSTED_TOOL_POLICY: ToolPolicyLayers = {
   agent: {

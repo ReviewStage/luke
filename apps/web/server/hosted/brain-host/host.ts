@@ -38,7 +38,7 @@ import { readWorkspaceDefaults } from "./defaults.js";
 import { EVE_CALLER, eveSessions } from "./eve-sessions.js";
 import { hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
-import { hostedActionCarrier, hostedFactsWriter } from "./performer.js";
+import { hostedActionCarrier } from "./performer.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStateStore, StreamRelay } from "./relay.js";
 import {
@@ -132,7 +132,7 @@ export interface BrainHost {
     admitted: AdmittedConversation,
     trigger: BrainTurnTrigger,
   ): HostEffect<HostedSessionPrompt>;
-  /** The standing context one turn opens with: roster, projects, facts, and the recent exchange, as data. */
+  /** The standing context one turn opens with: the roster and the projects, as data. */
   standingContext(admitted: AdmittedConversation): HostEffect<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
@@ -309,18 +309,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         const now = seams.now();
         const roster = yield* rosterOf(userId);
         const defaults = yield* readWorkspaceDefaults(userId);
-        const facts = yield* seams.store().facts.list(userId);
-        const recent = yield* readRecentMessages(
-          admitted.target,
-          CATALOG_TOOL_SET,
-          BRAIN_HOST.RECENT_MESSAGES,
-        );
         return hostedStandingContext({
           roster,
           rosterText: brainRosterOf(roster, now).text,
           defaults,
-          facts,
-          recent,
           now,
         });
       }),
@@ -365,7 +357,6 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             Effect.orDie(
               Effect.provideService(readWorkspaceDefaults(userId), SqlClient.SqlClient, client),
             ),
-          facts: hostedFactsWriter(client, seams.store(), userId, seams.now),
           apiKey: (providerId) =>
             Effect.orDie(
               Effect.provideService(

@@ -5,37 +5,35 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
-  type RememberedFact,
-  rememberedFactsText,
   type StoredUIMessage,
   standingContextText,
   workspaceProjectContextText,
 } from "../../core.js";
 import { type ConversationTarget, listRecentMessages } from "../store/index.js";
-import { BRAIN_HOST } from "./bounds.js";
 import type { HostedWorkspaceDefaults } from "./defaults.js";
 import type { HostedRoster } from "./roster.js";
 
 /**
  * What the hosted brain is handed beside its prompt every turn, rebuilt from
- * the rows and never remembered: the roster as the last pass left it, the
- * projects a workspace could be created in, the facts Luke remembers, and
- * the recent exchange read back from the conversation's own messages. It
- * rides as the turn's system-role instruction, replaced each turn, so the
- * history the model keeps is the words that were said and never a stale
- * roster.
+ * the rows and never remembered: the roster as the last pass left it and the
+ * projects a workspace could be created in. It rides as the turn's
+ * system-role instruction, replaced each turn, so the history the model keeps
+ * is the words that were said and never a stale roster. The exchange itself
+ * is not repeated here: every turn of a conversation runs in one eve session
+ * that holds its own history, and a rotated session is seeded once with the
+ * newest messages by `seed.ts`, which is what `storedMessageLine` and
+ * `readRecentMessages` below remain for. What Luke knows of the developer is
+ * `USER.md`, composed into the prompt with the other workspace files.
  */
 
 export interface StandingContextInput {
   readonly roster: HostedRoster;
   readonly rosterText: string;
   readonly defaults: HostedWorkspaceDefaults;
-  readonly facts: readonly RememberedFact[];
-  readonly recent: readonly StoredUIMessage[];
   readonly now: number;
 }
 
-/** Who a stored message's words are attributed to when the recent exchange is rendered. */
+/** Who a stored message's words are attributed to when a stored message is rendered as a line. */
 const SPEAKER = {
   DEVELOPER: "Developer",
   LUKE: "Luke",
@@ -69,15 +67,6 @@ export function storedMessageLine(message: StoredUIMessage, maximumChars: number
   return `${speakerOf(message)}: ${body}`;
 }
 
-/** The recent exchange as lines, oldest first; nothing where nothing has been said. */
-function recentMessagesText(recent: readonly StoredUIMessage[]): string | undefined {
-  if (recent.length === 0) return undefined;
-  return [
-    "Recent conversation, oldest first:",
-    ...recent.map((message) => storedMessageLine(message, BRAIN_HOST.RECENT_MESSAGE_CHARS)),
-  ].join("\n");
-}
-
 export function hostedStandingContext(input: StandingContextInput): string {
   const rest = [
     workspaceProjectContextText(
@@ -85,8 +74,6 @@ export function hostedStandingContext(input: StandingContextInput): string {
       input.defaults.defaultProviderId,
       input.defaults.defaultProjectIds,
     ),
-    rememberedFactsText(input.facts),
-    recentMessagesText(input.recent),
   ]
     .filter((part): part is string => part !== undefined && part.trim().length > 0)
     .join("\n\n");

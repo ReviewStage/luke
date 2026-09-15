@@ -6,7 +6,7 @@ import { Effect, ManagedRuntime, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
-  ACTION_TOOL,
+  BRAIN_TOOL,
   BRAIN_TURN_TRIGGER,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -15,6 +15,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
+  WORKSPACE_FILE,
 } from "../../server/core";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
@@ -32,9 +33,9 @@ import { SCRIPTED_FACT } from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask under
- * the scripted fixture model, the tool adapters admit and carry one
- * remembered fact, and the relay writes the turn into the store through the
- * writer. The eve server runs in this process with the database the
+ * the scripted fixture model, the tool adapters carry one USER.md write
+ * recording a fact about the developer, and the relay writes the turn into
+ * the store through the writer. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -162,7 +163,7 @@ export default defineEval({
       }
       const session = await t.target.attachSession(accepted.sessionId);
       session.succeeded();
-      session.calledTool(ACTION_TOOL.REMEMBER_FACT);
+      session.calledTool(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
 
       const turnId = hostTurnId(accepted.sessionId, "turn_0");
       const turn = await readTurnById(run, turnId);
@@ -197,8 +198,9 @@ export default defineEval({
       assert.equal(answer.parts.filter((part) => isTextUIPart(part)).length, 1);
 
       const store = hostedStore({ keys: payloadKeyRing(secret) });
-      const facts = await run(store.facts.list(LOCAL_DEV_PRINCIPAL));
-      assert.equal(facts.filter((fact) => fact.words === SCRIPTED_FACT).length, 1);
+      const user = await run(store.workspace.read(LOCAL_DEV_PRINCIPAL, WORKSPACE_FILE.USER));
+      assert.ok(user);
+      assert.equal(user.content.split(SCRIPTED_FACT).length - 1, 1);
       const runtimeSessionId = await readConversationRuntimeSessionId(run, conversation.id);
       assert.equal(runtimeSessionId, accepted.sessionId);
     } finally {

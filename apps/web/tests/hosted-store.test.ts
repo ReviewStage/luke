@@ -17,39 +17,6 @@ const NOW = 1_800_000_000_000;
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
-test("facts are listed in order and replaced whole, a kept id keeping its first instant, and sealed at rest", async () => {
-  const userId = await database.createUser();
-  assert.deepEqual(await database.run(database.store.facts.list(userId)), []);
-  const first = await database.run(
-    database.store.facts.replace(
-      userId,
-      [
-        { id: "fact-1", words: "prefers short replies" },
-        { id: "fact-2", words: "works in the mornings" },
-      ],
-      NOW,
-    ),
-  );
-  assert.deepEqual(first, [
-    { id: "fact-1", words: "prefers short replies", createdAt: NOW },
-    { id: "fact-2", words: "works in the mornings", createdAt: NOW },
-  ]);
-  const second = await database.run(
-    database.store.facts.replace(
-      userId,
-      [
-        { id: "fact-3", words: "uses a standing desk" },
-        { id: "fact-1", words: "prefers short replies" },
-      ],
-      NOW + 5,
-    ),
-  );
-  assert.deepEqual(second, [
-    { id: "fact-3", words: "uses a standing desk", createdAt: NOW + 5 },
-    { id: "fact-1", words: "prefers short replies", createdAt: NOW },
-  ]);
-});
-
 test("workspace files are read and written whole per user and path, seeded once, and refuse a path outside the workspace", async () => {
   const userId = await database.createUser();
   const workspace = database.store.workspace;
@@ -275,11 +242,10 @@ test("a pass record moves the attempt every time, the whole read only on success
   }
 });
 
-test("deleting the user row cascades through every notebook, fact, and roster table and leaves another user's rows standing", async () => {
+test("deleting the user row cascades through every notebook and roster table and leaves another user's rows standing", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
   for (const id of [userId, other]) {
-    await database.run(database.store.facts.replace(id, [{ id: "f-1", words: "a fact" }], NOW));
     await database.run(database.store.workspace.write(id, "USER.md", "# user", NOW));
     await database.run(
       database.store.roster.advance(id, { body: "{}", observedAt: NOW }, undefined),
@@ -298,7 +264,6 @@ test("deleting the user row cascades through every notebook, fact, and roster ta
 
   // roster_diff stands unwritten and unread until its drop lands; nothing seeds it, so nothing here can prove it.
   for (const table of [
-    "personal_fact",
     "workspace_file",
     "roster_snapshot",
     "roster_consumed",

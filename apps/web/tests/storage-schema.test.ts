@@ -69,7 +69,6 @@ const DECLARED_TABLES = [
   "oauth_consent",
   "oauth_refresh_token",
   "observation_pass",
-  "personal_fact",
   "provider_cursors",
   "provider_key",
   "roster_consumed",

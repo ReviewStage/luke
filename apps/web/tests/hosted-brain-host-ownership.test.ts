@@ -5,12 +5,7 @@ import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
-import {
-  ACTION_OUTPUT_STATUS,
-  ACTION_RESULT_STATUS,
-  ACTION_TOOL,
-  BRAIN_TURN_TRIGGER,
-} from "../server/core";
+import { ACTION_RESULT_STATUS, BRAIN_TOOL, BRAIN_TURN_TRIGGER } from "../server/core";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -212,7 +207,7 @@ function toolContext(sessionId: string, auth: SessionAuth): EveToolContext {
     session: { id: sessionId, auth, turn: { id: "turn_0", sequence: 0 } },
     abortSignal: new AbortController().signal,
     callId: "call-1",
-    toolName: ACTION_TOOL.REMEMBER_FACT,
+    toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
     getToken: unreachable,
     requireAuth: unreachable,
     getSandbox: unreachable,
@@ -445,21 +440,23 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const target = await ownedConversation(userA);
   const seat = ownSeat(userA, target.conversationId);
   const { host, storeReads } = hostOverTestDatabase();
+  const directive = "# USER.md\n\n- 2026-09-15: prefers short replies\n";
   const call = (sessionId: string, auth: SessionAuth) =>
     database.run(
       host.runTool(
-        ACTION_TOOL.REMEMBER_FACT,
+        BRAIN_TOOL.WRITE_WORKSPACE_FILE,
         binding(target, sessionId),
-        { words: "prefers short replies" },
+        { name: "USER.md", content: directive },
         toolContext(sessionId, auth),
       ),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);
   const landed = await call(SESSION.OLDER, seat);
-  assert.equal(landed.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-  const remembered = await database.run(database.store.facts.list(userA));
-  assert.equal(remembered.length, 1);
+  assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
+  const remembered = await database.run(database.store.workspace.read(userA, "USER.md"));
+  assert.equal(remembered?.content, directive);
+  assert.equal(await database.run(database.store.workspace.read(userB, "USER.md")), undefined);
   const readsOnceAdmitted = storeReads();
   assert.ok(readsOnceAdmitted > 0);
 
@@ -486,5 +483,5 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   });
 
   assert.equal(storeReads(), readsOnceAdmitted);
-  assert.deepEqual(await database.run(database.store.facts.list(userA)), remembered);
+  assert.deepEqual(await database.run(database.store.workspace.read(userA, "USER.md")), remembered);
 });

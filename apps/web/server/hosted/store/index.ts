@@ -5,7 +5,6 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
-import { type FactWrite, listFacts, replaceFacts, type StoredFact } from "./facts.js";
 import {
   eventsForMessages,
   latestMessageRating,
@@ -151,14 +150,6 @@ export interface HostedStore {
     /** The newest rating on one of the caller's messages, or nothing; ratings are written through `rateMessage` over the store writer. */
     latest(userId: string, messageId: string): HostedStoreEffect<StoredRatingRecord | undefined>;
   };
-  facts: {
-    list(userId: string): HostedStoreEffect<readonly StoredFact[]>;
-    replace(
-      userId: string,
-      facts: readonly FactWrite[],
-      now: number,
-    ): HostedStoreEffect<readonly StoredFact[]>;
-  };
   /**
    * The tool set a turn was offered, written once under the hash of what the
    * model saw, which is what a turn row names. The prompt has no table: the
@@ -261,10 +252,6 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
     },
     ratings: {
       latest: (userId, messageId) => latestMessageRating(userId, messageId),
-    },
-    facts: {
-      list: (userId) => listFacts(sealFor(userId), userId),
-      replace: (userId, facts, now) => replaceFacts(sealFor(userId), userId, facts, now),
     },
     toolSets: {
       record: (schemas, now) => recordToolSet(schemas, now),
