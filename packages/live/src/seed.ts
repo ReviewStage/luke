@@ -25,7 +25,7 @@ export const SEED_ROLE = {
   ASSISTANT: "assistant",
 } as const;
 
-export type SeedRole = (typeof SEED_ROLE)[keyof typeof SEED_ROLE];
+type SeedRole = (typeof SEED_ROLE)[keyof typeof SEED_ROLE];
 
 export const SEED_CONTENT_TYPE = {
   INPUT_TEXT: "input_text",

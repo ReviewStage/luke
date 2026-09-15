@@ -24,7 +24,7 @@ import { trimmedText } from "./trimmed-text.js";
  * desk with two.
  */
 
-export const ROSTER_SEED_BOUNDS = {
+const ROSTER_SEED_BOUNDS = {
   /** How many sessions may be named; what is on the desk now, not an inventory. */
   SESSIONS: 10,
   /** How much of a title travels, matching what the introduction's seed allows. */

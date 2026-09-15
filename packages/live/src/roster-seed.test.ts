@@ -3,7 +3,6 @@ import { SESSION_STATUS } from "@sidecar/session";
 import { test } from "vitest";
 import { APPEND_TOKEN_BOUND } from "./chunks.js";
 import {
-  ROSTER_SEED_BOUNDS,
   type RosterSeedSession,
   type RosterTold,
   rosterSeed,
@@ -12,6 +11,10 @@ import {
 } from "./roster-seed.js";
 import { SEED_CONTENT_TYPE, SEED_ITEM_TYPE, SEED_ROLE } from "./seed.js";
 import { estimatedTokens } from "./tokens.js";
+
+// The bounds roster-seed.ts holds itself to, restated here because they are
+// its own rather than an export any caller reads.
+const ROSTER_SEED_BOUNDS = { SESSIONS: 10, TITLE_CHARS: 80, ACTIVITY_CHARS: 80 } as const;
 
 const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;

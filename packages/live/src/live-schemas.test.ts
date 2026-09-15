@@ -32,15 +32,6 @@ const MODULE_SCHEMAS = {
     LiveDelegationTypeSchema: session.LiveDelegationTypeSchema,
     LiveAudioFormatSchema: session.LiveAudioFormatSchema,
     liveCreateAnswerSchema: session.liveCreateAnswerSchema,
-    NoAccountRefusal: session.NoAccountRefusal,
-    DisabledByFixtureRefusal: session.DisabledByFixtureRefusal,
-    HttpErrorRefusal: session.HttpErrorRefusal,
-    NetworkErrorRefusal: session.NetworkErrorRefusal,
-    MalformedResponseRefusal: session.MalformedResponseRefusal,
-    SidebandFailedRefusal: session.SidebandFailedRefusal,
-    NotSignedInRefusal: session.NotSignedInRefusal,
-    QuotaExhaustedRefusal: session.QuotaExhaustedRefusal,
-    HostedUnavailableRefusal: session.HostedUnavailableRefusal,
   } satisfies RecordedEffectJsonSchemas<typeof session>,
 } as const;
 
