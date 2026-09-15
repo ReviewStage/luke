@@ -254,7 +254,9 @@ export function hostedNotebookAccess(seams: HostedNotebookSeams): NotebookMemory
           if (row === undefined) return rejection(HOSTED_NOTEBOOK_REFUSAL.NOT_FOUND);
           const lines = row.content.split("\n");
           const total = lines.length;
-          const from = ask.from ?? 1;
+          // Lines are 1-based; a `from` below 1 reads from the top rather than
+          // handing `slice` a negative index that would return the tail.
+          const from = Math.max(1, ask.from ?? 1);
           if (from > total) return rejection(HOSTED_NOTEBOOK_REFUSAL.PAST_END);
           const count = Math.min(
             ask.lines ?? NOTEBOOK_SEARCH.DEFAULT_LINES,

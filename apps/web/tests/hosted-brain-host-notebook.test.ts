@@ -282,6 +282,11 @@ test("memory_get answers a bounded excerpt by line range, says when more follows
     NOTEBOOK_SEARCH.MAXIMUM_LINES > 200 ? 200 : NOTEBOOK_SEARCH.MAXIMUM_LINES,
   );
 
+  const belowStart = await read({ path: "MEMORY.md", from: 0, lines: 2 });
+  assert.equal(belowStart.from, 1);
+  assert.equal(belowStart.to, 2);
+  assert.equal(belowStart.text, (await read({ path: "MEMORY.md", from: 1, lines: 2 })).text);
+
   assert.deepEqual(await read({ path: "MEMORY.md", from: 201 }), {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason: HOSTED_NOTEBOOK_REFUSAL.PAST_END,
