@@ -2,7 +2,6 @@ export { SETTINGS_VIEW_COUNTED_AS } from "./counted.js";
 export {
   APP_SETTING_ID,
   APP_SETTING_SCHEMA,
-  type AppSettingId,
   isAppSettingId,
   SETTING_SECTION,
   SETTING_SIDE_EFFECT,
@@ -12,7 +11,6 @@ export {
   type SettingSideEffectId,
   type SettingsPage,
   type SettingsResetScope,
-  type SettingsVisibility,
 } from "./schema.js";
 export {
   ACCOUNT_PREFERENCE_FIELDS,
@@ -29,9 +27,7 @@ export {
   isSettingEntryKey,
   isSettingsResetScope,
   type KeyedAppSettingField,
-  SETTING_PAGE,
   type SettingEntryValue,
-  SettingsResetScopeSchema,
   type SettingsRowsInput,
   type StoredAppSettings,
   sameSettingEntry,
@@ -43,23 +39,16 @@ export {
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
-  spokenSettingValue,
 } from "./schema-access.js";
 export {
-  ACCOUNT_SECTION,
   CONDUCTOR_DEFAULT_CHOICE,
   CONNECTIONS_PAGE,
-  FRONT_PAGE,
-  SETTINGS_TAB,
-  SHORTCUTS_PAGE,
 } from "./settings-paths.js";
 export {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,
   stopHotkeyCandidates,
-  TALK_KEY_RELEASE,
-  talkKeyRelease,
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
   voiceHotkeyCandidates,

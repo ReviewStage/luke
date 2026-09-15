@@ -1,10 +1,5 @@
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
-import {
-  APP_SETTING_ID,
-  APP_SETTING_KIND,
-  type AppSettingId,
-  isAppSettingId,
-} from "@sidecar/guide";
+import { APP_SETTING_ID, APP_SETTING_KIND, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE_LIST, type LiveVoice } from "@sidecar/live";
 import {
   isProviderId,
@@ -67,11 +62,10 @@ export {
   type SettingSideEffectId,
   type SettingsPage,
   type SettingsResetScope,
-  type SettingsVisibility,
 } from "./schema-types.js";
 // The ids themselves live in core, because the product-event vocabulary names
 // the same set and may not depend on anything here.
-export { APP_SETTING_ID, type AppSettingId, isAppSettingId };
+export { APP_SETTING_ID, isAppSettingId };
 
 /* The default-workspace row's word for no default at all. An empty value
    rather than a member of the provider set, so no provider id can collide

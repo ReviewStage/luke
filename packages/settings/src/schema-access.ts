@@ -243,7 +243,7 @@ export function settingGuideEntries(
  * is always drawn; one whose entries answer to conditions of their own is asked
  * per id instead.
  */
-export function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
+function settingVisible(field: AppSettingField, view: SettingsVisibility): boolean {
   return APP_SETTING_SCHEMA[field].visible?.(view) ?? true;
 }
 
@@ -269,7 +269,7 @@ export interface SettingsRowsInput extends SettingsVisibility {
 }
 
 /** One row of a settings page, as the panel's own schema renderer draws it. */
-export interface SchemaSettingRow {
+interface SchemaSettingRow {
   field: AppSettingField;
   /** The setting as the guide describes it now: its words, its value, its choices. */
   entry: AppGuideSetting;
@@ -333,19 +333,8 @@ export function settingFromOption<Field extends AppSettingField>(
   return settingControl(field)?.stored(token, view) as AppSettingValue<Field> | undefined;
 }
 
-export function spokenSettingValue<Field extends AppSettingField>(
-  field: Field,
-  value: string,
-): AppSettingValue<Field> | undefined {
-  // SAFETY: spokenValue answers in the stored type of the field selected.
-  const convert = APP_SETTING_SCHEMA[field].spokenValue as
-    | ((candidate: string) => AppSettingValue<Field> | undefined)
-    | undefined;
-  return convert?.(value);
-}
-
 /** What a counted setting change reports: which setting, and the shape of its new value. */
-export interface SettingAnalytics {
+interface SettingAnalytics {
   id: AppSettingId;
   value: ProductSettingValue;
 }
