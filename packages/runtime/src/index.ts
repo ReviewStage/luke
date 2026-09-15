@@ -90,6 +90,7 @@ export {
   type ToolPolicyLayers,
 } from "./tool-policy.js";
 export {
+  appendedDailyNote,
   BOOTSTRAP_BOUNDS,
   BOOTSTRAP_FILE_ORDER,
   type BootstrapFile,
@@ -98,7 +99,10 @@ export {
   CURATED_FILE_BUDGET,
   DAILY_NOTES_DIRECTORY,
   type DailyNote,
+  type DailyNoteListing,
   dailyNoteName,
+  dailyNotePath,
+  isDailyNotePath,
   isWorkspaceFile,
   parseDailyNoteName,
   readBootstrapFiles,
@@ -108,6 +112,7 @@ export {
   tooLargeRefusal,
   WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
+  type WorkspaceAppendResult,
   type WorkspaceFile,
   type WorkspaceReadResult,
   type WorkspaceSeeding,

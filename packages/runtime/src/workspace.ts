@@ -193,6 +193,33 @@ export function dailyNoteName(atMs: number, slug?: string): string {
   return `${dayStamp(atMs)}${slug ? `-${slug}` : ""}.md`;
 }
 
+/** The day's note as the workspace tools name it, `memory/YYYY-MM-DD.md`, the day being the instant's UTC calendar day. */
+export function dailyNotePath(atMs: number): string {
+  return `${DAILY_NOTES_DIRECTORY}/${dailyNoteName(atMs)}`;
+}
+
+const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
+
+/** Whether a name the agent gave is a dated note under `memory/`, slugged variants included. */
+export function isDailyNotePath(name: string): boolean {
+  return (
+    name.startsWith(DAILY_NOTES_PREFIX) &&
+    parseDailyNoteName(name.slice(DAILY_NOTES_PREFIX.length)) !== undefined
+  );
+}
+
+/**
+ * A dated note with an entry appended: the entry alone where no note stands
+ * or the note held nothing, otherwise the note as it stands with its
+ * trailing whitespace dropped, a blank line, and the entry. Nothing already
+ * written is reordered or cut; the per-file bound is the caller's to check
+ * against the length this answers.
+ */
+export function appendedDailyNote(existing: string | undefined, entry: string): string {
+  const standing = existing?.trimEnd() ?? "";
+  return standing.length === 0 ? entry : `${standing}\n\n${entry}`;
+}
+
 /** The day a daily note's file name is about, `YYYY-MM-DD`, or nothing for a name that is not a daily note's. */
 export function parseDailyNoteName(name: string): { readonly day: string } | undefined {
   const match = DAILY_NOTE_PATTERN.exec(name);
@@ -248,6 +275,9 @@ export const WORKSPACE_FILE_REFUSAL = {
   OUTSIDE_WORKSPACE: "not a workspace file",
   TOO_LARGE: "the content exceeds the file's bound",
   NOT_FOUND: "no such workspace file",
+  /** A dated note is grown by appending, never replaced whole; the refusal names the tool that grows it. */
+  DAILY_NOTE_REWRITE:
+    "not run: a dated note under memory/ is appended to with append_daily_note, never rewritten whole",
 } as const;
 
 /**
@@ -268,9 +298,8 @@ export function tooLargeRefusal(bound: number): string {
  */
 export function workspaceFilePath(directory: string, name: string): string | undefined {
   if (isWorkspaceFile(name)) return path.join(directory, name);
-  const prefix = `${DAILY_NOTES_DIRECTORY}/`;
-  if (!name.startsWith(prefix)) return undefined;
-  const note = name.slice(prefix.length);
+  if (!name.startsWith(DAILY_NOTES_PREFIX)) return undefined;
+  const note = name.slice(DAILY_NOTES_PREFIX.length);
   if (!DAILY_NOTE_PATTERN.test(note)) return undefined;
   const resolved = path.resolve(directory, DAILY_NOTES_DIRECTORY, note);
   const root = path.resolve(directory, DAILY_NOTES_DIRECTORY);
@@ -284,6 +313,17 @@ export type WorkspaceReadResult =
 export type WorkspaceWriteResult =
   | { readonly ok: true; readonly chars: number }
   | { readonly ok: false; readonly reason: string };
+
+/** What an append to the day's note answers: the note's path and its length once the entry landed, or the refusal. */
+export type WorkspaceAppendResult =
+  | { readonly ok: true; readonly path: string; readonly chars: number }
+  | { readonly ok: false; readonly reason: string };
+
+/** One dated note as a listing names it: its path under `memory/` and how many characters it holds, never a word of it. */
+export interface DailyNoteListing {
+  readonly path: string;
+  readonly chars: number;
+}
 
 /** Reads one workspace file for the agent, cut at the file's own bound like a bootstrap file. */
 export async function readWorkspaceFile(
