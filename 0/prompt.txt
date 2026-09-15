@@ -1,0 +1,8 @@
+Why is my ios/watchos build on physical device stalled?
+
+~/Developer/luke-device.sh
+building main at ddd91a37 refactor(brain): USER.md is the facts store, and the standing context carries the roster and projects alone (#1478)
+iphone C44AA64B-A664-5C97-9C2F-FF131A0DBC81
+watch  1E423FDD-C802-5360-BF3A-E26B98655C5B
+push entitlement: dropped (set LUKE_PUSH=1 to keep it)
+xcodebuild… (log: /tmp/luke-device-build.log)
