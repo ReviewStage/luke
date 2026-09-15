@@ -238,10 +238,10 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### The permanent adaptors
 
-- **`packages/runtime/src/execution.ts`**'s `ContextEngine` and its
-  `MaybePromise` vocabulary — each hook answers in a `Promise` or a bare value
-  because the OpenClaw port of `b7528507` it was written for awaited them and
-  imported nothing from `effect`.
+- **`packages/runtime/src/execution.ts`**'s `MaybePromise` vocabulary — a hook
+  answers in a `Promise` or a bare value because the OpenClaw port of
+  `b7528507` it was written for awaited them and imported nothing from
+  `effect`.
 - **`packages/credentials/src/single-flight.ts`** — the check-and-create of
   the one `Deferred` every concurrent caller joins is an uninterruptible step
   that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks
@@ -296,8 +296,7 @@ decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
 `packages/hosted/src/reads-wire.ts`, `packages/wire/src/effect/json-schema.ts`,
-`packages/brain/src/ui-message-context.ts`, and
-`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 ### Idioms
 
