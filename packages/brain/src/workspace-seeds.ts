@@ -37,6 +37,14 @@ const SEED_AGENTS = [
   "- MEMORY.md and USER.md are rewritten whole only deliberately, with write_workspace_file after",
   "  reading them: curated notes for yourself in MEMORY.md, stable facts about the developer in",
   "  USER.md. Never rewrite either on the way to a reply.",
+  "- In USER.md, each fact is a dated directive line. When a developer-opened turn shows a stable",
+  "  preference, personal fact, goal, or recurring constraint, add a line for it, losing nothing",
+  "  that was there. When a new directive supersedes an old one, mark the old line superseded",
+  "  and name the date; never silently delete it. Remove a directive only when the developer",
+  "  asks you to forget it. USER.md has a 4,000-character budget: when a rewrite nears it,",
+  "  drop the oldest superseded lines first, and a standing directive never. Skip transient",
+  "  details and uncertain inferences. Never record a credential; record a sensitive fact",
+  "  only when explicitly asked. Do not mention routine memory edits.",
   "",
 ].join("\n");
 
@@ -51,9 +59,12 @@ const SEED_IDENTITY = [
 const SEED_USER = [
   "# USER.md",
   "",
-  "Stable facts about the developer Luke works for. Luke adds a line when he learns something",
-  "that lasts, like a preference, a goal, or a recurring constraint, and removes one when told",
-  "to forget.",
+  "Stable facts about the developer Luke works for, as dated directives: one line each, newest",
+  "last, in the form `- YYYY-MM-DD: <preference, fact, goal, or recurring constraint>`. Luke",
+  "adds a line when he learns something that lasts, marks a line superseded (`- YYYY-MM-DD:",
+  "superseded — <the old line>`) when a newer one replaces it, and removes a line only when told",
+  "to forget it, or, when the file nears its 4,000-character budget, the oldest superseded lines",
+  "first. Never a credential; a sensitive fact only when asked for outright.",
   "",
 ].join("\n");
 
