@@ -18,11 +18,6 @@ const BRAIN_TURN_READ_MAX_DURATION_SECONDS = Math.ceil(ASK_BOUNDS.MAX_WAIT_MS / 
 
 const API_PREFIX = "/api/";
 
-/** The path a client calls for the route bundled from `server/routes/<relative>.ts`. */
-export function functionPath(routeRelativePath: string): string {
-  return `${API_PREFIX}${routeRelativePath.replace(/\.ts$/, "")}`;
-}
-
 /** The route key of a client path: `server/routes/<key>.ts` answers `/api/<key>`. */
 export function routeKeyOf(path: string): string {
   return path.slice(API_PREFIX.length);

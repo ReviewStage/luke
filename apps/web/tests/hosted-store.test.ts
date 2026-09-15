@@ -45,9 +45,7 @@ test("workspace files are read and written whole per user and path, seeded once,
     await assert.rejects(database.run(workspace.write(userId, path, "x", NOW)), /workspace path/);
     await assert.rejects(database.run(workspace.read(userId, path)), /workspace path/);
   }
-  assert.equal(await database.run(workspace.delete(userId, "memory/2026-09-09.md")), true);
-  assert.equal(await database.run(workspace.delete(userId, "memory/2026-09-09.md")), false);
-  assert.equal(await countRowsForUser(database.run, "workspace_file", userId), 1);
+  assert.equal(await countRowsForUser(database.run, "workspace_file", userId), 2);
 
   const other = await database.createUser();
   assert.equal(await database.run(workspace.read(other, "AGENTS.md")), undefined);

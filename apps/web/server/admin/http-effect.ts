@@ -1,11 +1,9 @@
-import { Schema } from "effect";
 import { HttpServerResponse } from "effect/unstable/http";
-import { HttpApiSchema } from "effect/unstable/httpapi";
 import { ADMIN_ERROR, ADMIN_HTTP_STATUS } from "./http.js";
 
 /**
- * The admin response vocabulary as the schemas the dashboard's route group
- * declares its refusals from, answering the same statuses and the same bytes
+ * The admin response vocabulary as the refusals the dashboard's route group
+ * answers with, carrying the same statuses and the same bytes
  * `server/admin/http.ts` answers with. It stays the admin's own rather than
  * the hosted tier's for the reason that module gives: these slugs are a
  * browser's, not the desktop wire contract's.
@@ -29,18 +27,6 @@ const ADMIN_REFUSAL_STATUS = {
 } as const;
 
 type AdminRefusalSlug = keyof typeof ADMIN_REFUSAL_STATUS;
-
-function refusalSchema<Slug extends AdminRefusalSlug>(slug: Slug) {
-  return Schema.Struct({ error: Schema.Literal(slug) }).pipe(
-    HttpApiSchema.status(ADMIN_REFUSAL_STATUS[slug]),
-  );
-}
-
-export const MethodNotAllowedRefusal = refusalSchema(ADMIN_ERROR.METHOD_NOT_ALLOWED);
-export const UnavailableRefusal = refusalSchema(ADMIN_ERROR.UNAVAILABLE);
-export const NotSignedInRefusal = refusalSchema(ADMIN_ERROR.NOT_SIGNED_IN);
-export const NotAuthorizedRefusal = refusalSchema(ADMIN_ERROR.NOT_AUTHORIZED);
-export const NotFoundRefusal = refusalSchema(ADMIN_ERROR.NOT_FOUND);
 
 export type AdminRefusal = { readonly error: AdminRefusalSlug };
 

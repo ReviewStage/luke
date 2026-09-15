@@ -61,7 +61,6 @@ import {
 } from "./workspace-embeddings.js";
 import {
   type DailyNoteRecord,
-  deleteWorkspaceFile,
   listDailyNotes,
   listWorkspaceFiles,
   readWorkspaceFile,
@@ -193,7 +192,6 @@ export interface HostedStore {
       now: number,
     ): HostedStoreEffect<string | undefined>;
     seed(userId: string, path: string, content: string, now: number): HostedStoreEffect<boolean>;
-    delete(userId: string, path: string): HostedStoreEffect<boolean>;
     list(userId: string): HostedStoreEffect<readonly WorkspaceFileListing[]>;
     /** The dated notes under `memory/`, newest first and at most `limit` of them, each with its character count and none of its words. */
     listNotes(userId: string, limit: number): HostedStoreEffect<readonly DailyNoteRecord[]>;
@@ -304,7 +302,6 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       write: (userId, path, content, now) => writeWorkspaceFile(userId, path, content, now),
       revise: (userId, path, revise, now) => reviseWorkspaceFile(userId, path, revise, now),
       seed: (userId, path, content, now) => seedWorkspaceFile(userId, path, content, now),
-      delete: (userId, path) => deleteWorkspaceFile(userId, path),
       list: (userId) => listWorkspaceFiles(userId),
       listNotes: (userId, limit) => listDailyNotes(userId, limit),
     },
