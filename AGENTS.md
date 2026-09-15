@@ -118,7 +118,20 @@ in for the missing job before the first release.
   to two hours ahead so it lapses with the Mac that asserts it), means nothing
   is pushed and nothing expires until it lifts; and an offer past its own instant is the sweep's to end, never pushed
   stale. A phone or watch reporting itself present is no reason to wait, since
-  neither can say a briefing (`SPEAKING_PLATFORMS`). The mark precedes the send:
+  neither opens a session for an offer (`SPEAKING_PLATFORMS`, still
+  `{ macos }`); but a phone's or a watch's call that already stands claims a
+  briefing and speaks it exactly as a Mac's session does, since the exchange
+  behind the sessions and audio routes claims as the session's device and never
+  asks its platform, so such an offer is claimed and never pushed. Those are
+  two of the voice service's three routes (`apps/web/server/voice/frames.ts`
+  holds each route's frame policy; `apps/web/server/voice/opening.ts` holds
+  the openings): the sessions route, `/api/voice/sessions`, is a signed-in
+  device's WebRTC session, a Mac's or a phone's, created and relayed by the
+  service with the developer's voice and Luke's never transiting it; the
+  audio route, `/api/voice/audio`, is the third, where the service holds the
+  Live primary WebSocket on its own key for a device without WebRTC (the
+  watch) and relays PCM both ways, the one route on which audio transits the
+  service. The mark precedes the send:
   `markSpeechPushed` settles the offer under the conversation's lock, only a
   mark that landed is sent, and the next tick finds it settled, so what is
   guaranteed is at most one push per briefing, never that it arrived; a send
