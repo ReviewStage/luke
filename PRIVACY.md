@@ -64,9 +64,9 @@ cut to 20,000 characters, the stable facts about you and the curated notes to
 4,000 each, and the set to 60,000), and edited only through Luke's own
 workspace tools there, in his turns and in the one housekeeping call described
 under "How Luke keeps his notebook" below, which refuse a file past its bound
-rather than cut it, so the file he reads is the file that exists. The file's name is stored in
-the clear and its contents are sealed under a key only our service holds,
-each row bound to your account so it cannot be opened under another. Those
+rather than cut it, so the file he reads is the file that exists. The file's name and its
+contents are stored as written, bound to your account and readable by our own
+operators, the same way the conversation described below is. Those
 rows are untouched by clearing the conversation and are removed when you
 delete your account. Earlier versions of Luke kept the same files on your Mac,
 under his application data (`agents/main/workspace`), and read them into the
@@ -123,8 +123,8 @@ service, he may record a concise preference, personal fact, goal, or recurring
 constraint that looks useful later, as a dated line in `USER.md`, one of the
 workspace files described above. He skips temporary details and uncertain
 guesses, never records credentials, and records sensitive facts only when you
-explicitly ask. `USER.md` is a workspace row like the others: sealed the same
-way, bound to your account, edited only by Luke's own workspace tool in his
+explicitly ask. `USER.md` is a workspace row like the others: stored as
+written, bound to your account, edited only by Luke's own workspace tool in his
 turns there, untouched by clearing the conversation, and removed when you
 delete your account. A line a newer one replaces is marked superseded rather
 than silently dropped, so what he knew and since when is on the page for you
@@ -206,7 +206,7 @@ his — an answer he gave without running a turn, what he said before and after
 one, a briefing or a reply he read aloud — each written once it has settled,
 so the Conversation shows the words you actually heard beside the turns he
 ran and the messages he read from.
-Unlike his workspace files, the things he
+Like his workspace files, the things he
 remembers about you among them, these rows are not sealed: they are stored as
 written, and our own operators can read them. They stand until you clear
 the conversation, which marks it deleted so that every device stops drawing
@@ -589,8 +589,8 @@ Conductor key, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
 encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
 you on our service, the workspace files that turn reads and writes, the things
-he remembers about you among them, are stored sealed in the same database, and
-the conversation it writes is stored there unsealed, each as described above.
+he remembers about you among them, and the conversation it writes are stored
+unsealed in the same database, each as described above.
 Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 

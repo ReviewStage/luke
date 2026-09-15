@@ -1188,14 +1188,18 @@ writer, the voice writer, the speech module, and the ask record all answer as
 it came, and which a route handler composes into the one effect `runWeb`
 answers for the request.
 
-The notebook, the facts, and the roster keep their `sealed_*` columns: the
+The roster keeps its `sealed_*` columns: the
 payload envelope in `server/hosted/encryption.ts`, AES-256-GCM under the
 vault's `PROVIDER_KEY_ENCRYPTION_SECRET`, written as `<keyId>:base64(nonce ||
 ciphertext || tag)` and bound to the row's user id as authenticated data. The
 key id is what makes a rotation possible: the ring names the current key and
 every key an envelope on record may still name, and the vault's own key format
 is left exactly as it was. Ids, keys, sequences, instants, states, and fixed
-vocabulary words stand clear so they can be indexed.
+vocabulary words stand clear so they can be indexed, and so does
+`workspace_file`'s `content`: the notebook is stored as written, readable by
+an operator the way the conversation tables are, since migration
+`0033_workspace_file_content` dropped its sealed column (and every row then
+standing, which no SQL could open) for a plain one.
 
 The conversation tables — `conversations`, `messages`, `turns`, `events`,
 `tool_sets`, and `provider_cursors` — are the shape `plan/storage-plan.md` on the

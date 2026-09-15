@@ -284,17 +284,13 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       record: (schemas, now) => recordToolSet(schemas, now),
     },
     workspace: {
-      read: (userId, path) =>
-        Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined),
-      write: (userId, path, content, now) =>
-        writeWorkspaceFile(sealFor(userId), userId, path, content, now),
-      revise: (userId, path, revise, now) =>
-        reviseWorkspaceFile(sealFor(userId), userId, path, revise, now),
-      seed: (userId, path, content, now) =>
-        seedWorkspaceFile(sealFor(userId), userId, path, content, now),
+      read: (userId, path) => Effect.map(readWorkspaceFile(userId, path), Option.getOrUndefined),
+      write: (userId, path, content, now) => writeWorkspaceFile(userId, path, content, now),
+      revise: (userId, path, revise, now) => reviseWorkspaceFile(userId, path, revise, now),
+      seed: (userId, path, content, now) => seedWorkspaceFile(userId, path, content, now),
       delete: (userId, path) => deleteWorkspaceFile(userId, path),
       list: (userId) => listWorkspaceFiles(userId),
-      listNotes: (userId, limit) => listDailyNotes(sealFor(userId), userId, limit),
+      listNotes: (userId, limit) => listDailyNotes(userId, limit),
     },
     embeddings: {
       read: (userId, model, hashes) => readWorkspaceEmbeddings(userId, model, hashes),
