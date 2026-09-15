@@ -11,6 +11,7 @@ import {
   type ChildSpawnRefusal,
   type ConversationRecord,
   childSessionKey,
+  childTaskInputText,
   DEFAULT_AGENT_ID,
   CONVERSATION_KIND as RECORD_CONVERSATION_KIND,
   type SessionKey,
@@ -233,10 +234,13 @@ export function hostedChildAccess(
           if (spawnedByMessageId === undefined) {
             return refused(CHILD_SPAWN_REFUSAL.PERSISTENCE, NO_SPAWNING_MESSAGE);
           }
+          // The child's first turn opens with the subagent marker, which is what
+          // tells the model it is a child, and then the task as briefed; the relay
+          // writes that received message as the child's first user row.
           const opened = yield* openChild(seams.opener, {
             parent: seams.conversation,
             spawnedByMessageId,
-            task: ask.task,
+            task: childTaskInputText(ask.task),
             ...(ask.label !== undefined ? { label: ask.label } : undefined),
             expectsCompletion: ask.expectsCompletion ?? true,
           });

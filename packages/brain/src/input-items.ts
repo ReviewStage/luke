@@ -70,6 +70,17 @@ function eventRecord(event: BrainWakeEvent): WireRecord {
 }
 
 /**
+ * The words a child's first turn opens with: the marker that tells the model
+ * it is a child, then the task as its requester briefed it. No instant and
+ * no JSON behind it, since the task is the whole of the turn rather than a
+ * report of what happened when; the instructions read the marker as the
+ * standing and the words after it as the brief.
+ */
+export function childTaskInputText(task: string): string {
+  return `${BRAIN_INPUT_MARKER.SUBAGENT_TASK} ${task}`;
+}
+
+/**
  * The words an observed-events turn opens with. The roster itself is not
  * repeated here: the same request carries it in the standing context, which
  * is rebuilt every turn and never remembered.

@@ -49,6 +49,7 @@ export {
   type BrainWorkspaceAccess,
   brainToolCatalog,
   brainToolNotes,
+  childTaskInputText,
   holdReleasedInputText,
   maximumBriefingLength,
   READ_TOOLS,

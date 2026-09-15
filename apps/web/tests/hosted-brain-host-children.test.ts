@@ -4,6 +4,7 @@ import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import {
+  BRAIN_INPUT_MARKER,
   BRAIN_TURN_TRIGGER,
   CHILD_RUN_STATUS,
   CHILD_SPAWN_REFUSAL,
@@ -293,7 +294,7 @@ test("a spawn reaches the opener with the parent, the turn's journal, the task, 
     {
       conversationId: outcome.receipt.childId,
       turn: BRAIN_HOST_TURN.CHILD_TASK,
-      message: "fixture task",
+      message: `${BRAIN_INPUT_MARKER.SUBAGENT_TASK} fixture task`,
     },
   ]);
   assert.deepEqual(seams.reports, []);

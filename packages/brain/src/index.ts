@@ -1,6 +1,7 @@
 export {
   askInputText,
   BRAIN_INPUT_MARKER,
+  childTaskInputText,
   holdReleasedInputText,
   standingContextText,
   wakeInputText,
