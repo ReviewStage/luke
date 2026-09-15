@@ -1,6 +1,6 @@
 # Luke iOS
 
-SwiftUI Hello World for iPhone. Requires Xcode 14+ and an iOS 17 simulator.
+Requires Xcode 14+ and an iOS 17 simulator.
 
 ## Build
 

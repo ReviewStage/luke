@@ -163,8 +163,6 @@ export function admitConversation(
   });
 }
 
-/** The eve session the conversation's row records it running in; nothing while no session has claimed it. */
-
 /** The account whose standing conversation recorded this runtime session; nothing while none has. */
 export function runtimeSessionOwner(
   runtimeSessionId: string,

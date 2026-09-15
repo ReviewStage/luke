@@ -24,13 +24,12 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The account group: the signed-in desktop's own delete and preferences
- * endpoints, over the seams `server/hosted/account-delete.ts` and
- * `server/hosted/account-preferences.ts` already declare. Both endpoints
- * resolve the same bearer against the deployment's own account store before
- * touching anything, and answer nothing about any account but the one the
- * bearer names — root AGENTS.md pins that no credential or account secret
- * ever travels in an answer, so what each endpoint answers is a boolean or
- * the caller's own stored snapshot, never a token or a session id.
+ * endpoints. Both endpoints resolve the same bearer against the deployment's
+ * own account store before touching anything, and answer nothing about any
+ * account but the one the bearer names — root AGENTS.md pins that no
+ * credential or account secret ever travels in an answer, so what each
+ * endpoint answers is a boolean or the caller's own stored snapshot, never a
+ * token or a session id.
  */
 
 const ACCOUNT_PATH = {

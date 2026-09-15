@@ -810,5 +810,3 @@ test("refuses to start an agent the row never listed, before any request exists"
   });
   assert.equal(api.requests.length, requestsBefore);
 });
-
-// --- Conversation reading ---

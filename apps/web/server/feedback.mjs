@@ -77,8 +77,7 @@ const FEEDBACK_KINDS = Object.values(FEEDBACK_KIND);
 
 const FEEDBACK_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
-/* The same bounds the composer and the app's trust boundary enforce; keep in
-   step with `apps/desktop/src/shared/feedback.ts`. */
+/* The same bounds the composer and the app's trust boundary enforce. */
 const FEEDBACK_LIMITS = {
   MESSAGE_MAX_LENGTH: 8_000,
   NAME_MAX_LENGTH: 120,

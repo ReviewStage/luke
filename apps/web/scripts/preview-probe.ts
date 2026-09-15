@@ -33,13 +33,12 @@ import {
  *
  * Without `--url` it waits on the head's preview through the GitHub
  * deployment records, which is what CI does; with it, it probes the address
- * given, which is the Services preset sitting runbook's read of production
- * after a merge. The door names which project setting the probe relies on;
- * the bypass door sends `VERCEL_AUTOMATION_BYPASS_SECRET` when one is set and
- * otherwise plain GETs, which an unprotected production answers and a
- * protected preview redirects, reported as such. The report is written to
- * standard output and, where `GITHUB_STEP_SUMMARY` names a file, appended
- * there as a table.
+ * given, which is the read of production after a merge. The door names which
+ * project setting the probe relies on; the bypass door sends
+ * `VERCEL_AUTOMATION_BYPASS_SECRET` when one is set and otherwise plain GETs,
+ * which an unprotected production answers and a protected preview redirects,
+ * reported as such. The report is written to standard output and, where
+ * `GITHUB_STEP_SUMMARY` names a file, appended there as a table.
  */
 
 const WEB = join(import.meta.dirname, "..");

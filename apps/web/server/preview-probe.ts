@@ -16,10 +16,10 @@ import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
  * whether they did. A deployment distinguishes the states — a services build
  * serves eve at `/eve/v1/health` and every `/api/` function; the single-app
  * build answers `NOT_FOUND` for eve; a preset without the key fails to build
- * at all — so this sends one the requests the Services preset sitting runbook
- * probes by hand: every `/api/` path a client in the repository spells
- * (`api-callers.ts` derives the list; nothing here re-enumerates it), the
- * cron's path, the page, and eve's health, each cache-busted.
+ * at all — so this sends one the requests a hand probe would make: every
+ * `/api/` path a client in the repository spells (`api-callers.ts` derives the
+ * list; nothing here re-enumerates it), the cron's path, the page, and eve's
+ * health, each cache-busted.
  *
  * What a probe asserts is a value, never prose. A handler that is present
  * answers with its own refusal (401, 405, 426, or its own 404, as better-auth
@@ -27,8 +27,8 @@ import { checkApiCallers, PROBE_SEGMENT, RESOLUTION } from "./api-callers.js";
  * Vercel's own `NOT_FOUND`, and the platform marks every answer of its own
  * with an `x-vercel-error` header a function's answer never carries. That
  * header is the discriminator, so the whole derived list can be judged
- * without a table of codes, and the runbook's eight requests keep their exact
- * codes on top.
+ * without a table of codes, and the eight requests named below keep their
+ * exact codes on top.
  *
  * A preview is behind Deployment Protection, and a stranger's request is
  * redirected to Vercel's SSO. Two project settings open a way through, and
@@ -82,11 +82,11 @@ const SERVER_ERROR_FLOOR = 500;
 const REDIRECT_STATUSES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
 
 /**
- * The runbook's nine requests, the page, and eve's health, each with the
- * status production answered on 2026-09-12 (the audio route's, added on
- * 2026-09-14, is what its two siblings answer): a 401, 405, or 426 is the handler
- * present and refusing the caller, which is what a probe with no credential
- * should see. The OPTIONS door meets the same handlers' preflight refusals;
+ * The nine requests a hand probe sends, the page, and eve's health, each with
+ * the status production answered on 2026-09-12 (the audio route's, added on
+ * 2026-09-14, is what its two siblings answer): a 401, 405, or 426 is the
+ * handler present and refusing the caller, which is what a probe with no
+ * credential should see. The OPTIONS door meets the same handlers' preflight refusals;
  * the page is not on it, because the allowlist is a prefix and `/` would
  * unprotect every OPTIONS on the deployment, and eve's health answers OPTIONS
  * with its own 404, which the discriminator below already reads as eve.

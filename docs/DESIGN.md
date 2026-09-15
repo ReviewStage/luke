@@ -217,7 +217,7 @@ What follows from this everywhere else:
   table in the script, re-run it, and commit what it writes;
   `repository-checks.sh` runs it with `--check`.
 
-Copy that reaches a model rather than the screen (`luke-guide.ts`, the
+Copy that reaches a model rather than the screen (the guide, the
 live session's instructions) obeys a different rule. Verbosity there is not slop,
 but a capability the guide does not describe is one Luke will deny having, so
 compress the prose and never drop the fact. One rule per line beats three
