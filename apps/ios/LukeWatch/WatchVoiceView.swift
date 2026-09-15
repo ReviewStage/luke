@@ -11,6 +11,7 @@ struct WatchVoiceView: View {
     @Environment(WatchAccountSession.self) private var accountSession
     @Environment(WatchRosterStore.self) private var store
     @Environment(ConversationStore.self) private var stored
+    @Environment(WatchNavigation.self) private var navigation
     @AppStorage(VoiceSettingsKey.voice) private var voice = LiveVoice.default
     @State private var model = WatchVoiceSessionModel()
     @State private var isPressing = false
@@ -24,7 +25,7 @@ struct WatchVoiceView: View {
         .task {
             model.voice = voice
             model.prepare(accountSession: accountSession)
-            // The Conversation's action rows name sessions off the roster, refreshed as this page opens.
+            // The Conversation's action rows name sessions off the roster, refreshed as this screen opens.
             await store.load()
         }
         .onChange(of: voice) { _, newVoice in model.changeVoice(newVoice) }
@@ -42,14 +43,25 @@ struct WatchVoiceView: View {
         }
         .navigationTitle("Luke")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { settingsButton }
+            ToolbarItem(placement: .topBarLeading) { sessionsButton }
+            ToolbarItem(placement: .topBarTrailing) { settingsButton }
         }
         .sheet(isPresented: $settingsShown) {
             WatchVoiceSettingsView()
         }
     }
 
-    // MARK: - Floating controls
+    // MARK: - Toolbar
+
+    /// Pushes the sessions list over this screen; its back button returns here.
+    private var sessionsButton: some View {
+        Button {
+            navigation.showSessions()
+        } label: {
+            Label("Sessions", systemImage: "list.bullet")
+        }
+        .accessibilityLabel("Sessions")
+    }
 
     private var settingsButton: some View {
         Button {
@@ -59,6 +71,8 @@ struct WatchVoiceView: View {
         }
         .accessibilityLabel("Voice Settings")
     }
+
+    // MARK: - Floating controls
 
     private var floatingControls: some View {
         VStack(spacing: 4) {

@@ -20,7 +20,7 @@ struct WatchRosterView: View {
                 }
             } else {
                 ForEach(store.visibleSessions) { session in
-                    NavigationLink(value: session) {
+                    NavigationLink(value: WatchRoute.session(session)) {
                         WatchSessionRow(session: session)
                     }
                     .swipeActions(edge: .trailing, allowsFullSwipe: true) {
@@ -51,9 +51,6 @@ struct WatchRosterView: View {
             }
         }
         .navigationTitle("Sessions")
-        .navigationDestination(for: RosterSession.self) { session in
-            WatchSessionDetailView(session: session)
-        }
         .refreshable { await store.load() }
         .task { await store.poll() }
         .alert(
