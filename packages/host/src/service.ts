@@ -182,9 +182,6 @@ export function createGatewayService(
       });
       return Effect.succeed({ nodeId, connected: true, clientId: context.client.clientId });
     }),
-    [GATEWAY_METHOD.NODE_UNREGISTER]: reading((read) =>
-      Effect.succeed({ disconnected: nodes.setConnected(read.identifier("nodeId"), false) }),
-    ),
     [GATEWAY_METHOD.NODE_INVOKE]: reading((read) => {
       const capability = read.string("capability");
       const params = read.optionalRecord("params") ?? {};

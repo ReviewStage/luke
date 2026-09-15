@@ -351,7 +351,6 @@ const NODE_METHODS: ReadonlySet<GatewayMethod> = new Set<GatewayMethod>([
   GATEWAY_METHOD.HELLO,
   GATEWAY_METHOD.RECONNECT,
   GATEWAY_METHOD.NODE_REGISTER,
-  GATEWAY_METHOD.NODE_UNREGISTER,
 ]);
 
 export interface GatewayServerLayerOptions extends GatewayEventLogOptions {

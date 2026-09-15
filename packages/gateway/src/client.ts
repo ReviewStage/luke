@@ -18,7 +18,7 @@ import {
 } from "./protocol.js";
 import type { GatewayTransport } from "./transport.js";
 
-export interface GatewayClientOptions {
+interface GatewayClientOptions {
   transport: GatewayTransport;
   createId: () => string;
   /** Adopts a whole snapshot the host handed back because the replay window had moved past what this client saw. */
@@ -26,7 +26,7 @@ export interface GatewayClientOptions {
   report?: (message: string) => void;
 }
 
-export interface GatewayCallOptions {
+interface GatewayCallOptions {
   /** The caller's own retry identifier for a mutation; minted here when the caller supplies none. */
   idempotencyKey?: string;
   expectedRevision?: GatewayExpectedRevision;
@@ -37,7 +37,7 @@ export type GatewayCallResult =
   | { ok: true; result: WireValue | undefined }
   | { ok: false; error: GatewayError };
 
-export type GatewayClientEventListener = (event: GatewayEvent) => void;
+type GatewayClientEventListener = (event: GatewayEvent) => void;
 
 /**
  * The client side of the protocol. It mints request ids, stamps the version,
@@ -290,10 +290,10 @@ export const gatewayClient = /* @__PURE__ */ Effect.fn("gatewayClient")(function
 });
 
 /** The answer of a `gateway.hello`, read for the sequence the client should start following from. */
-export function helloSequence(result: WireValue | undefined): number | undefined {
+function helloSequence(result: WireValue | undefined): number | undefined {
   return isRecord(result) && isWireNumber(result.sequence) ? result.sequence : undefined;
 }
 
-export function unwrapResponse(response: GatewayResponse): GatewayCallResult {
+function unwrapResponse(response: GatewayResponse): GatewayCallResult {
   return response.ok ? { ok: true, result: response.result } : { ok: false, error: response.error };
 }

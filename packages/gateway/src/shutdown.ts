@@ -24,7 +24,6 @@ export interface GatewayShutdownSteps {
 
 export interface GatewayShutdownOptions {
   deadlineMs?: number;
-  now?: () => number;
 }
 
 export interface GatewayShutdownReport {
@@ -33,7 +32,6 @@ export interface GatewayShutdownReport {
   cancelled: readonly string[];
   /** How many records were persisted unresolved for recovery. */
   unresolved: number;
-  elapsedMs: number;
 }
 
 /**
@@ -55,10 +53,8 @@ export function shutdownGatewayEffect(
   steps: GatewayShutdownSteps,
   options: GatewayShutdownOptions = {},
 ): Effect.Effect<GatewayShutdownReport> {
-  const now = options.now ?? Date.now;
   const deadlineMs = options.deadlineMs ?? GATEWAY_SHUTDOWN_DEFAULTS.DEADLINE_MS;
   return Effect.gen(function* () {
-    const startedAt = now();
     yield* steps.closeAdmissions;
     const cancelledRef = yield* Ref.make<readonly string[]>([]);
     const settledRef = yield* Ref.make(false);
@@ -86,6 +82,6 @@ export function shutdownGatewayEffect(
     const cancelled = yield* Ref.get(cancelledRef);
     const settled = timedOut ? false : yield* Ref.get(settledRef);
     const unresolved = yield* steps.persistUnresolved;
-    return { settled, cancelled, unresolved, elapsedMs: now() - startedAt };
+    return { settled, cancelled, unresolved };
   });
 }

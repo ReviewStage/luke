@@ -72,7 +72,7 @@ const recordingAssembly = (log: Recorded[], startOrder: readonly Composer[]): Ho
   drain: () =>
     Effect.sync(() => {
       log.push({ step: STEP.DRAIN });
-      return { settled: true, cancelled: [], unresolved: 0, elapsedMs: 0 };
+      return { settled: true, cancelled: [], unresolved: 0 };
     }),
 });
 

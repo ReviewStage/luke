@@ -62,7 +62,6 @@ const GATEWAY_METHODS = {
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: { name: "notebook.read", mutates: false },
   NODE_REGISTER: { name: "node.register", mutates: true },
-  NODE_UNREGISTER: { name: "node.unregister", mutates: true },
   NODE_INVOKE: { name: "node.invoke", mutates: true },
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: { name: "client.bootstrap", mutates: false },
@@ -124,7 +123,7 @@ export type GatewayMethod = (typeof GATEWAY_METHOD)[keyof typeof GATEWAY_METHOD]
 export const GatewayMethodSchema = Schema.Literals(Object.values(GATEWAY_METHOD));
 
 /** One method as the table names it: its wire name and whether it changes something. */
-export interface GatewayMethodEntry {
+interface GatewayMethodEntry {
   readonly name: GatewayMethod;
   readonly mutates: boolean;
 }
@@ -284,8 +283,6 @@ export const conversationRateMessageParamsSchema = Schema.Struct({
   rating: RatingWordSchema,
 });
 
-export type ConversationRateMessageParams = typeof conversationRateMessageParamsSchema.Type;
-
 /**
  * How `conversation.rateMessage` ended. A rating is recorded or it is not,
  * and a control that asked has three different things to say about a
@@ -365,7 +362,7 @@ export function isMutatingGatewayMethod(method: GatewayMethod): boolean {
 const GatewayIdentifierSchema = Schema.NonEmptyString;
 
 /** What a caller may say it expects to still stand when its request lands. */
-export const GatewayExpectedRevisionSchema = Schema.Struct({
+const GatewayExpectedRevisionSchema = Schema.Struct({
   /** The conversation whose lifetime the caller read, and the generation it read there. */
   sessionKey: Schema.optionalKey(GatewayIdentifierSchema),
   sessionRevision: Schema.optionalKey(Schema.String),
@@ -412,13 +409,7 @@ export const GATEWAY_ERROR = {
 
 export type GatewayErrorCode = (typeof GATEWAY_ERROR)[keyof typeof GATEWAY_ERROR];
 
-export const GatewayErrorCodeSchema = Schema.Literals(Object.values(GATEWAY_ERROR));
-
-const readsGatewayErrorCode = Schema.is(GatewayErrorCodeSchema);
-
-export function isGatewayErrorCode(value: UnparsedWireValue): value is GatewayErrorCode {
-  return readsGatewayErrorCode(value);
-}
+const GatewayErrorCodeSchema = Schema.Literals(Object.values(GATEWAY_ERROR));
 
 /** An error as the envelope carries it: the code, and a sentence for a person. */
 export const GatewayErrorSchema = Schema.Struct({
@@ -600,7 +591,7 @@ export function gatewayVersionRefusal(
 }
 
 /** The revisions that stood when an answer was formed, so a client can name them on its next ask. */
-export const GatewayRevisionSchema = Schema.Struct({
+const GatewayRevisionSchema = Schema.Struct({
   configuration: Schema.Number,
   sequence: Schema.Number,
 });
@@ -622,7 +613,7 @@ function absentOrWireValue() {
   );
 }
 
-export const GatewayResponseSchema = Schema.Union([
+const GatewayResponseSchema = Schema.Union([
   Schema.Struct({
     id: GatewayIdentifierSchema,
     ok: Schema.Literal(true),
@@ -660,7 +651,7 @@ export const GATEWAY_EVENT = {
 
 export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT];
 
-export const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
+const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
 
 const readsGatewayEventKind = Schema.is(GatewayEventKindSchema);
 
@@ -692,10 +683,7 @@ export const GATEWAY_RECONNECT_KIND = {
   SNAPSHOT: "snapshot",
 } as const;
 
-export type GatewayReconnectKind =
-  (typeof GATEWAY_RECONNECT_KIND)[keyof typeof GATEWAY_RECONNECT_KIND];
-
-export const GatewayReconnectAnswerSchema = Schema.Union([
+const GatewayReconnectAnswerSchema = Schema.Union([
   Schema.Struct({
     kind: Schema.Literal(GATEWAY_RECONNECT_KIND.REPLAY),
     events: Schema.Array(GatewayEventSchema),
@@ -767,10 +755,7 @@ export const NODE_CAPABILITY_STATUS = {
   UNKNOWN: "unknown",
 } as const;
 
-export type NodeCapabilityStatus =
-  (typeof NODE_CAPABILITY_STATUS)[keyof typeof NODE_CAPABILITY_STATUS];
-
-export const NodeCapabilityResultSchema = Schema.Union([
+const NodeCapabilityResultSchema = Schema.Union([
   Schema.Struct({ status: Schema.Literal(NODE_CAPABILITY_STATUS.OK), value: absentOrWireValue() }),
   Schema.Struct({
     status: Schema.Literal(NODE_CAPABILITY_STATUS.UNAVAILABLE),
@@ -847,7 +832,7 @@ export function gatewayReconnectAnswerFromWire(
  * the node. The id binds the answer to the ask; a connection that closes
  * before answering leaves the ask unavailable and the effect uncertain.
  */
-export const NodeInvocationSchema = Schema.Struct({
+const NodeInvocationSchema = Schema.Struct({
   invocationId: GatewayIdentifierSchema,
   nodeId: GatewayIdentifierSchema,
   capability: Schema.String,
@@ -856,7 +841,7 @@ export const NodeInvocationSchema = Schema.Struct({
 
 export type NodeInvocation = typeof NodeInvocationSchema.Type;
 
-export const NodeInvocationAnswerSchema = Schema.Struct({
+const NodeInvocationAnswerSchema = Schema.Struct({
   invocationId: GatewayIdentifierSchema,
   result: NodeCapabilityResultSchema,
 });

@@ -42,7 +42,7 @@ export class GatewayMutates extends Context.Service<GatewayMutates, boolean>()(
 ) {}
 
 /** One method of the group: its wire name, a record of parameters, a wire value or nothing, and a refusal of the family. */
-export type GatewayRpc = Rpc.Rpc<
+type GatewayRpc = Rpc.Rpc<
   GatewayMethod,
   typeof GatewayParamsSchema,
   typeof GatewayResultSchema,
@@ -118,7 +118,7 @@ function requestHeaders(request: GatewayRequest): RequestHeaders {
 }
 
 /** What a request's headers said beside the method and its parameters, read off any carrier of name–value pairs: an Rpc message's tuples or the server's own header record. */
-export interface GatewayHeaderFields {
+interface GatewayHeaderFields {
   readonly protocolVersion: number;
   readonly idempotencyKey?: string;
   readonly expectedRevision?: GatewayExpectedRevision;
@@ -185,7 +185,7 @@ const RpcRequestMessageSchema = Schema.Struct({
   headers: Schema.Array(Schema.Tuple([Schema.String, Schema.String])),
 });
 
-export type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
+type RpcRequestMessage = typeof RpcRequestMessageSchema.Type;
 
 /** Reads one decoded frame as a request message of the group, or nothing for any other message the parser answered. */
 export const readRpcRequestMessage = Schema.decodeUnknownOption(RpcRequestMessageSchema);
@@ -273,7 +273,7 @@ function frameOf(record: WireRecord): string {
   return JSON.stringify(record);
 }
 
-export interface GatewayEnvelopeSerializationOptions {
+interface GatewayEnvelopeSerializationOptions {
   /** The revisions that stand as an answer is written; every response envelope carries them, as the server has always stamped them. */
   readonly revision: () => GatewayRevision;
 }

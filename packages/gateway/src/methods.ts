@@ -20,7 +20,7 @@ import type { GatewayHostConnection } from "./transport.js";
  * back on the answer and never a handler's to read, so the Rpc model keeps it
  * out of the handler's reach and this shape leaves it out too.
  */
-export type GatewayRequestFields = Omit<GatewayRequest, "id">;
+type GatewayRequestFields = Omit<GatewayRequest, "id">;
 
 export interface GatewayMethodContext {
   client: GatewayClientIdentity;
