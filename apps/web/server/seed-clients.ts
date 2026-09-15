@@ -55,9 +55,7 @@ export function seedOAuthClient(
   );
 }
 
-export function seedOAuthClients(
-  now = new Date(),
-): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
+function seedOAuthClients(now = new Date()): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
   return Effect.andThen(
     seedOAuthClient(DESKTOP_OAUTH_CLIENT, now),
     seedOAuthClient(MOBILE_OAUTH_CLIENT, now),

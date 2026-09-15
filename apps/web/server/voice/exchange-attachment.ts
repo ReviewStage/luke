@@ -34,7 +34,7 @@ import { upstreamSideband } from "./live-sideband.js";
  * session the service is about to refuse.
  */
 
-export interface ExchangeAttachmentDeps {
+interface ExchangeAttachmentDeps {
   readonly context: HostedStoreContext;
   /** The runner the attachment's own scope and the effects built in it are answered through. */
   readonly run: WebStoreRun;

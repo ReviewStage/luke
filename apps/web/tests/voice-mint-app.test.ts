@@ -7,9 +7,8 @@ import { HOSTED_SERVICE_PATH } from "../server/core";
 import type { HostedSpend, IntroductionSpend } from "../server/hosted/quota";
 import { type MintCall, mintAnswer } from "./support/mint-call";
 import {
-  type RecordedResponse,
+  recordedAnswer,
   recordedGoldenNames,
-  recordedResponse,
   settleResponseGolden,
 } from "./support/response-golden";
 
@@ -132,22 +131,9 @@ const CASES: [string, () => Promise<Response>][] = [
   ],
 ];
 
-const FRAMING_HEADER = { CONTENT_LENGTH: "content-length" } as const;
-
-/** The answer as the caller reads it, with the framing header held to the body it frames. */
-async function answered(response: Response): Promise<RecordedResponse> {
-  const recorded = await recordedResponse(response);
-  const framed = recorded.headers.find(([name]) => name === FRAMING_HEADER.CONTENT_LENGTH);
-  if (framed) assert.equal(Number(framed[1]), new TextEncoder().encode(recorded.body).byteLength);
-  return {
-    ...recorded,
-    headers: recorded.headers.filter(([name]) => name !== FRAMING_HEADER.CONTENT_LENGTH),
-  };
-}
-
 test("each group answers its mints and its refusals with the bytes recorded for them", async () => {
   for (const [name, answer] of CASES) {
-    await settleResponseGolden(GOLDEN_ROOT, name, await answered(await answer()));
+    await settleResponseGolden(GOLDEN_ROOT, name, await recordedAnswer(await answer()));
   }
 });
 

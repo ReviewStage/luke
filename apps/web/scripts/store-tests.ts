@@ -31,8 +31,6 @@ export const STORE_TEST_DOORS = {
   STORE_TEST_POSTGRES: "./support/store-test-postgres",
 } as const;
 
-export type StoreTestDoor = (typeof STORE_TEST_DOORS)[keyof typeof STORE_TEST_DOORS];
-
 const TEST_FILE_SUFFIX = ".test.ts";
 
 const escaped = (door: string) => door.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");

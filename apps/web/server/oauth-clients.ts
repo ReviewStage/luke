@@ -30,7 +30,7 @@ export const MOBILE_OAUTH_CLIENT = {
 export type OAuthClient = typeof DESKTOP_OAUTH_CLIENT | typeof MOBILE_OAUTH_CLIENT;
 
 /** One `oauth_client` row, camelCase as the auth service's own Kysely adapter reads and writes it. */
-export interface OAuthClientRecord {
+interface OAuthClientRecord {
   readonly id: string;
   readonly clientId: string;
   readonly disabled: boolean;

@@ -67,7 +67,7 @@ export const FRAME_DECISION = {
   REFUSE: "refuse",
 } as const;
 
-export type FrameDecision = (typeof FRAME_DECISION)[keyof typeof FRAME_DECISION];
+type FrameDecision = (typeof FRAME_DECISION)[keyof typeof FRAME_DECISION];
 
 const REFLECTED_AUDIO: readonly string[] = [
   LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND,

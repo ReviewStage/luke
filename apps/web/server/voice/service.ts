@@ -641,8 +641,6 @@ export class VoiceService {
                   case VOICE_SERVICE_FRAME.SESSION_BEAT:
                     exchange.speakBeat(report);
                     return;
-                  default:
-                    return;
                 }
               },
         onFrameRefused: (type) => {

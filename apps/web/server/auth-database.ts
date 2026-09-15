@@ -5,7 +5,7 @@ import type { Pool, PoolClient } from "pg";
 import * as schema from "./db/auth-schema.js";
 import { getPool } from "./db/index.js";
 
-export type AuthSchema = typeof schema;
+type AuthSchema = typeof schema;
 
 /**
  * Better Auth's adapter over the auth schema, and the one place the choice of

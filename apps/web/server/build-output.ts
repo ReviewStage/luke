@@ -46,7 +46,7 @@ const NODE_LAUNCHER = {
 } as const;
 
 /** A function written by hand rather than bundled from `server/routes/`. */
-export interface HandWrittenFunction {
+interface HandWrittenFunction {
   /** The module, relative to the web app; plain ESM the launcher runs as it stands. */
   readonly source: string;
   /** Its public path, which is the URL it answers on. */
@@ -66,7 +66,7 @@ export interface EmittedFunction {
   readonly maxDuration: number | undefined;
 }
 
-export interface FunctionConfig {
+interface FunctionConfig {
   readonly runtime: typeof FUNCTION_RUNTIME;
   readonly handler: typeof FUNCTION_ENTRY;
   readonly launcherType: typeof NODE_LAUNCHER.launcherType;
@@ -103,7 +103,7 @@ export function functionConfig(maxDuration: number | undefined): FunctionConfig 
   return { ...config, maxDuration };
 }
 
-export interface BuildOutputInput {
+interface BuildOutputInput {
   /** The output root, emptied first so a function an earlier plan emitted cannot ship beside the current ones. */
   readonly outputDirectory: string;
   readonly functions: readonly EmittedFunction[];
