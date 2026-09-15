@@ -171,7 +171,7 @@ export const SPEECH_REFUSAL = {
 
 type SpeechRefusal = (typeof SPEECH_REFUSAL)[keyof typeof SPEECH_REFUSAL];
 
-export type SpeechWriteResult =
+type SpeechWriteResult =
   | { readonly ok: true; readonly id: string; readonly seq: number }
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
@@ -194,7 +194,7 @@ export interface SpeechClaim {
   readonly deviceId: string;
 }
 
-export type SpeechClaimResult =
+type SpeechClaimResult =
   | { readonly ok: true; readonly id: string; readonly seq: number; readonly claim: SpeechClaim }
   | { readonly ok: false; readonly refusal: SpeechRefusal };
 
@@ -714,7 +714,7 @@ export interface SpeechSweepStore {
   readonly writer: Pick<StoreWriter, "recordEvent" | "enqueueTurn">;
 }
 
-export interface SpeechSweepOptions {
+interface SpeechSweepOptions {
   readonly now: number;
   /** The most offers each of the sweep's reads takes: one read per account with quiet standing, one over every other account. */
   readonly limit?: number | undefined;
@@ -851,7 +851,7 @@ export const sweepSpeech = /* @__PURE__ */ Effect.fn("sweepSpeech")(function* (
 });
 
 /** One briefing a hold released unspoken: the words the announce call carried, and when the brain decided them. */
-export interface ReleasedBriefing {
+interface ReleasedBriefing {
   readonly messageId: string;
   readonly briefing: string;
   /** Epoch milliseconds the announcing message was written. */
@@ -860,7 +860,7 @@ export interface ReleasedBriefing {
   readonly releasedAt: number;
 }
 
-export interface ReleasedBriefingsQuery {
+interface ReleasedBriefingsQuery {
   /** The most uncarried releases answered, oldest first. */
   readonly limit: number;
 }
@@ -922,7 +922,7 @@ const heldBriefingsWords = Schema.Struct({
 });
 
 /** One briefing as a hold-release item names it: what it said and, in epoch milliseconds, when the brain decided it. */
-export interface NamedBriefing {
+interface NamedBriefing {
   readonly briefing: string;
   readonly decidedAt: number;
 }

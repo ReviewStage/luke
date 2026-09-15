@@ -12,7 +12,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "../core.js";
  * bypassed — every server-side plugin lives for exactly one pass, so a
  * debounced pass could only ever answer with nothing.
  */
-export interface CloudAdapterSeams {
+interface CloudAdapterSeams {
   readApiKey: () => Effect.Effect<string | undefined>;
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
@@ -47,5 +47,3 @@ export function cloudSessionPluginFor(
 ): CloudSessionPlugin {
   return PLUGIN_BUILDERS[providerId](seams);
 }
-
-export type { CloudSessionPlugin };

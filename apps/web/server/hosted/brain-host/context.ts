@@ -26,7 +26,7 @@ import type { HostedRoster } from "./roster.js";
  * `USER.md`, composed into the prompt with the other workspace files.
  */
 
-export interface StandingContextInput {
+interface StandingContextInput {
   readonly roster: HostedRoster;
   readonly rosterText: string;
   readonly defaults: HostedWorkspaceDefaults;

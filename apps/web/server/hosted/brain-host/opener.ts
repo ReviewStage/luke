@@ -147,7 +147,7 @@ export interface TurnOpenerSeams {
   readonly report: (message: string) => void;
 }
 
-export interface TurnOpeningOptions {
+interface TurnOpeningOptions {
   readonly limit?: number;
 }
 

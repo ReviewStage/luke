@@ -56,7 +56,7 @@ export type CloudActionExecutor = (input: {
   agentSelection?: WorkspaceAgentSelection;
 }) => Effect.Effect<ActionExecutionAnswer>;
 
-export interface HostedCarrierDependencies {
+interface HostedCarrierDependencies {
   /** The roster as the snapshot holds it now, read again for every action. */
   readonly roster: () => Effect.Effect<HostedRoster>;
   readonly defaults: () => Effect.Effect<HostedWorkspaceDefaults>;

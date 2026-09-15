@@ -48,7 +48,7 @@ export interface CloudObserveSeams {
 }
 
 /** What one provider's pass reported, and whether it may be trusted as the whole roster. */
-export interface CloudProviderPass {
+interface CloudProviderPass {
   providerId: CloudAgentProviderId;
   observations: readonly ProviderSessionObservation[];
   projects: readonly WorkspaceProject[];

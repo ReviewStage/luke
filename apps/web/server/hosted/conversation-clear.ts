@@ -33,7 +33,7 @@ const clearBrake = makeRateBrake({
 
 const CLEAR_METHOD = "POST";
 
-export interface ConversationClearOptions {
+interface ConversationClearOptions {
   request: Request;
   resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "main">;

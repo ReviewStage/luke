@@ -151,7 +151,7 @@ export interface RelayStanding {
  */
 type RelayEffect<Value> = Effect.Effect<Value, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
-export interface StreamRelaySeams {
+interface StreamRelaySeams {
   /** The three writes the relay makes. */
   readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">;
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
