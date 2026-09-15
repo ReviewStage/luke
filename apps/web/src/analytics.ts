@@ -32,6 +32,72 @@ export const SITE_EVENT = {
 export type SiteEvent = (typeof SITE_EVENT)[keyof typeof SITE_EVENT];
 
 /**
+ * The pages of the OAuth sign-in flow. Their address carries the desktop's
+ * signed authorization request — the state, the PKCE challenge, the redirect,
+ * the expiry, and the signature — which is a live credential the funnel never
+ * needs to count. So no half of this file may keep their address whole: the
+ * recorder does not run on them (`disable_session_recording` below), and a
+ * counted event's every address is cut to its path before it leaves
+ * (`sanitizeAnalyticsUrls`).
+ */
+const AUTH_PATH = {
+  SIGN_IN: "/sign-in.html",
+  CONSENT: "/consent.html",
+} as const;
+
+const AUTH_PATHS: ReadonlySet<string> = new Set(Object.values(AUTH_PATH));
+
+/** Whether the page now loading is one the sign-in flow's address serves. */
+function onAuthPage(): boolean {
+  return AUTH_PATHS.has(window.location.pathname);
+}
+
+/**
+ * Cuts an auth page's address to its origin and path, dropping the query and
+ * the fragment that carry the authorization request. Every other address is
+ * returned whole, so a marketing link keeps the campaign that brought someone,
+ * and a value that is not an address is returned untouched.
+ */
+function authUrlToPath(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+  return AUTH_PATHS.has(url.pathname) ? `${url.origin}${url.pathname}` : value;
+}
+
+/**
+ * Rewrites every address a capture result carries — an event property, the
+ * referrer, and the first-seen pair PostHog keeps once on the person, which
+ * rides in the top-level `$set`/`$set_once` beside the properties, not within
+ * them — so an auth page's address never leaves whole. An address only ever
+ * sits as a string value in a plain record, so the walk descends into those
+ * alone: an array (a recording's `$snapshot_data`, an autocaptured element
+ * list) and a class instance (the capture result's `Date` timestamp) are each
+ * a leaf, left whole. Anything that is not an auth page's address stays as it
+ * was.
+ */
+/* oxlint-disable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion --
+   PostHog's capture result is the untyped JSON this boundary parses, so the
+   walk branches on each node's runtime shape and the assertions restate the
+   branch the `typeof`/prototype guard just proved. */
+export function sanitizeAnalyticsUrls<Value>(value: Value): Value {
+  if (typeof value === "string") return authUrlToPath(value) as Value;
+  if (value !== null && typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto === Object.prototype || proto === null) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, inner]) => [key, sanitizeAnalyticsUrls(inner)]),
+      ) as Value;
+    }
+  }
+  return value;
+}
+/* oxlint-enable anti-slop/no-runtime-typeof, anti-slop/require-safety-comment-for-type-assertion */
+
+/**
  * The client, once it has loaded. It is imported dynamically rather than at
  * the top of this module because the library is larger than everything else
  * the site ships put together: a static import would land it in the shared
@@ -70,6 +136,10 @@ export function startSiteAnalytics(): void {
       // rrweb does not read either of these.
       mask_all_text: true,
       mask_all_element_attributes: true,
+      // The sign-in flow's address is a live authorization request, so the
+      // recorder never runs on its pages and no event keeps that address whole.
+      disable_session_recording: onAuthPage(),
+      before_send: (event) => event && sanitizeAnalyticsUrls(event),
       session_recording: {
         // The sign-in address is the only thing anybody types on this site,
         // and it is the one thing here worth masking.
