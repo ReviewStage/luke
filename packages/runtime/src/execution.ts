@@ -1,85 +1,14 @@
-import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Schema } from "effect";
+import type { WireRecord } from "@sidecar/wire";
 
 /**
  * The seams along which Luke's reasoning is replaceable. A host owns the
- * conversation — accepting asks, recording runs, journaling effects, keeping
- * the checkpoint — and reaches a model only through these interfaces: an
- * agent runtime that turns a request into normalized events, a model adapter
- * that carries one inference, and a tool executor the host supplies. Nothing
- * here names a provider. A provider's own vocabulary (an OpenAI Responses
- * item, an encrypted reasoning item) travels as opaque records inside a
- * checkpoint whose format tag says whose shape it is, and a runtime loads
- * only the formats it can read.
+ * conversation — accepting asks, recording runs, journaling effects — and
+ * reaches a model only through these interfaces: an agent runtime that turns
+ * a request into normalized events, a model adapter that carries one
+ * inference, and a tool executor the host supplies. Nothing here names a
+ * provider: a provider's own vocabulary (an OpenAI Responses item, an
+ * encrypted reasoning item) travels as an opaque record.
  */
-
-/**
- * What a checkpoint is compatible with: the runtime that wrote it, at which
- * revision of its own rules, and the provider format its items are in, at
- * which revision of that shape. All four have to match for a runtime to load
- * it — a runtime of another id, or the same runtime at another version, may
- * not read items whose format it happens to share, because the format alone
- * does not say what the items were allowed to mean.
- */
-export interface CheckpointFormat {
-  readonly runtime: string;
-  readonly runtimeVersion: number;
-  readonly format: string;
-  readonly formatVersion: number;
-}
-
-export function sameCheckpointFormat(left: CheckpointFormat, right: CheckpointFormat): boolean {
-  return (
-    left.runtime === right.runtime &&
-    left.runtimeVersion === right.runtimeVersion &&
-    left.format === right.format &&
-    left.formatVersion === right.formatVersion
-  );
-}
-
-const TAG_RUNTIME_SEPARATOR = "@";
-const TAG_FORMAT_SEPARATOR = ":";
-const TAG_VERSION_SEPARATOR = "/";
-
-/** The tag one format travels under in storage: `<runtime>@<runtimeVersion>:<format>/<formatVersion>`. */
-export function checkpointFormatTag(format: CheckpointFormat): string {
-  return [
-    format.runtime,
-    TAG_RUNTIME_SEPARATOR,
-    format.runtimeVersion,
-    TAG_FORMAT_SEPARATOR,
-    format.format,
-    TAG_VERSION_SEPARATOR,
-    format.formatVersion,
-  ].join("");
-}
-
-function versioned(
-  value: string,
-  separator: string,
-): { name: string; version: number } | undefined {
-  const at = value.lastIndexOf(separator);
-  if (at <= 0 || at === value.length - 1) return undefined;
-  const version = Number(value.slice(at + 1));
-  if (!Number.isInteger(version) || version < 0) return undefined;
-  return { name: value.slice(0, at), version };
-}
-
-/** Reads a stored tag back into a format, or nothing for a tag not written by this rule. */
-export function checkpointFormatFromTag(tag: UnparsedWireValue): CheckpointFormat | undefined {
-  if (!isWireString(tag)) return undefined;
-  const split = tag.indexOf(TAG_FORMAT_SEPARATOR);
-  if (split <= 0) return undefined;
-  const runtime = versioned(tag.slice(0, split), TAG_RUNTIME_SEPARATOR);
-  const format = versioned(tag.slice(split + 1), TAG_VERSION_SEPARATOR);
-  if (!runtime || !format) return undefined;
-  return {
-    runtime: runtime.name,
-    runtimeVersion: runtime.version,
-    format: format.name,
-    formatVersion: format.version,
-  };
-}
 
 /** A tool as a model is offered it: a name, what it is for, and its JSON-schema parameters. */
 export interface ToolSchema {
@@ -107,16 +36,6 @@ export interface ToolExecutionContext {
   readonly signal: AbortSignal;
   isRevoked(): boolean;
 }
-
-export const REASONING_EFFORT = {
-  LOW: "low",
-  MEDIUM: "medium",
-  HIGH: "high",
-} as const;
-
-export type ReasoningEffort = (typeof REASONING_EFFORT)[keyof typeof REASONING_EFFORT];
-
-export const ReasoningEffortSchema = Schema.Literals(Object.values(REASONING_EFFORT));
 
 export interface ModelUsage {
   readonly inputTokens?: number;

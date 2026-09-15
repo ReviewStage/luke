@@ -28,16 +28,6 @@ export const CHILD_RUN_STATUS = {
 
 type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_STATUS];
 
-const CHILD_RUN_TERMINAL_STATUS: ReadonlySet<ChildRunStatus> = new Set([
-  CHILD_RUN_STATUS.COMPLETED,
-  CHILD_RUN_STATUS.FAILED,
-  CHILD_RUN_STATUS.CANCELLED,
-]);
-
-export function isTerminalChildRunStatus(status: ChildRunStatus): boolean {
-  return CHILD_RUN_TERMINAL_STATUS.has(status);
-}
-
 /**
  * One spawn as the store keeps it. The requester is the conversation and
  * the run that asked; the child is the conversation that answers, and its

@@ -102,10 +102,6 @@ export class ObservationLoop {
     this.#report = options.report ?? ((message) => void process.stderr.write(`${message}\n`));
   }
 
-  get generation(): number {
-    return this.#generation;
-  }
-
   isCurrent(generation: number): boolean {
     return generation === this.#generation && this.#options.gate();
   }
