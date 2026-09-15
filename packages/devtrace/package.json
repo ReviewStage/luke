@@ -13,7 +13,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/brain": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"

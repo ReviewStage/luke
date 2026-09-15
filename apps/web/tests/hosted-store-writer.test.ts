@@ -11,7 +11,7 @@ import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
-  type BrainRequestRecord,
+  type BrainRequestFailure,
   type BrainRunEvent,
   type BrainRunEventBody,
   type BrainTurnOrigin,
@@ -68,7 +68,7 @@ import {
 
 const NOW = 1_800_000_000_000;
 
-type TurnFailure = NonNullable<BrainRequestRecord["failure"]>;
+type TurnFailure = BrainRequestFailure;
 
 /** The one failure word the fixtures need, typed against the run's own set so a misspelling fails to compile. */
 const MODEL_FAILURE: TurnFailure = "model";

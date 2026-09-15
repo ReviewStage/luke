@@ -1,23 +1,9 @@
 import assert from "node:assert/strict";
 import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { test } from "vitest";
-import {
-  CONTEXT_ITEM_KIND,
-  contextItemId,
-  maximumVoiceContextSessions,
-  sessionContextText,
-} from "./standing-context.js";
+import { maximumVoiceContextSessions, sessionContextText } from "./standing-context.js";
 
 const OBSERVED_AT = 1_800_000_000_000;
-
-test("a context item is named apart from every other", () => {
-  const first = contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 1);
-
-  // The sequence rises rather than the name being reused: a delete that failed
-  // would otherwise leave the old item sitting under the new one's name.
-  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.SESSIONS, 2));
-  assert.notEqual(first, contextItemId(CONTEXT_ITEM_KIND.WORKSPACE_PROJECTS, 1));
-});
 
 test("the roster text holds still across clock ticks inside one age bucket and moves at its edge", () => {
   const minute = 60_000;

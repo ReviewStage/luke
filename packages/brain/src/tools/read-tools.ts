@@ -88,9 +88,3 @@ const READ_TRANSCRIPT: ReadToolModule = {
 
 /** The two reads, in the order the catalog lists them. */
 export const READ_TOOLS: readonly ReadToolModule[] = [LIST_SESSIONS, READ_TRANSCRIPT];
-
-const READ_TOOLS_BY_NAME = new Map(READ_TOOLS.map((tool) => [tool.name, tool]));
-
-export function readToolNamed(name: string): ReadToolModule | undefined {
-  return READ_TOOLS_BY_NAME.get(name);
-}

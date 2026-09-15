@@ -93,26 +93,6 @@ export function wakeInputText(events: readonly BrainWakeEvent[], now: number): s
   );
 }
 
-/**
- * The words a developer-ask turn opens with. Events that arrived since the
- * last turn ride along rather than waiting for their own, so the reply is
- * given knowing what just changed and the memory never skips them.
- */
-export function askInputText(
-  question: string,
-  eventsSinceLastTurn: readonly BrainWakeEvent[],
-  now: number,
-): string {
-  return marked(
-    BRAIN_INPUT_MARKER.DEVELOPER_ASK,
-    now,
-    JSON.stringify({
-      question,
-      events_since_last_turn: eventsSinceLastTurn.map(eventRecord),
-    }),
-  );
-}
-
 function deliveryRecord(delivery: BrainDelivery): WireRecord {
   return {
     briefing: delivery.briefing,

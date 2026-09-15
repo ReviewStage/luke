@@ -250,9 +250,3 @@ export const WORKSPACE_TOOLS: readonly WorkspaceToolModule[] = [
   LIST_DAILY_NOTES,
   LOAD_SKILL,
 ];
-
-const WORKSPACE_TOOLS_BY_NAME = new Map(WORKSPACE_TOOLS.map((tool) => [tool.name, tool]));
-
-export function workspaceToolNamed(name: string): WorkspaceToolModule | undefined {
-  return WORKSPACE_TOOLS_BY_NAME.get(name);
-}

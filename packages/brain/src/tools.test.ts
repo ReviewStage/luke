@@ -18,7 +18,6 @@ import {
   BRAIN_TOOLS,
   brainToolCatalog,
   brainToolRegistry,
-  brainToolSchemas,
   hostedBrainToolCatalog,
   isBrainOnlyTool,
   resolveTurnToolPolicy,
@@ -79,9 +78,6 @@ test("with no configured layers every turn is offered the whole catalog, and onl
   );
   assert.ok(!configured.allows(BRAIN_TOOL.ANNOUNCE));
   assert.equal(configured.deniedBy(BRAIN_TOOL.ANNOUNCE), TOOL_POLICY_LAYER.SESSION);
-  assert.equal(brainToolSchemas(wake).length, brainToolCatalog().length);
-  assert.equal(brainToolSchemas(ask).length, brainToolCatalog().length - 1);
-  for (const schema of brainToolSchemas(wake)) assert.ok(schema.name.length > 0);
 });
 
 test("a configured deny of the actions group removes every action and keeps the reads", () => {
