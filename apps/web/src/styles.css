@@ -157,14 +157,11 @@
   --complete-tint: rgba(111, 220, 164, 0.14);
 
   /* The admin dashboard's chart series, declared here because that page is
-     the one chart surface and it opts into this theme. The accent cyan and
-     the state green themselves sit too light for a mark on the dark card —
-     side by side they blur (ΔE 13.6) — so each slot is a darker step of the
-     same hue family, validated as a categorical pair against the card at
-     #101114 (worst CVD ΔE 15.4; 6.1:1 and 6.3:1, both ≥ 3:1): voice keeps
-     the working cyan's family, attention reviews keep complete's. */
+     the one chart surface and it opts into this theme. The accent cyan itself
+     sits too light for a mark on the dark card, so the slot is a darker step
+     of the same hue family, validated against the card at #101114 (6.1:1,
+     ≥ 3:1). */
   --chart-1: #2f9bd8;
-  --chart-2: #35a877;
 }
 
 @layer base {

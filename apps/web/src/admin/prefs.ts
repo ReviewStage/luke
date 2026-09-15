@@ -1,6 +1,6 @@
 import { ACCOUNTS_SORT_KEY, type AccountsSort, SORT_DIRECTION } from "./accounts-table/sort";
 
-export interface RememberedFlag {
+interface RememberedFlag {
   read(): boolean;
   write(value: boolean): void;
 }
@@ -55,7 +55,7 @@ export const SIDEBAR_COLLAPSED = rememberedFlag("luke-admin-sidebar-collapsed");
  */
 export const ADMINS_HIDDEN = rememberedFlag("luke-admin-hide-admins", true);
 
-export interface RememberedValue<T> {
+interface RememberedValue<T> {
   read(): T | undefined;
   write(value: T): void;
 }

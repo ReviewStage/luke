@@ -19,7 +19,7 @@ export type AdminRead<T> =
 /** Reads a 200's body. Every other status is the hook's, so this never branches. */
 export type AdminReader<T> = (response: Response) => Promise<T>;
 
-export interface AdminReadOptions<T> {
+interface AdminReadOptions<T> {
   /** False parks the read: no fetch, no abort, the state stands. Default true. */
   enabled?: boolean;
   /**

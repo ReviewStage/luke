@@ -34,7 +34,7 @@ export const SORT_DIRECTION = {
   DESCENDING: "descending",
 } as const;
 
-export type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
+type SortDirection = (typeof SORT_DIRECTION)[keyof typeof SORT_DIRECTION];
 
 /** A column's first press: names read forward, counts and dates largest first. */
 export const ACCOUNTS_SORT_FIRST_DIRECTION = {

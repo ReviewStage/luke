@@ -25,7 +25,7 @@ export const ACCOUNTS_TABLE_MIN_WIDTH = {
   ROSTER: "min-w-[760px]",
 } as const;
 
-export type AccountsTableMinWidth =
+type AccountsTableMinWidth =
   (typeof ACCOUNTS_TABLE_MIN_WIDTH)[keyof typeof ACCOUNTS_TABLE_MIN_WIDTH];
 
 /**
