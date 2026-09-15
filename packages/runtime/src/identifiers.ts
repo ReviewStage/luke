@@ -67,7 +67,7 @@ export const CONVERSATION_KIND = {
   MAIN: "main",
   THREAD: "thread",
   OBSERVED: "observed",
-  /** A child's conversation: delegated work of the same agent, archived on the child service's clock. */
+  /** A child's conversation: delegated work of the same agent. */
   CHILD: "child",
   UNKNOWN: "unknown",
 } as const;
@@ -101,7 +101,7 @@ export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGEN
   );
 }
 
-/** A child's conversation: `agent:<agentId>:subagent:<childId>`, the id minted by the host. */
+/** A child's conversation: `agent:<agentId>:subagent:<childId>`, the id being that conversation's uuid. */
 export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
   if (!isIdentifier(childId) || childId.includes(SESSION_KEY_SEPARATOR)) {
     throw new TypeError("child identifier must be a non-empty string without separators");

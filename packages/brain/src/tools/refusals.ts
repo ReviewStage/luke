@@ -36,9 +36,6 @@ export const SPAWN_REFUSAL_REASON = {
   [CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT]:
     "not run: this conversation already has its limit of active children",
   [CHILD_SPAWN_REFUSAL.GLOBAL_LIMIT]: "not run: every child execution slot is taken",
-  [CHILD_SPAWN_REFUSAL.BLOCKED_COMPLETIONS]:
-    "not run: too many completions are blocked awaiting delivery",
-  [CHILD_SPAWN_REFUSAL.FORK_OTHER_AGENT]: "not run: a fork must stay within the same agent",
   [CHILD_SPAWN_REFUSAL.PERSISTENCE]: "not run: the child's record could not be written",
   [CHILD_SPAWN_REFUSAL.STOPPED]: "not run: delegation is stopped",
 } as const satisfies Record<ChildSpawnRefusal, string>;

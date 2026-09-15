@@ -3,7 +3,6 @@ export {
   type ChildCancellation,
   type ChildSpawnOutcome,
   type ChildSpawnRefusal,
-  type ForkSnapshot,
 } from "./children.js";
 export {
   ObservationLoop,

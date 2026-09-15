@@ -8,24 +8,11 @@
  * not the barrel, which reaches `node:fs`.
  */
 
+export { ChildRunStatusSchema } from "./child-records.effect.js";
 export {
-  ChildCleanupSchema,
-  ChildContextModeSchema,
-  ChildRunStatusSchema,
-} from "./child-records.effect.js";
-export {
-  CHILD_CLEANUP,
-  CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
-  type ChildCleanup,
-  type ChildCompletionRecord,
-  type ChildContextMode,
-  type ChildPolicyMetadata,
   type ChildRunRecord,
   type ChildSpawnReceipt,
-  COMPLETION_DELIVERY_STATUS,
-  isChildCleanup,
-  isChildContextMode,
   isTerminalChildRunStatus,
 } from "./child-records.js";
 export {
