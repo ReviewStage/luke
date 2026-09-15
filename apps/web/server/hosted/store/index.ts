@@ -3,6 +3,7 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
+import { type ChildRecord, listChildren, readChild } from "./children.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
@@ -143,6 +144,10 @@ export interface HostedStore {
       identity: SessionIdentity,
       now: number,
     ): HostedStoreEffect<string | undefined>;
+    /** The account's standing children, newest first and at most `limit` of them, each where its latest turn leaves it. */
+    children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
+    /** One of the account's standing children by id, on the same terms; nothing where none stands. */
+    child(userId: string, childId: string): HostedStoreEffect<ChildRecord | undefined>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
@@ -270,6 +275,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       standing: (userId) => standingConversations(userId),
       observed: (userId, identity, now) =>
         standingObservedConversation(userId, identity, new Date(now)),
+      children: (userId, limit) => listChildren(userId, limit),
+      child: (userId, childId) => Effect.map(readChild(userId, childId), Option.getOrUndefined),
     },
     main: {
       clear: (userId, now) => clearMainConversation(userId, now),
@@ -316,6 +323,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
   };
 }
 
+export { CHILD_STATUS, type ChildRecord } from "./children.js";
 export { promptHashOf, toolSetHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";
 export {
