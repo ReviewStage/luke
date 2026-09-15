@@ -57,6 +57,8 @@ const GATEWAY_METHODS = {
   CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
   /** The developer's thumb on one of Luke's messages, or the press that takes it back, carried to the service as a rating event beside it. */
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
+  /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
+  CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
   NODE_REGISTER: { name: "node.register", mutates: true },
   NODE_UNREGISTER: { name: "node.unregister", mutates: true },
   NODE_INVOKE: { name: "node.invoke", mutates: true },

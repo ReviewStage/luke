@@ -216,6 +216,47 @@ async function clear(composer: ReturnType<typeof composeConversation>) {
   return result.cleared;
 }
 
+test("a refresh asked for by a method runs a pass now and answers once it has, and a closed gate answers without reading", async () => {
+  const { composer, client, views } = harness();
+  const handler = composer.methods[GATEWAY_METHOD.CONVERSATION_REFRESH];
+  assert.ok(handler);
+  const refresh = () =>
+    Effect.runPromise(
+      handler(
+        {},
+        {
+          client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+          request: {
+            protocolVersion: GATEWAY_PROTOCOL_VERSION,
+            method: GATEWAY_METHOD.CONVERSATION_REFRESH,
+            params: {},
+          },
+        },
+      ),
+    );
+  assert.deepEqual(await refresh(), {});
+  assert.deepEqual(client.calls, ["messages:", "events:", "turns:"]);
+  assert.equal(views().length, 1);
+
+  const closed = harness({ active: false });
+  const closedHandler = closed.composer.methods[GATEWAY_METHOD.CONVERSATION_REFRESH];
+  assert.ok(closedHandler);
+  await Effect.runPromise(
+    closedHandler(
+      {},
+      {
+        client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+        request: {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          method: GATEWAY_METHOD.CONVERSATION_REFRESH,
+          params: {},
+        },
+      },
+    ),
+  );
+  assert.deepEqual(closed.client.calls, []);
+});
+
 test("without a device row a poll reads every resource, and tells every client once when the picture moved", async () => {
   const { composer, client, views } = harness();
   assert.deepEqual(composer.snapshot(), { groups: [], settled: false });

@@ -43,6 +43,11 @@ export function registerDesktopIpc(services: DesktopServices): void {
     // service did not take leaves the thread standing and is reported to the
     // panel as refused.
     clearConversation: () => operator.host.clearConversation(),
+    // A spoken line settled: the record is being written, so the poll is asked
+    // to read now rather than at its cadence; nothing waits on the read.
+    refreshConversation: () => {
+      void run(operator.host.refreshConversation());
+    },
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
     liveDiagnostics: () => operator.host.liveDiagnostics(),

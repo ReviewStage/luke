@@ -398,6 +398,13 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   }
 
   const methods: GatewayMethodTable = {
+    // A pass asked for now rather than at the cadence: the voice window saw a
+    // spoken line settle, which is when the service starts writing it, and the
+    // panel draws the line until the record shows it, so the sooner the read
+    // the shorter the line stands ahead of its row. The loop coalesces the ask
+    // with any pass under way and gates it like every pass; the answer is that
+    // the pass it earned has run, or that the gate was closed.
+    [GATEWAY_METHOD.CONVERSATION_REFRESH]: () => Effect.as(loop.refresh, {}),
     [GATEWAY_METHOD.CONVERSATION_CLEAR]: () =>
       Effect.gen(function* () {
         if (!gate()) return { cleared: false };

@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import { runModeFor } from "@sidecar/host";
+import { CONVERSATION_ENTRY_KIND, type LiveConversationLine } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { Context, Effect } from "effect";
 import type { WebContents } from "electron";
 import { test } from "vitest";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
-import { VOICE_COMMAND, VOICE_COMMAND_OUTCOME } from "#shared/messages/voice-view";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  VOICE_COMMAND_OUTCOME,
+  type VoiceView,
+} from "#shared/messages/voice-view";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
-import { type VoiceWindowSurface, voiceRuntimeActRows } from "./voice-runtime";
+import {
+  recordMovedUnderLines,
+  type VoiceWindowSurface,
+  voiceRuntimeActRows,
+  voiceRuntimeReports,
+} from "./voice-runtime";
 
 /**
  * The Clear through the real row and the real router: the voice window must be
@@ -38,6 +49,7 @@ const RUN = {
 function fixture(clearConversation: () => Effect.Effect<boolean>) {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
   const liveCalls: string[] = [];
+  let refreshes = 0;
   // SAFETY: the row reads senders by identity alone; two distinct inert objects are two windows.
   const panelSender = {} as WebContents;
   // SAFETY: a second inert object, so the row reads two distinct windows.
@@ -92,7 +104,11 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
     recordProductEvent: () => undefined,
     clearConversation,
     setShortcutCapturing: () => undefined,
+    refreshConversation: () => {
+      refreshes += 1;
+    },
   };
+  const reports = voiceRuntimeReports(dependencies);
   // SAFETY: only the voice rows are under test; the router dispatches on the
   // kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(voiceRuntimeActRows(dependencies) as ActRows);
@@ -111,7 +127,23 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
     );
   const perform = (sender: WebContents, act: Parameters<typeof router.performAct>[0]) =>
     Effect.runPromise(router.performAct(act, senderOf(sender)));
-  return { command, perform, liveCalls, sentToVoice, panelSender, voiceSender };
+  const report = (sender: WebContents, view: VoiceView) =>
+    reports.reportVoiceView({ sender }, view, undefined);
+  return {
+    command,
+    perform,
+    report,
+    liveCalls,
+    sentToVoice,
+    panelSender,
+    voiceSender,
+    state: dependencies.state,
+    refreshes: () => refreshes,
+  };
+}
+
+function line(rowId: number, words: string, settled: boolean): LiveConversationLine {
+  return { rowId, entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words }, settled };
 }
 
 test("the five live session acts reach the host from the voice window alone", async () => {
@@ -204,4 +236,58 @@ test("a Clear from anything but a panel clears nothing and tells the voice windo
   assert.deepEqual(await f.command(f.voiceSender), { status: "done", value: undefined });
   assert.equal(cleared, 0);
   assert.deepEqual(f.sentToVoice, []);
+});
+
+test("the record is read now when a reported line settles or leaves with its call, and not for a report that moved neither", () => {
+  const growing = [line(1, "Two sessions", false)];
+  const grown = [line(1, "Two sessions finished", false)];
+  const settled = [line(1, "Two sessions finished.", true)];
+  const another = [...settled, line(2, "One is waiting", false)];
+  assert.equal(recordMovedUnderLines([], growing), false);
+  assert.equal(recordMovedUnderLines(growing, grown), false);
+  assert.equal(
+    recordMovedUnderLines(grown, settled),
+    true,
+    "a row settled: the service is writing it",
+  );
+  assert.equal(
+    recordMovedUnderLines(settled, another),
+    false,
+    "a fresh row is nothing written yet",
+  );
+  assert.equal(
+    recordMovedUnderLines(another, []),
+    true,
+    "the call closed: whatever stood is written",
+  );
+  assert.equal(recordMovedUnderLines([], []), false);
+});
+
+test("the voice window's report is written to the document and asks for a read only when the record moved under a line; a panel's report is ignored", () => {
+  const f = fixture(() => Effect.succeed(true));
+  const speaking: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: "speaking",
+    lukeSpeaking: true,
+    liveConversationLines: [line(1, "Two sessions", false)],
+  };
+  f.report(f.voiceSender, speaking);
+  assert.deepEqual(
+    f.state.snapshot().voice.view?.liveConversationLines,
+    speaking.liveConversationLines,
+  );
+  assert.equal(f.refreshes(), 0);
+  const settled: VoiceView = {
+    ...speaking,
+    liveConversationLines: [line(1, "Two sessions finished.", true)],
+  };
+  f.report(f.voiceSender, settled);
+  assert.equal(f.refreshes(), 1);
+  f.report(f.voiceSender, { ...settled, lukeSpeaking: false });
+  assert.equal(f.refreshes(), 1, "a report that moved only the speaker asks for nothing");
+  f.report(f.voiceSender, IDLE_VOICE_VIEW);
+  assert.equal(f.refreshes(), 2, "the call closing writes what stood");
+  f.report(f.panelSender, settled);
+  assert.deepEqual(f.state.snapshot().voice.view, IDLE_VOICE_VIEW);
+  assert.equal(f.refreshes(), 2);
 });

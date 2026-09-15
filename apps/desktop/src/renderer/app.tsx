@@ -457,9 +457,9 @@ export function App(): React.JSX.Element {
     stopSpeaking,
     requestMicrophoneAccess,
     clearConversationLines,
+    liveConversationEntries,
   } = useVoiceView();
-  const { voiceError, voiceNotice, talkOpening, liveConversationEntries, spokenAskPending } =
-    voiceView;
+  const { voiceError, voiceNotice, talkOpening, spokenAskPending } = voiceView;
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };

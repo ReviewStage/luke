@@ -34,16 +34,21 @@ function overWire(view: VoiceView): UnparsedWireValue {
   return JSON.parse(JSON.stringify(view)) as UnparsedWireValue;
 }
 
-test("a view carrying a caption and its streaming line is a voice view", () => {
+test("a view carrying a caption and its live lines, settled or not, is a voice view", () => {
   const line = streamingConversationEntry(CONVERSATION_ENTRY_KIND.REPLY, "On my way.");
+  const said = streamingConversationEntry(CONVERSATION_ENTRY_KIND.ASK, "Where are we?");
   assert.ok(line);
+  assert.ok(said);
   assert.equal(
     isVoiceView(
       overWire({
         ...IDLE_VOICE_VIEW,
         voiceStatus: LIVE_STATUS.SPEAKING,
         lukeCaptions: ["On my way."],
-        liveConversationEntries: [line],
+        liveConversationLines: [
+          { rowId: 1, entry: said, settled: true },
+          { rowId: 2, entry: line, settled: false },
+        ],
       }),
     ),
     true,
@@ -57,7 +62,7 @@ test("a view carrying the developer's own caption is a voice view, and a malform
     ...IDLE_VOICE_VIEW,
     voiceStatus: LIVE_STATUS.LISTENING,
     developerCaptions: ["what needs me"],
-    liveConversationEntries: [line],
+    liveConversationLines: [{ rowId: 1, entry: line, settled: false }],
   };
   assert.equal(isVoiceView(overWire(view)), true);
   // SAFETY: the guard under test exists to refuse a caption list that is one string, which the type forbids building.
@@ -65,12 +70,14 @@ test("a view carrying the developer's own caption is a voice view, and a malform
   assert.equal(isVoiceView(overWire(malformed)), false);
 });
 
-test("a streaming line refuses empty words or an unknown kind", () => {
+test("a live line refuses empty words, an unknown kind, or a row without its id and settle", () => {
   assert.equal(
     isVoiceView(
       overWire({
         ...IDLE_VOICE_VIEW,
-        liveConversationEntries: [{ kind: CONVERSATION_ENTRY_KIND.REPLY, words: "" }],
+        liveConversationLines: [
+          { rowId: 1, entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "" }, settled: false },
+        ],
       }),
     ),
     false,
@@ -79,8 +86,22 @@ test("a streaming line refuses empty words or an unknown kind", () => {
     isVoiceView(
       overWire({
         ...IDLE_VOICE_VIEW,
-        // SAFETY: the test hands the guard a kind it must refuse, which the view type cannot spell.
-        liveConversationEntries: [{ kind: "not-a-kind" as "reply", words: "words" }],
+        liveConversationLines: [
+          // SAFETY: the test hands the guard a kind it must refuse, which the view type cannot spell.
+          { rowId: 1, entry: { kind: "not-a-kind" as "reply", words: "words" }, settled: false },
+        ],
+      }),
+    ),
+    false,
+  );
+  assert.equal(
+    isVoiceView(
+      // SAFETY: the test hands the guard a line missing its row, which the view type cannot spell.
+      overWire({
+        ...IDLE_VOICE_VIEW,
+        liveConversationLines: [
+          { entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "words" } },
+        ] as unknown as VoiceView["liveConversationLines"],
       }),
     ),
     false,

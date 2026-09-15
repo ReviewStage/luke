@@ -78,7 +78,13 @@ const VOICE_VIEW = {
   talkOpening: false,
   lukeCaptions: ["Claude Code finished checkout."],
   developerCaptions: undefined,
-  liveConversationEntries: [{ kind: "reply", words: "Checkout is green.", recordedAt: 12 }],
+  liveConversationLines: [
+    {
+      rowId: 1,
+      entry: { kind: "reply", words: "Checkout is green.", recordedAt: 12 },
+      settled: false,
+    },
+  ],
   spokenAskPending: false,
 };
 

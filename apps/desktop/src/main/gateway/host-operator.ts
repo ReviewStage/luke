@@ -172,6 +172,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Conversation tab's Clear: the service's soft delete of the account's main conversation, answered as whether it landed. */
   clearConversation(): Effect.Effect<boolean>;
+  /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
+  refreshConversation(): Effect.Effect<void>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
   rateConversationMessage(
     messageId: string,
@@ -466,6 +468,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CONVERSATION_CLEAR),
         (answer) => record(answer)?.cleared === true,
       ),
+    refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
     rateConversationMessage: (messageId, rating) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),

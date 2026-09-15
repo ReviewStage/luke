@@ -4,7 +4,7 @@ import {
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, liveExchangeActive } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import { type Context, Deferred, Effect, Exit, Fiber, type Scope } from "effect";
 import type {
   LiveCaptionRow,
@@ -43,8 +43,13 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own rows while they are still being said, under the captions preference alone. */
   developerCaptions: readonly string[] | undefined;
-  /** Both speakers' rows still being spoken, ahead of the record the host writes once each settles. */
-  liveConversationEntries: readonly ConversationEntry[];
+  /**
+   * Both speakers' rows of the standing call, settled or not, for the
+   * Conversation tab to draw ahead of the record: a row settling is when the
+   * service starts writing it, and the panel keeps the line until the record
+   * shows it, so nothing is dropped here on a clock.
+   */
+  liveConversationLines: readonly LiveCaptionRow[];
   /** Whether the developer is being heard and has not been transcribed yet. */
   spokenAskPending: boolean;
 }
@@ -87,7 +92,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.talkOpening === right.talkOpening &&
     left.lukeCaptions === right.lukeCaptions &&
     left.developerCaptions === right.developerCaptions &&
-    left.liveConversationEntries === right.liveConversationEntries &&
+    left.liveConversationLines === right.liveConversationLines &&
     left.spokenAskPending === right.spokenAskPending &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
@@ -137,7 +142,9 @@ export class LiveVoiceOrchestrator {
   #rows: readonly LiveCaptionRow[] = [];
   #lukeCaptions: readonly string[] | undefined;
   #developerCaptions: readonly string[] | undefined;
-  #liveEntries: readonly ConversationEntry[] = [];
+  #liveLines: readonly LiveCaptionRow[] = [];
+  /** Whether a row of the developer's is still being said, which is what tells a fresh ask's place from one already written on. */
+  #askBeingSaid = false;
   #talkOpening = false;
   /** Whether the microphone was last heard live, kept across the call's own end so a lost session knows what it was carrying. */
   #lastListening = false;
@@ -468,13 +475,16 @@ export class LiveVoiceOrchestrator {
    * The captions as the panel draws them: Luke's words under the housing
    * while he speaks and there is a reason to read them, the developer's own
    * words while they are still being said and the captions preference asks
-   * for them, and every row still being spoken as a line the Conversation
-   * tab draws ahead of the record. A silent output is a reason to read Luke,
-   * who could not otherwise be heard, and no reason to read the developer,
-   * who said the words themselves; so their captions follow the preference
-   * alone. A developer row is unsettled for the ledger's gap after its last
-   * fragment, which is what keeps a finished sentence on screen a moment
-   * after the transcript catches up with it.
+   * for them, and every row of the call, settled or not, as a line the
+   * Conversation tab draws ahead of the record. A silent output is a reason to
+   * read Luke, who could not otherwise be heard, and no reason to read the
+   * developer, who said the words themselves; so their captions follow the
+   * preference alone. A developer row is unsettled for the ledger's gap after
+   * its last fragment, which is what keeps a finished sentence on screen a
+   * moment after the transcript catches up with it. A settled row is not
+   * dropped from the lines here: the panel drops a line once the record shows
+   * it, so the words never leave the screen between the settle and the read
+   * that brings them back.
    */
   #recomposeCaptions(): void {
     const unsettled = this.#rows.filter((row) => !row.settled);
@@ -494,8 +504,8 @@ export class LiveVoiceOrchestrator {
     if (!sameWords(this.#developerCaptions, nextDeveloperCaptions)) {
       this.#developerCaptions = nextDeveloperCaptions;
     }
-    const nextEntries = unsettled.map((row) => row.entry);
-    if (!sameEntries(this.#liveEntries, nextEntries)) this.#liveEntries = nextEntries;
+    if (!sameLines(this.#liveLines, this.#rows)) this.#liveLines = this.#rows;
+    this.#askBeingSaid = unsettled.some((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK);
   }
 
   #compose(): LiveVoiceView {
@@ -508,10 +518,8 @@ export class LiveVoiceOrchestrator {
       talkOpening: this.#talkOpening,
       lukeCaptions: this.#lukeCaptions,
       developerCaptions: this.#developerCaptions,
-      liveConversationEntries: this.#liveEntries,
-      spokenAskPending:
-        this.#status === LIVE_STATUS.LISTENING &&
-        !this.#liveEntries.some((entry) => entry.kind === CONVERSATION_ENTRY_KIND.ASK),
+      liveConversationLines: this.#liveLines,
+      spokenAskPending: this.#status === LIVE_STATUS.LISTENING && !this.#askBeingSaid,
     };
   }
 
@@ -548,10 +556,16 @@ function sameWords(
   return left.every((word, index) => word === right[index]);
 }
 
-function sameEntries(left: readonly ConversationEntry[], right: readonly ConversationEntry[]) {
+function sameLines(left: readonly LiveCaptionRow[], right: readonly LiveCaptionRow[]) {
   if (left.length !== right.length) return false;
-  return left.every((entry, index) => {
+  return left.every((line, index) => {
     const other = right[index];
-    return other !== undefined && entry.kind === other.kind && entry.words === other.words;
+    return (
+      other !== undefined &&
+      line.rowId === other.rowId &&
+      line.settled === other.settled &&
+      line.entry.kind === other.entry.kind &&
+      line.entry.words === other.entry.words
+    );
   });
 }

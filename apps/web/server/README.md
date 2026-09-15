@@ -861,11 +861,16 @@ What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
 voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
 handed to `observe` in arrival order and the writer takes what it keeps —
 each transcript delta a segment, and, through the two utterance doors the
-service calls as an utterance settles, an exchange the voice model answered
-itself as two finished rows cut from those segments: the developer's line
-and Luke's answer (a delegated exchange's answer is the turn's journal and is
-not written twice; a delegation arriving after the developer's line settled
-adopts that row under its id rather than cutting a second). A
+service calls as an utterance settles, each speaker's settled utterance as a
+finished row cut from those segments: the developer's line, and every
+utterance of Luke's as an assistant row authored by the voice model, whatever
+prompted it — an answer it gave itself, what it said around an ask handed to
+the brain, a briefing or the brain's reply read aloud, a greeting or a beat
+spoken from the build's script — so the Conversation shows what the developer
+actually heard, and a reading stands beside the message it was read from
+rather than in place of it. A delegation arriving after the
+developer's line settled adopts that row under its id rather than cutting a
+second. A
 `session.delegation.created` is the one event held rather than consumed as it
 arrives: the writer cuts the developer's ask from the segments already on
 record before the delegation's offset, and the API may deliver the delegation
@@ -1381,13 +1386,13 @@ with the device that opened it, its delegation mode, when it started and
 closed, the API's own close reason, and a `usage` payload of billed seconds
 with a flag saying whether the API confirmed them or a lost connection left
 them estimated. A segment is one span of what was actually said, by whom, in
-milliseconds on the session's clock. What is spoken becomes a message in one
-case, an exchange the voice model answers itself: the developer's settled
-utterance and Luke's settled answer are each cut from these segments into a
-finished row of the conversation, so the Conversation keeps that exchange as
-it keeps a delegated one. A delegated exchange's reply is the assistant
-message the brain wrote, and what the voice said of it lives here as segments
-alone. No audio is ever stored.
+milliseconds on the session's clock. What is spoken becomes a message as each
+utterance settles: the developer's line and every utterance of Luke's are each
+cut from these segments into a finished row of the conversation, so the
+Conversation keeps the words the developer actually heard. A delegated
+exchange's reply is also the assistant message the brain wrote, and Luke's
+reading of it stands beside that message as its own row. No audio is ever
+stored.
 
 Two writers share those tables and never a column. The voice service's own
 `server/voice/session-record.ts` owns the session row's whole life: it is

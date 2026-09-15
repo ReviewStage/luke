@@ -1,11 +1,12 @@
 import { PRODUCT_EXCHANGE_KIND, type ProductExchangeKind } from "@sidecar/analytics";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
-import { type ConversationEntry, storedConversationEntry } from "@sidecar/session";
+import { type LiveConversationLine, storedConversationEntry } from "@sidecar/session";
 import {
   isOptionalWireString,
   isRecord,
   isUnitLevel,
   isWireBoolean,
+  isWireNumber,
   isWireString,
   type UnparsedWireValue,
   type WireRecord,
@@ -38,13 +39,15 @@ export interface VoiceView extends VoiceSpeakers {
   /** The developer's own words still being said, drawn only under the captions preference. */
   developerCaptions: readonly string[] | undefined;
   /**
-   * The lines still being said, as `streamingConversationEntry` builds them:
-   * a kind and words, and no timestamp, because a line still growing has not
-   * happened yet. Read under the unstrict parse for that reason — the strict
-   * one refuses every unstamped line, which would drop the whole report at
-   * exactly the edges that carry a caption.
+   * Both speakers' rows of the standing call, each the ledger's row id, its
+   * line as `streamingConversationEntry` builds it — a kind and words, and no
+   * timestamp, because a line still growing has not happened yet — and
+   * whether it has settled. A settled row is still reported: the panel keeps
+   * drawing it until the record shows it. The line is read under the unstrict
+   * parse — the strict one refuses every unstamped line, which would drop the
+   * whole report at exactly the edges that carry a caption.
    */
-  liveConversationEntries: readonly ConversationEntry[];
+  liveConversationLines: readonly LiveConversationLine[];
   /**
    * Whether the developer is being heard and none of their words have been
    * transcribed yet, so Conversation can hold their place in the thread
@@ -116,7 +119,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   talkOpening: false,
   lukeCaptions: undefined,
   developerCaptions: undefined,
-  liveConversationEntries: [],
+  liveConversationLines: [],
   spokenAskPending: false,
 };
 
@@ -150,14 +153,14 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   ) {
     return false;
   }
-  const entries = value.liveConversationEntries;
-  return (
-    Array.isArray(entries) &&
-    entries.every((entry) => {
-      const streaming = storedConversationEntry(entry, { strict: false });
-      return streaming !== undefined && streaming.words.length > 0;
-    })
-  );
+  const lines = value.liveConversationLines;
+  return Array.isArray(lines) && lines.every(isLiveConversationLine);
+}
+
+function isLiveConversationLine(value: UnparsedWireValue): boolean {
+  if (!isRecord(value) || !isWireNumber(value.rowId) || !isWireBoolean(value.settled)) return false;
+  const streaming = storedConversationEntry(value.entry, { strict: false });
+  return streaming !== undefined && streaming.words.length > 0;
 }
 
 /**

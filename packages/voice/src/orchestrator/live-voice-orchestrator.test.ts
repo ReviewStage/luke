@@ -492,18 +492,22 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   assert.deepEqual(speaking?.lukeCaptions, ["Two sessions"]);
   assert.deepEqual(speaking?.developerCaptions, ["what needs me"]);
   assert.deepEqual(
-    speaking?.liveConversationEntries.map((entry) => entry.kind),
+    speaking?.liveConversationLines.map((line) => line.entry.kind),
     [CONVERSATION_ENTRY_KIND.ASK, CONVERSATION_ENTRY_KIND.REPLY],
   );
-  // A settled row leaves the live lines: the host has written it by then.
+  // A settled row stays a live line, marked settled: the service is writing
+  // it, and the panel keeps drawing it until the record shows it.
   call.events.onCaptions([
     row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
     row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
   ]);
   await settleFibers();
   assert.deepEqual(
-    f.views.at(-1)?.liveConversationEntries.map((entry) => entry.kind),
-    [CONVERSATION_ENTRY_KIND.REPLY],
+    f.views.at(-1)?.liveConversationLines.map((line) => [line.entry.kind, line.settled]),
+    [
+      [CONVERSATION_ENTRY_KIND.ASK, true],
+      [CONVERSATION_ENTRY_KIND.REPLY, false],
+    ],
   );
   assert.equal(f.views.at(-1)?.developerCaptions, undefined);
   // The count rose once for the whole exchange.
