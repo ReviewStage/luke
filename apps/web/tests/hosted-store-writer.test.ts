@@ -1539,7 +1539,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
     read_from: journal.id,
   });
 
-  // A turn that settled long before the words: they join it, but are a beat or an aside, not its reply.
+  // A turn that settled long before the words: an aside, standing where it was said under no turn.
   const stale = new Stream();
   await feed(target, [
     stale.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK, NOW - 11 * 60_000),
@@ -1550,7 +1550,7 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   await dispatched("dl_stale", stale.turnId);
   assert.ok((await spoken("aside-1", 20_000, 21_000, "dl_stale")).ok);
   const aside = (await storedMessages(target)).find((row) => row.clientId === "aside-1");
-  assert.equal(aside?.turnId, stale.turnId);
+  assert.equal(aside?.turnId, null);
   assert.deepEqual(aside?.metadata, {
     author: MESSAGE_AUTHOR.VOICE_MODEL,
     channel: MESSAGE_CHANNEL.VOICE,

@@ -1767,9 +1767,10 @@ const NOTHING_READ: ReadAloudSource = { turnId: undefined, messageId: undefined 
  * whose speech began inside the span comes first, since a briefing is said
  * whatever line stood before it, and the developer's latest line stays a
  * delegation's for as long as no line follows it. Otherwise, under a
- * delegation whose turn is known, the utterance belongs to that turn, and is
- * its reply read aloud where the turn had settled within the window before
- * the words were written. Anything else is his own words, read from nothing.
+ * delegation whose turn is known, the utterance joins that turn while the
+ * turn still runs, and joins it as its reply read aloud where the turn had
+ * settled within the window before the words were written; one long after
+ * the settle is an aside, read from nothing and standing where it was said.
  */
 function readAloudFrom(
   context: WriterContext,
@@ -1805,9 +1806,15 @@ function readAloudFrom(
       settledAt !== null &&
       context.now().getTime() - settledAt.getTime() <= READ_ALOUD_WINDOW_MS;
     const journal = settled ? yield* messageByClientId(context, turnId) : Option.none();
+    const readFrom = Option.isSome(journal) ? journal.value.id : undefined;
+    // The row joins the turn while the turn still runs — words said around the
+    // ask — or as the reply read aloud; an aside long after a settled turn
+    // stands on its own, where it was said, rather than sorting up into a turn
+    // that ended before words said between.
+    const running = Option.isSome(turn) && !TERMINAL_TURN_STATUSES.has(turn.value.status);
     return {
-      turnId,
-      messageId: Option.isSome(journal) ? journal.value.id : undefined,
+      turnId: running || readFrom !== undefined ? turnId : undefined,
+      messageId: readFrom,
     };
   });
 }
