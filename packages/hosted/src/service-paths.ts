@@ -30,7 +30,7 @@ export const HOSTED_SERVICE_PATH = {
    * The one endpoint a fresh install may call before any account exists: it
    * mints a single short-lived credential for the spoken onboarding
    * introduction, takes no bearer, and answers with the same mint shape the
-   * ordinary endpoint does, so `hostedMintAnswerSchema` validates both.
+   * ordinary endpoint does.
    */
   INTRODUCTION_MINT: "/api/voice/introduction-mint",
   ACCOUNT_DELETE: "/api/account/delete",

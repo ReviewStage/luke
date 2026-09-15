@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { hostedProjectsAnswerFromWire } from "@sidecar/hosted";
+import { hostedProjectsAnswerSchema } from "@sidecar/hosted";
+import { EXCESS_KEYS, type UnparsedWireValue } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import { Effect, type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import { encryptProviderKey } from "../server/hosted/encryption";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
@@ -10,6 +12,14 @@ import { handleProjects } from "../server/hosted/projects";
 import type { VaultKeyRow } from "../server/hosted/vault-route";
 import { runWithoutDatabase } from "./support/no-database";
 import { memoryObservationStore } from "./support/observation-store";
+
+/** An answer read: a key a newer service added is dropped rather than refused. */
+function parse<S extends EffectSchema.ConstraintDecoder<unknown>>(
+  schema: S,
+  value: UnparsedWireValue,
+): S["Type"] | undefined {
+  return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
+}
 
 const SECRET = "a".repeat(64);
 
@@ -191,7 +201,7 @@ test("a projects answer skips malformed entries rather than failing", () => {
       },
     ],
   };
-  const answer = hostedProjectsAnswerFromWire(JSON.parse(JSON.stringify(raw)));
+  const answer = parse(hostedProjectsAnswerSchema, JSON.parse(JSON.stringify(raw)));
   assert.ok(answer);
   assert.equal(answer.projects.length, 3);
   assert.equal(answer.projects[0]?.providerProjectId, "proj-1");
@@ -243,7 +253,7 @@ test("a provider that offered a project carries its agent table on the answer", 
     ),
   );
 
-  const answer = hostedProjectsAnswerFromWire(body);
+  const answer = parse(hostedProjectsAnswerSchema, body);
   assert.ok(answer);
   assert.equal(answer.agentModels.length, 3);
   const codex = answer.agentModels.find((entry) => entry.agent === "codex");

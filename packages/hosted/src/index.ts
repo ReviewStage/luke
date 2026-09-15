@@ -17,8 +17,6 @@ export {
   type HostedActionOutcome,
   type HostedActionTarget,
   type HostedActionWorkspaceOutcome,
-  type HostedAgentAddition,
-  type HostedWorkspaceCreation,
 } from "./action-client.js";
 export {
   type HostedActionAnswer,
@@ -134,12 +132,7 @@ export {
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
-export {
-  HOSTED_CALLS_URL,
-  HOSTED_WS_BASE_URL,
-  hostedMintAnswerAt,
-  hostedMintAnswerSchema,
-} from "./mint-wire.js";
+export { HOSTED_WS_BASE_URL } from "./mint-wire.js";
 export {
   NOTEBOOK_READ_BOUNDS,
   type NotebookAnswer,
@@ -152,14 +145,12 @@ export {
   type ObserveAnswer,
   type ObservedSession,
   type ObservedSessionControl,
-  observeAnswerFromWire,
   observeAnswerSchema,
 } from "./observe-wire.js";
 export {
   type HostedProjectsAnswer,
   type HostedWorkspaceAgentModels,
   type HostedWorkspaceProject,
-  hostedProjectsAnswerFromWire,
   hostedProjectsAnswerSchema,
 } from "./projects-wire.js";
 export {
@@ -242,11 +233,6 @@ export {
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
-export {
-  HostedSessionMessagesClient,
-  type HostedSessionMessagesClientOptions,
-  type SessionMessagesQuery,
-} from "./session-messages-client.js";
 export {
   decodeTurnEventFrame,
   encodeTurnEventFrame,

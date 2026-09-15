@@ -288,7 +288,3 @@ export const observeAnswerSchema = schemaAs<ObserveAnswer>(
     }),
   ),
 );
-
-export function observeAnswerFromWire(value: UnparsedWireValue): ObserveAnswer | undefined {
-  return admitted(observeAnswerSchema, value);
-}

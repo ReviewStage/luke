@@ -512,22 +512,10 @@ function admittedAnswer<Value, Encoded>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-export function sessionCreateFrameFromWire(
-  value: UnparsedWireValue,
-): SessionCreateFrame | undefined {
-  return admitted(sessionCreateFrameSchema, value);
-}
-
 export function sessionAudioCreateFrameFromWire(
   value: UnparsedWireValue,
 ): SessionAudioCreateFrame | undefined {
   return admitted(sessionAudioCreateFrameSchema, value);
-}
-
-export function sessionAttachFrameFromWire(
-  value: UnparsedWireValue,
-): SessionAttachFrame | undefined {
-  return admitted(sessionAttachFrameSchema, value);
 }
 
 export function sessionOpeningFrameFromWire(
@@ -540,14 +528,6 @@ export function sessionActivityFrameFromWire(
   value: UnparsedWireValue,
 ): SessionActivityFrame | undefined {
   return admitted(sessionActivityFrameSchema, value);
-}
-
-export function sessionStopFrameFromWire(value: UnparsedWireValue): SessionStopFrame | undefined {
-  return admitted(sessionStopFrameSchema, value);
-}
-
-export function sessionBeatFrameFromWire(value: UnparsedWireValue): SessionBeatFrame | undefined {
-  return admitted(sessionBeatFrameSchema, value);
 }
 
 export function sessionReportFrameFromWire(

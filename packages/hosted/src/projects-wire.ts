@@ -184,9 +184,3 @@ export const hostedProjectsAnswerSchema = schemaAs<HostedProjectsAnswer>(
     }),
   ),
 );
-
-export function hostedProjectsAnswerFromWire(
-  value: UnparsedWireValue,
-): HostedProjectsAnswer | undefined {
-  return admitted(hostedProjectsAnswerSchema, value);
-}

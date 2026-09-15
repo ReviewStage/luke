@@ -13,7 +13,6 @@ import * as conversationClearWire from "./conversation-clear-wire.js";
 import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
 import * as liveContract from "./live-contract.js";
-import * as mintWire from "./mint-wire.js";
 import * as notebookWire from "./notebook-wire.js";
 import * as observeWire from "./observe-wire.js";
 import * as projectsWire from "./projects-wire.js";
@@ -75,9 +74,6 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
     sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
-  "mint-wire": {
-    hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
-  } satisfies RecordedEffectJsonSchemas<typeof mintWire>,
   "notebook-wire": {
     notebookFileSchema: notebookWire.notebookFileSchema,
     notebookAnswerSchema: notebookWire.notebookAnswerSchema,
