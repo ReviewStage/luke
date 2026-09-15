@@ -40,22 +40,17 @@ public enum ConversationActionTool: String, Sendable {
 }
 
 /// The session a row names, drawn as a chip: its current title while the
-/// roster holds it, the title the envelope kept once it does not, under the
-/// mark of the agent behind it or its provider. The chip is the row's own
-/// press by another hand where the roster still holds the session, since a
-/// session's screen on the phone stands on its roster row; every other chip
-/// is a name.
+/// roster holds it, the title the envelope kept once it does not. The chip is
+/// the row's own press by another hand where the roster still holds the
+/// session, since a session's screen on the phone stands on its roster row;
+/// every other chip is a name.
 public struct ConversationToolRowChip: Equatable, Sendable {
     public let text: String
-    public let markId: String?
-    public let identity: SessionIdentity?
     /// The roster row the chip opens, while the roster holds one.
     public let session: RosterSession?
 
-    public init(text: String, markId: String? = nil, identity: SessionIdentity? = nil, session: RosterSession? = nil) {
+    public init(text: String, session: RosterSession? = nil) {
         self.text = text
-        self.markId = markId
-        self.identity = identity
         self.session = session
     }
 
@@ -225,22 +220,12 @@ public struct ConversationToolRow: Equatable, Sendable {
         _ identity: SessionIdentity?,
         target: ActionTargetSnapshot?,
         roster: [RosterSession],
-        fallbackName: String? = nil,
-        fallbackMark: String? = nil
+        fallbackName: String? = nil
     ) -> ConversationToolRowChip {
         if let session = rosterSession(identity, in: roster) {
-            return ConversationToolRowChip(
-                text: session.title,
-                markId: session.providerId,
-                identity: SessionIdentity(providerId: session.providerId, providerSessionId: session.sessionId),
-                session: session
-            )
+            return ConversationToolRowChip(text: session.title, session: session)
         }
-        return ConversationToolRowChip(
-            text: target?.title ?? fallbackName ?? unnamedSession,
-            markId: target?.agentId ?? fallbackMark ?? target?.providerId ?? identity?.providerId,
-            identity: identity
-        )
+        return ConversationToolRowChip(text: target?.title ?? fallbackName ?? unnamedSession)
     }
 
     private static func compose(
@@ -287,12 +272,11 @@ public struct ConversationToolRow: Equatable, Sendable {
             if case .accepted(_, let session, _, _) = envelope { created = session }
             let resolvedProvider = target?.providerId ?? input?[Argument.providerId]?.stringValue
             let name = input?[Argument.name]?.stringValue
-            let mark = input?[Argument.agent]?.stringValue ?? resolvedProvider
             let chip: ConversationToolRowChip? =
                 if let created {
-                    chip(created, target: target, roster: roster, fallbackName: name, fallbackMark: mark)
+                    chip(created, target: target, roster: roster, fallbackName: name)
                 } else if let name {
-                    ConversationToolRowChip(text: name, markId: mark)
+                    ConversationToolRowChip(text: name)
                 } else {
                     nil
                 }

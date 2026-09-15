@@ -216,8 +216,8 @@ final class ConversationThreadTests: XCTestCase {
         thread.apply(
             BrainTurnsAnswer(
                 turns: [
-                    BrainTurnRecord(turn: settled, conversationId: Self.main, cursor: "tc1"),
-                    BrainTurnRecord(turn: turn("t9", status: .queued, queuedAt: 900), conversationId: Self.main, cursor: "tc2"),
+                    BrainTurnRecord(turn: settled),
+                    BrainTurnRecord(turn: turn("t9", status: .queued, queuedAt: 900)),
                 ],
                 next: "tc2",
                 hasMore: false
@@ -232,7 +232,7 @@ final class ConversationThreadTests: XCTestCase {
 
     func testTheLatestSpeechEventDecidesWhetherABriefingReadsUnspoken() {
         var thread = ConversationThread()
-        let identity = ToolPartIdentity(toolCallId: "c1", toolName: "announce", state: .outputAvailable)
+        let identity = ToolPartIdentity(toolCallId: "c1", toolName: "announce")
         let announcement = ConversationReadMessage(
             message: reply(
                 id: "m1",
@@ -248,10 +248,7 @@ final class ConversationThreadTests: XCTestCase {
             )
         )
         func event(_ seq: Int, _ kind: ConversationEventKind) -> ConversationReadEvent {
-            ConversationReadEvent(
-                id: "e\(seq)", conversationId: Self.main, seq: seq, messageId: "m1", kind: kind,
-                createdAt: Date(timeIntervalSince1970: 100 + Double(seq))
-            )
+            ConversationReadEvent(seq: seq, messageId: "m1", kind: kind)
         }
         thread.apply(ConversationEventsAnswer(events: [event(1, .speechOffered), event(2, .speechExpired)], next: "e2", hasMore: false))
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: true)])
@@ -264,7 +261,7 @@ final class ConversationThreadTests: XCTestCase {
 
     func testAReplayStillPagingLeavesTheFoldedSpeechMarksStanding() {
         var thread = ConversationThread()
-        let identity = ToolPartIdentity(toolCallId: "c1", toolName: "announce", state: .outputAvailable)
+        let identity = ToolPartIdentity(toolCallId: "c1", toolName: "announce")
         let announcement = ConversationReadMessage(
             message: reply(
                 id: "m1",
@@ -280,10 +277,7 @@ final class ConversationThreadTests: XCTestCase {
             )
         )
         func event(_ seq: Int, _ kind: ConversationEventKind) -> ConversationReadEvent {
-            ConversationReadEvent(
-                id: "e\(seq)", conversationId: Self.main, seq: seq, messageId: "m1", kind: kind,
-                createdAt: Date(timeIntervalSince1970: 100 + Double(seq))
-            )
+            ConversationReadEvent(seq: seq, messageId: "m1", kind: kind)
         }
         thread.apply(ConversationEventsAnswer(events: [event(1, .speechOffered)], next: "e1", hasMore: true))
         XCTAssertEqual(thread.turnGroups[0].messages[0].tools, [.announce(identity, unspoken: true)])
@@ -360,10 +354,8 @@ final class ConversationThreadTests: XCTestCase {
 
     private func ratingEvent(_ seq: Int, _ rating: String?, messageId: String = "m1") -> ConversationReadEvent {
         ConversationReadEvent(
-            id: "r\(seq)", conversationId: Self.main, seq: seq, messageId: messageId, kind: .rating,
-            deviceId: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
-            payload: rating.map { .object(["rating": .string($0)]) } ?? .object([:]),
-            createdAt: Date(timeIntervalSince1970: 100 + Double(seq))
+            seq: seq, messageId: messageId, kind: .rating,
+            payload: rating.map { .object(["rating": .string($0)]) } ?? .object([:])
         )
     }
 

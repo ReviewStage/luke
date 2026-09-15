@@ -27,22 +27,6 @@ public struct RosterProject: Identifiable, Equatable, Sendable {
 
     public var id: String { "\(providerId):\(providerProjectId)" }
 
-    public init(
-        providerId: String,
-        providerProjectId: String,
-        repository: String,
-        taskSupport: ProjectTaskSupport,
-        targetName: String? = nil,
-        namesItself: Bool = false
-    ) {
-        self.providerId = providerId
-        self.providerProjectId = providerProjectId
-        self.repository = repository
-        self.taskSupport = taskSupport
-        self.targetName = targetName
-        self.namesItself = namesItself
-    }
-
     init?(json: [String: Any]) {
         guard
             let providerId = json["providerId"] as? String,

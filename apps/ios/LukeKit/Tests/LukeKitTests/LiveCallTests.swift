@@ -26,10 +26,6 @@ private final class FakeChannel: LiveDataChannel {
         return true
     }
 
-    func close() {
-        isOpen = false
-    }
-
     var sentTypes: [String] { sent.compactMap { $0["type"] as? String } }
 
     var sentIds: [String] { sent.compactMap { $0["event_id"] as? String } }
@@ -112,10 +108,6 @@ private final class FakeSideband: LiveSessionSideband {
     func hangUp() { sent.append(.hangUp) }
     func settleSends() async { settleCount += 1 }
     func close() { closeCount += 1 }
-
-    func deliver(_ event: HostedVoiceSessionEvent) {
-        continuation.yield(event)
-    }
 
     func endForGood(code: Int?) {
         continuation.yield(.closed(code: code))

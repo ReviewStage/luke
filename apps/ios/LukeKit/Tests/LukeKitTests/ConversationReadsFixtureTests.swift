@@ -59,8 +59,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
                 .action(
                     ToolPartIdentity(
                         toolCallId: "call_1a0000000000000001",
-                        toolName: "send_session_message",
-                        state: .outputAvailable
+                        toolName: "send_session_message"
                     ),
                     outcome: .accepted
                 ),
@@ -76,9 +75,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
             briefing.messages[0].tools,
             [
                 .announce(
-                    ToolPartIdentity(
-                        toolCallId: "call_3a0000000000000002", toolName: "announce", state: .outputAvailable
-                    ),
+                    ToolPartIdentity(toolCallId: "call_3a0000000000000002", toolName: "announce"),
                     unspoken: false
                 ),
             ]
@@ -90,19 +87,13 @@ final class ConversationReadsFixtureTests: XCTestCase {
         XCTAssertEqual(answer.events.map(\.kind), [.speechOffered, .speechClaimed, .rating])
         XCTAssertEqual(answer.events.map(\.seq), [1, 2, 3])
         XCTAssertEqual(Set(answer.events.map(\.messageId)), ["2b000000-0000-4000-8000-000000000032"])
-        XCTAssertNil(answer.events[0].deviceId)
-        XCTAssertEqual(answer.events[1].deviceId, "7c9e6679-7425-40de-944b-e07fc1f90ae7")
         XCTAssertEqual(answer.events[2].payload, .object(["rating": .string("up")]))
         XCTAssertFalse(answer.hasMore)
     }
 
-    func testTurnsAnswerDecodesEachTurnWithItsCursor() throws {
+    func testTurnsAnswerDecodesEachTurn() throws {
         let answer = try fixture(Fixture.turns, as: BrainTurnsAnswer.self)
         XCTAssertEqual(answer.turns.map(\.turn.origin), [.typed, .rosterDiff])
-        XCTAssertEqual(answer.turns.map(\.conversationId), [Self.main, Self.observed])
-        XCTAssertEqual(answer.turns[0].model, "gpt-5")
-        XCTAssertNil(answer.turns[1].model)
-        XCTAssertEqual(answer.turns.last?.cursor, answer.next)
         XCTAssertFalse(answer.hasMore)
     }
 
@@ -115,7 +106,6 @@ final class ConversationReadsFixtureTests: XCTestCase {
         XCTAssertEqual(changes.messages, messages.next)
         XCTAssertEqual(changes.events, events.next)
         XCTAssertEqual(changes.turns, turns.next)
-        XCTAssertEqual(changes.rosterObservedAt, Date(timeIntervalSince1970: 1_757_505_780))
     }
 
     func testAnUnknownEnumMemberRefusesTheAnswer() throws {

@@ -113,20 +113,12 @@ public struct ConversationViewTurn: Equatable, Sendable {
 public enum ConversationViewSource: Equatable, Sendable {
     case main
     case observed(SessionIdentity)
-
-    public var kind: ConversationViewSourceKind {
-        switch self {
-        case .main: .main
-        case .observed: .observed
-        }
-    }
 }
 
 /// A tool call's identity as the view names it beside its decision.
 public struct ToolPartIdentity: Equatable, Sendable {
     public let toolCallId: String
     public let toolName: String
-    public let state: ToolPartState
 }
 
 /// One tool call of a shown message as the view decided it —
@@ -229,33 +221,21 @@ public struct ConversationMessagesAnswer: Equatable, Sendable {
 
 /// One event row about a message — `ConversationReadEvent`.
 public struct ConversationReadEvent: Equatable, Sendable {
-    public let id: String
-    public let conversationId: String
     public let seq: Int
     public let messageId: String
     public let kind: ConversationEventKind
-    public let deviceId: String?
     public let payload: JSONValue?
-    public let createdAt: Date
 
     init(
-        id: String,
-        conversationId: String,
         seq: Int,
         messageId: String,
         kind: ConversationEventKind,
-        deviceId: String? = nil,
-        payload: JSONValue? = nil,
-        createdAt: Date
+        payload: JSONValue? = nil
     ) {
-        self.id = id
-        self.conversationId = conversationId
         self.seq = seq
         self.messageId = messageId
         self.kind = kind
-        self.deviceId = deviceId
         self.payload = payload
-        self.createdAt = createdAt
     }
 }
 
@@ -267,32 +247,10 @@ public struct ConversationEventsAnswer: Equatable, Sendable {
 }
 
 /// One turn as the turns endpoint answers it — `BrainTurnRecord`: the view's
-/// columns, the conversation it ran over, how it ended, and its own cursor.
-/// A turn is answered again each time a stamp on it moves, so a device
-/// replaces the turn it holds by id.
+/// columns. A turn is answered again each time a stamp on it moves, so a
+/// device replaces the turn it holds by id.
 public struct BrainTurnRecord: Equatable, Sendable {
     public let turn: ConversationViewTurn
-    public let conversationId: String
-    public let model: String?
-    public let failure: String?
-    public let cancelRequestedAt: Date?
-    public let cursor: String
-
-    init(
-        turn: ConversationViewTurn,
-        conversationId: String,
-        model: String? = nil,
-        failure: String? = nil,
-        cancelRequestedAt: Date? = nil,
-        cursor: String
-    ) {
-        self.turn = turn
-        self.conversationId = conversationId
-        self.model = model
-        self.failure = failure
-        self.cancelRequestedAt = cancelRequestedAt
-        self.cursor = cursor
-    }
 }
 
 /// The turns endpoint's answer — `BrainTurnsAnswer`; `next` is absent only
@@ -313,14 +271,12 @@ public struct ChangesAnswer: Equatable, Sendable {
     public let messages: String
     public let events: String
     public let turns: String?
-    public let rosterObservedAt: Date?
 
-    init(seen: Bool, messages: String, events: String, turns: String? = nil, rosterObservedAt: Date? = nil) {
+    init(seen: Bool, messages: String, events: String, turns: String? = nil) {
         self.seen = seen
         self.messages = messages
         self.events = events
         self.turns = turns
-        self.rosterObservedAt = rosterObservedAt
     }
 }
 
@@ -413,15 +369,14 @@ extension ConversationViewSource: Decodable {
 
 extension ConversationViewToolPart: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case toolCallId, toolName, state, kind, unspoken, outcome
+        case toolCallId, toolName, kind, unspoken, outcome
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let identity = ToolPartIdentity(
             toolCallId: try container.decodeIdentifier(forKey: .toolCallId),
-            toolName: try container.decodeIdentifier(forKey: .toolName),
-            state: try container.decodeRaw(ToolPartState.self, forKey: .state)
+            toolName: try container.decodeIdentifier(forKey: .toolName)
         )
         switch try container.decodeRaw(ConversationViewToolKind.self, forKey: .kind) {
         case .announce:
@@ -528,20 +483,16 @@ extension ConversationMessagesAnswer: Decodable {
 
 extension ConversationReadEvent: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case id, conversationId, seq, messageId, kind, deviceId, payload, createdAt
+        case seq, messageId, kind, payload
     }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            id: try container.decodeIdentifier(forKey: .id),
-            conversationId: try container.decodeIdentifier(forKey: .conversationId),
             seq: try container.decodeSequence(forKey: .seq),
             messageId: try container.decodeIdentifier(forKey: .messageId),
             kind: try container.decodeRaw(ConversationEventKind.self, forKey: .kind),
-            deviceId: try container.decodeIfPresent(String.self, forKey: .deviceId),
-            payload: try container.decodeIfPresent(JSONValue.self, forKey: .payload),
-            createdAt: try container.decodeInstant(forKey: .createdAt)
+            payload: try container.decodeIfPresent(JSONValue.self, forKey: .payload)
         )
     }
 }
@@ -563,8 +514,7 @@ extension ConversationEventsAnswer: Decodable {
 
 extension BrainTurnRecord: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case id, conversationId, origin, status, model, queuedAt, startedAt, settledAt, failure
-        case cancelRequestedAt, cursor
+        case id, origin, status, queuedAt, startedAt, settledAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -577,12 +527,7 @@ extension BrainTurnRecord: Decodable {
                 queuedAt: try container.decodeInstant(forKey: .queuedAt),
                 startedAt: try container.decodeInstantIfPresent(forKey: .startedAt),
                 settledAt: try container.decodeInstantIfPresent(forKey: .settledAt)
-            ),
-            conversationId: try container.decodeIdentifier(forKey: .conversationId),
-            model: try container.decodeIfPresent(String.self, forKey: .model),
-            failure: try container.decodeIfPresent(String.self, forKey: .failure),
-            cancelRequestedAt: try container.decodeInstantIfPresent(forKey: .cancelRequestedAt),
-            cursor: try container.decodeIdentifier(forKey: .cursor)
+            )
         )
     }
 }
@@ -604,7 +549,7 @@ extension BrainTurnsAnswer: Decodable {
 
 extension ChangesAnswer: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case seen, messages, events, turns, rosterObservedAt
+        case seen, messages, events, turns
     }
 
     public init(from decoder: Decoder) throws {
@@ -613,8 +558,7 @@ extension ChangesAnswer: Decodable {
             seen: try container.decode(Bool.self, forKey: .seen),
             messages: try container.decode(String.self, forKey: .messages),
             events: try container.decode(String.self, forKey: .events),
-            turns: try container.decodeIfPresent(String.self, forKey: .turns),
-            rosterObservedAt: try container.decodeInstantIfPresent(forKey: .rosterObservedAt)
+            turns: try container.decodeIfPresent(String.self, forKey: .turns)
         )
     }
 }

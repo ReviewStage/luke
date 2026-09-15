@@ -101,14 +101,13 @@ public protocol LiveAudioTrack: AnyObject {
 }
 
 /// The `oai-events` channel, as the peer sees it: whether it can carry an
-/// event, the send, the close, and the two callbacks the peer installs.
+/// event, the send, and the two callbacks the peer installs.
 @MainActor
 public protocol LiveDataChannel: AnyObject {
     var isOpen: Bool { get }
     /// Hands one event's JSON to the channel; whether the channel took it.
     @discardableResult
     func send(_ text: String) -> Bool
-    func close()
     var onMessage: ((String) -> Void)? { get set }
     var onClose: (() -> Void)? { get set }
 }
@@ -145,8 +144,6 @@ public struct LivePeerSeams: Sendable {
     public var onStatus: @MainActor @Sendable (LiveStatus) -> Void
     /// Every event the channel carried that the device is shown, decoded, after the peer has read it.
     public var onServerEvent: @MainActor @Sendable (LiveServerEvent) -> Void
-    /// The connection's state as it moves, and `closed` as the last word of a peer that stood.
-    public var onTransport: @MainActor @Sendable (LiveTransportState) -> Void
     /// Why an open failed, in words the screen can show.
     public var onError: @MainActor @Sendable (String) -> Void
     public var iceGatheringTimeout: Duration
@@ -160,7 +157,6 @@ public struct LivePeerSeams: Sendable {
         createSession: @MainActor @Sendable @escaping (_ sdp: String) async throws -> LiveSessionCreated?,
         onStatus: @MainActor @Sendable @escaping (LiveStatus) -> Void = { _ in },
         onServerEvent: @MainActor @Sendable @escaping (LiveServerEvent) -> Void = { _ in },
-        onTransport: @MainActor @Sendable @escaping (LiveTransportState) -> Void = { _ in },
         onError: @MainActor @Sendable @escaping (String) -> Void = { _ in },
         iceGatheringTimeout: Duration = LivePeerBounds.iceGathering,
         sessionStartTimeout: Duration = LivePeerBounds.sessionStart,
@@ -172,7 +168,6 @@ public struct LivePeerSeams: Sendable {
         self.createSession = createSession
         self.onStatus = onStatus
         self.onServerEvent = onServerEvent
-        self.onTransport = onTransport
         self.onError = onError
         self.iceGatheringTimeout = iceGatheringTimeout
         self.sessionStartTimeout = sessionStartTimeout
@@ -456,10 +451,9 @@ public final class LivePeer {
         tearDown(.idle)
     }
 
-    /// The connection's own state names are the transport report's; a failed one ends the peer.
+    /// A failed connection ends the peer.
     private func transportChanged() {
         guard let connection, let state = connection.transportState else { return }
-        seams.onTransport(state)
         if state == .failed, !ended {
             announcedStart.settle(false)
             tearDown(.failed)
@@ -473,10 +467,7 @@ public final class LivePeer {
         status = !started ? .connecting : micLive ? .listening : .muted
     }
 
-    /// Every end of the peer, however it came. The transport is reported
-    /// closed as the last thing before the handlers go: a connection closed
-    /// locally fires no state change of its own, and a screen left thinking a
-    /// session stands would keep speaking into it.
+    /// Every end of the peer, however it came.
     private func tearDown(_ status: LiveStatus) {
         guard !ended else { return }
         ended = true
@@ -492,10 +483,7 @@ public final class LivePeer {
         microphone?.isEnabled = false
         micLive = false
         remoteTrack = nil
-        if let connection {
-            connection.close()
-            seams.onTransport(.closed)
-        }
+        connection?.close()
         self.status = status
     }
 

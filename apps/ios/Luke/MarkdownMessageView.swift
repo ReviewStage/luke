@@ -42,7 +42,7 @@ private struct MarkdownBlockView: View {
             inlineText(text, font: .subheadline)
         case .heading(let level, let text):
             inlineText(text, font: headingFont(level))
-        case .code(_, let code):
+        case .code(let code):
             codeBlock(code)
         case .quote(let blocks):
             MarkdownBlocksView(blocks: blocks, spacing: 6)

@@ -51,21 +51,6 @@ public final class PCMAudioPlayer: @unchecked Sendable {
         playerNode.scheduleBuffer(buffer, completionHandler: nil)
     }
 
-    public func drain(then completion: @MainActor @Sendable @escaping () -> Void) {
-        // A 1-sample silent sentinel: the .dataConsumed callback fires only
-        // after the hardware has played every previously-scheduled buffer, so
-        // the tail of the response is not cut off.
-        guard let sentinel = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1) else {
-            Task { @MainActor in completion() }
-            return
-        }
-        sentinel.frameLength = 1
-        sentinel.floatChannelData?[0][0] = 0
-        playerNode.scheduleBuffer(sentinel, completionCallbackType: .dataConsumed) { _ in
-            Task { @MainActor in completion() }
-        }
-    }
-
     public func stop() {
         playerNode.stop()
         engine.stop()

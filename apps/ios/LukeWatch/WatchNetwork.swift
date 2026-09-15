@@ -58,13 +58,3 @@ enum WatchNetwork {
     /// that hear only that the service was unavailable rather than the error.
     static let unreachable = "Couldn't reach Luke. Keep your iPhone nearby, or join Wi-Fi."
 }
-
-/// A connection failure carrying the wrist's own wording, for the callers
-/// that receive words rather than the error: the voice session's `onError`.
-struct WatchNetworkFailure: LocalizedError {
-    let errorDescription: String?
-
-    init(_ error: any Error) {
-        errorDescription = WatchNetwork.describe(error)
-    }
-}
