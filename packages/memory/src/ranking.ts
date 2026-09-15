@@ -46,7 +46,7 @@ export const MEMORY_RANKING = {
  */
 const CJK_RE = /[぀-ゟ゠-ヿ㐀-䶿一-鿿가-힯ᄀ-ᇿ]/u;
 
-export function tokenize(text: string): readonly string[] {
+function tokenize(text: string): readonly string[] {
   const lower = text.toLowerCase();
   const ascii = lower.match(/[a-z0-9_]+/g) ?? [];
   const chars = Array.from(lower);
@@ -77,7 +77,7 @@ function termFrequencies(terms: readonly string[]): Map<string, number> {
  * frequency is the smoothed form that never goes negative, so a term every
  * passage carries adds nothing rather than subtracting.
  */
-export function bm25Scores(
+function bm25Scores(
   query: readonly string[],
   documents: readonly (readonly string[])[],
 ): readonly number[] {
@@ -116,7 +116,7 @@ export function bm25Scores(
 }
 
 /** The similarity every vector rank reads; two vectors of unequal width are unrelated. */
-export function cosineSimilarity(left: readonly number[], right: readonly number[]): number {
+function cosineSimilarity(left: readonly number[], right: readonly number[]): number {
   if (left.length === 0 || left.length !== right.length) return 0;
   let dot = 0;
   let leftNorm = 0;
@@ -135,7 +135,7 @@ export function cosineSimilarity(left: readonly number[], right: readonly number
 const DATED_NOTE_PATH_RE = /^memory\/(\d{4})-(\d{2})-(\d{2})(?:-[^/]+)?\.md$/;
 
 /** The day a dated note is about, as the UTC instant its day begins, read from its path; nothing for any other path. */
-export function datedNoteDay(path: string): number | undefined {
+function datedNoteDay(path: string): number | undefined {
   const match = DATED_NOTE_PATH_RE.exec(path);
   if (!match) return undefined;
   const year = Number(match[1]);
@@ -153,7 +153,7 @@ export function datedNoteDay(path: string): number | undefined {
 }
 
 /** The weight an age earns: one for now or the future, a half at the half-life, and so on. */
-export function recencyWeight(
+function recencyWeight(
   ageMs: number,
   halfLifeDays: number = MEMORY_RANKING.RECENCY_HALF_LIFE_DAYS,
 ): number {
@@ -169,7 +169,7 @@ function normalised(scores: readonly number[]): readonly number[] {
 }
 
 /** The first words of a passage, whitespace folded, cut to the snippet bound. */
-export function snippetOf(text: string): string {
+function snippetOf(text: string): string {
   const folded = text.replace(/\s+/g, " ").trim();
   return folded.length <= MEMORY_RANKING.SNIPPET_CHARS
     ? folded
