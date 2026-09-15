@@ -1,16 +1,12 @@
 import {
   CONVERSATION_ENTRY_KIND,
-  CONVERSATION_VIEW_TOOL_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
-  type ConversationViewMessage,
   type ConversationViewSnapshot,
-  isStoredToolPart,
   type LiveConversationLine,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import { MESSAGE_ROLE, type MessageRole } from "@sidecar/wire";
-import { announcedWords } from "./conversation-turns";
 
 /**
  * The hand-off from a line still being said to the record of it. The voice
@@ -230,11 +226,11 @@ function isTextPart(part: StoredPart): part is TextPart {
 
 /**
  * Words as they compare between the transcript and the record: each word its
- * letters and digits alone, lower-cased, one space between words. The
- * transcript spells punctuation and case its own way, and a reply the voice
- * read from the brain's journal is the journal's words as the speech model
- * said them; the spaces stay so a match lands on whole words, and a short
- * line is never found inside a longer word of another row.
+ * letters and digits alone, lower-cased, one space between words. A spoken
+ * row is cut from the same transcript the line was drawn from, so the two
+ * differ at most in the ends the ledger trimmed; the spaces stay so a match
+ * lands on whole words, and a short line is never found inside a longer word
+ * of another row.
  */
 function comparable(words: string): string {
   return words
@@ -255,36 +251,18 @@ interface RecordedWords {
   covered: number;
 }
 
-/**
- * The words a row says aloud: its text parts, and the briefing each announce
- * call carries, since a briefing the voice read is on record as that call and
- * nowhere else.
- */
-function spokenWordsOf(message: ConversationViewMessage): string {
-  const announced = new Set(
-    message.tools
-      .filter((tool) => tool.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE)
-      .map((tool) => tool.toolCallId),
-  );
-  return message.message.parts
-    .flatMap((part) => {
-      if (isTextPart(part)) return [part.text];
-      if (isStoredToolPart(part) && announced.has(part.toolCallId)) {
-        const words = announcedWords(part);
-        return words === undefined ? [] : [words];
-      }
-      return [];
-    })
-    .join("\n");
-}
-
 /** The record's rows created at or after an instant, in the view's order, each as its comparable words. */
 function recordedSince(view: ConversationViewSnapshot, since: number): RecordedWords[] {
   const rows: RecordedWords[] = [];
   for (const group of view.groups) {
     for (const message of group.messages) {
       if (message.createdAt < since) continue;
-      const words = comparable(spokenWordsOf(message));
+      const words = comparable(
+        message.message.parts
+          .filter(isTextPart)
+          .map((part) => part.text)
+          .join("\n"),
+      );
       if (words.length > 0) {
         rows.push({ role: message.message.role, words: ` ${words} `, covered: 0 });
       }
@@ -296,8 +274,8 @@ function recordedSince(view: ConversationViewSnapshot, since: number): RecordedW
 /**
  * Whether the row's words, past what earlier lines covered, cover a spoken
  * line's whole words, and takes them if so: the line inside what is left —
- * one utterance of an ask the delegation cut wider, a sentence of a reply
- * read from a journal — or what is left the first words of the line, where a
+ * one utterance of an ask the delegation cut wider — or what is left the
+ * first words of the line, where a
  * cut ended inside the utterance and the rest went to the next ask. Walking
  * the row forward is what lets one wide row cover each utterance inside it
  * once, and keeps one short row from covering the same word said twice.

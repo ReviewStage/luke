@@ -55,16 +55,14 @@ import {
  * cutting a second (`adoptSpokenLine`), giving it the ask's own cut — the
  * line's words with any fragment that joined the utterance after it settled
  * and any said after it before the delegation — so an ask and its line share
- * one id and one text however the two writes were ordered. Luke's settled
- * utterance is an assistant row authored by the voice model wherever the
- * words are the voice model's own — an answer it gave itself, what it said
- * before handing an ask to the brain, a remark after — so the Conversation
- * shows every word the developer heard, a greeting and a beat among them. The
- * one utterance that is not his own words is the voice following a commentary
- * append this instance was told is on record already — a briefing, or the
- * brain's reply read aloud, each its own message — read until the developer
- * speaks again. That one becomes no second row. Segments may overlap, because
- * timed deltas do, and no audio is ever stored.
+ * one id and one text however the two writes were ordered. Every settled
+ * utterance of Luke's is an assistant row authored by the voice model,
+ * whatever prompted the words — an answer he gave himself, what he said
+ * before handing an ask to the brain, a briefing or the brain's reply read
+ * aloud, a greeting or a beat spoken from the build's script — so the
+ * Conversation shows what the developer actually heard, and a reading stands
+ * beside the message it was read from rather than in place of it. Segments
+ * may overlap, because timed deltas do, and no audio is ever stored.
  *
  * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
  * by a `Schema` rather than trusted, and answered as an effect to whoever
@@ -79,18 +77,11 @@ export interface VoiceTarget {
   readonly conversation: ConversationTarget;
 }
 
-/**
- * A commentary append the voice service sent whose words are on record, so
- * the ack and the speech that follows can be tied to what it carried: a
- * briefing's own message, which the speech marks spoken, or the brain's reply
- * under its turn's journal — noted so the voice reading it is never written
- * as its own words.
- */
+/** A commentary append the voice service sent, so the ack and the speech that follows can be tied to the message it carried. */
 export interface CommentaryAppend {
   /** The client event id the append was sent with, which the `commentary.appended` ack names back. */
   readonly clientEventId: string;
-  /** The briefing's message, where the append carries one. */
-  readonly messageId?: string;
+  readonly messageId: string;
 }
 
 export const VOICE_WRITE_REFUSAL = {
@@ -128,14 +119,14 @@ export interface VoiceWriter {
     target: VoiceTarget,
     event: LiveServerEvent,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
-  /** Tells the writer of a commentary append, and which message it carries where it carries one, before the stream acknowledges it. */
+  /** Tells the writer which message a commentary append carries, before the stream acknowledges it. */
   noteAppend(target: VoiceTarget, append: CommentaryAppend): void;
   /** The developer's settled utterance, undelegated: a finished user row cut from the session's segments over its span. */
   recordSpokenLine(
     target: VoiceTarget,
     utterance: SpokenUtteranceSpan,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
-  /** One of Luke's settled utterances: a finished assistant row over its span where the words are the voice model's own, and nothing where it was reading an append. */
+  /** One of Luke's settled utterances: a finished assistant row cut from the session's segments over its span, whatever prompted the words. */
   recordSpokenReply(
     target: VoiceTarget,
     utterance: SpokenUtteranceSpan,
@@ -149,8 +140,7 @@ interface VoiceWriterOptions {
 
 /** An append the service sent, from the ack that placed it to the speech that followed it. */
 interface PendingAppend {
-  /** The briefing's message the speech marks spoken; absent for the brain's reply, on record under its turn. */
-  readonly messageId?: string;
+  readonly messageId: string;
   readonly conversation: ConversationTarget;
   /** Where the appended commentary ends on the session's clock; unknown until the ack. */
   spokenFromMs?: number;
@@ -366,23 +356,6 @@ const findSpokenSegments = SqlSchema.findAll({
 export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   /** Appends by live session and client event id: the one thing kept in memory, and only until the speech lands. */
   const pending = new Map<string, Map<string, PendingAppend>>();
-  /**
-   * Where, on each session's clock, the session's voice was found following a
-   * commentary append: the start of the output delta that marked it. Luke's
-   * utterance covering such an instant, or following one with no developer
-   * word between, is an append read aloud, not his own words. Kept beside the
-   * appends, for this instance's life like them.
-   */
-  const spokenAppendStarts = new Map<string, number[]>();
-
-  const appendStartsOf = (liveSessionId: string): number[] => {
-    const standing = spokenAppendStarts.get(liveSessionId);
-    if (standing !== undefined) return standing;
-    const created: number[] = [];
-    spokenAppendStarts.set(liveSessionId, created);
-    return created;
-  };
-
   const appendsOf = (liveSessionId: string): Map<string, PendingAppend> => {
     const standing = pending.get(liveSessionId);
     if (standing !== undefined) return standing;
@@ -441,10 +414,6 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       for (const [clientEventId, append] of appends) {
         if (append.spokenFromMs === undefined || delta.start_ms < append.spokenFromMs) continue;
         appends.delete(clientEventId);
-        appendStartsOf(target.liveSessionId).push(delta.start_ms);
-        // An append carrying no briefing — the brain's reply — is noted for
-        // the speech that follows it and marks nothing.
-        if (append.messageId === undefined) continue;
         if (voiceSession.deviceId === null) {
           outcome = { ok: false, refusal: VOICE_WRITE_REFUSAL.NOT_CLAIMANT };
           continue;
@@ -619,14 +588,12 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
 
   /**
    * One of Luke's settled utterances, as a finished assistant row authored by
-   * the voice model, wherever the words are the voice model's own: an answer
-   * it gave itself, what it said before handing an ask to the brain, a remark
-   * after, a greeting or a beat spoken from the build's script. The one
-   * utterance that is not his own words is the voice following a commentary
-   * append this instance was told is on record — a briefing, the brain's reply
-   * read aloud — read until the developer speaks again, because a reading
-   * pauses between its sentences and a pause is not the voice model's own
-   * words beginning. That one writes nothing here.
+   * the voice model, cut from the segments over its span, whatever prompted
+   * the words: an answer he gave himself, what he said around an ask handed
+   * to the brain, a briefing or the brain's reply read aloud, a greeting or a
+   * beat. A reading stands beside the message it was read from, which the
+   * Conversation may fold behind the words actually said; the record keeps
+   * both, since a device with no voice still reads the message.
    */
   function recordSpokenReply(
     target: VoiceTarget,
@@ -639,7 +606,6 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       });
       if (Option.isNone(voiceSession)) return NO_SESSION;
       const voiceSessionId = voiceSession.value.id;
-      if (yield* followingAppend(target.liveSessionId, voiceSessionId, utterance)) return IGNORED;
       const spoken = yield* findUtteranceSegments({
         voiceSessionId,
         role: VOICE_SEGMENT_ROLE.ASSISTANT,
@@ -663,45 +629,13 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
     });
   }
 
-  /**
-   * Whether Luke's utterance is the voice reading an append this instance
-   * sent: the voice was found following one inside the utterance's span, or
-   * the latest one it followed before the span has had no developer word
-   * since, so the utterance is that reading going on after a pause.
-   */
-  function followingAppend(
-    liveSessionId: string,
-    voiceSessionId: string,
-    utterance: SpokenUtteranceSpan,
-  ): Effect.Effect<boolean, VoiceWriteFailure, SqlClient.SqlClient> {
-    return Effect.gen(function* () {
-      const starts = appendStartsOf(liveSessionId);
-      if (starts.some((startMs) => startMs >= utterance.startMs && startMs <= utterance.endMs)) {
-        return true;
-      }
-      const before = starts.filter((startMs) => startMs < utterance.startMs);
-      if (before.length === 0) return false;
-      const developerSince = yield* findUtteranceSegments({
-        voiceSessionId,
-        role: VOICE_SEGMENT_ROLE.USER,
-        startMs: Math.max(...before),
-        endMs: utterance.startMs,
-      });
-      return developerSince.length === 0;
-    });
-  }
-
   return {
     recordSpokenLine,
     recordSpokenReply,
     noteAppend(target, append) {
-      const appends = appendsOf(target.liveSessionId);
-      // A briefing's last append is told twice, as the briefing's and as
-      // commentary like every other; the message it carries stays.
-      const standing = appends.get(append.clientEventId);
-      appends.set(append.clientEventId, {
-        ...(standing ?? { conversation: target.conversation }),
-        ...(append.messageId === undefined ? undefined : { messageId: append.messageId }),
+      appendsOf(target.liveSessionId).set(append.clientEventId, {
+        messageId: append.messageId,
+        conversation: target.conversation,
       });
     },
     consume: (target, event) =>

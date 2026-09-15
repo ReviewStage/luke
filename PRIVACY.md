@@ -180,12 +180,11 @@ chat gained since he last looked; the turn's model, token counts, and the
 ids of OpenAI's responses; and the events about each message — that a briefing was offered,
 claimed, spoken, pushed, held, or expired, and each rating you gave — naming
 the device that took part. When you speak with Luke through your account,
-what you said is kept as your line and what his voice said in its own words
-as his — an answer he gave without running a turn, or what he said before
-and after one — each written once it has settled, so the Conversation shows
-every spoken word you heard beside the turns he ran. A briefing or a reply
-he read aloud is already the message it was read from and is not written
-twice.
+what you said is kept as your line and what his voice said as his — an
+answer he gave without running a turn, what he said before and after one, a
+briefing or a reply he read aloud — each written once it has settled, so the
+Conversation shows the words you actually heard beside the turns he ran and
+the messages he read from.
 Unlike his workspace files and the facts he
 remembers, described below, these rows are not sealed: they are stored as
 written, and our own operators can read them. They stand until you clear

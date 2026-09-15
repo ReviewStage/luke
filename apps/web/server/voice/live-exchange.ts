@@ -303,11 +303,6 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("hostedLiveExchange"
       ...(options.trace ? { trace: options.trace } : undefined),
       onBriefingAppend: (delivery, eventId) =>
         voice.noteAppend(target, { clientEventId: eventId, messageId: delivery.claim.messageId }),
-      // An append whose words are on record already — a briefing's chunk, a
-      // sentence of the brain's reply — is noted, message or none, so the voice
-      // reading it is never written down as the voice model's own words. A beat
-      // or a greeting is not: the voice's words for it become his row.
-      onRecordedAppend: (eventId) => voice.noteAppend(target, { clientEventId: eventId }),
       ...(options.onProactiveSpoken ? { onProactiveSpoken: options.onProactiveSpoken } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),

@@ -553,7 +553,7 @@ test("an exchange the voice model answers itself leaves both settled utterances 
   assert.equal((await segments(live.liveSessionId)).length, 4);
 });
 
-test("Luke's utterance is his own row wherever he was not reading an append: before any line, and beside an ask handed to the brain; the voice following a commentary append is not", async () => {
+test("every settled utterance of Luke's is his row: before any line, a briefing read aloud beside the briefing's own message, and beside an ask handed to the brain", async () => {
   // Words before any developer line are the voice model's own, and the Conversation shows them.
   const first = await target();
   const voice = writer();
@@ -573,8 +573,8 @@ test("Luke's utterance is his own row wherever he was not reading an append: bef
     ],
   );
 
-  // The voice following a commentary append this writer was told of: a briefing's words, marked spoken and not a row,
-  // even with an undelegated line standing before them.
+  // The voice following a commentary append this writer was told of: a briefing read aloud, marked spoken on the
+  // briefing's message and written as its own row too, since what the developer heard is the reading.
   const second = await target();
   const messageId = await briefing(second.conversation);
   await database.run(voice.consume(second, heard("Anything new?", 100, 900)));
@@ -587,17 +587,20 @@ test("Luke's utterance is his own row wherever he was not reading an append: bef
   await database.run(voice.consume(second, said("One agent finished.", 2000, 3200)));
   assert.deepEqual(
     await database.run(voice.recordSpokenReply(second, { startMs: 2000, endMs: 3200 })),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+    WRITTEN,
   );
-  // The rows are the briefing the fixture announced and the developer's line: nothing of Luke's voice.
+  // The rows are the briefing the fixture announced, the developer's line, and the reading as Luke's own row.
   assert.deepEqual(
     (await spokenAsks(second.conversation)).map((row) => [
       row.role,
       row.clientId.startsWith("briefing-"),
+      // SAFETY: the rows were written by this test through the store's own metadata schemas; only the author is read back.
+      (row.metadata as { author: string }).author,
     ]),
     [
-      [MESSAGE_ROLE.ASSISTANT, true],
-      [MESSAGE_ROLE.USER, false],
+      [MESSAGE_ROLE.ASSISTANT, true, MESSAGE_AUTHOR.BRAIN],
+      [MESSAGE_ROLE.USER, false, MESSAGE_AUTHOR.DEVELOPER],
+      [MESSAGE_ROLE.ASSISTANT, false, MESSAGE_AUTHOR.VOICE_MODEL],
     ],
   );
   assert.equal(
@@ -780,7 +783,7 @@ test("a delegation adopting a settled line gives it the ask's whole cut: a fragm
   });
 });
 
-test("Luke's later words are his own rows too; only the voice reading an append is not, and a reading runs on through its pauses until the developer speaks again", async () => {
+test("Luke's later words are his rows too, and so is the brain's reply read aloud, sentence by sentence, beside the turn's journal", async () => {
   // Answered, then more of Luke's words later in the session: a second row of his own.
   const answered = await target();
   const voice = writer();
@@ -813,37 +816,41 @@ test("Luke's later words are his own rows too; only the voice reading an append 
     ],
   );
 
-  // The brain's reply read aloud: its appends are noted with no message, so the voice following them
-  // is neither a row nor a speech mark, and neither is the reading going on after a pause between
-  // its sentences. The developer speaking again ends the reading: Luke's next words are his own.
+  // The brain's reply read aloud after a delegated ask: the appends carry no briefing, so nothing is
+  // marked spoken, and each settled utterance of the reading is Luke's own row like any other — the
+  // words the developer heard, beside the turn's journal the brain wrote.
   const reading = await target();
   await database.run(voice.consume(reading, heard("Open the failing one.", 100, 1400)));
   assert.deepEqual(await database.run(voice.consume(reading, delegated("dl_read", 1450))), WRITTEN);
-  voice.noteAppend(reading, { clientEventId: "reply-1" });
-  voice.noteAppend(reading, { clientEventId: "reply-2" });
   await database.run(voice.consume(reading, appended("reply-1", 5000, 5100)));
-  await database.run(voice.consume(reading, appended("reply-2", 5100, 5200)));
   await database.run(voice.consume(reading, said("Opening it now.", 5200, 6400)));
   assert.deepEqual(
     await database.run(voice.recordSpokenReply(reading, { startMs: 5200, endMs: 6400 })),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
+    WRITTEN,
   );
   await database.run(voice.consume(reading, said("It is on the failing test.", 8000, 9500)));
   assert.deepEqual(
     await database.run(voice.recordSpokenReply(reading, { startMs: 8000, endMs: 9500 })),
-    { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
-  );
-  await database.run(voice.consume(reading, heard("Thanks.", 10_000, 10_500)));
-  await database.run(voice.consume(reading, said("Any time.", 11_000, 11_800)));
-  assert.deepEqual(
-    await database.run(voice.recordSpokenReply(reading, { startMs: 11_000, endMs: 11_800 })),
     WRITTEN,
   );
   assert.deepEqual(
-    (await spokenAsks(reading.conversation)).map((row) => [row.role, row.parts]),
+    (await spokenAsks(reading.conversation)).map((row) => [row.role, row.clientId, row.parts]),
     [
-      [MESSAGE_ROLE.USER, [{ type: "text", text: "Open the failing one.", state: "done" }]],
-      [MESSAGE_ROLE.ASSISTANT, [{ type: "text", text: "Any time.", state: "done" }]],
+      [
+        MESSAGE_ROLE.USER,
+        "dl_read",
+        [{ type: "text", text: "Open the failing one.", state: "done" }],
+      ],
+      [
+        MESSAGE_ROLE.ASSISTANT,
+        (await spokenAsks(reading.conversation))[1]?.clientId,
+        [{ type: "text", text: "Opening it now.", state: "done" }],
+      ],
+      [
+        MESSAGE_ROLE.ASSISTANT,
+        (await spokenAsks(reading.conversation))[2]?.clientId,
+        [{ type: "text", text: "It is on the failing test.", state: "done" }],
+      ],
     ],
   );
   assert.deepEqual(await speechEvents(reading.conversation), []);

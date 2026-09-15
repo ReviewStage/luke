@@ -2,11 +2,9 @@ import assert from "node:assert/strict";
 import {
   CONVERSATION_ENTRY_KIND,
   CONVERSATION_VIEW_SOURCE,
-  CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewMessage,
   type ConversationViewSnapshot,
   type LiveConversationLine,
-  TOOL_PART_STATE,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import { MESSAGE_AUTHOR, MESSAGE_CHANNEL, MESSAGE_ROLE, type MessageRole } from "@sidecar/wire";
@@ -168,7 +166,7 @@ test("the next call's row 1 is not the held row 1 of the last call unless it car
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [next.entry, returned.entry]);
 });
 
-test("the record covers a line by its words: an utterance inside a wider ask, a cut that ended inside the utterance, a reply read from a journal, never a row of another speaker or of before the call", () => {
+test("the record covers a line by its words: an utterance inside a wider ask, a cut that ended inside the utterance, a reading beside its own spoken row, never a row of another speaker or of before the call", () => {
   const firstHalf = line(1, CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
   const secondHalf = line(2, CONVERSATION_ENTRY_KIND.ASK, "Please.", true);
   const overrun = line(3, CONVERSATION_ENTRY_KIND.ASK, "And then run it. Thanks", true);
@@ -184,12 +182,8 @@ test("the record covers a line by its words: an utterance inside a wider ask, a 
     recorded(MESSAGE_ROLE.USER, "Open the failing one. Please.", OPENED + 2_000),
     // The next cut ended at the delegation's offset, inside the utterance.
     recorded(MESSAGE_ROLE.USER, "And then run it.", OPENED + 5_000),
-    // The brain's journal, whose sentences the voice read with its own punctuation.
-    recorded(
-      MESSAGE_ROLE.ASSISTANT,
-      "Opening it now. It is on the failing test, which the agent is waiting on.",
-      OPENED + 6_000,
-    ),
+    // Luke's own spoken row of the reading, cut from the same transcript the line was drawn from.
+    recorded(MESSAGE_ROLE.ASSISTANT, "Opening it now! It is on the failing test", OPENED + 6_000),
   );
   assert.deepEqual(shownLiveEntries(hold, record), []);
 
@@ -246,45 +240,6 @@ test("a settled line the record never shows is let go after its bound, and the c
   const asked = line(2, CONVERSATION_ENTRY_KIND.ASK, "Anything new?");
   hold = foldLiveLines(hold, [settled, asked], OPENED + 2_000 + LIVE_LINE_SETTLED_HOLD_MS + 500);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [asked.entry]);
-});
-
-test("a briefing the voice read is covered by the announce row that carries it", () => {
-  const reading = line(
-    1,
-    CONVERSATION_ENTRY_KIND.REPLY,
-    "Two sessions finished while you were away.",
-    true,
-  );
-  const hold = foldLiveLines(NO_LIVE_LINES, [reading], OPENED);
-  ids += 1;
-  const announced: ConversationViewMessage = {
-    message: {
-      id: `m${ids}`,
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [
-        {
-          type: "tool-announce",
-          toolCallId: "call-1",
-          state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-          input: { briefing: "Two sessions finished while you were away." },
-          output: {},
-        },
-      ],
-      metadata: { author: MESSAGE_AUTHOR.BRAIN },
-    },
-    seq: ids,
-    createdAt: OPENED + 1_000,
-    tools: [
-      {
-        toolCallId: "call-1",
-        toolName: "announce",
-        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
-        kind: CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
-        unspoken: false,
-      },
-    ],
-  };
-  assert.deepEqual(shownLiveEntries(hold, view(announced)), []);
 });
 
 test("the clock re-arms for the next settled line once the first has been let go", () => {

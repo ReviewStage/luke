@@ -17,7 +17,6 @@ import {
   LIVE_IDLE_WINDOW_MS,
   LIVE_INPUT_BOUNDS,
   LIVE_SERVER_EVENT,
-  type LiveAppendInput,
   type LiveDelegationId,
   type LiveServerEvent,
   type LiveSessionClosed,
@@ -61,7 +60,7 @@ import { LiveBrainTag } from "../effect/live-brain.js";
 import { LiveRecordTag } from "../effect/live-record.js";
 import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
-import { AppendChannel, type SendOptions } from "./append-channel.js";
+import { AppendChannel } from "./append-channel.js";
 import {
   closeGracefully,
   SIDEBAND_CLOSE_OUTCOME,
@@ -228,17 +227,6 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
    * settles it.
    */
   onBriefingAppend?: (delivery: Delivery, eventId: string) => void;
-  /**
-   * A commentary append whose words are on record already — a briefing's
-   * chunk, whose message the brain announced, or a sentence of the brain's
-   * reply, whose turn's journal holds it — is about to be sent under the
-   * event id given, so a record that keeps the voice model's own words as
-   * rows can tell the voice reading these from words of its own before the
-   * session answers. A beat, a greeting's cue, and a refusal's note are not
-   * told: the build's script is on no record, and what the voice says for
-   * them is written as his words like any other.
-   */
-  onRecordedAppend?: (eventId: string) => void;
 }
 
 /**
@@ -337,24 +325,13 @@ interface Exchange {
   /** The session the delegations belong to; a closed session's ids die with it and later sentences go session-wide. */
   sessionId: string | undefined;
   settled: boolean;
-  buffered: SpokenSentence[];
+  buffered: string[];
   /** Sentences that could not be appended because no session stood; spoken into the next one. */
-  late: SpokenSentence[];
+  late: string[];
   spokenChunks: number;
   slowStepTold: boolean;
   finalize: SessionDelay | undefined;
   end: LiveBrainRunEnd | undefined;
-}
-
-/**
- * One sentence an exchange speaks, and whether its words are on record
- * already: a reply's sentence is, under its turn's journal; the standing note
- * for a run that ended with nothing said is the build's, and what the voice
- * says for it becomes his row like any other words of his.
- */
-interface SpokenSentence {
-  readonly words: string;
-  readonly onRecord: boolean;
 }
 
 interface UtteranceWrite {
@@ -1438,12 +1415,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         exchange.settled = true;
         for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);
         return;
-      case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE: {
-        const sentence: SpokenSentence = { words: event.sentence, onRecord: true };
-        if (exchange.settled) this.#speakSentence(exchange, sentence);
-        else exchange.buffered.push(sentence);
+      case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
+        if (exchange.settled) this.#speakSentence(exchange, event.sentence);
+        else exchange.buffered.push(event.sentence);
         return;
-      }
       case LIVE_BRAIN_RUN_EVENT.ENDED:
         exchange.runIds.delete(event.runId);
         // A stopped or failed rider marks the exchange; a completed one only fills an empty mark.
@@ -1475,11 +1450,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (!unspoken || exchange.end === undefined || exchange.end === LIVE_BRAIN_RUN_END.COMPLETED) {
       return;
     }
-    this.#speakSentence(exchange, { words: RUN_END_NOTE[exchange.end], onRecord: false });
+    this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
   }
 
   /** One sentence of an exchange's reply, into its session under its delegation, or kept for the next session. */
-  #speakSentence(exchange: Exchange, sentence: SpokenSentence): void {
+  #speakSentence(exchange: Exchange, sentence: string): void {
     const session = this.#sessionOf(exchange);
     if (!session) {
       exchange.late.push(sentence);
@@ -1505,14 +1480,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     exchange: Exchange,
     session: StandingSession,
     delegationId: LiveDelegationId,
-    sentence: SpokenSentence,
+    sentence: string,
   ): void {
-    for (const chunk of chunkForAppend(sentence.words)) {
+    for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
-          const taken = yield* this.#commentary(session, this.#input(delegationId, chunk), {
-            onRecord: sentence.onRecord,
-          });
+          const taken = yield* session.channel.send(
+            commentaryAppend(this.#input(delegationId, chunk)),
+          );
           if (taken) exchange.spokenChunks += 1;
         }),
       );
@@ -1523,28 +1498,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const chunk of chunkForAppend(text)) {
       session.channel.enqueue(
         Effect.suspend(() =>
-          Effect.asVoid(
-            this.#commentary(session, this.#input(delegationId, chunk), { onRecord: false }),
-          ),
+          Effect.asVoid(session.channel.send(commentaryAppend(this.#input(delegationId, chunk)))),
         ),
       );
     }
-  }
-
-  /**
-   * The one door every commentary append leaves through. An append whose
-   * words are on record already is told to whoever notes them before it is
-   * sent, so the record can tell the voice reading it from the voice model's
-   * own words whichever lands first; one carrying the build's script or a
-   * standing note is not, and what the voice says for it is his words.
-   */
-  #commentary(
-    session: StandingSession,
-    input: LiveAppendInput,
-    { onRecord, ...options }: SendOptions & { readonly onRecord: boolean },
-  ): Effect.Effect<boolean> {
-    if (onRecord) this.#options.onRecordedAppend?.(input.eventId);
-    return session.channel.send(commentaryAppend(input), options);
   }
 
   /** The session an exchange's delegation ids belong to, if it still stands; a closed one leaves them dead. */
@@ -1590,12 +1547,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       session.channel.enqueue(
         Effect.gen({ self: this }, function* () {
           const input = this.#input(null, chunk);
-          const briefing = request.kind === PROACTIVE_SPEECH_KIND.BRIEFING;
-          if (last && briefing) {
+          if (last && request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
             this.#options.onBriefingAppend?.(request.delivery, input.eventId);
           }
-          const taken = yield* this.#commentary(session, input, {
-            onRecord: briefing,
+          const taken = yield* session.channel.send(commentaryAppend(input), {
             ...(last
               ? {
                   onSpoken: () => {
@@ -1632,8 +1587,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           this.#queue.release(request);
           return;
         }
-        const cued = yield* this.#commentary(session, this.#input(null, opening.cue), {
-          onRecord: false,
+        const cued = yield* session.channel.send(commentaryAppend(this.#input(null, opening.cue)), {
           onSpoken: () => {
             this.#queue.spoken(request);
             this.#options.onProactiveSpoken?.(request.kind);
