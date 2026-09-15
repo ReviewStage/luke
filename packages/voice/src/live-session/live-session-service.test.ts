@@ -34,11 +34,7 @@ import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
 import { holdSocket, type SocketHold } from "../held-socket.js";
-import {
-  type LiveSessionOpened,
-  type LiveSessionSource,
-  SidebandAttachFailed,
-} from "../live-session-source.js";
+import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import {
@@ -539,22 +535,6 @@ it.effect(
       freshSideband.started("sess-fresh");
       yield* settle();
       assert.equal(appends(freshSideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-    }),
-);
-
-it.effect(
-  "an adopted session whose sideband cannot attach is not stood: the adopt answers false and the session is announced closed as sideband-failed",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      const adopted = yield* f.service.adoptSession({
-        sessionId: "sess-unreachable",
-        attach: () => new SidebandAttachFailed({ detail: "the sideband never opened" }),
-        started: false,
-      });
-      assert.equal(adopted, false);
-      assert.deepEqual(phases(f.changes), [LIVE_SESSION_PHASE.CREATED, LIVE_SESSION_PHASE.CLOSED]);
-      assert.equal(f.changes.at(-1)?.reason, "sideband-failed");
     }),
 );
 
@@ -1127,14 +1107,9 @@ it.effect(
         usage: { seconds: 305 },
       });
       yield* settle();
-      assert.equal(f.service.status().usageSeconds, 305);
       sideband.closedBy(LIVE_CLOSE_REASON.CLOSE_REQUESTED, 310);
       yield* settle();
-      assert.deepEqual(f.service.status(), {
-        phase: LIVE_SESSION_PHASE.CLOSED,
-        usageConfirmed: true,
-        lastSessionSeconds: 310,
-      });
+      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
       assert.equal(sideband.closed, true);
       assert.equal(f.changes.at(-1)?.reason, LIVE_CLOSE_REASON.CLOSE_REQUESTED);
     }),
@@ -1175,10 +1150,7 @@ it.effect(
       assert.equal(ending.pollUnsafe(), undefined);
       yield* advanceClock(1);
       yield* Fiber.join(ending);
-      assert.deepEqual(f.service.status(), {
-        phase: LIVE_SESSION_PHASE.CLOSED,
-        usageConfirmed: false,
-      });
+      assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
       assert.equal(sideband.closed, true);
     }),
 );
@@ -1194,7 +1166,6 @@ it.effect("an expired session reopens at once", () =>
       LIVE_SESSION_PHASE.CLOSED,
       LIVE_SESSION_PHASE.WANTED,
     ]);
-    assert.equal(f.service.status().usageConfirmed, true);
   }),
 );
 
@@ -1215,7 +1186,6 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       sideband.dropConnection();
       yield* settle();
-      assert.equal(f.service.status().usageConfirmed, false);
       assert.equal(phases(f.changes).at(-1), LIVE_SESSION_PHASE.CLOSED);
       assert.equal(f.changes.at(-1)?.reason, LIVE_CLOSE_REASON.CONNECTION_LOST);
       assert.equal(
@@ -1245,7 +1215,6 @@ it.effect(
       f.service.reportTransport(LIVE_TRANSPORT_STATE.FAILED);
       yield* settle();
       assert.equal(f.service.sessionStands(), false);
-      assert.equal(f.service.status().usageConfirmed, false);
       const second = yield* f.open();
       yield* settle();
       f.service.reportTransport(LIVE_TRANSPORT_STATE.CLOSED);

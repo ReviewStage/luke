@@ -74,7 +74,6 @@ export interface LiveSessionHolderOptions {
   roster?: () => readonly RosterSeedSession[];
   emit: (change: VoiceLiveSessionChanged) => void;
   createId: () => string;
-  report: (message: string) => void;
   /** A session was created: the one count the holder makes. */
   onSessionCreated?: () => void;
   /**
@@ -235,21 +234,7 @@ export class LiveSessionHolder {
       );
       if (!opened) return undefined;
       this.#options.emit({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
-      const sideband = yield* Scope.provide(
-        Effect.catch(opened.attach(), (failure) =>
-          Effect.sync(() => {
-            this.#options.report(`Live sideband could not attach: ${failure.message}`);
-            this.#options.emit({
-              sessionId: opened.sessionId,
-              phase: LIVE_SESSION_PHASE.CLOSED,
-              reason: "sideband-failed",
-            });
-            return undefined;
-          }),
-        ),
-        scope,
-      );
-      if (!sideband) return undefined;
+      const sideband = yield* Scope.provide(opened.attach(), scope);
       const session: HeldSession = {
         sessionId: opened.sessionId,
         sideband,

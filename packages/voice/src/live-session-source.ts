@@ -92,25 +92,14 @@ export interface LiveSessionCreateInput {
   input: readonly InitialItem[];
 }
 
-/** A sideband that could not be opened, named by the fault the attempt ended at and by nothing the attempt carried. */
-export class SidebandAttachFailed extends Data.TaggedError("SidebandAttachFailed")<{
-  readonly detail: string;
-}> {
-  override get message(): string {
-    return `sideband attach failed (${this.detail})`;
-  }
-}
-
 /** A session that stands: the renderer's half, and the trusted half the host attaches. */
 export interface LiveSessionOpened extends LiveSessionCreated {
   /**
-   * Opens the trusted sideband on this session. Called once per session; a
-   * failure records `SIDEBAND_FAILED` on the source and fails with
-   * `SidebandAttachFailed`, and the session it leaves standing is the
-   * caller's to close. The scope it is yielded in is the one the sideband's
-   * own connections stand for.
+   * Opens the trusted sideband on this session. Called once per session; the
+   * session it leaves standing is the caller's to close. The scope it is
+   * yielded in is the one the sideband's own connections stand for.
    */
-  attach(): Effect.Effect<LiveSideband, SidebandAttachFailed, Scope.Scope>;
+  attach(): Effect.Effect<LiveSideband, never, Scope.Scope>;
   /**
    * Tells the service standing between this peer and the session whether
    * the peer has gone quiet, in the service's own vocabulary rather than as
