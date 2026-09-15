@@ -1071,3 +1071,29 @@ it.effect(
       });
     }),
 );
+
+it.effect(
+  "a child-task turn lands under the child origin and a child-completion turn under the child_completion origin, each received message the brain's own note",
+  () =>
+    Effect.promise(async () => {
+      for (const [turn, origin, source] of [
+        [BRAIN_HOST_TURN.CHILD_TASK, TURN_ORIGIN.CHILD, OBSERVATION_SOURCE.CHILD],
+        [
+          BRAIN_HOST_TURN.CHILD_COMPLETION,
+          TURN_ORIGIN.CHILD_COMPLETION,
+          OBSERVATION_SOURCE.CHILD_COMPLETION,
+        ],
+      ] as const) {
+        const target = await conversation(CONVERSATION_KIND.OBSERVED);
+        await play(typedTurn("turn_0", 0), standingFor(target, turn));
+
+        const { turnRows, messageRows } = await rows(target);
+        assert.equal(turnRows.length, 1);
+        assert.equal(turnRows[0]?.origin, origin);
+        assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+        const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
+        assert.ok(words);
+        assert.deepEqual(words.metadata, { author: MESSAGE_AUTHOR.BRAIN, source });
+      }
+    }),
+);

@@ -286,12 +286,17 @@ test("one compaction cycle flushes once: a replayed capture runs no turn, and th
   assert.equal((await noteFor(userId))?.content.match(/First cycle/g)?.length, 2);
 });
 
-test("a scaffolding turn flushes nothing: the roster's observation and a hold's release run no turn and claim no cycle", async () => {
+test("a scaffolding turn flushes nothing: the roster's observation, a hold's release, a child's task, and a child's completion run no turn and claim no cycle", async () => {
   const userId = await database.createUser();
   const conversationId = await ownedConversation(userId);
   const model = appendingModel("- Never written.");
 
-  for (const turn of [BRAIN_HOST_TURN.OBSERVATION, BRAIN_HOST_TURN.HOLD_RELEASE]) {
+  for (const turn of [
+    BRAIN_HOST_TURN.OBSERVATION,
+    BRAIN_HOST_TURN.HOLD_RELEASE,
+    BRAIN_HOST_TURN.CHILD_TASK,
+    BRAIN_HOST_TURN.CHILD_COMPLETION,
+  ]) {
     const result = await database.run(
       host.flush(
         capture(seat(userId, conversationId, turn), { operationId: operationId() }),

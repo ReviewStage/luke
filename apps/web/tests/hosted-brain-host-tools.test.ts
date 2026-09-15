@@ -182,6 +182,16 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
     ask,
   );
   assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
+  // A child's task is answered in words like an ask and is offered the ask's set; a child's
+  // completion is a note handed to the requester like an observation and is offered that set.
+  assert.deepEqual(
+    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK).map((declared) => declared.name),
+    ask,
+  );
+  assert.deepEqual(
+    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION).map((declared) => declared.name),
+    observation,
+  );
 });
 
 test("a session message is admitted against the stored roster and carried with the account's key; no key, no carry", async () => {
