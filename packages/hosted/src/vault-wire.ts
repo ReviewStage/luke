@@ -59,11 +59,6 @@ export interface VaultKeyListEntry {
   updatedAt: number;
 }
 
-/** The list endpoint answer. */
-export interface VaultKeysListAnswer {
-  keys: VaultKeyListEntry[];
-}
-
 /**
  * The whole list drops on one malformed entry rather than skipping it: a key
  * silently missing from the list is a key the panel offers no way to replace

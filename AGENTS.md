@@ -295,9 +295,9 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 decode answers when the result crosses IPC or the wire — a `Result` inside a
 process, a `SchemaRead` where a caller on the other side of a process boundary
 reads it: `apps/desktop/src/shared/messages/acts.ts`,
-`packages/hosted/src/reads-wire.ts`, `packages/hosted/src/live-contract.ts`,
-`packages/wire/src/effect/json-schema.ts`, `packages/brain/src/ui-message-context.ts`,
-and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
+`packages/hosted/src/reads-wire.ts`, `packages/wire/src/effect/json-schema.ts`,
+`packages/brain/src/ui-message-context.ts`, and
+`apps/web/server/hosted/store/message-reads.ts` all produce or read it.
 
 ### Idioms
 

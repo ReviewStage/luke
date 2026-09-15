@@ -64,11 +64,11 @@ export const CALL_FAULT = {
 type CallFault = (typeof CALL_FAULT)[keyof typeof CALL_FAULT];
 
 /** The service answered; every status, including a refusal, is the caller's to read. */
-export interface CallResponse {
+interface CallResponse {
   response: Response;
 }
 
-export interface CallFailure {
+interface CallFailure {
   fault: CallFault;
   /**
    * The kind of error a network fault ended with, never its words, which
@@ -95,7 +95,7 @@ interface CallRequest {
   headers?: Record<string, string> | undefined;
 }
 
-export interface AccountCallOptions {
+interface AccountCallOptions {
   /** The service origin; any trailing separator is trimmed once. */
   baseUrl: string;
   credential: CallCredential;
