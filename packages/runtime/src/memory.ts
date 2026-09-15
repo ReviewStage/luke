@@ -58,8 +58,6 @@ export interface MemoryRecallHistory {
 export const MEMORY_CAPTURE_PHASE = {
   /** The context is about to be compacted; the pre-compaction flush. */
   COMPACTION_REQUESTED: "compaction.requested",
-  /** The conversation is about to start fresh; the reset capture. */
-  RESET_REQUESTED: "reset.requested",
 } as const;
 
 type MemoryCapturePhase = (typeof MEMORY_CAPTURE_PHASE)[keyof typeof MEMORY_CAPTURE_PHASE];

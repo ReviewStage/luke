@@ -14,7 +14,6 @@ import {
   isDailyNotePath,
   readBootstrapFiles,
   readWorkspaceFile,
-  recentDailyNotes,
   seedWorkspace,
   tooLargeRefusal,
   WORKSPACE_FILE,
@@ -220,27 +219,4 @@ test("today's note is named by the instant's UTC day, a dated note is told from 
   assert.equal(appendedDailyNote("- one\n\n\n", "- two"), "- one\n\n- two");
   // What stood is kept to the character: only the trailing whitespace goes.
   assert.equal(appendedDailyNote("# Day\n\n- one", "- two"), "# Day\n\n- one\n\n- two");
-});
-
-test("recent daily notes are today's and yesterday's alone, slugged variants included", async () => {
-  const directory = await temporaryDirectory();
-  await seedWorkspace(directory, TEST_SEEDS);
-  for (const [name, content] of [
-    ["2026-09-08.md", "today"],
-    ["2026-09-08-standup.md", "standup"],
-    ["2026-09-07.md", "yesterday"],
-    ["2026-09-01.md", "old"],
-    ["notes.md", "not a note"],
-  ]) {
-    await fs.writeFile(path.join(directory, "memory", name ?? ""), content ?? "");
-  }
-  const notes = await recentDailyNotes(directory, NOW);
-  assert.deepEqual(
-    notes.map((note) => [note.name, note.content]),
-    [
-      ["2026-09-07.md", "yesterday"],
-      ["2026-09-08-standup.md", "standup"],
-      ["2026-09-08.md", "today"],
-    ],
-  );
 });

@@ -14,7 +14,6 @@ import {
   ConfigurationStore,
   CREDENTIAL_REFERENCE_KIND,
   defaultAgentConfiguration,
-  MEMORY_CAPABILITY,
   notebookMemoryProviderFor,
   RESPONSES_ITEM_FORMAT,
   resolveConfigurationEither,
@@ -47,12 +46,6 @@ test("the notebook index stands as a memory provider per embedding adapter, one 
       [BUILTIN_MEMORY_PROVIDER.HOSTED, BUILTIN_EMBEDDING_ADAPTER.HOSTED],
     ],
   );
-  for (const provider of Object.values(BUILTINS.memoryProviders)) {
-    assert.deepEqual(
-      [...provider.capabilities],
-      [MEMORY_CAPABILITY.KEYWORD, MEMORY_CAPABILITY.VECTOR, MEMORY_CAPABILITY.NOTEBOOK],
-    );
-  }
   assert.equal(
     notebookMemoryProviderFor(CREDENTIAL_REFERENCE_KIND.PROVIDER_KEY),
     BUILTIN_MEMORY_PROVIDER.OPENAI,
@@ -182,13 +175,6 @@ test("a duplicate id in a built-in table is a type error, never a run-time refus
 });
 
 test("a pairing the built-ins rule out is a type error, never a run-time refusal", () => {
-  type NotebookProvider = (typeof BUILTINS.memoryProviders)[typeof BUILTIN_MEMORY_PROVIDER.OPENAI];
-  // @ts-expect-error a vector provider must name the embedding adapter its vectors run on.
-  const withoutAnEmbeddingAdapter: NotebookProvider = {
-    capabilities: BUILTINS.memoryProviders[BUILTIN_MEMORY_PROVIDER.OPENAI].capabilities,
-  };
-  assert.deepEqual(Object.keys(withoutAnEmbeddingAdapter), ["capabilities"]);
-
   // @ts-expect-error only a host tool may speak; a performer carries acts and cannot claim it.
   const speakingPerformer: ToolPlacement = {
     execution: TOOL_EXECUTION.PERFORMER,

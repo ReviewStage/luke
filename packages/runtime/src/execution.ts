@@ -158,26 +158,12 @@ export interface ReasoningSummary {
 
 export const MODEL_RESPONSE_OUTCOME = {
   ANSWERED: "answered",
-  /** Rate-limited or out of allowance; nothing was sent, and `until` says when to try again. */
-  THROTTLED: "throttled",
   FAILED: "failed",
 } as const;
 
-/**
- * Why a model call failed, as a fixed word. A compatibility failure is the
- * one a host must never paper over: the adapter and the service it speaks to
- * disagree about the contract, and the honest answer is to stop, not to fall
- * back to an older behavior.
- */
+/** Why a model call failed, as a fixed word: the service the adapter spoke to refused or broke. */
 export const MODEL_FAILURE = {
-  COMPATIBILITY: "compatibility",
-  NETWORK: "network",
-  CREDENTIAL: "credential",
   UPSTREAM: "upstream",
-  /** The answer came back but was not a response this adapter can read or replay. */
-  MALFORMED: "malformed",
-  /** The request would exceed a bound the transport fixes; nothing was sent. */
-  BOUNDS: "bounds",
 } as const;
 
 type ModelFailure = (typeof MODEL_FAILURE)[keyof typeof MODEL_FAILURE];
@@ -209,7 +195,6 @@ interface ModelAnswer {
 
 export type ModelResponse =
   | ModelAnswer
-  | { readonly outcome: typeof MODEL_RESPONSE_OUTCOME.THROTTLED; readonly until: number }
   | {
       readonly outcome: typeof MODEL_RESPONSE_OUTCOME.FAILED;
       readonly failure: ModelFailure;
@@ -219,23 +204,12 @@ export type ModelResponse =
 export const CONTEXT_INPUT_KIND = {
   /** Words from the host: an ask, an observation, a released hold, each already marked as data. */
   USER_TEXT: "user_text",
-  /** What a model answered, as the provider items it produced. */
-  MODEL_OUTPUT: "model_output",
-  /** The answer to one tool call, paired to the call by its id. */
-  TOOL_RESULT: "tool_result",
 } as const;
 
-type ContextInput =
-  | { readonly kind: typeof CONTEXT_INPUT_KIND.USER_TEXT; readonly text: string }
-  | {
-      readonly kind: typeof CONTEXT_INPUT_KIND.MODEL_OUTPUT;
-      readonly items: readonly WireRecord[];
-    }
-  | {
-      readonly kind: typeof CONTEXT_INPUT_KIND.TOOL_RESULT;
-      readonly callId: string;
-      readonly outputJson: string;
-    };
+type ContextInput = {
+  readonly kind: typeof CONTEXT_INPUT_KIND.USER_TEXT;
+  readonly text: string;
+};
 
 export interface ContextBootstrap {
   /** Whether the checkpoint's items were loaded; false leaves the engine empty. */
@@ -305,19 +279,6 @@ export interface ContextEngine {
    * is the caller's to know; the engine keeps them as the context from here.
    */
   adopt(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
-  /**
-   * Folds the older retained items behind a summary the host writes for
-   * them, keeping roughly `keepRecentTokens` of the most recent items and
-   * never parting a tool call from its result or a reasoning item from the
-   * call it preceded; answers how many items went, or zero when nothing was
-   * folded — too little to fold, or a summary the host could not produce. An
-   * engine whose items cannot be folded this way leaves it undefined.
-   */
-  foldBehindSummary?(
-    summarize: (older: readonly WireRecord[]) => Promise<string | undefined>,
-    keepRecentTokens: number,
-    lifecycle?: ContextLifecycle,
-  ): MaybePromise<number>;
   /** Maintenance once a turn has committed; nothing the model sees changes here. */
   afterTurn(lifecycle?: ContextLifecycle): MaybePromise<void>;
   mark(): ContextMark;

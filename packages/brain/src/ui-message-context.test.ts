@@ -623,7 +623,6 @@ test("the engine writes no row: the loop's inputs and adopted items are refused,
   assert.throws(() => seam.adopt([]), {
     message: UI_MESSAGE_ENGINE_REFUSAL.ADOPT,
   });
-  assert.equal(seam.foldBehindSummary, undefined);
   assert.equal(context.checkpoint().items.length, 1);
 });
 

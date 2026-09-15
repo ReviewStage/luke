@@ -29,7 +29,6 @@ export interface ObservationLoopOptions {
   gate: () => boolean;
   intervalMs: number;
   run: (generation: number) => Effect.Effect<void>;
-  afterRun?: () => Effect.Effect<void>;
   /**
    * Where a pass the cadence started reports its own failure. The interval
    * before it kept running whatever a pass threw, so the schedule may not end
@@ -130,17 +129,12 @@ export class ObservationLoop {
       this.#options.run(generation),
       Effect.suspend(() => {
         this.#running = false;
-        // The hook re-checks what the clock alone changes, so it belongs to a
-        // pass the loop still owns. A pass that outlived its stop has no clock
-        // behind it — running the hook there would draw the roster again over
-        // the empty one the stop just published.
-        const after = this.isCurrent(generation) ? this.#options.afterRun?.() : undefined;
         if (!this.#queued) {
           this.#settle();
-          return after ?? Effect.void;
+          return Effect.void;
         }
         this.#queued = false;
-        return Effect.andThen(after ?? Effect.void, Effect.asVoid(Effect.forkDetach(this.refresh)));
+        return Effect.asVoid(Effect.forkDetach(this.refresh));
       }),
     );
   });

@@ -237,36 +237,6 @@ it.effect("a loop behind a closed gate arms nothing and is disarmed all the same
   }),
 );
 
-it.effect("a pass that outlives its disarm does not run the after-run hook", () =>
-  Effect.gen(function* () {
-    let enabled = true;
-    const pending = yield* Deferred.make<void>();
-    const hooks: number[] = [];
-    const loop = new ObservationLoop({
-      gate: () => enabled,
-      intervalMs: 60_000,
-      run: () => Deferred.await(pending),
-      afterRun: () =>
-        Effect.sync(() => {
-          hooks.push(1);
-        }),
-    });
-    const gate = yield* cadenceGate(loop.cadence);
-    yield* gate.arm;
-
-    const running = yield* Effect.forkChild(loop.refresh);
-    yield* gate.disarm;
-    enabled = false;
-    yield* Deferred.succeed(pending, undefined);
-    yield* Fiber.await(running);
-    assert.deepEqual(hooks, []);
-
-    enabled = true;
-    yield* loop.refresh;
-    assert.deepEqual(hooks, [1]);
-  }),
-);
-
 describe("the cadence", () => {
   it.effect("runs a pass at every spaced instant until the loop is disarmed", () =>
     Effect.gen(function* () {
