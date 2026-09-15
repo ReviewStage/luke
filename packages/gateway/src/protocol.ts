@@ -42,12 +42,11 @@ interface MethodEntry {
  * host this repository composes, and no event of those kinds is ever
  * appended. They stay because this package's own tests use them as the
  * synthetic names their protocol cases run on (`protocol.test.ts`,
- * `server.test.ts`, `websocket.test.ts`, `socket-frames.test.ts`,
- * `protocol-envelopes.test.ts`, `node-invocations.test.ts`, `rpc.test.ts`)
- * and the goldens under `fixtures/protocol` are keyed by them; re-pointing
- * those and re-recording the goldens is a ticket of its own. A new method or
- * event a host will answer is added beside them as before; nothing here is a
- * reservation.
+ * `server.test.ts`, `protocol-envelopes.test.ts`, `node-invocations.test.ts`,
+ * `rpc.test.ts`) and the goldens under `fixtures/protocol` are keyed by them;
+ * re-pointing those and re-recording the goldens is a ticket of its own. A
+ * new method or event a host will answer is added beside them as before;
+ * nothing here is a reservation.
  */
 const GATEWAY_METHODS = {
   HELLO: { name: "gateway.hello", mutates: false },

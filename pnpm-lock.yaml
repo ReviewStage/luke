@@ -609,9 +609,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.115
-      ws:
-        specifier: 'catalog:'
-        version: 8.21.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -619,9 +616,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.2.0
-      '@types/ws':
-        specifier: 8.18.1
-        version: 8.18.1
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

@@ -22,12 +22,10 @@ names the host answers rather than a vocabulary kept for them.
 
 ## The goldens are the envelope
 
-`fixtures/protocol/` and `fixtures/socket/` hold one recording per method, error
-code, and frame kind, carried through the text transport and a real ephemeral
-socket. **Key order is part of the contract**, so nothing sorts the recorded keys
-and the formatter is kept off the tree. An error's `message` is prose and travels
-into a golden as a fixed token, while the exchange asserts a message was said at
-all.
+`fixtures/protocol/` holds one recording per method and error code, carried
+through the text transport. **Key order is part of the contract**, so nothing
+sorts the recorded keys and the formatter is kept off the tree. An error's
+`message` is prose and travels into a golden as a fixed token.
 
 Re-recording with `LUKE_UPDATE_FIXTURES=1` is a claim that the protocol moved.
 
@@ -47,18 +45,6 @@ parameters is an `idempotency_conflict`. **Never a second effect.**
 transport at its authenticated handshake, and a request's own id is the
 transport's to echo, never the handler's to read.
 
-## Authentication is injected, never spelled here
-
-The handshake runs on the binding's own upgrade, before `ws` is handed the socket
-and before the client registry has heard of it. Who is asking is compared where it
-is understood: a shared secret in constant time on a loopback binding, an
-account's bearer on a server. **This package learns no credential, and none
-reaches a log line in it.**
-
-A host that starts to leave mid-check takes the socket with it rather than holding
-its close open behind an authority that may never answer, and a client that drops
-mid-handshake is admitted as nobody.
-
 ## The node's ledger is one scope
 
 `serveInvocations` opens one `InvocationMemory` for the scope it is served in,
@@ -68,15 +54,6 @@ performance is a fiber of the memory's own set rather than of whoever the frame
 arrived on, so a frame whose reader gave up never takes the answer the
 duplicates are joined to. **The native effect runs at most once per id**,
 whatever the wire did.
-
-The client end of the socket is one scope too. `connectWebSocketGateway` holds
-the socket, the mailbox its frames arrive in, and the one fiber that reads
-them, so the frames a connection carries are read in order and the socket, the
-requests still out, and the fibers answering the host's invocations all end
-with that scope. The mailbox is filled from `ws`'s own callback in the same
-synchronous step the socket is opened in, so a frame that lands between the 101
-and the reader's first step waits in it rather than arriving before anything
-was listening.
 
 ## Unavailable and unknown are different answers
 
