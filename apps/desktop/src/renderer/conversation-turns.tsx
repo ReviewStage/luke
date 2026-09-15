@@ -127,7 +127,7 @@ const DEVELOPER_ORIGINS: ReadonlySet<TurnOrigin> = new Set<TurnOrigin>([
 ]);
 
 /** A turn with no row to say who opened it is drawn as an ask rather than claimed as Luke's own. */
-export function judgmentOf(turn: ConversationViewTurn | undefined): Judgment {
+function judgmentOf(turn: ConversationViewTurn | undefined): Judgment {
   return turn !== undefined && !DEVELOPER_ORIGINS.has(turn.origin) ? JUDGMENT.OWN : JUDGMENT.ASK;
 }
 
@@ -137,7 +137,7 @@ const PENDING_STATUSES: ReadonlySet<TurnStatus> = new Set<TurnStatus>([
   TURN_STATUS.RUNNING,
 ]);
 
-export function turnPending(turn: ConversationViewTurn | undefined): boolean {
+function turnPending(turn: ConversationViewTurn | undefined): boolean {
   return turn !== undefined && PENDING_STATUSES.has(turn.status);
 }
 
@@ -149,7 +149,7 @@ export function turnPending(turn: ConversationViewTurn | undefined): boolean {
  * the voice made of them, and are drawn folded as his written working — never
  * as a bubble the reader would take for a second answer.
  */
-export function answeredAloud(turn: ConversationViewTurn | undefined): boolean {
+function answeredAloud(turn: ConversationViewTurn | undefined): boolean {
   return turn?.origin === TURN_ORIGIN.SPOKEN;
 }
 
@@ -621,7 +621,7 @@ function isReasoningPart(part: StoredPart): part is ReasoningPart {
 }
 
 /** The words an announce call carries: its one `briefing` argument, or nothing for a call spelled otherwise. */
-export function announcedWords(part: StoredToolPart): string | undefined {
+function announcedWords(part: StoredToolPart): string | undefined {
   // SAFETY: a stored part's input is the call's JSON arguments; the wire boundary is where they are read.
   const input = unparsedWire(part.input as WireBoundaryInput);
   return isRecord(input) && isWireString(input.briefing) ? input.briefing : undefined;

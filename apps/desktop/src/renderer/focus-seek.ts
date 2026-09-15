@@ -1,5 +1,5 @@
 /** Long enough for any stage to arrive, and short enough to be a backstop. */
-export const FOCUS_FRAME_LIMIT = 60;
+const FOCUS_FRAME_LIMIT = 60;
 
 /** Only an element a reader can actually see is worth acting on. */
 export function drawnVisibly(element: HTMLElement): boolean {

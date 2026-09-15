@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
-  CONVERSATION_TIME_BREAK_MS,
   createConversationTimeBreakFormatter,
   opensConversationTimeBreak,
 } from "./conversation-time-break";
@@ -13,7 +12,7 @@ const DAY_MS = 24 * 60 * MINUTE_MS;
 test("the first recorded line opens a break, and a silence of an hour opens the next", () => {
   assert.equal(opensConversationTimeBreak(undefined, NOW), true);
   assert.equal(opensConversationTimeBreak(NOW, NOW + 59 * MINUTE_MS), false);
-  assert.equal(opensConversationTimeBreak(NOW, NOW + CONVERSATION_TIME_BREAK_MS), true);
+  assert.equal(opensConversationTimeBreak(NOW, NOW + 60 * MINUTE_MS), true);
   assert.equal(opensConversationTimeBreak(NOW, NOW + DAY_MS), true);
 });
 

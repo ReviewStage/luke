@@ -6,10 +6,9 @@ import { test } from "vitest";
 import {
   ConversationPanel,
   conversationDistanceFromTail,
-  conversationEntryPresentation,
   followsConversationTail,
 } from "./conversation-panel";
-import { CONVERSATION_ENTRY_SPEAKER, thinkingElapsedLabel } from "./conversation-rows";
+import { thinkingElapsedLabel } from "./conversation-rows";
 import {
   FIXTURE_NOW,
   FIXTURE_ROSTER,
@@ -41,29 +40,6 @@ function count(markup: string, needle: string): number {
 const SINGLE_TURN = fixtureConversationTurns().filter(
   (group) => group.turnId === FIXTURE_TURN.SINGLE,
 );
-
-test("a line still being said is shown in the developer's or Luke's voice by its kind", () => {
-  assert.deepEqual(conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ASK), {
-    speaker: CONVERSATION_ENTRY_SPEAKER.YOU,
-    label: "You",
-  });
-  assert.equal(
-    conversationEntryPresentation(CONVERSATION_ENTRY_KIND.REPLY).speaker,
-    CONVERSATION_ENTRY_SPEAKER.LUKE,
-  );
-  assert.equal(
-    conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ANNOUNCEMENT).speaker,
-    CONVERSATION_ENTRY_SPEAKER.LUKE,
-  );
-  assert.equal(
-    conversationEntryPresentation(CONVERSATION_ENTRY_KIND.OWN_ACTION).speaker,
-    CONVERSATION_ENTRY_SPEAKER.LUKE,
-  );
-  assert.equal(
-    conversationEntryPresentation(CONVERSATION_ENTRY_KIND.ACTION).speaker,
-    CONVERSATION_ENTRY_SPEAKER.EVENT,
-  );
-});
 
 test("the stored turns are mounted inside the one subtree the session recording blocks", () => {
   const markup = render(fixtureConversationTurns());

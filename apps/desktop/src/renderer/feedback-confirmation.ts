@@ -14,7 +14,7 @@ import {
  */
 
 /** How the confirmation dresses the landing: what the text does alongside. */
-export const CONFIRMATION_SCENE = {
+const CONFIRMATION_SCENE = {
   /** A stomp whose impact ducks the text lines under him. */
   SHOCKWAVE: "shockwave",
   /** A puff at the exclamation mark, which tips over and springs back up. */
@@ -57,13 +57,13 @@ export const CONFIRMATION_ENTRANCE_MS =
   MOTION_DURATION_MS.EXIT + MOTION_DELAY_MS.PEEK + MOTION_DURATION_MS.SURFACE;
 
 /** The beat the landing rests after its gesture, before the panel returns. */
-export const CONFIRMATION_REST_MS = 700;
+const CONFIRMATION_REST_MS = 700;
 
 /**
  * With motion asked away, the words alone say it: long enough to be read on
  * the way back from the Send button, no gesture to wait out.
  */
-export const STILL_CONFIRMATION_MS = 1_600;
+const STILL_CONFIRMATION_MS = 1_600;
 
 /**
  * How long the confirmation holds the shape before the panel is restored:

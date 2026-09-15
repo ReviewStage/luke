@@ -5,7 +5,7 @@
  * closer than that, a message answers the one before it, and the row's own
  * stamp in the pull column is enough.
  */
-export const CONVERSATION_TIME_BREAK_MS = 60 * 60_000;
+const CONVERSATION_TIME_BREAK_MS = 60 * 60_000;
 
 const DAY_MS = 24 * 60 * 60_000;
 

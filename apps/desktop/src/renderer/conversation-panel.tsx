@@ -23,9 +23,7 @@ interface ConversationEntryPresentation {
 }
 
 /** The user-facing voice for each kind of line still being said, before the record it settles into arrives. */
-export function conversationEntryPresentation(
-  kind: ConversationEntryKind,
-): ConversationEntryPresentation {
+function conversationEntryPresentation(kind: ConversationEntryKind): ConversationEntryPresentation {
   switch (kind) {
     case CONVERSATION_ENTRY_KIND.ASK:
       return { speaker: CONVERSATION_ENTRY_SPEAKER.YOU, label: "You" };
