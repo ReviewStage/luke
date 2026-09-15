@@ -175,11 +175,6 @@ const ACTS_BY_NAME = new Map<string, ToolSpec<ActionFamily, ActionKind>>(
   ACTION_LIST.map((tool) => [tool.name, tool]),
 );
 
-/** The family a named tool belongs to, or nothing when no such tool exists. */
-export function actionToolFamily(name: string): ActionFamily | undefined {
-  return ACTS_BY_NAME.get(name)?.family;
-}
-
 /** The kind of action a named tool carries, or nothing when no such tool exists. */
 export function actionToolKind(name: string): ActionKind | undefined {
   return ACTS_BY_NAME.get(name)?.kind;

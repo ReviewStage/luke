@@ -97,7 +97,7 @@ export type ValidatedAction<Kind extends ActionKind = ActionKind> = Admitted<
 };
 
 /** Whether the turn an action belongs to still stands, asked again after every await. */
-export interface ActionGuard {
+interface ActionGuard {
   isRevoked(): boolean;
   /** Fires on revocation, so a read waited on before the effect settles at once rather than finishing first. */
   readonly signal?: AbortSignal;
@@ -115,7 +115,7 @@ export interface ActionRoster {
 }
 
 /** The projects a creation ask may land in, read the same way and from the same pass. */
-export interface ActionProjects {
+interface ActionProjects {
   read(): Effect.Effect<readonly ObservedWorkspaceProject[]>;
   /**
    * The developer's saved tie-breaks, which only ever narrow within what
@@ -193,8 +193,6 @@ export const ACTION_REFUSAL = {
   NO_UPDATE_REPORT: "This run does not report where updates stand.",
   NO_UPDATE_ACTION: "The Updates button checks, downloads, or restarts.",
 } as const;
-
-export type ActionRefusalReason = (typeof ACTION_REFUSAL)[keyof typeof ACTION_REFUSAL];
 
 /** Why an action was not admitted. Disjoint from every carried action, by `kind`. */
 export interface Refusal {

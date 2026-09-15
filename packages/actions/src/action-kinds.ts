@@ -23,16 +23,6 @@ import type {
 } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 
-/**
- * One tool call as admission is handed it: the action's own name and its
- * arguments as the model wrote them. No call id — the id an answer travels
- * back under belongs to the transport, which extends this with one.
- */
-export interface ActionFunctionCall {
-  name: string;
-  argumentsJson: string;
-}
-
 /** Which process an action is about: a session, or Luke himself. */
 export const ACTION_FAMILY = {
   SESSION: "session",
@@ -71,7 +61,7 @@ export const SESSION_LIST_VOICE = "voice";
  * An action payload that can never be mistaken for a refusal: the two shapes are
  * disjoint, so `kind === undefined` is the whole of the test either way.
  */
-export type Carried<T> = T & { status?: never; reason?: never };
+type Carried<T> = T & { status?: never; reason?: never };
 
 /**
  * What each kind of action carries once admitted. Every field here is either the
@@ -146,15 +136,6 @@ export type SessionActionKind =
   | typeof ACTION_KIND.ADD_AGENT
   | typeof ACTION_KIND.RENAME_WORKSPACE
   | typeof ACTION_KIND.RENAME_SESSION;
-
-export type AppActionKind =
-  | typeof ACTION_KIND.SETTING
-  | typeof ACTION_KIND.PANEL
-  | typeof ACTION_KIND.FEEDBACK
-  | typeof ACTION_KIND.UPDATE;
-
-export type CarriedSessionAction = CarriedAction<SessionActionKind>;
-export type CarriedAppAction = CarriedAction<AppActionKind>;
 
 /**
  * One ask at an intake, before anything about it has been read: the kind names
