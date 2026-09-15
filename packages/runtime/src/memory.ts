@@ -77,8 +77,7 @@ export const MEMORY_CAPTURE_OUTCOME = {
   FAILED: "failed",
 } as const;
 
-export type MemoryCaptureOutcome =
-  (typeof MEMORY_CAPTURE_OUTCOME)[keyof typeof MEMORY_CAPTURE_OUTCOME];
+type MemoryCaptureOutcome = (typeof MEMORY_CAPTURE_OUTCOME)[keyof typeof MEMORY_CAPTURE_OUTCOME];
 
 export interface MemoryCaptureResult {
   readonly outcome: MemoryCaptureOutcome;

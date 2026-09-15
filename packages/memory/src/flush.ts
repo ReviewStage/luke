@@ -11,11 +11,7 @@
  */
 
 import { WORKSPACE_FILE } from "@sidecar/runtime";
-import {
-  MEMORY_CAPTURE_OUTCOME,
-  type MemoryCaptureOutcome,
-  type MemoryCaptureResult,
-} from "@sidecar/runtime/vocabulary";
+import { MEMORY_CAPTURE_OUTCOME, type MemoryCaptureResult } from "@sidecar/runtime/vocabulary";
 
 export const MEMORY_FLUSH_DEFAULTS = {
   /** The most output tokens a housekeeping turn may spend. */
@@ -36,8 +32,6 @@ export const SILENT_REPLY_TOKEN = "NO_REPLY";
  * asked for it.
  */
 export const MEMORY_HOUSEKEEPING_OUTCOME = MEMORY_CAPTURE_OUTCOME;
-
-export type MemoryHousekeepingOutcome = MemoryCaptureOutcome;
 
 export type MemoryHousekeepingResult = MemoryCaptureResult;
 
@@ -64,7 +58,7 @@ const READ_ONLY_HINT = `Treat workspace bootstrap and reference files such as ${
 const NO_VARIANT_HINT =
   "Do NOT create timestamped variant files (e.g., YYYY-MM-DD-HHMM.md); always use the canonical YYYY-MM-DD.md filename.";
 
-export interface HousekeepingPrompt {
+interface HousekeepingPrompt {
   /** The standing instructions the turn runs under. */
   readonly system: string;
   /** The words that open the turn. */

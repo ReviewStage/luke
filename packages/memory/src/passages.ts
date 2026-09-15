@@ -20,7 +20,7 @@ export interface MemoryPassage {
   readonly hash: string;
 }
 
-export interface PassageBounds {
+interface PassageBounds {
   readonly tokens: number;
   readonly overlapTokens: number;
 }

@@ -197,7 +197,7 @@ export interface RankedPassage {
   readonly score: number;
 }
 
-export interface RankingAsk {
+interface RankingAsk {
   readonly query: string;
   /** The query's embedding under the same model as the passages' vectors; absent runs the keyword lane alone. */
   readonly queryVector?: readonly number[] | undefined;
