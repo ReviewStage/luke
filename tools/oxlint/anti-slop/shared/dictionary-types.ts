@@ -19,7 +19,7 @@ type ResolvedType = {
   readonly substitutions: TypeAliasEnvironment;
 };
 
-export type UnsafeDictionary = {
+type UnsafeDictionary = {
   readonly kind: "unsafe-dictionary";
   readonly unsafeValue: "any" | "empty-object" | "object" | "union" | "unknown";
 };

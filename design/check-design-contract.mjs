@@ -37,10 +37,6 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
     }
   }
 
-  // Generated face keyframes own their literal cycles as artwork. Their shared
-  // .luke-face-part rule supplies --face-motion, so per-rule checking would
-  // mistake that inheritance for an unguarded animation.
-  const checksLiteralCycles = name !== "face-motion.css";
   const rules = source.matchAll(/([^{}]+)\{([^{}]*)\}/gsu);
   for (const [, selector, body] of rules) {
     for (const declaration of body.matchAll(
@@ -61,7 +57,6 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
         failures.push(`${name}: ${selector.trim()} transitions a layout property`);
       }
 
-      if (!checksLiteralCycles) continue;
       const literalTimes = [...value.matchAll(/(-?\d*\.?\d+)(ms|s)\b/gu)].filter((match) => {
         const milliseconds = Number(match[1]) * (match[2] === "s" ? 1000 : 1);
         return milliseconds > 1;

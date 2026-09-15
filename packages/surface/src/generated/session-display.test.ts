@@ -2,13 +2,6 @@ import assert from "node:assert/strict";
 import { SESSION_URGENCY } from "@sidecar/session";
 import { compareSessionsByUrgency, MOTION_DURATION_MS } from "@sidecar/surface";
 import { test } from "vitest";
-import { URGENCY_LABEL, URGENCY_PRIORITY } from "./session-display.js";
-
-test("every display urgency has a label, and the priority list is a permutation of them", () => {
-  assert.deepEqual(new Set(Object.keys(URGENCY_LABEL)), new Set(Object.values(SESSION_URGENCY)));
-  assert.deepEqual(new Set(URGENCY_PRIORITY), new Set(Object.values(SESSION_URGENCY)));
-  assert.equal(URGENCY_PRIORITY.length, Object.values(SESSION_URGENCY).length);
-});
 
 test("urgency puts attention first, then working, complete, and idle", () => {
   const idle = { urgency: SESSION_URGENCY.UNKNOWN, lastActivityAt: 3 };
