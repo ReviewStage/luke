@@ -1,6 +1,7 @@
 import {
   ArchiveIcon,
   BookIcon,
+  BrainIcon,
   ChevronIcon,
   ControlIcon,
   DisplayIcon,
@@ -141,6 +142,18 @@ export function turnPending(turn: ConversationViewTurn | undefined): boolean {
 }
 
 /**
+ * Whether the turn's answer was Luke's voice's to say: a turn the developer
+ * opened by speaking hands what the brain wrote to the voice, which says it
+ * in words of its own that the record keeps as his rows. The brain's own
+ * words in such a turn are his thinking rather than anything said, whatever
+ * the voice made of them, and are drawn folded as his written working — never
+ * as a bubble the reader would take for a second answer.
+ */
+export function answeredAloud(turn: ConversationViewTurn | undefined): boolean {
+  return turn?.origin === TURN_ORIGIN.SPOKEN;
+}
+
+/**
  * The mark a tool call's row leads with, one per kind of thing a call can be,
  * total over the kinds so a new kind does not compile until it has one. Two
  * renames share the pencil, two creations and a delegation the plus, every
@@ -247,47 +260,73 @@ function BubbleRow({
   );
 }
 
-/** Luke's thought before what followed it, folded to a line that opens on its words; never a control of anything. */
+/** What a fold of Luke's thinking opens on: one word for both kinds, for now. */
+const THINKING_LABEL = "Thinking";
+
+/**
+ * A fold of Luke's thinking: a line drawn the way a fold of tool calls is —
+ * the disclosure chevron, then his brain for a mark, then the one word — that
+ * opens on the words below it, closed until the reader presses it, and never
+ * a control of anything. It is a row of its own and never a row inside the
+ * tool calls' fold: what he did and what he thought are two things. The two
+ * rows below share it and nothing else, so the record's two kinds of
+ * thinking stay two kinds in the markup while reading as one on the surface.
+ */
+function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.Element {
+  return (
+    <details className="conversation-thinking-fold">
+      <summary className="conversation-turn-summary">
+        <ChevronIcon />
+        <span className="conversation-action-mark" aria-hidden="true">
+          <BrainIcon />
+        </span>
+        <span>{THINKING_LABEL}</span>
+      </summary>
+      {children}
+    </details>
+  );
+}
+
+/** The model's own reasoning before what followed it, as the reasoning part carries it. */
 function ReasoningRow({ text }: { text: string }): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
       data-speaker={CONVERSATION_ENTRY_SPEAKER.LUKE}
+      data-thinking-fold="true"
       data-reasoning="true"
     >
       <small className="visually-hidden">{VOICE.LUKE.label}</small>
       <div className="conversation-message">
-        <details className="conversation-reasoning">
-          <summary className="conversation-reasoning-summary">Thought</summary>
-          <span className="conversation-reasoning-words">{text}</span>
-        </details>
+        <ThinkingFold>
+          <span className="conversation-thinking-fold-words">{text}</span>
+        </ThinkingFold>
       </div>
     </li>
   );
 }
 
-/** What the fold of words Luke read aloud opens on. */
-const AS_WRITTEN_LABEL = "As written";
-
 /**
- * The brain's words as written, folded to one line, because Luke read them
- * aloud and the words he actually said stand as the bubble below. A native
- * disclosure like a thought's, at the same inset, so the source is there to
- * check against without reading as a second thing he said.
+ * The brain's written words where his voice said something of them: the text
+ * it handed the voice in a turn the developer opened by speaking, or a
+ * briefing a device read aloud. What he actually said stands as the voice's
+ * own bubble, and what the brain wrote was his working toward that, folded
+ * like his reasoning but a row of its own, since the store keeps the two
+ * apart and so does this.
  */
-function SourceWordsRow({ words }: { words: string }): React.JSX.Element {
+function WrittenRow({ words }: { words: string }): React.JSX.Element {
   return (
     <li
       className="conversation-entry"
       data-speaker={CONVERSATION_ENTRY_SPEAKER.LUKE}
-      data-read-aloud="true"
+      data-thinking-fold="true"
+      data-written="true"
     >
       <small className="visually-hidden">{VOICE.LUKE.label}</small>
       <div className="conversation-message">
-        <details className="conversation-source">
-          <summary className="conversation-source-summary">{AS_WRITTEN_LABEL}</summary>
-          <MarkdownMessage words={words} className="conversation-source-words" />
-        </details>
+        <ThinkingFold>
+          <MarkdownMessage words={words} className="conversation-thinking-fold-words" />
+        </ThinkingFold>
       </div>
     </li>
   );
@@ -653,12 +692,17 @@ function spokenWords(message: StoredUIMessage): string {
   return userWords(message);
 }
 
-/** Whether a part draws Luke's words: a text part, or an announce call carrying its briefing. */
+/**
+ * Whether a part draws words Luke said: a text part that is not his thinking,
+ * or an announce call carrying its briefing. A fold of thinking draws words
+ * too, but none he said, so the rating never stands on one.
+ */
 function drawsWords(
   part: StoredPart,
   described: ReadonlyMap<string, ConversationViewToolPart>,
+  thinking: boolean,
 ): boolean {
-  if (isTextPart(part)) return true;
+  if (isTextPart(part)) return !thinking;
   return (
     isStoredToolPart(part) &&
     described.get(part.toolCallId)?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE &&
@@ -722,12 +766,17 @@ function toolCallRow(
  * control on its last words. Which tool calls are announcements is the view's
  * decision, read back by call id; an announce call carrying its briefing is
  * drawn as that bubble and as no tool call row, and every other call is a row
- * composed from its own part.
+ * composed from its own part. In a turn whose answer the voice said, the
+ * brain's text is his thinking and folds as his written working, whatever
+ * the voice made of it; the rating of the brain's judgment then stands on the
+ * voice's reading of it, where the record ties one to the journal, and on no
+ * fold of thinking.
  */
 function messageRows(
   view: ConversationViewMessage,
   judgment: Judgment,
   pending: boolean,
+  aloud: boolean,
   roster: readonly SessionView[],
   rating: RatingContext,
   readings: Readings,
@@ -767,9 +816,11 @@ function messageRows(
       />,
     ];
   }
-  // A message read aloud is folded to its source: the words said stand below
-  // it as the reading's bubble, and the rating control moves there with them.
+  // A briefing a device read aloud folds as the brain's written words: what was
+  // said stands as the reading's bubble, and the rating control moves there with it.
   const readAloud = (readings.readOf.get(message.id)?.length ?? 0) > 0;
+  // The brain's text in a turn the voice answered is his thinking, said by nobody.
+  const thinking = aloud && message.metadata.author === MESSAGE_AUTHOR.BRAIN;
   const described = new Map<string, ConversationViewToolPart>(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
@@ -777,7 +828,7 @@ function messageRows(
   const toolCalls: ToolCall[] = [];
   // The control stands on the message's last words, so one message takes one.
   const lastWordsAt = message.parts.findLastIndex((part: StoredPart) =>
-    drawsWords(part, described),
+    drawsWords(part, described, thinking),
   );
   const control =
     lastWordsAt === -1 || readAloud
@@ -787,8 +838,8 @@ function messageRows(
     const key = `${message.id}:${index}`;
     const placed = index === lastWordsAt ? control : undefined;
     if (isTextPart(part)) {
-      if (readAloud) {
-        rows.push(<SourceWordsRow key={key} words={part.text} />);
+      if (thinking) {
+        rows.push(<WrittenRow key={key} words={part.text} />);
         return;
       }
       rows.push(
@@ -815,7 +866,7 @@ function messageRows(
     if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
       const words = announcedWords(part);
       if (words !== undefined && readAloud) {
-        rows.push(<SourceWordsRow key={key} words={words} />);
+        rows.push(<WrittenRow key={key} words={words} />);
         return;
       }
       if (words !== undefined) {
@@ -910,6 +961,7 @@ export function ConversationTurns({
         previousAt = span.last;
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
+        const aloud = answeredAloud(group.turn);
         // The ask a rated reply answered is the developer's latest words in
         // the same turn before it; a turn Luke opened himself answered none.
         let ask: string | undefined;
@@ -918,6 +970,7 @@ export function ConversationTurns({
             message,
             judgment,
             pending,
+            aloud,
             roster,
             {
               ask,

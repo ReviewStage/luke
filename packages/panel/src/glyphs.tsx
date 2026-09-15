@@ -408,6 +408,18 @@ export function ControlIcon(): React.JSX.Element {
   );
 }
 
+/** Two lobes over a stem: Luke's thinking, the fold a reader opens to see it. */
+export function BrainIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M11 20.6V4.8a3 3 0 0 0-5 2.3 3 3 0 0 0-1.6 5 3 3 0 0 0 .8 5.1 3 3 0 0 0 5.8 3.4Z" />
+      <path d="M13 20.6V4.8a3 3 0 0 1 5 2.3 3 3 0 0 1 1.6 5 3 3 0 0 1-.8 5.1 3 3 0 0 1-5.8 3.4Z" />
+      <path d="M11 9.4a2.6 2.6 0 0 1-2.4 2.4" />
+      <path d="M13 13.8a2.6 2.6 0 0 1 2.6 2.4" />
+    </Glyph>
+  );
+}
+
 /** A box with its lid on: the settled thing filed away. */
 export function ArchiveIcon(): React.JSX.Element {
   return (

@@ -39,7 +39,8 @@ import { Result } from "effect";
  * gave it (a row still being written is answered on every read until it
  * finishes, so the copy held is always the latest, and a row the store moved
  * — a spoken line taken into its turn, a turn's work placed behind the line
- * it answers — arrives again at a fresh sequence and leaves the place it
+ * it answers, a journal closed behind what landed while its turn ran —
+ * arrives again at a fresh sequence and leaves the place it
  * held, an emptied group going with it), a turn is
  * replaced by its id whenever a stamp on it moves, the rows of a
  * conversation an answer no longer lists are dropped, and an observed
@@ -556,8 +557,9 @@ export class ConversationViewSync {
   /**
    * A message arriving somewhere other than where it is held leaves the old
    * place first, so it stands once: the store moved it, by taking a spoken
-   * line into its turn or by placing a turn's work behind the line it
-   * answers, and answered it again at a fresh sequence. A group left with
+   * line into its turn, by placing a turn's work behind the line it
+   * answers, or by closing a journal behind what landed while its turn ran,
+   * and answered it again at a fresh sequence. A group left with
    * nothing goes; one that is the group being merged into is amended in
    * place. Answers whether anything moved.
    */
