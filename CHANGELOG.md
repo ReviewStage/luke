@@ -32,6 +32,241 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.6.0 — 2026-09-15
+
+### One brain, running on Luke's service
+
+Luke's replies and his announcements come from one brain that remembers across
+turns, and it runs on his service rather than on this Mac. Once a minute the
+service observes the Conductor sessions of every account with a synced key and
+a Mac seen in the last week and wakes the brain with what changed, so a session
+that finished or needs you is noticed whether or not your Mac is awake, and a
+briefing a meeting hold released is decided again once the meeting ends. Ask
+about a session and he reads what it did, including a Conductor chat's own
+conversation. Session rows draw the same roster the service keeps, and no
+provider pass or transcript read runs on your Mac any longer.
+([#738](https://github.com/ReviewStage/luke/pull/738),
+[#865](https://github.com/ReviewStage/luke/pull/865),
+[#1038](https://github.com/ReviewStage/luke/pull/1038),
+[#1069](https://github.com/ReviewStage/luke/pull/1069),
+[#1079](https://github.com/ReviewStage/luke/pull/1079),
+[#972](https://github.com/ReviewStage/luke/pull/972),
+[#1421](https://github.com/ReviewStage/luke/pull/1421))
+
+### Voice on your Luke account, and voice alone
+
+Spoken exchanges need no OpenAI key of your own: every call runs through Luke's
+service on the account you signed in with, over GPT Live, so the Voice page
+loses its Provider section and a key an earlier build stored is dropped at
+launch. Hold the talk key and the microphone is open for exactly as long as
+you hold it; release it and Luke keeps talking until the stop key or Escape.
+The Ask Luke composer, its Option-L shortcut, and typed asks are gone, and the
+Voice row offers all 22 Live voices with Marin as the default. The panel draws
+both of you at once, your meter on the right wing and Luke's beside his face,
+and the thinking dots stand whenever the brain is working.
+([#933](https://github.com/ReviewStage/luke/pull/933),
+[#956](https://github.com/ReviewStage/luke/pull/956),
+[#1006](https://github.com/ReviewStage/luke/pull/1006),
+[#1013](https://github.com/ReviewStage/luke/pull/1013),
+[#1381](https://github.com/ReviewStage/luke/pull/1381),
+[#1417](https://github.com/ReviewStage/luke/pull/1417),
+[#1166](https://github.com/ReviewStage/luke/pull/1166))
+
+### The Conversation tab
+
+History is now Conversation, and it draws the account's one thread as the
+service holds it, so a Clear on any device empties it everywhere. Luke's
+replies render as Markdown. Each action he took is a row saying what he did,
+with a chip that opens the session it reached, and several in one turn fold
+under a line that counts them. A turn he opened on his own judgment leads with
+his face under "Luke, on his own judgment", a reply he read aloud shows the
+words he said with the brain's text folded behind a "Thinking" line, and a
+briefing nobody heard is marked. While a run is going his face hops beside
+three rising dots, in the thread and on the notch strip, and a sideways swipe
+uncovers each line's time the way iMessage does. An ellipsis beside each of
+his messages opens thumbs up and down; a thumbs down offers the feedback
+composer with the message quoted, and nothing leaves your Mac until you press
+Send.
+([#795](https://github.com/ReviewStage/luke/pull/795),
+[#977](https://github.com/ReviewStage/luke/pull/977),
+[#740](https://github.com/ReviewStage/luke/pull/740),
+[#936](https://github.com/ReviewStage/luke/pull/936),
+[#939](https://github.com/ReviewStage/luke/pull/939),
+[#1473](https://github.com/ReviewStage/luke/pull/1473),
+[#1489](https://github.com/ReviewStage/luke/pull/1489),
+[#873](https://github.com/ReviewStage/luke/pull/873),
+[#747](https://github.com/ReviewStage/luke/pull/747),
+[#1029](https://github.com/ReviewStage/luke/pull/1029),
+[#1462](https://github.com/ReviewStage/luke/pull/1462))
+
+### Luke's notebook
+
+Luke keeps a notebook on the service: what he knows about you in USER.md,
+durable decisions in MEMORY.md, and a dated note for each day he appends to as
+he works. Before answering about prior work, dates, people, or preferences he
+searches it and reads only the lines he needs, saying so when the search ran
+on keywords alone. Before a long conversation is folded, he writes what is
+worth keeping to the day's note first. Each curated file is held to 4,000
+characters, so he condenses rather than loses the tail, and a read-only
+Memory page in Settings shows the notebook as he wrote it, without a model
+turn in between.
+([#1475](https://github.com/ReviewStage/luke/pull/1475),
+[#1484](https://github.com/ReviewStage/luke/pull/1484),
+[#1491](https://github.com/ReviewStage/luke/pull/1491),
+[#1477](https://github.com/ReviewStage/luke/pull/1477),
+[#1478](https://github.com/ReviewStage/luke/pull/1478),
+[#1479](https://github.com/ReviewStage/luke/pull/1479))
+
+### Your Conductor key lives in the vault
+
+Connect on the Connections row stores your Conductor key in your account's
+vault, never on this Mac, and a key an earlier build kept locally is handed
+over once and deleted here. Onboarding asks for that key right after your first
+sign-in, ahead of any session row and the calendar step, and a skipped step
+leaves an empty desk that says no provider is connected and offers Connect
+again. The Sync switch goes with the path it served.
+([#1260](https://github.com/ReviewStage/luke/pull/1260),
+[#1267](https://github.com/ReviewStage/luke/pull/1267))
+
+### Improvements
+
+- Luke greets you by first name at every signed-in launch, and the spoken
+  introduction waits for your first sign-in instead of greeting a stranger
+  ([#1204](https://github.com/ReviewStage/luke/pull/1204),
+  [#1254](https://github.com/ReviewStage/luke/pull/1254))
+- Briefings are two short sentences at most, subject first, one idea a
+  sentence, never a title read aloud
+  ([#1378](https://github.com/ReviewStage/luke/pull/1378))
+- A voice call opens already knowing your roster and hears what changes as
+  your desk moves, so "anything need me?" is answered without a round trip,
+  and a reply that only needed a read is spoken the moment its words form
+  ([#1226](https://github.com/ReviewStage/luke/pull/1226),
+  [#1164](https://github.com/ReviewStage/luke/pull/1164))
+- While you are still speaking, Luke may read ahead to a session's recent
+  messages or a notebook search the answer will need
+  ([#1229](https://github.com/ReviewStage/luke/pull/1229))
+- Every spoken exchange is kept, including the ones Luke answers himself, so
+  your words and his come back after a relaunch
+  ([#1318](https://github.com/ReviewStage/luke/pull/1318),
+  [#1319](https://github.com/ReviewStage/luke/pull/1319))
+- Captions show your own words as you say them, in a quieter tone, and every
+  segment of a longer reply rolls up under the housing instead of the last two
+  ([#1464](https://github.com/ReviewStage/luke/pull/1464),
+  [#883](https://github.com/ReviewStage/luke/pull/883))
+- You can stop an ask: a Stop on a waiting ask is honoured when its turn
+  starts, and a Stop on a running one ends only the turn it was aimed at
+  ([#1155](https://github.com/ReviewStage/luke/pull/1155),
+  [#1258](https://github.com/ReviewStage/luke/pull/1258))
+- The Voice page's Pause announcements switch becomes Announce when sessions
+  need you, on by default; switching it off puts Luke's face to sleep and
+  switching it back on reads the still-true held ones out together
+  ([#686](https://github.com/ReviewStage/luke/pull/686))
+- A briefing on offer opens a muted session on this Mac so Luke speaks it here
+  when you are present, and Pause announcements and the introduction hold a
+  briefing on the service too, so one is never spoken through either
+  ([#1404](https://github.com/ReviewStage/luke/pull/1404),
+  [#1386](https://github.com/ReviewStage/luke/pull/1386))
+- Pressing a filled thumb takes a rating back, and the message stands unrated
+  on every device ([#1467](https://github.com/ReviewStage/luke/pull/1467))
+- Luke reads an agent's messages whole instead of the first 400 characters
+  and walks a long Conductor chat to its end
+  ([#916](https://github.com/ReviewStage/luke/pull/916))
+- Luke's persona is a set of rules with a banned-phrase list rather than
+  exemplars, so a day of announcements no longer hardens into stock phrases
+  ([#875](https://github.com/ReviewStage/luke/pull/875))
+- An action whose effect is uncertain after a crash shows as unknown in the
+  Conversation, distinct from a refusal, and Luke never retries it on his own
+  ([#943](https://github.com/ReviewStage/luke/pull/943))
+- A workspace chip for a workspace Luke just created stays openable
+  ([#1438](https://github.com/ReviewStage/luke/pull/1438))
+- A Conductor workspace can be created with Fable 5.1 or GPT-6 Astra as its
+  agent's model ([#758](https://github.com/ReviewStage/luke/pull/758),
+  [#759](https://github.com/ReviewStage/luke/pull/759))
+- A settings search result lands the keyboard on the row's control rather
+  than the page header ([#1428](https://github.com/ReviewStage/luke/pull/1428))
+- The Conversation tab's Clear moves beside the tab bar and shows only while
+  the thread has lines ([#778](https://github.com/ReviewStage/luke/pull/778))
+- tryluke.dev prerenders the landing, About, Changelog, and Privacy pages, so
+  link previews and visitors without JavaScript see the page
+  ([#716](https://github.com/ReviewStage/luke/pull/716))
+
+### Fixes
+
+- Fixed a workspace created or an agent added through Luke going out with
+  Conductor's default agent, model, and effort instead of the pairing you
+  chose ([#1443](https://github.com/ReviewStage/luke/pull/1443),
+  [#1486](https://github.com/ReviewStage/luke/pull/1486))
+- Fixed a voice chosen on the Voice page not taking until the standing call
+  had idled out; the next press now opens in the voice you chose
+  ([#1470](https://github.com/ReviewStage/luke/pull/1470))
+- Fixed asking Luke to create a workspace in a Conductor cloud project being
+  refused with "No listed project matches that identity"
+  ([#876](https://github.com/ReviewStage/luke/pull/876))
+- Fixed asking Luke to flip the Captions switch being refused with "Captions
+  takes no effort level" ([#895](https://github.com/ReviewStage/luke/pull/895))
+- Fixed clearing a setting answering "Could not save that setting on this
+  system" and coming back at the next launch
+  ([#1252](https://github.com/ReviewStage/luke/pull/1252))
+- Fixed Mission Control tiling the notch panel in the middle of the desktop
+  after an introduction takeover
+  ([#1225](https://github.com/ReviewStage/luke/pull/1225))
+- Fixed quitting Luke mid-meeting dropping the meeting hold on announcements
+  until the next poll ([#1141](https://github.com/ReviewStage/luke/pull/1141))
+- Fixed Luke saying "I couldn't write that ask down" for a follow-up asked
+  seconds after a question
+  ([#1476](https://github.com/ReviewStage/luke/pull/1476))
+- Fixed a spoken ask's row landing one word short of what you said, and a
+  spoken line vanishing from the Conversation two seconds after you finished
+  ([#1482](https://github.com/ReviewStage/luke/pull/1482),
+  [#1465](https://github.com/ReviewStage/luke/pull/1465))
+- Fixed a reply drawing above your question when a spoken ask entered a turn
+  late, and an aside said long after a turn settled sorting up into it
+  ([#1297](https://github.com/ReviewStage/luke/pull/1297),
+  [#1473](https://github.com/ReviewStage/luke/pull/1473))
+- Fixed "Still thinking" dots drawing above later replies for an interrupted
+  turn ([#1461](https://github.com/ReviewStage/luke/pull/1461))
+- Fixed the feedback composer opened from a thumbs down returning to Settings
+  instead of the Conversation
+  ([#1466](https://github.com/ReviewStage/luke/pull/1466))
+- Fixed an announcement's arrival line reading a session title from before
+  the pass that named it ([#1407](https://github.com/ReviewStage/luke/pull/1407))
+- Fixed the Conversation drawing Luke's reply twice, and what he said aloud
+  drifting from the words it recorded
+  ([#891](https://github.com/ReviewStage/luke/pull/891),
+  [#870](https://github.com/ReviewStage/luke/pull/870))
+- Fixed the voice call ending at the provider's hour cap with a red
+  "[object RTCErrorEvent]" caption; an idle call now retires itself after five
+  minutes ([#854](https://github.com/ReviewStage/luke/pull/854))
+- Fixed the key slot and feedback composer popups opening with empty black
+  above their words on a Mac without a notch
+  ([#715](https://github.com/ReviewStage/luke/pull/715))
+- Fixed the lead provider mark hopping left and springing back as the capsule
+  unfolded ([#777](https://github.com/ReviewStage/luke/pull/777))
+
+### Miscellaneous
+
+- Updated the provider set to Conductor alone: Superset, the local Claude
+  Code, Codex, and OMP observers, and the Linear connection are removed, and
+  Luke's roster comes from Conductor through his service
+  ([#1200](https://github.com/ReviewStage/luke/pull/1200),
+  [#1201](https://github.com/ReviewStage/luke/pull/1201),
+  [#1207](https://github.com/ReviewStage/luke/pull/1207))
+- Updated a live launch to remove the retired local brain database an earlier
+  build left on this Mac ([#1294](https://github.com/ReviewStage/luke/pull/1294))
+- Updated PRIVACY.md to describe the scheduled observation of your Conductor
+  sessions, voice on the account alone, spoken exchanges kept on the service,
+  the read-ahead a spoken ask may make, and the notebook's search
+  ([#1069](https://github.com/ReviewStage/luke/pull/1069),
+  [#1229](https://github.com/ReviewStage/luke/pull/1229),
+  [#1422](https://github.com/ReviewStage/luke/pull/1422),
+  [#1480](https://github.com/ReviewStage/luke/pull/1480))
+- Updated the landing page's footer to close on a "© 2026 Stage Inc." line
+  ([#1380](https://github.com/ReviewStage/luke/pull/1380))
+- Updated the third-party notice to name every OpenClaw port the code carries
+  ([#1411](https://github.com/ReviewStage/luke/pull/1411))
+- Updated the About page portraits to full-resolution JPEGs with their
+  metadata stripped ([#673](https://github.com/ReviewStage/luke/pull/673))
+
 ## 0.5.0 — 2026-09-03
 
 ### Onboarding ends at a calendar
