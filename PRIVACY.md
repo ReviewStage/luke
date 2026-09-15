@@ -246,16 +246,12 @@ paths, prompts, or error text.
 screen, your editor, your terminal, or any other app. The recording is the
 shape of the panel, not its words: before it leaves your Mac, every piece of
 text the panel shows is replaced with blocks of the same length, so a session
-title, a branch, an error line, a caption of what you or Luke said, your name
-and email address, a tooltip, and the label of a button all appear as blocks.
-Text you type into a field is replaced the same way, so an API key or a
-sign-in code you enter is not in it, and a screenshot you attach to the
-feedback form is left out, since a picture of your screen could carry another
-app's words. The Conversation tab, the feedback form's message field, and the
-Memory page in Settings are left out of the recording entirely rather than
-blocked out, as a second line. Luke does not report what you clicked; a
-recording shows where the pointer went and what the panel looked like, and
-nothing it said.
+title, an error line, a caption of what you or Luke said, your name and email
+address, and anything you type into a field all appear as blocks. A screenshot
+you attach to the feedback form is left out, since a picture of your screen
+could carry another app's words, and so are the Conversation tab, the feedback
+form's message field, and the Memory page in Settings, as a second line. Luke
+does not report what you clicked.
 
 Recording starts when Luke opens, before you sign in, so it covers the
 signed-out panel, the sign-in, and the spoken introduction that follows your

@@ -8,34 +8,19 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  *
  * This is not the counted-event stream and does not share its guarantee. A
  * counted event can only say what `packages/analytics/src/product-events.ts`
- * declared, so a session title has no form it could travel in; those events
- * go to Luke's own service and are read against the allowlist a second time
- * there. This client is the analytics library posting straight to the
- * processor, and a recording is the rendered panel — so what keeps a session
- * title, a branch, an error line, a caption, or the account's own name and
- * address out of it is the masking configured in `startSessionReplay` below,
- * not an allowlist: every text node is replaced with asterisks before it is
- * serialized (`maskTextSelector: "*"`), every input is masked (the library's
- * default), the attributes that carry words or an image (`MASKED_ATTRIBUTES`)
- * are asterisked too, and autocapture is off, since a click event would
- * otherwise carry the text of what was clicked. What leaves is layout,
- * pointer positions, and asterisks of the right length.
+ * declared; this client is the analytics library posting straight to the
+ * processor, and a recording is the rendered panel. What keeps a session
+ * title, a branch, an error line, a caption, or the account's own name out of
+ * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
+ * every input is masked, the attributes that carry words or an image are
+ * asterisked, and autocapture is off. What leaves is layout, pointer
+ * positions, and asterisks of the right length. Three elements also block
+ * their whole subtree with the library's fixed `ph-no-capture` class as a
+ * second line: the Conversation tab, the feedback composer's message field,
+ * and the Settings tab's Memory page.
  *
- * Three elements also block themselves outright with the library's fixed
- * `ph-no-capture` class, which takes their whole subtree out of the capture
- * rather than asterisking it: the Conversation tab, the feedback composer's
- * message field, which a thumbs down can open prefilled with the
- * conversation's own words, and the Settings tab's Memory page, which draws
- * what Luke has saved about the person. Masking already covers them; the
- * blocks are the second line.
- *
- * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this
- * file's masking and those three blocked elements are the whole of what
- * decides it. Nothing else stands between what the panel draws and what
- * leaves the machine, and a masking option the library stopped honouring
- * would look exactly like one that works — which is why
- * `session-replay.test.ts` asserts the option names against the installed
- * bundle.
+ * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
+ * masking and those blocks are the whole of what decides it.
  *
  * What this file decides on its own is only whether to record at all, and the
  * main process is the whole of that answer: an ordinary run records, a
@@ -213,9 +198,7 @@ function projectApiKey(): string {
  * the hosted `/array/<token>/config.js` bundle rather than by anything in the
  * package's own types, so the shape is documented by what the loader reads
  * and nothing in the type system holds it still. `session-replay.test.ts`
- * asserts the global's name against the installed bundle, because a library
- * that renamed it would fall through to the fetch and take recording out
- * silently on any policy that refused it.
+ * asserts the name against the installed bundle.
  */
 declare global {
   interface Window {
@@ -240,11 +223,9 @@ declare global {
  *
  * Preloading answers it here instead. `sessionRecording` decides the gate by
  * truthiness alone, so an empty object turns recording on and supplies no
- * masking of its own: the library reads a masking field from `init`'s
- * `session_recording` first and from this response second, so what
- * `startSessionReplay` configures is what stands, and the project's own
- * "Privacy and masking" setting could only ever add to it. `hasFeatureFlags:
- * false` declines the flag fetch Luke has no use for.
+ * masking: `init`'s `session_recording` is read first and this response
+ * second, so `SESSION_REPLAY_MASKING` stands. `hasFeatureFlags: false`
+ * declines the flag fetch Luke has no use for.
  */
 function preloadRemoteConfig(key: string): void {
   window._POSTHOG_REMOTE_CONFIG = {
@@ -253,54 +234,22 @@ function preloadRemoteConfig(key: string): void {
 }
 
 /**
- * The attributes whose value is words or an image rather than structure:
- * a tooltip, an accessible name, an image's caption, a field's prompt, and
- * an image's source, which for an attached feedback screenshot is the whole
- * picture inlined as a `data:` address. Everything else — `class`, `style`,
- * `id`, the `data-` hooks — is what lets the recording lay out at all, which
- * is why this is a list and not the library's `maskAllElementAttributes`.
+ * What keeps the words out of the recording: every text node masked (there is
+ * no `maskAllText` for recordings, and the recorder drops an option it does
+ * not know without a word, so the names are asserted against the installed
+ * bundle), inputs masked by the library's default, the attributes that carry
+ * words or an image asterisked while `class` and `style` still lay out, and
+ * autocapture off, since a click event carries the text of what was clicked.
  */
-const MASKED_ATTRIBUTE = {
-  TITLE: "title",
-  ARIA_LABEL: "aria-label",
-  ARIA_DESCRIPTION: "aria-description",
-  ALT: "alt",
-  PLACEHOLDER: "placeholder",
-  SRC: "src",
-} as const;
-
-const MASKED_ATTRIBUTES: ReadonlySet<string> = new Set(Object.values(MASKED_ATTRIBUTE));
-
-/**
- * The recorder's attribute mask: same-length asterisks for an attribute on
- * the list above, the value as it came for any other. Exported so the list
- * is asserted rather than read.
- */
-export function maskWordBearingAttribute(name: string, value: string): string {
-  return MASKED_ATTRIBUTES.has(name) ? "*".repeat(value.length) : value;
-}
-
-/**
- * What keeps the words out of the recording, named so the test can assert
- * the whole of it as one value.
- *
- * `maskTextSelector: "*"` masks every text node, since rrweb masks a text
- * node whose parent matches the selector and every element matches `*`;
- * there is no `maskAllText` for recordings, and the recorder drops an
- * option it does not know without a word, so the name is asserted against
- * the installed bundle. `maskAllInputs` stays the library's default of on.
- * Autocapture is off because masking covers the video alone: a click event
- * carries the text of the element clicked, and dead-click capture the same,
- * so both are refused and `mask_all_text` stands behind them should either
- * ever be turned back on.
- */
-export const SESSION_REPLAY_MASKING = {
+const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
+const SESSION_REPLAY_MASKING = {
   autocapture: false,
   capture_dead_clicks: false,
   mask_all_text: true,
   session_recording: {
     maskTextSelector: "*",
-    maskAttributeFn: maskWordBearingAttribute,
+    maskAttributeFn: (name: string, value: string): string =>
+      WORDS.has(name) ? "*".repeat(value.length) : value,
   },
 } as const;
 

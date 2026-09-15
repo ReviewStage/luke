@@ -28,16 +28,12 @@ to add one on.**
 
 ## One bundle, two documents, one role branch
 
-The panels and the hidden voice window load the same `renderer.js` from
-`index.html` and `voice.html`; `src/renderer/index.tsx` mounts `VoiceHost` or the
-panel's `Surface` by the role main decided for the window that asked
-(`surface-for.tsx`). **The panel is the one surface that records**: `App` is
-where `applySessionReplay` is called and the voice role never mounts it, and
-`voice.html`'s policy is `connect-src 'none'`, so the client could not post from
-there if it were reached. What made one bundle acceptable is that the recording
-carries no words (`session-replay.ts`: every text node and word-bearing attribute
-is masked and autocapture is off), so what a window draws no longer decides what
-leaves the machine.
+The panels and the hidden voice window load the same `renderer.js`;
+`src/renderer/index.tsx` mounts `VoiceHost` or the panel's `Surface` by the role
+main decided for the window that asked. **The panel is the one surface that
+records**: `App` is where `applySessionReplay` is called and the voice role never
+mounts it, `voice.html` is `connect-src 'none'`, and the recording carries no
+words in any case (`session-replay.ts`).
 
 No credential reaches the voice window, nothing there appends to the model, and it
 writes no Conversation line. The policy — whether a session stands, what the keys

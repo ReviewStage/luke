@@ -121,11 +121,9 @@ await Promise.all([
     path.join(appRoot, "src/renderer/index.html"),
     path.join(outputRoot, "renderer/index.html"),
   ),
-  // The hidden voice window's document. It loads the same `renderer.js` as
-  // the panel's, so there is one bundle to parse and one to budget: the
-  // window's role is main's answer for which window asked, the recording
-  // carries no words (`src/renderer/session-replay.ts`), and this document's
-  // policy allows no network at all, so nothing here could record or post.
+  // The hidden voice window's document, over the same `renderer.js`: its role
+  // is main's answer, its policy allows no network, and the recording carries
+  // no words in any case (`src/renderer/session-replay.ts`).
   fs.copyFile(
     path.join(appRoot, "src/renderer/voice.html"),
     path.join(outputRoot, "renderer/voice.html"),
