@@ -56,9 +56,25 @@ function messageOptions(overrides: Partial<SessionActionOptions> = {}): SessionA
     readKey: () => Effect.succeed({ ciphertext: encryptProviderKey("key-1", SECRET) }),
     roster: () => Effect.succeed(EMPTY_ROSTER),
     unsupportedReason: () => undefined,
+    // No pairing synced unless a test stores one: the route's production read
+    // reaches the account's rows, and these tests open no database.
+    agentDefault: () => Effect.succeed(undefined),
     execute: () => Effect.succeed({ result: "accepted" }),
     ...overrides,
   };
+}
+
+function agentOptions(overrides: Partial<SessionActionOptions> = {}): SessionActionOptions {
+  return messageOptions({
+    request: actionRequest("/api/actions/agent", {
+      providerId: "conductor",
+      providerSessionId: "session-1",
+      agent: "claude",
+      task: "add tests",
+    }),
+    kind: ACTION_KIND.ADD_AGENT,
+    ...overrides,
+  });
 }
 
 function workspaceOptions(overrides: Partial<SessionActionOptions> = {}): SessionActionOptions {
@@ -228,6 +244,142 @@ test("an agent addition carries the model and effort beside the agent, renamed a
     effort: "high",
     task: "add tests",
   });
+});
+
+// --- The account's stored agent pairing reaches the execution for the two actions that start an agent ---
+
+const SYNCED_PAIRING: WorkspaceAgentSelection = {
+  agent: "claude",
+  model: "fable-5-1",
+  effort: "high",
+};
+
+/** What one execution was handed: the ask's fields, and the pairing beside them when one rode. */
+interface HandedToExecution {
+  fields: WireRecord;
+  agentSelection?: WorkspaceAgentSelection;
+}
+
+/** An `execute` that records what it was handed, answering accepted. */
+function recordingExecute(
+  handed: HandedToExecution[],
+): NonNullable<SessionActionOptions["execute"]> {
+  return (options) =>
+    Effect.sync(() => {
+      handed.push({
+        fields: options.fields,
+        ...(options.agentSelection === undefined
+          ? undefined
+          : { agentSelection: options.agentSelection }),
+      });
+      return { result: "accepted" };
+    });
+}
+
+/** An `agentDefault` that must never be read: a read is the test's failure. */
+const unreadAgentDefault: NonNullable<SessionActionOptions["agentDefault"]> = () =>
+  Effect.die(new Error("the stored pairing must not be read for this ask"));
+
+test("a creation that named no model hands the account's stored pairing to the execution", async () => {
+  const handed: HandedToExecution[] = [];
+  const asked: { userId: string; providerId: string }[] = [];
+  await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        agentDefault: (userId, providerId) => {
+          asked.push({ userId, providerId });
+          return Effect.succeed(SYNCED_PAIRING);
+        },
+        execute: recordingExecute(handed),
+      }),
+    ),
+  );
+
+  // Read once, for the signed-in account and the provider the ask named, and
+  // handed on whole — effort included — beside fields that still name no model.
+  assert.deepEqual(asked, [{ userId: "user-1", providerId: "conductor" }]);
+  assert.deepEqual(handed, [
+    {
+      fields: { provider_id: "conductor", project_id: "project-1", task: "build the thing" },
+      agentSelection: SYNCED_PAIRING,
+    },
+  ]);
+});
+
+test("an agent addition is handed the stored pairing on the same terms", async () => {
+  const handed: HandedToExecution[] = [];
+  await runWithoutDatabase(
+    handleSessionAction(
+      agentOptions({
+        agentDefault: () => Effect.succeed(SYNCED_PAIRING),
+        execute: recordingExecute(handed),
+      }),
+    ),
+  );
+
+  assert.deepEqual(handed, [
+    {
+      fields: {
+        provider_id: "conductor",
+        provider_session_id: "session-1",
+        agent: "claude",
+        task: "add tests",
+      },
+      agentSelection: SYNCED_PAIRING,
+    },
+  ]);
+});
+
+test("an account that synced no pairing hands the execution none, not a guess", async () => {
+  const handed: HandedToExecution[] = [];
+  await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        agentDefault: () => Effect.succeed(undefined),
+        execute: recordingExecute(handed),
+      }),
+    ),
+  );
+
+  assert.equal(handed.length, 1);
+  assert.equal("agentSelection" in (handed[0] ?? {}), false);
+});
+
+test("the stored pairing is read for no action that starts no agent", async () => {
+  const handed: HandedToExecution[] = [];
+  await runWithoutDatabase(
+    handleSessionAction(
+      messageOptions({ agentDefault: unreadAgentDefault, execute: recordingExecute(handed) }),
+    ),
+  );
+
+  assert.deepEqual(handed, [
+    { fields: { provider_id: "conductor", provider_session_id: "session-1", text: "hello" } },
+  ]);
+});
+
+test("the stored pairing is read for no creation a gate refused first", async () => {
+  const unsupported = await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        unsupportedReason: () => "Not available.",
+        agentDefault: unreadAgentDefault,
+        execute: () => Effect.die(new Error("execute must not run for an unsupported provider")),
+      }),
+    ),
+  );
+  assert.equal((await unsupported.json()).result, "unsupported");
+
+  const keyless = await runWithoutDatabase(
+    handleSessionAction(
+      workspaceOptions({
+        readKey: () => Effect.succeed(undefined),
+        agentDefault: unreadAgentDefault,
+        execute: () => Effect.die(new Error("execute must not run without a key")),
+      }),
+    ),
+  );
+  assert.equal((await keyless.json()).result, "rejected");
 });
 
 // --- The execute result travels to the wire unchanged ---
