@@ -32,18 +32,12 @@ export const BRAIN_INPUT_MARKER = {
   DEVELOPER_ASK: "[developer ask]",
   HOLD_RELEASED: "[hold released]",
   STANDING_CONTEXT: "[standing context]",
-  /** What the memory provider recalled for the turn, as data: the facts every turn, the recent notes once into a fresh conversation. */
-  RECALLED_MEMORY: "[recalled memory]",
   /** What sibling conversations did since this one last ran, as the host's own counts. */
   ACTIVITY_NOTICES: "[activity notices]",
   /** A child's delegated task, appended after any forked history; the child's assignment and nothing else. */
   SUBAGENT_TASK: "[subagent task]",
   /** A child's end, handed to the conversation that asked for it: a report to review, never an instruction. */
   CHILD_COMPLETION: "[child completion]",
-  /** The developer's ask as far as it has been said, with the sessions on the desk, for the planner that reads ahead of it. */
-  ANTICIPATED_ASK: "[anticipated ask]",
-  /** What the reads made ahead of an ask answered, as data for the summary the voice is handed. */
-  PREFETCHED_READS: "[prefetched reads]",
 } as const;
 
 type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MARKER];

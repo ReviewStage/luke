@@ -11,12 +11,8 @@ interface BrainToolCallTrace {
 
 /** What one anticipation of a spoken ask came to. */
 export const BRAIN_PREFETCH_OUTCOME = {
-  /** No planner stands: no small model, or a hosted service that does not offer the prefetch. */
-  UNAVAILABLE: "unavailable",
   /** The planner answered and every read it named that the roster allows was made. */
   PLANNED: "planned",
-  /** The planner failed, or was superseded or dropped before it answered. */
-  FAILED: "failed",
 } as const;
 
 export type BrainPrefetchOutcome =
@@ -24,13 +20,8 @@ export type BrainPrefetchOutcome =
 
 /** What a spoken turn found when it took the prefetch slot. */
 export const BRAIN_PREFETCH_TAKE = {
-  HIT: "hit",
   /** The reads were still under way and finished inside the turn's wait. */
   HIT_WAITED: "hit-waited",
-  MISS_NONE: "miss-none",
-  MISS_EXPIRED: "miss-expired",
-  MISS_TIMEOUT: "miss-timeout",
-  MISS_REVOKED: "miss-revoked",
 } as const;
 
 export type BrainPrefetchTake = (typeof BRAIN_PREFETCH_TAKE)[keyof typeof BRAIN_PREFETCH_TAKE];

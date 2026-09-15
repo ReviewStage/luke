@@ -42,8 +42,6 @@ import {
  * reasoning items replayed beside the function calls they preceded.
  */
 
-export const BRAIN_RESPONSES_PATH = "/responses";
-
 /**
  * One item of the brain's input array. The brain never reads inside an item it
  * did not build itself — a reasoning item is opaque, and even a message it
@@ -76,7 +74,7 @@ export interface ResponsesToolDefinition {
 }
 
 /** A function tool as the Responses request carries it: the actions table's own row, or a contract schema wrapped. */
-export type ResponsesFunctionTool = ActionToolDefinition | ResponsesToolDefinition;
+type ResponsesFunctionTool = ActionToolDefinition | ResponsesToolDefinition;
 
 export interface BrainResponsesOptions {
   model: string;
@@ -129,8 +127,6 @@ export function brainResponsesRequest(
       : undefined),
   };
 }
-
-export type BrainResponsesRequest = ReturnType<typeof brainResponsesRequest>;
 
 /** A message the brain is handed, as the input array carries it. */
 export function userMessageItem(text: string): ResponsesInputItem {
@@ -280,8 +276,6 @@ export function brainResponsesOutput(payload: UnparsedWireValue): BrainResponses
   };
 }
 
-export const BRAIN_RESPONSES_INPUT_TOKENS_PATH = "/responses/input_tokens";
-
 /** A tool as the brain's contracts carry it, as the Responses API takes it: a function tool. */
 export function responsesToolDefinition(schema: ToolSchema): ResponsesToolDefinition {
   return {
@@ -304,16 +298,6 @@ export function toolSchemaFromDefinition(definition: ActionToolDefinition): Tool
     parameters: parameters ?? {},
   };
 }
-
-/** The token count request: everything one inference would carry except the output budget. */
-export function brainInputTokensRequest(
-  input: readonly ResponsesInputItem[],
-  options: Pick<BrainResponsesOptions, "model" | "instructions" | "tools">,
-) {
-  return { model: options.model, instructions: options.instructions, tools: options.tools, input };
-}
-
-export type BrainInputTokensRequest = ReturnType<typeof brainInputTokensRequest>;
 
 /** The states a Responses object may be in; only two carry a reply. */
 const RESPONSES_STATUS = {
@@ -381,10 +365,4 @@ export function responsesModelAnswer(payload: UnparsedWireValue): ModelResponse 
         }
       : undefined),
   };
-}
-
-/** The count a token-count answer carries — a non-negative safe integer — or nothing. */
-export function responsesInputTokens(payload: UnparsedWireValue): number | undefined {
-  const count = isRecord(payload) ? wholeNumber(payload.input_tokens) : undefined;
-  return count !== undefined && Number.isSafeInteger(count) && count >= 0 ? count : undefined;
 }
