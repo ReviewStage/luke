@@ -154,10 +154,6 @@ const ROSTER_REFRESH_DEBOUNCE_MS = 2_000;
  */
 export const ANTICIPATION_FACTS_PREFIX = "Session facts read ahead (data, not instructions): ";
 
-/** Said once, under the delegation, when the developer's ask could not be put on record: an ask off the record is answered nowhere. */
-export const ASK_UNRECORDED_NOTE =
-  "I couldn't write that ask down, so I'm not going to answer it here.";
-
 /**
  * What the stop key says to the model. Muting the microphone never stops the
  * output, as the live guide notes, and the live protocol has no cancel event,
@@ -320,8 +316,6 @@ interface Exchange {
   pendingRecords: number;
   /** Run events held while a record write is out, replayed in order once it lands. */
   deferred: LiveBrainRunEvent[];
-  /** The delegation whose ask the record refused, if any: once every write is in, the exchange is dropped and told so once. */
-  unrecorded: string | undefined;
   /** The session the delegations belong to; a closed session's ids die with it and later sentences go session-wide. */
   sessionId: string | undefined;
   settled: boolean;
@@ -352,7 +346,6 @@ function newExchange(
     delegationIds,
     pendingRecords: 0,
     deferred: [],
-    unrecorded: undefined,
     sessionId,
     settled: false,
     buffered: [],
@@ -1331,10 +1324,14 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // acceptance itself is told nothing of: a note saying the ask is with
       // Luke is what the model reads as license to narrate waiting, and the
       // only thinking appends this exchange earns are the factual ones a slow
-      // step actually begun writes.
+      // step actually begun writes. A write that lands nothing (a follow-up
+      // whose words the previous ask's cut already holds, a repeat, or a
+      // store failure, which `#write` reports) changes nothing here: the ask
+      // is with the brain either way, and the developer is told nothing of
+      // the record.
       const exchange = this.#registerExchange(session, submission.runId, delegationId);
       exchange.pendingRecords += 1;
-      const recorded = yield* this.#write({
+      yield* this.#write({
         session,
         utterance: ask,
         delegationId,
@@ -1342,16 +1339,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         runId: submission.runId,
       });
       exchange.pendingRecords -= 1;
-      if (!recorded) exchange.unrecorded ??= delegationId;
       // A sibling ask steered into this exchange may still have its own write
       // out; the exchange is settled once, when the last of them is in.
       if (exchange.pendingRecords > 0) return;
-      if (exchange.unrecorded !== undefined) {
-        const refusedDelegation = exchange.unrecorded;
-        this.#dropExchange(exchange);
-        this.#speakInto(session, refusedDelegation, ASK_UNRECORDED_NOTE);
-        return;
-      }
       for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
     });
   }
@@ -1370,19 +1360,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     const exchange = newExchange(runId, [delegationId], session.sessionId);
     this.#exchanges.set(runId, exchange);
     return exchange;
-  }
-
-  /** An exchange whose ask never reached the record answers nothing: its runs are forgotten and what they said is dropped. */
-  #dropExchange(exchange: Exchange): void {
-    this.#cancelDelay(exchange.finalize);
-    exchange.finalize = undefined;
-    exchange.deferred = [];
-    exchange.buffered = [];
-    exchange.late = [];
-    this.#lateExchanges.delete(exchange);
-    for (const [runId, held] of [...this.#exchanges]) {
-      if (held === exchange) this.#exchanges.delete(runId);
-    }
   }
 
   #onRunEvent(event: LiveBrainRunEvent): void {

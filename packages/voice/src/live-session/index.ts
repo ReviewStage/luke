@@ -15,7 +15,6 @@ export type { LiveRecord } from "./live-record.js";
 export { LiveSessionHolder } from "./live-session-holder.js";
 export {
   type AdoptableSession,
-  ASK_UNRECORDED_NOTE,
   type BriefingDelivery,
   LiveSessionService,
   type LiveSessionServiceOptions,
