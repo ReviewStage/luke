@@ -46,36 +46,47 @@ it.effect(
       const events = yield* Effect.promise(() => fixture("conversation-events-answer.json"));
       const turns = yield* Effect.promise(() => fixture("brain-turns-answer.json"));
       const children = yield* Effect.promise(() => fixture("children-answer.json"));
+      const childMessages = yield* Effect.promise(() => fixture("child-messages-answer.json"));
       const api = fakeCloudApi({
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}`]: { answer: () => messages },
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_EVENTS}`]: { answer: () => events },
         [`GET ${HOSTED_SERVICE_PATH.BRAIN_TURNS}`]: { answer: () => turns },
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`]: { answer: () => children },
+        [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES}`]: {
+          answer: () => childMessages,
+        },
       });
       const page: ReadPageQuery = { after: "c3VyZQ", limit: 50 };
+      const child = "3c000000-0000-4000-8000-000000000011";
 
-      const [read, eventsRead, turnsRead, childrenRead] = yield* Effect.provide(
+      const [read, eventsRead, turnsRead, childrenRead, childRead] = yield* Effect.provide(
         Effect.all([
           client().messages(page),
           client().events(),
           client().turns({ after: "dHVybg" }),
           client().children(),
+          client().childMessages(child, { limit: 50 }),
         ]),
         api.layer,
       );
 
-      assert.ok(read.ok && eventsRead.ok && turnsRead.ok && childrenRead.ok);
+      assert.ok(read.ok && eventsRead.ok && turnsRead.ok && childrenRead.ok && childRead.ok);
       assert.equal(read.answer.groups.length, 2);
       assert.equal(eventsRead.answer.events.length > 0, true);
       assert.equal(turnsRead.answer.turns.length > 0, true);
       assert.equal(childrenRead.answer.children.length, 2);
+      assert.deepEqual(
+        childRead.answer.conversations.map((conversation) => conversation.id),
+        [child],
+      );
       assert.deepEqual(recordedRoutes(api.requests()), [
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}?after=c3VyZQ&limit=50`,
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_EVENTS}`,
         `GET ${HOSTED_SERVICE_PATH.BRAIN_TURNS}?after=dHVybg`,
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`,
+        `GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES}?child=${child}&limit=50`,
       ]);
-      assert.deepEqual(api.credentials(), ["token-1", "token-1", "token-1", "token-1"]);
+      assert.deepEqual(api.credentials(), ["token-1", "token-1", "token-1", "token-1", "token-1"]);
     }),
 );
 

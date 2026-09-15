@@ -674,6 +674,19 @@ export const childrenAnswerSchema = EffectSchema.Struct({
   ),
 });
 
+/**
+ * The query a child's messages read takes: the child by its id, read as
+ * `wireUuidSchema` reads one, and the two parameters every per-resource read
+ * takes. The answer is `conversationMessagesAnswerSchema` over one
+ * conversation, the child standing where the main does in a main's page: its
+ * rows are the brain's own work, drawn whole as a main's are.
+ */
+export const CHILD_MESSAGES_QUERY = {
+  CHILD: "child",
+  AFTER: READ_QUERY.AFTER,
+  LIMIT: READ_QUERY.LIMIT,
+} as const;
+
 const unreadableRowSchema = EffectSchema.Struct({
   conversationId: wireUuidSchema,
   seq: wholeNumber(1),

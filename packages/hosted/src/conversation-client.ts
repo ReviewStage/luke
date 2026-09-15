@@ -24,6 +24,7 @@ import {
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
+  CHILD_MESSAGES_QUERY,
   type ChildrenAnswer,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
@@ -111,8 +112,13 @@ function ratingRecord(request: HostedMessageRatingRequest): WireRecord {
   };
 }
 
-function pagePath(path: string, page: ReadPageQuery): string {
-  const query = new URLSearchParams();
+/** The read's path with its page, after whatever the read names first: a child's read names the child. */
+function pagePath(
+  path: string,
+  page: ReadPageQuery,
+  named: Readonly<Record<string, string>> = {},
+): string {
+  const query = new URLSearchParams(named);
   if (page.after !== undefined) query.set(READ_QUERY.AFTER, page.after);
   if (page.limit !== undefined) query.set(READ_QUERY.LIMIT, String(page.limit));
   const encoded = query.toString();
@@ -146,15 +152,32 @@ export class HostedConversationClient {
     never,
     HttpClient.HttpClient
   > {
-    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page, (payload) =>
+    return this.#readEffect(pagePath(HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES, page), (payload) =>
       Result.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
+    );
+  }
+
+  /** One child's messages behind the caller's cursor: the same page shape as `messages`, over the one child named. */
+  childMessages(
+    childId: string,
+    page: ReadPageQuery = {},
+  ): Effect.Effect<
+    ConversationReadResult<ConversationMessagesAnswer>,
+    never,
+    HttpClient.HttpClient
+  > {
+    return this.#readEffect(
+      pagePath(HOSTED_SERVICE_PATH.CONVERSATION_CHILD_MESSAGES, page, {
+        [CHILD_MESSAGES_QUERY.CHILD]: childId,
+      }),
+      (payload) => Result.getOrUndefined(readEither(conversationMessagesAnswerSchema)(payload)),
     );
   }
 
   events(
     page: ReadPageQuery = {},
   ): Effect.Effect<ConversationReadResult<ConversationEventsAnswer>, never, HttpClient.HttpClient> {
-    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page, (payload) =>
+    return this.#readEffect(pagePath(HOSTED_SERVICE_PATH.CONVERSATION_EVENTS, page), (payload) =>
       Result.getOrUndefined(readEither(conversationEventsAnswerSchema)(payload)),
     );
   }
@@ -162,14 +185,14 @@ export class HostedConversationClient {
   turns(
     page: ReadPageQuery = {},
   ): Effect.Effect<ConversationReadResult<BrainTurnsAnswer>, never, HttpClient.HttpClient> {
-    return this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
+    return this.#readEffect(pagePath(HOSTED_SERVICE_PATH.BRAIN_TURNS, page), (payload) =>
       Result.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
     );
   }
 
   /** The account's children as they stand, whole and newest first; the read takes no cursor, so there is no page to ask for. */
   children(): Effect.Effect<ConversationReadResult<ChildrenAnswer>, never, HttpClient.HttpClient> {
-    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, {}, (payload) =>
+    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, (payload) =>
       Result.getOrUndefined(readEither(childrenAnswerSchema)(payload)),
     );
   }
@@ -248,12 +271,11 @@ export class HostedConversationClient {
 
   #readEffect<Answer>(
     path: string,
-    page: ReadPageQuery,
     read: (payload: UnparsedWireValue) => Answer | undefined,
   ): Effect.Effect<ConversationReadResult<Answer>, never, HttpClient.HttpClient> {
     const call = this.#call;
     return Effect.gen(function* () {
-      const answer = yield* call.send({ method: HTTP_METHOD.GET, path: pagePath(path, page) });
+      const answer = yield* call.send({ method: HTTP_METHOD.GET, path });
       if (!callAnswered(answer)) return UNANSWERED;
       const payload = yield* Effect.promise(() => answer.response.json().catch(() => undefined));
       if (payload === undefined) return UNANSWERED;

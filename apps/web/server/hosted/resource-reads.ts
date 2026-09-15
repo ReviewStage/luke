@@ -5,6 +5,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
+  CHILD_MESSAGES_QUERY,
   CHILDREN_READ_BOUNDS,
   type ChildRead,
   type ChildrenAnswer,
@@ -39,6 +40,7 @@ import {
   unparsedWire,
   type WireBoundaryInput,
   type WireValue,
+  wireUuidSchema,
 } from "../core.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
@@ -383,6 +385,112 @@ type ServerMessagesAnswer = Omit<ConversationMessagesAnswer, "groups"> & {
   readonly groups: readonly ServerTurnGroup[];
 };
 
+/**
+ * One page of the view over `standing`, grouped by turn, with the cursor to
+ * read on from: the Conversation's read over the account's standing main and
+ * observed conversations, and a child's read over the one child, each
+ * selected, projected, and answered the same way.
+ */
+const messagesPage = /* @__PURE__ */ Effect.fnUntraced(function* (
+  store: ResourceReadOptions["store"],
+  userId: string,
+  standing: readonly StandingConversation[],
+  page: ReadPage<SequenceReadCursor>,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const windowStart = viewWindowStart(standing);
+  const walked = yield* Effect.catchTag(
+    walkSequences(
+      standing,
+      page,
+      (conversation) => ({
+        seq: conversation.nextMessageSeq - 1,
+        revision: conversation.journalRevision,
+      }),
+      (conversation, after, limit) => {
+        const since = conversation.kind === CONVERSATION_KIND.OBSERVED ? windowStart : undefined;
+        return Effect.flatMap(
+          store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
+            after: after.seq,
+            limit,
+            ...(after.revision !== undefined ? { revisionAfter: after.revision } : undefined),
+            ...(since !== undefined ? { since } : undefined),
+          }),
+          (read) =>
+            read.ok
+              ? Effect.succeed(read.value)
+              : Effect.fail(
+                  new UnreadableRow({ row: { conversationId: conversation.id, seq: read.seq } }),
+                ),
+        );
+      },
+      { seqOf: (record) => record.seq, revisionOf: (record) => record.revision },
+    ).pipe(Effect.map(Result.succeed)),
+    "UnreadableRow",
+    (unreadable) => Effect.succeed(Result.fail(unreadable)),
+  );
+  if (Result.isFailure(walked)) {
+    return errorResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, HOSTED_API_ERROR.UNREADABLE_ROW, {
+      unreadableRow: walked.failure.row,
+    });
+  }
+  const walk: SequenceWalk<StoredMessageRecord> = walked.success;
+
+  const main: ConversationViewStoredMessage[] = [];
+  const observed: ConversationViewObservedConversation[] = [];
+  const conversationOfTurn = new Map<string, StandingConversation>();
+  const messageIds: string[] = [];
+  for (const { conversation, rows } of walk.taken) {
+    const viewRows = rows.map(viewRow);
+    for (const row of viewRows) conversationOfTurn.set(row.turnId, conversation);
+    for (const record of rows) messageIds.push(record.id);
+    if (conversation.kind === CONVERSATION_KIND.MAIN) main.push(...viewRows);
+    else {
+      observed.push({
+        session: {
+          providerId: conversation.providerId,
+          providerSessionId: conversation.providerSessionId,
+        },
+        messages: viewRows,
+      });
+    }
+  }
+  const [turns, events] = yield* Effect.all([
+    store.turns.named(userId, [...conversationOfTurn.keys()]),
+    store.events.forMessages(userId, messageIds),
+  ]);
+  const groups = selectConversationView({
+    main,
+    observed,
+    turns: turns.map(viewTurn),
+    events: events.map(viewEvent),
+    toolKinds: CATALOG_VIEW_TOOL_KINDS,
+  });
+
+  const answer: ServerMessagesAnswer = {
+    conversations: standing.map(readConversation),
+    groups: groups.map((group) => {
+      const conversation = conversationOfTurn.get(group.turnId);
+      if (conversation === undefined) throw new Error("the view grouped a row no page held");
+      return {
+        turnId: group.turnId,
+        conversationId: conversation.id,
+        source: viewSource(conversation),
+        ...(group.turn ? { turn: group.turn } : undefined),
+        messages: group.messages.map((message) => ({
+          message: clientUIMessage(message.message),
+          seq: message.seq,
+          createdAt: message.createdAt,
+          tools: message.tools,
+          ...(message.rating === undefined ? undefined : { rating: message.rating }),
+        })),
+      };
+    }),
+    next: walk.next,
+    hasMore: walk.hasMore,
+  };
+  return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
 /** GET: the view over the page's rows, grouped by turn, with the cursor to read on from. */
 export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConversationMessages")(
   function* (
@@ -396,100 +504,56 @@ export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConve
     const { store } = options;
 
     const standing = yield* store.directory.standing(userId);
-    const windowStart = viewWindowStart(standing);
-    const walked = yield* Effect.catchTag(
-      walkSequences(
-        standing,
-        page,
-        (conversation) => ({
-          seq: conversation.nextMessageSeq - 1,
-          revision: conversation.journalRevision,
-        }),
-        (conversation, after, limit) => {
-          const since = conversation.kind === CONVERSATION_KIND.OBSERVED ? windowStart : undefined;
-          return Effect.flatMap(
-            store.messages.list(userId, conversation.id, CATALOG_TOOL_SET, {
-              after: after.seq,
-              limit,
-              ...(after.revision !== undefined ? { revisionAfter: after.revision } : undefined),
-              ...(since !== undefined ? { since } : undefined),
-            }),
-            (read) =>
-              read.ok
-                ? Effect.succeed(read.value)
-                : Effect.fail(
-                    new UnreadableRow({ row: { conversationId: conversation.id, seq: read.seq } }),
-                  ),
-          );
-        },
-        { seqOf: (record) => record.seq, revisionOf: (record) => record.revision },
-      ).pipe(Effect.map(Result.succeed)),
-      "UnreadableRow",
-      (unreadable) => Effect.succeed(Result.fail(unreadable)),
-    );
-    if (Result.isFailure(walked)) {
-      return errorResponse(HOSTED_HTTP_STATUS.INTERNAL_ERROR, HOSTED_API_ERROR.UNREADABLE_ROW, {
-        unreadableRow: walked.failure.row,
-      });
-    }
-    const walk: SequenceWalk<StoredMessageRecord> = walked.success;
-
-    const main: ConversationViewStoredMessage[] = [];
-    const observed: ConversationViewObservedConversation[] = [];
-    const conversationOfTurn = new Map<string, StandingConversation>();
-    const messageIds: string[] = [];
-    for (const { conversation, rows } of walk.taken) {
-      const viewRows = rows.map(viewRow);
-      for (const row of viewRows) conversationOfTurn.set(row.turnId, conversation);
-      for (const record of rows) messageIds.push(record.id);
-      if (conversation.kind === CONVERSATION_KIND.MAIN) main.push(...viewRows);
-      else {
-        observed.push({
-          session: {
-            providerId: conversation.providerId,
-            providerSessionId: conversation.providerSessionId,
-          },
-          messages: viewRows,
-        });
-      }
-    }
-    const [turns, events] = yield* Effect.all([
-      store.turns.named(userId, [...conversationOfTurn.keys()]),
-      store.events.forMessages(userId, messageIds),
-    ]);
-    const groups = selectConversationView({
-      main,
-      observed,
-      turns: turns.map(viewTurn),
-      events: events.map(viewEvent),
-      toolKinds: CATALOG_VIEW_TOOL_KINDS,
-    });
-
-    const answer: ServerMessagesAnswer = {
-      conversations: standing.map(readConversation),
-      groups: groups.map((group) => {
-        const conversation = conversationOfTurn.get(group.turnId);
-        if (conversation === undefined) throw new Error("the view grouped a row no page held");
-        return {
-          turnId: group.turnId,
-          conversationId: conversation.id,
-          source: viewSource(conversation),
-          ...(group.turn ? { turn: group.turn } : undefined),
-          messages: group.messages.map((message) => ({
-            message: clientUIMessage(message.message),
-            seq: message.seq,
-            createdAt: message.createdAt,
-            tools: message.tools,
-            ...(message.rating === undefined ? undefined : { rating: message.rating }),
-          })),
-        };
-      }),
-      next: walk.next,
-      hasMore: walk.hasMore,
-    };
-    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+    return yield* messagesPage(store, userId, standing, page);
   },
 );
+
+/**
+ * A child as the one conversation of its own page: it stands where the main
+ * does in a main's page, because its rows are the brain's own work and are
+ * drawn whole as a main's are, and the answer's source vocabulary names how a
+ * group is drawn rather than the row's kind. Its opening is the instant the
+ * delegation opened it, and its counters are its own.
+ */
+function childAsPageMain(child: ChildRecord): StandingConversation {
+  return {
+    id: child.id,
+    kind: CONVERSATION_KIND.MAIN,
+    openedAt: child.createdAt,
+    nextMessageSeq: child.nextMessageSeq,
+    nextEventSeq: child.nextEventSeq,
+    journalRevision: child.journalRevision,
+  };
+}
+
+/**
+ * GET: one child's messages behind a device's own cursor, the same page the
+ * Conversation's read answers, over the one child the query names. A child
+ * that does not stand for the account — stamped, another account's, or a
+ * conversation of another kind — is not found, the same answer every read
+ * gives for a resource it does not hold.
+ */
+export const handleConversationChildMessages = /* @__PURE__ */ Effect.fn(
+  "handleConversationChildMessages",
+)(function* (
+  options: ResourceReadOptions,
+): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+  const gate = yield* readGate(options);
+  if (gate instanceof Response) return gate;
+  const { userId, query } = gate;
+  const childId = Result.getOrUndefined(
+    readEither(wireUuidSchema)(query.get(CHILD_MESSAGES_QUERY.CHILD) ?? undefined),
+  );
+  const page = readPage(query, sequenceReadCursorSchema);
+  if (childId === undefined || !page) return invalidRequest();
+  const { store } = options;
+
+  const child = yield* store.directory.child(userId, childId);
+  if (child === undefined) {
+    return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+  }
+  return yield* messagesPage(store, userId, [childAsPageMain(child)], page);
+});
 
 function readEvent(event: StoredEventRecord): ConversationReadEvent {
   return {
