@@ -1,7 +1,6 @@
 import {
   LIVE_SESSION_PHASE,
   LIVE_TRANSPORT_STATE,
-  type LiveSessionPhase,
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
@@ -182,16 +181,6 @@ export interface BriefingDelivery {
   decidedAt: number;
 }
 
-export interface LiveSessionStatus {
-  sessionId?: string;
-  phase: LiveSessionPhase | undefined;
-  /** The latest usage snapshot, cumulative seconds; confirmed only by `session.closed`. */
-  usageSeconds?: number;
-  usageConfirmed: boolean;
-  /** The seconds the last session's `session.closed` reported. */
-  lastSessionSeconds?: number;
-}
-
 export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   /** Where a session comes from now, or nothing while voice is unavailable. */
   source: () => LiveSessionSource | undefined;
@@ -258,7 +247,6 @@ interface StandingSession {
   /** The graceful close under way, so a second ask to end the session waits on the first. */
   closing: Deferred.Deferred<void> | undefined;
   micLive: boolean;
-  usageSeconds: number | undefined;
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
@@ -370,9 +358,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   readonly #options: LiveSessionServiceOptions<Delivery>;
   readonly #queue: ProactiveQueue<Delivery>;
   #standing: StandingSession | undefined;
-  #lastSessionSeconds: number | undefined;
-  #usageConfirmed = false;
-  #phase: LiveSessionPhase | undefined;
   readonly #exchanges = new Map<string, Exchange>();
   /** Exchanges whose reply outlived their session, or never had one, waiting for the next to open. */
   readonly #lateExchanges = new Set<Exchange>();
@@ -511,20 +496,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     if (delay !== undefined) Deferred.doneUnsafe(delay, Exit.void);
   }
 
-  status(): LiveSessionStatus {
-    return {
-      ...(this.#standing ? { sessionId: this.#standing.sessionId } : undefined),
-      phase: this.#phase,
-      ...(this.#standing?.usageSeconds !== undefined
-        ? { usageSeconds: this.#standing.usageSeconds }
-        : undefined),
-      usageConfirmed: this.#usageConfirmed,
-      ...(this.#lastSessionSeconds !== undefined
-        ? { lastSessionSeconds: this.#lastSessionSeconds }
-        : undefined),
-    };
-  }
-
   /** Whether a session stands that appends can reach. */
   sessionStands(): boolean {
     return this.#standing !== undefined && !this.#standing.ended;
@@ -554,10 +525,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           if (!opened) return undefined;
           this.#setPhase({ sessionId: opened.sessionId, phase: LIVE_SESSION_PHASE.CREATED });
           const sideband = yield* this.#attach(opened, scope);
-          if (!sideband) return undefined;
           this.#standing = yield* this.#stand(opened.sessionId, sideband, scope);
           this.#standing.rosterTold = seeded?.told;
-          this.#usageConfirmed = false;
           this.#options.onSessionCreated?.();
           this.#trace(LIVE_TRACE_DECISION.CREATED);
           return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
@@ -580,10 +549,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       const stood = yield* this.#opening((scope) =>
         Effect.gen({ self: this }, function* () {
           const sideband = yield* this.#attach(opened, scope);
-          if (!sideband) return undefined;
           const session = yield* this.#stand(opened.sessionId, sideband, scope);
           this.#standing = session;
-          this.#usageConfirmed = false;
           this.#options.onSessionCreated?.();
           this.#trace(LIVE_TRACE_DECISION.CREATED);
           if (opened.started) this.#started(session);
@@ -904,20 +871,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #attach(
     opened: Pick<LiveSessionOpened, "sessionId" | "attach">,
     scope: Scope.Closeable,
-  ): Effect.Effect<LiveSideband | undefined> {
+  ): Effect.Effect<LiveSideband> {
     return Scope.provide(opened.attach(), scope).pipe(
       Effect.tap((sideband) => Scope.addFinalizer(scope, sideband.close)),
-      Effect.catch((failure) =>
-        Effect.sync(() => {
-          this.#options.report(`Live sideband could not attach: ${failure.message}`);
-          this.#setPhase({
-            sessionId: opened.sessionId,
-            phase: LIVE_SESSION_PHASE.CLOSED,
-            reason: "sideband-failed",
-          });
-          return undefined;
-        }),
-      ),
     );
   }
 
@@ -950,7 +906,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         ended: false,
         closing: undefined,
         micLive: false,
-        usageSeconds: undefined,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
         retained: [],
@@ -1072,7 +1027,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           this.#delegation(session, event.delegation.id, event.offset_ms);
         return Effect.void;
       case LIVE_SERVER_EVENT.USAGE_UPDATED:
-        session.usageSeconds = event.usage.seconds;
         return Effect.void;
       case LIVE_SERVER_EVENT.ERROR: {
         const about = event.client_event_id ?? event.error.client_event_id;
@@ -1599,9 +1553,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #onClosed(session: StandingSession, closed: LiveSessionClosed): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
-    session.usageSeconds = closed.usage.seconds;
-    this.#lastSessionSeconds = closed.usage.seconds;
-    this.#usageConfirmed = true;
     this.#trace(LIVE_TRACE_DECISION.CLOSED);
     const torn = this.#tearDown(session, closed.reason);
     if (closed.reason === LIVE_CLOSE_REASON.EXPIRED || this.#owedSpeech()) this.#wantSession();
@@ -1609,14 +1560,13 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   /**
-   * The session ended without `session.closed`: the latest usage stands
-   * unconfirmed, every delivery aimed at the dead session is discarded, and
-   * a conversation the developer was holding is reopened. Settled here, like
-   * the close above, and handing back what the tear-down began.
+   * The session ended without `session.closed`: every delivery aimed at the
+   * dead session is discarded, and a conversation the developer was holding
+   * is reopened. Settled here, like the close above, and handing back what
+   * the tear-down began.
    */
   #connectionLost(session: StandingSession, reason: string): Effect.Effect<void> {
     if (session.ended) return Deferred.await(session.released);
-    this.#usageConfirmed = false;
     this.#trace(LIVE_TRACE_DECISION.CONNECTION_LOST);
     const micWasLive = session.micLive;
     const torn = this.#tearDown(session, reason);
@@ -1686,7 +1636,6 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   }
 
   #setPhase(change: VoiceLiveSessionChanged): void {
-    this.#phase = change.phase;
     this.#options.emit(change);
   }
 

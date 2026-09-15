@@ -159,7 +159,6 @@ export const composeLive = /* @__PURE__ */ Effect.fn("composeLive")(function* (
     roster: () => voiceRoster(observation.rosterForClients()),
     emit: (change) => kernel.emit(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED, carried(change)),
     createId: kernel.createId,
-    report: kernel.report,
     onSessionCreated: () => {
       settings.recordProductEvent(PRODUCT_EVENT.VOICE_CALL_START, {
         // Every session this Mac opens is the service's, on the account.

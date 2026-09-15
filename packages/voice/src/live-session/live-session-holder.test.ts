@@ -25,11 +25,7 @@ import type { WireRecord } from "@sidecar/wire";
 import { Clock, Duration, Effect, Exit, Fiber, Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { holdSocket, type SocketHold } from "../held-socket.js";
-import {
-  type LiveSessionOpened,
-  type LiveSessionSource,
-  SidebandAttachFailed,
-} from "../live-session-source.js";
+import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
 import { type LiveSideband, type SidebandArrival, sidebandOverSocket } from "../live-socket.js";
 import { SIDEBAND_CLOSE_TIMEOUT_MS } from "./graceful-close.js";
 import { LiveSessionHolder, WANTED_WORD } from "./live-session-holder.js";
@@ -123,7 +119,6 @@ interface Fixture {
   sourceAvailable: boolean;
   /** Whether the source opens the doors for the idle report and the stop, as the hosted source does and the keyed one does not. */
   reportsActivity: boolean;
-  attachFails: boolean;
   open(): Effect.Effect<FakeSideband>;
 }
 
@@ -142,7 +137,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     const state = {
       sourceAvailable: true,
       reportsActivity: true,
-      attachFails: false,
       created: 0,
       stops: 0,
     };
@@ -155,10 +149,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
           const opened: LiveSessionOpened = {
             sessionId: `sess-${sidebands.length}`,
             sdpAnswer: `answer-for-${input.sdpOffer}`,
-            attach: () =>
-              state.attachFails
-                ? Effect.fail(new SidebandAttachFailed({ detail: "status 503" }))
-                : Effect.succeed(sideband),
+            attach: () => Effect.succeed(sideband),
             ...(state.reportsActivity
               ? {
                   reportActivity: (idle: boolean) => {
@@ -189,7 +180,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       roster: () => roster,
       emit: (change) => changes.push(change),
       createId: () => `id-${++ids}`,
-      report: () => undefined,
       onSpoken: (kind) => {
         spoken.push(kind);
       },
@@ -227,12 +217,6 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       set reportsActivity(value: boolean) {
         state.reportsActivity = value;
-      },
-      get attachFails() {
-        return state.attachFails;
-      },
-      set attachFails(value: boolean) {
-        state.attachFails = value;
       },
       open: () =>
         Effect.gen(function* () {
@@ -313,26 +297,6 @@ it.effect("no source means no session and nothing announced", () =>
     assert.deepEqual(f.changes, []);
     assert.equal(f.holder.sessionStands(), false);
   }),
-);
-
-it.effect(
-  "a sideband that cannot attach answers no session and announces it closed as sideband-failed",
-  () =>
-    Effect.gen(function* () {
-      const f = yield* fixture();
-      f.attachFails = true;
-      assert.equal(yield* f.holder.createSession("offer"), undefined);
-      assert.deepEqual(f.changes, [
-        { sessionId: "sess-1", phase: LIVE_SESSION_PHASE.CREATED },
-        {
-          sessionId: "sess-1",
-          phase: LIVE_SESSION_PHASE.CLOSED,
-          reason: "sideband-failed",
-        },
-      ]);
-      assert.equal(f.created, 0);
-      assert.equal(f.holder.sessionStands(), false);
-    }),
 );
 
 it.effect(
@@ -674,15 +638,11 @@ it.effect(
       assert.equal(f.holder.speakBeat(LAUNCH), true);
       assert.equal(yield* f.holder.createSession("offer"), undefined);
       assert.equal(f.holder.speakBeat(LAUNCH), true);
-      f.sourceAvailable = true;
-      f.attachFails = true;
       assert.equal(yield* f.holder.createSession("offer"), undefined);
       assert.equal(f.holder.speakBeat(LAUNCH), true);
       assert.deepEqual(phases(f.changes), [
         LIVE_SESSION_PHASE.WANTED,
         LIVE_SESSION_PHASE.WANTED,
-        LIVE_SESSION_PHASE.CREATED,
-        LIVE_SESSION_PHASE.CLOSED,
         LIVE_SESSION_PHASE.WANTED,
       ]);
       assert.deepEqual(f.beats, []);
