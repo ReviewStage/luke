@@ -50,7 +50,7 @@ export const UI_PART_STATE = {
 } as const;
 
 /** The provider key the AI SDK's OpenAI provider reads a reasoning part's replay data from. */
-export const REASONING_PROVIDER_KEY = "openai";
+const REASONING_PROVIDER_KEY = "openai";
 
 /** How the SDK spells a tool part's type: the tool's name behind this prefix, which its own readers derive the name from. */
 const TOOL_PART_TYPE_PREFIX = "tool-";

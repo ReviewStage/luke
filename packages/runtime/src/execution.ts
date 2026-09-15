@@ -1,9 +1,4 @@
-import {
-  isWireString,
-  type UnknownActionResult,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
 import { Schema } from "effect";
 
 /**
@@ -11,12 +6,11 @@ import { Schema } from "effect";
  * conversation — accepting asks, recording runs, journaling effects, keeping
  * the checkpoint — and reaches a model only through these interfaces: an
  * agent runtime that turns a request into normalized events, a model adapter
- * that carries one inference, a context engine that owns the provider's item
- * shapes, and a tool executor the host supplies. Nothing here names a
- * provider. A provider's own vocabulary (an OpenAI Responses item, an
- * encrypted reasoning item) travels as opaque records inside a checkpoint
- * whose format tag says whose shape it is, and a runtime loads only the
- * formats it can read.
+ * that carries one inference, and a tool executor the host supplies. Nothing
+ * here names a provider. A provider's own vocabulary (an OpenAI Responses
+ * item, an encrypted reasoning item) travels as opaque records inside a
+ * checkpoint whose format tag says whose shape it is, and a runtime loads
+ * only the formats it can read.
  */
 
 /**
@@ -32,12 +26,6 @@ export interface CheckpointFormat {
   readonly runtimeVersion: number;
   readonly format: string;
   readonly formatVersion: number;
-}
-
-/** The items a context engine persists between turns, opaque to everything but an engine of the same format. */
-export interface RuntimeCheckpoint {
-  readonly format: CheckpointFormat;
-  readonly items: readonly WireRecord[];
 }
 
 export function sameCheckpointFormat(left: CheckpointFormat, right: CheckpointFormat): boolean {
@@ -156,88 +144,5 @@ export interface ReasoningSummary {
   readonly item: WireRecord;
 }
 
-export const CONTEXT_INPUT_KIND = {
-  /** Words from the host: an ask, an observation, a released hold, each already marked as data. */
-  USER_TEXT: "user_text",
-} as const;
-
-type ContextInput = {
-  readonly kind: typeof CONTEXT_INPUT_KIND.USER_TEXT;
-  readonly text: string;
-};
-
-export interface ContextBootstrap {
-  /** Whether the checkpoint's items were loaded; false leaves the engine empty. */
-  readonly loaded: boolean;
-  /** Why not, when they were not. */
-  readonly reason?: string;
-  /** How many dangling tool calls the engine had to pair with a lost-result answer. */
-  readonly repaired: number;
-}
-
-/** What one assembly is shown beside the retained items: text the host rebuilds every call and never keeps. */
-export interface ContextAssembly {
-  readonly ephemeral: readonly string[];
-}
-
-/** A point to roll the engine back to when a turn fails partway. */
-export interface ContextMark {
-  readonly items: readonly WireRecord[];
-}
-
-/** A lifecycle hook may answer at once or after a wait; the runtime awaits either. */
+/** A hook may answer at once or after a wait; its caller awaits either. */
 export type MaybePromise<Value> = Value | Promise<Value>;
-
-/**
- * What every lifecycle hook is handed beside its own arguments: the signal of
- * the run or generation the work belongs to. A hook that waits must settle
- * when it fires and apply nothing afterwards, because the runtime stops
- * waiting the moment it fires and the host may roll the engine back or reuse
- * it for the next run; a hook that answers at once may ignore it.
- */
-interface ContextLifecycle {
-  readonly signal?: AbortSignal;
-}
-
-/**
- * Owns what the model sees: the provider's item shapes, how words become
- * items, how a compaction folds the past, and what persists as a checkpoint.
- * The engine holds retained state; the host decides when a turn commits or
- * rolls back, and persists the checkpoint the engine hands it. The lifecycle
- * hooks may be asynchronous — an engine backed by a store or a remote thread
- * is as much an engine as one holding an array — and the runtime awaits each
- * only until the run's signal fires. The three snapshot operations stay
- * synchronous because the host takes them inside its own serialized save,
- * where nothing may be awaited.
- */
-export interface ContextEngine {
-  readonly checkpointFormat: CheckpointFormat;
-  /**
-   * Loads a checkpoint, refusing one of another format, and answers a call a
-   * crash left unpaired with the lost result: the envelope saying the call
-   * was dispatched and its effect is unknown.
-   */
-  bootstrap(
-    checkpoint: RuntimeCheckpoint | undefined,
-    lostResult: UnknownActionResult,
-    lifecycle?: ContextLifecycle,
-  ): MaybePromise<ContextBootstrap>;
-  ingest(input: ContextInput, lifecycle?: ContextLifecycle): MaybePromise<void>;
-  /** The items one inference is shown, the ephemeral text last so the retained prefix stays stable. */
-  assemble(
-    assembly: ContextAssembly,
-    lifecycle?: ContextLifecycle,
-  ): MaybePromise<readonly WireRecord[]>;
-  /**
-   * Replaces the retained items whole: a forked child's inherited history,
-   * or the private copy a housekeeping turn runs over. What the items mean
-   * is the caller's to know; the engine keeps them as the context from here.
-   */
-  adopt(items: readonly WireRecord[], lifecycle?: ContextLifecycle): MaybePromise<void>;
-  /** Maintenance once a turn has committed; nothing the model sees changes here. */
-  afterTurn(lifecycle?: ContextLifecycle): MaybePromise<void>;
-  mark(): ContextMark;
-  rollback(mark: ContextMark): void;
-  checkpoint(): RuntimeCheckpoint;
-  dispose(): MaybePromise<void>;
-}
