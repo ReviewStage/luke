@@ -105,7 +105,7 @@ export interface CalendarsComposer extends Composer {
   readonly disarmObservation: Effect.Effect<void>;
 }
 
-export interface CalendarsDependencies {
+interface CalendarsDependencies {
   settings: SettingsComposer;
   observationGate: () => boolean;
   /**

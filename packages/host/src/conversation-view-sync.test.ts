@@ -55,12 +55,7 @@ function ask(id: number, seq: number, text: string, createdAt: number): Conversa
   };
 }
 
-function announcement(
-  id: number,
-  seq: number,
-  createdAt: number,
-  unspoken: boolean,
-): ConversationViewMessage {
+function announcement(id: number, seq: number, createdAt: number): ConversationViewMessage {
   return {
     message: {
       id: messageId(id),
@@ -84,7 +79,7 @@ function announcement(
         toolName: "announce",
         state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
         kind: CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
-        unspoken,
+        unspoken: false,
       },
     ],
   };
@@ -216,7 +211,7 @@ test("a conversation the answer no longer lists takes its groups, turns, and eve
           turnId: turnId(2),
           conversationId: OBSERVED,
           source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-          messages: [announcement(2, 1, NOW + 1000, false)],
+          messages: [announcement(2, 1, NOW + 1000)],
         },
       ],
       "c1",
@@ -303,7 +298,7 @@ test("the latest speech event on a message decides whether its announcement was 
           turnId: turnId(1),
           conversationId: OBSERVED,
           source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-          messages: [announcement(1, 1, NOW, false)],
+          messages: [announcement(1, 1, NOW)],
         },
       ],
       "c1",
@@ -409,7 +404,7 @@ test("a Clear that opened a new main takes the observed crossing rows from befor
     turnId: id,
     conversationId: OBSERVED,
     source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at, false)],
+    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at)],
   });
   sync.applyMessages(
     page(
@@ -452,10 +447,7 @@ test("a turn still running across a Clear keeps only the rows it wrote after the
             status: TURN_STATUS.RUNNING,
             queuedAt: NOW,
           },
-          messages: [
-            announcement(21, 1, NOW + 500, false),
-            announcement(22, 2, NOW + 20_000, false),
-          ],
+          messages: [announcement(21, 1, NOW + 500), announcement(22, 2, NOW + 20_000)],
         },
       ],
       "c1",
@@ -477,10 +469,7 @@ test("a turn still running across a Clear keeps only the rows it wrote after the
           turnId: turnId(21),
           conversationId: OBSERVED,
           source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-          messages: [
-            announcement(21, 1, NOW + 500, false),
-            announcement(23, 3, NOW + 30_000, false),
-          ],
+          messages: [announcement(21, 1, NOW + 500), announcement(23, 3, NOW + 30_000)],
         },
       ],
       "c2",
@@ -500,7 +489,7 @@ test("a Clear the service confirmed empties the picture from the answer alone: m
     turnId: id,
     conversationId: OBSERVED,
     source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at, false)],
+    messages: [announcement(Number(id.slice(-2)), Number(id.slice(-2)), at)],
   });
   sync.applyMessages(
     page(
@@ -685,7 +674,7 @@ test("only one of Luke's messages this device holds is rateable, named by whethe
           turnId: turnId(2),
           conversationId: OBSERVED,
           source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
-          messages: [announcement(3, 1, NOW + 2, false)],
+          messages: [announcement(3, 1, NOW + 2)],
         },
       ],
       "c1",

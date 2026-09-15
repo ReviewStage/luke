@@ -60,7 +60,7 @@ export const CONVERSATION_VIEW_BOUNDS = {
 } as const;
 
 /** Where this device's read of each resource stands; absent before the first page of that resource. */
-export interface ConversationReadCursors {
+interface ConversationReadCursors {
   readonly messages?: string | undefined;
   readonly events?: string | undefined;
   readonly turns?: string | undefined;

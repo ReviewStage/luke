@@ -97,7 +97,7 @@ export function openEndedQuietUntil(at: number): number {
 }
 
 /** The two holds this Mac decides for itself, each with no instant of its own. */
-export interface AnnouncementHolds {
+interface AnnouncementHolds {
   /** The announce-sessions switch is off. */
   readonly paused: boolean;
   /** The spoken introduction is owed and its completion is not yet on file. */

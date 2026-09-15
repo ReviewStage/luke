@@ -17,7 +17,7 @@ const RETIRED_STORE_ENTRY = {
   ARCHIVES: "archives",
 } as const;
 
-export type RetiredStoreEntry = (typeof RETIRED_STORE_ENTRY)[keyof typeof RETIRED_STORE_ENTRY];
+type RetiredStoreEntry = (typeof RETIRED_STORE_ENTRY)[keyof typeof RETIRED_STORE_ENTRY];
 
 /** The entries under the agent's directory a launch removes, in the order it removes them. */
 export const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
@@ -27,7 +27,7 @@ export const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
   RETIRED_STORE_ENTRY.ARCHIVES,
 ];
 
-export interface RemoveRetiredStoreOptions {
+interface RemoveRetiredStoreOptions {
   /** The agent's own directory under Luke's application data. */
   agentRoot: string;
   report: (message: string) => void;

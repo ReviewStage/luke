@@ -89,7 +89,7 @@ export interface DeviceCadenceClient {
   ) => Effect.Effect<DeviceForgetAnswer | undefined>;
 }
 
-export interface DeviceCadenceOptions {
+interface DeviceCadenceOptions {
   client: DeviceCadenceClient;
   state: JsonStateFile<DeviceState>;
   /** Mints the installation id once, on the first registration this state root ever makes. */
@@ -101,7 +101,7 @@ export interface DeviceCadenceOptions {
   report?: (message: string) => void;
 }
 
-export interface DeviceCadence {
+interface DeviceCadence {
   /** Whether a registration stands: started, and not yet stopped. */
   readonly standing: boolean;
   /** The row's id as the service last answered it, or nothing before a registration lands. */
@@ -354,7 +354,7 @@ export interface DevicesComposer extends Composer {
   readonly reportPresence: Effect.Effect<void>;
 }
 
-export interface DevicesDependencies {
+interface DevicesDependencies {
   account: AccountComposer;
   calendars: CalendarsComposer;
   settings: SettingsComposer;

@@ -62,12 +62,12 @@ export interface AppleCalendarConnection {
  * while access withdrawn empties both lists, because nothing may keep
  * standing on consent taken back.
  */
-export interface AppleCalendarObservation extends ObservedAccountCalendars {
+interface AppleCalendarObservation extends ObservedAccountCalendars {
   meetings: readonly MeetingInterval[];
 }
 
 /** What the connect flow needs back from the system's own consent dialog. */
-export interface AppleCalendarAccessOutcome {
+interface AppleCalendarAccessOutcome {
   access: AppleCalendarAccess;
   calendars: readonly AccountCalendar[];
   defaultCalendarId?: string;
@@ -84,7 +84,7 @@ export type AppleCalendarHelperRun = (
   timeoutMs: number,
 ) => Effect.Effect<string, unknown>;
 
-export interface AppleCalendarReaderOptions {
+interface AppleCalendarReaderOptions {
   /**
    * Resolved at observation time, so connecting or disconnecting in settings
    * takes effect on the next pass without the reader being rebuilt. Absent

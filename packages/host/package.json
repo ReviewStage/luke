@@ -5,9 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
-    "./effect": "./src/effect/index.js",
-    "./node-capabilities": "./src/node-capabilities.js",
-    "./testing": "./src/testing/index.js"
+    "./effect": "./src/effect/index.js"
   },
   "types": "./src/index.ts",
   "scripts": {

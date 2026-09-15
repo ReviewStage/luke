@@ -29,7 +29,7 @@ import {
  * provider is read back out of the stored snapshot by the service's own
  * admission.
  */
-export interface SessionRowActionsDependencies {
+interface SessionRowActionsDependencies {
   /** The roster the rows were drawn from, as it stands at the press. */
   drawn: () => readonly Session[];
   client: Pick<HostedActionClient, "sendMessage" | "executeControl">;

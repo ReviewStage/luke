@@ -30,7 +30,7 @@ import type { AccountComposer } from "./compose-account.js";
 import type { SettingsComposer } from "./compose-settings.js";
 import type { Composer } from "./composer.js";
 import { HostKernelTag } from "./effect/kernel.js";
-import { createSessionOpens, type SessionOpens } from "./session-opens.js";
+import { createSessionOpens } from "./session-opens.js";
 import { createSessionRowActions } from "./session-row-actions.js";
 import { drawSnapshotProjects, drawSnapshotRoster } from "./snapshot-roster.js";
 
@@ -55,16 +55,8 @@ export interface ObservationComposer extends Composer {
   readonly loop: ObservationLoop;
   /** Starts one fresh observation pass and answers at once, so callers can catch the roster up. */
   readonly refreshRoster: Effect.Effect<void>;
-  readonly sessionOpens: SessionOpens;
   /** The roster a client draws: the sessions still worth a row, the same gate every broadcast passes. */
   rosterForClients: () => readonly Session[];
-  /**
-   * Told every time the drawn roster is broadcast, with the same sessions the
-   * broadcast carried. It is the one way a concern that draws nothing — the
-   * voice session, which is seeded with a summary of the desk — learns that
-   * the desk moved without polling for it.
-   */
-  onRosterChange: (listener: (sessions: readonly Session[]) => void) => void;
   rosterSettled: () => boolean;
   offeredWorkspaceProjects: () => readonly ObservedWorkspaceProject[];
   workspaceProjectOffered: (providerId: string, providerProjectId: string) => boolean;
@@ -78,7 +70,7 @@ export interface ObservationComposer extends Composer {
   stopObservation: () => void;
 }
 
-export interface ObservationDependencies {
+interface ObservationDependencies {
   settings: SettingsComposer;
   account: AccountComposer;
   observationGate: () => boolean;
@@ -118,7 +110,6 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   let heldWorkspaceProjects: readonly ObservedWorkspaceProject[] = [];
   let workspaceProjectsBroadcastGeneration = 0;
   let rosterBroadcast = false;
-  const rosterListeners: ((sessions: readonly Session[]) => void)[] = [];
 
   function workspaceProjectOffered(providerId: string, providerProjectId: string): boolean {
     return heldWorkspaceProjects.some(
@@ -249,16 +240,14 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
   }
 
   /**
-   * The one place the drawn roster leaves this composer, so every reader of
-   * it sees the same desk: the panel over the event, and the concerns that
-   * draw nothing over the listeners. The stop's empty roster travels here
-   * too — a voice session outlives the account gate closing, and one left
-   * holding the last desk it was told would keep offering agents that are
-   * no longer observed.
+   * The one place the drawn roster leaves this composer, so every reader of it
+   * sees the same desk, over the event the panel draws. The stop's empty roster
+   * travels here too — a voice session outlives the account gate closing, and
+   * one left holding the last desk it was told would keep offering agents that
+   * are no longer observed.
    */
   function emitSessions(drawn: readonly Session[]): void {
     kernel.emit(GATEWAY_EVENT.SESSIONS_CHANGED, { sessions: carried(drawn), settled: true });
-    for (const listener of rosterListeners) listener(drawn);
   }
 
   function countObservedSessions(sessions: readonly Session[]): void {
@@ -371,11 +360,7 @@ export const composeObservation = /* @__PURE__ */ Effect.fn("composeObservation"
     methods,
     loop,
     refreshRoster: pokeRefresh,
-    sessionOpens,
     rosterForClients,
-    onRosterChange: (listener) => {
-      rosterListeners.push(listener);
-    },
     rosterSettled: () => !runMode.observesProviders || rosterBroadcast,
     offeredWorkspaceProjects,
     workspaceProjectOffered,
