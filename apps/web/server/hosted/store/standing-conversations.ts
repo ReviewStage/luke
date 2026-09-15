@@ -114,3 +114,69 @@ export function standingConversations(
     return standing;
   });
 }
+
+/**
+ * One of the account's conversations as the brain's own `sessions_list`
+ * names it: the row's kind, the label a delegation gave a child, the session
+ * an observed conversation observes, and when it was opened and last
+ * written to. Unlike the view's listing above, a child's row is listed
+ * here, since the brain lists its own conversations; a thread's still is
+ * not, and nothing hosted opens one.
+ */
+export interface ConversationDirectoryEntry {
+  readonly id: string;
+  readonly kind:
+    | typeof CONVERSATION_KIND.MAIN
+    | typeof CONVERSATION_KIND.OBSERVED
+    | typeof CONVERSATION_KIND.CHILD;
+  readonly label: string | null;
+  readonly providerSessionId: string | null;
+  readonly createdAt: Date;
+  readonly lastActivityAt: Date;
+}
+
+const ConversationDirectoryRowSchema = Schema.Struct({
+  id: Schema.String,
+  kind: Schema.Literals([
+    CONVERSATION_KIND.MAIN,
+    CONVERSATION_KIND.OBSERVED,
+    CONVERSATION_KIND.CHILD,
+  ]),
+  label: Schema.NullOr(Schema.String),
+  providerSessionId: Schema.NullOr(Schema.String),
+  createdAt: InstantColumnSchema,
+  lastActivityAt: InstantColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    providerSessionId: "provider_session_id",
+    createdAt: "created_at",
+    lastActivityAt: "last_activity_at",
+  }),
+);
+
+const findConversationDirectory = SqlSchema.findAll({
+  Request: Schema.String,
+  Result: ConversationDirectoryRowSchema,
+  execute: (userId) =>
+    statement(
+      (sql) => sql`
+        select id, kind, label, provider_session_id, created_at, last_activity_at
+        from conversations
+        where user_id = ${userId}
+          and kind in (${CONVERSATION_KIND.MAIN}, ${CONVERSATION_KIND.OBSERVED}, ${CONVERSATION_KIND.CHILD})
+          and deleted_at is null
+        order by last_activity_at desc, id asc
+      `,
+    ),
+});
+
+/** The account's standing main, observed, and child conversations, most recently written to first. */
+export function conversationDirectory(
+  userId: string,
+): Effect.Effect<
+  readonly ConversationDirectoryEntry[],
+  StandingConversationFailure,
+  SqlClient.SqlClient
+> {
+  return findConversationDirectory(userId);
+}

@@ -10,6 +10,7 @@ import { afterAll, test } from "vitest";
 import {
   ACTION_KIND,
   ACTION_OUTPUT_STATUS,
+  ACTION_REFUSAL,
   ACTION_RESULT_STATUS,
   ACTION_TOOL,
   BRAIN_RUN_EVENT,
@@ -132,6 +133,7 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
     notebook: unsearchedNotebook,
+    children: undefined,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -272,6 +274,7 @@ test("a created workspace keeps the created session identity in its action envel
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
     notebook: unsearchedNotebook,
+    children: undefined,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -345,6 +348,7 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
     notebook: unsearchedNotebook,
+    children: undefined,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -501,4 +505,25 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
     recorded.map((event) => event.kind),
     [CONVERSATION_EVENT_KIND.SPEECH_OFFERED],
   );
+});
+
+test("a session tool is wired into the dispatch but not offered: the hosted policy refuses the call before the module runs", async () => {
+  for (const turn of [ASK, OBSERVATION]) {
+    assert.equal(
+      hostedToolDeclarations(turn.trigger).some(
+        (declared) => declared.name === BRAIN_TOOL.SESSIONS_SPAWN,
+      ),
+      false,
+    );
+    const answered = await Effect.runPromise(
+      runHostedTool(
+        BRAIN_TOOL.SESSIONS_SPAWN,
+        { task: "fixture task" },
+        eveContext(),
+        fakes().seams,
+        turn,
+      ),
+    );
+    assert.deepEqual(answered, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
+  }
 });

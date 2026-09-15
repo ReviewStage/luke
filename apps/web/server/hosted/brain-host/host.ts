@@ -35,6 +35,7 @@ import {
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "./bounds.js";
+import { hostedChildAccess } from "./children.js";
 import { hostedStandingContext, readRecentMessages } from "./context.js";
 import {
   type AdmittedConversation,
@@ -376,6 +377,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         }
         const client = yield* SqlClient.SqlClient;
         const http = yield* HttpClient.HttpClient;
+        const writer = yield* seams.writer();
         const { userId } = binding.target;
         // Every seam below answers `Effect<A, never, never>`, so the request's
         // own client is provided into each read here and a row the service
@@ -421,6 +423,23 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
               store: seams.store(),
               userId,
               embedder: seams.embedder(),
+              now: seams.now,
+            }),
+            // A child is opened, and its turn cancelled, by the deployment acting for the account,
+            // the way the scheduled opener acts for it; a deployment with no secret or no origin for
+            // eve opens none and cancels none.
+            children: hostedChildAccess(client, {
+              conversation: binding.target,
+              kind: standing.kind,
+              turnId: binding.turn.turnId,
+              opener: {
+                deploymentSecret: seams.deploymentSecret,
+                eveOrigin: seams.eveOrigin,
+                eve: eveSessions,
+                now: seams.now,
+                report: (message) => console.warn(message),
+              },
+              writer,
               now: seams.now,
             }),
             now: seams.now,

@@ -14,6 +14,7 @@ import {
   ANNOUNCE_TOOL,
   type AnnounceToolModule,
   actionToolNamed,
+  type BrainChildAccess,
   type BrainTurnTrigger,
   type BrainWorkspaceAccess,
   brainToolCatalog,
@@ -28,7 +29,9 @@ import {
   refusedActionOutput,
   resolveTurnToolPolicy,
   runOriginOf,
+  type SessionToolModule,
   sessionKey,
+  sessionToolNamed,
   TOOL_GROUP,
   type ToolContext,
   type ToolPolicyLayers,
@@ -54,14 +57,17 @@ import type { HostedTranscriptReads } from "./transcript.js";
  * through its context and nothing else: admission's readers and the carrier
  * for an action, the roster and the transcript reader for a read, the
  * workspace rows for a workspace tool, the briefing channel for `announce`,
- * and the notebook's search and read over the same rows for a memory tool.
+ * the notebook's search and read over the same rows for a memory tool, and
+ * the children access for a session tool.
  */
 
 /**
  * What the service cannot perform is not offered: the tools that reach a
  * machine — an open, an app setting, the panel, the feedback composer, the
- * updater — and the groups behind seams the service does not wire:
- * delegation and skills. The notebook's two reads are offered, answered by
+ * updater — and two groups: skills, behind a seam the service does not
+ * wire, and delegation, wired below to the children access but withheld
+ * until the hosted brain is ready to offer it, so no model sees a session
+ * tool yet. The notebook's two reads are offered, answered by
  * the in-process search over the account's workspace rows (`notebook.ts`).
  * The workspace tools stay, so `USER.md` is written the way every other
  * workspace file is. The turn's own layer still withholds `announce` from an
@@ -101,6 +107,8 @@ export interface HostedToolSeams {
   readonly workspace: BrainWorkspaceAccess;
   /** The notebook's search and read over the account's rows, for the two memory tools. */
   readonly notebook: NotebookMemoryAccess;
+  /** Delegation for the conversation, for the four session tools; absent, each refuses. The hosted policy offers none of them yet. */
+  readonly children: BrainChildAccess | undefined;
   readonly now: () => number;
 }
 
@@ -167,6 +175,7 @@ function moduleNamed(
   | { readonly kind: "announce"; readonly module: AnnounceToolModule }
   | { readonly kind: "workspace"; readonly module: WorkspaceToolModule }
   | { readonly kind: "memory"; readonly module: NotebookMemoryToolShape }
+  | { readonly kind: "session"; readonly module: SessionToolModule }
   | undefined {
   const action = actionToolNamed(name);
   if (action) return { kind: "action", module: action };
@@ -177,6 +186,8 @@ function moduleNamed(
   if (workspace) return { kind: "workspace", module: workspace };
   const memory = MEMORY_TOOLS_BY_NAME.get(name);
   if (memory) return { kind: "memory", module: memory };
+  const session = sessionToolNamed(name);
+  if (session) return { kind: "session", module: session };
   return undefined;
 }
 
@@ -261,6 +272,16 @@ function runOf(
           const tool = memoryToolNamed(provider, named.module.name);
           if (!tool) return Effect.succeed(NO_SUCH_TOOL);
           return tool.execute(fields, { ...standing, scope });
+        });
+    case "session":
+      // As for a workspace tool, nothing here journals: the turn record eve
+      // keeps and the journal the relay writes are the service's record of a
+      // spawn or a cancel, so the effect runs as the module handed it.
+      return (fields, standing) =>
+        named.module.execute(fields, {
+          ...standing,
+          children: seams.children,
+          journal: (effect) => effect,
         });
   }
 }
