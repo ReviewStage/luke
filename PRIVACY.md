@@ -56,25 +56,25 @@ of a conversation is the record described under "Your account" below; a
 fixture or evidence run keeps no conversation at all.
 
 **Conversations Luke opens for himself.** In a turn of his own on our
-service — one you asked for, or one the scheduled observation described below
-woke for a session — Luke may hand part of the work to a helper: a child
-conversation opened beside the one he is working in, run by the same judgment
-under your account, and never on your Mac. The child can read what its parent
-can read — your Conductor sessions as our service last observed them, and a
-chat's conversation, your own messages and the agent's replies, not its tool
-activity, under the same synced key — and do what its parent can do: the
-actions on your coding agent sessions, the writes to his workspace files and
-the dated notes, and the search and reading of his notebook. It cannot speak
-to you or announce anything, and it cannot open a child of its own. When it
-finishes, its final reply is handed back to the parent as one turn there, and
-the parent decides what, if anything, you hear of it. What the child said and
-each tool it called, with its input and its result, is stored as a
-conversation of your account, in the same rows described under "Your account"
-below and on the same terms: stored as written and readable by our own
-operators, marked deleted with the rest when you clear the conversation and
-removed thirty days later, and removed at once when you delete your account.
-Each of its turns counts against your daily review allowance like any turn of
-Luke's own.
+service — in his conversation with you, or in the conversation of his that
+follows one of your sessions — Luke may hand part of the work to a helper: a
+child conversation opened beside the one he is working in, run by the same
+judgment under your account, and never on your Mac. The child can read what
+its parent can read — your Conductor sessions as our service last observed
+them, and a chat's conversation, your own messages and the agent's replies,
+not its tool activity, under the same synced key — and do what its parent can
+do: the actions on your coding agent sessions, the writes to his workspace
+files and the dated notes, and the search and reading of his notebook. It
+cannot speak to you or announce anything, and it cannot open a child of its
+own. When it finishes, its final reply is handed back to the parent as one
+turn there, and the parent decides what, if anything, you hear of it. What
+the child said and each tool it called, with its input and its result, is
+stored as a conversation of your account, in the same rows described under
+"Your account" below and on the same terms: stored as written and readable by
+our own operators, marked deleted with the rest when you clear the
+conversation and removed thirty days later, and removed at once when you
+delete your account. Each of its turns counts against your daily review
+allowance like any turn of Luke's own.
 
 **Luke's workspace.** Luke's workspace is a small set of Markdown files — his
 operating instructions, his identity, stable facts about you, curated notes,
