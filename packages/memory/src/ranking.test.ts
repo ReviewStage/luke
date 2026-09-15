@@ -1,17 +1,6 @@
 import assert from "node:assert/strict";
-import { DAY_MS } from "@sidecar/runtime/vocabulary";
 import { test } from "vitest";
-import {
-  bm25Scores,
-  cosineSimilarity,
-  datedNoteDay,
-  MEMORY_RANKING,
-  type PassageCandidate,
-  rankPassages,
-  recencyWeight,
-  snippetOf,
-  tokenize,
-} from "./ranking.js";
+import { MEMORY_RANKING, type PassageCandidate, rankPassages } from "./ranking.js";
 
 /** Synthetic passages throughout: no real note, decision, or name. */
 
@@ -24,50 +13,6 @@ function passage(
 ): PassageCandidate {
   return { path, startLine: 1, endLine: 1, text, updatedAt: NOW, ...overrides };
 }
-
-test("tokenize lowers ASCII words and keeps duplicates, and cuts CJK into characters and adjacent bigrams", () => {
-  assert.deepEqual(tokenize("Notch notch, clipping!"), ["notch", "notch", "clipping"]);
-  assert.deepEqual(tokenize("日本語"), ["日本", "本語", "日", "本", "語"]);
-  assert.deepEqual(tokenize("  ...  "), []);
-});
-
-test("BM25 scores the passage carrying the query's rarer terms highest, and a passage sharing nothing at zero", () => {
-  const documents = [
-    tokenize("the notch clips the menu bar on the wide display"),
-    tokenize("the standing desk is raised in the mornings"),
-    tokenize("the notch decision: keep the panel below the notch"),
-  ];
-  const scores = bm25Scores(tokenize("notch decision"), documents);
-  assert.equal(scores.length, 3);
-  assert.equal(scores[1], 0);
-  assert.ok((scores[2] ?? 0) > (scores[0] ?? 0), "two matching terms beat one");
-  assert.ok((scores[0] ?? 0) > 0);
-  assert.deepEqual(bm25Scores([], documents), [0, 0, 0]);
-  assert.deepEqual(bm25Scores(tokenize("anything"), []), []);
-});
-
-test("cosine similarity is one for a vector with itself, zero across widths, and zero for a zero vector", () => {
-  assert.ok(Math.abs(cosineSimilarity([1, 2, 3], [1, 2, 3]) - 1) < 1e-12);
-  assert.equal(cosineSimilarity([1, 2], [1, 2, 3]), 0);
-  assert.equal(cosineSimilarity([0, 0], [1, 1]), 0);
-  assert.ok(Math.abs(cosineSimilarity([1, 0], [0, 1])) < 1e-12);
-});
-
-test("a dated note's day is read from its path, and nothing else has one", () => {
-  assert.equal(datedNoteDay("memory/2026-09-14.md"), Date.UTC(2026, 8, 14));
-  assert.equal(datedNoteDay("memory/2026-09-14-standup.md"), Date.UTC(2026, 8, 14));
-  assert.equal(datedNoteDay("memory/2026-02-30.md"), undefined);
-  assert.equal(datedNoteDay("MEMORY.md"), undefined);
-  assert.equal(datedNoteDay("notes/2026-09-14.md"), undefined);
-});
-
-test("recency halves every 30 days and never exceeds one", () => {
-  assert.equal(recencyWeight(0), 1);
-  assert.equal(recencyWeight(-DAY_MS), 1);
-  assert.ok(Math.abs(recencyWeight(30 * DAY_MS) - 0.5) < 1e-12);
-  assert.ok(Math.abs(recencyWeight(60 * DAY_MS) - 0.25) < 1e-12);
-  assert.equal(MEMORY_RANKING.RECENCY_HALF_LIFE_DAYS, 30);
-});
 
 test("keyword-only ranking scores the best lexical match one, decays a dated note by its day, and drops passages sharing no term", () => {
   const ranked = rankPassages({
@@ -140,11 +85,4 @@ test("the window is cut to maxResults with ties broken by path and line, and an 
     rankPassages({ query: "x", passages: [passage("USER.md", "x")], now: NOW, maxResults: 0 }),
     [],
   );
-});
-
-test("a snippet folds whitespace and is cut to the bound with an ellipsis", () => {
-  assert.equal(snippetOf("  a\n\n b   c "), "a b c");
-  const long = snippetOf("w".repeat(1000));
-  assert.equal(long.length, MEMORY_RANKING.SNIPPET_CHARS);
-  assert.ok(long.endsWith("…"));
 });

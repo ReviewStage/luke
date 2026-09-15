@@ -13,7 +13,6 @@ export {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   type NotebookMemoryAccess,
-  type NotebookMemoryProviderSeams,
   type NotebookMemoryToolShape,
   notebookMemoryProvider,
   notebookMemoryToolShapes,
