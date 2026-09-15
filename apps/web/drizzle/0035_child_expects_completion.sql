@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "expects_completion" boolean DEFAULT true;
