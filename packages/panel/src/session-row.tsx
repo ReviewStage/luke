@@ -5,7 +5,7 @@ import { AudioBadge, CloudBadge, ProviderMark } from "./provider-marks.js";
 // `tsx` executes imported workspace-package JSX with the classic runtime.
 void React;
 
-export interface SessionRowProps {
+interface SessionRowProps {
   providerId: string;
   cloud?: boolean;
   realtimeVoice?: boolean | undefined;
@@ -22,7 +22,6 @@ export interface SessionRowProps {
   branch?: boolean;
   diff?: React.ReactNode;
   when: React.ReactNode;
-  notice?: React.ReactNode;
   applications?: React.ReactNode;
 }
 
@@ -44,7 +43,6 @@ export function SessionRow({
   branch = false,
   diff,
   when,
-  notice,
   applications,
 }: SessionRowProps): React.JSX.Element {
   return (
@@ -77,10 +75,7 @@ export function SessionRow({
         ) : null}
       </span>
       <span className="row-side">
-        <small className="row-when">
-          {notice}
-          {when}
-        </small>
+        <small className="row-when">{when}</small>
         {applications}
       </span>
     </>
