@@ -40,9 +40,10 @@ import {
  * The v2 reads and the Clear, against the real migrations: a device's cursor
  * reads answer the rows in sequence and skip a conversation the Clear
  * stamped from the very next call, the purge takes the stamped rows once the
- * window has passed and nothing sooner, and a row this build cannot read
- * back — a tool part naming a tool the registry does not hold, or parts
- * that are not a message's — refuses the page rather than riding out in it.
+ * window has passed and nothing sooner, a row naming a tool the catalog has
+ * retired reads back without that part, and a row this build cannot read
+ * back — parts that are not a message's — refuses the page rather than
+ * riding out in it.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -469,37 +470,32 @@ test("deleting the account takes cleared and standing conversations alike", asyn
   assert.equal(await countConversations(opened), 0);
 });
 
-test("a row naming a tool the registry does not hold refuses the page, naming the row", async () => {
+test("a row naming a tool the catalog has retired reads back without that part, and the page goes on past it", async () => {
   const userId = await database.createUser();
   const { main } = await populateMain(userId);
+  const retired = {
+    type: "tool-nobody_registered",
+    toolCallId: "call_4a0000000000000001",
+    state: "output-available",
+    input: {},
+    output: {},
+  };
+  const said = { type: "text", text: "It is done.", state: "done" };
   await insertMessage(userId, main, 4, {
     role: MESSAGE_ROLE.ASSISTANT,
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
-    parts: [
-      {
-        type: "tool-nobody_registered",
-        toolCallId: "call_4a0000000000000001",
-        state: "output-available",
-        input: {},
-        output: {},
-      },
-    ],
+    parts: [{ type: "step-start" }, retired, said],
   });
+  await insertMessage(userId, main, 5);
 
-  const read = await database.run(database.store.messages.list(userId, main, TOOLS));
-  assert.equal(read.ok, false);
-  if (read.ok) return;
-  assert.equal(read.refusal, SCHEMA_REFUSAL.NOT_REGISTERED);
-  assert.equal(read.seq, 4);
-  assert.deepEqual(read.path, ["parts", 0, "type"]);
-
-  const before = readRecords(
-    await database.run(database.store.messages.list(userId, main, TOOLS, { limit: 3 })),
+  const records = readRecords(
+    await database.run(database.store.messages.list(userId, main, TOOLS)),
   );
   assert.deepEqual(
-    before.map((record) => record.seq),
-    [1, 2, 3],
+    records.map((record) => record.seq),
+    [1, 2, 3, 4, 5],
   );
+  assert.deepEqual(records[3]?.message.parts, [{ type: "step-start" }, said]);
 });
 
 test("a row whose parts are not a message's refuses the page as malformed", async () => {

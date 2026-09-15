@@ -29,7 +29,7 @@ import type {
   UnreadableRow,
 } from "@sidecar/session";
 import { isStoredToolPart } from "@sidecar/session";
-import { readStoredUIMessages } from "@sidecar/session/ui-messages";
+import { readStoredUIMessages, UNREGISTERED_TOOL_PART } from "@sidecar/session/ui-messages";
 import { EXCESS_KEYS, unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Effect, Result } from "effect";
@@ -164,11 +164,14 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   }
 
   /**
-   * Holds a page's rows to the vocabulary under the registry. A row the
-   * registry refuses — a tool this build does not register, an input its
-   * schema will not admit — is named the way the service names one it could
-   * not read back, so the thread stands as last read and says so rather than
-   * stopping quietly at the last good page; the cursor does not pass the row.
+   * Holds a page's rows to the vocabulary under the registry. A tool part
+   * naming a tool this build does not register is dropped from its row, since
+   * the service's catalog and this build's registry move separately and a
+   * call one of them has retired must not blank the thread. A row the
+   * registry refuses otherwise — an input its schema will not admit — is
+   * named the way the service names one it could not read back, so the thread
+   * stands as last read and says so rather than stopping quietly at the last
+   * good page; the cursor does not pass the row.
    */
   const readPage = /* @__PURE__ */ Effect.fnUntraced(function* (
     answer: ConversationMessagesAnswer,
@@ -181,6 +184,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         readStoredUIMessages(
           group.messages.map((message) => message.message),
           registry,
+          UNREGISTERED_TOOL_PART.DROP,
         ),
       );
       if (!read.ok) {

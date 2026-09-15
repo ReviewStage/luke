@@ -16,7 +16,11 @@ import {
   type StoredToolPart,
   TOOL_PART_STATE,
 } from "@sidecar/session";
-import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
+import {
+  readStoredUIMessages,
+  type StoredUIMessage,
+  UNREGISTERED_TOOL_PART,
+} from "@sidecar/session/ui-messages";
 import {
   isWireString,
   SCHEMA_REFUSAL,
@@ -267,8 +271,9 @@ function refuse(refusal: SchemaRefusal, path: SchemaPath): SchemaRead<never> {
  * Reads rows back from their wire form: each item's message through the
  * session package's reader, which holds it to the vocabulary and to the
  * registered tools, and its model as a non-empty string when it carries one.
- * The refusal names the item and the field, so a store can tell a malformed
- * row from one naming a tool this build no longer registers.
+ * A tool part naming a tool this build no longer registers is dropped from
+ * its row, as every stored-row read drops one, so a retired tool does not
+ * cost the checkpoint; the refusal names the item and the field.
  */
 export async function readContextRows(
   items: readonly WireRecord[],
@@ -286,7 +291,7 @@ export async function readContextRows(
     messages.push(message);
     models.push(model);
   }
-  const read = await readStoredUIMessages(messages, tools);
+  const read = await readStoredUIMessages(messages, tools, UNREGISTERED_TOOL_PART.DROP);
   if (!read.ok) {
     const [index, ...rest] = read.path;
     return refuse(read.refusal, index === undefined ? [] : [index, ROW_FIELD.MESSAGE, ...rest]);

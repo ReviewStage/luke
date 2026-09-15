@@ -1313,29 +1313,30 @@ it.effect(
 );
 
 it.effect(
-  "a row the catalog cannot read refuses the page whole, naming the row, whether the tool is unregistered or its input refused",
+  "a row naming a tool the catalog has retired is answered without that part, and a row whose input the catalog refuses refuses the page whole, naming the row",
   () =>
     Effect.promise(async () => {
       const userId = await database.createUser();
       const { main } = await populate(userId);
       const device = new Device(userId, 200);
       await device.catchUp();
+      // Where the device stood before either row: the second read asks from here too, since the first advances the cursor.
+      const before = device.cursor ?? "";
 
       await insertMessage(userId, main, 5, {
         role: MESSAGE_ROLE.ASSISTANT,
         metadata: BRAIN_REPLY,
-        parts: [toolPart("nobody_registered", "call_6a0000000000000001", {})],
+        parts: [
+          toolPart("nobody_registered", "call_6a0000000000000001", {}),
+          { type: "text", text: "Done.", state: "done" },
+        ],
       });
-      const unregistered = await database.run(
-        handleConversationMessages(
-          options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
-        ),
-      );
-      assert.equal(unregistered.status, 500);
-      assert.deepEqual(await unregistered.json(), {
-        error: HOSTED_API_ERROR.UNREADABLE_ROW,
-        unreadableRow: { conversationId: main, seq: 5 },
-      });
+      const retired = await device.poll();
+      const answered = retired.groups
+        .flatMap((group) => group.messages)
+        .find((message) => message.seq === 5);
+      assert.deepEqual(answered?.message.parts, [{ type: "text", text: "Done.", state: "done" }]);
+      assert.deepEqual(answered?.tools, []);
 
       // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
       await database.run(
@@ -1350,9 +1351,7 @@ it.effect(
         parts: [toolPart("announce", "call_6a0000000000000002", { briefing: 42 })],
       });
       const refusedInput = await database.run(
-        handleConversationMessages(
-          options(userId, request(READ_PATH.MESSAGES, { after: device.cursor ?? "" })),
-        ),
+        handleConversationMessages(options(userId, request(READ_PATH.MESSAGES, { after: before }))),
       );
       assert.equal(refusedInput.status, 500);
       assert.equal((await refusedInput.json()).unreadableRow.seq, 5);

@@ -18,6 +18,7 @@ import {
   TURN_STATUS,
   type TurnOrigin,
   type TurnStatus,
+  UNREGISTERED_TOOL_PART,
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
@@ -39,8 +40,12 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
  * Messages are read back through `readStoredUIMessages`, never the SDK's
  * validator alone, because the SDK turns a terminal tool part naming a tool
  * the registry does not hold into a dynamic-tool part rather than refusing
- * it; a page holding a row this build cannot read is refused whole, naming
- * the row's sequence, rather than answered with the row silently reshaped.
+ * it. A tool part naming a tool the catalog has since retired is dropped
+ * from its row and the row is answered without it, because one retired call
+ * must not leave a conversation unreadable on every device for as long as
+ * the row stands; a page holding a row this build cannot read otherwise is
+ * refused whole, naming the row's sequence, rather than answered with the
+ * row silently reshaped.
  *
  * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` over
  * the ambient client, its statement the client's own tagged template and its
@@ -137,7 +142,11 @@ async function refusedRow(
   const named = rows.find((_, position) => position === index);
   if (named !== undefined) return { ok: false, refusal: read.refusal, seq: named.seq, path };
   for (const row of rows) {
-    const single = await readStoredUIMessages(unparsedWire([row.stored]), tools);
+    const single = await readStoredUIMessages(
+      unparsedWire([row.stored]),
+      tools,
+      UNREGISTERED_TOOL_PART.DROP,
+    );
     if (!single.ok) {
       const [, ...inner] = single.path;
       return { ok: false, refusal: single.refusal, seq: row.seq, path: inner };
@@ -194,7 +203,11 @@ async function readSelected(
     ...row,
     stored: { id: row.id, role, parts, ...optionalField("metadata", metadata) },
   }));
-  const read = await readStoredUIMessages(unparsedWire(rows.map((row) => row.stored)), tools);
+  const read = await readStoredUIMessages(
+    unparsedWire(rows.map((row) => row.stored)),
+    tools,
+    UNREGISTERED_TOOL_PART.DROP,
+  );
   if (!read.ok) return refusedRow(rows, read, tools);
   return {
     ok: true,

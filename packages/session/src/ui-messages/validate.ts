@@ -72,6 +72,24 @@ type ValidationOptions = Parameters<typeof safeValidateUIMessages<ValidatedMessa
  */
 const DYNAMIC_TOOL_PART_TYPE = "dynamic-tool";
 
+/**
+ * What a read does with a tool part naming a tool the registry does not hold.
+ * The write door refuses: a call naming a tool the brain was never offered is
+ * a bug in the turn, and the row must not land. A stored row is read with the
+ * part dropped: its tool was registered when the row was written and has
+ * since been retired, and one retired call must not make the whole
+ * conversation unreadable on every device for as long as the row stands. A
+ * `dynamic-tool` part is refused under either, because a stored row never
+ * carries one and a retirement never produces one.
+ */
+export const UNREGISTERED_TOOL_PART = {
+  REFUSE: "refuse",
+  DROP: "drop",
+} as const;
+
+export type UnregisteredToolPart =
+  (typeof UNREGISTERED_TOOL_PART)[keyof typeof UNREGISTERED_TOOL_PART];
+
 const readUserMetadata = readEither(USER_MESSAGE_METADATA);
 const readAssistantMetadata = readEither(ASSISTANT_MESSAGE_METADATA);
 
@@ -91,6 +109,29 @@ function underMetadata<A>(
     (error) =>
       new SchemaRefusalError({ refusal: error.refusal, path: ["metadata", ...error.path] }),
   );
+}
+
+/** A static tool part naming a tool the registry does not hold: the part a retirement leaves behind. */
+function namesRetiredTool(part: UnparsedWireValue, tools: ToolSet): boolean {
+  if (!isRecord(part) || !isWireString(part.type)) return false;
+  const name = toolPartName(part.type);
+  return name !== undefined && !Object.hasOwn(tools, name);
+}
+
+/**
+ * The rows with every retired tool part cut out; a row that is not a record,
+ * or whose parts are not a list, passes to the SDK to refuse. A refusal read
+ * past this names a part's index among the parts that remain.
+ */
+function withoutRetiredToolParts(
+  messages: readonly UnparsedWireValue[],
+  tools: ToolSet,
+): UnparsedWireValue[] {
+  return messages.map((message) => {
+    if (!isRecord(message) || !Array.isArray(message.parts)) return message;
+    const parts = message.parts.filter((part) => !namesRetiredTool(part, tools));
+    return parts.length === message.parts.length ? message : { ...message, parts };
+  });
 }
 
 /** The first tool part, as the rows arrived, whose name the registry does not hold. */
@@ -162,20 +203,25 @@ function readStoredMessage(
  * Reads stored rows back under the vocabulary: the SDK's own structural
  * validation and the registered tools' schemas, then this build's metadata by
  * role and its tool-state set. The registry is the catalog's `tool()`
- * declarations keyed by the name a part spells. A refusal is the same word
- * and path a wire schema answers with, so a store can tell a malformed row
- * from one naming a tool this build no longer registers. A conversation with
- * no rows yet reads as no messages: the SDK refuses an empty array, and an
- * empty conversation is not a malformed one.
+ * declarations keyed by the name a part spells. A tool part naming a tool the
+ * registry does not hold is refused or dropped as `unregistered` says, the
+ * write door refusing and a stored-row read dropping; a refusal is the same
+ * word and path a wire schema answers with, so a store can tell a malformed
+ * row from one naming a tool this build does not register. A conversation
+ * with no rows yet reads as no messages: the SDK refuses an empty array, and
+ * an empty conversation is not a malformed one.
  */
 export async function readStoredUIMessagesEither(
-  messages: UnparsedWireValue,
+  rows: UnparsedWireValue,
   tools: ToolSet,
+  unregistered: UnregisteredToolPart = UNREGISTERED_TOOL_PART.REFUSE,
 ): Promise<Result.Result<StoredUIMessage[], SchemaRefusalError>> {
-  if (!Array.isArray(messages)) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
-  if (messages.length === 0) return Result.succeed([]);
-  const unregistered = unregisteredToolPart(messages, tools);
-  if (unregistered) return refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregistered);
+  if (!Array.isArray(rows)) return refuse(SCHEMA_REFUSAL.MALFORMED, []);
+  if (rows.length === 0) return Result.succeed([]);
+  const messages =
+    unregistered === UNREGISTERED_TOOL_PART.DROP ? withoutRetiredToolParts(rows, tools) : rows;
+  const unregisteredPart = unregisteredToolPart(messages, tools);
+  if (unregisteredPart) return refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregisteredPart);
   const validated = await safeValidateUIMessages<ValidatedMessage>({
     messages,
     // SAFETY: the SDK types this option for a message whose tool set is known statically, and a
@@ -204,8 +250,9 @@ export async function readStoredUIMessagesEither(
 export async function readStoredUIMessages(
   messages: UnparsedWireValue,
   tools: ToolSet,
+  unregistered: UnregisteredToolPart = UNREGISTERED_TOOL_PART.REFUSE,
 ): Promise<SchemaRead<StoredUIMessage[]>> {
-  return Result.match(await readStoredUIMessagesEither(messages, tools), {
+  return Result.match(await readStoredUIMessagesEither(messages, tools, unregistered), {
     onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
     onSuccess: (value) => ({ ok: true, value }),
   });

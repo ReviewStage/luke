@@ -558,25 +558,37 @@ test("a checkpoint of another stamp, or rows the vocabulary refuses, loads nothi
     assert.equal(result.repaired, 0);
     assert.deepEqual(context.checkpoint().items, []);
   }
-  const unregistered = assistantRow(
-    "m2",
-    [
-      {
-        type: "tool-someone_elses_tool",
-        toolCallId: "c",
-        state: "output-available",
-        input: {},
-        output: {},
-      },
+  const malformed = {
+    format: context.checkpointFormat,
+    items: [
+      ...itemsOf([ASK_ROW]),
+      { message: { ...toWire(REPLY_ROW.message), metadata: {} }, model: MODEL },
     ],
-    MODEL,
-  );
-  const refused = await context.bootstrap(
-    checkpointOf(context, [ASK_ROW, unregistered]),
-    LOST_RESULT,
-  );
+  };
+  const refused = await context.bootstrap(malformed, LOST_RESULT);
   assert.equal(refused.loaded, false);
   assert.deepEqual(context.checkpoint().items, []);
+});
+
+test("a checkpoint row naming a tool this build no longer registers loads with that part dropped", async () => {
+  const context = engine();
+  const retired: StoredPart = {
+    type: "tool-someone_elses_tool",
+    toolCallId: "c",
+    state: "output-available",
+    input: {},
+    output: {},
+  };
+  const said: StoredPart = { type: "text", text: TURN.REPLY, state: "done" };
+  const loaded = await context.bootstrap(
+    checkpointOf(context, [ASK_ROW, assistantRow("m2", [retired, said], MODEL)]),
+    LOST_RESULT,
+  );
+  assert.deepEqual(loaded, { loaded: true, repaired: 0 });
+  assert.deepEqual(
+    context.checkpoint().items,
+    itemsOf([ASK_ROW, assistantRow("m2", [said], MODEL)]),
+  );
 });
 
 test("rows are read back field by field, and a refusal names the item and the field", async () => {

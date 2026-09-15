@@ -358,12 +358,12 @@ test("an accepted create_workspace result with a created session pokes a roster 
   assert.equal(refreshes(), 1);
 });
 
-test("a page this build's registry refuses is named on the snapshot like a row the service could not read, and paging stops at it", async () => {
-  const { composer, client, views, reports } = harness();
+/** The hello answer with one more assistant row after the reply, carrying the given parts, and a page after it. */
+function withThirdRow(parts: WireValue[]): ConversationMessagesAnswer {
   const answer = messagesAnswer("hello");
   const [group] = answer.groups;
   assert.ok(group);
-  const refused: ConversationMessagesAnswer = {
+  return {
     ...answer,
     groups: [
       {
@@ -372,18 +372,10 @@ test("a page this build's registry refuses is named on the snapshot like a row t
           ...group.messages,
           {
             message: {
-              id: "2b000000-0000-4000-8000-000000000002",
+              id: "2b000000-0000-4000-8000-000000000003",
               role: MESSAGE_ROLE.ASSISTANT,
               metadata: { author: MESSAGE_AUTHOR.BRAIN },
-              parts: [
-                {
-                  type: "tool-tool_this_build_never_registered",
-                  toolCallId: "call_1",
-                  state: "output-available",
-                  input: {},
-                  output: {},
-                },
-              ],
+              parts,
             },
             seq: 3,
             createdAt: NOW + 1,
@@ -394,13 +386,55 @@ test("a page this build's registry refuses is named on the snapshot like a row t
     ],
     hasMore: true,
   };
-  client.messagesAnswer = ok(refused);
+}
+
+test("a page this build's registry refuses is named on the snapshot like a row the service could not read, and paging stops at it", async () => {
+  const { composer, client, views, reports } = harness();
+  // A registered tool whose input its schema will not admit: the one refusal a retirement does not explain.
+  client.messagesAnswer = ok(
+    withThirdRow([
+      {
+        type: "tool-read_transcript",
+        toolCallId: "call_1",
+        state: "output-error",
+        input: { provider_id: 7 },
+        errorText: "refused",
+      },
+    ]),
+  );
   await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(composer.snapshot().unreadable, { conversationId: MAIN, seq: 3 });
   assert.deepEqual(views().at(-1)?.unreadable, { conversationId: MAIN, seq: 3 });
   // One read, not a walk: the cursor did not pass the row and no page after it was asked for.
   assert.deepEqual(client.calls, ["messages:", "events:", "turns:"]);
   assert.equal(reports.length, 1);
+});
+
+test("a row naming a tool this build does not register is drawn without that part, and paging goes on past it", async () => {
+  const { composer, client, reports } = harness();
+  const said = { type: "text", text: "Retired, but the rest stands.", state: "done" };
+  client.messagesAnswer = ok(
+    withThirdRow([
+      {
+        type: "tool-tool_this_build_never_registered",
+        toolCallId: "call_1",
+        state: "output-available",
+        input: {},
+        output: {},
+      },
+      said,
+    ]),
+  );
+  await Effect.runPromise(composer.loop.refresh);
+  assert.equal(composer.snapshot().unreadable, undefined);
+  const third = composer
+    .snapshot()
+    .groups.flatMap((group) => group.messages)
+    .find((message) => message.seq === 3);
+  assert.deepEqual(third?.message.parts, [said]);
+  // The walk went on: the page said it had more, and the next page was asked for.
+  assert.ok(client.calls.filter((call) => call.startsWith("messages:")).length > 1);
+  assert.deepEqual(reports, []);
 });
 
 test("Clear carries the service's soft delete and reads again at once; a Clear the service did not take answers false", async () => {
