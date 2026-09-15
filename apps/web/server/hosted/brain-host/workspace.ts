@@ -2,6 +2,7 @@ import { Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
+  appendedDailyNote,
   BOOTSTRAP_FILE_ORDER,
   BRAIN_IDENTITY_LINE,
   BRAIN_INPUT_MARKER,
@@ -14,6 +15,7 @@ import {
   buildSystemPrompt,
   DAILY_NOTES_DIRECTORY,
   DEFAULT_AGENT_ID,
+  dailyNotePath,
   type EffectiveToolPolicy,
   isWorkspaceFile,
   PROMPT_PROFILE,
@@ -34,7 +36,9 @@ import { BRAIN_HOST } from "./bounds.js";
  * prompt is composed from the rows exactly as the desktop composes it from
  * the directory — the bootstrap order, each file's own bound and the total
  * bound, the pure builder — and the tools can name nothing but the bootstrap
- * files and a dated note under `memory/`.
+ * files and a dated note under `memory/`. A dated note is grown by appending
+ * to today's, under the account's row lock so two turns in flight cannot lose
+ * one another's entry, and listed by path and length without a word of it.
  */
 
 /** The slice of the store the workspace reaches. */
@@ -76,7 +80,10 @@ const NO_SKILLS = "not loaded: this agent lists no skills";
  * over `SqlClient`, so the request's own client is provided into each read
  * here and `Effect.orDie` stands for the error the contract has nowhere to
  * say — a row this service cannot read is not a refusal the model is offered
- * a reason for.
+ * a reason for. An append names today's note by the host's clock and revises
+ * it in the store's one transaction: the revision declines, leaving the note
+ * as it was, where the entry would grow it past the note's own bound, and the
+ * refusal names that bound.
  */
 export function hostedWorkspaceAccess(
   client: SqlClient.SqlClient,
@@ -105,6 +112,27 @@ export function hostedWorkspaceAccess(
         yield* run(store.workspace.write(userId, path, content, now()));
         return { ok: true, chars: content.length };
       }),
+    append: (entry) =>
+      Effect.gen(function* () {
+        const at = now();
+        const path = dailyNotePath(at);
+        const bound = workspaceFileBound(path);
+        const landed = yield* run(
+          store.workspace.revise(
+            userId,
+            path,
+            (existing) => {
+              const grown = appendedDailyNote(existing, entry);
+              return grown.length > bound ? undefined : grown;
+            },
+            at,
+          ),
+        );
+        return landed === undefined
+          ? { ok: false, reason: tooLargeRefusal(bound) }
+          : { ok: true, path, chars: landed.length };
+      }),
+    listNotes: (limit) => run(store.workspace.listNotes(userId, limit)),
     loadSkill: () => Effect.succeed({ ok: false, reason: NO_SKILLS }),
   };
 }

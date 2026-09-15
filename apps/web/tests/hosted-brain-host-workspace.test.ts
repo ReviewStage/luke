@@ -31,6 +31,17 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 const NOW = 1_800_000_000_000;
 
+/**
+ * The dated-note half: an append names today's note by the clock the host
+ * handed it, grows the note under the account's lock, and refuses past the
+ * note's own bound, the bound named, without touching the note; the listing
+ * is newest first, bounded, and counts characters without reading a word
+ * back. Synthetic fixtures: no real note anywhere.
+ */
+
+/** 2026-09-15 at noon UTC; the day's note is `memory/2026-09-15.md`, which `NOTE_PATH` names. */
+const NOON = Date.UTC(2026, 8, 15, 12);
+
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
@@ -41,11 +52,11 @@ const PER_FILE = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
 const NOTE_PATH = "memory/2026-09-15.md";
 
 /** The access the tools hold for one account, over the test database's own client. */
-function accessFor(userId: string) {
+function accessFor(userId: string, now: () => number = () => NOW) {
   return database.run(
     Effect.gen(function* () {
       const client = yield* SqlClient.SqlClient;
-      return hostedWorkspaceAccess(client, database.store, userId, () => NOW);
+      return hostedWorkspaceAccess(client, database.store, userId, now);
     }),
   );
 }
@@ -132,4 +143,83 @@ test("a row past its file's bound is read cut at that bound, and the prompt comp
     built.diagnostics.map((diagnostic) => diagnostic.subject),
     [WORKSPACE_FILE.USER],
   );
+});
+
+test("an append creates today's note by the host's clock, grows it after a blank line, and the next day's entry opens the next day's note", async () => {
+  const userId = await database.createUser();
+  let now = NOON;
+  const access = await accessFor(userId, () => now);
+
+  assert.deepEqual(await database.run(access.append("- decided: notch")), {
+    ok: true,
+    path: NOTE_PATH,
+    chars: "- decided: notch".length,
+  });
+  assert.deepEqual(await database.run(access.append("- tests green")), {
+    ok: true,
+    path: NOTE_PATH,
+    chars: "- decided: notch\n\n- tests green".length,
+  });
+  assert.deepEqual(await database.run(access.read(NOTE_PATH)), {
+    ok: true,
+    content: "- decided: notch\n\n- tests green",
+  });
+  now = NOON + 24 * 60 * 60 * 1000;
+  assert.deepEqual(await database.run(access.append("- next day")), {
+    ok: true,
+    path: "memory/2026-09-16.md",
+    chars: "- next day".length,
+  });
+  assert.deepEqual(await database.run(access.listNotes(60)), [
+    { path: "memory/2026-09-16.md", chars: "- next day".length },
+    { path: NOTE_PATH, chars: "- decided: notch\n\n- tests green".length },
+  ]);
+  assert.deepEqual(await database.run(access.listNotes(1)), [
+    { path: "memory/2026-09-16.md", chars: "- next day".length },
+  ]);
+  // A bootstrap file is no dated note, whatever the listing's bound.
+  await database.run(access.write("MEMORY.md", "# MEMORY.md"));
+  assert.equal((await database.run(access.listNotes(60))).length, 2);
+});
+
+test("an entry that would grow the note past the note's own bound is refused with the bound named and the note stands as it was", async () => {
+  const userId = await database.createUser();
+  const access = await accessFor(userId, () => NOON);
+  const nearlyFull = "x".repeat(PER_FILE - 10);
+  assert.equal((await database.run(access.append(nearlyFull))).ok, true);
+  assert.deepEqual(await database.run(access.append("- ten chars or more")), {
+    ok: false,
+    reason: tooLargeRefusal(PER_FILE),
+  });
+  assert.deepEqual(await database.run(access.listNotes(60)), [
+    { path: NOTE_PATH, chars: nearlyFull.length },
+  ]);
+  // An entry that fits exactly lands: the bound is inclusive.
+  const fitting = "y".repeat(8);
+  assert.deepEqual(await database.run(access.append(fitting)), {
+    ok: true,
+    path: NOTE_PATH,
+    chars: PER_FILE,
+  });
+  // An account that never appended lists nothing, and a first entry past the bound creates no note.
+  const other = await database.createUser();
+  const otherAccess = await accessFor(other, () => NOON);
+  const oversize = "z".repeat(PER_FILE + 1);
+  assert.equal((await database.run(otherAccess.append(oversize))).ok, false);
+  assert.deepEqual(await database.run(otherAccess.listNotes(60)), []);
+  assert.deepEqual(await database.run(otherAccess.read(NOTE_PATH)), {
+    ok: false,
+    reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND,
+  });
+});
+
+test("appends in flight together for one account all land, none losing another's entry", async () => {
+  const userId = await database.createUser();
+  const access = await accessFor(userId, () => NOON);
+  const entries = ["- a", "- b", "- c", "- d", "- e", "- f", "- g", "- h"];
+  await Promise.all(entries.map((entry) => database.run(access.append(entry))));
+  const read = await database.run(access.read(NOTE_PATH));
+  assert.ok(read.ok);
+  for (const entry of entries) assert.ok(read.content.includes(entry), entry);
+  assert.equal(read.content.split("\n\n").length, entries.length);
 });

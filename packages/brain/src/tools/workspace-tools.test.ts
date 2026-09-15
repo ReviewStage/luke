@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { type DailyNoteListing, WORKSPACE_FILE_REFUSAL } from "@sidecar/runtime";
 import { MAIN_SESSION_KEY, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
-import { BRAIN_TOOL } from "./names.js";
+import { BRAIN_TOOL, maximumListedDailyNotes } from "./names.js";
 import { REFUSAL_REASON } from "./refusals.js";
 import {
   type BrainWorkspaceAccess,
@@ -36,8 +37,17 @@ function context(access: { workspace: BrainWorkspaceAccess | undefined }) {
   return { ctx, journaled: () => journaled };
 }
 
+const TODAY = "memory/2026-09-15.md";
+
+const LISTED: readonly DailyNoteListing[] = [
+  { path: "memory/2026-09-15.md", chars: 120 },
+  { path: "memory/2026-09-14.md", chars: 8 },
+];
+
 function fakeWorkspace() {
   const written: [string, string][] = [];
+  const appended: string[] = [];
+  const listed: number[] = [];
   const workspace: BrainWorkspaceAccess = {
     read: (name) => Effect.succeed({ ok: true, content: `content of ${name}` }),
     write: (name, content) =>
@@ -45,22 +55,130 @@ function fakeWorkspace() {
         written.push([name, content]);
         return { ok: true, chars: content.length };
       }),
+    append: (entry) =>
+      Effect.sync(() => {
+        appended.push(entry);
+        return { ok: true, path: TODAY, chars: appended.join("\n\n").length };
+      }),
+    listNotes: (limit) =>
+      Effect.sync(() => {
+        listed.push(limit);
+        return LISTED;
+      }),
     loadSkill: () => Effect.succeed({ ok: true, instructions: "do it", truncated: false }),
   };
-  return { workspace, written };
+  return { workspace, written, appended, listed };
 }
 
-test("the three workspace tools are modules in catalog order, each naming the strings it takes", () => {
+test("the five workspace tools are modules in catalog order, each naming the strings it takes", () => {
   assert.deepEqual(
     WORKSPACE_TOOLS.map((tool) => tool.name),
-    [BRAIN_TOOL.READ_WORKSPACE_FILE, BRAIN_TOOL.WRITE_WORKSPACE_FILE, BRAIN_TOOL.LOAD_SKILL],
+    [
+      BRAIN_TOOL.READ_WORKSPACE_FILE,
+      BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+      BRAIN_TOOL.APPEND_DAILY_NOTE,
+      BRAIN_TOOL.LIST_DAILY_NOTES,
+      BRAIN_TOOL.LOAD_SKILL,
+    ],
   );
   for (const tool of WORKSPACE_TOOLS) assert.equal(workspaceToolNamed(tool.name), tool);
   const required = WORKSPACE_TOOLS.map((tool) => {
     const node = emitJsonSchema(tool.inputSchema);
     return "required" in node ? [...node.required] : [];
   });
-  assert.deepEqual(required, [["name"], ["name", "content"], ["location"]]);
+  assert.deepEqual(required, [["name"], ["name", "content"], ["content"], [], ["location"]]);
+});
+
+test("a whole-file write of a dated note is refused toward append_daily_note before the journal is asked, and a bootstrap file still lands", async () => {
+  const { workspace, written } = fakeWorkspace();
+  const { ctx, journaled } = context({ workspace });
+  const write = workspaceToolNamed(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
+  assert.ok(write);
+  for (const name of ["memory/2026-09-15.md", "memory/2026-09-15-standup.md"]) {
+    const refused: WireRecord = await Effect.runPromise(
+      write.execute({ name, content: "- a line" }, ctx),
+    );
+    assert.deepEqual(refused, {
+      status: ACTION_RESULT_STATUS.REJECTED,
+      reason: WORKSPACE_FILE_REFUSAL.DAILY_NOTE_REWRITE,
+    });
+  }
+  assert.equal(journaled(), 0);
+  assert.deepEqual(written, []);
+  // A name under memory/ that is no dated note is the host's to refuse, as before.
+  const landed = await Effect.runPromise(write.execute({ name: "USER.md", content: "- x" }, ctx));
+  assert.equal(landed.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(written, [["USER.md", "- x"]]);
+  assert.equal(journaled(), 1);
+  assert.match(write.description, /append_daily_note/u);
+  assert.match(
+    write.description,
+    /AGENTS\.md, IDENTITY\.md, USER\.md, MEMORY\.md, or BOOTSTRAP\.md/u,
+  );
+});
+
+test("an append trims its entry, refuses one left with nothing before the journal is asked, and answers the note's path and length once journaled", async () => {
+  const { workspace, appended } = fakeWorkspace();
+  const { ctx, journaled } = context({ workspace });
+  const append = workspaceToolNamed(BRAIN_TOOL.APPEND_DAILY_NOTE);
+  assert.ok(append);
+  for (const input of [{}, { content: 7 }, { content: null }] as const) {
+    const refused: WireRecord = await Effect.runPromise(append.execute(input, ctx));
+    assert.equal(refused.reason, REFUSAL_REASON.MALFORMED_ARGUMENTS);
+  }
+  const empty = await Effect.runPromise(append.execute({ content: "  \n " }, ctx));
+  assert.deepEqual(empty, {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: REFUSAL_REASON.EMPTY_NOTE,
+  });
+  assert.equal(journaled(), 0);
+  assert.deepEqual(appended, []);
+  const first = await Effect.runPromise(append.execute({ content: "  - decided: notch\n" }, ctx));
+  assert.deepEqual(first, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    path: TODAY,
+    chars: "- decided: notch".length,
+  });
+  const second = await Effect.runPromise(append.execute({ content: "- tests green" }, ctx));
+  assert.deepEqual(second, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    path: TODAY,
+    chars: "- decided: notch\n\n- tests green".length,
+  });
+  assert.deepEqual(appended, ["- decided: notch", "- tests green"]);
+  assert.equal(journaled(), 2);
+  // The host's refusal is the model's answer, journaled like any other outcome.
+  const full: BrainWorkspaceAccess = {
+    ...workspace,
+    append: () => Effect.succeed({ ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE }),
+  };
+  const bounded = context({ workspace: full });
+  const refused: WireRecord = await Effect.runPromise(
+    append.execute({ content: "- more" }, bounded.ctx),
+  );
+  assert.deepEqual(refused, {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE,
+  });
+  assert.equal(bounded.journaled(), 1);
+});
+
+test("listing the dated notes asks the host for the newest sixty and answers each path with its length, outside the journal", async () => {
+  const { workspace, listed } = fakeWorkspace();
+  const { ctx, journaled } = context({ workspace });
+  const list = workspaceToolNamed(BRAIN_TOOL.LIST_DAILY_NOTES);
+  assert.ok(list);
+  assert.deepEqual(await Effect.runPromise(list.execute({}, ctx)), {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    notes: [
+      { path: "memory/2026-09-15.md", chars: 120 },
+      { path: "memory/2026-09-14.md", chars: 8 },
+    ],
+  });
+  assert.deepEqual(listed, [maximumListedDailyNotes]);
+  assert.equal(maximumListedDailyNotes, 60);
+  assert.equal(journaled(), 0);
+  assert.match(list.description, /60/u);
 });
 
 test("a write whose arguments are not the strings the tool takes is refused before the journal is asked, and the file is untouched", async () => {

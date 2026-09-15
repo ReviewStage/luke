@@ -25,6 +25,7 @@ export const REFUSAL_REASON = {
   /** A child named by id that the host does not hold for this conversation. */
   UNKNOWN_CHILD: "no child of this conversation has that id",
   EMPTY_TASK: "a task needs words",
+  EMPTY_NOTE: "a note entry needs words",
   NO_MEMORY: "not run: this agent has no notebook index",
 } as const;
 
