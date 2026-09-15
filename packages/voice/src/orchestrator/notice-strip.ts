@@ -8,7 +8,7 @@ import { Duration, Effect, type Fiber } from "effect";
 
 export const VOICE_ERROR_NOTICE_MS = 12_000;
 
-export interface NoticeStripOptions {
+interface NoticeStripOptions {
   onChanged(): void;
   /**
    * Forks the expiry effect under whichever services the caller holds; the

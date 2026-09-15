@@ -20,8 +20,6 @@ export const SOCKET_OPEN_FAULT = {
   NETWORK: "network",
 } as const;
 
-export type SocketOpenFault = (typeof SOCKET_OPEN_FAULT)[keyof typeof SOCKET_OPEN_FAULT];
-
 /** How a socket ended, as the transport reported it; the code is the close frame's where one arrived. */
 export interface SocketClose {
   code?: number;

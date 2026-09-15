@@ -68,25 +68,12 @@ export class VoiceCapabilityAssembler {
   #liveSessions: LiveSessionSource | undefined;
   #unavailableLiveDiagnostics: LiveDiagnostics;
   #applications = 0;
-  readonly #applied = new Set<() => void>();
 
   constructor(options: VoiceCapabilityAssemblerOptions) {
     this.#options = options;
     this.#unavailableLiveDiagnostics = unavailableLiveDiagnostics({
       fixtureMode: options.fixtureRun(),
     });
-  }
-
-  /**
-   * Hears every application that published, after its capability set stands,
-   * so a reader of the set can follow a credential change without polling.
-   * Answers the unsubscribe.
-   */
-  onApplied(listener: () => void): () => void {
-    this.#applied.add(listener);
-    return () => {
-      this.#applied.delete(listener);
-    };
   }
 
   /**
@@ -149,7 +136,6 @@ export class VoiceCapabilityAssembler {
         fixtureMode: this.#options.fixtureRun(),
       });
       this.#report();
-      for (const listener of this.#applied) listener();
       return { latest: true, isCurrent };
     });
   }

@@ -38,14 +38,14 @@ interface PendingAck {
  * commentary's speech settles, and whether the send is one the session should
  * be kept alive for. Both default to what an ordinary reply wants.
  */
-export interface SendOptions {
+interface SendOptions {
   /** For a commentary append: called once its speech has settled. */
   onSpoken?: () => void;
   /** Whether this send moves the idle clock. A note about the desk does not. */
   countsForIdle?: boolean;
 }
 
-export interface AppendChannelOptions {
+interface AppendChannelOptions {
   sideband: LiveSideband;
   report: (message: string) => void;
   trace: LiveTrace;
