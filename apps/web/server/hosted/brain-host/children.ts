@@ -65,6 +65,12 @@ export const HOSTED_CHILDREN = {
    * accepted over a second query per spawn.
    */
   LIST_LIMIT: 200,
+  /**
+   * How many of a child's messages one history read considers before the
+   * tool's line limit is applied: a message of tool calls alone is no line,
+   * so the bound is taken over the lines that remain, not the rows read.
+   */
+  LINES_WINDOW: 200,
 } as const;
 
 /** The refusal the brain reads for each way the opener declines: no child was opened, and this is the nearest reason. */
@@ -302,9 +308,12 @@ export function hostedChildAccess(
           const recent = yield* readRecentMessages(
             { userId, conversationId: childId },
             CATALOG_TOOL_SET,
-            limit,
+            HOSTED_CHILDREN.LINES_WINDOW,
           );
-          return recent.map(lineOf).filter((line) => line.length > 0);
+          return recent
+            .map(lineOf)
+            .filter((line) => line.length > 0)
+            .slice(-limit);
         }),
       ),
   };

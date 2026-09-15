@@ -584,20 +584,22 @@ test("the conversations are the account's main, observed, and child conversation
 test("the lines are a child's own recent words, oldest first and bounded, and nothing for a child not this conversation's", async () => {
   const fixture = await standing();
   const child = await childOf(fixture, { task: "fixture one" });
-  const line = (seq: number, role: string, text: string, author: string) =>
+  const line = (seq: number, role: string, text: string | undefined, author: string) =>
     insertMessage(database.run, {
       userId: fixture.userId,
       conversationId: child.childId,
       seq,
       clientId: randomUUID(),
       role,
-      parts: [{ type: UI_PART_TYPE.TEXT, text }],
+      parts: text === undefined ? [] : [{ type: UI_PART_TYPE.TEXT, text }],
       metadata: { author },
       createdAt: at(seq),
       finishedAt: at(seq),
     });
   await line(2, MESSAGE_ROLE.ASSISTANT, "fixture two", MESSAGE_AUTHOR.BRAIN);
-  await line(3, MESSAGE_ROLE.ASSISTANT, "fixture three", MESSAGE_AUTHOR.BRAIN);
+  // A message with no words of its own, a step of tool calls alone, is no line and spends none of the bound.
+  await line(3, MESSAGE_ROLE.ASSISTANT, undefined, MESSAGE_AUTHOR.BRAIN);
+  await line(4, MESSAGE_ROLE.ASSISTANT, "fixture three", MESSAGE_AUTHOR.BRAIN);
   const seams = seamsOf(fixture, fakeEve());
 
   assert.deepEqual(await withAccess(seams, (access) => access.lines(child.childId, 2)), [
