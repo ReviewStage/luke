@@ -23,6 +23,7 @@ import {
 import {
   BOOTSTRAP_BOUNDS,
   boundBootstrapFiles,
+  CURATED_FILE_BUDGET,
   seedWorkspace,
   WORKSPACE_FILE,
   type WorkspaceFile,
@@ -170,11 +171,13 @@ test("the minimal profile carries AGENTS.md alone and no persona, identity, user
   );
 });
 
-test("a truncated or missing file is named in the notice and the diagnostics", () => {
+test("a truncated or missing file is named in the notice and the diagnostics, a curated file at its own budget", () => {
   const perFile = BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
+  const budget = CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY];
   const bounded = boundBootstrapFiles([
     { name: WORKSPACE_FILE.AGENTS, path: "/w/AGENTS.md", content: "a".repeat(perFile + 50) },
     { name: WORKSPACE_FILE.IDENTITY, path: "/w/IDENTITY.md", content: undefined },
+    { name: WORKSPACE_FILE.MEMORY, path: "/w/MEMORY.md", content: "m".repeat(budget + 50) },
   ]);
   const built = buildSystemPrompt(facts({ bootstrapFiles: bounded, skills: [] }));
   assert.deepEqual(
@@ -182,8 +185,12 @@ test("a truncated or missing file is named in the notice and the diagnostics", (
     [
       [PROMPT_DIAGNOSTIC.FILE_TRUNCATED, WORKSPACE_FILE.AGENTS],
       [PROMPT_DIAGNOSTIC.FILE_MISSING, WORKSPACE_FILE.IDENTITY],
+      [PROMPT_DIAGNOSTIC.FILE_TRUNCATED, WORKSPACE_FILE.MEMORY],
     ],
   );
+  assert.ok(built.text.includes(`- MEMORY.md: ${budget} of ${budget + 50} characters shown`));
+  assert.ok(built.text.includes(`- AGENTS.md: ${perFile} of ${perFile + 50} characters shown`));
+  assert.ok(built.text.includes(`[truncated: ${budget + 50} characters on disk]`));
 });
 
 test("gathering reads the workspace under the configuration, lists eligible skills, and a child reads AGENTS.md alone", async () => {

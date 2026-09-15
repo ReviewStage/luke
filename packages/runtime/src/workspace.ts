@@ -44,6 +44,31 @@ export const BOOTSTRAP_BOUNDS = {
   MAXIMUM_TOTAL_CHARS: 60_000,
 } as const;
 
+/**
+ * The curated core's own budgets, from OpenClaw's memory architecture
+ * (`docs/concepts/memory-architecture.md`): USER.md and MEMORY.md are the two
+ * small files the agent keeps current by hand and the prompt injects whole,
+ * each under a budget of its own well inside the instruction files' per-file
+ * bound, so a fact or a decision worth carrying is condensed rather than
+ * piled up, and detail goes to the dated notes under `memory/`.
+ */
+export const CURATED_FILE_BUDGET = {
+  [WORKSPACE_FILE.USER]: 4_000,
+  [WORKSPACE_FILE.MEMORY]: 4_000,
+} as const;
+
+/**
+ * The most characters one workspace file may hold as the prompt reads it and
+ * the writer lets it stand: the curated budget for USER.md and MEMORY.md, the
+ * per-file bound for every other file and for a dated note.
+ */
+export function workspaceFileBound(name: string): number {
+  if (name === WORKSPACE_FILE.USER || name === WORKSPACE_FILE.MEMORY) {
+    return CURATED_FILE_BUDGET[name];
+  }
+  return BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE;
+}
+
 const WORKSPACE_FILE_LIST: readonly string[] = Object.values(WORKSPACE_FILE);
 
 /** Whether a name is one of the bootstrap files, and so a path the workspace tools may name directly. */
@@ -91,7 +116,7 @@ export interface BootstrapFile {
   readonly path: string;
   readonly content: string;
   readonly missing: boolean;
-  /** How many characters the file held before the per-file or total bound cut it; equal to the content's length when uncut. */
+  /** How many characters the file held before its own or the total bound cut it; equal to the content's length when uncut. */
   readonly originalChars: number;
   readonly truncated: boolean;
 }
@@ -108,7 +133,7 @@ async function readIfPresent(file: string): Promise<string | undefined> {
 
 /**
  * Applies the bounds to files already read, in order: each file is cut to
- * the per-file bound from its end, and once the running total reaches the
+ * its own bound from its end, and once the running total reaches the
  * total bound the rest of that file and every file after it are cut, each
  * still listed so the prompt can say which. A missing file is listed as
  * missing with no content; BOOTSTRAP.md is meant to go missing once setup
@@ -129,8 +154,8 @@ export function boundBootstrapFiles(
         truncated: false,
       };
     }
-    const perFile = file.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE);
-    const content = perFile.slice(0, Math.max(0, remaining));
+    const ownBound = file.content.slice(0, workspaceFileBound(file.name));
+    const content = ownBound.slice(0, Math.max(0, remaining));
     remaining -= content.length;
     return {
       name: file.name,
@@ -221,9 +246,18 @@ export async function recentDailyNotes(
 
 export const WORKSPACE_FILE_REFUSAL = {
   OUTSIDE_WORKSPACE: "not a workspace file",
-  TOO_LARGE: "the content exceeds the per-file bound",
+  TOO_LARGE: "the content exceeds the file's bound",
   NOT_FOUND: "no such workspace file",
 } as const;
+
+/**
+ * The refusal of a write past a file's bound, naming the bound in characters
+ * so the writer can read the file back, condense it, and rewrite it to fit;
+ * nothing of the refused content is written.
+ */
+export function tooLargeRefusal(bound: number): string {
+  return `${WORKSPACE_FILE_REFUSAL.TOO_LARGE} of ${bound} characters; read it back, condense, and rewrite to fit`;
+}
 
 /**
  * Resolves a name the agent gave to a file inside the workspace, or nothing:
@@ -251,7 +285,7 @@ export type WorkspaceWriteResult =
   | { readonly ok: true; readonly chars: number }
   | { readonly ok: false; readonly reason: string };
 
-/** Reads one workspace file for the agent, bounded like a bootstrap file. */
+/** Reads one workspace file for the agent, cut at the file's own bound like a bootstrap file. */
 export async function readWorkspaceFile(
   directory: string,
   name: string,
@@ -260,10 +294,10 @@ export async function readWorkspaceFile(
   if (!file) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
   const content = await readIfPresent(file);
   if (content === undefined) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
-  return { ok: true, content: content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
+  return { ok: true, content: content.slice(0, workspaceFileBound(name)) };
 }
 
-/** Writes one workspace file whole for the agent; a content past the per-file bound is refused rather than cut. */
+/** Writes one workspace file whole for the agent; a content past the file's own bound is refused rather than cut. */
 export async function writeWorkspaceFile(
   directory: string,
   name: string,
@@ -271,9 +305,8 @@ export async function writeWorkspaceFile(
 ): Promise<WorkspaceWriteResult> {
   const file = workspaceFilePath(directory, name);
   if (!file) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-  if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
-    return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
-  }
+  const bound = workspaceFileBound(name);
+  if (content.length > bound) return { ok: false, reason: tooLargeRefusal(bound) };
   await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 });
   const temporary = `${file}.${process.pid}.tmp`;
   await fs.writeFile(temporary, content, { mode: 0o600 });
