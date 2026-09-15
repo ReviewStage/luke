@@ -41,6 +41,16 @@
   color: var(--danger);
 }
 
+/* The thread is the conversation tab's one growing region: the scroll box
+   fills it, and the jump back to the tail floats over its bottom edge rather
+   than taking a row of the thread's own. */
+.conversation-thread {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
 /* The thread scrolls on two nested scrollers, one per axis. The outer one is
    the vertical scroll the thread always had, with its thin scrollbar and the
    edge fade; the inner one is the pull. */
@@ -57,6 +67,40 @@
   scrollbar-width: thin;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
+}
+
+.conversation-jump-to-bottom {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: rgba(17, 18, 20, 0.94);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.34);
+  color: var(--text-secondary);
+  transform: translateX(-50%);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease,
+    border-color var(--duration-hover) ease;
+}
+
+.conversation-jump-to-bottom:hover,
+.conversation-jump-to-bottom:focus-visible {
+  border-color: var(--selected-edge);
+  background: color-mix(in srgb, var(--surface-overlay) 86%, var(--selected));
+  color: var(--text-primary);
+}
+
+.conversation-jump-to-bottom .settings-chevron {
+  width: 13px;
+  height: 13px;
+  transform: rotate(90deg);
 }
 
 /* The pull is the thread's own sideways scroll, the way iMessage uncovers a
