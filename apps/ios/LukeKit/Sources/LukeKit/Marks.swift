@@ -8,8 +8,6 @@ public enum FaceArt {
     /// The face cropped to itself (MARK_VIEW_BOX). Only for a face that never
     /// moves: it is tight enough that any motion would leave it.
     public static let markBox = CGRect(x: 53.85, y: 62.67, width: 134.29, height: 122.37)
-    /// The square window motions play in (VIEW_BOX), with headroom to move.
-    public static let motionBox = CGRect(x: 48, y: 51, width: 146, height: 146)
     public static let strokeWidth: CGFloat = 16
     public static let eyeY: CGFloat = 92
     public static let eyeRadius: CGFloat = 12

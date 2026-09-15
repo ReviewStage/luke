@@ -109,14 +109,10 @@ public final class ConversationStore {
             guard account.accountEmail == holder, !Task.isCancelled else { return false }
             thread.record(
                 ConversationReadEvent(
-                    id: answer.id,
-                    conversationId: message.conversationId,
                     seq: answer.seq,
                     messageId: message.messageId,
                     kind: .rating,
-                    deviceId: deviceId,
-                    payload: .object(["rating": .string(word.rawValue)]),
-                    createdAt: now()
+                    payload: .object(["rating": .string(word.rawValue)])
                 )
             )
             ratings = thread.ratings

@@ -24,7 +24,6 @@ private final class FakeTrack: LiveAudioTrack {
 private final class FakeChannel: LiveDataChannel {
     var isOpen = false
     private(set) var sent: [[String: Any]] = []
-    private(set) var closeCount = 0
     var onMessage: ((String) -> Void)?
     var onClose: (() -> Void)?
 
@@ -35,11 +34,6 @@ private final class FakeChannel: LiveDataChannel {
         }
         sent.append(record)
         return true
-    }
-
-    func close() {
-        closeCount += 1
-        isOpen = false
     }
 
     var sentTypes: [String] { sent.compactMap { $0["type"] as? String } }
@@ -69,8 +63,6 @@ private final class FakePeerConnection: LivePeerConnection {
     var onIceGatheringStateChange: (() -> Void)?
     var onTransportStateChange: (() -> Void)?
     var onRemoteTrack: ((any LiveAudioTrack) -> Void)?
-    /// Whether the channel opens with the answer, as a real one does once the transport connects.
-    var channelOpensOnAnswer = true
 
     func addAudioTrack(_ track: any LiveAudioTrack) throws {
         steps.append(.addTrack)
@@ -100,7 +92,7 @@ private final class FakePeerConnection: LivePeerConnection {
         steps.append(.setRemote)
         remoteSdp = description.sdp
         XCTAssertEqual(description.kind, .answer)
-        if channelOpensOnAnswer { channels.last?.isOpen = true }
+        channels.last?.isOpen = true
     }
 
     func close() {
@@ -126,7 +118,6 @@ private final class Harness {
     let microphone = FakeTrack()
     private(set) var statuses: [LiveStatus] = []
     private(set) var events: [LiveServerEvent] = []
-    private(set) var transports: [LiveTransportState] = []
     private(set) var errors: [String] = []
     private(set) var offers: [String] = []
     var created: LiveSessionCreated? = LiveSessionCreated(sessionId: "live_123", sdpAnswer: "v=0\r\nanswer\r\n")
@@ -152,7 +143,6 @@ private final class Harness {
                 },
                 onStatus: { self.statuses.append($0) },
                 onServerEvent: { self.events.append($0) },
-                onTransport: { self.transports.append($0) },
                 onError: { self.errors.append($0) },
                 iceGatheringTimeout: iceGatheringTimeout,
                 sessionStartTimeout: sessionStartTimeout,
@@ -252,7 +242,6 @@ final class LivePeerTests: XCTestCase {
         XCTAssertEqual(harness.errors, ["Luke could not open a voice session."])
         XCTAssertEqual(harness.peer.status, .failed)
         XCTAssertEqual(harness.statuses, [.connecting, .failed])
-        XCTAssertEqual(harness.transports, [.closed])
         XCTAssertFalse(harness.peer.standing)
         XCTAssertNil(harness.peer.sessionId)
     }
@@ -427,7 +416,7 @@ final class LivePeerTests: XCTestCase {
     }
 
     @MainActor
-    func testTheTransportIsReportedAsTheConnectionMovesAndAFailedOneEndsThePeer() async throws {
+    func testAFailedConnectionEndsThePeer() async throws {
         let harness = Harness()
         let stood = await harness.openStarted()
         XCTAssertTrue(stood)
@@ -435,30 +424,16 @@ final class LivePeerTests: XCTestCase {
         harness.connection.transport(.connecting)
         harness.connection.transport(.connected)
         harness.connection.transport(.disconnected)
-        XCTAssertEqual(harness.transports, [.connecting, .connected, .disconnected])
         XCTAssertTrue(harness.peer.standing)
 
         harness.connection.transport(.failed)
 
-        XCTAssertEqual(harness.transports, [.connecting, .connected, .disconnected, .failed, .closed])
         XCTAssertFalse(harness.peer.standing)
         XCTAssertEqual(harness.peer.status, .failed)
         XCTAssertEqual(harness.connection.steps.last, .close)
         XCTAssertFalse(harness.microphone.isEnabled)
         XCTAssertNil(harness.channel?.onMessage)
         XCTAssertNil(harness.connection.onTransportStateChange)
-    }
-
-    @MainActor
-    func testAConnectionStillNewReportsNothing() async throws {
-        let harness = Harness()
-        let stood = await harness.openStarted()
-        XCTAssertTrue(stood)
-
-        harness.connection.transportState = nil
-        harness.connection.onTransportStateChange?()
-
-        XCTAssertEqual(harness.transports, [])
     }
 
     @MainActor
@@ -481,7 +456,6 @@ final class LivePeerTests: XCTestCase {
         XCTAssertTrue(announced)
         XCTAssertEqual(harness.peer.status, .idle)
         XCTAssertEqual(harness.connection.steps.last, .close)
-        XCTAssertEqual(harness.transports.last, .closed)
         XCTAssertEqual(harness.events.last, .sessionClosed(eventId: "event_9", reason: .closeRequested, usageSeconds: 12))
         XCTAssertEqual(harness.statuses, [.connecting, .muted, .closing, .idle])
         let closedAgain = await harness.peer.close()
@@ -529,7 +503,6 @@ final class LivePeerTests: XCTestCase {
         XCTAssertFalse(harness.peer.standing)
         XCTAssertEqual(harness.peer.status, .idle)
         XCTAssertEqual(harness.connection.steps.last, .close)
-        XCTAssertEqual(harness.transports, [.closed])
     }
 
     @MainActor

@@ -10,7 +10,7 @@ import Foundation
 public indirect enum MarkdownBlock: Equatable, Sendable {
     case paragraph(AttributedString)
     case heading(level: Int, AttributedString)
-    case code(language: String?, String)
+    case code(String)
     case quote([MarkdownBlock])
     case list(ordered: Bool, items: [MarkdownListItem])
     case table(
@@ -199,11 +199,10 @@ private final class BlockNode {
             return [.paragraph(text)]
         case .header(let level):
             return [.heading(level: level, text)]
-        case .codeBlock(let languageHint):
-            let language = languageHint.flatMap { $0.isEmpty ? nil : $0 }
+        case .codeBlock:
             var code = String(text.characters)
             if code.hasSuffix("\n") { code.removeLast() }
-            return [.code(language: language, code)]
+            return [.code(code)]
         case .thematicBreak:
             return [.rule]
         case .blockQuote:

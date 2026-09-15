@@ -95,10 +95,6 @@ final class WebRTCDataChannel: NSObject, LiveDataChannel, LKRTCDataChannelDelega
         channel.sendData(LKRTCDataBuffer(data: Data(text.utf8), isBinary: false))
     }
 
-    func close() {
-        channel.close()
-    }
-
     nonisolated func dataChannelDidChangeState(_ dataChannel: LKRTCDataChannel) {
         guard dataChannel.readyState == .closed else { return }
         Task { @MainActor in self.onClose?() }

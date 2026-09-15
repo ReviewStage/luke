@@ -130,7 +130,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         let reply = try JSONDecoder().decode(UIMessage.self, from: bytes)
         let parts = reply.toolParts
         let identity = { (part: ToolPart) in
-            ToolPartIdentity(toolCallId: part.toolCallId, toolName: part.toolName, state: part.state)
+            ToolPartIdentity(toolCallId: part.toolCallId, toolName: part.toolName)
         }
         let session = SessionIdentity(providerId: "conductor", providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50")
         return ConversationReadTurnGroup(
@@ -228,8 +228,8 @@ final class ConversationTurnRowsTests: XCTestCase {
                 ConversationReadMessage(
                     message: message, seq: 1, createdAt: Date(timeIntervalSince1970: 1),
                     tools: [
-                        .detail(ToolPartIdentity(toolCallId: "c1", toolName: "read_transcript", state: .outputAvailable)),
-                        .action(ToolPartIdentity(toolCallId: "c2", toolName: "remember_fact", state: .outputAvailable), outcome: .accepted),
+                        .detail(ToolPartIdentity(toolCallId: "c1", toolName: "read_transcript")),
+                        .action(ToolPartIdentity(toolCallId: "c2", toolName: "remember_fact"), outcome: .accepted),
                     ]
                 ),
             ]

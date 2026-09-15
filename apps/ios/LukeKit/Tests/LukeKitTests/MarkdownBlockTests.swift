@@ -84,19 +84,19 @@ final class MarkdownBlockTests: XCTestCase {
         ])
     }
 
-    func testFencedCodeKeepsLanguageAndDropsTrailingNewline() {
+    func testFencedCodeDropsTheTrailingNewline() {
         let blocks = MarkdownBlock.parse("```swift\nlet x = 1\nprint(x)\n```")
-        XCTAssertEqual(blocks, [.code(language: "swift", "let x = 1\nprint(x)")])
+        XCTAssertEqual(blocks, [.code("let x = 1\nprint(x)")])
     }
 
-    func testFencedCodeWithoutLanguageHasNone() {
-        XCTAssertEqual(MarkdownBlock.parse("```\nls -la\n```"), [.code(language: nil, "ls -la")])
+    func testAFenceWithNoLanguageIsStillACodeBlock() {
+        XCTAssertEqual(MarkdownBlock.parse("```\nls -la\n```"), [.code("ls -la")])
     }
 
     func testIndentedCodeBecomesACodeBlock() {
         XCTAssertEqual(
             MarkdownBlock.parse("    let value = 1\n    print(value)"),
-            [.code(language: nil, "let value = 1\nprint(value)")]
+            [.code("let value = 1\nprint(value)")]
         )
     }
 
@@ -215,7 +215,7 @@ final class MarkdownBlockTests: XCTestCase {
         )
         XCTAssertEqual(
             MarkdownBlock.parse("```mermaid\ngraph TD\nA --> B\n```"),
-            [.code(language: "mermaid", "graph TD\nA --> B")]
+            [.code("graph TD\nA --> B")]
         )
     }
 

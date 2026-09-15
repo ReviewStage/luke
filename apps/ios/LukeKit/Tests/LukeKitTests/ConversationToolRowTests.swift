@@ -5,8 +5,8 @@ import XCTest
 
 /// An action's row, composed from the call's arguments and its envelope,
 /// with the roster supplying only a session it still holds. What is
-/// asserted is the structure the desktop shares — kind, outcome, the chip
-/// and who names it, the reason — never the phone's own sentence.
+/// asserted is the structure the desktop shares — kind, outcome, the chip,
+/// the reason — never the phone's own sentence.
 final class ConversationToolRowTests: XCTestCase {
     private static let session = SessionIdentity(
         providerId: "conductor", providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50"
@@ -77,11 +77,8 @@ final class ConversationToolRowTests: XCTestCase {
         XCTAssertEqual(rows.map(\.providerId), ["conductor", "conductor", "conductor"])
         let chip = try XCTUnwrap(rows[0].chip)
         XCTAssertEqual(chip.text, "Fixture session")
-        XCTAssertEqual(chip.markId, "fixture-agent")
-        XCTAssertEqual(chip.identity, Self.session)
         XCTAssertFalse(chip.openable)
         XCTAssertEqual(rows[1].chip?.text, ConversationToolRow.unnamedSession)
-        XCTAssertEqual(rows[1].chip?.markId, "conductor")
     }
 
     func testTheRosterNamesASessionItStillHoldsAndOffersItsScreen() throws {
@@ -89,7 +86,6 @@ final class ConversationToolRowTests: XCTestCase {
         let row = try XCTUnwrap(ConversationToolRow(part: parts[0], roster: [rosterRow]))
         let chip = try XCTUnwrap(row.chip)
         XCTAssertEqual(chip.text, "Renamed since")
-        XCTAssertEqual(chip.markId, "conductor")
         XCTAssertEqual(chip.session, rosterRow)
         XCTAssertTrue(chip.openable)
     }
@@ -104,7 +100,6 @@ final class ConversationToolRowTests: XCTestCase {
         let row = try XCTUnwrap(ConversationToolRow(part: part("send_session_message", state: .inputAvailable), roster: []))
         XCTAssertEqual(row.outcome, .pending)
         XCTAssertNil(row.reason)
-        XCTAssertEqual(row.chip?.identity, Self.session)
     }
 
     func testAnUnreadableEnvelopeIsUnknownNeverAccepted() throws {
@@ -183,9 +178,7 @@ final class ConversationToolRowTests: XCTestCase {
         XCTAssertEqual(row.kind, .createWorkspace)
         XCTAssertEqual(row.providerId, "conductor")
         let chip = try XCTUnwrap(row.chip)
-        XCTAssertEqual(chip.identity, SessionIdentity(providerId: "conductor", providerSessionId: "new-1"))
         XCTAssertEqual(chip.text, "Checkout")
-        XCTAssertEqual(chip.markId, "claude-code")
         XCTAssertFalse(chip.openable)
     }
 
@@ -210,7 +203,7 @@ final class ConversationToolRowTests: XCTestCase {
         for (tool, kind) in tools {
             let row = try XCTUnwrap(ConversationToolRow(part: part(tool, output: accepted(target: fixtureTarget)), roster: []), tool)
             XCTAssertEqual(row.kind, kind, tool)
-            XCTAssertEqual(row.chip?.identity, Self.session, tool)
+            XCTAssertEqual(row.chip?.text, "Fixture session", tool)
             XCTAssertEqual(row.providerId, "conductor", tool)
         }
     }
