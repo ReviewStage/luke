@@ -33,8 +33,10 @@ in for the missing job before the first release.
 - Never let a credential or account secret enter a Gateway answer or event, the
   voice window, a counted event, a trace, or a fixture. Nothing in this repository
   scans for secrets, so this rule is the whole of the check.
-- Session replay records the rendered panel with no allowlist in front of it, so
-  drawing something new on the panel decides what leaves the machine.
+- Session replay records the rendered panel with every word masked
+  (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
+  layout, not text; an unmasked attribute or a new way of drawing words is what
+  would change that.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 
@@ -178,13 +180,13 @@ ships `4.0.0` stable.
 An Effect describes work; only a runtime edge runs one. The edges are listed
 in `tools/oxlint/anti-slop/effect-edges.json`'s `runtimeEdges`: `apps/desktop/src/main/main.ts`
 (the desktop's one `ManagedRuntime`), `apps/desktop/src/main/services/compose-desktop.ts`
-(the layer that runtime is built from), the two renderer roots
-`apps/desktop/src/renderer/index.tsx` and `apps/desktop/src/renderer/voice/index.tsx`
-(one browser registry each, so the panel and the voice window never share
-one), `apps/desktop/src/renderer/renderer-runtime.ts` (the module each root's
+(the layer that runtime is built from), the renderer root
+`apps/desktop/src/renderer/index.tsx` (loaded once per window, the panels and
+the voice window alike, so no two windows share a browser registry),
+`apps/desktop/src/renderer/renderer-runtime.ts` (the module the root's
 runtime is built from: `Atom.runtime`'s layer is built, and `AtomRegistry.get`
-reads it, the moment a root first reaches it, so the edge is here rather than
-at each of the two roots that import it), the renderer's own fiber sites —
+reads it, the moment the root first reaches it, so the edge is here rather than
+at the root that imports it), the renderer's own fiber sites —
 `apps/desktop/src/renderer/introduction/introduction-takeover.tsx`, the
 panel's own `apps/desktop/src/renderer/use-voice-view.ts` (the panel's notice
 strip forks its own clock the same way the voice window's does), and the
