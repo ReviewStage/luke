@@ -14,7 +14,7 @@ import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
 /** The hidden window the conversation lives in, as much of it as this file needs. */
-export interface VoiceWindowSurface {
+interface VoiceWindowSurface {
   current(): BrowserWindow | undefined;
   owns(webContents: WebContents): boolean;
 }
@@ -61,7 +61,7 @@ export interface VoiceRuntimeDependencies {
  * closing writes whatever still stood. Either is the moment to read the
  * record rather than wait the poll's cadence out.
  */
-export function recordMovedUnderLines(
+function recordMovedUnderLines(
   previous: readonly LiveConversationLine[],
   next: readonly LiveConversationLine[],
 ): boolean {

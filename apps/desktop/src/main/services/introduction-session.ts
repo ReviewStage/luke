@@ -34,10 +34,6 @@ export class IntroductionSession {
     this.#dependencies = dependencies;
   }
 
-  get standing(): boolean {
-    return this.#standing !== undefined;
-  }
-
   open(input: {
     sdp: string;
     titles: readonly string[];

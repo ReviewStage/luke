@@ -75,7 +75,7 @@ export function outputVolumeWatcher(options: OutputVolumeWatcherOptions): Output
  * a hint arriving a change later, and the cost of misreading one is a hint
  * that lies.
  */
-export function parseOutputLine(line: string): OutputAudioState | undefined {
+function parseOutputLine(line: string): OutputAudioState | undefined {
   const match = /^output muted=([01]) volume=(\d+(?:\.\d+)?)$/.exec(line);
   if (!match?.[1] || !match[2]) return undefined;
   const volume = Number.parseFloat(match[2]);

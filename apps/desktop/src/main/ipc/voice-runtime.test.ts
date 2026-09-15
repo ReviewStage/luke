@@ -17,8 +17,7 @@ import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { AppStateStore, initialAppState } from "../app-state";
 import type { PanelManager } from "../window/panel-manager";
 import {
-  recordMovedUnderLines,
-  type VoiceWindowSurface,
+  type VoiceRuntimeDependencies,
   voiceRuntimeActRows,
   voiceRuntimeReports,
 } from "./voice-runtime";
@@ -64,7 +63,7 @@ function fixture(clearConversation: () => Effect.Effect<boolean>) {
         },
       },
     }),
-  } as unknown as VoiceWindowSurface;
+  } as unknown as VoiceRuntimeDependencies["voiceWindow"];
   // SAFETY: this path reads only `owns` and the exchange edge off the panel manager.
   const panels = {
     owns: (sender: WebContents) => sender === panelSender,
@@ -236,31 +235,6 @@ test("a Clear from anything but a panel clears nothing and tells the voice windo
   assert.deepEqual(await f.command(f.voiceSender), { status: "done", value: undefined });
   assert.equal(cleared, 0);
   assert.deepEqual(f.sentToVoice, []);
-});
-
-test("the record is read now when a reported line settles or leaves with its call, and not for a report that moved neither", () => {
-  const growing = [line(1, "Two sessions", false)];
-  const grown = [line(1, "Two sessions finished", false)];
-  const settled = [line(1, "Two sessions finished.", true)];
-  const another = [...settled, line(2, "One is waiting", false)];
-  assert.equal(recordMovedUnderLines([], growing), false);
-  assert.equal(recordMovedUnderLines(growing, grown), false);
-  assert.equal(
-    recordMovedUnderLines(grown, settled),
-    true,
-    "a row settled: the service is writing it",
-  );
-  assert.equal(
-    recordMovedUnderLines(settled, another),
-    false,
-    "a fresh row is nothing written yet",
-  );
-  assert.equal(
-    recordMovedUnderLines(another, []),
-    true,
-    "the call closed: whatever stood is written",
-  );
-  assert.equal(recordMovedUnderLines([], []), false);
 });
 
 test("the voice window's report is written to the document and asks for a read only when the record moved under a line; a panel's report is ignored", () => {

@@ -15,7 +15,7 @@ import { ActRefused, type ActRows, type ActSender } from "../act-router";
  * Gateway client, whose calls are effects this file composes and the act
  * router runs, and never the host's in-process performer.
  */
-export interface SessionActsDependencies {
+interface SessionActsDependencies {
   /** The opens alone: a press is not a write, and reaches the roster's address without admission. */
   performer: {
     openSession(identity: SessionIdentity): Effect.Effect<SessionOpenResult>;
@@ -44,7 +44,7 @@ type SessionActKind =
   | typeof ACT_KIND.SESSION_EXECUTE_CONTROL;
 
 /** The one refusal this process adds of its own: a row is the panel's, and only a panel draws one. */
-export const ROW_WRITE_REFUSAL = "Only a session row on the panel can send that.";
+const ROW_WRITE_REFUSAL = "Only a session row on the panel can send that.";
 
 /**
  * The presses a session row makes. Three need no brain and no admission: a
@@ -98,7 +98,7 @@ export function sessionActRows(
 }
 
 /** What a write answers when the host could not be asked at all: the words the row draws. */
-export const WRITE_REFUSAL = {
+const WRITE_REFUSAL = {
   MESSAGE: "That message could not be sent.",
   CONTROL: "That control could not be run.",
 } as const;

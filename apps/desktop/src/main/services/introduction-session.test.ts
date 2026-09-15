@@ -53,12 +53,10 @@ it.effect("an offer seeds the session with the bounded titles and holds the conn
       INTRODUCTION_SEED_BOUNDS.TITLES,
     );
     assert.deepEqual(counted, [PRODUCT_EVENT.VOICE_CALL_START]);
-    assert.equal(session.standing, true);
     assert.deepEqual(closes, []);
 
     session.end();
     assert.deepEqual(closes, ["sess_1"]);
-    assert.equal(session.standing, false);
     session.end();
     assert.deepEqual(closes, ["sess_1"]);
   }),
@@ -93,11 +91,9 @@ it.effect("a second offer hangs up the first session, and a refusal holds and co
     yield* session.open({ sdp: SDP, titles: [] });
     yield* session.open({ sdp: SDP, titles: [] });
     assert.deepEqual(closes, ["sess_1"]);
-    assert.equal(session.standing, true);
 
     assert.equal(yield* session.open({ sdp: SDP, titles: [] }), undefined);
     assert.deepEqual(closes, ["sess_1", "sess_2"]);
-    assert.equal(session.standing, false);
     assert.equal(counted.length, 2);
   }),
 );
