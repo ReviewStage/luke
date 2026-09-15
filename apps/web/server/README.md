@@ -122,7 +122,7 @@ what `scripts/preview-probe.ts` (`server/preview-probe.ts`) sends to a
 deployment: every caller path, the cron's, the page, and eve's health, failing
 on any answer that is Vercel's own rather than a handler's — the
 `x-vercel-error` header the platform puts on its `NOT_FOUND`, which a
-function's own 404 never carries — with the runbook's eight requests held to
+function's own 404 never carries — with eight of those requests held to
 their exact codes besides, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
@@ -249,7 +249,7 @@ trip there would land on the cold start of every function, including the ones
 that never query. `pg` connects on its first query instead. The hosted store is
 moving onto the client a module at a time, so the two stand side by side over
 the one database: `server/hosted/store/workspace-files.ts`,
-`standing-conversations.ts`, `soft-delete.ts`, `facts.ts`, `message-reads.ts`,
+`standing-conversations.ts`, `soft-delete.ts`, `message-reads.ts`,
 the store writer, the voice writer, and the speech module read and write
 through this client, `ratings.ts` reaches `message-reads.ts`'s one read the
 same way, and `roster-snapshot.ts` too but for its one exported
@@ -454,15 +454,10 @@ read from `HostedEnvironment` instead, the way the hosted tier's own key is,
 and the erasure call itself runs over the ambient
 `HttpClient` rather than an injected transport, so nothing in `AccountAppSeams`
 carries one — a test provides its own fake `HttpClient` layer instead.
-`server/hosted/account-delete.ts` and `server/hosted/account-preferences.ts`
-keep the promise-shaped handlers they always answered with, now read only by
-their own tests and as the byte-identity oracle `tests/account-app.test.ts`
-checks the group against, with the environment handed in directly the way
-`tests/support/mint-call.ts` hands it to the mint group. `fixtures/account-route/`
-records what the group answers for a delete, a read, a write, a refused
-method, an invalid token, an invalid body, and a path outside the group, with
-`content-length` checked against the body it frames and then dropped before
-comparing.
+`fixtures/account-route/` records what the group answers for a delete, a read,
+a write, a refused method, an invalid token, an invalid body, and a path
+outside the group, with `content-length` checked against the body it frames and
+then dropped before comparing.
 
 ## The devices and vault group
 

@@ -35,13 +35,12 @@ platform-independent behavior in a package.
 
 ## Check your work
 
-The canonical commands and when each one is required are the command table and
-the handoff invariant in [AGENTS.md](AGENTS.md).
+The canonical commands and when each one is required are the command table in
+[AGENTS.md](AGENTS.md).
 
 ## Open the pull request
 
-The commit, PR title, and rebase conventions are the "Git workflow" section of
-[AGENTS.md](AGENTS.md); what the description has to carry is step 5 of
+What the description has to carry is step 5 of
 [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ## Reporting problems

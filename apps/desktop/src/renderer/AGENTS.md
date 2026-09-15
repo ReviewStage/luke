@@ -69,7 +69,6 @@ Read it first. What it does not cover is the Electron window under the surface:
   sample, so it buys a render surface and returns nothing.
 - Anything the shape does not cover must stay click-through, so hit regions track
   the shape rather than the window.
-- `setWindowMode` owns the grow/shrink ordering for every caller.
 
 ## Confirms
 
@@ -95,7 +94,7 @@ back after the longest of them.
 
 ## Luke's knowledge of himself
 
-`luke-guide.ts` is the one place Luke's self-knowledge is described, and the
+The guide is the one place Luke's self-knowledge is described, and the
 brain's `change_app_setting` and `show_panel` are validated against that same
 snapshot — so the guide is both what Luke can say about himself and the outer
 bound of what an ask can do to him.
@@ -106,8 +105,7 @@ and a stale entry is one he will misdescribe. The settings half is generated fro
 `APP_SETTING_SCHEMA` and cannot go stale; the facts half is hand-written, and its
 only test asserts a fact *exists* for every label — never that one is true.
 
-- Mark a setting `adjustable` only after wiring its id into `applySpokenSetting`.
-  A setting only a hand may change stays `adjustable: false` with a `manual` path,
+- A setting only a hand may change stays `adjustable: false` with a `manual` path,
   because the refusal Luke voices is itself the guidance.
 - Credentials are never adjustable, never spoken, and never described beyond
   whether a provider is connected. The guide leaves the machine, so nothing in it
