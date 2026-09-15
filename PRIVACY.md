@@ -183,6 +183,17 @@ reads any of them. Asking Luke to forget removes the line you name from his
 than claiming it erased. Forgetting does not delete the conversation itself;
 Clear is still the separate action above.
 
+**Seeing what he saved.** The Mac app's Settings has a Memory page that reads
+the notebook back to you: `MEMORY.md`, `USER.md`, and the newest of the dated
+notes under `memory/`, as they stand on our service, drawn as the Markdown they
+are written in. It is a window and not a form: opening the page asks our
+service for your own account's rows over the same signed-in connection the
+Conversation tab reads through, the app holds the answer only while the page
+is on screen and keeps nothing of it on disk or after you leave, nothing on
+the page writes, and no model runs for it. The page is excluded from the
+session recording described under "What we collect", the way the
+Conversation tab is.
+
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
 signed in, and a daily count of how much voice and review you have used.
@@ -238,7 +249,8 @@ text, your name and email address, and any screenshot you attached to the
 feedback form. The Conversation tab is blocked from recordings, so neither the words in your
 conversation with Luke nor the things he remembers about you are included, and
 the feedback form's message field is blocked the same way, since a thumbs down
-can open it prefilled with those words. The caption strip under Luke's shape is
+can open it prefilled with those words. The Memory page in Settings, which
+draws what he has saved, is blocked the same way. The caption strip under Luke's shape is
 not blocked: with Captions on, it draws his spoken words and yours as you speak
 to him, so a recording made while you talk to Luke includes what you said. Text
 you type into a field is replaced

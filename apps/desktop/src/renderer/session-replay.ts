@@ -16,14 +16,15 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * error line, and the account's own name and address all travel
  * because they are drawn; autocapture puts the text of whatever was clicked
  * on an event.
- * What is typed into a field stays masked by the library's default, and two
+ * What is typed into a field stays masked by the library's default, and three
  * elements explicitly block themselves with the library's fixed
- * `ph-no-capture` class: the Conversation tab's whole subtree, and the
+ * `ph-no-capture` class: the Conversation tab's whole subtree, the
  * feedback composer's message field, which a thumbs down can open prefilled
- * with the conversation's own words.
+ * with the conversation's own words, and the Settings tab's Memory page,
+ * which draws what Luke has saved about the person.
  *
  * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this
- * file and those two blocked elements are the whole of what decides it.
+ * file and those three blocked elements are the whole of what decides it.
  * Nothing else stands between what the panel draws and what leaves the machine.
  *
  * What this file decides on its own is only whether to record at all, and the

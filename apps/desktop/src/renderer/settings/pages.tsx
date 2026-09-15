@@ -1,6 +1,7 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import {
   BackIcon,
+  BookIcon,
   ChevronIcon,
   DisplayIcon,
   KeyboardIcon,
@@ -35,6 +36,10 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.CONNECTIONS]: {
     title: "Connections",
     icon: <PlugIcon />,
+  },
+  [SETTINGS_VIEW.MEMORY]: {
+    title: "Memory",
+    icon: <BookIcon />,
   },
 };
 

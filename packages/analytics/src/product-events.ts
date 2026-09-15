@@ -240,6 +240,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   APPEARANCE: "appearance",
   SHORTCUTS: "shortcuts",
   CONNECTIONS: "connections",
+  MEMORY: "memory",
 } as const;
 
 export type ProductSettingsView =

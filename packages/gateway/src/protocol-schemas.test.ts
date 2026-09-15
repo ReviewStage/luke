@@ -39,6 +39,8 @@ type RecordedProtocolSchemas = Pick<
   | "voiceLiveSessionChangedSchema"
   | "conversationRateMessageParamsSchema"
   | "conversationRateMessageResultSchema"
+  | "notebookFileSchema"
+  | "notebookReadResultSchema"
 >;
 
 const SCHEMAS = {
@@ -50,6 +52,8 @@ const SCHEMAS = {
   voiceLiveSessionChangedSchema: protocol.voiceLiveSessionChangedSchema,
   conversationRateMessageParamsSchema: protocol.conversationRateMessageParamsSchema,
   conversationRateMessageResultSchema: protocol.conversationRateMessageResultSchema,
+  notebookFileSchema: protocol.notebookFileSchema,
+  notebookReadResultSchema: protocol.notebookReadResultSchema,
 } satisfies RecordedEffectJsonSchemas<RecordedProtocolSchemas>;
 
 const RECORDED: readonly (readonly [string, RecordedJsonSchemaSource])[] = Object.entries(SCHEMAS);

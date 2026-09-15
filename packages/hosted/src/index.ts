@@ -154,6 +154,13 @@ export {
   hostedMintAnswerSchema,
 } from "./mint-wire.js";
 export {
+  NOTEBOOK_READ_BOUNDS,
+  type NotebookAnswer,
+  type NotebookFile,
+  notebookAnswerSchema,
+  notebookFileSchema,
+} from "./notebook-wire.js";
+export {
   OBSERVE_QUERY,
   type ObserveAnswer,
   type ObservedSession,

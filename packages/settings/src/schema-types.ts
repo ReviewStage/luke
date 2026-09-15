@@ -10,6 +10,8 @@ export const SETTINGS_PAGE = {
   APPEARANCE: "appearance",
   SHORTCUTS: "shortcuts",
   CONNECTIONS: "connections",
+  /** What Luke has saved: his notebook read from the service, drawn and never written here. */
+  MEMORY: "memory",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];

@@ -106,6 +106,7 @@ const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.CONNECTIONS]: "Connections",
+  [SETTINGS_VIEW.MEMORY]: "Memory",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */

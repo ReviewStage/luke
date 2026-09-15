@@ -184,6 +184,7 @@ const SETTINGS_PAGE_WORD = {
   [SETTINGS_PAGE.APPEARANCE]: "Appearance page",
   [SETTINGS_PAGE.SHORTCUTS]: "Settings tab",
   [SETTINGS_PAGE.CONNECTIONS]: "Connections page",
+  [SETTINGS_PAGE.MEMORY]: "Memory page",
 } satisfies Record<string, string>;
 
 test("every settings id is described by exactly one field, and placed on one page", () => {

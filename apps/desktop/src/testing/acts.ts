@@ -75,6 +75,7 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CONVERSATION_RATE_MESSAGE,
     payload: { messageId: "2b000000-0000-4000-8000-000000000202", rating: "up" },
   },
+  [ACT_KIND.NOTEBOOK_READ]: { kind: ACT_KIND.NOTEBOOK_READ },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "clear-conversation" },

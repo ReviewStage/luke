@@ -1,0 +1,47 @@
+{
+  "type": "object",
+  "properties": {
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 20000
+          },
+          "chars": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "path",
+          "content",
+          "chars",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 32
+    },
+    "omittedNotes": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "files",
+    "omittedNotes"
+  ],
+  "additionalProperties": false
+}

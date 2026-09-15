@@ -14,6 +14,7 @@ import * as conversationWire from "./conversation-wire.js";
 import * as deviceWire from "./device-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as mintWire from "./mint-wire.js";
+import * as notebookWire from "./notebook-wire.js";
 import * as observeWire from "./observe-wire.js";
 import * as projectsWire from "./projects-wire.js";
 import * as ratingWire from "./rating-wire.js";
@@ -77,6 +78,10 @@ const EFFECT_MODULE_SCHEMAS = {
   "mint-wire": {
     hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof mintWire>,
+  "notebook-wire": {
+    notebookFileSchema: notebookWire.notebookFileSchema,
+    notebookAnswerSchema: notebookWire.notebookAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof notebookWire>,
   "observe-wire": {
     observeAnswerSchema: observeWire.observeAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof observeWire>,

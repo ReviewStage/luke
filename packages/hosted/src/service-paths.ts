@@ -80,6 +80,14 @@ export const HOSTED_SERVICE_PATH = {
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
   BRAIN_TURNS: "/api/brain/turns",
   /**
+   * Luke's notebook as the workspace rows hold it (GET): `MEMORY.md`,
+   * `USER.md`, and the newest dated notes under `memory/`, read whole and
+   * bounded, for its owner to look at. A read and nothing else: the service
+   * stores nothing for it and no model runs in it. `notebook-wire.ts`
+   * declares the answer.
+   */
+  BRAIN_NOTEBOOK: "/api/brain/notebook",
+  /**
    * A developer's question to Luke's judgment (POST): admitted against the
    * conversation it names before eve is reached, dispatched into that
    * conversation's one eve session, and answered with the id its turn is

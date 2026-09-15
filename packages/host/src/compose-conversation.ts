@@ -11,6 +11,7 @@ import {
   GATEWAY_METHOD,
   type GatewayMethodTable,
   invalid,
+  type NotebookReadResult,
 } from "@sidecar/gateway";
 import {
   CONVERSATION_RATE_REFUSAL,
@@ -75,7 +76,7 @@ export interface ConversationComposer extends Composer {
 /** The service's side of the reads, Clear, and the rating write, as the composer asks it: the client's calls and nothing of its construction. */
 export type ConversationReadsClient = Pick<
   HostedConversationClient,
-  "messages" | "events" | "turns" | "clear" | "rate"
+  "messages" | "events" | "turns" | "clear" | "rate" | "notebook"
 >;
 
 /** The change signal's one call, the same client the devices composer restates presence through. */
@@ -424,6 +425,17 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         publish();
         yield* pollAfter;
         return { cleared: true };
+      }),
+    // The notebook read for the Settings page: the same gate as Clear, since a
+    // run that sends nothing or an account whose capabilities are down has
+    // nothing to ask, answered as the service's own record or, short of one,
+    // an empty record the client reads as unreadable just now. Nothing of it
+    // is kept here: the page that asked is the one place it is drawn.
+    [GATEWAY_METHOD.NOTEBOOK_READ]: () =>
+      Effect.gen(function* () {
+        if (!gate()) return {};
+        const answer = yield* Effect.provide(client.notebook(), FetchHttpClient.layer);
+        return answer === undefined ? {} : carried<NotebookReadResult>(answer);
       }),
     [GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE]: (params) =>
       Effect.gen(function* () {
