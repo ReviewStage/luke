@@ -26,6 +26,13 @@ const noHostSettingSideEffect: HostSettingSideEffect = () => Effect.void;
 /** What the host's own side effects reach in the concerns around them. */
 export interface HostSettingSideEffectDependencies {
   setVoice: (voice: StoredAppSettings["voice"]) => Effect.Effect<void>;
+  /**
+   * The standing live session ended gracefully, where one stands. GPT Live
+   * fixes a session's voice when the session is created and documents no way
+   * to change it after, so a conversation left standing would keep the old
+   * voice for as long as it idled, which reads as the choice not taking.
+   */
+  readonly endLiveSession: Effect.Effect<void>;
   /** The hold read again for the panel, which draws it; nothing on this side queues speech to hold since E5-3. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
   /** The device heartbeat sent now, carrying the quiet instant as it stands after the write. */
@@ -47,7 +54,13 @@ export function hostSettingSideEffects(dependencies: HostSettingSideEffectDepend
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.MEDIA_DUCK]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) => dependencies.setVoice(settings.voice),
+    // The stored voice reaches the source first, so the session the peer
+    // opens next is created under it; only then is the standing session
+    // ended, since its own voice cannot move and the developer is listening
+    // for the one they chose. A sign-in's reconcile runs this too, when no
+    // session can stand, so the end is a no-op there.
+    [SETTING_SIDE_EFFECT.VOICE]: ({ settings }) =>
+      Effect.andThen(dependencies.setVoice(settings.voice), dependencies.endLiveSession),
     // The hold is the service's to apply since E5-3: a briefing is spoken by
     // the service's own exchange against the quiet instant this device's
     // heartbeat reports, which folds the pause and the meeting hold both. So
