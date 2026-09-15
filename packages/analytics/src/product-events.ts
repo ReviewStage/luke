@@ -1,6 +1,6 @@
 import { CREDENTIAL_PROVIDER_ID, type CredentialProviderId } from "@sidecar/credentials/vocabulary";
 import { APP_PANEL_TAB, APP_SETTING_ID, type AppPanelTab, type AppSettingId } from "@sidecar/guide";
-import { ACTION_RESULT_STATUS, PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
+import { PROVIDER_ID_LIST, type ProviderId } from "@sidecar/session";
 import {
   isRecord,
   isWireNumber,
@@ -38,7 +38,6 @@ export const PRODUCT_EVENT = {
   CALENDAR_DISCONNECT: "calendar:disconnect",
   SESSION_OBSERVE: "session:observe",
   SESSION_ACTION_SEND: "session:action_send",
-  SESSION_DIAGNOSTIC: "session:diagnostic",
   PANEL_OPEN: "panel:open",
   PANEL_TAB_CHANGE: "panel:tab_change",
   SETTINGS_VIEW_OPEN: "settings:view_open",
@@ -47,7 +46,6 @@ export const PRODUCT_EVENT = {
   UPDATE_ACTION: "update:action",
   FEEDBACK_OPEN: "feedback:open",
   FEEDBACK_SEND: "feedback:send",
-  ASK_SUBMIT: "ask:submit",
   VOICE_CALL_START: "voice:call_start",
   INTRODUCTION_COMPLETE: "introduction:complete",
   VOICE_EXCHANGE: "voice:exchange",
@@ -76,7 +74,6 @@ export const PRODUCT_SURFACE_EVENT = {
   PANEL_TAB_CHANGE: PRODUCT_EVENT.PANEL_TAB_CHANGE,
   SETTINGS_VIEW_OPEN: PRODUCT_EVENT.SETTINGS_VIEW_OPEN,
   SEARCH_OPEN: PRODUCT_EVENT.SEARCH_OPEN,
-  ASK_SUBMIT: PRODUCT_EVENT.ASK_SUBMIT,
 } as const;
 
 export type ProductSurfaceEventName =
@@ -102,14 +99,12 @@ export const PRODUCT_EVENT_PROPERTY = {
   IMAGE_COUNT: "image_count",
   SESSION_SOURCE: "session_source",
   SESSION_ACTION: "session_action",
-  DIAGNOSTIC_KIND: "diagnostic_kind",
   ACCOUNT_ACTION: "account_action",
   UPDATE_ACTION: "update_action",
   PANEL_TAB: "panel_tab",
   PANEL_SOURCE: "panel_source",
   SETTINGS_VIEW: "settings_view",
   SEARCH_SURFACE: "search_surface",
-  ASK_OUTCOME: "ask_outcome",
   EXCHANGE_KIND: "exchange_kind",
   PERMISSION_RESULT: "permission_result",
   SIGN_IN_AGE: "sign_in_age",
@@ -148,23 +143,6 @@ export type ProductSessionAction =
   (typeof PRODUCT_SESSION_ACTION)[keyof typeof PRODUCT_SESSION_ACTION];
 
 export const ProductSessionActionSchema = Schema.Literals(Object.values(PRODUCT_SESSION_ACTION));
-
-/**
- * Which kind of fault an observation pass reported, never the fault itself:
- * the error's message stays in the local log, because the words of a failure
- * can carry a path, a branch, or a title. It repeats the providers package's
- * own diagnostic-kind set rather than importing it, because that package reads
- * this one and the edge would close a loop; the desktop closes the gap with a
- * total `Record` bridge, so a new kind does not build until this vocabulary
- * answers for it.
- */
-export const PRODUCT_DIAGNOSTIC_KIND = {
-  ACCIDENTAL_WAKE: "accidental_wake",
-  PASS_FAILURE: "pass_failure",
-} as const;
-
-export type ProductDiagnosticKind =
-  (typeof PRODUCT_DIAGNOSTIC_KIND)[keyof typeof PRODUCT_DIAGNOSTIC_KIND];
 
 /** Which calendar a connection is to, never whose or what is on it. */
 export const PRODUCT_CALENDAR_SOURCE = {
@@ -214,15 +192,14 @@ const PRODUCT_PANEL_TAB = {
 type ProductPanelTab = (typeof PRODUCT_PANEL_TAB)[keyof typeof PRODUCT_PANEL_TAB];
 
 /**
- * What opened the panel, never what was on it when it opened. The two the
- * build actually has: a press on the capsule, and the ask key claimed from
- * anywhere. The notice band under the housing draws without a press and there
- * is no menu, so neither is listed — a value nothing can emit would read on a
- * dashboard as a way in that nobody uses rather than one that does not exist.
+ * What opened the panel, never what was on it when it opened. The one the
+ * build actually has: a press on the capsule. The notice band under the
+ * housing draws without a press and there is no menu, so neither is listed — a
+ * value nothing can emit would read on a dashboard as a way in that nobody
+ * uses rather than one that does not exist.
  */
 export const PRODUCT_PANEL_SOURCE = {
   CAPSULE: "capsule",
-  HOTKEY: "hotkey",
 } as const;
 
 type ProductPanelSource = (typeof PRODUCT_PANEL_SOURCE)[keyof typeof PRODUCT_PANEL_SOURCE];
@@ -253,14 +230,6 @@ export const PRODUCT_SEARCH_SURFACE = {
 } as const;
 
 type ProductSearchSurface = (typeof PRODUCT_SEARCH_SURFACE)[keyof typeof PRODUCT_SEARCH_SURFACE];
-
-/** Whether an ask reached a conversation, never the words it carried. */
-export const PRODUCT_ASK_OUTCOME = {
-  SENT: "sent",
-  REFUSED: ACTION_RESULT_STATUS.REJECTED,
-} as const;
-
-export type ProductAskOutcome = (typeof PRODUCT_ASK_OUTCOME)[keyof typeof PRODUCT_ASK_OUTCOME];
 
 /**
  * Who opened the exchange being counted, never a word of it. The developer's
@@ -347,7 +316,7 @@ export const PRODUCT_SIGN_IN_AGE = {
   BEYOND_WEEK: "beyond_week",
 } as const;
 
-export type ProductSignInAge = (typeof PRODUCT_SIGN_IN_AGE)[keyof typeof PRODUCT_SIGN_IN_AGE];
+type ProductSignInAge = (typeof PRODUCT_SIGN_IN_AGE)[keyof typeof PRODUCT_SIGN_IN_AGE];
 
 const SIGN_IN_AGE_LADDER: readonly { limitMs: number; age: ProductSignInAge }[] = [
   { limitMs: 10 * 60 * 1000, age: PRODUCT_SIGN_IN_AGE.WITHIN_TEN_MINUTES },
@@ -406,14 +375,12 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT]: ProductSessionCountBucket;
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: ProductVoiceSessionSource;
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: ProductSessionAction;
-  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: ProductDiagnosticKind;
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: ProductAccountAction;
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: ProductUpdateAction;
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: ProductPanelTab;
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: ProductPanelSource;
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: ProductSettingsView;
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: ProductSearchSurface;
-  [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: ProductAskOutcome;
   [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: ProductExchangeKind;
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: ProductPermissionResult;
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
@@ -442,14 +409,12 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: Object.values(PRODUCT_CALENDAR_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: Object.values(PRODUCT_VOICE_SESSION_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: Object.values(PRODUCT_SESSION_ACTION),
-  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: Object.values(PRODUCT_DIAGNOSTIC_KIND),
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: Object.values(PRODUCT_ACCOUNT_ACTION),
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: Object.values(PRODUCT_UPDATE_ACTION),
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: Object.values(PRODUCT_PANEL_TAB),
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: Object.values(PRODUCT_PANEL_SOURCE),
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: Object.values(PRODUCT_SETTINGS_VIEW),
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: Object.values(PRODUCT_SEARCH_SURFACE),
-  [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: Object.values(PRODUCT_ASK_OUTCOME),
   [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: Object.values(PRODUCT_EXCHANGE_KIND),
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: Object.values(PRODUCT_PERMISSION_RESULT),
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
@@ -482,7 +447,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.UPDATE_ACTION]: [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION],
   [PRODUCT_EVENT.FEEDBACK_OPEN]: [],
   [PRODUCT_EVENT.FEEDBACK_SEND]: [PRODUCT_EVENT_PROPERTY.IMAGE_COUNT],
-  [PRODUCT_EVENT.ASK_SUBMIT]: [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME],
   [PRODUCT_EVENT.VOICE_EXCHANGE]: [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND],
   [PRODUCT_EVENT.VOICE_PERMISSION]: [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT],
   [PRODUCT_EVENT.SESSION_OBSERVE]: [
@@ -492,10 +456,6 @@ export const PRODUCT_EVENT_PROPERTIES = {
   [PRODUCT_EVENT.SESSION_ACTION_SEND]: [
     PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
     PRODUCT_EVENT_PROPERTY.SESSION_ACTION,
-  ],
-  [PRODUCT_EVENT.SESSION_DIAGNOSTIC]: [
-    PRODUCT_EVENT_PROPERTY.PROVIDER_ID,
-    PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND,
   ],
   [PRODUCT_EVENT.VOICE_CALL_START]: [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE],
   [PRODUCT_EVENT.INTRODUCTION_COMPLETE]: [],
