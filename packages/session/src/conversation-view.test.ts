@@ -8,6 +8,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_RATING,
   MESSAGE_ROLE,
+  RATING_WORD,
   type SchemaRead,
   TURN_ORIGIN,
   unparsedWire,
@@ -299,7 +300,7 @@ test("an announcement is unspoken when its latest speech event is the expiry, wh
   assert.equal(part?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE && part.unspoken, true);
 });
 
-test("a message carries its latest rating by event sequence, a re-rating replaces it in the view, and an unreadable newest rating folds as none", async () => {
+test("a message carries its latest rating by event sequence, a re-rating replaces it in the view, and an unreadable or withdrawn newest rating folds as none", async () => {
   const input = await loadView(FIXTURE.OBSERVATION_ANNOUNCED);
   const announcementId = input.observed[0]?.messages[1]?.message.id ?? "";
   const ratingUnder = (events: readonly ConversationViewEvent[]) => {
@@ -347,6 +348,42 @@ test("a message carries its latest rating by event sequence, a re-rating replace
       { messageId: announcementId, kind: CONVERSATION_EVENT_KIND.RATING, seq: 3 },
     ]),
     undefined,
+  );
+  // The developer took the verdict back: the newest word is the withdrawal, and the message stands unrated.
+  assert.equal(
+    ratingUnder([
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 2,
+        rating: { rating: MESSAGE_RATING.UP },
+      },
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 3,
+        rating: { rating: RATING_WORD.WITHDRAWN },
+      },
+    ]),
+    undefined,
+  );
+  // A verdict given after the withdrawal stands again.
+  assert.deepEqual(
+    ratingUnder([
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 3,
+        rating: { rating: RATING_WORD.WITHDRAWN },
+      },
+      {
+        messageId: announcementId,
+        kind: CONVERSATION_EVENT_KIND.RATING,
+        seq: 4,
+        rating: { rating: MESSAGE_RATING.DOWN },
+      },
+    ]),
+    { rating: MESSAGE_RATING.DOWN },
   );
   assert.equal(
     ratingUnder([

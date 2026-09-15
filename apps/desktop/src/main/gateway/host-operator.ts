@@ -45,7 +45,7 @@ import {
   isRecord,
   isWireBoolean,
   isWireString,
-  type MessageRating,
+  type RatingWord,
   type UnparsedWireValue,
   type WireRecord,
 } from "@sidecar/wire";
@@ -177,7 +177,7 @@ export interface HostOperator {
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
   rateConversationMessage(
     messageId: string,
-    rating: MessageRating,
+    rating: RatingWord,
   ): Effect.Effect<ConversationRateMessageResult>;
   onboardingState(): Effect.Effect<
     | {

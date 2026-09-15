@@ -16,6 +16,7 @@
     "@sidecar/hosted": "workspace:*",
     "@sidecar/live": "workspace:*",
     "@sidecar/session": "workspace:*",
+    "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"
   },

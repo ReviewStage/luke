@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_HEADER, VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { PROACTIVE_SPEECH_KIND, speechAppends, speechOpening } from "@sidecar/live";
+import {
+  LIVE_AUDIO_FORMAT,
+  PROACTIVE_SPEECH_KIND,
+  speechAppends,
+  speechOpening,
+} from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Scope } from "effect";
@@ -27,6 +32,7 @@ import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
+  LIVE_INPUT_AUDIO_APPEND,
   LIVE_SERVER_EVENT,
   LIVE_VOICE,
   type LiveClientEvent,
@@ -35,6 +41,7 @@ import {
   SEED_ROLE,
 } from "../server/live";
 import { deploymentExchange } from "../server/voice/deployment-exchange";
+import { VOICE_ROUTE } from "../server/voice/frames";
 import type { AttachedSession, ExchangeReport } from "../server/voice/live-exchange";
 import { LOG_EVENT, type LogEntry } from "../server/voice/log";
 import { UNPERMITTED_FRAME_REASON } from "../server/voice/relay";
@@ -59,8 +66,11 @@ import {
 import {
   insertConversation,
   insertDevice,
+  readEventsByConversation,
   readEventsByMessage,
   readMessagesByConversationTyped,
+  readVoiceSessionsByUserTyped,
+  readVoiceTranscriptSegmentsBySession,
 } from "./support/store-rows";
 import {
   connect,
@@ -1002,6 +1012,225 @@ it.effect(
         [CONVERSATION_EVENT_KIND.SPEECH_OFFERED, CONVERSATION_EVENT_KIND.SPEECH_CLAIMED],
       );
       await hangUp(context, { desktop, upstream, attach, created });
+      await context.stop();
+    }),
+);
+
+/**
+ * A base64 run no transcript, no ask, and no row could arrive at on its own,
+ * standing in for the developer's audio and Luke's: what the record must not
+ * hold a byte of.
+ */
+const AUDIO_MARKER = {
+  DEVICE: "REVWSUNFLUFVRElPLU1BUktFUg==",
+  LUKE: "TFVLRS1BVURJTy1NQVJLRVI=",
+} as const;
+
+/** A watch through to a started session on the audio route: the created frame read, and OpenAI's end of the primary socket. */
+async function openAudioSession(context: Stand, deviceId: string) {
+  const opened = await connect(context.url(VOICE_SERVICE_PATH.AUDIO), {
+    authorization: BEARER,
+    [VOICE_SERVICE_HEADER.DEVICE_ID]: deviceId,
+  });
+  assert.ok("reader" in opened);
+  const watch = opened.reader;
+  await send(watch.socket, {
+    type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+    voice: LIVE_VOICE.MARIN,
+    format: LIVE_AUDIO_FORMAT.PCM16_16K,
+  });
+  const primary = await context.openAi.nextPrimary();
+  const upstream = readSocket(primary.socket);
+  const created = record(await watch.next());
+  return { watch, upstream, primary, created };
+}
+
+it.effect(
+  "on the audio route one socket carries the developer's audio up and Luke's down, the exchange stands on it as started and answers through eve, and the record holds the words and not one byte of the audio",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const deviceId = randomUUID();
+      await insertDevice(database.run, {
+        id: deviceId,
+        userId: context.target.userId,
+        installationId: `install-${deviceId}`,
+        platform: DEVICE_PLATFORM.WATCHOS,
+        lastSeenAt: new Date(NOW),
+      });
+      // The developer's first words ride in the chunk `session.started` does,
+      // so the door holds them and both consumers hear them ahead of the resume.
+      context.openAi.startedBeside = [JSON.stringify(heard("What needs me?", 1000, 2400))];
+      const session = await openAudioSession(context, deviceId);
+      assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
+      assert.equal(session.created.sessionId, session.primary.sessionId);
+      assert.equal(Object.hasOwn(session.created, "sdpAnswer"), false);
+      assert.deepEqual(
+        context.log.map((entry) => [entry.event, entry.route]),
+        [
+          [LOG_EVENT.EXCHANGE_ATTACHED, VOICE_ROUTE.AUDIO],
+          [LOG_EVENT.SESSION_CREATED, VOICE_ROUTE.AUDIO],
+        ],
+      );
+      // The exchange was offered the session as the route resolved it: the
+      // watch's own row and platform, on the audio route, and already started,
+      // since the door read `session.started` itself and the exchange will not
+      // hear it again.
+      assert.deepEqual(
+        context.offered.map((offered) => [
+          offered.route,
+          offered.deviceId,
+          offered.platform,
+          offered.started,
+        ]),
+        [[VOICE_ROUTE.AUDIO, deviceId, DEVICE_PLATFORM.WATCHOS, true]],
+      );
+      const [row] = await readVoiceSessionsByUserTyped(database.run, context.target.userId);
+      assert.ok(row);
+      assert.equal(row.liveSessionId, session.primary.sessionId);
+      assert.equal(row.deviceId, deviceId);
+
+      // The developer speaks: two appends of audio up the socket, forwarded as the bytes they arrived as.
+      const appends = [
+        JSON.stringify({ type: LIVE_INPUT_AUDIO_APPEND, audio: AUDIO_MARKER.DEVICE }),
+        JSON.stringify({ type: LIVE_INPUT_AUDIO_APPEND, audio: `${AUDIO_MARKER.DEVICE}AA==` }),
+      ];
+      for (const frame of appends) await sendText(session.watch.socket, frame);
+      const arrived: string[] = [];
+      for (let index = 0; index < appends.length; index += 1) {
+        arrived.push(await session.upstream.next(5_000));
+      }
+      assert.deepEqual(arrived, appends);
+
+      // The session answers on the one socket: the echo of the developer's
+      // audio, Luke's audio, and the delegation that cuts the ask; the watch
+      // is shown the held words, then Luke's audio, and nothing else.
+      await sendText(
+        session.primary.socket,
+        JSON.stringify({ type: LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND, audio: AUDIO_MARKER.DEVICE }),
+      );
+      await sendText(
+        session.primary.socket,
+        JSON.stringify({ type: LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA, delta: AUDIO_MARKER.LUKE }),
+      );
+      await sendText(session.primary.socket, JSON.stringify(delegated("dl_1", 2500)));
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.eve.opened.map((message) => [message.conversationId, message.turn]),
+        [[context.target.conversationId, BRAIN_HOST_TURN.SPOKEN]],
+      );
+      const shown = [record(await session.watch.next()), record(await session.watch.next())];
+      assert.deepEqual(
+        shown.map((frame) => frame.type),
+        [LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA, LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA],
+      );
+      assert.equal(shown[1]?.delta, AUDIO_MARKER.LUKE);
+
+      // The brain answers; the exchange appends the reply under its own ids
+      // and the session acknowledges each, as on the sessions route.
+      const eveSession = await asks.latestSession(
+        context.target.userId,
+        context.target.conversationId,
+      );
+      assert.ok(eveSession);
+      const standing = {
+        sessionId: eveSession,
+        target: context.target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
+        await database.run(relay.handle(event, standing));
+      const spoken: string[] = [];
+      while (spoken.length < 2) {
+        const sent = clientEvent(await session.upstream.next(5_000));
+        if (sent.type === LIVE_CLIENT_EVENT.THINKING_APPEND) {
+          await sendText(session.primary.socket, JSON.stringify(thinkingAppended(sent.event_id)));
+          continue;
+        }
+        assert.equal(sent.type, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
+        if (sent.type !== LIVE_CLIENT_EVENT.COMMENTARY_APPEND) break;
+        spoken.push(sent.content);
+        await sendText(
+          session.primary.socket,
+          JSON.stringify(
+            appended(sent.event_id, 3000 + spoken.length * 1000, 4000 + spoken.length * 1000),
+          ),
+        );
+      }
+      assert.deepEqual(spoken, ["One agent finished.", "Another is waiting on you."]);
+      await sendText(
+        session.primary.socket,
+        JSON.stringify(said("One agent finished.", 3000, 4000)),
+      );
+
+      // The watch hangs up; the relay's close goes up the same socket; the
+      // session's final event ends it, and the record is drained before the
+      // session is reported ended.
+      session.watch.socket.close(SOCKET_CLOSE_CODE.NORMAL);
+      const closing = clientEvent(await session.upstream.next(5_000));
+      assert.equal(closing.type, LIVE_CLIENT_EVENT.CLOSE);
+      await sendText(
+        session.primary.socket,
+        JSON.stringify({
+          type: LIVE_SERVER_EVENT.SESSION_CLOSED,
+          event_id: "closed",
+          reason: "close_requested",
+          usage: { seconds: 6 },
+        }),
+      );
+      await until(
+        () => context.log.some((entry) => entry.event === LOG_EVENT.SESSION_ENDED),
+        () => `the session to be reported ended; log ${JSON.stringify(context.log)}`,
+      );
+      const ended = context.log.find((entry) => entry.event === LOG_EVENT.SESSION_ENDED);
+      assert.ok(ended && ended.event === LOG_EVENT.SESSION_ENDED);
+      assert.equal(ended.route, VOICE_ROUTE.AUDIO);
+      // The two appends went up as the watch's own frames; the close the relay sent on its behalf is not counted as one.
+      assert.equal(ended.framesToUpstream, appends.length);
+      assert.equal(
+        ended.bytesToUpstream,
+        appends.reduce((total, frame) => total + Buffer.byteLength(frame), 0),
+      );
+      assert.equal(ended.droppedAudio, 1);
+      assert.equal(ended.seconds, 6);
+
+      // The record: the developer's line under the delegation's id, Luke's
+      // reply, the session's segments, and its row; and across every row the
+      // record can be read from, not one byte of either marker. The sideband
+      // reader dropped both audio events by type before the writer saw them.
+      const messages = await readMessagesByConversationTyped(
+        database.run,
+        context.target.conversationId,
+      );
+      assert.deepEqual(
+        messages.filter((message) => message.role === MESSAGE_ROLE.USER).map((m) => m.clientId),
+        ["dl_1"],
+      );
+      const events = await readEventsByConversation(database.run, context.target.conversationId);
+      const sessions = await readVoiceSessionsByUserTyped(database.run, context.target.userId);
+      const segments = await readVoiceTranscriptSegmentsBySession(database.run, row.id);
+      assert.ok(segments.length > 0, "the writer cut the session's transcript into segments");
+      assert.ok(segments.some((segment) => String(segment.text).includes("What needs me?")));
+      const everything = JSON.stringify({
+        messages,
+        events,
+        sessions,
+        segments,
+        eve: context.eve.opened,
+        reports: context.reports,
+        log: context.log,
+      });
+      for (const marker of Object.values(AUDIO_MARKER)) {
+        assert.equal(everything.includes(marker), false, `the record holds ${marker}`);
+      }
+      // Nor does anything the record can be read from hold an audio-shaped row.
+      assert.equal(everything.includes(LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA), false);
+      assert.equal(everything.includes(LIVE_INPUT_AUDIO_APPEND), false);
       await context.stop();
     }),
 );

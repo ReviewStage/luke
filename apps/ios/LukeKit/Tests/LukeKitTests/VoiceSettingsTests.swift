@@ -17,11 +17,12 @@ final class VoiceSettingsTests: XCTestCase {
             RealtimeVoice.allCases.map(\.rawValue),
             ["alloy", "ash", "ballad", "cedar", "coral", "echo", "marin", "sage", "shimmer", "verse"]
         )
+        XCTAssertEqual(LiveVoice.default, .marin)
+        XCTAssertEqual(LiveVoice.beacon.displayName, "Beacon")
+        XCTAssertEqual(LiveVoice.beacon.id, "beacon")
+        XCTAssertNil(LiveVoice(rawValue: "Echo"))
         XCTAssertEqual(RealtimeVoice.default, .marin)
-        XCTAssertEqual(RealtimeVoice(spoken: .cedar), .cedar)
-        XCTAssertEqual(RealtimeVoice(spoken: .beacon), .default)
-        XCTAssertEqual(RealtimeVoice(syncedName: "willow"), .default)
-        XCTAssertNil(RealtimeVoice(syncedName: "baritone"))
+        XCTAssertNil(RealtimeVoice(rawValue: "beacon"), "a Live voice the watch's mint cannot speak reads as the default")
         XCTAssertEqual(RealtimeVoice.coral.displayName, "Coral")
         XCTAssertNil(RealtimeVoice(rawValue: "Echo"))
     }

@@ -1,14 +1,17 @@
 import AVFoundation
 
 public enum PCMAudio {
-    /// Float32 mono at 24 kHz — `AVAudioPlayerNode`'s native scheduling
-    /// format, at the rate the Realtime wire speaks. A new value per call
-    /// rather than one shared: `AVAudioFormat` is not `Sendable`, so each
-    /// owner holds its own and nothing crosses an isolation boundary.
-    public static func format() -> AVAudioFormat {
+    /// Float32 mono at the rate the wire speaks — `AVAudioPlayerNode`'s native
+    /// scheduling format. The watch's Realtime mint speaks at 24 kHz
+    /// (`PressAudioBuffer.sampleRate`), the default; the watch's audio route
+    /// speaks at the rate of the `LiveAudioFormat` its session was created
+    /// under. A new value per call rather than one shared: `AVAudioFormat` is
+    /// not `Sendable`, so each owner holds its own and nothing crosses an
+    /// isolation boundary.
+    public static func format(sampleRate: Int = PressAudioBuffer.sampleRate) -> AVAudioFormat {
         AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
-            sampleRate: Double(PressAudioBuffer.sampleRate),
+            sampleRate: Double(sampleRate),
             channels: 1,
             interleaved: false
         )!
@@ -17,67 +20,27 @@ public enum PCMAudio {
 
 #if os(iOS) || os(watchOS)
 
-/// Who owns the audio session under a PCM player or capturer. The phone
-/// configures and activates its own; on the watch the session is
-/// `WatchVoiceAudioSession`'s, active for the whole call before either of
-/// these exists, so nothing here touches it. The three differences travel as
-/// one value, because a caller picking them separately could pick a
-/// combination neither platform has.
+/// Who owns the audio session under a PCM player or capturer: the host, which
+/// on the watch is `WatchVoiceAudioSession`, active for the whole call before
+/// either of these exists, so nothing here touches it. The phone's own case,
+/// which configured and activated a session of its own, went with the phone's
+/// move onto the hosted exchange (LUKE-216, LUKE-219); the one value left
+/// stays a parameter only because the watch's call sites go with the rest of
+/// the legacy path in LUKE-224.
 public enum PCMAudioSessionPolicy: Sendable {
-    case phone
     case hostOwned
-
-    var configuresSession: Bool {
-        switch self {
-        case .phone: true
-        case .hostOwned: false
-        }
-    }
-
-    /// watchOS routes its own Bluetooth audio and has no speaker option, so
-    /// the options exist on the phone alone.
-    var categoryOptions: AVAudioSession.CategoryOptions {
-        #if os(iOS)
-        switch self {
-        case .phone: return [.defaultToSpeaker, .allowBluetoothHFP]
-        case .hostOwned: return []
-        }
-        #else
-        return []
-        #endif
-    }
-
-    /// Refuses to start when the microphone has already been denied. On
-    /// watchOS the engine raises on a denied permission rather than failing,
-    /// so the turn has to be refused before the tap begins.
-    var checksRecordPermission: Bool {
-        switch self {
-        case .phone: false
-        case .hostOwned: true
-        }
-    }
 }
 
-/// Plays 24 kHz PCM16 mono audio through the speaker using
+/// Plays PCM16 mono audio at the rate given through the speaker using
 /// `AVAudioPlayerNode`, converting incoming Int16 samples to Float32 —
 /// `AVAudioEngine`'s native format — before scheduling them.
 public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
-    private let format = PCMAudio.format()
-    private let policy: PCMAudioSessionPolicy
+    private let format: AVAudioFormat
 
-    public init(policy: PCMAudioSessionPolicy) {
-        self.policy = policy
-        if policy.configuresSession {
-            let audioSession = AVAudioSession.sharedInstance()
-            try? audioSession.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: policy.categoryOptions
-            )
-            try? audioSession.setActive(true)
-        }
+    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
+        format = PCMAudio.format(sampleRate: sampleRate)
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: format)
         try? engine.start()
@@ -117,35 +80,27 @@ public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
     public func stop() {
         playerNode.stop()
         engine.stop()
-        guard policy.configuresSession else { return }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 
-/// Captures 24 kHz PCM16 mono audio from the microphone using
+/// Captures PCM16 mono audio at the rate given from the microphone using
 /// `AVAudioEngine`: taps the input node at its hardware format, converts each
 /// frame through `AVAudioConverter`, and yields Int16 samples to the stream.
 public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
     private let engine = AVAudioEngine()
-    private let policy: PCMAudioSessionPolicy
+    private let sampleRate: Int
     private var hasTap = false
 
-    public init(policy: PCMAudioSessionPolicy) {
-        self.policy = policy
+    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
+        self.sampleRate = sampleRate
     }
 
     public func start() throws -> AsyncStream<[Int16]> {
-        if policy.checksRecordPermission, AVAudioApplication.shared.recordPermission == .denied {
+        // Refuses to start when the microphone has already been denied: the
+        // engine raises on a denied permission rather than failing, so the
+        // turn has to be refused before the tap begins.
+        if AVAudioApplication.shared.recordPermission == .denied {
             throw CocoaError(.fileReadUnknown)
-        }
-        if policy.configuresSession {
-            let audioSession = AVAudioSession.sharedInstance()
-            try audioSession.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: policy.categoryOptions
-            )
-            try audioSession.setActive(true)
         }
 
         let inputNode = engine.inputNode
@@ -155,7 +110,7 @@ public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
         // simulator can briefly report while its microphone route changes.
         // Reject it before installTap so the turn can fail normally instead
         // of terminating the app.
-        let targetFormat = PCMAudio.format()
+        let targetFormat = PCMAudio.format(sampleRate: sampleRate)
         guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0,
               let converter = AVAudioConverter(from: hwFormat, to: targetFormat)
         else {
@@ -219,8 +174,6 @@ public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
             hasTap = false
         }
         engine.stop()
-        guard policy.configuresSession else { return }
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 }
 

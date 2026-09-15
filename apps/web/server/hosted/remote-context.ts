@@ -12,7 +12,7 @@ import {
  * matches `sessionContextText` from `@sidecar/brain` so the model's
  * instructions and this context share one vocabulary, with fields the server
  * does not have (running tool, pull request, workspace display name) simply
- * omitted. Every row opens, because the phone draws a screen of its own for
+ * omitted. Every row opens, because the watch draws a screen of its own for
  * each session it lists: an open there lands in the app, never at a
  * provider's address, so the recency labels the instructions read for "open
  * the latest" name the same row as the plain recency label.
@@ -67,7 +67,7 @@ function remoteCapabilityText(
   const capabilities = [
     `provider_id=${session.providerId} provider_session_id=${session.sessionId}`,
     `messages=${Boolean(session.canReceiveMessage)}`,
-    // The phone opens a session on its own screen.
+    // The watch opens a session on its own screen.
     "open=true",
     ...(mostRecent.get(session.providerId) === session.sessionId
       ? ["most_recent_for_provider=true", "most_recent_openable_for_provider=true"]
@@ -90,7 +90,7 @@ function remoteCapabilityText(
  * Renders the session roster for a remote voice session context item.
  *
  * The format mirrors `sessionContextText` from `@sidecar/brain` so the
- * session document the phone receives reads against the same instructions the
+ * session document the watch receives reads against the same instructions the
  * desktop uses. Fields the server does not hold — the session's open link,
  * current running tool, pull-request association, and the separate workspace
  * display name distinct from the repository path — are simply absent; omitting

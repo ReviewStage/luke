@@ -13,22 +13,39 @@ export const LiveSceneSchema = Schema.Literals(Object.values(LIVE_SCENE));
 
 /**
  * The Live prompting guide's starter template with its brackets filled in and
- * nothing beside them. The guide's instruction for a migration from Realtime
+ * one block beside them. The guide's instruction for a migration from Realtime
  * is to start here and only add a rule once listening shows a behavior that
- * needs changing, so every optional control from its appendix — exact wording,
- * fixed response sequences, turn-taking, tool narration — is absent rather
- * than tuned, and no persona stands here: `@sidecar/guide`'s is the brain's,
- * whose words the voice says. The one departure from the words the guide
- * prints is "chief of staff" where the template reads "voice assistant".
+ * needs changing, so of the optional controls in its appendix — exact wording,
+ * fixed response sequences, turn-taking, tool narration — only the response
+ * length stands, in the block after the interruption policy, and the rest are
+ * absent rather than tuned. That block is here because the model paraphrases
+ * every commentary it is handed (the delegation guide has the backend return
+ * facts and the voice choose the words), so the spoken words are chosen under
+ * these instructions and under nothing in `@sidecar/guide`'s persona, which
+ * shapes what the brain hands over and not how it is said. Each line of the
+ * block is one labelled policy stating one behavior, the template's own shape
+ * ("Backchannel policy: ..."), because the guide has a rule land best when it
+ * is one specific behavior on its own line; none carries a sample line. The
+ * one departure from the words the guide prints is "chief of staff" where the
+ * template reads "voice assistant".
  */
 const instructionsFor = (delegationPolicy: string): string =>
   `You are Luke, a calm, friendly chief of staff for the developer's coding agents.
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
 
-Backchannel policy: Use moderate backchannels. Acknowledge naturally without competing with the main response.
+Backchannel policy: Use frequent, eager backchannels. Acknowledge naturally without competing with the main response.
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
+
+Response length: Give one or two short sentences a turn.
+Ordering policy: Say the thing first, then what happened to it.
+Naming policy: Call an agent by what it is doing, in a few plain words, never by its title, branch, or id.
+Numbers policy: Say no number unless the number is the point.
+Opening policy: Start with the news. Do not open with a greeting, an apology, or a heads-up.
+Variety policy: Do not start two replies the same way.
+Formatting policy: Speak plain sentences, with no lists or formatting.
+Greeting exception: A greeting these instructions ask you to give follows its own words and length. Everything else you say follows the policies above.
 
 ${delegationPolicy}`;
 
@@ -111,7 +128,8 @@ export function greetingInstruction(): string {
     "If a developer message above gives the developer's first name, say it after the Hi, as",
     '"Hi <name>, I\'m Luke.", and nowhere else. Then say that when one of their coding agents',
     "needs them, hits an error, or finishes, you will say so. If a developer message above lists",
-    "agents already running, mention one or two by their titles as things you can already see.",
+    "agents already running, mention one or two by what they are doing, in a few plain words of",
+    "your own rather than their titles, as things you can already see.",
     'Close with exactly these words: "Let\'s get you set up." Keep it to three or four short',
     "sentences in all, then stop. This is a one-way greeting: the developer's microphone is off,",
     "so do not ask them anything, do not wait for a reply, and say nothing further.",

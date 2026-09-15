@@ -3,11 +3,41 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// The developer's verdict on one of Luke's messages — `MESSAGE_RATING` in
-/// `@sidecar/wire`, the stored event's own two words.
+/// The developer's verdict as it stands on one of Luke's messages —
+/// `MESSAGE_RATING` in `@sidecar/wire`: the two words a thumb can say.
 public enum MessageRating: String, Sendable {
     case up
     case down
+}
+
+/// Every word a rating event may say — `RATING_WORD` in `@sidecar/wire`: a
+/// verdict, or `withdrawn`, the word a press on the filled thumb writes to
+/// take the verdict back. A withdrawal is a rating event and never a
+/// message's standing rating: a thread that reads it as the newest word shows
+/// no thumb, and the service never folds it onto a message page.
+public enum RatingWord: String, Sendable {
+    case up
+    case down
+    case withdrawn
+}
+
+extension RatingWord {
+    /// The word a thumb says when pressed on a message it does not yet stand on.
+    public init(_ rating: MessageRating) {
+        switch rating {
+        case .up: self = .up
+        case .down: self = .down
+        }
+    }
+
+    /// The verdict this word leaves standing on the message: nothing for a withdrawal.
+    public var verdict: MessageRating? {
+        switch self {
+        case .up: .up
+        case .down: .down
+        case .withdrawn: nil
+        }
+    }
 }
 
 /// What recording a rating answers — `HostedMessageRatingAnswer`: the event
@@ -34,9 +64,10 @@ public enum MessageRatingError: Error, Equatable, HostedUnauthorizedSignaling {
 /// `rating-wire.ts` in `@sidecar/hosted`. A rating is a fact the developer
 /// states about one of Luke's messages from this device, appended as an
 /// event beside the message and never an update: a second verdict is a
-/// second event, and a read takes the newer. The request carries the verdict
-/// and the device alone; the wire's optional note is the developer's free
-/// text, and this build offers no field to type one.
+/// second event, a verdict taken back is a third that says `withdrawn`, and
+/// a read takes the newest. The request carries the word and the device
+/// alone; the wire's optional note is the developer's free text, and this
+/// build offers no field to type one.
 public final class MessageRatingClient: Sendable {
     /// `conversationMessageRatingPath` in `@sidecar/hosted`, around the message's id: the path's head, without its leading slash, and its tail.
     public static let pathHead = "api/conversation/messages"
@@ -52,7 +83,7 @@ public final class MessageRatingClient: Sendable {
 
     public func rate(
         messageId: String,
-        _ rating: MessageRating,
+        _ word: RatingWord,
         deviceId: String,
         accessToken: String
     ) async throws -> MessageRatingAnswer {
@@ -65,7 +96,7 @@ public final class MessageRatingClient: Sendable {
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONSerialization.data(
-            withJSONObject: ["rating": rating.rawValue, "deviceId": deviceId]
+            withJSONObject: ["rating": word.rawValue, "deviceId": deviceId]
         )
         let (data, response) = try await http.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0

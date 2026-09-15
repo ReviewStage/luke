@@ -77,6 +77,7 @@ const VOICE_VIEW = {
   voiceNotice: "Listening on the built-in microphone.",
   talkOpening: false,
   lukeCaptions: ["Claude Code finished checkout."],
+  developerCaptions: undefined,
   liveConversationLines: [
     {
       rowId: 1,

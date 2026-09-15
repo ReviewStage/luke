@@ -83,6 +83,27 @@ export type LiveAudioFormat = (typeof LIVE_AUDIO_FORMAT)[keyof typeof LIVE_AUDIO
  */
 export const LIVE_DEFAULT_AUDIO_FORMAT = LIVE_AUDIO_FORMAT.PCM16_16K;
 
+/** One format as a schema: its encoding at the one rate the guide pairs it with, and no other pairing. */
+function audioFormatSchema<Encoding extends string, Rate extends number>(format: {
+  readonly type: Encoding;
+  readonly rate: Rate;
+}) {
+  return Schema.Struct({ type: Schema.Literal(format.type), rate: Schema.Literal(format.rate) });
+}
+
+/**
+ * The format a device names when it asks the service for a session the
+ * service streams its audio through, read as one of the four above and
+ * nothing else: an encoding at a rate the guide does not pair it with is
+ * refused here, since the session would refuse it at startup.
+ */
+export const LiveAudioFormatSchema = Schema.Union([
+  audioFormatSchema(LIVE_AUDIO_FORMAT.PCM16_24K),
+  audioFormatSchema(LIVE_AUDIO_FORMAT.PCM16_16K),
+  audioFormatSchema(LIVE_AUDIO_FORMAT.G711_ULAW_8K),
+  audioFormatSchema(LIVE_AUDIO_FORMAT.G711_ALAW_8K),
+]);
+
 /**
  * The one client event that starts a session, sent as the first message on a
  * primary WebSocket. It stands here beside the creation request rather than
@@ -93,6 +114,20 @@ export const LIVE_DEFAULT_AUDIO_FORMAT = LIVE_AUDIO_FORMAT.PCM16_16K;
  * stated over.
  */
 export const LIVE_SESSION_START = "session.start";
+
+/**
+ * The one client event that carries audio into a session: base64 of raw
+ * bytes in the format the session was started under, sent on a primary
+ * WebSocket alone, since a WebRTC session's voice travels on its media track
+ * and its data channel must never carry this. It stands here beside
+ * `session.start` rather than in `LIVE_CLIENT_EVENT` for the same reason
+ * that one does: that set is what a renderer's channel may send, and a
+ * renderer appends no audio. The API names the reflection a sideband hears
+ * by the same string, `LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND`, so a frame of
+ * this type is the device's own audio in one direction and its echo in the
+ * other.
+ */
+export const LIVE_INPUT_AUDIO_APPEND = "session.input_audio.append";
 
 interface LiveStartupOptions {
   scene: LiveScene;

@@ -59,7 +59,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
                 syncJSONData([
                     "preferences": [
                         "voice": "marin",
-                        "voiceSpeed": 1.5,
                         "defaultWorkspaceProvider": "conductor",
                         "workspaceProjectDefaults": ["conductor": "project-1"],
                         "workspaceAgentDefaults": [
@@ -85,7 +84,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
 
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store), DeviceSettingsSnapshot(
             voice: .marin,
-            speed: .fast,
             workspaceProviderId: "conductor",
             workspaceProjectIds: ["conductor": "project-1"],
             workspaceAgentDefaults: [
@@ -101,7 +99,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
         let store = makeStore()
         DeviceSettingsSnapshot(
             voice: .sage,
-            speed: .default,
             workspaceProjectIds: ["conductor": "project-local"]
         ).write(to: store)
         let tokenSource = AccountPreferencesTokenSource()
@@ -134,7 +131,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
 
         XCTAssertEqual(methods, ["GET", "PUT"])
         XCTAssertEqual(writtenPreferences?["voice"] as? String, "sage")
-        XCTAssertNil(writtenPreferences?["voiceSpeed"])
         XCTAssertEqual(writtenPreferences?["workspaceProjectDefaults"] as? [String: String], [
             "conductor": "project-local",
         ])
@@ -229,7 +225,7 @@ final class AccountPreferencesSyncTests: XCTestCase {
             if request.httpMethod == "GET" {
                 return (
                     syncJSONData([
-                        "preferences": ["voice": "sage", "voiceSpeed": 1.5],
+                        "preferences": ["voice": "sage", "workspaceProjectDefaults": ["codex": "remote"]],
                         "updatedAt": 1_800_000_000_000,
                     ]),
                     syncResponse(url: request.url!, status: 200)
@@ -257,9 +253,9 @@ final class AccountPreferencesSyncTests: XCTestCase {
 
         XCTAssertEqual(methods, ["GET", "PUT"])
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: store).voice, .coral)
-        XCTAssertEqual(DeviceSettingsSnapshot.read(from: store).speed, .fast)
+        XCTAssertEqual(DeviceSettingsSnapshot.read(from: store).workspaceProjectIds, ["codex": "remote"])
         XCTAssertEqual(writtenPreferences?["voice"] as? String, "coral")
-        XCTAssertEqual(writtenPreferences?["voiceSpeed"] as? Double, 1.5)
+        XCTAssertEqual(writtenPreferences?["workspaceProjectDefaults"] as? [String: String], ["codex": "remote"])
     }
 
     @MainActor
@@ -267,7 +263,6 @@ final class AccountPreferencesSyncTests: XCTestCase {
         let store = makeStore()
         DeviceSettingsSnapshot(
             voice: .sage,
-            speed: .fast,
             workspaceProviderId: "conductor",
             workspaceProjectIds: ["conductor": "project-1"],
             workspaceAgentDefaults: ["conductor": WorkspaceAgentDefault(agent: "codex", model: "gpt")]

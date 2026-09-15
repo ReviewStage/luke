@@ -28,6 +28,7 @@ import {
 import {
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT_HEADER,
+  PRODUCT_VOICE_SESSION_SOURCE,
   ProductAccountActionSchema,
   ProductEventClientSchema,
   ProductEventNameSchema,
@@ -47,14 +48,27 @@ import {
   PUSH_ENVIRONMENT,
   READ_PAGE_BOUNDS,
   VAULT_KEY_MAX_LENGTH,
+  VOICE_SERVICE_FRAME,
+  VOICE_SERVICE_HEADER,
+  VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
 import {
+  LIVE_AUDIO_ENCODING,
+  LIVE_AUDIO_FORMAT,
   LIVE_CLIENT_EVENT,
   LIVE_CLOSE_REASON,
+  LIVE_DEFAULT_AUDIO_FORMAT,
+  LIVE_IDLE_WINDOW_MS,
+  LIVE_INPUT_AUDIO_APPEND,
+  LIVE_SERVER_EVENT,
   LIVE_STATUS,
   LIVE_VOICE,
+  PROACTIVE_SPEECH_KIND,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
+  TRANSCRIPT_SPEAKER,
+  UTTERANCE_GAP_MS,
+  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import {
   CLOUD_AGENT_PROVIDER_ID,
@@ -67,6 +81,7 @@ import {
   TOOL_PART_STATE,
   WORKSPACE_TASK_SUPPORT,
 } from "@sidecar/session";
+import { HOSTED_REATTACH_DELAYS_MS } from "@sidecar/voice";
 import {
   ACTION_RESULT_STATUS,
   CONVERSATION_EVENT_KIND,
@@ -75,6 +90,7 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
@@ -82,8 +98,11 @@ import { Schema, SchemaAST } from "effect";
 import { test } from "vitest";
 
 import {
+  swiftEnumCases,
   swiftEnumRawValues,
+  swiftStaticCase,
   swiftStaticNumber,
+  swiftStaticNumberList,
   swiftStaticString,
   swiftSwitchLiterals,
   swiftSwitchNumbers,
@@ -328,6 +347,139 @@ test("LiveTransportState is LIVE_TRANSPORT_STATE", () => {
     swiftEnumRawValues(swift(`${KIT}/LivePeer.swift`), "LiveTransportState"),
     LIVE_TRANSPORT_STATE,
     "a transport state outside the report's schema is a state the desktop never tells its host about either",
+  );
+});
+
+test("VoiceServiceFrame is VOICE_SERVICE_FRAME", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "VoiceServiceFrame"),
+    VOICE_SERVICE_FRAME,
+    "a service frame the phone cannot name is read as a session event it is not",
+  );
+});
+
+test("LiveClientEventName is LIVE_CLIENT_EVENT", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "LiveClientEventName"),
+    LIVE_CLIENT_EVENT,
+    "a client event the phone names by another word is refused by the route, which closes the socket",
+  );
+});
+
+test("VoiceServiceHeader is VOICE_SERVICE_HEADER", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "VoiceServiceHeader"),
+    VOICE_SERVICE_HEADER,
+    "a header the service does not read leaves the session naming no device",
+  );
+});
+
+test("ProactiveSpeechKind is PROACTIVE_SPEECH_KIND", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "ProactiveSpeechKind"),
+    PROACTIVE_SPEECH_KIND,
+    "a spoken kind the phone cannot name drops the service's word that it was spoken",
+  );
+});
+
+test("the sessions socket path, idle window, and reattach cadence are the desktop's", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  assert.equal(
+    `/${swiftStaticString(source, "sessionsPath")}`,
+    VOICE_SERVICE_PATH.SESSIONS,
+    "a path the service does not answer opens no session",
+  );
+  assert.equal(
+    swiftStaticNumber(source, "liveIdleWindowMs"),
+    LIVE_IDLE_WINDOW_MS,
+    "an idle window of the phone's own reports idle on another clock than the Mac's",
+  );
+  assert.deepEqual(
+    swiftStaticNumberList(source, "reattachDelaysMs"),
+    HOSTED_REATTACH_DELAYS_MS,
+    "a cadence of the phone's own tries a lost connection on other terms than the Mac's",
+  );
+});
+
+test("LiveTranscriptSpeaker is TRANSCRIPT_SPEAKER", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/LiveCaptions.swift`), "LiveTranscriptSpeaker"),
+    TRANSCRIPT_SPEAKER,
+    "a speaker the phone cannot name draws a caption row under nobody",
+  );
+});
+
+test("the caption rows group and settle on the desktop's bounds", () => {
+  const source = swift(`${KIT}/LiveCaptions.swift`);
+  assert.equal(
+    swiftStaticNumber(source, "utteranceGapMs"),
+    UTTERANCE_GAP_MS,
+    "a gap of the phone's own splits an utterance the record keeps whole",
+  );
+  assert.equal(
+    swiftStaticNumber(source, "utteranceSettleMarginMs"),
+    UTTERANCE_SETTLE_MARGIN_MS,
+    "a margin of the phone's own settles a row before or after the record does",
+  );
+});
+
+test("every ProductVoiceSessionSource is a PRODUCT_VOICE_SESSION_SOURCE", () => {
+  assertSubset(
+    swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductVoiceSessionSource"),
+    Object.values(PRODUCT_VOICE_SESSION_SOURCE),
+    "a session source outside the allowlist is refused with its batch",
+  );
+});
+
+test("the audio socket path and its two audio event types are the contract's", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  assert.equal(
+    `/${swiftStaticString(source, "audioPath")}`,
+    VOICE_SERVICE_PATH.AUDIO,
+    "a path the service does not answer opens no session for the watch",
+  );
+  assert.equal(
+    swiftStaticString(source, "inputAudioAppend"),
+    LIVE_INPUT_AUDIO_APPEND,
+    "audio sent under another type is refused by the route, which closes the socket",
+  );
+  assert.equal(
+    swiftStaticString(source, "outputAudioDelta"),
+    LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA,
+    "Luke's audio relayed under a type the watch does not read plays nothing",
+  );
+});
+
+test("LiveAudioEncoding is LIVE_AUDIO_ENCODING", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/VoiceServiceContract.swift`), "LiveAudioEncoding"),
+    LIVE_AUDIO_ENCODING,
+    "an encoding named otherwise is refused by the format schema at the door",
+  );
+});
+
+test("LiveAudioFormat is LIVE_AUDIO_FORMAT, rate for rate, with the same default", () => {
+  const source = swift(`${KIT}/VoiceServiceContract.swift`);
+  const cases = swiftEnumCases(source, "LiveAudioFormat");
+  assertSameValues(
+    [...cases.values()],
+    Object.keys(LIVE_AUDIO_FORMAT),
+    "a format the watch names that the table does not is refused at startup",
+  );
+  const rates = swiftSwitchNumbers(source, "LiveAudioFormat", "rate", "Int");
+  const formats = new Map(Object.entries(LIVE_AUDIO_FORMAT));
+  for (const [caseName, key] of cases) {
+    assert.equal(
+      rates.get(caseName),
+      formats.get(key)?.rate,
+      `${key}: a rate the guide does not pair with the encoding is refused at startup`,
+    );
+  }
+  const defaultKey = cases.get(swiftStaticCase(source, "default"));
+  assert.deepEqual(
+    defaultKey === undefined ? undefined : formats.get(defaultKey),
+    LIVE_DEFAULT_AUDIO_FORMAT,
+    "a default of the watch's own would speak at another rate than the one ruled",
   );
 });
 
@@ -576,6 +728,14 @@ test("MessageRating is MESSAGE_RATING", () => {
   );
 });
 
+test("RatingWord is RATING_WORD", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/MessageRatingClient.swift`), "RatingWord"),
+    RATING_WORD,
+    "a word the phone cannot say is refused by the rating route, and one it cannot read leaves a thumb it should have taken off",
+  );
+});
+
 test("ProductRatedMessageKind is PRODUCT_RATED_MESSAGE_KIND", () => {
   assertSameSchemaSet(
     swiftEnumRawValues(swift(`${KIT}/ProductEvents.swift`), "ProductRatedMessageKind"),
@@ -632,6 +792,35 @@ test("a computed property inside the body is not part of the case list", () => {
       ["fast", 1.5],
     ],
   );
+});
+
+test("an enum's cases are read with their raw values, and a static case by its name", () => {
+  const source = [
+    "public enum Format: String, CaseIterable, Sendable {",
+    '    case pcm16At24k = "PCM16_24K"',
+    "    case ulaw",
+    "",
+    "    public static let `default`: Format = .ulaw",
+    "}",
+  ].join("\n");
+  assert.deepEqual(
+    [...swiftEnumCases(source, "Format")],
+    [
+      ["pcm16At24k", "PCM16_24K"],
+      ["ulaw", "ulaw"],
+    ],
+  );
+  assert.equal(swiftStaticCase(source, "default"), "ulaw");
+  assert.throws(() => swiftStaticCase(source, "other"), /found 0/u);
+});
+
+test("a static list reads its numbers in order", () => {
+  assert.deepEqual(
+    swiftStaticNumberList("static let delays = [0, 3_000, 7000]", "delays"),
+    [0, 3000, 7000],
+  );
+  assert.throws(() => swiftStaticNumberList("static let delays = []", "delays"), /not a list/u);
+  assert.throws(() => swiftStaticNumberList("static let other = [1]", "delays"), /found 0/u);
 });
 
 test("a declaration that is not there is a failure, never an empty set", () => {

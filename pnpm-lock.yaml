@@ -1061,6 +1061,9 @@ importers:
       '@sidecar/session':
         specifier: workspace:*
         version: link:../../packages/session
+      '@sidecar/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../../packages/wire

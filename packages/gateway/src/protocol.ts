@@ -1,6 +1,6 @@
 import {
   isRecord,
-  MessageRatingSchema,
+  RatingWordSchema,
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
@@ -55,7 +55,7 @@ const GATEWAY_METHODS = {
   SHUTDOWN: { name: "gateway.shutdown", mutates: true },
   /** The Conversation tab's Clear as the service's soft delete of the account's main conversation. */
   CONVERSATION_CLEAR: { name: "conversation.clear", mutates: true },
-  /** The developer's thumb on one of Luke's messages, carried to the service as a rating event beside it. */
+  /** The developer's thumb on one of Luke's messages, or the press that takes it back, carried to the service as a rating event beside it. */
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
@@ -274,12 +274,12 @@ export const voiceLiveSessionChangedSchema = Schema.Struct({
 
 export type VoiceLiveSessionChanged = typeof voiceLiveSessionChangedSchema.Type;
 
-/** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it. */
+/** `conversation.rateMessage`: which of Luke's messages, and the developer's verdict on it, or the word that takes one back. */
 export const conversationRateMessageParamsSchema = Schema.Struct({
   /** The message as the view holds it, by its own id, admitted as written so it matches the row the host holds. */
   messageId: keptText(512),
-  /** The verdict under the stored event's own rule, so the method and the row cannot say different things. */
-  rating: MessageRatingSchema,
+  /** The word under the stored event's own rule, so the method and the row cannot say different things. */
+  rating: RatingWordSchema,
 });
 
 export type ConversationRateMessageParams = typeof conversationRateMessageParamsSchema.Type;

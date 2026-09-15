@@ -515,7 +515,7 @@ private struct PendingSwitch {
 /// it, or by its bound, whichever comes first. A value settled before it is
 /// awaited is answered at once, so an event that lands early is not lost.
 @MainActor
-private final class Settlement<Value: Sendable> {
+final class Settlement<Value: Sendable> {
     private var value: Value?
     private var continuation: CheckedContinuation<Value, Never>?
     private var bound: Task<Void, Never>?

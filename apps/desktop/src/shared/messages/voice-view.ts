@@ -36,6 +36,8 @@ export interface VoiceView extends VoiceSpeakers {
   voiceNotice: string | undefined;
   talkOpening: boolean;
   lukeCaptions: readonly string[] | undefined;
+  /** The developer's own words still being said, drawn only under the captions preference. */
+  developerCaptions: readonly string[] | undefined;
   /**
    * Both speakers' rows of the standing call, each the ledger's row id, its
    * line as `streamingConversationEntry` builds it — a kind and words, and no
@@ -116,6 +118,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   voiceNotice: undefined,
   talkOpening: false,
   lukeCaptions: undefined,
+  developerCaptions: undefined,
   liveConversationLines: [],
   spokenAskPending: false,
 };
@@ -132,6 +135,10 @@ export function isVoiceCommand(value: UnparsedWireValue): value is VoiceCommand 
   return isWireString(value) && VOICE_COMMANDS.has(value);
 }
 
+function isOptionalWireStrings(value: UnparsedWireValue): value is readonly string[] | undefined {
+  return value === undefined || (Array.isArray(value) && value.every(isWireString));
+}
+
 export function isVoiceView(value: UnparsedWireValue): value is VoiceView & WireRecord {
   if (!isRecord(value)) return false;
   if (!isLiveStatus(value.voiceStatus)) return false;
@@ -140,8 +147,10 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isWireBoolean(value.spokenAskPending)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
-  const captions = value.lukeCaptions;
-  if (captions !== undefined && !(Array.isArray(captions) && captions.every(isWireString))) {
+  if (
+    !isOptionalWireStrings(value.lukeCaptions) ||
+    !isOptionalWireStrings(value.developerCaptions)
+  ) {
     return false;
   }
   const lines = value.liveConversationLines;

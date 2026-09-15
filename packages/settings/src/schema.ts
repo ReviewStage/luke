@@ -252,8 +252,8 @@ export const APP_SETTING_SCHEMA = {
     id: APP_SETTING_ID.VOICE_CAPTIONS,
     label: "Captions",
     description:
-      "Luke's words on screen while he speaks; nothing is kept. They also appear on their own, " +
-      "whatever this says, while the Mac's output is muted or at zero.",
+      "Luke's words on screen while he speaks, and yours while you speak to him; nothing is kept. " +
+      "His also appear on their own, whatever this says, while the Mac's output is muted or at zero.",
     default: false,
     page: SETTINGS_PAGE.VOICE,
     section: SETTING_SECTION.CONTROLS,

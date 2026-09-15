@@ -111,7 +111,8 @@ export const ACT_KIND = {
   SESSION_EXECUTE_CONTROL: "session.executeControl",
   /**
    * The developer's thumb on one of Luke's messages in the Conversation tab,
-   * carried to the host, which writes it to the service as a rating event on
+   * or the press on the filled thumb that takes the verdict back, carried to
+   * the host, which writes it to the service as a rating event on
    * that message and shows the verdict back through the view it publishes.
    * The one write the tab makes about a message, and the panel's alone.
    */

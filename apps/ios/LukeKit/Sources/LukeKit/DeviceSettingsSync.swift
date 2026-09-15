@@ -1,26 +1,24 @@
 import Foundation
 
 /// Every setting the phone and the watch both hold, read from and written to
-/// the same UserDefaults keys each app's own controls use: the voice and pace
-/// the next mint asks for, and the New Workspace choices remembered per
-/// provider. Nothing here is account data, a credential, or anything a
-/// provider wrote; it is the developer's own choices about their own devices.
+/// the same UserDefaults keys each app's own controls use: the voice the next
+/// session speaks in, and the New Workspace choices remembered per provider.
+/// No pace is carried, since the Live model both devices speak through has no
+/// speed. Nothing here is account data, a credential, or anything a provider wrote;
+/// it is the developer's own choices about their own devices.
 public struct DeviceSettingsSnapshot: Equatable, Sendable {
-    public var voice: RealtimeVoice
-    public var speed: RealtimeVoiceSpeed
+    public var voice: LiveVoice
     public var workspaceProviderId: String?
     public var workspaceProjectIds: [String: String]
     public var workspaceAgentDefaults: [String: WorkspaceAgentDefault]
 
     public init(
-        voice: RealtimeVoice = .default,
-        speed: RealtimeVoiceSpeed = .default,
+        voice: LiveVoice = .default,
         workspaceProviderId: String? = nil,
         workspaceProjectIds: [String: String] = [:],
         workspaceAgentDefaults: [String: WorkspaceAgentDefault] = [:]
     ) {
         self.voice = voice
-        self.speed = speed
         self.workspaceProviderId = workspaceProviderId
         self.workspaceProjectIds = workspaceProjectIds
         self.workspaceAgentDefaults = workspaceAgentDefaults
@@ -29,10 +27,7 @@ public struct DeviceSettingsSnapshot: Equatable, Sendable {
     public static func read(from store: UserDefaults) -> DeviceSettingsSnapshot {
         let defaults = WorkspaceCreationDefaults(store: store)
         return DeviceSettingsSnapshot(
-            voice: store.string(forKey: VoiceSettingsKey.voice).flatMap(RealtimeVoice.init(syncedName:))
-                ?? .default,
-            speed: store.string(forKey: VoiceSettingsKey.speed).flatMap(RealtimeVoiceSpeed.init(rawValue:))
-                ?? .default,
+            voice: store.string(forKey: VoiceSettingsKey.voice).flatMap(LiveVoice.init(rawValue:)) ?? .default,
             workspaceProviderId: defaults.lastProviderId,
             workspaceProjectIds: defaults.lastProjectIds,
             workspaceAgentDefaults: defaults.agentDefaults
@@ -41,7 +36,6 @@ public struct DeviceSettingsSnapshot: Equatable, Sendable {
 
     public func write(to store: UserDefaults) {
         store.set(voice.rawValue, forKey: VoiceSettingsKey.voice)
-        store.set(speed.rawValue, forKey: VoiceSettingsKey.speed)
         let defaults = WorkspaceCreationDefaults(store: store)
         defaults.lastProviderId = workspaceProviderId
         defaults.setLastProjectIds(workspaceProjectIds)
@@ -82,14 +76,14 @@ public final class DeviceSettingsSync {
     }
 
     /// Bumped when a field changes meaning or type; a payload from another
-    /// version is ignored rather than half-read.
-    public static let payloadVersion = 1
+    /// version is ignored rather than half-read. Version 2 dropped the pace
+    /// and widened the voice to every Live voice.
+    public static let payloadVersion = 2
 
     private enum Field {
         static let version = "settingsVersion"
         static let changedAt = "changedAt"
         static let voice = "voice"
-        static let speed = "speed"
         static let workspaceProvider = "workspaceProviderId"
         static let workspaceProjects = "workspaceProjectIds"
         static let workspaceAgents = "workspaceAgentDefaults"
@@ -199,7 +193,6 @@ public final class DeviceSettingsSync {
             Field.changedAt: (changedAt ?? Date(timeIntervalSinceReferenceDate: 0))
                 .timeIntervalSinceReferenceDate,
             Field.voice: snapshot.voice.rawValue,
-            Field.speed: snapshot.speed.rawValue,
             Field.workspaceProjects: snapshot.workspaceProjectIds,
             Field.workspaceAgents: snapshot.workspaceAgentDefaults.mapValues { selection in
                 var fields = [Field.agent: selection.agent]
@@ -214,12 +207,10 @@ public final class DeviceSettingsSync {
         return payload
     }
 
-    /// A voice or pace the vocabulary no longer names falls to the default,
-    /// the same answer each app's own controls give an unknown stored value.
+    /// A voice the vocabulary no longer names falls to the default, the same
+    /// answer each app's own controls give an unknown stored value.
     private static func snapshot(from payload: [String: Any]) -> DeviceSettingsSnapshot? {
-        guard let voice = payload[Field.voice] as? String,
-              let speed = payload[Field.speed] as? String
-        else { return nil }
+        guard let voice = payload[Field.voice] as? String else { return nil }
         let agents = (payload[Field.workspaceAgents] as? [String: [String: String]] ?? [:])
             .compactMapValues { fields -> WorkspaceAgentDefault? in
                 guard let agent = fields[Field.agent] else { return nil }
@@ -230,8 +221,7 @@ public final class DeviceSettingsSync {
                 )
             }
         return DeviceSettingsSnapshot(
-            voice: RealtimeVoice(syncedName: voice) ?? .default,
-            speed: RealtimeVoiceSpeed(rawValue: speed) ?? .default,
+            voice: LiveVoice(rawValue: voice) ?? .default,
             workspaceProviderId: payload[Field.workspaceProvider] as? String,
             workspaceProjectIds: payload[Field.workspaceProjects] as? [String: String] ?? [:],
             workspaceAgentDefaults: agents

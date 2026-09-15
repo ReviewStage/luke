@@ -4,8 +4,10 @@ import { TURN_EVENT_STREAM_BOUNDS, TURN_EVENT_STREAM_PATH } from "./hosted/turn-
 
 /**
  * A WebSocket connection to a Vercel Function lives as long as the function
- * may run, so the two voice functions carry the platform's longest generally
- * available duration.
+ * may run, so the voice functions carry the platform's longest generally
+ * available duration. On the audio route that duration is the call's whole
+ * life, since the service's own socket to OpenAI is the session and nothing
+ * re-attaches to one.
  */
 export const VOICE_FUNCTION_MAX_DURATION_SECONDS = 800;
 
@@ -83,10 +85,7 @@ const GROUPS: readonly GroupDefinition[] = [
   },
 ];
 
-const STANDALONE_ROUTES: readonly string[] = [
-  routeKeyOf(VOICE_SERVICE_PATH.SESSIONS),
-  routeKeyOf(VOICE_SERVICE_PATH.INTRODUCTION),
-];
+const STANDALONE_ROUTES: readonly string[] = Object.values(VOICE_SERVICE_PATH).map(routeKeyOf);
 
 /**
  * The functions a deploy carries, given every route key under `server/routes/`:

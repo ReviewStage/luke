@@ -6,7 +6,6 @@ struct LukeApp: App {
     @State private var session: AccountSession
     @State private var vault: VaultStore
     @State private var events: ProductEventSender
-    @State private var conversation = VoiceConversationThread()
     @UIApplicationDelegateAdaptor(PushCoordinator.self) private var push
     @Environment(\.scenePhase) private var scenePhase
     // Held for its lifetime — the WCSessionDelegate must not be deallocated.
@@ -16,6 +15,8 @@ struct LukeApp: App {
     private let devices: DeviceRegistrar
 
     init() {
+        let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        MobileSentry.start(platform: .iOS, appVersion: Self.appVersion, enabled: !testing)
         let session = AccountSession(
             client: AccountClient(
                 baseURL: AccountConstants.baseURL,
@@ -42,9 +43,9 @@ struct LukeApp: App {
         // still stands: the state change below arrives after the token is gone.
         session.onSignOut = { token in await devices.forget(accessToken: token).value }
         // XCTest launches this app as its suites' host, and a test run's
-        // counts and recording would be a test's, not a developer's — the
-        // desktop's fixture and evidence gate, at this app's one seam.
-        let testing = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        // counts, replay, and crash reporting would be a test's, not a
+        // developer's — the desktop's fixture and evidence gate, at this
+        // app's one seam.
         accountPreferencesEnabled = !testing
         let events = ProductEventSender(
             serviceURL: AccountConstants.serviceURL,
@@ -77,7 +78,6 @@ struct LukeApp: App {
                 .environment(session)
                 .environment(vault)
                 .environment(events)
-                .environment(conversation)
                 .environment(push)
                 // Notification permission is asked at the first launch, over
                 // the sign-in card and before any account: the phone runs no
@@ -136,7 +136,6 @@ struct LukeApp: App {
             }
         case (.signedIn, .signedOut):
             SessionReplay.resetPerson()
-            conversation.clear()
         default:
             break
         }

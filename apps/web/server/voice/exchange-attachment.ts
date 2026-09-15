@@ -46,7 +46,7 @@ export interface ExchangeAttachmentDeps {
   readonly emit: HostedLiveExchangeOptions["emit"];
   readonly now: () => number;
   readonly createId: () => string;
-  /** Where a standing exchange's own reports go, each named with the platform of the session it stood on. */
+  /** Where a standing exchange's own reports go, each named with the route and the platform of the session it stood on. */
   readonly report: (report: ExchangeReport) => void;
   readonly trace?: HostedLiveExchangeOptions["trace"];
 }
@@ -82,8 +82,10 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         now: deps.now,
         createId: deps.createId,
         // The exchange reports a sentence; which session it stood on is this
-        // attachment's to add, since the exchange itself is told no platform.
-        report: (message) => deps.report({ message, platform: session.platform }),
+        // attachment's to add, since the exchange itself is told no route and
+        // no platform.
+        report: (message) =>
+          deps.report({ message, route: session.route, platform: session.platform }),
         ...(deps.trace ? { trace: deps.trace } : undefined),
         ...(session.onSpoken ? { onProactiveSpoken: session.onSpoken } : undefined),
       });

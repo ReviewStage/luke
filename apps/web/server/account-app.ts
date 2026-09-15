@@ -1,4 +1,4 @@
-import { accountPreferencesFromWire, RETIRED_ACCOUNT_PREFERENCE_FIELD } from "@sidecar/settings";
+import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Layer, Redacted } from "effect";
 import {
@@ -8,12 +8,7 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import {
-  type AccountPreferencesRow,
-  type HostedAccountPreferences,
-  phoneVoiceSpeed,
-} from "./hosted/account-preferences.js";
-import type { AccountSeamEffect } from "./hosted/account-store.js";
+import type { AccountPreferencesRow, AccountSeamEffect } from "./hosted/account-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -54,10 +49,7 @@ export interface AccountAppSeams {
   /** Deletes the user row; every dependent row cascades with it. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
-  writePreferences: (
-    userId: string,
-    preferences: HostedAccountPreferences,
-  ) => AccountSeamEffect<Date>;
+  writePreferences: (userId: string, preferences: AccountPreferences) => AccountSeamEffect<Date>;
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -152,17 +144,8 @@ const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("preferencesWriteEndp
   const body = parsed as UnparsedWireValue;
   if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
-  const shared = accountPreferencesFromWire(body.preferences);
-  const pace = phoneVoiceSpeed(body.preferences);
-  if (shared === undefined || !pace.valid) {
-    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  }
-  const preferences: HostedAccountPreferences = {
-    ...shared,
-    ...(pace.value !== undefined
-      ? { [RETIRED_ACCOUNT_PREFERENCE_FIELD.VOICE_SPEED]: pace.value }
-      : undefined),
-  };
+  const preferences = accountPreferencesFromWire(body.preferences);
+  if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
 
   const updatedAt = yield* Effect.orDie(seams.writePreferences(userId, preferences));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {

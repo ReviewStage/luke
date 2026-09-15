@@ -37,8 +37,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
  * The two signed-in Realtime mints as the one route group their functions
- * serve: the desktop's, and the phone's — which also carries the roster it
- * was shown. Each mints one short-lived credential on the key this deployment
+ * serve: the desktop's, and the watch's — which also carries the roster it
+ * was shown, and goes with the watch's move onto the hosted exchange
+ * (LUKE-224). Each mints one short-lived credential on the key this deployment
  * holds, from a session document the build composes: the caller's whole say
  * is a voice and a pace, each validated against the sets the build ships, so
  * nothing a caller sends can reshape what the credential is for. The audio
@@ -46,7 +47,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  *
  * The accountless introduction's mint is a group of its own next door: it
  * carries no bearer, spends a different meter, and would otherwise take the
- * phone's whole cloud-observe graph into a function that never runs a pass.
+ * watch's whole cloud-observe graph into a function that never runs a pass.
  *
  * Both paths are declared for every method, because the POST each mint
  * documents is its own `method-not-allowed` rather than a path the group
@@ -94,7 +95,7 @@ const voiceMint = /* @__PURE__ */ Effect.fn("voiceMint")(function* (seams: Voice
 });
 
 /**
- * POST: the signed-in phone's credential and the roster it is to speak about.
+ * POST: the signed-in watch's credential and the roster it is to speak about.
  * The two are asked for at once, because neither depends on the other, and a
  * roster that ran long leaves the mint standing.
  */

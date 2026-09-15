@@ -13,10 +13,10 @@ import {
   type ConversationEventKind,
   isRecord,
   isWireString,
-  RATING_EVENT_PAYLOAD,
-  type RatingEventPayload,
   SCHEMA_REFUSAL,
   type SchemaRead,
+  STANDING_RATING,
+  type StandingRating,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -414,7 +414,7 @@ export interface ConversationReadMessage {
   /** Epoch milliseconds the row was written at; the order across conversations. */
   readonly createdAt: number;
   readonly tools: readonly ConversationViewToolPart[];
-  readonly rating?: RatingEventPayload;
+  readonly rating?: StandingRating;
 }
 
 const conversationReadMessageSchema = EffectSchema.Struct({
@@ -422,7 +422,7 @@ const conversationReadMessageSchema = EffectSchema.Struct({
   seq: wholeNumber(1),
   createdAt: countedNumber,
   tools: EffectSchema.Array(conversationViewToolPartSchema),
-  rating: EffectSchema.optionalKey(RATING_EVENT_PAYLOAD),
+  rating: EffectSchema.optionalKey(STANDING_RATING),
 });
 
 /**

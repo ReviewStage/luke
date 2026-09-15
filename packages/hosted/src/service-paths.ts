@@ -8,10 +8,11 @@
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
   /**
-   * Mints one ephemeral Realtime credential for the signed-in iPhone and
+   * Mints one ephemeral Realtime credential for the signed-in watch and
    * answers with the user's cloud session roster pre-serialized as a context
    * item (POST). Same quota meter as VOICE_MINT; narrowed to the tool set the
-   * mobile action endpoints serve.
+   * mobile action endpoints serve. The phone no longer calls it (LUKE-216);
+   * the path goes with the watch's move onto the hosted exchange (LUKE-224).
    */
   REMOTE_VOICE_MINT: "/api/voice/remote-mint",
   /** Send a message to a cloud session (POST). */
@@ -110,16 +111,25 @@ export const HOSTED_SERVICE_PATH = {
 } as const;
 
 /**
- * Where the hosted voice service answers: two Vercel Functions of the same
+ * Where the hosted voice service answers: three Vercel Functions of the same
  * service, reached at `HOSTED_VOICE_SERVICE_ORIGIN`, the socket form of the
  * service's own origin. Each path is a WebSocket upgrade; one connection
- * carries one session, or one attachment to a session that stands.
+ * carries one session, or, on the sessions path alone, one attachment to a
+ * session that stands.
  */
 export const VOICE_SERVICE_PATH = {
-  /** A signed-in desktop's voice session; the account bearer travels on the handshake. */
+  /** A signed-in device's WebRTC voice session, a Mac's or a phone's; the account bearer travels on the handshake. */
   SESSIONS: "/api/voice/sessions",
   /** The accountless introduction session, metered by the function itself; no bearer. */
   INTRODUCTION: "/api/voice/introduction",
+  /**
+   * A signed-in device with no WebRTC of its own, streaming its audio through
+   * the service and hearing Luke's back over the same socket; the same
+   * handshake as the sessions path, and a call that ends when the function
+   * does, since the service's own socket to OpenAI is the session and nothing
+   * re-attaches to one.
+   */
+  AUDIO: "/api/voice/audio",
 } as const;
 
 /** Where one turn stands (GET), by the id its ask answered or the turn's own; `wait` holds the read for a bounded settlement. */

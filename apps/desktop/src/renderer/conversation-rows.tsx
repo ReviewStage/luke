@@ -8,8 +8,8 @@ import { ThinkingDots } from "./thinking-dots";
  * The rows the thread draws that belong to no message: Luke's wait, the
  * developer's place before their words arrive, and the date set over a line
  * that followed a long silence. Here rather than in the panel because the
- * turn renderer draws them too, at the foot of a turn still running and
- * between turns, and a row two files share lives in neither.
+ * turn renderer draws them too, the wait once at the foot of the thread and
+ * the dates between turns, and a row two files share lives in neither.
  */
 
 export const CONVERSATION_ENTRY_SPEAKER = {
@@ -49,8 +49,9 @@ export function thinkingElapsedLabel(since: number, now: number): string | undef
 
 /**
  * Luke's turn, drawn on his side of the thread in the bubble his reply will
- * fill, so the thread holds one object per turn and the reply replaces the wait
- * in place. His face plays the success hop on repeat — a run still going is
+ * fill, so the reply replaces the wait in place. The thread draws it once, as
+ * its last object, and only while the newest turn is still running: a turn
+ * runs after every turn before it, so there is never more than one to wait on. His face plays the success hop on repeat — a run still going is
  * continuously true, which is what a repeating motion is for — and three dots
  * rise in its wake. Nothing here is a control: the stop is the composer's disc,
  * which both tabs share. The reader's line is the live region, and the age

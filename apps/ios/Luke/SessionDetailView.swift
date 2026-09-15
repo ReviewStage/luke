@@ -24,10 +24,20 @@ struct OutgoingMessage: Identifiable, Equatable {
 }
 
 /// The shared left-side bubble used for words coming back from Luke or one of
-/// the observed agents. The voice conversation reuses this exact shape.
-struct AgentMessageBubble: View {
+/// the observed agents. The voice conversation reuses this exact shape. A
+/// press and hold opens the bubble's menu: the screen's own actions on the
+/// message first, where it has any, and Copy under them.
+struct AgentMessageBubble<Actions: View>: View {
     let words: String
-    var isError = false
+    let isError: Bool
+    /// The screen's own items in the press-and-hold menu, drawn above Copy.
+    let actions: Actions
+
+    init(words: String, isError: Bool = false, @ViewBuilder actions: () -> Actions) {
+        self.words = words
+        self.isError = isError
+        self.actions = actions()
+    }
 
     var body: some View {
         HStack {
@@ -44,9 +54,19 @@ struct AgentMessageBubble: View {
                 .padding(.vertical, 9)
                 .background(Color.cardFill, in: RoundedRectangle(cornerRadius: 18))
                 .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 18))
-                .contextMenu { MessageCopyAction(words: words) }
+                .contextMenu {
+                    actions
+                    MessageCopyAction(words: words)
+                }
             Spacer(minLength: 48)
         }
+    }
+}
+
+extension AgentMessageBubble where Actions == EmptyView {
+    /// A bubble whose menu holds Copy alone.
+    init(words: String, isError: Bool = false) {
+        self.init(words: words, isError: isError) { EmptyView() }
     }
 }
 
@@ -82,7 +102,8 @@ struct DeveloperMessageBubble: View {
     }
 }
 
-private struct MessageCopyAction: View {
+/// Copy, the item every message's press-and-hold menu ends on.
+struct MessageCopyAction: View {
     let words: String
 
     var body: some View {

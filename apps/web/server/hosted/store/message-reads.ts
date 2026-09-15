@@ -846,7 +846,7 @@ export function messageAuthorship(
   );
 }
 
-/** One rating as the record holds it: the event's place, the verdict and note, and the device that gave it. */
+/** One rating as the record holds it: the event's place, its word (a verdict, or the withdrawal of one) and note, and the device that gave it. */
 export interface StoredRatingRecord extends RatingEventPayload {
   readonly id: string;
   readonly seq: number;
@@ -883,9 +883,10 @@ const findLatestRating = SqlSchema.findOneOption({
 
 /**
  * The newest rating on a message, or nothing. Every rating stands as its own
- * event, so the latest is the one with the highest sequence; a latest payload
- * the vocabulary cannot read answers nothing rather than an older verdict,
- * since the developer's last word is what a read is for.
+ * event, a withdrawal among them, so the latest is the one with the highest
+ * sequence; a latest payload the vocabulary cannot read answers nothing
+ * rather than an older verdict, since the developer's last word is what a
+ * read is for.
  */
 export function latestMessageRating(
   userId: string,

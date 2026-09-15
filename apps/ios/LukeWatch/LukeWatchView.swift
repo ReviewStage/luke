@@ -5,7 +5,6 @@ struct LukeWatchView: View {
     @Environment(WatchAccountSession.self) private var watchSession
     @Environment(WatchRosterStore.self) private var rosterStore
     @Environment(WatchNavigation.self) private var navigation
-    @Environment(VoiceConversationThread.self) private var conversation
 
     var body: some View {
         Group {
@@ -17,10 +16,9 @@ struct LukeWatchView: View {
             }
         }
         .onChange(of: watchSession.accountScope) {
-            // The roster, the conversation, and where the watch stood are
-            // the signed-in developer's own: the next account starts clean.
+            // The roster and where the watch stood are the signed-in
+            // developer's own: the next account starts clean.
             rosterStore.reset()
-            conversation.clear()
             navigation.reset()
         }
     }

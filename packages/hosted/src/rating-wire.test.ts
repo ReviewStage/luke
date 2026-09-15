@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {
   EXCESS_KEYS,
   MESSAGE_RATING,
+  RATING_WORD,
   SCHEMA_REFUSAL,
   type UnparsedWireValue,
   unparsedWire,
@@ -39,7 +40,7 @@ function requestRefusal(value: Parameters<typeof unparsedWire>[0]) {
   });
 }
 
-test("a rating request is a verdict, an optional bounded note, and the device's id, case folded", () => {
+test("a rating request is a verdict or its withdrawal, an optional bounded note, and the device's id, case folded", () => {
   assert.deepEqual(
     parse(hostedMessageRatingRequestSchema, {
       rating: MESSAGE_RATING.DOWN,
@@ -55,6 +56,11 @@ test("a rating request is a verdict, an optional bounded note, and the device's 
   assert.deepEqual(
     parse(hostedMessageRatingRequestSchema, { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID }),
     { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID.toLowerCase() },
+  );
+  // Taking a verdict back travels under the same request, as the word that says so.
+  assert.deepEqual(
+    parse(hostedMessageRatingRequestSchema, { rating: RATING_WORD.WITHDRAWN, deviceId: DEVICE_ID }),
+    { rating: RATING_WORD.WITHDRAWN, deviceId: DEVICE_ID.toLowerCase() },
   );
 });
 

@@ -14,12 +14,14 @@
 
 /**
  * What kind of words the caption strip is carrying, which is what colours
- * them. Spoken words are the strip's own job; a failure borrows it in the
- * error red; a notice borrows it in the attention orange for a temporary state
- * rather than a fault.
+ * them. Luke's spoken words are the strip's own job; the developer's own
+ * words are told apart in the tone but drawn in the same style for now; a
+ * failure borrows it in the error red; a notice borrows it in the attention
+ * orange for a temporary state rather than a fault.
  */
 export const CAPTION_TONE = {
   WORDS: "words",
+  ASK: "ask",
   ERROR: "error",
   NOTICE: "notice",
 } as const;
@@ -33,7 +35,7 @@ export type CaptionTone = (typeof CAPTION_TONE)[keyof typeof CAPTION_TONE];
 export interface SpokenStripContent {
   /** The caption block's words. */
   texts: readonly string[];
-  /** Whose words they are: Luke's own, a failure's, or a notice's. */
+  /** Whose words they are: Luke's own, the developer's, a failure's, or a notice's. */
   tone: CaptionTone;
 }
 

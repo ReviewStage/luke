@@ -20,7 +20,6 @@ public enum AccountPreferencesClientError: Error, Equatable {
 
 private enum AccountPreferenceWireField {
     static let voice = "voice"
-    static let voiceSpeed = "voiceSpeed"
     static let defaultWorkspaceProvider = "defaultWorkspaceProvider"
     static let workspaceProjectDefaults = "workspaceProjectDefaults"
     static let workspaceAgentDefaults = "workspaceAgentDefaults"
@@ -30,7 +29,6 @@ private enum AccountPreferenceWireField {
 
     static let topLevel: Set<String> = [
         voice,
-        voiceSpeed,
         defaultWorkspaceProvider,
         workspaceProjectDefaults,
         workspaceAgentDefaults,
@@ -40,17 +38,6 @@ private enum AccountPreferenceWireField {
 private let workspaceProviderIds: Set<String> = ["codex", "conductor", "superset"]
 private let supersetWorkspaceProviderId = "superset"
 private let maximumWorkspaceProjectIdLength = 500
-
-private func hostedVoiceSpeed(_ value: Any) -> RealtimeVoiceSpeed? {
-    if value is Bool { return nil }
-    if let number = value as? NSNumber {
-        return RealtimeVoiceSpeed(multiplier: number.doubleValue)
-    }
-    if let number = value as? Double {
-        return RealtimeVoiceSpeed(multiplier: number)
-    }
-    return nil
-}
 
 private func hostedMilliseconds(_ value: Any) -> Double? {
     if value is Bool { return nil }
@@ -75,9 +62,9 @@ private func isSupersetAgentKind(_ value: String) -> Bool {
 }
 
 /// Client for the account preferences endpoint. It sends only the cross-device
-/// preferences held by `DeviceSettingsSnapshot`; missing voice and speed values
-/// mean the shared defaults, so a reset clears the account choice rather than
-/// writing a copy of the default.
+/// preferences held by `DeviceSettingsSnapshot`; a missing voice means the
+/// shared default, so a reset clears the account choice rather than writing a
+/// copy of the default.
 public final class AccountPreferencesClient: Sendable {
     private let baseURL: URL
     private let http: HTTPClient
@@ -156,7 +143,6 @@ extension DeviceSettingsSnapshot {
     public var accountPreferencesWire: [String: Any] {
         var wire: [String: Any] = [:]
         if voice != .default { wire[AccountPreferenceWireField.voice] = voice.rawValue }
-        if speed != .default { wire[AccountPreferenceWireField.voiceSpeed] = speed.multiplier }
         if let workspaceProviderId {
             wire[AccountPreferenceWireField.defaultWorkspaceProvider] = workspaceProviderId
         }
@@ -179,17 +165,11 @@ extension DeviceSettingsSnapshot {
             return nil
         }
 
-        var voice = RealtimeVoice.default
+        var voice = LiveVoice.default
         if let rawVoice = wire[AccountPreferenceWireField.voice] {
-            guard let name = rawVoice as? String, let parsed = RealtimeVoice(syncedName: name)
+            guard let name = rawVoice as? String, let parsed = LiveVoice(rawValue: name)
             else { return nil }
             voice = parsed
-        }
-
-        var speed = RealtimeVoiceSpeed.default
-        if let rawSpeed = wire[AccountPreferenceWireField.voiceSpeed] {
-            guard let parsed = hostedVoiceSpeed(rawSpeed) else { return nil }
-            speed = parsed
         }
 
         var workspaceProviderId: String?
@@ -245,7 +225,6 @@ extension DeviceSettingsSnapshot {
 
         self.init(
             voice: voice,
-            speed: speed,
             workspaceProviderId: workspaceProviderId,
             workspaceProjectIds: workspaceProjectIds,
             workspaceAgentDefaults: workspaceAgentDefaults

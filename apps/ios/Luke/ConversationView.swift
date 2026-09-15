@@ -10,10 +10,13 @@ import SwiftUI
 /// on this phone from the call's arguments and its envelope, the session it
 /// reached a chip that opens that session's screen while the roster still
 /// holds it; a turn Luke opened himself leads with his face and never wears
-/// a reply's bubble. Under each of Luke's messages stand two thumbs, the one
-/// write this screen makes: a verdict on that message, sent to the service
-/// under the account's fence and drawn back from the latest rating event,
-/// so a verdict given on the Mac shows here and one given here shows there.
+/// a reply's bubble. Behind a press and hold on each of Luke's messages, a
+/// reply's bubble or his own judgment's row alike, stand two thumbs, the one
+/// write this screen makes: a verdict on that message, or the withdrawal of
+/// the one standing, sent to the service under the account's fence and drawn
+/// back from the latest rating event as the filled thumb in that menu and
+/// nowhere on the message itself, so a verdict given on the Mac shows here
+/// and one given or taken back here shows there.
 /// The screen polls the change signal while it stands in the foreground and
 /// draws only what it holds in memory.
 ///
@@ -161,13 +164,13 @@ struct ConversationView: View {
         }
     }
 
-    /// The developer's thumb on one of Luke's messages: written to the
-    /// service, and counted as the verdict and the message's kind alone once
-    /// the service has recorded it.
-    private func rate(_ message: RateableMessage, _ rating: MessageRating) {
+    /// The developer's thumb on one of Luke's messages, or the press that
+    /// takes it back: written to the service, and counted as the word and the
+    /// message's kind alone once the service has recorded it.
+    private func rate(_ message: RateableMessage, _ word: RatingWord) {
         Task {
-            guard await conversation.rate(message, rating, account: account) else { return }
-            events.record(.conversationRated(rating: rating, kind: message.kind))
+            guard await conversation.rate(message, word, account: account) else { return }
+            events.record(.conversationRated(rating: word, kind: message.kind))
         }
     }
 
@@ -249,21 +252,12 @@ private struct ConversationRowView: View {
     let openSession: (RosterSession) -> Void
     let ratings: [String: MessageRating]
     let canRate: Bool
-    let rate: (RateableMessage, MessageRating) -> Void
+    let rate: (RateableMessage, RatingWord) -> Void
 
     var body: some View {
         switch row {
         case .words(_, let speaker, let text, _, let unspoken, let rateable):
-            VStack(alignment: .leading, spacing: 4) {
-                wordsRow(speaker: speaker, text: text, unspoken: unspoken)
-                if let rateable {
-                    RatingControl(
-                        rating: ratings[rateable.messageId],
-                        enabled: canRate,
-                        rate: { rate(rateable, $0) }
-                    )
-                }
-            }
+            wordsRow(speaker: speaker, text: text, unspoken: unspoken, rateable: rateable)
         case .reasoning(_, let text):
             ReasoningRow(text: text)
         case .action(_, let toolRow, _):
@@ -282,13 +276,18 @@ private struct ConversationRowView: View {
     }
 
     @ViewBuilder
-    private func wordsRow(speaker: ConversationSpeaker, text: String, unspoken: Bool) -> some View {
+    private func wordsRow(
+        speaker: ConversationSpeaker,
+        text: String,
+        unspoken: Bool,
+        rateable: RateableMessage?
+    ) -> some View {
         switch speaker {
         case .you:
             DeveloperMessageBubble(words: text)
         case .luke:
             VStack(alignment: .leading, spacing: 3) {
-                AgentMessageBubble(words: text)
+                AgentMessageBubble(words: text) { ratingItems(rateable) }
                 if unspoken {
                     Text("Not spoken")
                         .font(.caption2)
@@ -303,47 +302,91 @@ private struct ConversationRowView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
         case .own:
+            // Luke's own words are his message all the same: the same menu a
+            // reply's bubble opens, on the row that wears none.
             OwnJudgmentRow {
                 MarkdownMessageView(text)
                     .foregroundStyle(Color.inkSecondary)
             }
+            .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 12))
+            .contextMenu {
+                ratingItems(rateable)
+                MessageCopyAction(words: text)
+            }
         }
     }
 
+    /// The two thumbs, where the message takes a verdict; nothing otherwise.
+    @ViewBuilder
+    private func ratingItems(_ rateable: RateableMessage?) -> some View {
+        if let rateable {
+            RatingMenuItems(
+                rating: ratings[rateable.messageId],
+                enabled: canRate,
+                rate: { rate(rateable, $0) }
+            )
+        }
+    }
 }
 
-/// Two thumbs under one of Luke's messages, the way a chat rates a reply:
-/// the one pressed is filled, a press on the other moves the verdict, and a
-/// press on the filled one sends the same verdict again, since a rating is a
-/// fact stated and never an edit. Each thumb keeps a 44pt target.
-private struct RatingControl: View {
+/// Two thumbs in the press-and-hold menu of one of Luke's messages, the way
+/// a chat rates a reply: the verdict standing is drawn filled and its item
+/// offers to remove it, a press on the other moves the verdict, and a press
+/// on the filled one takes the verdict back, leaving the message unrated.
+/// Each press is one more fact stated and never an edit: the withdrawal is a
+/// rating event of its own that says so. The menu is the only place the
+/// verdict shows; the message itself wears no mark of it. Both items stand
+/// above Copy, and both are disabled rather than hidden while this
+/// installation has no device row to rate as.
+private struct RatingMenuItems: View {
     let rating: MessageRating?
     let enabled: Bool
-    let rate: (MessageRating) -> Void
+    let rate: (RatingWord) -> Void
 
     var body: some View {
-        HStack(spacing: 4) {
-            thumb(.up, symbol: "hand.thumbsup", label: "Thumbs up")
-            thumb(.down, symbol: "hand.thumbsdown", label: "Thumbs down")
-        }
-        .padding(.leading, 8)
-        .disabled(!enabled)
+        thumb(.up)
+        thumb(.down)
+        Divider()
     }
 
-    private func thumb(_ verdict: MessageRating, symbol: String, label: String) -> some View {
+    private func thumb(_ verdict: MessageRating) -> some View {
         let chosen = rating == verdict
         return Button {
-            rate(verdict)
+            rate(chosen ? .withdrawn : RatingWord(verdict))
         } label: {
-            Image(systemName: chosen ? "\(symbol).fill" : symbol)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(chosen ? Color.ink : Color.inkTertiary)
-                .frame(width: 44, height: 28)
-                .contentShape(Rectangle())
+            Label(
+                chosen ? verdict.removeTitle : verdict.menuTitle,
+                systemImage: verdict.symbol(filled: chosen)
+            )
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
+        .disabled(!enabled)
         .accessibilityAddTraits(chosen ? .isSelected : [])
+    }
+}
+
+extension MessageRating {
+    fileprivate var menuTitle: String {
+        switch self {
+        case .up: "Thumbs Up"
+        case .down: "Thumbs Down"
+        }
+    }
+
+    /// What the filled thumb's item says, since pressing it takes the verdict back.
+    fileprivate var removeTitle: String {
+        switch self {
+        case .up: "Remove Thumbs Up"
+        case .down: "Remove Thumbs Down"
+        }
+    }
+
+    fileprivate func symbol(filled: Bool) -> String {
+        let base: String =
+            switch self {
+            case .up: "hand.thumbsup"
+            case .down: "hand.thumbsdown"
+            }
+        return filled ? "\(base).fill" : base
     }
 }
 

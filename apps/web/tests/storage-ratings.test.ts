@@ -5,6 +5,7 @@ import {
   MESSAGE_CHANNEL,
   MESSAGE_RATING,
   MESSAGE_ROLE,
+  RATING_WORD,
 } from "@sidecar/wire";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -150,6 +151,41 @@ test("a later rating is a second event and the one the latest read answers; the 
     [
       [first.seq, CONVERSATION_EVENT_KIND.RATING],
       [second.seq, CONVERSATION_EVENT_KIND.RATING],
+    ],
+  );
+});
+
+test("a verdict taken back is a third event that says so, the one the latest read answers, and the verdict it took back still stands in the record", async () => {
+  const userId = await database.createUser();
+  const { main, reply } = await populate(userId);
+  const given = await database.run(
+    rateMessage(store, userId, reply, { rating: MESSAGE_RATING.UP, deviceId: DEVICE_ID }),
+  );
+  const withdrawn = await database.run(
+    rateMessage(store, userId, reply, { rating: RATING_WORD.WITHDRAWN, deviceId: DEVICE_ID }),
+  );
+  assert.equal(given.ok && withdrawn.ok, true);
+  if (!given.ok || !withdrawn.ok) return;
+  assert.equal(withdrawn.seq, given.seq + 1);
+
+  const latest = await database.run(database.store.ratings.latest(userId, reply));
+  assert.deepEqual(
+    [latest?.id, latest?.rating, latest?.note, latest?.deviceId],
+    [withdrawn.id, RATING_WORD.WITHDRAWN, undefined, DEVICE_ID],
+  );
+  const payloads = new Map(
+    (await readEventsByConversation(database.run, main)).map((row) => [row.id, row.payload]),
+  );
+  assert.deepEqual(payloads.get(given.id), { rating: MESSAGE_RATING.UP });
+  assert.deepEqual(payloads.get(withdrawn.id), { rating: RATING_WORD.WITHDRAWN });
+  assert.deepEqual(
+    (await database.run(database.store.events.list(userId, main))).map((event) => [
+      event.seq,
+      event.kind,
+    ]),
+    [
+      [given.seq, CONVERSATION_EVENT_KIND.RATING],
+      [withdrawn.seq, CONVERSATION_EVENT_KIND.RATING],
     ],
   );
 });

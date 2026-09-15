@@ -87,25 +87,4 @@ final class SessionsStoreTests: XCTestCase {
         store.endArchiving(session, delivered: false)
         XCTAssertEqual(store.sessions.map(\.sessionId), ["a"])
     }
-
-    func testAShownListShowsTheSearchItNarrowedBy() {
-        let store = makeStore()
-        store.open(makeSession("a"))
-        store.showList(VoiceAsks.SessionListAsk(filters: nil, sort: .recency, query: "luke"))
-        XCTAssertEqual(store.tab, .sessions)
-        XCTAssertTrue(store.path.isEmpty)
-        XCTAssertEqual(store.sort, .recency)
-        XCTAssertEqual(store.searchQuery, "luke")
-        XCTAssertTrue(store.searchPresented)
-    }
-
-    func testAShownListLeavesWhatTheAskDidNotName() {
-        let store = makeStore()
-        store.searchQuery = "standing"
-        store.sort = .urgency
-        store.showList(VoiceAsks.SessionListAsk(filters: [], sort: nil, query: nil))
-        XCTAssertEqual(store.sort, .urgency)
-        XCTAssertEqual(store.searchQuery, "standing")
-        XCTAssertFalse(store.searchPresented)
-    }
 }

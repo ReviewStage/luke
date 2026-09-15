@@ -52,7 +52,11 @@ is what is shown, not what is kept. A thumbs up or down you give one of Luke's
 messages there is written to the same service as a rating event beside that
 message, naming the verdict and the Mac it came from, so it shows on every
 device signed in to your account, including the next time you open Luke; a
-second verdict is a second event, and the newest is what every device shows.
+second verdict is a second event, pressing the filled thumb again takes your
+verdict back as a third event that says so and leaves the message unrated,
+and the newest is what every device shows. Taking a verdict back does not
+erase it: the record keeps every verdict you gave and the fact that you took
+it back, and only the newest is shown.
 Pressing thumbs down also offers the feedback composer, prefilled with that
 message and your ask before it, and nothing of it leaves the Mac unless you
 press Send. What the service keeps of it is described under "Your account"
@@ -178,13 +182,13 @@ result, the briefing he offered you among them; the words an observation
 turn opened with, which for a Conductor session include the messages that
 chat gained since he last looked; the turn's model, token counts, and the
 ids of OpenAI's responses; and the events about each message — that a briefing was offered,
-claimed, spoken, pushed, held, or expired, and each rating you gave — naming
-the device that took part. When you speak with Luke through your account,
-what you said is kept as your line and what his voice said as his — an
-answer he gave without running a turn, what he said before and after one, a
-briefing or a reply he read aloud — each written once it has settled, so the
-Conversation shows the words you actually heard beside the turns he ran and
-the messages he read from.
+claimed, spoken, pushed, held, or expired, and each rating you gave or took
+back — naming the device that took part. When you speak with Luke through
+your account, what you said is kept as your line and what his voice said as
+his — an answer he gave without running a turn, what he said before and after
+one, a briefing or a reply he read aloud — each written once it has settled,
+so the Conversation shows the words you actually heard beside the turns he
+ran and the messages he read from.
 Unlike his workspace files and the facts he
 remembers, described below, these rows are not sealed: they are stored as
 written, and our own operators can read them. They stand until you clear
@@ -203,9 +207,10 @@ launch, or the introduction where it plays before you sign in — is not sent
 then: it waits in a file in Luke's own data folder, for at most seven days
 and at most two hundred counts, and is sent under the account that next
 signs in, even when that is in a later launch. A Mac that never signs in
-sends none of them. A thumbs up or down you give one of Luke's messages is
-counted with the verdict and whether the message was a reply or a briefing,
-and never with the message, its id, or a note you left. Nothing you type or
+sends none of them. A thumbs up or down you give one of Luke's messages, or
+take back, is counted with the verdict or the fact that you took it back and
+whether the message was a reply or a briefing, and never with the message,
+its id, or a note you left. Nothing you type or
 say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
@@ -216,7 +221,10 @@ text, your name and email address, and any screenshot you attached to the
 feedback form. The Conversation tab is blocked from recordings, so neither the words in your
 conversation with Luke nor the things he remembers about you are included, and
 the feedback form's message field is blocked the same way, since a thumbs down
-can open it prefilled with those words. Text you type into a field is replaced
+can open it prefilled with those words. The caption strip under Luke's shape is
+not blocked: with Captions on, it draws his spoken words and yours as you speak
+to him, so a recording made while you talk to Luke includes what you said. Text
+you type into a field is replaced
 with blocks before the recording leaves your Mac, so an API key or a sign-in
 code you enter is not in it. While recording is on, Luke also reports what you
 clicked, including the text on it; the fixed list above does not cover those
@@ -245,16 +253,21 @@ things its screens show — session titles, branches, error text, and
 your name and email. A Conductor session's conversation, fetched onto that
 session's screen, and your Conversation with Luke on its own screen are each
 masked out of recordings the way the desktop's Conversation tab is blocked, so
-those messages reach your phone and nothing else. Text you
-type into a field is masked, a message you sent stays masked when it is drawn
-back as a chat bubble, and a crash is reported on the next launch with its
-message and code path. Unlike the Mac
-app, taps are not separately reported with their text — only the recording
-itself shows what was pressed. Signing in attaches the running recording to
-your account, and signing out starts a fresh anonymous one.
+those messages reach your phone and nothing else. Text you type into a field
+is masked, a message you sent stays masked when it is drawn back as a chat
+bubble, and taps are not separately reported with their text — only the
+recording itself shows what was pressed. Separately, in ordinary runs the iOS
+app sends Sentry anonymous exception and process-session reports and native
+crash reports on the next launch, with the same posture as the Mac app: no
+Luke account or other identity, no PII collection, no tracing, no Sentry
+Replay, no screenshots, no profiling, and no manual reports of handled
+errors. Signing in attaches the running recording to your account, and signing
+out starts a fresh anonymous one.
 
-The Apple Watch app records nothing and reports no crashes. It counts its use
-through the same fixed list as the other two apps, and nothing else leaves it.
+The Apple Watch app records nothing. It counts its use through the same fixed
+list as the other two apps, and in ordinary runs it also sends Sentry's
+anonymous process-session status. Sentry's watchOS support does not capture
+native crashes there, so no watch crash report is filed.
 The Conversation it shows is read from the same stored messages the phone
 reads, under your account, and the watch only reads them: a rating you gave a
 message is shown there and cannot be given from the wrist.
@@ -495,9 +508,9 @@ Send.
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
 - PostHog, for usage data and screen recordings, from the Mac, iOS, and
-  Apple Watch apps. The counts go through our own service; the recordings,
-  desktop clicks, and iOS errors that ride with them go from Luke to PostHog
-  directly, and the watch app sends PostHog nothing directly.
+  Apple Watch apps. The counts go through our own service; the recordings and
+  desktop clicks go from Luke to PostHog directly, and the watch app sends
+  PostHog nothing directly.
 - Apple, for briefing notifications. When no device of yours is placed to
   say a briefing, our service hands Luke's words to Apple's push notification
   service, addressed to the push token your device registered, and Apple
@@ -505,7 +518,8 @@ Send.
   unlocking. The notification carries those words and the briefing's own
   opaque message id, and nothing else about you or your sessions.
 - Sentry, for the anonymous exception, process-session, and native crash reports
-  described above.
+  described above; on watchOS this is limited to process-session status because
+  the SDK does not capture native crashes there.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 
@@ -569,11 +583,13 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   you synced to the hosted service, your device rows, the conversation our
   service kept with its workspace files and remembered facts, and the stored
   roster of your sessions, and asks PostHog to erase your usage data
-  and recordings, including the iOS and Apple Watch apps'. It does not reach a recording that was
-  never attached to your account, as described above. Luke stops recording for
-  the rest of the session, and starts again the next time you open it or sign
-  in. Sentry reporting continues after deletion, and prior anonymous crash
-  reports cannot be identified as yours and targeted through account deletion.
+  and recordings, including the iOS app's. The Apple Watch app sends no
+  direct PostHog data, and its counted events are erased with your Luke
+  account. It does not reach a recording that was never attached to your
+  account, as described above. Luke stops recording for the rest of the
+  session, and starts again the next time you open it or sign in. Sentry
+  reporting continues after deletion, and prior anonymous crash reports cannot
+  be identified as yours and targeted through account deletion.
   Deleting does not affect your Google or GitHub account, and anything stored
   only on your Mac stays there until you remove it.
 

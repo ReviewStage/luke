@@ -88,21 +88,22 @@ public final class ConversationStore {
     /// the service would refuse.
     public var canRate: Bool { deviceId() != nil && ratingClient != nil }
 
-    /// Records the developer's verdict on one of Luke's messages: the write
-    /// runs under the account's retry and holder fence, and its answer is
-    /// taken as the event it recorded, so the control shows the verdict at
-    /// once and the next events read finds nothing newer. A refusal leaves
-    /// the verdict as it was and answers false; the service's two refusals —
-    /// a message the account no longer holds, and one that is not Luke's —
-    /// are both a control drawn on a row the thread has since moved past.
-    public func rate(_ message: RateableMessage, _ rating: MessageRating, account: any AccountTokenProviding) async -> Bool {
+    /// Records the developer's word on one of Luke's messages, a verdict or
+    /// the withdrawal of one: the write runs under the account's retry and
+    /// holder fence, and its answer is taken as the event it recorded, so the
+    /// control shows the verdict, or none, at once and the next events read
+    /// finds nothing newer. A refusal leaves the verdict as it was and answers
+    /// false; the service's two refusals — a message the account no longer
+    /// holds, and one that is not Luke's — are both a control drawn on a row
+    /// the thread has since moved past.
+    public func rate(_ message: RateableMessage, _ word: RatingWord, account: any AccountTokenProviding) async -> Bool {
         guard let holder = account.accountEmail, let deviceId = deviceId(), let ratingClient else {
             return false
         }
         do {
             let answer = try await account.authorized {
                 try await ratingClient.rate(
-                    messageId: message.messageId, rating, deviceId: deviceId, accessToken: $0
+                    messageId: message.messageId, word, deviceId: deviceId, accessToken: $0
                 )
             }
             guard account.accountEmail == holder, !Task.isCancelled else { return false }
@@ -114,7 +115,7 @@ public final class ConversationStore {
                     messageId: message.messageId,
                     kind: .rating,
                     deviceId: deviceId,
-                    payload: .object(["rating": .string(rating.rawValue)]),
+                    payload: .object(["rating": .string(word.rawValue)]),
                     createdAt: now()
                 )
             )

@@ -55,6 +55,21 @@ test("a view carrying a caption and its live lines, settled or not, is a voice v
   );
 });
 
+test("a view carrying the developer's own caption is a voice view, and a malformed one is not", () => {
+  const line = streamingConversationEntry(CONVERSATION_ENTRY_KIND.ASK, "what needs me");
+  assert.ok(line);
+  const view = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    developerCaptions: ["what needs me"],
+    liveConversationLines: [{ rowId: 1, entry: line, settled: false }],
+  };
+  assert.equal(isVoiceView(overWire(view)), true);
+  // SAFETY: the guard under test exists to refuse a caption list that is one string, which the type forbids building.
+  const malformed = { ...view, developerCaptions: "what needs me" } as unknown as VoiceView;
+  assert.equal(isVoiceView(overWire(malformed)), false);
+});
+
 test("a live line refuses empty words, an unknown kind, or a row without its id and settle", () => {
   assert.equal(
     isVoiceView(

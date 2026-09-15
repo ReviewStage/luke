@@ -46,6 +46,7 @@ import {
 } from "@sidecar/wire";
 import { useState } from "react";
 import { ConversationCopyButton } from "./conversation-copy";
+import { ConversationMessageMenu } from "./conversation-menu";
 import { ConversationRatingControl, type RatedMessageDraft } from "./conversation-rating";
 import {
   CONVERSATION_ENTRY_SPEAKER,
@@ -88,9 +89,10 @@ import { ThinkingDots } from "./thinking-dots";
  * never wears a reply's bubble, so what he decided for himself is never read
  * as something the developer asked. Each of Luke's messages — a reply, a
  * briefing, words on his own judgment: the assistant rows the service takes a
- * verdict on — carries the rating control on its last words, so one message
- * takes one control; the developer's own ask and the brain's note to itself
- * carry none, since the service would refuse a rating on either.
+ * verdict on — carries the rating control on its last words, behind the
+ * ellipsis in that row's margin, so one message takes one control; the
+ * developer's own ask and the brain's note to itself carry none, since the
+ * service would refuse a rating on either.
  *
  * Everything here is drawn inside the Conversation subtree, which the session
  * recording blocks whole: a session's title on a chip, a briefing's words, a
@@ -217,7 +219,7 @@ function BubbleRow({
   at: number;
   copy?: boolean;
   unspoken?: boolean;
-  /** The rating control, on the last words of one of Luke's messages and nowhere else. */
+  /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
   rating?: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -232,8 +234,10 @@ function BubbleRow({
           <MarkdownMessage words={words} className="conversation-words" />
           {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
           {copy ? <ConversationCopyButton words={words} /> : null}
+          {rating === undefined ? null : (
+            <ConversationMessageMenu>{rating}</ConversationMessageMenu>
+          )}
         </span>
-        {rating}
       </div>
       <RowStamp at={at} />
     </li>
@@ -271,7 +275,7 @@ function OwnWordsRow({
 }: {
   words: string;
   at: number;
-  /** The rating control, on the last words of the message and nowhere else. */
+  /** The rating control, behind the ellipsis on the last words of the message and nowhere else. */
   rating?: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -289,7 +293,9 @@ function OwnWordsRow({
           </span>
           <span className="conversation-action-body">
             <MarkdownMessage words={words} className="conversation-words" />
-            {rating}
+            {rating === undefined ? null : (
+              <ConversationMessageMenu>{rating}</ConversationMessageMenu>
+            )}
           </span>
         </span>
       </div>
@@ -784,6 +790,14 @@ export function ConversationTurns({
   children?: React.ReactNode;
 }): React.JSX.Element {
   let previousAt: number | undefined;
+  // The wait is the thread's last object or nothing: a turn still running is
+  // the newest one, since eve runs a conversation's turns one at a time and
+  // in order, so a pending row above a settled reply is a record eve never
+  // finished writing (an interrupted run), not a run still going. Drawing a
+  // wait there would tell the developer Luke is thinking about words he
+  // already answered, or never will.
+  const last = groups.at(-1);
+  const waiting = turnPending(last?.turn) ? last?.turn : undefined;
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
@@ -827,17 +841,15 @@ export function ConversationTurns({
               ]
             : []),
           ...drawn,
-          ...(pending && group.turn !== undefined
-            ? [
-                <ConversationThinkingRow
-                  key={`${group.turnId}:thinking`}
-                  since={group.turn.startedAt ?? group.turn.queuedAt}
-                  now={now}
-                />,
-              ]
-            : []),
         ];
       })}
+      {waiting !== undefined && last !== undefined ? (
+        <ConversationThinkingRow
+          key={`${last.turnId}:thinking`}
+          since={waiting.startedAt ?? waiting.queuedAt}
+          now={now}
+        />
+      ) : null}
       {children}
     </ol>
   );

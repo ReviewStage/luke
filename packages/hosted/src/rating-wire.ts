@@ -1,4 +1,4 @@
-import { MESSAGE_RATING, maximumRatingNoteLength, type RatingEventPayload } from "@sidecar/wire";
+import { maximumRatingNoteLength, RATING_WORD, type RatingEventPayload } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
 import { deviceWireIdSchema } from "./device-wire.js";
 import { countedNumber } from "./service-wire.js";
@@ -29,7 +29,7 @@ function trimmedText(maximumChars?: number) {
 export type HostedMessageRatingRequest = RatingEventPayload & { deviceId: string };
 
 export const hostedMessageRatingRequestSchema = EffectSchema.Struct({
-  rating: EffectSchema.Literals(Object.values(MESSAGE_RATING)),
+  rating: EffectSchema.Literals(Object.values(RATING_WORD)),
   note: EffectSchema.optionalKey(trimmedText(maximumRatingNoteLength)),
   deviceId: deviceWireIdSchema,
 });

@@ -27,10 +27,12 @@ const phonePrivacyManifest = fs.readFileSync(
   path.join(iosRoot, "Luke", "PrivacyInfo.xcprivacy"),
   "utf8",
 );
+const phoneInfoPlist = fs.readFileSync(path.join(iosRoot, "Luke", "Info.plist"), "utf8");
 const watchPrivacyManifest = fs.readFileSync(
   path.join(iosRoot, "LukeWatch", "PrivacyInfo.xcprivacy"),
   "utf8",
 );
+const watchInfoPlist = fs.readFileSync(path.join(iosRoot, "LukeWatch", "Info.plist"), "utf8");
 const exportOptions = fs.readFileSync(path.join(iosRoot, "ExportOptions.plist"), "utf8");
 
 function swiftSources(directory) {
@@ -85,6 +87,12 @@ test("both apps declare exempt encryption so every build can be tested at once",
   assert.equal(project.match(/INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;/g)?.length, 4);
 });
 
+test("both apps carry the shared Sentry DSN build setting and Info.plist key", () => {
+  assert.equal(project.match(/SENTRY_DSN = "";/g)?.length, 4);
+  assert.match(phoneInfoPlist, /<key>LukeSentryDSN<\/key>\s*<string>\$\(SENTRY_DSN\)<\/string>/);
+  assert.match(watchInfoPlist, /<key>LukeSentryDSN<\/key>\s*<string>\$\(SENTRY_DSN\)<\/string>/);
+});
+
 test("both apps ship a privacy manifest that matches the APIs the code calls", () => {
   assert.match(project, /AABBCC000000000000000102 \/\* PrivacyInfo\.xcprivacy in Resources \*\/,/);
   assert.match(project, /AABBCC000000000000000103 \/\* PrivacyInfo\.xcprivacy in Resources \*\/,/);
@@ -128,6 +136,20 @@ test("the WebRTC framework is linked for the phone alone, behind one gated file"
   assert.equal(adaptor.split("\n")[0], "#if canImport(LiveKitWebRTC)");
   assert.match(adaptor, /\n#endif\n$/);
   assert.doesNotMatch(swiftSources(path.join(iosRoot, "LukeWatch")), webRTCImport);
+});
+
+test("LukeKit links Sentry for the phone and watch, but never on Linux", () => {
+  const linuxExclusions = kitManifest.slice(kitManifest.indexOf("#if os(Linux)"), kitManifest.indexOf("#else"));
+  assert.match(linuxExclusions, /let sentryPackages: \[Package\.Dependency\] = \[\]/);
+  assert.match(linuxExclusions, /let sentryProducts: \[Target\.Dependency\] = \[\]/);
+  assert.match(
+    kitManifest,
+    /\.package\(url: "https:\/\/github\.com\/getsentry\/sentry-cocoa\.git", exact: "9\.28\.0"\)/,
+  );
+  assert.match(
+    kitManifest,
+    /\.product\(\s*name: "SentrySPM",\s*package: "sentry-cocoa",\s*condition: \.when\(platforms: \[\.iOS, \.watchOS, \.macOS\]\)/,
+  );
 });
 
 const phoneEntitlements = fs.readFileSync(path.join(iosRoot, "Luke", "Luke.entitlements"), "utf8");

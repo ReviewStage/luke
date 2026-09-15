@@ -31,6 +31,7 @@ import {
   MESSAGE_CHANNEL,
   MESSAGE_RATING,
   MESSAGE_ROLE,
+  RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
   type WireValue,
@@ -590,6 +591,31 @@ test("a rating on one of Luke's messages travels to the service with this device
       name: PRODUCT_EVENT.CONVERSATION_RATED,
       properties: {
         rating: MESSAGE_RATING.DOWN,
+        message_kind: PRODUCT_RATED_MESSAGE_KIND.REPLY,
+      },
+    },
+  ]);
+});
+
+test("taking a verdict back travels the same way, unrates the message at once, and is counted as its own word", async () => {
+  const { composer, client, counted } = harness({ deviceId: DEVICE });
+  client.changesAnswer = { seen: true, messages: "messages-head", events: "events-head" };
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(composer.snapshot().groups[0]?.messages[1]?.rating, {
+    rating: MESSAGE_RATING.UP,
+  });
+  const answer = await rate(composer, { messageId: REPLY, rating: RATING_WORD.WITHDRAWN });
+  assert.deepEqual(answer, { status: CONVERSATION_RATE_STATUS.RATED });
+  assert.deepEqual(client.rated, [
+    { messageId: REPLY, request: { rating: RATING_WORD.WITHDRAWN, deviceId: DEVICE } },
+  ]);
+  // The thumb comes off from the answer, before any poll reads the withdrawal back.
+  assert.equal(composer.snapshot().groups[0]?.messages[1]?.rating, undefined);
+  assert.deepEqual(counted, [
+    {
+      name: PRODUCT_EVENT.CONVERSATION_RATED,
+      properties: {
+        rating: RATING_WORD.WITHDRAWN,
         message_kind: PRODUCT_RATED_MESSAGE_KIND.REPLY,
       },
     },

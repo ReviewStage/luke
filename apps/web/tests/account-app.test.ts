@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { LIVE_VOICE } from "@sidecar/live";
 import { PROVIDER_ID } from "@sidecar/session";
+import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { type FakeResponder, fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
-import { REALTIME_VOICE, REALTIME_VOICE_SPEED } from "../server/core.js";
-import type {
-  AccountPreferencesRow,
-  HostedAccountPreferences,
-} from "../server/hosted/account-preferences.js";
+import type { AccountPreferencesRow } from "../server/hosted/account-store.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import { noDatabase } from "./support/no-database.js";
@@ -96,7 +94,7 @@ function readPreferences(state: Backing) {
 }
 
 function writePreferences(state: Backing) {
-  return async (userId: string, preferences: HostedAccountPreferences): Promise<Date> => {
+  return async (userId: string, preferences: AccountPreferences): Promise<Date> => {
     state.stored.set(userId, { preferences, updatedAt: NOW });
     return NOW;
   };
@@ -149,18 +147,14 @@ function preferencesWriteRequest(
   return new Request(`${ORIGIN}/api/account/preferences`, init);
 }
 
-const STORED_PREFERENCES: HostedAccountPreferences = {
-  voice: REALTIME_VOICE.CORAL,
-  voiceSpeed: REALTIME_VOICE_SPEED.QUICK,
-};
+const STORED_PREFERENCES: AccountPreferences = { voice: LIVE_VOICE.CORAL };
 
 const WRITTEN_PREFERENCES = {
-  voice: REALTIME_VOICE.MARIN,
-  voiceSpeed: REALTIME_VOICE_SPEED.FAST,
+  voice: LIVE_VOICE.MARIN,
   defaultWorkspaceProvider: PROVIDER_ID.CONDUCTOR,
   workspaceProjectDefaults: { conductor: "project-1" },
   workspaceAgentDefaults: { conductor: { agent: "codex", model: "gpt-5.6-sol", effort: "high" } },
-} satisfies HostedAccountPreferences;
+} satisfies AccountPreferences;
 
 const WRITE_BODY = { preferences: WRITTEN_PREFERENCES };
 
