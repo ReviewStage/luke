@@ -155,6 +155,7 @@ export interface TurnInsertRow {
   readonly conversationId: string;
   readonly origin: string;
   readonly status: string;
+  readonly eveTurnId?: string | null;
   readonly queuedAt?: Date;
   readonly startedAt?: Date | null;
   readonly settledAt?: Date | null;
@@ -171,11 +172,11 @@ export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
       insert into turns (
-        user_id, conversation_id, origin, status, queued_at, started_at, settled_at,
+        user_id, conversation_id, origin, status, eve_turn_id, queued_at, started_at, settled_at,
         response_ids, usage, failure
       )
       values (
-        ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status},
+        ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status}, ${row.eveTurnId ?? null},
         ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null},
         ${responseIds}, ${usage}::jsonb, ${row.failure ?? null}
       )

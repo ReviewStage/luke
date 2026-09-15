@@ -1,6 +1,7 @@
 export {
   askInputText,
   BRAIN_INPUT_MARKER,
+  childTaskInputText,
   holdReleasedInputText,
   standingContextText,
   wakeInputText,
@@ -60,6 +61,11 @@ export {
   PREFETCH_READ_KIND,
 } from "./tools/prefetch-tool.js";
 export { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./tools/read-tools.js";
+export {
+  type BrainChildAccess,
+  type SessionToolModule,
+  sessionToolNamed,
+} from "./tools/session-tools.js";
 export { type ToolContext, type ToolModule, toolArguments } from "./tools/tool-module.js";
 export {
   type BrainWorkspaceAccess,

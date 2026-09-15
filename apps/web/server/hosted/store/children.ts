@@ -13,6 +13,7 @@ import {
 } from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
+import type { ConversationTarget } from "./writer.js";
 
 /**
  * The account's children: the conversations a delegation opened, each a row
@@ -40,10 +41,17 @@ export interface ChildRecord {
   readonly label: string | null;
   /** The first words the parent handed the child, cut at the wire's excerpt bound; none before a line stands or where it holds no text. */
   readonly task: string | null;
+  /** Whether the delegation waits on the child's completion coming back to the parent. */
+  readonly expectsCompletion: boolean;
   readonly createdAt: Date;
   /** When the child's completion reached its parent as a turn of the parent's own; unset until it has. */
   readonly completionDeliveredAt: Date | null;
+  /** The eve session the child runs in, once its start or the opener claimed the row. */
+  readonly runtimeSessionId: string | null;
   readonly status: ChildStatus;
+  /** The latest turn, by the store's id and eve's own, each unset before one stands or before eve named it. */
+  readonly turnId: string | null;
+  readonly eveTurnId: string | null;
   /** The latest turn's stamps, each unset until the turn reached it, and all unset before a turn stands. */
   readonly startedAt: Date | null;
   readonly settledAt: Date | null;
@@ -82,8 +90,12 @@ const ChildRowSchema = Schema.Struct({
   parentKind: Schema.Literals(CHILD_PARENT_KINDS),
   label: Schema.NullOr(Schema.String),
   task: Schema.NullOr(Schema.String),
+  expectsCompletion: Schema.Boolean,
   createdAt: InstantColumnSchema,
   completionDeliveredAt: Schema.NullOr(InstantColumnSchema),
+  runtimeSessionId: Schema.NullOr(Schema.String),
+  turnId: Schema.NullOr(Schema.String),
+  eveTurnId: Schema.NullOr(Schema.String),
   turnStatus: Schema.NullOr(
     Schema.Literals([
       TURN_STATUS.QUEUED,
@@ -103,8 +115,12 @@ const ChildRowSchema = Schema.Struct({
   Schema.encodeKeys({
     parentConversationId: "parent_conversation_id",
     parentKind: "parent_kind",
+    expectsCompletion: "expects_completion",
     createdAt: "created_at",
     completionDeliveredAt: "completion_delivered_at",
+    runtimeSessionId: "runtime_session_id",
+    turnId: "turn_id",
+    eveTurnId: "eve_turn_id",
     turnStatus: "turn_status",
     startedAt: "started_at",
     settledAt: "settled_at",
@@ -134,7 +150,7 @@ const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[])
     join conversations parent
       on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
     left join lateral (
-      select status, queued_at, started_at, settled_at, failure
+      select id, eve_turn_id, status, queued_at, started_at, settled_at, failure
       from turns
       where turns.conversation_id = child.id and turns.user_id = child.user_id
       order by turns.queued_at desc, turns.id desc
@@ -195,9 +211,10 @@ const taskExcerpt = (sql: SqlClient.SqlClient) =>
 const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[], limit: number) =>
   sql`
     select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
-           ${taskExcerpt(sql)} as task,
-           child.created_at, child.completion_delivered_at,
-           latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure,
+           ${taskExcerpt(sql)} as task, child.expects_completion,
+           child.created_at, child.completion_delivered_at, child.runtime_session_id,
+           latest.id as turn_id, latest.eve_turn_id, latest.status as turn_status,
+           latest.started_at, latest.settled_at, latest.failure,
            child.next_message_seq, child.next_event_seq, child.journal_revision
     ${childrenFrom(sql, conditions)}
     order by child.created_at desc, child.id desc
@@ -212,6 +229,27 @@ const findChildren = SqlSchema.findAll({
       selectChildren(
         sql,
         [sql`child.user_id = ${request.userId}`, standingChild(sql)],
+        request.limit,
+      ),
+    ),
+});
+
+const findChildrenOf = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    limit: Schema.Number,
+  }),
+  Result: ChildRowSchema,
+  execute: (request) =>
+    statement((sql) =>
+      selectChildren(
+        sql,
+        [
+          sql`child.user_id = ${request.userId}`,
+          sql`child.parent_conversation_id = ${request.parentConversationId}`,
+          standingChild(sql),
+        ],
         request.limit,
       ),
     ),
@@ -291,6 +329,17 @@ export function listChildren(
   limit: number,
 ): Effect.Effect<readonly ChildRecord[], ChildReadFailure, SqlClient.SqlClient> {
   return Effect.map(findChildren({ userId, limit }), (rows) => rows.map(toChildRecord));
+}
+
+/** One conversation's standing children, newest first and at most `limit` of them. */
+export function listChildrenOf(
+  userId: string,
+  parentConversationId: string,
+  limit: number,
+): Effect.Effect<readonly ChildRecord[], ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(findChildrenOf({ userId, parentConversationId, limit }), (rows) =>
+    rows.map(toChildRecord),
+  );
 }
 
 /** What a delegation writes down as it opens a child: whose it is, what it hangs from, and how it was named. */
@@ -422,4 +471,44 @@ export function childrenHead(
   userId: string,
 ): Effect.Effect<Option.Option<ChildrenHeadPosition>, ChildReadFailure, SqlClient.SqlClient> {
   return findChildrenHead({ userId });
+}
+
+const SpawningMessageRowSchema = Schema.Struct({ id: Schema.String });
+
+const findSpawningMessage = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    turnId: Schema.String,
+  }),
+  Result: SpawningMessageRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select id
+        from messages
+        where messages.conversation_id = ${request.conversationId}
+          and messages.user_id = ${request.userId}
+          and (messages.client_id = ${request.turnId} or messages.turn_id = ${request.turnId}::uuid)
+        order by (messages.client_id = ${request.turnId}) desc, messages.seq desc
+        limit 1
+      `,
+    ),
+});
+
+/**
+ * The message a turn's delegation spawns its child from: the turn's own
+ * journal, the row whose client id is the turn's id, where the relay has
+ * opened it; otherwise the newest row the turn has, the line it was handed,
+ * since the relay writes the journal on its own fiber and a call may run
+ * before it lands. Nothing where the turn has no row yet.
+ */
+export function readSpawningMessage(
+  target: ConversationTarget,
+  turnId: string,
+): Effect.Effect<string | undefined, ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(
+    findSpawningMessage({ userId: target.userId, conversationId: target.conversationId, turnId }),
+    (found) => Option.getOrUndefined(Option.map(found, (row) => row.id)),
+  );
 }
