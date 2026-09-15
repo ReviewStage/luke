@@ -24,14 +24,12 @@ import {
   ACTION_REFUSAL,
   ACTION_TOOL,
   ACTIONS,
-  type ActionFunctionCall,
-  actionToolFamily,
   SESSION_LIST_ALL,
   SESSION_LIST_VOICE,
 } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
 import { itemEnum, objectProperties } from "./testing/json-schema.js";
-import { admitToolCall } from "./testing/tool-call.js";
+import { type ActionFunctionCall, admitToolCall } from "./testing/tool-call.js";
 
 /**
  * One tool call admitted, as the payload alone: the brand and the origin are
@@ -748,8 +746,6 @@ test("an opening task is held to the project's own word for it", async () => {
 });
 
 test("each action belongs to one family", async () => {
-  assert.equal(actionToolFamily(ACTION_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
-  assert.equal(actionToolFamily("delete_everything"), undefined);
   assert.equal(ACTIONS.CHANGE_APP_SETTING.family, ACTION_FAMILY.APP);
   assert.equal(ACTIONS.SEND_SESSION_MESSAGE.family, ACTION_FAMILY.SESSION);
 });

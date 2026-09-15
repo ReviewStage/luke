@@ -22,15 +22,9 @@ import {
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import { test } from "vitest";
-import {
-  ACTION_FAMILY,
-  ACTION_TOOL,
-  type ActionFunctionCall,
-  actionToolFamily,
-  SESSION_LIST_VOICE,
-} from "./index.js";
+import { ACTION_TOOL, SESSION_LIST_VOICE } from "./index.js";
 import { withoutAdmission } from "./testing/admitted.js";
-import { admitToolCall } from "./testing/tool-call.js";
+import { type ActionFunctionCall, admitToolCall } from "./testing/tool-call.js";
 
 /** One app action admitted, as the payload alone: the brand and the origin are dropped. */
 async function appToolAction(
@@ -130,14 +124,6 @@ test("a spoken toggle accepts the unambiguous words and nothing else", async () 
   assert.equal(appToggleValue(1), undefined);
   assert.equal(appToggleText(true), "on");
   assert.equal(appToggleText(false), "off");
-});
-
-test("only the app's own tools are routed to the guide", async () => {
-  assert.equal(actionToolFamily(ACTION_TOOL.CHANGE_APP_SETTING), ACTION_FAMILY.APP);
-  assert.equal(actionToolFamily(ACTION_TOOL.SHOW_PANEL), ACTION_FAMILY.APP);
-  assert.equal(actionToolFamily(ACTION_TOOL.OPEN_FEEDBACK_COMPOSER), ACTION_FAMILY.APP);
-  assert.equal(actionToolFamily(ACTION_TOOL.RUN_UPDATE_ACTION), ACTION_FAMILY.APP);
-  assert.equal(actionToolFamily(ACTION_TOOL.SEND_SESSION_MESSAGE), ACTION_FAMILY.SESSION);
 });
 
 test("a spoken change can name only a setting the guide lists, to a value it accepts", async () => {

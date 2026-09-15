@@ -64,7 +64,7 @@ export type ActionTargetSnapshot = {
   readonly applicationId?: string;
 };
 
-export type AcceptedActionOutput = {
+type AcceptedActionOutput = {
   readonly status: typeof ACTION_OUTPUT_STATUS.ACCEPTED;
   readonly target?: ActionTargetSnapshot;
   /** The session a creation's answer named: an identifier, never an address. */
@@ -75,13 +75,13 @@ export type AcceptedActionOutput = {
   readonly warning?: string;
 };
 
-export type UnknownActionOutput = {
+type UnknownActionOutput = {
   readonly status: typeof ACTION_OUTPUT_STATUS.UNKNOWN;
   readonly reason: string;
   readonly target?: ActionTargetSnapshot;
 };
 
-export type RefusedActionOutput = {
+type RefusedActionOutput = {
   readonly status: typeof ACTION_OUTPUT_STATUS.REFUSED;
   readonly reason: string;
   readonly target?: ActionTargetSnapshot;

@@ -1,6 +1,5 @@
 import { ACTION_RESULT_STATUS, isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { Effect } from "effect";
-import type { ActionFunctionCall } from "../action-kinds.js";
 import { ACTIONS } from "../actions.js";
 import {
   ACTION_REFUSAL,
@@ -9,6 +8,17 @@ import {
   type Refusal,
   type ValidatedAction,
 } from "../admit.js";
+
+/**
+ * One tool call as admission is handed it: the action's own name and its
+ * arguments as the model wrote them. No call id — the id an answer travels
+ * back under belongs to the transport, which extends this with one. It lives
+ * beside the door that takes one, because only tests speak in calls.
+ */
+export interface ActionFunctionCall {
+  name: string;
+  argumentsJson: string;
+}
 
 /**
  * One model-emitted tool call admitted the way a tool module admits it: the

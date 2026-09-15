@@ -111,7 +111,7 @@ export const REALTIME_TRUNCATION = {
 } as const;
 
 /** A function tool as the desktop's Realtime session was configured with one. */
-export interface MouthToolDefinition {
+interface MouthToolDefinition {
   type: "function";
   name: string;
   description: string;
