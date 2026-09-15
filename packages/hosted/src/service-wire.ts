@@ -45,10 +45,12 @@ export const HOSTED_API_ERROR = {
   /** A tool name the service's catalog does not register; no schema was selected. */
   UNKNOWN_TOOL: "unknown-tool",
   /**
-   * A stored row this build cannot read back — a tool part naming a tool the
-   * catalog does not register, or parts that are not a message's — so the page
-   * it stands on was refused whole rather than answered without it; the
-   * answer names the row's conversation and sequence.
+   * A stored row this build cannot read back — parts that are not a
+   * message's, a registered tool's input its schema refuses — so the page it
+   * stands on was refused whole rather than answered without it; the answer
+   * names the row's conversation and sequence. A tool part naming a tool the
+   * catalog has retired is not this: the read drops the part and answers the
+   * row.
    */
   UNREADABLE_ROW: "unreadable-row",
   METHOD_NOT_ALLOWED: "method-not-allowed",

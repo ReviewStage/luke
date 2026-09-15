@@ -25,6 +25,7 @@ import {
   readStoredUIMessages,
   readStoredUIMessagesEither,
   type StoredUIMessage,
+  UNREGISTERED_TOOL_PART,
 } from "./validate.js";
 
 /** The shared fixtures beside the session vocabulary, plain JSON so another language's decoder reads the same files. */
@@ -196,6 +197,67 @@ test("a tool part naming a tool the registry does not hold is refused, whatever 
   const readPending = await readStoredUIMessages([pending], TOOLS);
   assert.equal(refusalOf(readPending), SCHEMA_REFUSAL.NOT_REGISTERED);
   assert.deepEqual(pathOf(readPending), [0, "parts", 0, "type"]);
+});
+
+test("a stored-row read drops a tool part naming a tool the registry has retired and reads the row without it", async () => {
+  const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
+  const replyParts = reply.parts;
+  assert.ok(Array.isArray(replyParts));
+  const read = await readStoredUIMessages([reply], {}, UNREGISTERED_TOOL_PART.DROP);
+  assert.equal(read.ok, true);
+  if (!read.ok) return;
+  const [stored] = read.value;
+  assert.deepEqual(stored, {
+    ...reply,
+    parts: replyParts.filter((part) => wireRecord(part)?.type !== "tool-read_transcript"),
+  });
+  // A call still pending under the retired tool goes the same way, and a registered part beside it stays.
+  const mixed = {
+    ...reply,
+    parts: [
+      {
+        type: "tool-retired_tool",
+        toolCallId: "call_11",
+        state: TOOL_PART_STATE.INPUT_AVAILABLE,
+        input: { anything: true },
+      },
+      ...replyParts,
+    ],
+  };
+  const readMixed = await readStoredUIMessages([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  assert.deepEqual(readMixed, { ok: true, value: [reply] });
+  // The Either entry point takes the same word.
+  const either = await readStoredUIMessagesEither([mixed], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  assert.ok(Result.isSuccess(either));
+  assert.deepEqual(either.success, [reply]);
+});
+
+test("dropping is only for a retired tool: a registered tool's refused input and a dynamic part are refused under it too", async () => {
+  const wrongInput = await replyWithToolPart({
+    type: "tool-read_transcript",
+    toolCallId: "call_12",
+    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+    input: { providerId: 7 },
+    output: { lines: [] },
+  });
+  assert.equal(
+    refusalOf(await readStoredUIMessages([wrongInput], TOOLS, UNREGISTERED_TOOL_PART.DROP)),
+    SCHEMA_REFUSAL.MALFORMED,
+  );
+  const dynamic = await replyWithToolPart({
+    type: "dynamic-tool",
+    toolName: "read_transcript",
+    toolCallId: "call_13",
+    state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+    input: {},
+    output: {},
+  });
+  const readDynamic = await readStoredUIMessages([dynamic], TOOLS, UNREGISTERED_TOOL_PART.DROP);
+  assert.equal(refusalOf(readDynamic), SCHEMA_REFUSAL.NOT_REGISTERED);
+  assert.deepEqual(pathOf(readDynamic), [0, "parts", 0, "type"]);
+  // The default is the write door's: refuse.
+  const reply = await fixture(FIXTURE.REPLY_WITH_TOOL_PART);
+  assert.equal(refusalOf(await readStoredUIMessages([reply], {})), SCHEMA_REFUSAL.NOT_REGISTERED);
 });
 
 test("a dynamic tool part is refused: a stored row names a registered tool or none", async () => {
