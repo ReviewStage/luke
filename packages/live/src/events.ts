@@ -120,8 +120,7 @@ export const LIVE_DELEGATION_TARGET = {
   RESPONSES: "responses",
 } as const;
 
-export type LiveDelegationTarget =
-  (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
+type LiveDelegationTarget = (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
 
 export const LiveDelegationTargetSchema = Schema.Literals(Object.values(LIVE_DELEGATION_TARGET));
 
@@ -210,7 +209,7 @@ const acknowledgment = {
   client_event_id: Schema.optionalKey(opaqueId),
 };
 
-export type LiveSessionSnapshot = {
+type LiveSessionSnapshot = {
   id: string;
   model?: string;
   expires_at?: number;
@@ -224,7 +223,7 @@ const sessionSnapshotSchema = cleaned<LiveSessionSnapshot>(
   }),
 );
 
-export type LiveUsageSnapshot = {
+type LiveUsageSnapshot = {
   seconds: number;
 };
 
@@ -246,7 +245,7 @@ function appended<const Type extends string>(type: Type) {
   });
 }
 
-export type LiveAppendedEvent<Type extends string> = Acknowledged & {
+type LiveAppendedEvent<Type extends string> = Acknowledged & {
   type: Type;
   start_ms: number;
   end_ms: number;
@@ -262,7 +261,7 @@ function transcriptDeltaEvent<const Type extends string>(type: Type) {
   });
 }
 
-export type LiveTranscriptDeltaEvent<Type extends string> = Acknowledged & {
+type LiveTranscriptDeltaEvent<Type extends string> = Acknowledged & {
   type: Type;
   delta: string;
   start_ms: number;
@@ -273,11 +272,11 @@ function microphoneAcknowledgment<const Type extends string>(type: Type) {
   return Schema.Struct({ type: Schema.Literal(type), ...acknowledgment });
 }
 
-export type LiveMicrophoneAckEvent<Type extends string> = Acknowledged & {
+type LiveMicrophoneAckEvent<Type extends string> = Acknowledged & {
   type: Type;
 };
 
-export type LiveSessionStartedEvent = Acknowledged & {
+type LiveSessionStartedEvent = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.SESSION_STARTED;
   session: LiveSessionSnapshot;
 };
@@ -315,7 +314,7 @@ const commentaryAppendedSchema = appended(LIVE_SERVER_EVENT.COMMENTARY_APPENDED)
 const inputTranscriptDeltaSchema = transcriptDeltaEvent(LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA);
 const outputTranscriptDeltaSchema = transcriptDeltaEvent(LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA);
 
-export type LiveDelegation = {
+type LiveDelegation = {
   id: string;
   target: LiveDelegationTarget;
   response_id?: string;
@@ -329,7 +328,7 @@ const delegationSchema = cleaned<LiveDelegation>(
   }),
 );
 
-export type LiveDelegationCreated = Acknowledged & {
+type LiveDelegationCreated = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED;
   offset_ms: number;
   delegation: LiveDelegation;
@@ -349,11 +348,11 @@ const delegationCreatedSchema: Schema.Codec<LiveDelegationCreated, UnparsedWireV
   }),
 );
 
-export type LiveContextWindow = {
+type LiveContextWindow = {
   usage_ratio: number;
 };
 
-export type LiveUsageUpdatedEvent = Acknowledged & {
+type LiveUsageUpdatedEvent = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.USAGE_UPDATED;
   usage: LiveUsageSnapshot;
   context_window?: LiveContextWindow;
@@ -369,11 +368,11 @@ const usageUpdatedSchema = cleaned<LiveUsageUpdatedEvent>(
   }),
 );
 
-export type LiveInputAudioAppendEvent = {
+type LiveInputAudioAppendEvent = {
   type: typeof LIVE_SERVER_EVENT.INPUT_AUDIO_APPEND;
 };
 
-export type LiveOutputAudioDeltaEvent = {
+type LiveOutputAudioDeltaEvent = {
   type: typeof LIVE_SERVER_EVENT.OUTPUT_AUDIO_DELTA;
 };
 
@@ -395,7 +394,7 @@ const outputAudioDeltaSchema: Schema.Codec<LiveOutputAudioDeltaEvent, UnparsedWi
  * GPT-Live server-events reference could not be read when this was written,
  * so all three are carried and a reader matches on whichever arrived.
  */
-export type LiveErrorDetail = {
+type LiveErrorDetail = {
   type?: string;
   code?: string;
   message?: string;
@@ -415,7 +414,7 @@ const errorDetailSchema = cleaned<LiveErrorDetail>(
   }),
 );
 
-export type LiveErrorEvent = Acknowledged & {
+type LiveErrorEvent = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.ERROR;
   error: LiveErrorDetail;
 };
@@ -432,7 +431,7 @@ const errorEventSchema: Schema.Codec<LiveErrorEvent, UnparsedWireValue> = schema
   }),
 );
 
-export type LiveInfoEvent = Acknowledged & {
+type LiveInfoEvent = Acknowledged & {
   type: typeof LIVE_SERVER_EVENT.INFO;
   code?: string;
   message?: string;
@@ -527,7 +526,7 @@ export function parseLiveServerEvent(data: UnparsedWireValue): LiveServerEvent |
  */
 export type LiveDelegationId = string | null;
 
-export type LiveAppendInput = {
+type LiveAppendInput = {
   eventId: string;
   delegationId: LiveDelegationId;
   /** Plain text of at most 500 tokens; `chunkForAppend` cuts a longer text. */
@@ -546,7 +545,7 @@ export type LiveAppendEvent<Type extends AppendType = AppendType> = {
   content: string;
 };
 
-export type LiveCommandEvent<
+type LiveCommandEvent<
   Type extends
     | typeof LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE
     | typeof LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE

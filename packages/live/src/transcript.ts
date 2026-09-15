@@ -47,7 +47,7 @@ export const UTTERANCE_SETTLE_MARGIN_MS = 800;
  */
 export const PREFETCH_DEBOUNCE_MS = 400;
 
-export interface TranscriptFragment {
+interface TranscriptFragment {
   speaker: TranscriptSpeaker;
   /** The delta exactly as received, untrimmed and unpadded. */
   text: string;
@@ -66,12 +66,12 @@ export interface TranscriptUtterance {
   endMs: number;
 }
 
-export interface UtteranceQuery {
+interface UtteranceQuery {
   /** Only utterances that end after this instant on the session timeline. */
   sinceMs?: number;
 }
 
-export interface AskContext {
+interface AskContext {
   /** Both speakers' utterances since the instant asked for, oldest first. */
   turns: readonly TranscriptUtterance[];
   /** The developer's latest utterance in that span, which is what a delegation asks about. */
@@ -84,7 +84,7 @@ export interface AskContext {
  * in. Nothing about it is settled; the row id is what a later reading is
  * matched against.
  */
-export interface Anticipation {
+interface Anticipation {
   rowId: number;
   text: string;
   context: AskContext;

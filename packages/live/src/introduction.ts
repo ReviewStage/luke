@@ -40,7 +40,7 @@ export function boundedIntroductionName(name: string | undefined): string | unde
   return first ? first.slice(0, INTRODUCTION_SEED_BOUNDS.NAME_CHARS) : undefined;
 }
 
-export interface IntroductionSeed {
+interface IntroductionSeed {
   titles: readonly string[];
   /** The account's display name, bounded to its first word here. */
   name?: string | undefined;

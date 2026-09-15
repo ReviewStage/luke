@@ -52,7 +52,7 @@ export interface ArrivalSpeech {
   decidedAt: number;
 }
 
-export interface CalendarOnboardingSpeech {
+interface CalendarOnboardingSpeech {
   kind: typeof PROACTIVE_SPEECH_KIND.CALENDAR_ONBOARDING;
   decidedAt: number;
 }
@@ -61,7 +61,7 @@ export interface CalendarOnboardingSpeech {
  * The launch greeting names the developer, and the name is the one observed
  * value it carries, bounded here before it enters the instruction.
  */
-export interface LaunchSpeech {
+interface LaunchSpeech {
   kind: typeof PROACTIVE_SPEECH_KIND.LAUNCH;
   /** The signed-in account's first name, as the account service reported it. */
   firstName?: string;
