@@ -311,9 +311,17 @@ function unmatchedTail(entry: ConversationEntry, covered: number): ConversationE
  * keeps one short row from covering the same word said twice, and leaves any
  * suffix not yet on record standing on screen.
  */
-function takes(row: RecordedWords, spoken: string): TakenWords | undefined {
+function takes(
+  row: RecordedWords,
+  spoken: string,
+  options: { continuing: boolean },
+): TakenWords | undefined {
   const needle = ` ${spoken} `;
-  const at = row.words.indexOf(needle, row.covered);
+  const at = options.continuing
+    ? row.words.startsWith(needle, row.covered)
+      ? row.covered
+      : -1
+    : row.words.indexOf(needle, row.covered);
   if (at !== -1) {
     // The trailing space stays uncovered: it is the next word's leading one.
     row.covered = at + needle.length - 1;
@@ -350,7 +358,7 @@ export function shownLiveEntries(
     let remaining = spoken;
     for (const row of recorded) {
       if (row.role !== role || remaining.length === 0) continue;
-      const taken = takes(row, remaining);
+      const taken = takes(row, remaining, { continuing: covered > 0 });
       if (taken === undefined) continue;
       covered += taken.words;
       if (taken.complete) return [];

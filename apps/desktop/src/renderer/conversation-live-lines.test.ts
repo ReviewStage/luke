@@ -293,3 +293,14 @@ test("a line is covered by whole words only: a short line is not found inside a 
     [{ ...cutShort.entry, words: "agent" }],
   );
 });
+
+test("a leftover tail only continues from the next stored row's start, not from the same word later inside it", () => {
+  const first = line(1, CONVERSATION_ENTRY_KIND.ASK, "Restart the fixture agent", true);
+  const second = line(2, CONVERSATION_ENTRY_KIND.ASK, "Tell the agent to wait", true);
+  const hold = foldLiveLines(NO_LIVE_LINES, [first, second], OPENED);
+  const record = view(
+    recorded(MESSAGE_ROLE.USER, "Restart the fixture", OPENED + 1_000),
+    recorded(MESSAGE_ROLE.USER, "Tell the agent to wait", OPENED + 2_000),
+  );
+  assert.deepEqual(shownLiveEntries(hold, record), [{ ...first.entry, words: "agent" }]);
+});
