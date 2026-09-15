@@ -252,9 +252,14 @@ interface UserMessageWrite {
 }
 
 /**
- * One of Luke's own spoken utterances, as the voice writer cuts it from the
- * session's segments: a finished assistant row no turn owns, authored by the
- * voice model, written once per client id.
+ * One of Luke's spoken utterances, as the voice writer cuts it from the
+ * session's segments: a finished assistant row authored by the voice model,
+ * written once per client id. Its metadata names the session and span it was
+ * cut from and, where the developer's line before it was a delegation's, that
+ * delegation; the store adds what it can read of what the words were read
+ * from — the journal of the delegation's settled turn, which then owns the
+ * row, or the briefing whose `speech.spoken` fell inside the span — so a view
+ * can fold that message's words behind the words actually said.
  */
 interface SpokenReplyWrite {
   readonly clientId: string;
@@ -632,6 +637,67 @@ const findTurn = SqlSchema.findOneOption({
       `,
     ),
 });
+
+/** The turn's status and when it settled, for the read of whether words spoken after it were its reply read aloud. */
+const findSettledTurn = SqlSchema.findOneOption({
+  Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({
+    status: TurnStatusSchema,
+    settledAt: Schema.NullOr(InstantColumnSchema),
+  }).pipe(Schema.encodeKeys({ settledAt: "settled_at" })),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select status, settled_at
+        from turns
+        where id = ${request.turnId} and conversation_id = ${request.conversationId}
+      `,
+    ),
+});
+
+/**
+ * The briefing whose speech began inside a span of one voice session's clock:
+ * the `speech.spoken` event names the session and the instant on its clock
+ * the voice followed the briefing's append, and Luke's utterance covering
+ * that instant is the briefing read aloud. A row is read from one message,
+ * so where two briefings appended back to back were both marked by one delta
+ * and read in one breath, the later is the one the reading names and the
+ * earlier keeps its own bubble; two briefings in one utterance is the
+ * exception a single link accepts rather than a list it grows for.
+ */
+const findBriefingSpokenWithin = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    voiceSessionId: Schema.String,
+    fromMs: Schema.Int,
+    toMs: Schema.Int,
+  }),
+  Result: Schema.Struct({ messageId: Schema.String }).pipe(
+    Schema.encodeKeys({ messageId: "message_id" }),
+  ),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select message_id
+        from events
+        where conversation_id = ${request.conversationId}
+          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_SPOKEN}
+          and payload ->> 'voiceSessionId' = ${request.voiceSessionId}
+          and (payload ->> 'atMs')::int >= ${request.fromMs}
+          and (payload ->> 'atMs')::int <= ${request.toMs}
+        order by seq desc
+        limit 1
+      `,
+    ),
+});
+
+/**
+ * How long after a turn settled words of Luke's following its delegation are
+ * still its reply read aloud. The voice reads the reply as soon as the turn
+ * ends; words much later under the same line are a beat or an aside, and are
+ * not folded over the reply.
+ */
+const READ_ALOUD_WINDOW_MS = 2 * 60_000;
 
 const findMessageByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
@@ -1668,21 +1734,90 @@ const recordSpokenReply = /* @__PURE__ */ Effect.fn("recordSpokenReply")(functio
   if (Option.isSome(standing)) {
     return { ok: true, id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED };
   }
+  const source = yield* readAloudFrom(context, write.metadata);
   const read = yield* admitted(context, {
     id: write.clientId,
     role: MESSAGE_ROLE.ASSISTANT,
-    metadata: write.metadata,
+    metadata:
+      source.messageId === undefined
+        ? write.metadata
+        : { ...write.metadata, read_from: source.messageId },
     parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
   if (!read.ok) return read;
   const { id } = yield* insertMessage(context, {
     clientId: write.clientId,
-    turnId: undefined,
+    turnId: source.turnId,
     message: read.message,
     finishedAt: context.now(),
   });
   return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
+
+/** What a spoken row was read from, and the turn that owns it: either may be nothing. */
+interface ReadAloudSource {
+  readonly turnId: string | undefined;
+  readonly messageId: string | undefined;
+}
+
+const NOTHING_READ: ReadAloudSource = { turnId: undefined, messageId: undefined };
+
+/**
+ * What Luke's utterance was read from, as the record can tell. A briefing
+ * whose speech began inside the span comes first, since a briefing is said
+ * whatever line stood before it, and the developer's latest line stays a
+ * delegation's for as long as no line follows it. Otherwise, under a
+ * delegation whose turn is known, the utterance joins that turn while the
+ * turn still runs, and joins it as its reply read aloud where the turn had
+ * settled within the window before the words were written; one long after
+ * the settle is an aside, read from nothing and standing where it was said.
+ */
+function readAloudFrom(
+  context: WriterContext,
+  metadata: AssistantMessageMetadata,
+): Write<ReadAloudSource> {
+  return Effect.gen(function* () {
+    if (
+      metadata.voice_session_id !== undefined &&
+      metadata.from_ms !== undefined &&
+      metadata.to_ms !== undefined
+    ) {
+      const briefing = yield* findBriefingSpokenWithin({
+        conversationId: context.target.conversationId,
+        voiceSessionId: metadata.voice_session_id,
+        fromMs: metadata.from_ms,
+        toMs: metadata.to_ms,
+      });
+      if (Option.isSome(briefing)) {
+        return { turnId: undefined, messageId: briefing.value.messageId };
+      }
+    }
+    if (metadata.delegation_id === undefined) return NOTHING_READ;
+    const turnId = yield* askTurnOf({
+      conversationId: context.target.conversationId,
+      clientId: metadata.delegation_id,
+    });
+    if (turnId === undefined) return NOTHING_READ;
+    const turn = yield* findSettledTurn({ turnId, conversationId: context.target.conversationId });
+    const settledAt = Option.isSome(turn) ? turn.value.settledAt : null;
+    const settled =
+      Option.isSome(turn) &&
+      TERMINAL_TURN_STATUSES.has(turn.value.status) &&
+      settledAt !== null &&
+      context.now().getTime() - settledAt.getTime() <= READ_ALOUD_WINDOW_MS;
+    const journal = settled ? yield* messageByClientId(context, turnId) : Option.none();
+    const readFrom = Option.isSome(journal) ? journal.value.id : undefined;
+    // The row joins the turn while the turn still runs — words said around the
+    // ask — or as the reply read aloud; an aside long after a settled turn
+    // stands on its own, where it was said, rather than sorting up into a turn
+    // that ended before words said between.
+    const running = Option.isSome(turn) && !TERMINAL_TURN_STATUSES.has(turn.value.status);
+    return {
+      turnId: running || readFrom !== undefined ? turnId : undefined,
+      messageId: readFrom,
+    };
+  });
+}
 
 function latestSpokenLine(context: WriterContext, query: SpokenLineQuery): Write<SpokenLineResult> {
   return Effect.map(

@@ -539,7 +539,13 @@ test("an exchange the voice model answers itself leaves both settled utterances 
         MESSAGE_ROLE.ASSISTANT,
         null,
         [{ type: "text", text: "The fixture agent is, on a permission prompt.", state: "done" }],
-        { author: MESSAGE_AUTHOR.VOICE_MODEL },
+        {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          from_ms: 5000,
+          to_ms: 7400,
+        },
         new Date(NOW),
       ],
     ],
@@ -556,6 +562,7 @@ test("an exchange the voice model answers itself leaves both settled utterances 
 test("every settled utterance of Luke's is his row: before any line, a briefing read aloud beside the briefing's own message, and beside an ask handed to the brain", async () => {
   // Words before any developer line are the voice model's own, and the Conversation shows them.
   const first = await target();
+  const firstSessionId = await sessionRowId(first.liveSessionId);
   const voice = writer();
   await database.run(voice.consume(first, said("Good morning.", 100, 900)));
   assert.deepEqual(
@@ -568,7 +575,13 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
       [
         MESSAGE_ROLE.ASSISTANT,
         [{ type: "text", text: "Good morning.", state: "done" }],
-        { author: MESSAGE_AUTHOR.VOICE_MODEL },
+        {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: firstSessionId,
+          from_ms: 100,
+          to_ms: 900,
+        },
       ],
     ],
   );
@@ -589,20 +602,25 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
     await database.run(voice.recordSpokenReply(second, { startMs: 2000, endMs: 3200 })),
     WRITTEN,
   );
-  // The rows are the briefing the fixture announced, the developer's line, and the reading as Luke's own row.
+  // The rows are the briefing the fixture announced, the developer's line, and the reading as Luke's
+  // own row, which names the briefing it was read from: the speech began inside its span.
+  const secondRows = await spokenAsks(second.conversation);
   assert.deepEqual(
-    (await spokenAsks(second.conversation)).map((row) => [
-      row.role,
-      row.clientId.startsWith("briefing-"),
-      // SAFETY: the rows were written by this test through the store's own metadata schemas; only the author is read back.
-      (row.metadata as { author: string }).author,
-    ]),
+    secondRows.map((row) => [row.role, row.clientId.startsWith("briefing-")]),
     [
-      [MESSAGE_ROLE.ASSISTANT, true, MESSAGE_AUTHOR.BRAIN],
-      [MESSAGE_ROLE.USER, false, MESSAGE_AUTHOR.DEVELOPER],
-      [MESSAGE_ROLE.ASSISTANT, false, MESSAGE_AUTHOR.VOICE_MODEL],
+      [MESSAGE_ROLE.ASSISTANT, true],
+      [MESSAGE_ROLE.USER, false],
+      [MESSAGE_ROLE.ASSISTANT, false],
     ],
   );
+  assert.deepEqual(secondRows[2]?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: await sessionRowId(second.liveSessionId),
+    from_ms: 2000,
+    to_ms: 3200,
+    read_from: messageId,
+  });
   assert.equal(
     (await speechEvents(second.conversation)).some(
       (event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_SPOKEN,
@@ -620,8 +638,9 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
     await database.run(voice.recordSpokenReply(third, { startMs: 1500, endMs: 2300 })),
     WRITTEN,
   );
+  const thirdRows = await spokenAsks(third.conversation);
   assert.deepEqual(
-    (await spokenAsks(third.conversation)).map((row) => [row.role, row.clientId, row.parts]),
+    thirdRows.map((row) => [row.role, row.clientId, row.parts]),
     [
       [
         MESSAGE_ROLE.USER,
@@ -630,11 +649,40 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
       ],
       [
         MESSAGE_ROLE.ASSISTANT,
-        (await spokenAsks(third.conversation))[1]?.clientId,
+        thirdRows[1]?.clientId,
         [{ type: "text", text: "Let me look.", state: "done" }],
       ],
     ],
   );
+  // His words name the delegation they followed; with no turn known for it yet, they were read from nothing.
+  const thirdSessionId = await sessionRowId(third.liveSessionId);
+  assert.deepEqual(thirdRows[1]?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: thirdSessionId,
+    from_ms: 1500,
+    to_ms: 2300,
+    delegation_id: "dl_pre",
+  });
+  // A briefing read after that: the line before it is still the delegation's, and the reading is
+  // still read from the briefing, since the speech began inside its span.
+  const briefingId = await briefing(third.conversation);
+  voice.noteAppend(third, { clientEventId: "append-3", messageId: briefingId });
+  await database.run(voice.consume(third, appended("append-3", 4000, 5000)));
+  await database.run(voice.consume(third, said("One agent finished.", 5000, 6200)));
+  assert.deepEqual(
+    await database.run(voice.recordSpokenReply(third, { startMs: 5000, endMs: 6200 })),
+    WRITTEN,
+  );
+  assert.deepEqual((await spokenAsks(third.conversation)).at(-1)?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: thirdSessionId,
+    from_ms: 5000,
+    to_ms: 6200,
+    delegation_id: "dl_pre",
+    read_from: briefingId,
+  });
 });
 
 test("a delegation arriving after the developer's line settled adopts that line under its id and takes it into the ask's turn, rather than cutting a second row", async () => {

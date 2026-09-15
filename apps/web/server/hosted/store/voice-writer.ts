@@ -591,9 +591,11 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
    * the voice model, cut from the segments over its span, whatever prompted
    * the words: an answer he gave himself, what he said around an ask handed
    * to the brain, a briefing or the brain's reply read aloud, a greeting or a
-   * beat. A reading stands beside the message it was read from, which the
-   * Conversation may fold behind the words actually said; the record keeps
-   * both, since a device with no voice still reads the message.
+   * beat. The row names the session and span it was cut from and the
+   * delegation it followed; the store reads from those what the words were
+   * read from, so the Conversation can fold that message behind the words
+   * actually said while the record keeps both, since a device with no voice
+   * still reads the message.
    */
   function recordSpokenReply(
     target: VoiceTarget,
@@ -614,7 +616,21 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       });
       const text = spoken.map((segment) => segment.text).join("");
       if (text.length === 0) return IGNORED;
-      const metadata: AssistantMessageMetadata = { author: MESSAGE_AUTHOR.VOICE_MODEL };
+      // The developer's latest line before the words, where one was handed to the brain, names the
+      // delegation the words followed; the store reads from that what the words were read from.
+      const latest = yield* store.latestSpokenLine(target.conversation, {
+        voiceSessionId,
+        startingAtOrBeforeMs: utterance.startMs,
+      });
+      if (!latest.ok) return { ok: false, refusal: latest.refusal };
+      const metadata: AssistantMessageMetadata = {
+        author: MESSAGE_AUTHOR.VOICE_MODEL,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: voiceSessionId,
+        from_ms: utterance.startMs,
+        to_ms: utterance.endMs,
+        ...(latest.line?.delegated ? { delegation_id: latest.line.clientId } : undefined),
+      };
       const written = yield* store.recordSpokenReply(target.conversation, {
         clientId: spokenRowClientId(
           voiceSessionId,

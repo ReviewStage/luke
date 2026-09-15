@@ -214,6 +214,7 @@ function BubbleRow({
   at,
   copy = true,
   unspoken = false,
+  reading = false,
   rating,
 }: {
   voice: RowVoice;
@@ -221,6 +222,8 @@ function BubbleRow({
   at: number;
   copy?: boolean;
   unspoken?: boolean;
+  /** Whether the words are what Luke's voice said of a message folded above them. */
+  reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
   rating?: React.ReactNode;
 }): React.JSX.Element {
@@ -229,6 +232,7 @@ function BubbleRow({
       className="conversation-entry"
       data-speaker={voice.speaker}
       data-unspoken={unspoken ? "true" : undefined}
+      data-reading={reading ? "true" : undefined}
     >
       <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
@@ -259,6 +263,33 @@ function ReasoningRow({ text }: { text: string }): React.JSX.Element {
         <details className="conversation-reasoning">
           <summary className="conversation-reasoning-summary">Thought</summary>
           <span className="conversation-reasoning-words">{text}</span>
+        </details>
+      </div>
+    </li>
+  );
+}
+
+/** What the fold of words Luke read aloud opens on. */
+const AS_WRITTEN_LABEL = "As written";
+
+/**
+ * The brain's words as written, folded to one line, because Luke read them
+ * aloud and the words he actually said stand as the bubble below. A native
+ * disclosure like a thought's, at the same inset, so the source is there to
+ * check against without reading as a second thing he said.
+ */
+function SourceWordsRow({ words }: { words: string }): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={CONVERSATION_ENTRY_SPEAKER.LUKE}
+      data-read-aloud="true"
+    >
+      <small className="visually-hidden">{VOICE.LUKE.label}</small>
+      <div className="conversation-message">
+        <details className="conversation-source">
+          <summary className="conversation-source-summary">{AS_WRITTEN_LABEL}</summary>
+          <MarkdownMessage words={words} className="conversation-source-words" />
         </details>
       </div>
     </li>
@@ -584,6 +615,47 @@ interface RatingContext {
   readonly onOfferFeedback?: ((draft: string) => void) | undefined;
 }
 
+/**
+ * How the thread's rows read one another aloud: by message id, the rows of
+ * the voice model's that were read from a message — its reply spoken after
+ * its turn, its briefing said — and every message by its id, so a reading
+ * finds what it read from wherever in the thread that message stands.
+ */
+interface Readings {
+  readonly readOf: ReadonlyMap<string, readonly ConversationViewMessage[]>;
+  readonly byId: ReadonlyMap<string, ConversationViewMessage>;
+}
+
+/** The message a row of the voice model's was read from, by the id its metadata names; nothing for words of his own. */
+function readFromOf(view: ConversationViewMessage): string | undefined {
+  const { message } = view;
+  if (message.role !== MESSAGE_ROLE.ASSISTANT) return undefined;
+  if (message.metadata.author !== MESSAGE_AUTHOR.VOICE_MODEL) return undefined;
+  return message.metadata.read_from;
+}
+
+/** The readings of the thread, folded once from every group before any row is drawn. */
+function readingsOf(groups: readonly ConversationViewTurnGroup[]): Readings {
+  const readOf = new Map<string, ConversationViewMessage[]>();
+  const byId = new Map<string, ConversationViewMessage>();
+  for (const group of groups) {
+    for (const message of group.messages) {
+      byId.set(message.message.id, message);
+      const from = readFromOf(message);
+      if (from === undefined) continue;
+      const standing = readOf.get(from);
+      if (standing === undefined) readOf.set(from, [message]);
+      else standing.push(message);
+    }
+  }
+  return { readOf, byId };
+}
+
+/** The text a reading says, for the rating draft that quotes it and the bubble that draws it. */
+function spokenWords(message: StoredUIMessage): string {
+  return userWords(message);
+}
+
 /** Whether a part draws Luke's words: a text part, or an announce call carrying its briefing. */
 function drawsWords(
   part: StoredPart,
@@ -661,6 +733,7 @@ function messageRows(
   pending: boolean,
   roster: readonly SessionView[],
   rating: RatingContext,
+  readings: Readings,
   onOpenChat?: (identity: SessionIdentity) => void,
 ): readonly React.JSX.Element[] {
   const { message } = view;
@@ -677,6 +750,29 @@ function messageRows(
     ];
   }
   if (message.role === MESSAGE_ROLE.SYSTEM) return [];
+  // A row of the voice model's read from a message in the thread is the words
+  // actually said: its bubble carries the rating of the message it read from,
+  // on the last of that message's readings, since the rating is of the
+  // brain's judgment and there is one control per message.
+  const readFrom = readFromOf(view);
+  const source = readFrom === undefined ? undefined : readings.byId.get(readFrom);
+  if (source !== undefined) {
+    const words = spokenWords(message);
+    const last = readings.readOf.get(source.message.id)?.at(-1) === view;
+    return [
+      <BubbleRow
+        key={message.id}
+        voice={VOICE.LUKE}
+        words={words}
+        at={view.createdAt}
+        reading={true}
+        rating={last ? ratingControl(source, words, rating) : undefined}
+      />,
+    ];
+  }
+  // A message read aloud is folded to its source: the words said stand below
+  // it as the reading's bubble, and the rating control moves there with them.
+  const readAloud = (readings.readOf.get(message.id)?.length ?? 0) > 0;
   const described = new Map<string, ConversationViewToolPart>(
     view.tools.map((tool) => [tool.toolCallId, tool]),
   );
@@ -687,13 +783,17 @@ function messageRows(
     drawsWords(part, described),
   );
   const control =
-    lastWordsAt === -1
+    lastWordsAt === -1 || readAloud
       ? undefined
       : ratingControl(view, quotedWords(message, message.parts[lastWordsAt]), rating);
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
     const placed = index === lastWordsAt ? control : undefined;
     if (isTextPart(part)) {
+      if (readAloud) {
+        rows.push(<SourceWordsRow key={key} words={part.text} />);
+        return;
+      }
       rows.push(
         judgment === JUDGMENT.OWN ? (
           <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={placed} />
@@ -717,6 +817,10 @@ function messageRows(
     const tool = described.get(part.toolCallId);
     if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
       const words = announcedWords(part);
+      if (words !== undefined && readAloud) {
+        rows.push(<SourceWordsRow key={key} words={words} />);
+        return;
+      }
       if (words !== undefined) {
         rows.push(
           <BubbleRow
@@ -792,6 +896,7 @@ export function ConversationTurns({
   children?: React.ReactNode;
 }): React.JSX.Element {
   let previousAt: number | undefined;
+  const readings = readingsOf(groups);
   // The wait is the thread's last object or nothing: a turn still running is
   // the newest one, since eve runs a conversation's turns one at a time and
   // in order, so a pending row above a settled reply is a record eve never
@@ -821,6 +926,7 @@ export function ConversationTurns({
               ask,
               onOfferFeedback: onOfferRatingFeedback,
             },
+            readings,
             onOpenChat,
           );
           if (

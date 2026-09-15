@@ -249,7 +249,42 @@ test("the emitted schema offers the three user shapes and names only the fields 
   const assistant = emitJsonSchema(ASSISTANT_MESSAGE_METADATA);
   assert.equal("type" in assistant && assistant.type, "object");
   if (!("type" in assistant) || assistant.type !== "object") return;
-  assert.deepEqual(Object.keys(assistant.properties).sort(), ["author", "compaction"]);
+  assert.deepEqual(Object.keys(assistant.properties).sort(), [
+    "author",
+    "channel",
+    "compaction",
+    "delegation_id",
+    "from_ms",
+    "read_from",
+    "to_ms",
+    "voice_session_id",
+  ]);
   assert.deepEqual([...assistant.required], ["author"]);
   assert.equal(assistant.additionalProperties, false);
+});
+
+test("an assistant row of the voice model's may name the session and span it was cut from, the delegation it followed, and the message it was read from; the brain's and a child's may not", () => {
+  const spoken = {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_0f3a1c22",
+    delegation_id: "dl_2b8c4d5e",
+    from_ms: 5000,
+    to_ms: 7400,
+    read_from: "3f0e5b1a-6c2d-4e8f-9a0b-1c2d3e4f5a6b",
+  };
+  assert.deepEqual(parse(ASSISTANT_MESSAGE_METADATA, spoken), spoken);
+  assert.deepEqual(parse(ASSISTANT_MESSAGE_METADATA, { author: MESSAGE_AUTHOR.VOICE_MODEL }), {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+  });
+  const refused: UnparsedWireValue[] = [
+    { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.VOICE },
+    { author: MESSAGE_AUTHOR.CHILD, read_from: spoken.read_from },
+    { author: MESSAGE_AUTHOR.BRAIN, delegation_id: "dl_2b8c4d5e" },
+    { author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 5000, to_ms: 4000 },
+    { author: MESSAGE_AUTHOR.VOICE_MODEL, from_ms: 5000 },
+  ];
+  for (const value of refused) {
+    assert.equal(refusalOf(ASSISTANT_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);
+  }
 });

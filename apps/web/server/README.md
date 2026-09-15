@@ -1391,8 +1391,14 @@ utterance settles: the developer's line and every utterance of Luke's are each
 cut from these segments into a finished row of the conversation, so the
 Conversation keeps the words the developer actually heard. A delegated
 exchange's reply is also the assistant message the brain wrote, and Luke's
-reading of it stands beside that message as its own row. No audio is ever
-stored.
+reading of it stands beside that message as its own row, whose metadata names
+the voice session and span it was cut from, the delegation it followed, and,
+where the store could tell, `read_from`: the message the words were read
+aloud from — the delegation's turn's journal where that turn had settled
+within two minutes of the write, in which case the row joins the turn, or the
+briefing whose `speech.spoken` began inside the span. The desktop folds a
+message read from to its words as written and draws the reading as the
+bubble, with the message's rating on it. No audio is ever stored.
 
 Two writers share those tables and never a column. The voice service's own
 `server/voice/session-record.ts` owns the session row's whole life: it is
