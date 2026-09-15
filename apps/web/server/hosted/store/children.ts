@@ -1,8 +1,16 @@
+import type { TextUIPart } from "ai";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { Fragment } from "effect/unstable/sql/Statement";
-import { TURN_STATUS, type TurnStatus } from "../../core.js";
+import {
+  CHILD_STATUS,
+  CHILDREN_READ_BOUNDS,
+  type ChildStatus,
+  MESSAGE_ROLE,
+  TURN_STATUS,
+  type TurnStatus,
+} from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./database.js";
 
@@ -17,18 +25,9 @@ import { InstantColumnSchema } from "./database.js";
  * stamped went with its parent and is listed by nothing here.
  */
 
+export { CHILD_STATUS };
+
 type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
-
-/** Where a child stands, derived from its latest turn: accepted before one runs, then the turn's own status. */
-export const CHILD_STATUS = {
-  ACCEPTED: "accepted",
-  RUNNING: TURN_STATUS.RUNNING,
-  SETTLED: TURN_STATUS.SETTLED,
-  CANCELLED: TURN_STATUS.CANCELLED,
-  FAILED: TURN_STATUS.FAILED,
-} as const;
-
-type ChildStatus = (typeof CHILD_STATUS)[keyof typeof CHILD_STATUS];
 
 export interface ChildRecord {
   readonly id: string;
@@ -36,6 +35,8 @@ export interface ChildRecord {
   readonly parentKind: ConversationKind;
   /** The name the delegation gave the child, or none. */
   readonly label: string | null;
+  /** The first words the parent handed the child, cut at the wire's excerpt bound; none before a line stands or where it holds no text. */
+  readonly task: string | null;
   readonly createdAt: Date;
   /** When the child's completion reached its parent as a turn of the parent's own; unset until it has. */
   readonly completionDeliveredAt: Date | null;
@@ -46,13 +47,27 @@ export interface ChildRecord {
   readonly failure: string | null;
 }
 
+/**
+ * Where the account's children stand as one instant: the latest of any
+ * child's stamps, as Postgres renders it to the microsecond, and that child's
+ * id to break a tie. Text rather than a `Date` on the turn cursor's own terms:
+ * a millisecond cannot tell two stamps set in the same millisecond apart.
+ */
+export interface ChildrenHeadPosition {
+  readonly changedAt: string;
+  readonly id: string;
+}
+
 type ChildReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 
-/** The child's row joined to its parent's kind and its latest turn, where one stands. */
+/** The SDK's own name for a text part, which is what a task's words are read from. */
+const TEXT_PART_TYPE: TextUIPart["type"] = "text";
+
+/** The child's row joined to its parent's kind, its latest turn where one stands, and its task's excerpt. */
 const ChildRowSchema = Schema.Struct({
   id: Schema.String,
   parentConversationId: Schema.String,
@@ -63,6 +78,7 @@ const ChildRowSchema = Schema.Struct({
     CONVERSATION_KIND.THREAD,
   ]),
   label: Schema.NullOr(Schema.String),
+  task: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   completionDeliveredAt: Schema.NullOr(InstantColumnSchema),
   turnStatus: Schema.NullOr(
@@ -92,23 +108,20 @@ const ChildRowSchema = Schema.Struct({
 type ChildRow = typeof ChildRowSchema.Type;
 
 /**
- * The one select both reads share: the account's standing children under
- * `conditions`, newest first, each joined to its parent (a child without
- * one is a row no delegation wrote, and is not a child) and to the latest of
- * its turns by the instant it was queued, the id breaking a tie. Both joins
- * hold to the child's own account, so a parent or a turn written under
- * another lends the child nothing, whatever id it names.
+ * The rows every read here selects from: the account's standing children
+ * under `conditions`, each joined to its parent (a child without one is a
+ * row no delegation wrote, and is not a child) and to the latest of its
+ * turns by the instant it was queued, the id breaking a tie. Both joins hold
+ * to the child's own account, so a parent or a turn written under another
+ * lends the child nothing, whatever id it names.
  */
-const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[], limit: number) =>
+const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[]) =>
   sql`
-    select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
-           child.created_at, child.completion_delivered_at,
-           latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure
     from conversations child
     join conversations parent
       on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
     left join lateral (
-      select status, started_at, settled_at, failure
+      select status, queued_at, started_at, settled_at, failure
       from turns
       where turns.conversation_id = child.id and turns.user_id = child.user_id
       order by turns.queued_at desc, turns.id desc
@@ -119,6 +132,40 @@ const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[
       sql`child.deleted_at is null`,
       ...conditions,
     ])}
+  `;
+
+/**
+ * The task's excerpt: the text parts of the child's first user line, in
+ * their order, cut to the wire's bound. The cut is in characters where the
+ * wire's is in UTF-16 units, so the read stays bounded and the route makes
+ * the exact cut.
+ */
+const taskExcerpt = (sql: SqlClient.SqlClient) =>
+  sql`
+    (
+      select left(string_agg(part.value ->> 'text', ' ' order by part.ordinality), ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS})
+      from (
+        select parts
+        from messages
+        where messages.conversation_id = child.id
+          and messages.user_id = child.user_id
+          and messages.role = ${MESSAGE_ROLE.USER}
+        order by messages.seq asc
+        limit 1
+      ) first_line,
+      jsonb_array_elements(first_line.parts) with ordinality as part(value, ordinality)
+      where part.value ->> 'type' = ${TEXT_PART_TYPE}
+    )
+  `;
+
+/** The one select both record reads share: newest first, at most `limit` rows. */
+const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[], limit: number) =>
+  sql`
+    select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
+           ${taskExcerpt(sql)} as task,
+           child.created_at, child.completion_delivered_at,
+           latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure
+    ${childrenFrom(sql, conditions)}
     order by child.created_at desc, child.id desc
     limit ${limit}
   `;
@@ -142,6 +189,41 @@ const findChild = SqlSchema.findOneOption({
         [sql`child.user_id = ${request.userId}`, sql`child.id = ${request.childId}`],
         1,
       ),
+    ),
+});
+
+/**
+ * The instant a child last changed: opened, its completion delivered, or its
+ * latest turn queued, started, or settled, whichever is latest. Each stamp
+ * the child has not reached falls back to its opening, so the expression is
+ * never null.
+ */
+const CHILD_CHANGED_AT_SQL =
+  "greatest(child.created_at, coalesce(child.completion_delivered_at, child.created_at), " +
+  "coalesce(latest.queued_at, child.created_at), coalesce(latest.started_at, child.created_at), " +
+  "coalesce(latest.settled_at, child.created_at))";
+
+const childChangedAt = (sql: SqlClient.SqlClient) => sql.literal(CHILD_CHANGED_AT_SQL);
+
+// Rendered as the turn cursor's instant is: the UTC wall clock with the zone
+// spelled here, so the text is a property of the query rather than of the
+// connection's TimeZone.
+const CHILD_CHANGED_AT_TEXT_SQL = `((${CHILD_CHANGED_AT_SQL}) at time zone 'UTC')::text || '+00'`;
+const childChangedAtText = (sql: SqlClient.SqlClient) => sql.literal(CHILD_CHANGED_AT_TEXT_SQL);
+
+const findChildrenHead = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }).pipe(
+    Schema.encodeKeys({ changedAt: "changed_at" }),
+  ),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select child.id, ${childChangedAtText(sql)} as changed_at
+        ${childrenFrom(sql, [sql`child.user_id = ${request.userId}`])}
+        order by ${childChangedAt(sql)} desc, child.id desc
+        limit 1
+      `,
     ),
 });
 
@@ -285,4 +367,11 @@ export function readChild(
   childId: string,
 ): Effect.Effect<Option.Option<ChildRecord>, ChildReadFailure, SqlClient.SqlClient> {
   return Effect.map(findChild({ userId, childId }), Option.map(toChildRecord));
+}
+
+/** Where the account's children stand: the child that changed last and the instant it did; none while no child stands. */
+export function childrenHead(
+  userId: string,
+): Effect.Effect<Option.Option<ChildrenHeadPosition>, ChildReadFailure, SqlClient.SqlClient> {
+  return findChildrenHead({ userId });
 }

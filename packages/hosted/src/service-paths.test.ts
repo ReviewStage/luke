@@ -15,8 +15,9 @@ test("the device registration has a stable endpoint path", () => {
   assert.equal(HOSTED_SERVICE_PATH.DEVICES, "/api/devices");
 });
 
-test("Clear stands beside the Conversation's reads under the same prefix", () => {
+test("Clear and the children read stand beside the Conversation's reads under the same prefix", () => {
   assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_CLEAR, "/api/conversation/clear");
+  assert.equal(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, "/api/conversation/children");
   assert.notEqual(
     HOSTED_SERVICE_PATH.CONVERSATION_CLEAR,
     HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES,

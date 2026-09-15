@@ -3,7 +3,13 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
-import { type ChildRecord, listChildren, readChild } from "./children.js";
+import {
+  type ChildRecord,
+  type ChildrenHeadPosition,
+  childrenHead,
+  listChildren,
+  readChild,
+} from "./children.js";
 import { type OfferedToolSchema, recordToolSet } from "./content-addressed.js";
 import { type HostedStoreContext, userSeal } from "./database.js";
 import {
@@ -148,6 +154,8 @@ export interface HostedStore {
     children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
     /** One of the account's standing children by id, on the same terms; nothing where none stands. */
     child(userId: string, childId: string): HostedStoreEffect<ChildRecord | undefined>;
+    /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond; nothing while no child stands. */
+    childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
@@ -277,6 +285,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
         standingObservedConversation(userId, identity, new Date(now)),
       children: (userId, limit) => listChildren(userId, limit),
       child: (userId, childId) => Effect.map(readChild(userId, childId), Option.getOrUndefined),
+      childrenHead: (userId) => Effect.map(childrenHead(userId), Option.getOrUndefined),
     },
     main: {
       clear: (userId, now) => clearMainConversation(userId, now),

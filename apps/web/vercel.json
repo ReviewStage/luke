@@ -97,6 +97,10 @@
           "dest": "/api/default.js?route=changes"
         },
         {
+          "src": "/api/conversation/children",
+          "dest": "/api/default.js?route=conversation/children"
+        },
+        {
           "src": "/api/conversation/clear",
           "dest": "/api/default.js?route=conversation/clear"
         },

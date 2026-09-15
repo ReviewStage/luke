@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   changesAnswerSchema,
+  childrenHeadSchema,
   DEVICE_PLATFORM,
   HOSTED_API_ERROR,
   sequenceReadCursorSchema,
@@ -216,6 +217,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.deepEqual(positionsOf(empty.messages), []);
   assert.deepEqual(positionsOf(empty.events), []);
   assert.equal(empty.turns, undefined);
+  assert.equal(empty.children, undefined);
   assert.equal(empty.rosterObservedAt, undefined);
 
   const main = await insertConversation(database.run, {
@@ -294,6 +296,8 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     id: turnId,
   });
   assert.equal(heads.rosterObservedAt, NOW - 30_000);
+  // The children head names the child that changed last; here the one child, at its opening.
+  assert.equal(parse(childrenHeadSchema, heads.children ?? "")?.id, child);
   // The messages head carries each conversation's journal revision; the events head carries none.
   assert.deepEqual(
     sorted(revisionsOf(heads.messages)),
@@ -338,6 +342,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   );
   assert.equal(written.events, heads.events);
   assert.equal(written.turns, heads.turns);
+  assert.equal(written.children, heads.children);
 
   const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 1000)));
   const cleared = await answered(
@@ -351,4 +356,6 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     ]),
   );
   assert.equal(cleared.turns, undefined);
+  // The child went with its parent, so no child stands and the head is absent.
+  assert.equal(cleared.children, undefined);
 });

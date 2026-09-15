@@ -5,6 +5,9 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
+  CHILDREN_READ_BOUNDS,
+  type ChildRead,
+  type ChildrenAnswer,
   type ClientUIMessage,
   CONVERSATION_EVENT_KIND,
   CONVERSATION_VIEW_SOURCE,
@@ -42,6 +45,7 @@ import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type {
+  ChildRecord,
   HostedStore,
   StandingConversation,
   StoredEventRecord,
@@ -573,3 +577,69 @@ export const handleBrainTurns = /* @__PURE__ */ Effect.fn("handleBrainTurns")(fu
   };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
+
+/** A settled text with its ends trimmed, cut to the wire's excerpt bound in the units the wire counts; nothing where nothing stands. */
+function taskExcerpt(task: string | null): string | undefined {
+  const trimmed = task?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.slice(0, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS).trimEnd();
+}
+
+/**
+ * One child as the wire carries it, or nothing for a child whose parent is
+ * of a kind the wire does not name. A child cannot open a child of its own
+ * and a thread delegates nothing, so such a row is one no delegation wrote;
+ * it is left out of the answer rather than refusing the answer whole.
+ */
+function readChild(child: ChildRecord): ChildRead | undefined {
+  if (
+    child.parentKind !== CONVERSATION_KIND.MAIN &&
+    child.parentKind !== CONVERSATION_KIND.OBSERVED
+  ) {
+    return undefined;
+  }
+  const label = child.label?.trim();
+  const task = taskExcerpt(child.task);
+  return {
+    id: child.id,
+    parentConversationId: child.parentConversationId,
+    parentKind:
+      child.parentKind === CONVERSATION_KIND.MAIN
+        ? CONVERSATION_VIEW_SOURCE.MAIN
+        : CONVERSATION_VIEW_SOURCE.OBSERVED,
+    ...(label ? { label } : undefined),
+    ...(task !== undefined ? { task } : undefined),
+    status: child.status,
+    acceptedAt: child.createdAt.getTime(),
+    ...(child.startedAt ? { startedAt: child.startedAt.getTime() } : undefined),
+    ...(child.settledAt ? { settledAt: child.settledAt.getTime() } : undefined),
+    ...(child.failure !== null ? { failure: child.failure } : undefined),
+  };
+}
+
+/**
+ * GET: the account's children as they stand, newest first and bounded. The
+ * read takes no cursor, since a child's status changes in place and the list
+ * is short: a query is accepted and ignored, and the change signal's
+ * `children` head is what tells a device to read again.
+ */
+export const handleConversationChildren = /* @__PURE__ */ Effect.fn("handleConversationChildren")(
+  function* (
+    options: Pick<ResourceReadOptions, "request" | "resolveUserId"> & {
+      store: Pick<HostedStore, "directory">;
+    },
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+    const gate = yield* readGate(options);
+    if (gate instanceof Response) return gate;
+    const { userId } = gate;
+
+    const children = yield* options.store.directory.children(
+      userId,
+      CHILDREN_READ_BOUNDS.MAX_CHILDREN,
+    );
+    const answer: ChildrenAnswer = {
+      children: children.map(readChild).filter((child) => child !== undefined),
+    };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  },
+);

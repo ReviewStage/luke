@@ -3,10 +3,12 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedChangesClient } from "./changes-client.js";
-import { encodeSequenceReadCursor } from "./reads-wire.js";
+import { encodeChildrenHead, encodeSequenceReadCursor } from "./reads-wire.js";
 
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+const CHILD = "3c000000-0000-4000-8000-000000000012";
 const EMPTY_CURSOR = encodeSequenceReadCursor([]);
+const CHILDREN_HEAD = encodeChildrenHead({ changedAt: "2026-09-10 12:03:00+00", id: CHILD });
 
 function client(options: Partial<ConstructorParameters<typeof HostedChangesClient>[0]> = {}) {
   return new HostedChangesClient({
@@ -23,7 +25,12 @@ it.effect(
     Effect.gen(function* () {
       const api = fakeCloudApi({
         "POST /api/changes": {
-          answer: () => ({ seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR }),
+          answer: () => ({
+            seen: true,
+            messages: EMPTY_CURSOR,
+            events: EMPTY_CURSOR,
+            children: CHILDREN_HEAD,
+          }),
         },
       });
 
@@ -36,7 +43,12 @@ it.effect(
         api.layer,
       );
 
-      assert.deepEqual(answer, { seen: true, messages: EMPTY_CURSOR, events: EMPTY_CURSOR });
+      assert.deepEqual(answer, {
+        seen: true,
+        messages: EMPTY_CURSOR,
+        events: EMPTY_CURSOR,
+        children: CHILDREN_HEAD,
+      });
       assert.deepEqual(recordedRoutes(api.requests()), ["POST /api/changes"]);
       assert.deepEqual(api.credentials(), ["token-1"]);
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {

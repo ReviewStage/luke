@@ -77,6 +77,13 @@ export const HOSTED_SERVICE_PATH = {
   CONVERSATION_MESSAGES: "/api/conversation/messages",
   /** The events about the Conversation's messages behind a device's own cursor (GET). */
   CONVERSATION_EVENTS: "/api/conversation/events",
+  /**
+   * The account's children (GET): the conversations a delegation opened,
+   * newest first and bounded, each where its latest turn leaves it. No
+   * cursor, since a child's status changes in place; the change signal's
+   * `children` head says when to read it again.
+   */
+  CONVERSATION_CHILDREN: "/api/conversation/children",
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
   BRAIN_TURNS: "/api/brain/turns",
   /**
