@@ -4,7 +4,6 @@ import { it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import {
-  deleteWorkspaceFile,
   listDailyNotes,
   listWorkspaceFiles,
   readWorkspaceFile,
@@ -65,10 +64,6 @@ it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => 
           { path: NOTE_PATH, updatedAt: NOW + 2 },
         ],
       );
-
-      assert.equal(yield* deleteWorkspaceFile(userId, NOTE_PATH), true);
-      assert.equal(yield* deleteWorkspaceFile(userId, NOTE_PATH), false);
-      assert.equal((yield* listWorkspaceFiles(userId)).length, 1);
     }),
   );
 
@@ -159,8 +154,6 @@ it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => 
         assert.equal(Exit.isFailure(written), true);
         const read = yield* Effect.exit(readWorkspaceFile(userId, path));
         assert.equal(Exit.isFailure(read), true);
-        const removed = yield* Effect.exit(deleteWorkspaceFile(userId, path));
-        assert.equal(Exit.isFailure(removed), true);
       }
       assert.deepEqual([...(yield* listWorkspaceFiles(userId))], []);
     }),

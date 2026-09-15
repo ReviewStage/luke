@@ -28,7 +28,6 @@ import { DISPATCH_QUERY } from "../server/function-dispatch";
 import {
   FUNCTION_MAX_DURATION_SECONDS,
   functionDefinitions,
-  functionPath,
   routeKeyOf,
   VOICE_FUNCTION_MAX_DURATION_SECONDS,
 } from "../server/function-durations";
@@ -51,6 +50,11 @@ import {
 
 const WEB = fileURLToPath(new URL("..", import.meta.url));
 
+/** The path a client calls for a route key, which is `routeKeyOf`'s own inverse. */
+function clientPath(routeKey: string): string {
+  return `/api/${routeKey}`;
+}
+
 test("every voice function carries the 800 second maximum duration", () => {
   for (const path of Object.values(VOICE_SERVICE_PATH)) {
     assert.equal(FUNCTION_MAX_DURATION_SECONDS.get(path), VOICE_FUNCTION_MAX_DURATION_SECONDS);
@@ -60,7 +64,6 @@ test("every voice function carries the 800 second maximum duration", () => {
 test("every path given a duration is a route the bundle emits", () => {
   for (const path of FUNCTION_MAX_DURATION_SECONDS.keys()) {
     assert.ok(existsSync(join(WEB, routeSourcePath(routeKeyOf(path)))), path);
-    assert.equal(functionPath(`${routeKeyOf(path)}.ts`), path);
   }
 });
 
@@ -84,10 +87,7 @@ test("every route belongs to exactly one function, and the voice routes alone st
 test("a grouped function's routes all had the duration the group declares", async () => {
   for (const definition of await webFunctions(WEB)) {
     for (const route of definition.routes) {
-      assert.equal(
-        FUNCTION_MAX_DURATION_SECONDS.get(functionPath(`${route}.ts`)),
-        definition.maxDuration,
-      );
+      assert.equal(FUNCTION_MAX_DURATION_SECONDS.get(clientPath(route)), definition.maxDuration);
     }
   }
 });

@@ -152,19 +152,6 @@ const insertFile = SqlSchema.findAll({
     ),
 });
 
-const removeFile = SqlSchema.findAll({
-  Request: FileKeySchema,
-  Result: WrittenPathSchema,
-  execute: (key) =>
-    statement(
-      (sql) => sql`
-        delete from workspace_file
-        where user_id = ${key.userId} and path = ${key.path}
-        returning path
-      `,
-    ),
-});
-
 const findFiles = SqlSchema.findAll({
   Request: Schema.String,
   Result: WorkspaceFileListingSchema,
@@ -263,13 +250,6 @@ export function seedWorkspaceFile(
   now: number,
 ): Effect.Effect<boolean, WorkspaceFileFailure, SqlClient.SqlClient> {
   return Effect.map(insertFile({ userId, path, content, now }), (written) => written.length > 0);
-}
-
-export function deleteWorkspaceFile(
-  userId: string,
-  path: string,
-): Effect.Effect<boolean, WorkspaceFileFailure, SqlClient.SqlClient> {
-  return Effect.map(removeFile({ userId, path }), (removed) => removed.length > 0);
 }
 
 export function listWorkspaceFiles(
