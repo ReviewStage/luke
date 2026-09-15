@@ -16,10 +16,7 @@ function providerIdentity(providerId: keyof typeof PROVIDER_IDENTITY_BY_ID): Ses
 export const AGENT_IDENTITY = {
   CLAUDE_CODE: providerIdentity(PROVIDER_ID.CLAUDE_CODE),
   CODEX: providerIdentity(PROVIDER_ID.CODEX),
-  COPILOT: { id: HOSTED_AGENT_ID.COPILOT, displayName: "Copilot" },
   CURSOR: { id: HOSTED_AGENT_ID.CURSOR, displayName: "Cursor" },
-  GEMINI_CLI: { id: HOSTED_AGENT_ID.GEMINI_CLI, displayName: "Gemini CLI" },
-  GROK_BUILD: { id: HOSTED_AGENT_ID.GROK_BUILD, displayName: "Grok Build" },
   OPENCODE: { id: HOSTED_AGENT_ID.OPENCODE, displayName: "OpenCode" },
 } as const satisfies Readonly<Record<string, SessionProvider>>;
 

@@ -159,11 +159,6 @@ export function workspaceAgentModelLabel(
   return entry?.models.find((model) => model.id === selection.model)?.label ?? selection.model;
 }
 
-/** Guards a selection arriving over IPC: its shape first, then the table. */
-export function isWorkspaceAgentSelection(providerId: string, value: UnparsedWireValue): boolean {
-  return parseWorkspaceAgentSelection(providerId, value) !== undefined;
-}
-
 export function parseWorkspaceAgentSelection(
   providerId: string,
   value: UnparsedWireValue,

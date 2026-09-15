@@ -12,15 +12,6 @@ import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@s
 import { Schema } from "effect";
 import type { SessionIdentity } from "../session-identity.js";
 
-/**
- * The note a line carries in place of an identity the roster no longer
- * reports, taught verbatim by the standing instructions a voice runs under,
- * so the words the model is taught are always the words it reads: a line
- * wearing it names work that is gone — perhaps already archived — never an
- * invitation to act on a lookalike still observed.
- */
-export const SESSION_NO_LONGER_OBSERVED_NOTE = "this session is no longer observed";
-
 /** What one history line records, which also says who it speaks for. */
 export const CONVERSATION_ENTRY_KIND = {
   /** The developer's own spoken turn, as the voice service transcribed it. */
@@ -75,11 +66,7 @@ export interface ConversationEntry {
   /**
    * The roster-validated session the line was about, when it was about one.
    * Only ever an identity the roster reported at the moment of the entry —
-   * never one a model composed — and named to a model only while the
-   * session is still observed; once the roster lets the session go,
-   * {@link SESSION_NO_LONGER_OBSERVED_NOTE} stands in place of the ids, so a
-   * stale identity can neither steer a tool call toward a refusal nor leave
-   * "that chat" open to a lookalike.
+   * never one a model composed.
    */
   identity?: SessionIdentity;
   /**
