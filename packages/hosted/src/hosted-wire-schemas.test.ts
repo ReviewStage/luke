@@ -76,7 +76,6 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
   "mint-wire": {
     hostedMintAnswerSchema: mintWire.hostedMintAnswerSchema,
-    remoteMintAnswerSchema: mintWire.remoteMintAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof mintWire>,
   "observe-wire": {
     observeAnswerSchema: observeWire.observeAnswerSchema,

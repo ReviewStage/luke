@@ -1,26 +1,23 @@
 import { LUKE_PERSONA } from "@sidecar/guide";
 import { LIVE_VOICE, type LiveVoice } from "@sidecar/live";
-import { SESSION_NO_LONGER_OBSERVED_NOTE } from "@sidecar/session";
 import { isWireNumber, isWireString, text, type UnparsedWireValue } from "@sidecar/wire";
-import { type ActionToolDefinition, remoteRealtimeToolDefinitions } from "./actions.js";
 
 /**
- * The Realtime session document the hosted mint routes still build: the
- * watch's, until it moves onto the hosted exchange (LUKE-224), and the two the
- * installed desktops of earlier releases still ask for. The phone's callers
- * went with its move (LUKE-216, LUKE-219); nothing on the phone reads this
- * file. It lives here rather than in `@sidecar/hosted` beside the credential
- * contract because the watch's document carries the watch's own action
- * tools, declared in this package, and every scene opens with the persona
- * from `@sidecar/guide`; `hosted` is wire vocabulary that reaches neither,
- * and an edge from it to this package would point behavior below transport.
- * This is the lowest package that may name both. The credential the mint
- * answers with is read into the contract where that contract lives, in
- * `@sidecar/hosted`'s `realtime-contract.ts`. The voices are the Live
- * vocabulary's, narrowed to the ones the Realtime API documents: the desktop
- * and the phone offer every Live voice, and a synced preference outside this
- * set falls to the default on the watch before any mint reads it. Everything
- * in this file goes when the watch moves, in LUKE-224.
+ * The Realtime session document the two legacy hosted mints still build for
+ * the installed desktops of earlier releases (`/api/voice/mint` and
+ * `/api/voice/introduction-mint`). Those two mints are this file's last
+ * readers: the phone moved onto the hosted exchange with LUKE-216 and the
+ * watch with LUKE-224, and LUKE-219 deleted their remote mint; retiring the
+ * desktop mints, and this file with them, is a desktop ticket. It lives here
+ * rather than in `@sidecar/hosted` beside the credential contract because
+ * every scene opens with the persona from `@sidecar/guide`; `hosted` is wire
+ * vocabulary that reaches neither, and an edge from it to this package would
+ * point behavior below transport. The credential the mint answers with is
+ * read into the contract where that contract lives, in `@sidecar/hosted`'s
+ * `realtime-contract.ts`. The voices are the Live vocabulary's, narrowed to
+ * the ones the Realtime API documents: every current client offers every
+ * Live voice, and a synced preference outside this set falls to the default
+ * before the mint reads it.
  */
 
 /** The endpoint that mints a client secret. */
@@ -42,7 +39,7 @@ export const REALTIME_VOICE = {
 
 export type RealtimeVoice = (typeof REALTIME_VOICE)[keyof typeof REALTIME_VOICE];
 
-/** The watch's settings offer the voices in this order. */
+/** The voices in the order a picker offered them. */
 export const REALTIME_VOICE_LIST: readonly RealtimeVoice[] = Object.values(REALTIME_VOICE);
 
 /** Guards a voice arriving from storage or the wire. */
@@ -52,14 +49,14 @@ export function isRealtimeVoice(value: UnparsedWireValue): value is RealtimeVoic
   return REALTIME_VOICE_LIST.includes(value as RealtimeVoice);
 }
 
-/** The voice a Realtime session is minted with for a Live voice the watch chose or synced. */
+/** The voice a Realtime session is minted with for a Live voice the caller chose or synced. */
 export function realtimeVoiceFor(voice: LiveVoice): RealtimeVoice {
   return isRealtimeVoice(voice) ? voice : REALTIME_DEFAULTS.VOICE;
 }
 
 /**
- * Every pace the watch can speak at, as a multiple of the voice's natural
- * rate. The API accepts anything from 0.25 to 1.5; the offered steps are the
+ * Every pace a Realtime session can speak at, as a multiple of the voice's
+ * natural rate. The API accepts anything from 0.25 to 1.5; the offered steps are the
  * ones that stay intelligible, spaced widely enough to be told apart by ear.
  */
 export const REALTIME_VOICE_SPEED = {
@@ -71,7 +68,7 @@ export const REALTIME_VOICE_SPEED = {
 
 export type RealtimeVoiceSpeed = (typeof REALTIME_VOICE_SPEED)[keyof typeof REALTIME_VOICE_SPEED];
 
-/** The watch's settings offer the speeds in this order, slowest to fastest. */
+/** The paces in order, slowest to fastest. */
 export const REALTIME_VOICE_SPEED_LIST: readonly RealtimeVoiceSpeed[] =
   Object.values(REALTIME_VOICE_SPEED);
 
@@ -99,7 +96,7 @@ export interface RealtimeSessionOptions {
 
 const REALTIME_SESSION_TYPE = "realtime";
 
-/** The rate the watch's press captures PCM at; audio read at any other rate is not heard at all. */
+/** The rate a press captured PCM at; audio read at any other rate is not heard at all. */
 const PRESS_AUDIO_SAMPLE_RATE = 24_000;
 
 /**
@@ -184,33 +181,6 @@ const DESKTOP: readonly string[] = [
 ];
 
 /**
- * The watch's call carries the roster as context and the session actions as
- * its own tools, so it keeps the resolution rules those need until it too is
- * given a brain (LUKE-224). The phone's call, which shared these rules, is
- * the hosted brain's now and reads none of them.
- */
-const REMOTE: readonly string[] = [
-  "On a call:",
-  "- The roster is private context, not a report: answer out of it, never read it out.",
-  "- Follow the developer's lead and preserve their exact requested scope. Never expand an agent's",
-  "  task with improvements, requirements, or elaboration of your own.",
-  "- Repeat back what they said only when an action needs explicit confirmation first.",
-  '- A roster line\'s bracketed capability data, its ages ("updated minutes ago"), and its branch',
-  "  stay unsaid unless asked, or unless they are what tells two agents apart.",
-  "",
-  "How to know which agent an ask means:",
-  '- Resolve "that chat" or "that agent" from this call\'s own turns.',
-  `- A line marked "${SESSION_NO_LONGER_OBSERVED_NOTE}" names work the roster has let go — ` +
-    "perhaps already archived. Say that plainly; never act on a different session in its place.",
-  "- When nothing settles which agent is meant, ask which one, naming each candidate in a few " +
-    "words from its work — never guess. Do not pick an agent just because it is listed first " +
-    "or updated most recently unless the user explicitly asks for the latest or most recent one.",
-  "- An explicit latest or most-recent ask resolves by the recency labels in the observed roster; " +
-    "do not ask for a chat name when recency is the selection the user gave.",
-  "- Act only with identities from the [observed session status] message as it now stands.",
-];
-
-/**
  * The installed desktops' first-run introduction has no roster, no guide, and
  * no actions, so its rules replace the conversation's rather than extend them.
  */
@@ -238,7 +208,6 @@ const INTRODUCTION: readonly string[] = [
 /** The rules each Realtime scene adds over what every minted session is told. */
 export const REALTIME_SCENE = {
   DESKTOP,
-  REMOTE,
   INTRODUCTION,
 } as const;
 
@@ -268,14 +237,14 @@ function realtimeReasoning(model: string): { effort: "low" } | undefined {
  * detection is disabled outright so the caller's press, not a voice-activity
  * heuristic, decides when the session is listening.
  */
-export function realtimeSessionConfig<Tool extends MouthToolDefinition | ActionToolDefinition>(
+export function realtimeSessionConfig(
   rules: readonly string[],
-  tools: readonly Tool[] | "none",
+  tools: readonly MouthToolDefinition[] | "none",
   options: RealtimeSessionOptions = {},
 ) {
   const model = text(options.model) ?? REALTIME_DEFAULTS.MODEL;
   const reasoning = realtimeReasoning(model);
-  const noTools: readonly Tool[] = [];
+  const noTools: readonly MouthToolDefinition[] = [];
   return {
     type: REALTIME_SESSION_TYPE,
     model,
@@ -315,21 +284,10 @@ export function realtimeClientSecretRequest(options: RealtimeSessionOptions = {}
 }
 
 /**
- * The request body for the watch's mint. The call carries the roster itself
- * and actions through its own tools, so it keeps the rules that resolve
- * agents from that roster and the actions the mobile action endpoints serve.
- */
-export function remoteRealtimeClientSecretRequest(options: RealtimeSessionOptions = {}) {
-  return {
-    session: realtimeSessionConfig(REALTIME_SCENE.REMOTE, remoteRealtimeToolDefinitions(), options),
-  };
-}
-
-/**
  * The session document an installed desktop's introduction credential is
  * minted against: no tools declared and no way to choose one, because the
  * introduction endpoint answers callers with no account.
  */
 export function introductionSessionConfig(options: RealtimeSessionOptions = {}) {
-  return realtimeSessionConfig<MouthToolDefinition>(REALTIME_SCENE.INTRODUCTION, "none", options);
+  return realtimeSessionConfig(REALTIME_SCENE.INTRODUCTION, "none", options);
 }

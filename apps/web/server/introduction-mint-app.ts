@@ -25,8 +25,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * The accountless introduction's mint as its own route group. It stands apart
  * from the signed-in mints deliberately: it resolves no bearer, spends the
  * deployment's own shared daily ceiling rather than an account's allowance,
- * and takes none of the phone mint's cloud-observe graph into the one
- * function a first run reaches before anything else.
+ * and keeps the one function a first run reaches before anything else as
+ * small as that.
  */
 
 export interface IntroductionMintSeams extends MintSeams {

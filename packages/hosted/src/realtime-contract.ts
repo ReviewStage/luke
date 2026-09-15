@@ -1,12 +1,12 @@
 import { isRecord, text, type UnparsedWireValue, wholeNumber } from "@sidecar/wire";
 
 /**
- * The ephemeral Realtime credential the legacy mints answer with. Its readers
- * are the watch's remote mint, until the watch moves onto the hosted exchange
- * (LUKE-224), and the two mints the installed desktops of earlier releases
- * still ask for, which are the desktop's to retire; the phone reads none of
- * it since its own move (LUKE-216, LUKE-219). The remote half of this
- * contract goes with the watch.
+ * The ephemeral Realtime credential the two legacy mints answer with. The
+ * installed desktops of earlier releases are its last readers, through
+ * `/api/voice/mint` and `/api/voice/introduction-mint`; the phone and the
+ * watch moved onto the hosted exchange (LUKE-216, LUKE-224) and the mint of
+ * their own went with LUKE-219. Retiring the desktop mints, and this contract
+ * with them, is a desktop ticket.
  */
 
 /** The OpenAI path a Realtime connection opens after minting. */
@@ -24,10 +24,11 @@ export interface RealtimeConnection extends RealtimeCredential {
   callsUrl: string;
   /**
    * WebSocket realtime endpoint, including ?model=, for a client that opens
-   * the call over WebSocket rather than WebRTC. The hosted mint always
-   * carries it; a connection minted straight against OpenAI on the
-   * developer's own key does not, because that mint answers a calls URL
-   * alone and composing one here would invent an endpoint.
+   * the call over WebSocket rather than WebRTC; no current client does, and
+   * the field stays because the hosted mint's recorded answer carries it. A
+   * connection minted straight against OpenAI on the developer's own key
+   * does not, because that mint answers a calls URL alone and composing one
+   * here would invent an endpoint.
    */
   wsUrl?: string;
 }

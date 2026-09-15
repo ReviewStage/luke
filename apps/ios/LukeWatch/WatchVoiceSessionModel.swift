@@ -245,7 +245,7 @@ final class WatchVoiceSessionModel {
 
     private func startCapturing(into session: HostedAudioSession) {
         guard capturer == nil else { return }
-        let capturer = PCMAudioCapturer(policy: .hostOwned, sampleRate: session.format.rate)
+        let capturer = PCMAudioCapturer(sampleRate: session.format.rate)
         self.capturer = capturer
         captureTask = Task { [weak self] in
             do {
@@ -332,7 +332,7 @@ final class WatchVoiceSessionModel {
     /// says which received audio has played.
     private func play(_ samples: [Int16]) {
         guard let session, !samples.isEmpty else { return }
-        if player == nil { player = PCMAudioPlayer(policy: .hostOwned, sampleRate: session.format.rate) }
+        if player == nil { player = PCMAudioPlayer(sampleRate: session.format.rate) }
         player?.enqueue(samples)
         let now = ContinuousClock.now
         let start = max(playbackEndsAt ?? now, now)

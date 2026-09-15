@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
 import { test } from "vitest";
-import { remoteRealtimeToolDefinitions } from "./actions.js";
 import {
   ASK_BRAIN_TOOL,
   introductionSessionConfig,
@@ -17,8 +16,7 @@ import {
   realtimeSessionConfig,
   realtimeSessionInstructions,
   realtimeVoiceFor,
-  remoteRealtimeClientSecretRequest,
-} from "./remote-mint-legacy.js";
+} from "./realtime-mint-legacy.js";
 
 test("the minted session closes the microphone until a press opens it", () => {
   const config = realtimeSessionConfig(REALTIME_SCENE.DESKTOP, mouthToolDefinitions());
@@ -58,7 +56,7 @@ test("the minted session chooses how it gives way at the edge of the window", ()
   assert.equal(realtimeClientSecretRequest().session.truncation.type, REALTIME_TRUNCATION.TYPE);
 });
 
-test("the default voice is what the session is minted with, and one the phone offers", () => {
+test("the default voice is what the session is minted with, and one every client offers", () => {
   assert.equal(REALTIME_DEFAULTS.VOICE, LIVE_DEFAULTS.VOICE);
   assert.equal(
     realtimeSessionConfig(REALTIME_SCENE.DESKTOP, mouthToolDefinitions()).audio.output.voice,
@@ -123,19 +121,6 @@ test("the desktop session is minted with the one ask and nothing wider", () => {
     [ASK_BRAIN_TOOL.name],
   );
   assert.equal(config.tool_choice, "auto");
-});
-
-test("the phone's mint carries the phone's own acts and roster rules", () => {
-  const request = remoteRealtimeClientSecretRequest();
-  const remoteNames = remoteRealtimeToolDefinitions().map((tool) => tool.name);
-
-  assert.ok(remoteNames.length > 0);
-  assert.deepEqual(
-    request.session.tools.map((tool) => tool.name),
-    remoteNames,
-  );
-  assert.equal(remoteNames.includes(ASK_BRAIN_TOOL.name), false);
-  assert.equal(request.session.instructions, realtimeSessionInstructions(REALTIME_SCENE.REMOTE));
 });
 
 test("the minted introduction session declares no tools and no way to choose one", () => {

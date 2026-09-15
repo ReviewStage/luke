@@ -70,19 +70,6 @@ function voice(overrides: Partial<MintCall> = {}) {
   };
 }
 
-function remote(overrides: Partial<MintCall> = {}) {
-  return {
-    request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT),
-    apiKey: API_KEY,
-    resolveUserId: () => Effect.succeed("user-1"),
-    spend: () => Effect.succeed(OPEN_SPEND),
-    readVaultKeys: () => Effect.succeed([]),
-    now: () => NOW,
-    httpClient: upstream(minted),
-    ...overrides,
-  };
-}
-
 function introduction(overrides: Partial<MintCall> = {}) {
   return {
     request: mintRequest(HOSTED_SERVICE_PATH.INTRODUCTION_MINT),
@@ -119,27 +106,6 @@ const CASES: [string, () => Promise<Response>][] = [
     () =>
       mintAnswer(voice({ httpClient: upstream(() => new Response("secret", { status: 500 })) })),
   ],
-  ["remote-mint", () => mintAnswer(remote())],
-  [
-    "remote-mint-method-not-allowed",
-    () =>
-      mintAnswer(
-        remote({ request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, undefined, "GET") }),
-      ),
-  ],
-  ["remote-mint-unavailable", () => mintAnswer(remote({ apiKey: " " }))],
-  [
-    "remote-mint-invalid-token",
-    () => mintAnswer(remote({ resolveUserId: () => Effect.succeed(undefined) })),
-  ],
-  [
-    "remote-mint-invalid-request",
-    () =>
-      mintAnswer(
-        remote({ request: mintRequest(HOSTED_SERVICE_PATH.REMOTE_VOICE_MINT, { scene: "phone" }) }),
-      ),
-  ],
-  ["remote-mint-quota-exhausted", () => mintAnswer(remote({ spend: () => Effect.succeed(SPENT) }))],
   ["introduction-mint", () => mintAnswer(introduction())],
   [
     "introduction-mint-method-not-allowed",

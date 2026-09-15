@@ -7,14 +7,6 @@
 
 export const HOSTED_SERVICE_PATH = {
   VOICE_MINT: "/api/voice/mint",
-  /**
-   * Mints one ephemeral Realtime credential for the signed-in watch and
-   * answers with the user's cloud session roster pre-serialized as a context
-   * item (POST). Same quota meter as VOICE_MINT; narrowed to the tool set the
-   * mobile action endpoints serve. The phone no longer calls it (LUKE-216);
-   * the path goes with the watch's move onto the hosted exchange (LUKE-224).
-   */
-  REMOTE_VOICE_MINT: "/api/voice/remote-mint",
   /** Send a message to a cloud session (POST). */
   ACTION_MESSAGE: "/api/actions/message",
   /** Create a workspace in a cloud project (POST). */

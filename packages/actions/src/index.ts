@@ -21,4 +21,4 @@ export * from "./actions.js";
 export * from "./adapter-requests.js";
 export * from "./admit.js";
 export * from "./memory.js";
-export * from "./remote-mint-legacy.js";
+export * from "./realtime-mint-legacy.js";

@@ -615,29 +615,30 @@ desktop opens its voice through the hosted voice service below and never calls
 it. It is an exact-path file, so Vercel's zero-config `api/`
 detection routes it without a `routes` entry; only the bracketed auth
 catch-all needs one. The mint lives behind the group in
-`server/voice-mint-app.ts`, which is what all three mint functions serve —
-the desktop's, the watch's `remote-mint` (the phone's until its voice moved
-onto the hosted voice service; it goes with the watch's move, LUKE-224), and
-the accountless `introduction-mint` — each request resolved to a user through the auth
-service's own `/oauth2/userinfo` endpoint, called in process, except the
-introduction's, which carries no bearer at all. Each path is declared for
-every method, so the POST a mint documents stays its own
-`method-not-allowed`, and a path the group declares nothing for is the hosted
-vocabulary's `not-found`. `fixtures/voice-mint-route/` records what each mint
-and each refusal answers, recorded from the promise-shaped routes the group
-replaced and unchanged by the conversion.
+`server/voice-mint-app.ts`, which is what both mint functions serve — the
+desktop's, and the accountless `introduction-mint` in a group of its own —
+each request resolved to a user through the auth service's own
+`/oauth2/userinfo` endpoint, called in process, except the introduction's,
+which carries no bearer at all. The phone's and the watch's mint stood beside
+them until each device moved onto the hosted voice service (LUKE-216,
+LUKE-224) and LUKE-219 deleted it; these two installed-desktop mints are the
+legacy Realtime path's last readers, and retiring them is a desktop ticket.
+Each path is declared for every method, so the POST a mint documents stays
+its own `method-not-allowed`, and a path the group declares nothing for is
+the hosted vocabulary's `not-found`. `fixtures/voice-mint-route/` records
+what each mint and each refusal answers, recorded from the promise-shaped
+routes the group replaced and unchanged by the conversion.
 
 The mint answer's `connection` object carries both a WebRTC calls endpoint
-(`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`) for
-the watch, which has no WebRTC; the phone is a WebRTC peer through the hosted
-voice service and reads neither. Both
-point at the canonical OpenAI host and are pinned by the build rather than
-composed by the client: `callsUrl` is the calls endpoint at
-`https://api.openai.com/v1/realtime/calls`; `wsUrl` is the WebSocket base at
-`wss://api.openai.com/v1/realtime` with the session's model appended as
-`?model=<model>`. The same ephemeral client secret authenticates both
-transports. Clients predating this field ignore `wsUrl`; clients predating
-this server receive a connection without it and must handle its absence.
+(`callsUrl`) for the desktop renderer and a WebSocket endpoint (`wsUrl`),
+which the phone's and the watch's Realtime clients opened until they moved
+and no current client reads; it stays because it is part of the answer the
+recorded fixtures hold. Both point at the canonical OpenAI host and are
+pinned by the build rather than composed by the client: `callsUrl` is the
+calls endpoint at `https://api.openai.com/v1/realtime/calls`; `wsUrl` is the
+WebSocket base at `wss://api.openai.com/v1/realtime` with the session's model
+appended as `?model=<model>`. The same ephemeral client secret authenticates
+both transports.
 
 The endpoint needs one secret: `OPENAI_API_KEY`. Without it it answers 503
 and the hosted tier is simply off, the same kill switch as the feedback

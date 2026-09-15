@@ -8,7 +8,7 @@
 import { HTTP_METHOD } from "@sidecar/wire";
 import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { realtimeClientSecretRequest, remoteRealtimeClientSecretRequest } from "../core.js";
+import type { realtimeClientSecretRequest } from "../core.js";
 import { accountCall, callAnswered, fixedBearer } from "../core.js";
 // Type-only, so the value-level import the introduction handler takes from
 // this module never becomes a runtime cycle.
@@ -30,7 +30,6 @@ export const HOSTED_OPENAI_DEFAULTS = {
 /** Build-fixed documents the hosted tier POSTs to OpenAI. */
 export type OpenAiPostBody =
   | ReturnType<typeof realtimeClientSecretRequest>
-  | ReturnType<typeof remoteRealtimeClientSecretRequest>
   | ReturnType<typeof introductionClientSecretRequest>;
 
 export interface OpenAiUpstreamOptions {
