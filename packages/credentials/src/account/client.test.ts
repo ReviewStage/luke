@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
+import { type FakeResponder, fakeHttpClientLayer, type JsonValue } from "@sidecar/wire/testing";
 import { Deferred, Duration, Effect, Exit, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { test } from "vitest";
@@ -12,7 +12,6 @@ import {
   accountFailureAction,
   accountGateOpen,
   deleteHostedAccount,
-  type FetchLike,
   withIssuedAccountTokens,
 } from "./client.js";
 import { ACCOUNT_PROVIDER } from "./snapshot.js";
@@ -50,7 +49,7 @@ test("the authorization URL carries the native public-client contract", () => {
 it.effect("the code exchange sends the verifier and redirect as form fields", () =>
   Effect.gen(function* () {
     let request: Request | undefined;
-    const fetch: FetchLike = async (input, init) => {
+    const fetch: FakeResponder = async (input, init) => {
       request = new Request(input, init);
       return json({ access_token: "access", refresh_token: "refresh" });
     };
@@ -83,7 +82,7 @@ it.effect("the code exchange sends the verifier and redirect as form fields", ()
 
 it.effect("a refresh keeps the existing refresh token when rotation omits one", () =>
   Effect.gen(function* () {
-    const fetch: FetchLike = async (_input, init) => {
+    const fetch: FakeResponder = async (_input, init) => {
       const form = new URLSearchParams(String(init?.body));
       assert.equal(form.get("grant_type"), "refresh_token");
       assert.equal(form.get("refresh_token"), "existing-refresh");
@@ -130,7 +129,7 @@ it.effect("sign-out revokes the refresh token as a public client", () =>
 
 it.effect("userinfo returns the identity fields and nothing else the claim carried", () =>
   Effect.gen(function* () {
-    const fetch: FetchLike = async (_input, init) => {
+    const fetch: FakeResponder = async (_input, init) => {
       assert.equal(new Headers(init?.headers).get("authorization"), "Bearer access-token");
       return json({
         sub: "internal-user-id",
@@ -360,7 +359,7 @@ test("capture and fixture runs bypass the account wall", () => {
 it.effect("a delete posts the bearer token at the service's account-delete path", () =>
   Effect.gen(function* () {
     let request: Request | undefined;
-    const fetch: FetchLike = async (input, init) => {
+    const fetch: FakeResponder = async (input, init) => {
       request = new Request(input, init);
       return json({ deleted: true });
     };
@@ -380,7 +379,7 @@ it.effect("a delete posts the bearer token at the service's account-delete path"
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
 it.effect("an expired token's refusal reads as refresh-and-retry, a service no does not", () =>
   Effect.gen(function* () {
-    const refusal = (status: number): FetchLike => {
+    const refusal = (status: number): FakeResponder => {
       return async () => json({ error: "invalid-token" }, status);
     };
 

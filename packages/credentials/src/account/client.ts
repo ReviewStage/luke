@@ -61,9 +61,7 @@ function accountPictureUrl(value: UnparsedWireValue): string | undefined {
   return googleHosted || host === "avatars.githubusercontent.com" ? url.toString() : undefined;
 }
 
-export type FetchLike = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
-
-export interface AccountClientOptions {
+interface AccountClientOptions {
   baseUrl: string;
   clientId: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */
@@ -297,8 +295,7 @@ export const ACCOUNT_FAILURE_ACTION = {
   SIGN_OUT: "sign-out",
 } as const;
 
-export type AccountFailureAction =
-  (typeof ACCOUNT_FAILURE_ACTION)[keyof typeof ACCOUNT_FAILURE_ACTION];
+type AccountFailureAction = (typeof ACCOUNT_FAILURE_ACTION)[keyof typeof ACCOUNT_FAILURE_ACTION];
 
 /** Only the OAuth server's definitive revocation answer removes a stored account. */
 export function accountFailureAction(error: Error): AccountFailureAction {
@@ -325,7 +322,7 @@ export function accountGateOpen(
 
 const DELETE_TIMEOUT_MS = 15_000;
 
-export interface AccountDeletionOptions {
+interface AccountDeletionOptions {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The signed-in account's current access token. */

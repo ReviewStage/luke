@@ -83,7 +83,7 @@ function reportingFailure<A, E>(effect: Effect.Effect<A, E>, what: string): Effe
   ).pipe(Effect.asVoid);
 }
 
-export interface AccountSessionManagerOptions {
+interface AccountSessionManagerOptions {
   client: AccountClient;
   store: AccountSessionStore;
   hostedServiceBaseUrl: string;
