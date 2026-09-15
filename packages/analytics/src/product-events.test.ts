@@ -32,14 +32,12 @@ const SAMPLE_VALUE = {
   [PRODUCT_EVENT_PROPERTY.CALENDAR_SOURCE]: "google",
   [PRODUCT_EVENT_PROPERTY.SESSION_SOURCE]: "hosted",
   [PRODUCT_EVENT_PROPERTY.SESSION_ACTION]: "message_send",
-  [PRODUCT_EVENT_PROPERTY.DIAGNOSTIC_KIND]: "accidental_wake",
   [PRODUCT_EVENT_PROPERTY.ACCOUNT_ACTION]: "sign_out",
   [PRODUCT_EVENT_PROPERTY.UPDATE_ACTION]: "check",
   [PRODUCT_EVENT_PROPERTY.PANEL_TAB]: "settings",
   [PRODUCT_EVENT_PROPERTY.PANEL_SOURCE]: "capsule",
   [PRODUCT_EVENT_PROPERTY.SETTINGS_VIEW]: "connections",
   [PRODUCT_EVENT_PROPERTY.SEARCH_SURFACE]: "sessions",
-  [PRODUCT_EVENT_PROPERTY.ASK_OUTCOME]: "sent",
   [PRODUCT_EVENT_PROPERTY.EXCHANGE_KIND]: "spoken",
   [PRODUCT_EVENT_PROPERTY.PERMISSION_RESULT]: "granted",
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: "within_hour",
@@ -265,9 +263,6 @@ test("no value the vocabulary can express is free text", () => {
         for (const rung of Object.values(PRODUCT_SESSION_COUNT_BUCKET)) {
           assert.ok(Number.isInteger(rung), `${rung} is not a bucket rung`);
         }
-        continue;
-      }
-      if (property === PRODUCT_EVENT_PROPERTY.APP_VERSION) {
       }
     }
   }
