@@ -1,13 +1,20 @@
+import {
+  failedHousekeeping,
+  type MemoryHousekeepingResult,
+  skippedHousekeeping,
+} from "@sidecar/memory";
 import type { LanguageModel } from "ai";
-import { Effect, type Schema } from "effect";
+import { Cause, Effect, type Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
+import type { MemoryCompactionRequestedContext } from "eve/memory";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import {
   ACTION_RESULT_STATUS,
+  BRAIN_TURN_TRIGGER,
   type BrainTurnTrigger,
   type CloudAgentProviderId,
   isRecord,
@@ -24,6 +31,7 @@ import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
   BRAIN_HOST_MODEL_FIXTURE,
+  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "./bounds.js";
@@ -38,6 +46,7 @@ import {
 import { readWorkspaceDefaults } from "./defaults.js";
 import { EVE_CALLER, eveSessions } from "./eve-sessions.js";
 import { hostTurnId } from "./ids.js";
+import { flushMemory, MEMORY_FLUSH_REFUSAL } from "./memory-flush.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
 import { hostedNotebookAccess } from "./notebook.js";
 import { hostedActionCarrier } from "./performer.js";
@@ -153,6 +162,19 @@ export interface BrainHost {
   >;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;
+  /**
+   * The pre-compaction memory flush, run from eve's own `compaction.requested`
+   * capture: one housekeeping turn over the copy of the history eve hands in,
+   * for a session admitted for a conversation of the caller's and running a
+   * developer's own ask, at most once per compaction cycle, on the account's
+   * metered model or the fixture the eve project hands in its place. Total:
+   * every way it can end is an outcome, never an error eve would see, so the
+   * developer's turn folds and proceeds whatever became of the flush.
+   */
+  flush(
+    capture: MemoryCompactionRequestedContext,
+    fixtureModel?: LanguageModel,
+  ): Effect.Effect<MemoryHousekeepingResult, never, SqlClient.SqlClient>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
@@ -275,6 +297,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       rosters.set(userId, roster);
       return roster;
     });
+
+  /** The account's metered model, or nothing while the deployment holds no key. */
+  const modelFor = (admitted: AdmittedConversation): LanguageModel | undefined => {
+    const access = seams.openAi();
+    if (!access) return undefined;
+    return meteredModel(openAiBrainModel(access.apiKey, access.modelId), () =>
+      seams.spend(admitted.target.userId),
+    );
+  };
 
   return {
     admit: (auth, sessionId) =>
@@ -402,13 +433,43 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         );
       }),
 
-    model(admitted) {
-      const access = seams.openAi();
-      if (!access) return undefined;
-      return meteredModel(openAiBrainModel(access.apiKey, access.modelId), () =>
-        seams.spend(admitted.target.userId),
-      );
-    },
+    model: (admitted) => modelFor(admitted),
+
+    flush: (capture, fixtureModel) =>
+      Effect.gen(function* () {
+        const admitted = yield* admitConversation(capture.session.auth, {
+          id: capture.session.id,
+          standing: SESSION_STANDING.CURRENT,
+        });
+        if (!admitted.ok) return skippedHousekeeping(admitted.refusal);
+        // OpenClaw's session-kind gate: a scaffolding turn — the roster's
+        // observation, a hold's release — produces no durable memory, so only
+        // a turn the developer opened flushes, typed or spoken.
+        const turn = turnKindOf(capture.session.auth.current);
+        if (turn === undefined || BRAIN_HOST_TURN_KIND[turn].trigger !== BRAIN_TURN_TRIGGER.ASK) {
+          return skippedHousekeeping(MEMORY_FLUSH_REFUSAL.NOT_AN_ASK);
+        }
+        const model = fixtureModel ?? modelFor(admitted);
+        if (!model) return skippedHousekeeping(BRAIN_HOST_REFUSAL.NO_MODEL);
+        const client = yield* SqlClient.SqlClient;
+        const { userId } = admitted.target;
+        return yield* flushMemory({
+          target: admitted.target,
+          operationId: capture.operationId,
+          messages: capture.messages,
+          signal: capture.abortSignal,
+          model,
+          workspace: hostedWorkspaceAccess(client, seams.store(), userId, seams.now),
+          now: seams.now,
+        });
+      }).pipe(
+        Effect.catchCause((cause) =>
+          Effect.sync(() => {
+            console.warn(`The memory flush could not run: ${Cause.pretty(cause)}`);
+            return failedHousekeeping(MEMORY_FLUSH_REFUSAL.HOST_FAILED);
+          }),
+        ),
+      ),
 
     sessionStarted: (admitted, sessionId) =>
       claimRuntimeSession(admitted.target, sessionId, new Date(seams.now())),

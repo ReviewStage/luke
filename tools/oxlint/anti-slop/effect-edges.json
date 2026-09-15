@@ -14,6 +14,7 @@
     "apps/web/eve/hooks/store.ts",
     "apps/web/eve/instructions/prompt.ts",
     "apps/web/eve/instructions/seed.ts",
+    "apps/web/eve/memory/notebook.ts",
     "apps/web/eve/tools/brain.ts",
     "apps/web/scripts/preview-probe.ts",
     "apps/web/server/db/migrate.ts",
