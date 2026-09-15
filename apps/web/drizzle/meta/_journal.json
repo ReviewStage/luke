@@ -232,6 +232,13 @@
       "when": 1789700000000,
       "tag": "0033_workspace_file_content",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1789750000000,
+      "tag": "0034_child_label_and_completion",
+      "breakpoints": true
     }
   ]
 }

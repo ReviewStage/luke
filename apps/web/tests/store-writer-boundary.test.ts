@@ -9,7 +9,7 @@ import { test } from "vitest";
  * the invariant the writer establishes, stated over the server's own sources.
  * A module that could write one of the three tables has to name it in the
  * text of a statement the `SqlClient` runs, so the modules that name one are
- * the modules that could write one, and that set is the writer and the two
+ * the modules that could write one, and that set is the writer and the three
  * readers that select from the same tables. A `from`/`join`/`into`/`update`
  * clause does not tell a select from an insert, so each reader stands in the
  * list by name, in the open, and the modules that write are read from the
@@ -31,11 +31,15 @@ const READER = "server/hosted/store/message-reads.ts";
 /** The speech module: folds a briefing's standing from the events on its message and writes every transition through the writer. */
 const SPEECH_READER = "server/hosted/store/speech.ts";
 
+/** The children directory: derives where a child stands from the latest of its turns, and writes none. */
+const CHILDREN_READER = "server/hosted/store/children.ts";
+
 /** The tables each module names at all. */
 const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [WRITER, WRITTEN_TABLES],
   [READER, WRITTEN_TABLES],
   [SPEECH_READER, new Set(["messages", "events"])],
+  [CHILDREN_READER, new Set(["turns"])],
 ]);
 
 /** The modules that may write one of the three tables, which is the writer and nothing else. */
@@ -60,7 +64,7 @@ function matchedTables(source: string, pattern: RegExp): readonly string[] {
   );
 }
 
-test("the writer and the two readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the three readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
   const named = new Map<string, ReadonlySet<string>>();
   const writers = new Set<string>();

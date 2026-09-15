@@ -35,6 +35,8 @@ export interface ConversationRow {
   readonly deletedAt?: Date | null;
   readonly nextMessageSeq?: number;
   readonly nextEventSeq?: number;
+  readonly label?: string | null;
+  readonly completionDeliveredAt?: Date | null;
 }
 
 export function insertConversation(run: HostedStoreTestRun, row: ConversationRow): Promise<string> {
@@ -45,14 +47,15 @@ export function insertConversation(run: HostedStoreTestRun, row: ConversationRow
       insert into conversations (
         user_id, kind, provider_id, provider_session_id,
         parent_conversation_id, spawned_by_message_id, fork_of_seq, runtime_session_id,
-        created_at, deleted_at, next_message_seq, next_event_seq
+        created_at, deleted_at, next_message_seq, next_event_seq, label, completion_delivered_at
       )
       values (
         ${row.userId}, ${row.kind ?? CONVERSATION_KIND.MAIN},
         ${row.providerId ?? null}, ${row.providerSessionId ?? null},
         ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null}, ${row.forkOfSeq ?? null},
         ${row.runtimeSessionId ?? null}, ${row.createdAt ?? new Date()}, ${row.deletedAt ?? null},
-        ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1}
+        ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1},
+        ${row.label ?? null}, ${row.completionDeliveredAt ?? null}
       )
       returning id
     `;
@@ -157,6 +160,7 @@ export interface TurnInsertRow {
   readonly settledAt?: Date | null;
   readonly responseIds?: readonly string[] | null;
   readonly usage?: unknown;
+  readonly failure?: string | null;
 }
 
 export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise<string> {
@@ -168,12 +172,12 @@ export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise
       const rows = yield* sql`
       insert into turns (
         user_id, conversation_id, origin, status, queued_at, started_at, settled_at,
-        response_ids, usage
+        response_ids, usage, failure
       )
       values (
         ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status},
         ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null},
-        ${responseIds}, ${usage}::jsonb
+        ${responseIds}, ${usage}::jsonb, ${row.failure ?? null}
       )
       returning id
     `;
