@@ -152,11 +152,6 @@ export {
   type HostedMintAnswer,
   hostedMintAnswerAt,
   hostedMintAnswerSchema,
-  type RemoteMintAnswer,
-  type RemoteVoiceContext,
-  type RemoteVoiceContextItem,
-  remoteMintAnswerAt,
-  remoteMintAnswerSchema,
 } from "./mint-wire.js";
 export {
   OBSERVE_QUERY,

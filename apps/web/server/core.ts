@@ -48,8 +48,6 @@ export {
   type BrainWorkspaceAccess,
   brainToolCatalog,
   brainToolNotes,
-  CONTEXT_ITEM_KIND,
-  contextItemId,
   holdReleasedInputText,
   maximumBriefingLength,
   READ_TOOLS,

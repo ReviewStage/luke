@@ -132,10 +132,6 @@
     "dest": "/api/default.js?route=voice/mint"
   },
   {
-    "src": "/api/voice/remote-mint",
-    "dest": "/api/default.js?route=voice/remote-mint"
-  },
-  {
     "src": "/api/observation/tick",
     "dest": "/api/observation-tick.js?route=observation/tick"
   }

@@ -59,7 +59,7 @@ final class DeviceSettingsSyncTests: XCTestCase {
         phone.start()
         watch.start()
 
-        phoneStore.set(RealtimeVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
+        phoneStore.set(LiveVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
         XCTAssertEqual(phonePublished.count, 1)
         XCTAssertEqual(phonePublished[0]["voice"] as? String, "sage")
         XCTAssertEqual(phonePublished[0]["settingsVersion"] as? Int, DeviceSettingsSync.payloadVersion)
@@ -173,7 +173,7 @@ final class DeviceSettingsSyncTests: XCTestCase {
             watchPublished.append($0)
         }
         watch.start()
-        watchStore.set(RealtimeVoice.verse.rawValue, forKey: VoiceSettingsKey.voice)
+        watchStore.set(LiveVoice.verse.rawValue, forKey: VoiceSettingsKey.voice)
         phone.start()
 
         phone.publishCurrent()
@@ -193,7 +193,7 @@ final class DeviceSettingsSyncTests: XCTestCase {
         phone.start()
         watch.start()
 
-        phoneStore.set(RealtimeVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
+        phoneStore.set(LiveVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
         watch.publishCurrent()
         phone.receive(watchPublished.last!)
         XCTAssertEqual(DeviceSettingsSnapshot.read(from: phoneStore).voice, .sage)
@@ -206,12 +206,12 @@ final class DeviceSettingsSyncTests: XCTestCase {
         var watchPublished: [[String: Any]] = []
         let watch = DeviceSettingsSync(store: watchStore, role: .secondary, now: tick) { watchPublished.append($0) }
         watch.start()
-        watchStore.set(RealtimeVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
+        watchStore.set(LiveVoice.sage.rawValue, forKey: VoiceSettingsKey.voice)
         let stale = watchPublished.last!
 
         var phone: DeviceSettingsSync? = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { _ in }
         phone?.start()
-        phoneStore.set(RealtimeVoice.ash.rawValue, forKey: VoiceSettingsKey.voice)
+        phoneStore.set(LiveVoice.ash.rawValue, forKey: VoiceSettingsKey.voice)
         phone = nil
 
         let relaunched = DeviceSettingsSync(store: phoneStore, role: .primary, now: tick) { _ in }

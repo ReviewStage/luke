@@ -16,15 +16,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  ACTION_FAMILY,
-  ACTION_OUTPUT_STATUS,
-  ACTION_TOOL,
-  ACTIONS,
-  REALTIME_VOICE,
-  REALTIME_VOICE_SPEED,
-  remoteRealtimeToolDefinitions,
-} from "@sidecar/actions";
+import { ACTION_FAMILY, ACTION_OUTPUT_STATUS, ACTIONS } from "@sidecar/actions";
 import {
   PRODUCT_EVENT_BATCH_LIMIT,
   PRODUCT_EVENT_CLIENT_HEADER,
@@ -278,22 +270,6 @@ test("ActionResult is ACTION_RESULT_STATUS", () => {
   );
 });
 
-test("VoiceToolName is the remote tool set the mint declares", () => {
-  assertSameValues(
-    swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
-    remoteRealtimeToolDefinitions().map((tool) => tool.name),
-    "a tool the mint declares and the phone cannot name is refused before it is looked at",
-  );
-});
-
-test("every VoiceToolName is a ACTION_TOOL", () => {
-  assertSubset(
-    swiftEnumRawValues(swift(`${KIT}/VoiceAsks.swift`), "VoiceToolName"),
-    Object.values(ACTION_TOOL),
-    "a tool renamed in the actions table leaves the phone naming a tool that does not exist",
-  );
-});
-
 test("LiveVoice is LIVE_VOICE", () => {
   assertSameSet(
     swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "LiveVoice"),
@@ -480,39 +456,6 @@ test("LiveAudioFormat is LIVE_AUDIO_FORMAT, rate for rate, with the same default
     defaultKey === undefined ? undefined : formats.get(defaultKey),
     LIVE_DEFAULT_AUDIO_FORMAT,
     "a default of the watch's own would speak at another rate than the one ruled",
-  );
-});
-
-test("RealtimeVoice is REALTIME_VOICE", () => {
-  assertSameSet(
-    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoice"),
-    REALTIME_VOICE,
-    "a voice outside the set is refused at mint time",
-  );
-});
-
-test("RealtimeVoiceSpeed names the same paces as REALTIME_VOICE_SPEED", () => {
-  assertSameValues(
-    swiftEnumRawValues(swift(`${KIT}/VoiceSettings.swift`), "RealtimeVoiceSpeed"),
-    Object.keys(REALTIME_VOICE_SPEED).map((key) => key.toLowerCase()),
-    "a pace the phone stores by a name the contract does not have falls to the default",
-  );
-});
-
-test("RealtimeVoiceSpeed multiplies by what REALTIME_VOICE_SPEED holds", () => {
-  const multipliers = swiftSwitchNumbers(
-    swift(`${KIT}/VoiceSettings.swift`),
-    "RealtimeVoiceSpeed",
-    "multiplier",
-    "Double",
-  );
-  const expected = new Map(
-    Object.entries(REALTIME_VOICE_SPEED).map(([key, speed]) => [key.toLowerCase(), speed]),
-  );
-  assert.deepEqual(
-    [...multipliers].sort(),
-    [...expected].sort(),
-    "a pace whose multiplier drifted speaks at a rate the contract never offered",
   );
 });
 

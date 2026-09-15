@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import {
-  HOSTED_CALLS_URL,
-  HOSTED_WS_BASE_URL,
-  hostedMintAnswerAt,
-  remoteMintAnswerAt,
-} from "./mint-wire.js";
+import { HOSTED_CALLS_URL, HOSTED_WS_BASE_URL, hostedMintAnswerAt } from "./mint-wire.js";
 
 const NOW = 1_800_000_000_000;
 const MODEL = "gpt-realtime-2.1";
@@ -101,12 +96,4 @@ test("an expired or incomplete credential reads as no answer at all", () => {
   assert.equal(hostedMintAnswerAt(mintedWire({ expiresAt: NOW - 1 }), NOW), undefined);
   assert.equal(hostedMintAnswerAt(mintedWire({ value: "" }), NOW), undefined);
   assert.equal(hostedMintAnswerAt({ odd: true }, NOW), undefined);
-});
-
-test("a mobile mint answer carries the context the phone forwards, or is no answer at all", () => {
-  const context = { sessions: { itemId: "item-0", text: "[observed session status]\nnone" } };
-  const answer = remoteMintAnswerAt({ ...mintedWire(), context }, NOW);
-  assert.deepEqual(answer?.context, context);
-  assert.equal(remoteMintAnswerAt(mintedWire(), NOW), undefined);
-  assert.equal(remoteMintAnswerAt({ ...mintedWire(), context: { sessions: {} } }, NOW), undefined);
 });

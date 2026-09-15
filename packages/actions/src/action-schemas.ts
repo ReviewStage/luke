@@ -24,7 +24,6 @@ import {
   PROVIDER_ID_LIST,
   SESSION_APPLICATION_ID,
   SESSION_LOCATION,
-  SESSION_STATUS,
 } from "@sidecar/session";
 import {
   isWireString,
@@ -65,23 +64,6 @@ const SESSION_LIST_FILTER_DESCRIPTION =
   `${SESSION_LIST_VOICE} for voice chats, an agent's provider_id, or an associated app's id. ` +
   `Values combine — ${SESSION_LOCATION.LOCAL} with an agent keeps that agent's local ` +
   `sessions — and ${SESSION_LIST_ALL} stands alone.`;
-
-/**
- * The narrowing vocabulary the phone's list holds: its chips read a row's
- * provider and status and nothing else, so a spoken narrowing there picks
- * from those two axes and the whole-list scope. Which values narrow to
- * anything is the observed roster's question, answered on the phone.
- */
-const REMOTE_SESSION_LIST_FILTER_VALUES: readonly string[] = [
-  ...new Set<string>([SESSION_LIST_ALL, ...PROVIDER_ID_LIST, ...Object.values(SESSION_STATUS)]),
-];
-
-const REMOTE_SESSION_LIST_FILTER_DESCRIPTION =
-  `The values to narrow the session list to: ${SESSION_LIST_ALL} for every session, a ` +
-  `provider_id for one provider's sessions, or a status (${Object.values(SESSION_STATUS).join(
-    ", ",
-  )}). Values combine — a provider with a status keeps that provider's sessions in that ` +
-  `status — and ${SESSION_LIST_ALL} stands alone.`;
 
 const SESSION_LIST_SORT_DESCRIPTION =
   `Reorders the session list: ${SESSION_LIST_SORT.URGENCY} puts what needs the ` +
@@ -218,8 +200,6 @@ export const OPEN_REQUEST = Schema.Struct({
   ),
 });
 
-export const REMOTE_OPEN_REQUEST = Schema.Struct({ ...SESSION_IDENTITY_FIELDS });
-
 export const CREATE_WORKSPACE_REQUEST = Schema.Struct({
   provider_id: optional(
     boundedText({ description: "The provider ID; omit it to create in the default provider." }),
@@ -295,20 +275,9 @@ const PANEL_FILTERS_READER = filterValuesReader(
 export const PANEL_FILTERS: Schema.Codec<readonly string[] | undefined, UnparsedWireValue> =
   Schema.UndefinedOr(PANEL_FILTERS_READER);
 
-const REMOTE_PANEL_FILTERS_READER = filterValuesReader(
-  REMOTE_SESSION_LIST_FILTER_VALUES,
-  REMOTE_SESSION_LIST_FILTER_DESCRIPTION,
-);
-
 export const PANEL_REQUEST = Schema.Struct({
   tab: optional(PANEL_TAB),
   filters: optional(PANEL_FILTERS_READER),
-  sort: optional(PANEL_SORT),
-  query: optional(PANEL_QUERY),
-});
-
-export const REMOTE_PANEL_REQUEST = Schema.Struct({
-  filters: optional(REMOTE_PANEL_FILTERS_READER),
   sort: optional(PANEL_SORT),
   query: optional(PANEL_QUERY),
 });

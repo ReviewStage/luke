@@ -2,13 +2,11 @@ import AVFoundation
 
 public enum PCMAudio {
     /// Float32 mono at the rate the wire speaks — `AVAudioPlayerNode`'s native
-    /// scheduling format. The watch's Realtime mint speaks at 24 kHz
-    /// (`PressAudioBuffer.sampleRate`), the default; the watch's audio route
-    /// speaks at the rate of the `LiveAudioFormat` its session was created
-    /// under. A new value per call rather than one shared: `AVAudioFormat` is
-    /// not `Sendable`, so each owner holds its own and nothing crosses an
-    /// isolation boundary.
-    public static func format(sampleRate: Int = PressAudioBuffer.sampleRate) -> AVAudioFormat {
+    /// scheduling format — which is the rate of the `LiveAudioFormat` the
+    /// watch's session was created under. A new value per call rather than
+    /// one shared: `AVAudioFormat` is not `Sendable`, so each owner holds its
+    /// own and nothing crosses an isolation boundary.
+    public static func format(sampleRate: Int) -> AVAudioFormat {
         AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: Double(sampleRate),
@@ -20,26 +18,17 @@ public enum PCMAudio {
 
 #if os(iOS) || os(watchOS)
 
-/// Who owns the audio session under a PCM player or capturer: the host, which
-/// on the watch is `WatchVoiceAudioSession`, active for the whole call before
-/// either of these exists, so nothing here touches it. The phone's own case,
-/// which configured and activated a session of its own, went with the phone's
-/// move onto the hosted exchange (LUKE-216, LUKE-219); the one value left
-/// stays a parameter only because the watch's call sites go with the rest of
-/// the legacy path in LUKE-224.
-public enum PCMAudioSessionPolicy: Sendable {
-    case hostOwned
-}
-
 /// Plays PCM16 mono audio at the rate given through the speaker using
 /// `AVAudioPlayerNode`, converting incoming Int16 samples to Float32 —
-/// `AVAudioEngine`'s native format — before scheduling them.
-public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
+/// `AVAudioEngine`'s native format — before scheduling them. The audio
+/// session is the host's: on the watch `WatchVoiceAudioSession` holds it
+/// active for the whole call before this exists, so nothing here touches it.
+public final class PCMAudioPlayer: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let format: AVAudioFormat
 
-    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
+    public init(sampleRate: Int) {
         format = PCMAudio.format(sampleRate: sampleRate)
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: format)
@@ -86,12 +75,12 @@ public final class PCMAudioPlayer: AudioPlayer, @unchecked Sendable {
 /// Captures PCM16 mono audio at the rate given from the microphone using
 /// `AVAudioEngine`: taps the input node at its hardware format, converts each
 /// frame through `AVAudioConverter`, and yields Int16 samples to the stream.
-public final class PCMAudioCapturer: AudioCapturer, @unchecked Sendable {
+public final class PCMAudioCapturer: @unchecked Sendable {
     private let engine = AVAudioEngine()
     private let sampleRate: Int
     private var hasTap = false
 
-    public init(policy: PCMAudioSessionPolicy, sampleRate: Int = PressAudioBuffer.sampleRate) {
+    public init(sampleRate: Int) {
         self.sampleRate = sampleRate
     }
 

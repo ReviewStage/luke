@@ -9,10 +9,13 @@ import {
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
 
 /**
- * What the two mint endpoints answer: one ephemeral Realtime credential, the
- * allowance it was spent against, and — for the watch's remote mint, until
- * LUKE-224 moves the watch onto the hosted exchange — the roster context it
- * forwards verbatim. A credential is validated field by field
+ * What the two legacy mint endpoints answer: one ephemeral Realtime
+ * credential and the allowance it was spent against. The installed desktops
+ * of earlier releases are the last readers, through `/api/voice/mint` and
+ * `/api/voice/introduction-mint`; the phone and the watch moved onto the
+ * hosted exchange (LUKE-216, LUKE-224) and the context fields their own mint
+ * answered went with LUKE-219. Retiring the desktop mints, and this reader
+ * with them, is a desktop ticket. A credential is validated field by field
  * rather than repaired, because a mis-answering service must read as a
  * malformed response and never as a call aimed somewhere else. Every record
  * here is a plain struct read through
@@ -33,8 +36,9 @@ export const HOSTED_CALLS_URL = `https://api.openai.com/v1${REALTIME_CALLS_PATH}
 /**
  * The build-pinned WebSocket base URL for OpenAI Realtime. The full endpoint
  * appends ?model=<model> and is validated field-by-field in the wire reader
- * the same way callsUrl is, so a mis-answering service cannot redirect the
- * watch's connection.
+ * the same way callsUrl is, so a mis-answering service cannot redirect a
+ * connection. No current client opens the WebSocket, but the field is part of
+ * the answer the installed desktops' mint records, so it stays with that mint.
  */
 export const HOSTED_WS_BASE_URL = "wss://api.openai.com/v1/realtime";
 
@@ -115,7 +119,7 @@ function droppedField<Value, Encoded>(
 
 const quotaField = Schema.optionalKey(droppedField(hostedQuotaSchema));
 
-/** What both mint answers carry: the credential, and the allowance it was spent against. */
+/** What a mint answer carries: the credential, and the allowance it was spent against. */
 const MINT_FIELDS = {
   connection: connectionSchema,
   quota: quotaField,
@@ -145,44 +149,3 @@ function mintAnswerAt<Answer extends HostedMintAnswer, Encoded>(
 }
 
 export const hostedMintAnswerAt = mintAnswerAt(hostedMintAnswerSchema);
-
-/**
- * One pre-serialized context item returned by the remote mint endpoint. The
- * watch wraps `text` verbatim in a `conversation.item.create` event keyed by
- * `itemId` — it does not re-serialize, re-label, or re-validate the content.
- * These remote fields go with the watch's move (LUKE-224).
- */
-export interface RemoteVoiceContextItem {
-  /** The item id the watch names the `conversation.item.create` event with. */
-  itemId: string;
-  /** The labeled context text, ready to drop into `content[0].text`. */
-  text: string;
-}
-
-/** The pre-serialized context the remote mint endpoint answers with. */
-export interface RemoteVoiceContext {
-  sessions: RemoteVoiceContextItem;
-}
-
-/** What the remote mint endpoint returns on success. */
-export interface RemoteMintAnswer extends HostedMintAnswer {
-  context: RemoteVoiceContext;
-}
-
-/**
- * The remote mint answer: the credential checks above, and additionally a
- * context with a sessions item. A malformed context is not repaired — the
- * watch has no fallback for context it cannot forward.
- */
-export const remoteMintAnswerSchema = schemaAs<RemoteMintAnswer>(
-  omittingUndefinedKeys(
-    Schema.Struct({
-      ...MINT_FIELDS,
-      context: Schema.Struct({
-        sessions: Schema.Struct({ itemId: text, text }),
-      }),
-    }),
-  ),
-);
-
-export const remoteMintAnswerAt = mintAnswerAt(remoteMintAnswerSchema);

@@ -276,40 +276,28 @@ from the moment they open; they stand only while the call does.
 
 Gone with the move, by ruling (LUKE-212) or by the route's rule: the
 composer and the keyboard button (Luke is voice only on every device), the
-phone-side tool dispatch (`dispatchVoiceToolCall`, `VoiceAsks`'s roster
-validation, and the armed-turn discipline stay in `LukeKit` until LUKE-219
-deletes them; the watch dispatches nothing either, since its call moved with
-LUKE-224), and the two device-local tools the phone had, `open_session` and
-`show_panel`, which have no service counterpart: Luke can no longer open a
-session's screen or narrow the list from a spoken ask on the phone. Nothing
-under `Luke/` calls the remote mint or the Realtime session any more, the
-phone's typed-ask path is deleted from `RealtimeSession`, the phone's own
-audio-session policy is deleted from `PCMAudio`, and the account's stored
-pace is gone from the service with the sync that carried it (LUKE-219). The
-legacy path's remaining files (`RealtimeSession`, `VoiceMintClient`,
-`VoiceConversationThread`, `ConversationContext`, `WorkspaceProjectsContext`,
-`VoiceActionDispatcher`, `VoiceAsks`'s tool validation,
-`VoiceToolAvailability`, `PressAudioBuffer`, and `RealtimeVoice` and
-`RealtimeVoiceSpeed` in `VoiceSettings`) have no caller on either device now
-that the watch has moved too (LUKE-224), and are LUKE-219's to delete in its
-watch half.
+phone-side tool dispatch, and the two device-local tools the phone had,
+`open_session` and `show_panel`, which have no service counterpart: Luke can
+no longer open a session's screen or narrow the list from a spoken ask on the
+phone. The legacy Realtime path itself — the remote mint's client, the
+Realtime session, the on-device tool dispatch and its validation, the
+in-memory voice thread, the context items, and the Realtime voice and pace
+settings — is deleted from `LukeKit` (LUKE-219); the service's remote mint
+went with it, and the account no longer stores a pace.
 
 ## Voice actions
 
 Neither device dispatches a tool: on the hosted exchange the service decides
 every action, the phone sends only the microphone switch, the stop, the idle
 report, and the hang-up, and no tool call reaches the wrist either (its call
-is described under Watch below). `dispatchVoiceToolCall`, `VoiceAsks`'s
-roster validation, and the context items stay in `LukeKit` only until the
-legacy path's watch half is deleted (LUKE-219).
+is described under Watch below).
 
 ## Voice service socket
 
 The phone's half of the desktop's hosted voice architecture (LUKE-210) lives
 in `LukeKit`; the phone's voice screen runs on it through `LiveCall`, and
 the watch through `WatchVoiceSessionModel` over the audio route described at
-the end of this section. Nothing runs on `RealtimeSession` and the legacy
-Realtime mint any more. The piece here is the sessions socket client, the
+the end of this section. The piece here is the sessions socket client, the
 phone's `HostedLiveSessionSource`
 (`packages/voice/src/live-session-source.ts`), speaking the vocabulary
 `packages/hosted/src/live-contract.ts` declares:
@@ -511,10 +499,10 @@ in range, the watch's own Wi-Fi or cellular only when it is not.
 watchOS draws or routes something differently: the credentials in
 `KeychainStore`, parameterized by the service string and the accessibility
 class that are the only things the two sandboxes differ on; the voice call's
-audio in `PCMAudioPlayer` and `PCMAudioCapturer`, parameterized by who owns
-the audio session, since on the watch that is `WatchVoiceAudioSession` for the
-whole call, and by the sample rate, since the watch speaks at the rate its
-session's format names; and Luke's own face in `FaceArt` and `LukeMark`, with only the
+audio in `PCMAudioPlayer` and `PCMAudioCapturer`, which touch no audio
+session of their own (on the watch `WatchVoiceAudioSession` holds it for the
+whole call) and speak at the rate the session's format names; and Luke's own
+face in `FaceArt` and `LukeMark`, with only the
 tab bar's UIKit rasterization left on the phone, where UIKit exists. A copy
 kept in step by a "change both" comment is a copy that eventually is not, so
 each of those was one file with two callers rather than two files.

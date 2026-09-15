@@ -4,11 +4,7 @@ import {
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import {
-  type ActionToolDefinition,
-  actionToolDefinitions,
-  remoteRealtimeToolDefinitions,
-} from "./actions.js";
+import { type ActionToolDefinition, actionToolDefinitions } from "./actions.js";
 
 /**
  * The tool definitions as a model is handed them, recorded whole: the name,
@@ -20,7 +16,7 @@ import {
 
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
-const GOLDEN_PREFIX = { DESKTOP: "tool", REMOTE: "remote-tool" } as const;
+const GOLDEN_PREFIX = { DESKTOP: "tool" } as const;
 
 function goldenName(prefix: string, definition: ActionToolDefinition): string {
   return `${prefix}-${definition.name}`;
@@ -29,9 +25,6 @@ function goldenName(prefix: string, definition: ActionToolDefinition): string {
 const RECORDED: readonly (readonly [string, ActionToolDefinition])[] = [
   ...actionToolDefinitions().map(
     (definition) => [goldenName(GOLDEN_PREFIX.DESKTOP, definition), definition] as const,
-  ),
-  ...remoteRealtimeToolDefinitions().map(
-    (definition) => [goldenName(GOLDEN_PREFIX.REMOTE, definition), definition] as const,
   ),
 ];
 

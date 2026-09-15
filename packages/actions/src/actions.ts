@@ -28,8 +28,6 @@ import {
   OPEN_REQUEST,
   PANEL_REQUEST,
   REMEMBER_REQUEST,
-  REMOTE_OPEN_REQUEST,
-  REMOTE_PANEL_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
   SETTING_REQUEST,
@@ -44,19 +42,6 @@ export interface ToolSpec<Family extends ActionFamily, Kind extends ActionKind> 
   readonly description: string;
   /** The action's own field vocabulary: what admission reads and what the model is shown. */
   readonly request: Schema.Codec<unknown, UnparsedWireValue>;
-  /**
-   * The same action as the watch offers it on the legacy remote mint, where
-   * the watch's surface gives the action a different shape: an open lands on
-   * the app's own screen rather than a provider's address, and the list
-   * narrows on the axes its chips hold. Absent, the watch is handed the
-   * desktop's. The wording the model is shown still says "phone", because
-   * changing it would move the pinned tool-schema bytes for a set LUKE-224
-   * deletes whole.
-   */
-  readonly remote?: {
-    readonly description: string;
-    readonly request: Schema.Codec<unknown, UnparsedWireValue>;
-  };
 }
 
 /**
@@ -101,15 +86,6 @@ export const ACTIONS = {
       "show_panel instead, never this. An ask to open one session per provider uses this tool " +
       "once per matching provider in the same response, without filtering the panel first.",
     request: erase(OPEN_REQUEST),
-    remote: {
-      description:
-        "Open one observed session's own screen in this app, leaving this conversation — only " +
-        "when the developer asks to open, go to, or jump into that specific session. An ask to " +
-        'show, see, or list sessions or agents — "show me the waiting sessions" — narrows the ' +
-        "list through show_panel instead, never this. The phone shows one screen, so open one " +
-        "session per response; asked for several, ask which.",
-      request: erase(REMOTE_OPEN_REQUEST),
-    },
   },
   CREATE_WORKSPACE: {
     name: "create_workspace",
@@ -161,13 +137,6 @@ export const ACTIONS = {
       'An ask to show, see, or list sessions or agents of some kind — "show me the Codex ' +
       'agents", "show me my local sessions" — is this tool with a filter, not open_session.',
     request: erase(PANEL_REQUEST),
-    remote: {
-      description:
-        "Show the session list — and narrow, search, or reorder it. An ask to show, see, or " +
-        'list sessions of some kind — "show me the waiting sessions", "show me the Conductor ' +
-        'agents" — is this tool with a filter, not open_session.',
-      request: erase(REMOTE_PANEL_REQUEST),
-    },
   },
   OPEN_FEEDBACK_COMPOSER: {
     name: "open_feedback_composer",
@@ -247,54 +216,18 @@ export interface ActionToolDefinition {
   parameters: JsonSchemaNode;
 }
 
-function definitionOf(
-  spec: ToolSpec<ActionFamily, ActionKind>,
-  remote: boolean,
-): ActionToolDefinition {
-  const shape = (remote ? spec.remote : undefined) ?? spec;
+function definitionOf(spec: ToolSpec<ActionFamily, ActionKind>): ActionToolDefinition {
   return {
     type: "function",
     name: spec.name,
-    description: shape.description,
-    parameters: emitJsonSchema(shape.request),
+    description: spec.description,
+    parameters: emitJsonSchema(spec.request),
   };
 }
 
 /** The tool schemas the brain's action catalog is declared from. */
 export function actionToolDefinitions(): readonly ActionToolDefinition[] {
-  return ACTION_LIST.map((tool) => definitionOf(tool, false));
-}
-
-/**
- * The actions the watch carries, as tool schemas for its Realtime session on
- * the legacy remote mint; the phone dispatches no tool since its move onto the
- * hosted exchange (LUKE-216), and this set goes with the watch's move
- * (LUKE-224). The session writes are the ones the hosted action endpoints
- * serve — MESSAGE, CONTROL, CREATE_WORKSPACE, ADD_AGENT, RENAME_WORKSPACE,
- * RENAME_SESSION — and the watch validates each against the roster and
- * projects it was shown before an endpoint sees it. OPEN lands on the
- * session's own screen in the app and PANEL on the app's own list, so each is
- * performed on the watch and reaches no endpoint at all.
- *
- * A setting change, the feedback composer, and the Updates row are surfaces the
- * watch does not draw. REMEMBER and FORGET are absent because the watch keeps
- * no memory: Luke's durable facts live on the Mac alone.
- */
-const REMOTE_ACTION_KINDS: ReadonlySet<string> = new Set<ActionKind>([
-  ACTION_KIND.MESSAGE,
-  ACTION_KIND.CONTROL,
-  ACTION_KIND.OPEN,
-  ACTION_KIND.CREATE_WORKSPACE,
-  ACTION_KIND.ADD_AGENT,
-  ACTION_KIND.RENAME_WORKSPACE,
-  ACTION_KIND.RENAME_SESSION,
-  ACTION_KIND.PANEL,
-]);
-
-export function remoteRealtimeToolDefinitions(): readonly ActionToolDefinition[] {
-  return ACTION_LIST.filter((tool) => REMOTE_ACTION_KINDS.has(tool.kind)).map((tool) =>
-    definitionOf(tool, true),
-  );
+  return ACTION_LIST.map((tool) => definitionOf(tool));
 }
 
 /**
