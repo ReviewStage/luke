@@ -1,6 +1,7 @@
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { DAILY_NOTES_DIRECTORY } from "../../core.js";
 import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
 
 /**
@@ -60,6 +61,20 @@ const FileWriteSchema = Schema.Struct({
   now: Schema.Number,
 });
 
+/** The dated notes' prefix, the one prefix a listing is asked under. */
+const DAILY_NOTES_PREFIX = `${DAILY_NOTES_DIRECTORY}/`;
+
+const DailyNotesRequestSchema = Schema.Struct({
+  userId: Schema.String,
+  limit: Schema.Number,
+});
+
+/** A dated note's row as the listing reads it: its path and its sealed contents, opened only to be counted. */
+const SealedDailyNoteSchema = Schema.Struct({
+  path: Schema.String,
+  sealedContent: Schema.String,
+}).pipe(Schema.encodeKeys({ sealedContent: "sealed_content" }));
+
 /** The row as `workspace_file` holds it, contents still sealed. */
 const SealedWorkspaceFileSchema = Schema.Struct({
   path: Schema.String,
@@ -84,6 +99,12 @@ const WorkspaceFileListingSchema = Schema.Struct({
 const WrittenPathSchema = Schema.Struct({ path: Schema.String });
 
 export type WorkspaceFileListing = Schema.Schema.Type<typeof WorkspaceFileListingSchema>;
+
+/** One dated note as the listing answers it: its path and how many characters it holds, never a word of it. */
+export interface DailyNoteRecord {
+  readonly path: string;
+  readonly chars: number;
+}
 
 export interface WorkspaceFileRecord {
   readonly path: string;
@@ -159,6 +180,30 @@ const findFiles = SqlSchema.findAll({
     ),
 });
 
+/**
+ * The dated notes newest first, which is their paths in descending byte
+ * order since a note is named by its day; the collation is fixed so the two
+ * dialects the tests run over, and a deployment's own, order one way.
+ */
+const findDailyNotes = SqlSchema.findAll({
+  Request: DailyNotesRequestSchema,
+  Result: SealedDailyNoteSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select path, sealed_content
+        from workspace_file
+        where user_id = ${request.userId} and starts_with(path, ${DAILY_NOTES_PREFIX})
+        order by path collate "C" desc
+        limit ${request.limit}
+      `,
+    ),
+});
+
+/** Takes the user's row lock for the transaction, so two revisions of one account's files run one after the other. */
+const lockUser = (userId: string) =>
+  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+
 export function readWorkspaceFile(
   seal: UserSeal,
   userId: string,
@@ -186,6 +231,34 @@ export function writeWorkspaceFile(
   return upsertFile({ userId, path, sealedContent: seal.seal(content), now });
 }
 
+/**
+ * Rewrites the file from what stands, under the account's row lock, so two
+ * revisions in flight for one account read and write one after the other
+ * and neither loses the other's words. The revision answers the new content,
+ * or nothing to leave the file exactly as it was; what is answered here is
+ * what landed, or nothing where the revision declined.
+ */
+export function reviseWorkspaceFile(
+  seal: UserSeal,
+  userId: string,
+  path: string,
+  revise: (existing: string | undefined) => string | undefined,
+  now: number,
+): Effect.Effect<string | undefined, WorkspaceFileFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* lockUser(userId);
+        const standing = yield* readWorkspaceFile(seal, userId, path);
+        const revised = revise(Option.getOrUndefined(standing)?.content);
+        if (revised === undefined) return undefined;
+        yield* upsertFile({ userId, path, sealedContent: seal.seal(revised), now });
+        return revised;
+      }),
+    ),
+  );
+}
+
 /** Writes the file only where none stands: the seeding a launch does once, and an edit never undone by an upgrade. */
 export function seedWorkspaceFile(
   seal: UserSeal,
@@ -211,4 +284,15 @@ export function listWorkspaceFiles(
   userId: string,
 ): Effect.Effect<readonly WorkspaceFileListing[], WorkspaceFileFailure, SqlClient.SqlClient> {
   return findFiles(userId);
+}
+
+/** The user's dated notes under `memory/`, newest first and at most `limit` of them, each opened only to count its characters. */
+export function listDailyNotes(
+  seal: UserSeal,
+  userId: string,
+  limit: number,
+): Effect.Effect<readonly DailyNoteRecord[], WorkspaceFileFailure, SqlClient.SqlClient> {
+  return Effect.map(findDailyNotes({ userId, limit }), (rows) =>
+    rows.map((row) => ({ path: row.path, chars: seal.open(row.sealedContent).length })),
+  );
 }

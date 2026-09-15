@@ -92,6 +92,34 @@ test("a configured deny of the actions group removes every action and keeps the 
   assert.ok(policy.allows(BRAIN_TOOL.LIST_SESSIONS));
   assert.ok(policy.allows(BRAIN_TOOL.READ_TRANSCRIPT));
   assert.ok(policy.allows(BRAIN_TOOL.READ_WORKSPACE_FILE));
+  assert.ok(policy.allows(BRAIN_TOOL.LIST_DAILY_NOTES));
+});
+
+test("the dated-note tools stand in the workspace group: the append a write, the listing a read the read group also names", () => {
+  const catalog = brainToolCatalog();
+  const entryOf = (name: string) => {
+    const entry = catalog.find((tool) => tool.schema.name === name);
+    assert.ok(entry, name);
+    return entry;
+  };
+  const append = entryOf(BRAIN_TOOL.APPEND_DAILY_NOTE);
+  assert.equal(append.execution, TOOL_EXECUTION.WORKSPACE);
+  assert.equal(append.effect, TOOL_EFFECT.WRITE);
+  assert.deepEqual([...append.groups], [TOOL_GROUP.WORKSPACE]);
+  const list = entryOf(BRAIN_TOOL.LIST_DAILY_NOTES);
+  assert.equal(list.execution, TOOL_EXECUTION.WORKSPACE);
+  assert.equal(list.effect, TOOL_EFFECT.READ);
+  assert.deepEqual([...list.groups], [TOOL_GROUP.WORKSPACE, TOOL_GROUP.READ]);
+  const withoutWorkspace = resolveToolPolicy(catalog, {
+    agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.WORKSPACE}`] },
+  });
+  assert.equal(withoutWorkspace.allows(BRAIN_TOOL.APPEND_DAILY_NOTE), false);
+  assert.equal(withoutWorkspace.allows(BRAIN_TOOL.LIST_DAILY_NOTES), false);
+  const withoutReads = resolveToolPolicy(catalog, {
+    agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.READ}`] },
+  });
+  assert.equal(withoutReads.allows(BRAIN_TOOL.APPEND_DAILY_NOTE), true);
+  assert.equal(withoutReads.allows(BRAIN_TOOL.LIST_DAILY_NOTES), false);
 });
 
 test("announce takes the briefing alone and the hosted catalog carries every definition as a function tool", () => {

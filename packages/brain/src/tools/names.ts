@@ -9,6 +9,8 @@ export const BRAIN_TOOL = {
   ANNOUNCE: "announce",
   READ_WORKSPACE_FILE: "read_workspace_file",
   WRITE_WORKSPACE_FILE: "write_workspace_file",
+  APPEND_DAILY_NOTE: "append_daily_note",
+  LIST_DAILY_NOTES: "list_daily_notes",
   LOAD_SKILL: "load_skill",
   SESSIONS_SPAWN: "sessions_spawn",
   SUBAGENTS: "subagents",
@@ -57,3 +59,6 @@ export const maximumChildTaskLength = 8_000;
 
 /** The most history lines one `sessions_history` read answers with. */
 export const maximumSessionsConversationLines = 50;
+
+/** The most dated notes one `list_daily_notes` read answers with, the newest first; two months of daily notes. */
+export const maximumListedDailyNotes = 60;

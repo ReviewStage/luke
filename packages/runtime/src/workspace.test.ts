@@ -4,11 +4,14 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "vitest";
 import {
+  appendedDailyNote,
   BOOTSTRAP_BOUNDS,
   BOOTSTRAP_FILE_ORDER,
   boundBootstrapFiles,
   CURATED_FILE_BUDGET,
   dailyNoteName,
+  dailyNotePath,
+  isDailyNotePath,
   readBootstrapFiles,
   readWorkspaceFile,
   recentDailyNotes,
@@ -195,6 +198,28 @@ test("a curated file is refused past its own budget, never cut, and read back at
   assert.deepEqual(read, { ok: true, content: "m".repeat(budget) });
   const wide = await readWorkspaceFile(directory, WORKSPACE_FILE.AGENTS);
   assert.deepEqual(wide, { ok: true, content: "a".repeat(budget + 1) });
+});
+
+test("today's note is named by the instant's UTC day, a dated note is told from every other name, and an appended entry lands after a blank line", () => {
+  assert.equal(dailyNotePath(NOW), "memory/2026-09-08.md");
+  // A minute before midnight UTC is still the day's note; the next minute is the next day's.
+  assert.equal(dailyNotePath(Date.UTC(2026, 8, 8, 23, 59)), "memory/2026-09-08.md");
+  assert.equal(dailyNotePath(Date.UTC(2026, 8, 9, 0, 0)), "memory/2026-09-09.md");
+  assert.equal(isDailyNotePath("memory/2026-09-08.md"), true);
+  assert.equal(isDailyNotePath("memory/2026-09-08-standup.md"), true);
+  assert.equal(isDailyNotePath(WORKSPACE_FILE.MEMORY), false);
+  assert.equal(isDailyNotePath("memory/notes.md"), false);
+  assert.equal(isDailyNotePath("2026-09-08.md"), false);
+  assert.equal(isDailyNotePath("memory/../MEMORY.md"), false);
+
+  assert.equal(appendedDailyNote(undefined, "- one"), "- one");
+  assert.equal(appendedDailyNote("", "- one"), "- one");
+  assert.equal(appendedDailyNote("  \n\n", "- one"), "- one");
+  assert.equal(appendedDailyNote("- one", "- two"), "- one\n\n- two");
+  assert.equal(appendedDailyNote("- one\n", "- two"), "- one\n\n- two");
+  assert.equal(appendedDailyNote("- one\n\n\n", "- two"), "- one\n\n- two");
+  // What stood is kept to the character: only the trailing whitespace goes.
+  assert.equal(appendedDailyNote("# Day\n\n- one", "- two"), "# Day\n\n- one\n\n- two");
 });
 
 test("recent daily notes are today's and yesterday's alone, slugged variants included", async () => {

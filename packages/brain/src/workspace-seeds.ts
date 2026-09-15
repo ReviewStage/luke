@@ -31,8 +31,12 @@ const SEED_AGENTS = [
   "## Tool notes",
   "",
   "- Name a session only by the identity the standing context lists for it right now.",
-  "- Your workspace files are yours to keep current: notes for yourself go in MEMORY.md, stable",
-  "  facts about the developer in USER.md, dated notes under memory/.",
+  "- During work, an observation worth keeping (a decision, a result, something learned) goes",
+  "  to today's dated note with append_daily_note; it appends and never rewrites. list_daily_notes",
+  "  names the notes you have, and read_workspace_file reads one.",
+  "- MEMORY.md and USER.md are rewritten whole only deliberately, with write_workspace_file after",
+  "  reading them: curated notes for yourself in MEMORY.md, stable facts about the developer in",
+  "  USER.md. Never rewrite either on the way to a reply.",
   "",
 ].join("\n");
 

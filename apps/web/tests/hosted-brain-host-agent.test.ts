@@ -59,6 +59,8 @@ test("the hosted policy withholds the machine's tools and the notebook's reads, 
     BRAIN_TOOL.READ_TRANSCRIPT,
     BRAIN_TOOL.READ_WORKSPACE_FILE,
     BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+    BRAIN_TOOL.APPEND_DAILY_NOTE,
+    BRAIN_TOOL.LIST_DAILY_NOTES,
   ]) {
     assert.equal(askNames.includes(kept), true);
     assert.equal(observationNames.includes(kept), true);

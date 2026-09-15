@@ -48,9 +48,12 @@ import {
 import { openSpeechOffers, type SpeechOffer } from "./speech.js";
 import { type StandingConversation, standingConversations } from "./standing-conversations.js";
 import {
+  type DailyNoteRecord,
   deleteWorkspaceFile,
+  listDailyNotes,
   listWorkspaceFiles,
   readWorkspaceFile,
+  reviseWorkspaceFile,
   seedWorkspaceFile,
   type WorkspaceFileListing,
   type WorkspaceFileRecord,
@@ -168,9 +171,22 @@ export interface HostedStore {
   workspace: {
     read(userId: string, path: string): HostedStoreEffect<WorkspaceFileRecord | undefined>;
     write(userId: string, path: string, content: string, now: number): HostedStoreEffect<void>;
+    /**
+     * Rewrites the file from what stands, under the account's lock; the
+     * revision answers the new content or nothing to leave the file as it
+     * was, and what is answered is what landed.
+     */
+    revise(
+      userId: string,
+      path: string,
+      revise: (existing: string | undefined) => string | undefined,
+      now: number,
+    ): HostedStoreEffect<string | undefined>;
     seed(userId: string, path: string, content: string, now: number): HostedStoreEffect<boolean>;
     delete(userId: string, path: string): HostedStoreEffect<boolean>;
     list(userId: string): HostedStoreEffect<readonly WorkspaceFileListing[]>;
+    /** The dated notes under `memory/`, newest first and at most `limit` of them, each with its character count and none of its words. */
+    listNotes(userId: string, limit: number): HostedStoreEffect<readonly DailyNoteRecord[]>;
   };
   roster: {
     read(userId: string): HostedStoreEffect<RosterSnapshotRecord | undefined>;
@@ -258,10 +274,13 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
         Effect.map(readWorkspaceFile(sealFor(userId), userId, path), Option.getOrUndefined),
       write: (userId, path, content, now) =>
         writeWorkspaceFile(sealFor(userId), userId, path, content, now),
+      revise: (userId, path, revise, now) =>
+        reviseWorkspaceFile(sealFor(userId), userId, path, revise, now),
       seed: (userId, path, content, now) =>
         seedWorkspaceFile(sealFor(userId), userId, path, content, now),
       delete: (userId, path) => deleteWorkspaceFile(userId, path),
       list: (userId) => listWorkspaceFiles(userId),
+      listNotes: (userId, limit) => listDailyNotes(sealFor(userId), userId, limit),
     },
     roster: {
       read: (userId) => readRosterSnapshot(sealFor(userId), userId),

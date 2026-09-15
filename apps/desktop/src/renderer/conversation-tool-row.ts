@@ -87,6 +87,8 @@ export const TOOL_ROW_KIND = {
   TRANSCRIPT: "transcript",
   WORKSPACE_READ: "workspace-read",
   WORKSPACE_WRITE: "workspace-write",
+  DAILY_NOTE_APPEND: "daily-note-append",
+  DAILY_NOTES_LIST: "daily-notes-list",
   SKILL: "skill",
   DELEGATE: "delegate",
   CHILDREN: "children",
@@ -115,6 +117,8 @@ const DETAIL_KIND_BY_TOOL: ReadonlyMap<string, DetailKind> = new Map<string, Det
   [BRAIN_TOOL.READ_TRANSCRIPT, TOOL_ROW_KIND.TRANSCRIPT],
   [BRAIN_TOOL.READ_WORKSPACE_FILE, TOOL_ROW_KIND.WORKSPACE_READ],
   [BRAIN_TOOL.WRITE_WORKSPACE_FILE, TOOL_ROW_KIND.WORKSPACE_WRITE],
+  [BRAIN_TOOL.APPEND_DAILY_NOTE, TOOL_ROW_KIND.DAILY_NOTE_APPEND],
+  [BRAIN_TOOL.LIST_DAILY_NOTES, TOOL_ROW_KIND.DAILY_NOTES_LIST],
   [BRAIN_TOOL.LOAD_SKILL, TOOL_ROW_KIND.SKILL],
   [BRAIN_TOOL.SESSIONS_SPAWN, TOOL_ROW_KIND.DELEGATE],
   [BRAIN_TOOL.SUBAGENTS, TOOL_ROW_KIND.CHILDREN],
@@ -592,6 +596,11 @@ function composeDetail(
         ],
       };
     }
+    // An entry's words are the note's, not the row's: the row says a note grew and nothing of what it gained.
+    case TOOL_ROW_KIND.DAILY_NOTE_APPEND:
+      return { runs: [{ text: "Added to today's note" }] };
+    case TOOL_ROW_KIND.DAILY_NOTES_LIST:
+      return { runs: [{ text: "Listed his dated notes" }] };
     case TOOL_ROW_KIND.SKILL: {
       const location = wordIn(input, "location");
       return {
