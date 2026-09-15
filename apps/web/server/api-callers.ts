@@ -119,7 +119,7 @@ interface RefusedCaller {
   readonly sites: readonly CallerSite[];
 }
 
-export interface ResolvedCallers {
+interface ResolvedCallers {
   readonly resolved: readonly ResolvedCaller[];
   readonly refused: readonly RefusedCaller[];
 }
@@ -474,7 +474,7 @@ const decodeModuleNamespace = Schema.decodeUnknownSync(
   Schema.Record(Schema.String, Schema.Unknown),
 );
 
-export interface EvaluatedModule {
+interface EvaluatedModule {
   /** The paths the module's exports spell or answer, each with the export's own site. */
   readonly sites: readonly ScannedSite[];
   /** Exports the check could not read as paths. */

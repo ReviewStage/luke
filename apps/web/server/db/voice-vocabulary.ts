@@ -11,10 +11,9 @@ export const VOICE_CLOSE_REASON = {
 
 export type VoiceCloseReason = (typeof VOICE_CLOSE_REASON)[keyof typeof VOICE_CLOSE_REASON];
 
-/** Who the session hands a delegation to: the client that opened it, or the Responses API directly. */
+/** Who the session hands a delegation to: the client that opened it. */
 export const VOICE_DELEGATION_MODE = {
   CLIENT: "client",
-  RESPONSES: "responses",
 } as const;
 
 /** Who spoke a segment: the developer or Luke. A segment is never a system row. */

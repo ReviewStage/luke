@@ -31,7 +31,7 @@ export type HostedStoreTestRun = <A, E>(
   effect: Effect.Effect<A, E, SqlClient.SqlClient>,
 ) => Promise<A>;
 
-export interface HostedStoreTestDatabase {
+interface HostedStoreTestDatabase {
   readonly store: HostedStore;
   /** The same client the store's effects run against, for a test that reads one itself. */
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;

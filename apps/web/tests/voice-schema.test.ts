@@ -231,5 +231,5 @@ test("the close reasons are the Live API's five, and a segment's role is one of 
     "remote_hangup",
   ]);
   assert.deepEqual(Object.values(VOICE_SEGMENT_ROLE).sort(), ["assistant", "user"]);
-  assert.deepEqual(Object.values(VOICE_DELEGATION_MODE).sort(), ["client", "responses"]);
+  assert.deepEqual(Object.values(VOICE_DELEGATION_MODE).sort(), ["client"]);
 });

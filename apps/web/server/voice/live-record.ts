@@ -51,12 +51,12 @@ type DelegationCreated = Extract<
   { type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED }
 >;
 
-export interface HostedLiveRecordOptions {
+interface HostedLiveRecordOptions {
   readonly writer: VoiceWriter;
   readonly target: VoiceTarget;
 }
 
-export interface HostedLiveRecord extends LiveRecord {
+interface HostedLiveRecord extends LiveRecord {
   /** One server event of the session's stream, in arrival order; answers what the writer did with it. */
   observe(event: LiveServerEvent): Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>;
   /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */

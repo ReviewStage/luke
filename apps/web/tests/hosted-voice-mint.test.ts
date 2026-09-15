@@ -28,10 +28,10 @@ interface VoiceMintRequestBody {
   speed?: RealtimeVoiceSpeed | number;
 }
 
-function mintRequest(body?: VoiceMintRequestBody, headers: Record<string, string> = {}): Request {
+function mintRequest(body?: VoiceMintRequestBody): Request {
   const init: RequestInit = {
     method: "POST",
-    headers: { authorization: "Bearer token-1", ...headers },
+    headers: { authorization: "Bearer token-1" },
   };
   if (body !== undefined) init.body = JSON.stringify(body);
   return new Request("https://luke.test/api/voice/mint", init);

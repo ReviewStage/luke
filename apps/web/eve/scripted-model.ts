@@ -14,7 +14,7 @@ import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js"
 
 export const SCRIPTED_FACT = "The developer prefers short replies.";
 const SCRIPTED_USER_FILE = `# USER.md\n\n- 2026-09-15: ${SCRIPTED_FACT}\n`;
-export const SCRIPTED_REPLY = "Noted: short replies from now on.";
+const SCRIPTED_REPLY = "Noted: short replies from now on.";
 
 export function scriptedModel(): LanguageModel {
   return mockModel({

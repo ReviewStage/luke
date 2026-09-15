@@ -47,7 +47,7 @@ export const PROBE_DOOR = {
   /** OPTIONS Allowlist over `/api` and `/eve`: an OPTIONS the allowlist lets through with no credential at all. */
   OPTIONS_ALLOWLIST: "options-allowlist",
 } as const;
-export type ProbeDoor = (typeof PROBE_DOOR)[keyof typeof PROBE_DOOR];
+type ProbeDoor = (typeof PROBE_DOOR)[keyof typeof PROBE_DOOR];
 export const ProbeDoorSchema = Schema.Literals([
   PROBE_DOOR.BYPASS_SECRET,
   PROBE_DOOR.OPTIONS_ALLOWLIST,
@@ -124,7 +124,7 @@ export interface PlannedRequest {
 }
 
 /** The paths a deployment is asked for, from the two places callers are written down. */
-export interface ProbePaths {
+interface ProbePaths {
   /**
    * Every `/api/` path a client builds, an interpolated id stood in for by the
    * callers check's probe segment, and a base other segments are appended to
@@ -200,7 +200,7 @@ const CACHE_BUSTER = "nocache";
 const VERCEL_SSO = { host: "vercel.com", pathname: "/sso-api" } as const;
 
 /** What a probe reads of an answer: the status and the two headers that decide whose answer it is. */
-export interface ProbeAnswer {
+interface ProbeAnswer {
   readonly status: number;
   readonly vercelError: Option.Option<string>;
   readonly location: Option.Option<string>;
@@ -223,7 +223,7 @@ export function judge(request: PlannedRequest, answer: ProbeAnswer): Verdict {
   return VERDICT.OK;
 }
 
-export interface ProbeResult extends PlannedRequest {
+interface ProbeResult extends PlannedRequest {
   readonly status: number;
   readonly vercelError: string | undefined;
   readonly verdict: Verdict;

@@ -57,7 +57,7 @@ export const ADMIN_ERROR = {
   UNAVAILABLE: "unavailable",
 } as const;
 
-export type AdminError = (typeof ADMIN_ERROR)[keyof typeof ADMIN_ERROR];
+type AdminError = (typeof ADMIN_ERROR)[keyof typeof ADMIN_ERROR];
 
 /**
  * How much of the user population a metrics read covers. Admin accounts are the

@@ -23,7 +23,7 @@ import type { ExchangeAttachment, ExchangeReport } from "./live-exchange.js";
  * fake eve behind the same door.
  */
 
-export interface DeploymentExchangeSeams {
+interface DeploymentExchangeSeams {
   /** The edge's own runner, over which the writer is composed and every effect of the exchange is answered. */
   readonly run: WebStoreRun;
   /** The secret the store's sealed rows open under; nothing means the hosted tier is off. */
