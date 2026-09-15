@@ -66,7 +66,6 @@ const MESSAGE_ROLE = {
   USER: "user",
   ASSISTANT: "assistant",
   DEVELOPER: "developer",
-  TOOL: "tool",
 } as const;
 
 const SPEAKER_ROLE = {

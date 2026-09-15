@@ -535,7 +535,7 @@ function sessionDisplayTs() {
 
 import { SESSION_URGENCY, type SessionUrgency } from "@sidecar/session";
 
-export const URGENCY_LABEL = {
+const URGENCY_LABEL = {
 ${labels}
 } as const;
 
@@ -545,7 +545,7 @@ export function urgencyLabel(urgency: SessionUrgency): string {
 }
 
 /** The urgency order the surface reads top-down and the badge collapses to. */
-export const URGENCY_PRIORITY: readonly SessionUrgency[] = [
+const URGENCY_PRIORITY: readonly SessionUrgency[] = [
 ${priority}
 ];
 

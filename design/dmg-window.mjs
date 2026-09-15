@@ -1,6 +1,5 @@
 export const DMG_WINDOW = {
   BACKGROUND: {
-    DIRECTORY: ".background",
     FILE_NAME: "background.tiff",
     PNG: { WIDTH: 660, HEIGHT: 400 },
   },

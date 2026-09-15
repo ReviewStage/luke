@@ -10,7 +10,7 @@
 
 import { SESSION_URGENCY, type SessionUrgency } from "@sidecar/session";
 
-export const URGENCY_LABEL = {
+const URGENCY_LABEL = {
   [SESSION_URGENCY.WORKING]: "Working",
   [SESSION_URGENCY.ATTENTION]: "Needs you",
   [SESSION_URGENCY.COMPLETE]: "Complete",
@@ -23,7 +23,7 @@ export function urgencyLabel(urgency: SessionUrgency): string {
 }
 
 /** The urgency order the surface reads top-down and the badge collapses to. */
-export const URGENCY_PRIORITY: readonly SessionUrgency[] = [
+const URGENCY_PRIORITY: readonly SessionUrgency[] = [
   SESSION_URGENCY.ATTENTION,
   SESSION_URGENCY.WORKING,
   SESSION_URGENCY.COMPLETE,
