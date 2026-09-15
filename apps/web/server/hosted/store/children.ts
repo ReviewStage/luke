@@ -95,7 +95,9 @@ type ChildRow = typeof ChildRowSchema.Type;
  * The one select both reads share: the account's standing children under
  * `conditions`, newest first, each joined to its parent (a child without
  * one is a row no delegation wrote, and is not a child) and to the latest of
- * its turns by the instant it was queued, the id breaking a tie.
+ * its turns by the instant it was queued, the id breaking a tie. Both joins
+ * hold to the child's own account, so a parent or a turn written under
+ * another lends the child nothing, whatever id it names.
  */
 const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[], limit: number) =>
   sql`
@@ -103,11 +105,12 @@ const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[
            child.created_at, child.completion_delivered_at,
            latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure
     from conversations child
-    join conversations parent on parent.id = child.parent_conversation_id
+    join conversations parent
+      on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
     left join lateral (
       select status, started_at, settled_at, failure
       from turns
-      where turns.conversation_id = child.id
+      where turns.conversation_id = child.id and turns.user_id = child.user_id
       order by turns.queued_at desc, turns.id desc
       limit 1
     ) latest on true

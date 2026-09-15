@@ -144,6 +144,17 @@ test("a child's status is its latest turn's: accepted before one runs, then runn
   // The latest turn is the one queued last, not the one written last.
   await turn({ status: TURN_STATUS.SETTLED, queuedAt: at(5), settledAt: at(6) });
   assert.equal((await read()).status, CHILD_STATUS.CANCELLED);
+
+  // A turn on the child's row but under another account lends it nothing, however late it was queued.
+  await insertTurn(database.run, {
+    userId: await database.createUser(),
+    conversationId: child,
+    origin: TURN_ORIGIN.CHILD,
+    status: TURN_STATUS.RUNNING,
+    queuedAt: at(60),
+    startedAt: at(61),
+  });
+  assert.equal((await read()).status, CHILD_STATUS.CANCELLED);
 });
 
 test("a stamped child, another account's child, and a row of another kind are listed by nothing", async () => {
