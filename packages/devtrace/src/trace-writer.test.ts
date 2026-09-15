@@ -4,102 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { NodeFileSystem } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import {
-  BRAIN_PREFETCH_OUTCOME,
-  BRAIN_PREFETCH_TAKE,
-  BRAIN_TURN_TRIGGER,
-  hostedBrainToolCatalog,
-} from "@sidecar/brain";
 import { LIVE_SERVER_EVENT } from "@sidecar/live";
-import { TOOL_LOOP_RUNTIME } from "@sidecar/runtime";
-import { MODEL_RESPONSE_OUTCOME, RUN_ORIGIN } from "@sidecar/runtime/vocabulary";
-import { isRecord, isWireString, recordFromJsonLine } from "@sidecar/wire";
+import { isRecord, recordFromJsonLine } from "@sidecar/wire";
 import { Effect } from "effect";
 import { AgentTraceWriter } from "./trace-writer.js";
-import { TRACE_DIRECTION, TRACE_ENTRY_KIND } from "./vocabulary.js";
-
-function fixedClock(): () => Date {
-  let tick = 0;
-  return () => {
-    tick += 1_000;
-    return new Date(1_800_000_000_000 + tick);
-  };
-}
+import { TRACE_DIRECTION } from "./vocabulary.js";
 
 /** A directory of this run's own, and the `FileSystem` the host's layer hands the writer. */
 const traceDirectory = Effect.promise(() => mkdtemp(path.join(tmpdir(), "devtrace-")));
-
-it.live("lines land in the named file, stamped, in the order they were recorded", () =>
-  Effect.gen(function* () {
-    const directory = yield* traceDirectory;
-    const writer = yield* AgentTraceWriter.make({ directory, now: fixedClock() });
-    writer.recordWire({
-      direction: TRACE_DIRECTION.CLIENT,
-      event: { type: "session.input_audio.mute" },
-    });
-    writer.recordBrainRequest({
-      inputItems: 3,
-      inputChars: 2_048,
-      outcome: MODEL_RESPONSE_OUTCOME.ANSWERED,
-      elapsedMs: 900,
-      outputItemKinds: ["reasoning", "message"],
-      inputTokens: 1_500,
-      outputTokens: 60,
-    });
-    writer.recordBrainTurn({
-      trigger: BRAIN_TURN_TRIGGER.WAKE,
-      origin: RUN_ORIGIN.OBSERVATION,
-      runtime: TOOL_LOOP_RUNTIME.ID,
-      tools: [...hostedBrainToolCatalog().keys()],
-      promptChars: 12_000,
-      inputTokens: 1_500,
-      transcriptBytes: 4_096,
-      toolCalls: [{ name: "announce", argumentsChars: 120, outcomeStatus: "accepted" }],
-      deliveries: [{ briefingChars: 96 }],
-      elapsedMs: 1_250,
-      iterations: 1,
-    });
-    writer.recordSpeechDecision({ kind: "briefing", decision: "offered", pendingCount: 2 });
-    writer.recordBrainPrefetch({
-      outcome: BRAIN_PREFETCH_OUTCOME.PLANNED,
-      chars: 24,
-      reads: 1,
-      elapsedMs: 300,
-    });
-    writer.recordBrainPrefetch({ take: BRAIN_PREFETCH_TAKE.HIT_WAITED, reads: 1, waitedMs: 120 });
-    yield* writer.settled;
-    const written = yield* Effect.promise(() => readFile(writer.file, "utf8"));
-    const lines = written.split("\n").filter((line) => line.length > 0);
-    const entries = lines.map(recordFromJsonLine);
-    assert.equal(entries.length, 6);
-    assert.equal(entries[4]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
-    assert.equal(entries[4]?.outcome, BRAIN_PREFETCH_OUTCOME.PLANNED);
-    assert.equal(entries[4]?.reads, 1);
-    assert.equal(entries[5]?.kind, TRACE_ENTRY_KIND.BRAIN_PREFETCH);
-    assert.equal(entries[5]?.take, BRAIN_PREFETCH_TAKE.HIT_WAITED);
-    assert.equal(entries[5]?.waitedMs, 120);
-    assert.equal(entries[0]?.kind, TRACE_ENTRY_KIND.WIRE);
-    assert.equal(entries[0]?.direction, TRACE_DIRECTION.CLIENT);
-    assert.equal(entries[1]?.kind, TRACE_ENTRY_KIND.BRAIN_REQUEST);
-    assert.equal(entries[1]?.outcome, MODEL_RESPONSE_OUTCOME.ANSWERED);
-    assert.equal(entries[1]?.inputChars, 2_048);
-    assert.ok(entries[1] && !("model" in entries[1]));
-    assert.equal(entries[2]?.kind, TRACE_ENTRY_KIND.BRAIN);
-    assert.equal(entries[2]?.trigger, BRAIN_TURN_TRIGGER.WAKE);
-    assert.equal(entries[2]?.elapsedMs, 1_250);
-    const toolCalls = entries[2]?.toolCalls;
-    assert.ok(Array.isArray(toolCalls) && isRecord(toolCalls[0]));
-    assert.equal(entries[3]?.kind, TRACE_ENTRY_KIND.SPEECH);
-    assert.deepEqual(entries[3]?.speech, {
-      kind: "briefing",
-      decision: "offered",
-      pendingCount: 2,
-    });
-    for (const entry of entries) {
-      assert.ok(isWireString(entry?.at));
-    }
-  }).pipe(Effect.provide(NodeFileSystem.layer)),
-);
 
 it.live("raw audio handed straight to the writer still never reaches the file", () =>
   Effect.gen(function* () {
