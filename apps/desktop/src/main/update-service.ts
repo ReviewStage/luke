@@ -169,7 +169,7 @@ export function idleUpdateSnapshot(
 }
 
 /** Where the last-run version is kept between launches, for the `updated` confirmation. */
-export interface LastRunVersionStore {
+interface LastRunVersionStore {
   read(): string | undefined;
   write(version: string): void;
 }

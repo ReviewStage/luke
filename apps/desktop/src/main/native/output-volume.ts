@@ -3,12 +3,12 @@ import { LINE_UNAVAILABLE, lineWatcher } from "./line-watcher";
 import type { NativeHelperProcess } from "./native-helper";
 
 /**
- * The two things the helper says. Parsed rather than assumed, like the talk
- * key's lines: a state the reader guessed at would put a "turn your volume up"
- * hint on screen over sound the user can hear perfectly well.
+ * The line the helper says when it has nothing to report. Parsed rather than
+ * assumed, like the talk key's lines: a state the reader guessed at would put
+ * a "turn your volume up" hint on screen over sound the user can hear
+ * perfectly well.
  */
 const OUTPUT_VOLUME_EVENT = {
-  OUTPUT: "output",
   UNAVAILABLE: "unavailable",
 } as const;
 
@@ -24,7 +24,7 @@ interface OutputVolumeEdges {
   onUnavailable(): void;
 }
 
-export interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
+interface OutputVolumeWatcherOptions extends OutputVolumeEdges {
   /** Injectable so the reader can be exercised without a Mac or a binary. */
   spawnHelper?: () => NativeHelperProcess | undefined;
 }

@@ -6,7 +6,6 @@ import { channels } from "#shared/bridge";
 import type { TalkKeyEdges } from "../native/talk-key";
 import {
   HOTKEY_RANK,
-  type HotkeyRank,
   HotkeyRegistrar,
   type ShortcutSurface,
   type TalkKeyHandle,
@@ -21,8 +20,6 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
   const registered: RecordedShortcut[] = [];
   const unregistered: string[] = [];
   let unregisterAllCount = 0;
-  const announced: HotkeyRank[] = [];
-  const talkStops: number[] = [];
   let talkEdges: TalkKeyEdges | undefined;
   let talkStart = true;
   const voiceHostSent: string[] = [];
@@ -51,17 +48,11 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     shortcut,
     createTalkKeyWatcher: (edges): TalkKeyHandle => {
       talkEdges = edges;
-      return {
-        start: () => talkStart,
-        stop: () => {
-          talkStops.push(1);
-          return Promise.resolve();
-        },
-      };
+      return { start: () => talkStart, stop: () => Promise.resolve() };
     },
     host: {
       voiceHost: () => voiceHost,
-      hotkeyChanged: (rank) => announced.push(rank),
+      hotkeyChanged: () => {},
     },
   });
 
@@ -70,8 +61,6 @@ function harness(options: { credentials?: boolean; registers?: boolean } = {}) {
     registered: () => registered.map((entry) => entry.accelerator),
     unregistered: () => unregistered,
     unregisterAllCount: () => unregisterAllCount,
-    announced: () => announced,
-    talkStops: () => talkStops,
     voiceHostSent: () => voiceHostSent,
     pressTalk() {
       const talk = registered.find((entry) => entry.accelerator === registrar.talk);

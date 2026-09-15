@@ -19,7 +19,7 @@ import {
 import { ConfigProvider, Layer } from "effect";
 import type { DesktopConfig } from "./desktop-config";
 
-export interface HostSeamDependencies {
+interface HostSeamDependencies {
   config: DesktopConfig;
   /** The client's own credential protection; the host encrypts nothing without it. */
   cipher: HostSeams["cipher"];

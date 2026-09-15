@@ -30,7 +30,7 @@ export interface NativeNodeCapabilities {
   ) => Promise<string>;
 }
 
-export interface NativeNodeDependencies {
+interface NativeNodeDependencies {
   config: DesktopConfig;
   /** Where what these devices answer is written; the windows are told from it. */
   state: AppStateStore;
