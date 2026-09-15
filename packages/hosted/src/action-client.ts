@@ -66,7 +66,10 @@ export type HostedActionWorkspaceOutcome =
  * provider itself listed, and the developer's own bounded words for what
  * the agent should start on. The model and effort ride only beside the agent
  * they pair with, as one selection, so the service's admission holds the
- * pairing to the build's table exactly as the desktop's did.
+ * pairing to the build's table exactly as the desktop's did. A creation that
+ * names no model starts on the account's synced `workspaceAgentDefaults`
+ * pairing, model and effort both, where the developer chose one; the
+ * provider's own default decides only where no pairing is stored either.
  */
 export interface HostedWorkspaceCreation {
   providerProjectId: string;

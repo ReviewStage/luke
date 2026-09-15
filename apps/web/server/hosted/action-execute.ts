@@ -53,6 +53,19 @@ import { type ObservedRoster, rosterProvider } from "./observed-roster.js";
 export type HostedSessionActionKind = Exclude<SessionActionKind, typeof ACTION_KIND.OPEN>;
 
 /**
+ * The two actions that start an agent, and so the two the developer's stored
+ * agent pairing (`workspaceAgentDefaults`, synced to the account) has anything
+ * to say to. Every door onto `executeSessionAction` — the brain's carrier and
+ * the hosted action routes alike — reads the pairing for exactly these kinds
+ * and hands it on; the request builders decide whether it rides, since a model
+ * the ask named outranks it there.
+ */
+export const AGENT_STARTING_ACTION_KINDS: ReadonlySet<HostedSessionActionKind> = new Set([
+  ACTION_KIND.CREATE_WORKSPACE,
+  ACTION_KIND.ADD_AGENT,
+]);
+
+/**
  * Which actions each provider takes, mirroring exactly the write routes its
  * desktop adapter implements — the adapter seam is the authority for actions,
  * and nothing here may advertise a capability the adapter does not already

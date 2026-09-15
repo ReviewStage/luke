@@ -12,14 +12,17 @@ import {
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
+  type WorkspaceAgentSelection,
 } from "../core.js";
 import {
   type ActionExecutionAnswer,
   type ActionRoster,
+  AGENT_STARTING_ACTION_KINDS,
   actionUnsupportedReason,
   executeSessionAction,
   type HostedSessionActionKind,
 } from "./action-execute.js";
+import { readWorkspaceDefaults } from "./brain-host/defaults.js";
 import { decryptProviderKey, secretOrUnavailable } from "./encryption.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { rosterForAction } from "./observation-pass.js";
@@ -145,6 +148,20 @@ export interface SessionActionOptions
    * has no other way to be exercised.
    */
   unsupportedReason?: (providerId: CloudAgentProviderId) => string | undefined;
+  /**
+   * The developer's stored agent pairing for this provider — the
+   * `workspaceAgentDefaults` the desktop's settings keep, synced to the
+   * account — read for the two actions that start an agent and for nothing
+   * else. Injected in tests; production reads the account's synced rows
+   * through `readWorkspaceDefaults`. The execution lets it ride only where
+   * the ask named no model of its own, so a phone's or a watch's creation
+   * that left the choice open starts on the very model and effort the
+   * developer chose on the Mac, exactly as one the brain asks for does.
+   */
+  agentDefault?: (
+    userId: string,
+    providerId: CloudAgentProviderId,
+  ) => HostedActionEffect<WorkspaceAgentSelection | undefined>;
   /** Injected in tests; production hands the ask to `executeSessionAction`. */
   execute?: (options: {
     kind: HostedSessionActionKind;
@@ -152,8 +169,15 @@ export interface SessionActionOptions
     fields: WireRecord;
     apiKey: string;
     roster: ActionRoster;
+    agentSelection?: WorkspaceAgentSelection;
   }) => Effect.Effect<ActionExecutionAnswer>;
 }
+
+/** The production read behind `agentDefault`: the account's synced pairing for one provider. */
+const storedAgentDefault: NonNullable<SessionActionOptions["agentDefault"]> = (
+  userId,
+  providerId,
+) => Effect.map(readWorkspaceDefaults(userId), (defaults) => defaults.agentDefaults?.[providerId]);
 
 /**
  * What every action handler resolves before it looks at the action's own fields, or
@@ -273,8 +297,22 @@ export const handleSessionAction = /* @__PURE__ */ Effect.fn("handleSessionActio
   if (key instanceof Response) return key;
 
   const roster = yield* options.roster(userId, providerId, secret);
+  // The stored pairing is read only for an action that starts an agent, after
+  // every gate above has passed, so a refused or unsupported ask reads nothing.
+  const agentSelection = AGENT_STARTING_ACTION_KINDS.has(kind)
+    ? yield* (options.agentDefault ?? storedAgentDefault)(userId, providerId)
+    : undefined;
   const execute = options.execute ?? executeSessionAction;
-  return actionAnswer(yield* execute({ kind, providerId, fields, apiKey: key.apiKey, roster }));
+  return actionAnswer(
+    yield* execute({
+      kind,
+      providerId,
+      fields,
+      apiKey: key.apiKey,
+      roster,
+      ...(agentSelection === undefined ? undefined : { agentSelection }),
+    }),
+  );
 });
 
 /**
