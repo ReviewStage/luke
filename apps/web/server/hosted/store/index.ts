@@ -72,10 +72,10 @@ type HostedStoreEffect<A> = Effect.Effect<A, HostedStoreFailure, SqlClient.SqlCl
 /**
  * The hosted store, over Postgres and keyed by user: the conversation rows
  * the store writer writes and the read routes answer, beside the notebook,
- * the remembered facts, the roster snapshot, and the speech offers. Every
+ * the roster snapshot, and the speech offers. Every
  * method names the user whose rows it reaches, and nothing here resolves a
  * user: the bearer seam above decides who is asking, and the store takes the
- * answer. The notebook, the facts, and the roster still cross the payload
+ * answer. The notebook and the roster still cross the payload
  * envelope on their way to a row and back, bound to the user's id; the
  * conversation rows are plain `jsonb`, readable by an operator.
  */

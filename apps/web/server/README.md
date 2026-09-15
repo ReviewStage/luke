@@ -1172,7 +1172,7 @@ The `conversations`/`messages`/`turns`/`events`/`tool_sets`/`provider_cursors`,
 `workspace_file`, and `roster_snapshot` tables hold the hosted brain's
 conversation per account: the
 conversation rows the storage rework settled on, the identity workspace and
-daily notes, the remembered facts, and the latest roster snapshot with its
+daily notes, and the latest roster snapshot with its
 diffs and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and

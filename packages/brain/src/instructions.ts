@@ -76,9 +76,10 @@ const TURN_LINES: readonly string[] = [
   "completion arrives on its own. Don't poll for it.",
   "",
   `Every turn also carries a ${BRAIN_INPUT_MARKER.STANDING_CONTEXT} item, rebuilt each time: the`,
-  "observed sessions with the identities you act by, the projects a workspace can be created",
-  "in, durable facts about the developer, the recent conversation, and the app guide. It's",
-  "context, not a report. Answer out of it and don't read it back.",
+  "observed sessions with the identities you act by, and the projects a workspace can be",
+  "created in. It's context, not a report. Answer out of it and don't read it back. What you",
+  "know of the developer is USER.md, in your prompt; the conversation itself is this session's",
+  "own history, never restated here.",
 ];
 
 const TOOL_LINES: readonly string[] = [
