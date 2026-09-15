@@ -20,13 +20,7 @@ import { composeObservation } from "./compose-observation.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
-import {
-  type HostAssembly,
-  HostAssemblyTag,
-  type HostTag,
-  hostDrain,
-  hostStandingLayer,
-} from "./effect/host.js";
+import { type HostAssembly, HostAssemblyTag, hostDrain } from "./effect/host.js";
 import { HostKernelTag, HostService } from "./effect/kernel.js";
 import {
   type AppIdentity,
@@ -352,23 +346,3 @@ export const hostAssemblyLayer: Layer.Layer<
     return assembly;
   }),
 );
-
-/**
- * The host as one `Layer` over the kernel: built, it is the host started, and
- * the scope it was built in closing is the whole quit — the drain, the loops
- * disarmed, and every composer's stop in the reverse of its start.
- */
-export const hostLayer: Layer.Layer<
-  HostTag,
-  DuplicateGatewayMethod,
-  | HostKernelTag
-  | HostService
-  | RunMode
-  | Reporter
-  | Environment
-  | SecretCipher
-  | AppIdentity
-  | MachinePresenceReader
-  | ShutdownSignal
-  | FileSystem.FileSystem
-> = Layer.provide(hostStandingLayer, hostAssemblyLayer);
