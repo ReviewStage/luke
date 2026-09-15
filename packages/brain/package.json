@@ -7,8 +7,7 @@
     ".": "./src/index.js",
     "./requests": "./src/requests.js",
     "./tool-names": "./src/tools/names.js",
-    "./tool-set": "./src/tool-set.js",
-    "./ui-message-context": "./src/ui-message-context.js"
+    "./tool-set": "./src/tool-set.js"
   },
   "types": "./src/index.ts",
   "scripts": {

@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
-import {
-  normalizeSession,
-  type ObservedWorkspaceProject,
-  SESSION_STATUS,
-  WORKSPACE_TASK_SUPPORT,
-} from "@sidecar/session";
+import { normalizeSession, SESSION_STATUS } from "@sidecar/session";
 import { test } from "vitest";
 import {
   CONTEXT_ITEM_KIND,
   contextItemId,
   maximumVoiceContextSessions,
-  maximumVoiceContextWorkspaceProjects,
   sessionContextText,
 } from "./standing-context.js";
 
@@ -74,25 +68,4 @@ test("session context stays bounded when many sessions are observed", () => {
     .split("\n")
     .slice(1);
   assert.equal(exactlyAtBound.length, maximumVoiceContextSessions);
-});
-
-const OFFERED_PROJECT: ObservedWorkspaceProject = {
-  providerId: "conductor",
-  providerName: "Conductor",
-  providerProjectId: "proj-1",
-  repository: "luke",
-  taskSupport: WORKSPACE_TASK_SUPPORT.OPTIONAL,
-};
-
-test("a chosen default project survives the context cap", () => {
-  // One more project than the context will list, alphabetical like the
-  // normalizer hands them over, with the developer's chosen default sorted
-  // dead last — exactly the project the cap would otherwise cut.
-  const crowd = Array.from({ length: maximumVoiceContextWorkspaceProjects + 1 }, (_, index) => ({
-    ...OFFERED_PROJECT,
-    providerProjectId: `proj-${String(index).padStart(2, "0")}`,
-    repository: `repo-${String(index).padStart(2, "0")}`,
-  }));
-  const last = crowd.at(-1);
-  assert.ok(last);
 });

@@ -84,7 +84,7 @@ export const PLAN_READS_INPUT: EffectSchema.Codec<unknown, UnparsedWireValue> = 
 const readPlan = readEither(PLAN_READS_FIELDS, { excess: EXCESS_KEYS.DROP });
 
 /** The planner's tool as a registry carries it: its name, its words, and the schema its fields are declared in. */
-export interface PlanReadsTool {
+interface PlanReadsTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: EffectSchema.Codec<unknown, UnparsedWireValue>;
@@ -109,7 +109,7 @@ interface PrefetchSessionOption {
 }
 
 /** The sessions offered to one plan: the options the planner reads, and the identity each position resolves to. */
-export interface OfferedSessions {
+interface OfferedSessions {
   options: readonly PrefetchSessionOption[];
   identities: readonly SessionIdentity[];
 }
@@ -130,7 +130,7 @@ export function offeredSessions(sessions: readonly Session[]): OfferedSessions {
   };
 }
 
-export type PlannedRead =
+type PlannedRead =
   | { kind: typeof PREFETCH_READ_KIND.TRANSCRIPT; identity: SessionIdentity }
   | { kind: typeof PREFETCH_READ_KIND.MEMORY; query: string };
 

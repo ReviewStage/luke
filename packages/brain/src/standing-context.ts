@@ -285,7 +285,7 @@ export const CONTEXT_ITEM_KIND = {
   WORKSPACE_PROJECTS: "workspace-projects",
 } as const;
 
-export type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
+type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
 
 /**
  * Names the item one context update occupies on a call that still carries
@@ -297,7 +297,7 @@ export function contextItemId(kind: ContextItemKind, sequence: number): string {
 }
 
 /** How many projects one context update may offer workspace creation in. */
-export const maximumVoiceContextWorkspaceProjects = 10;
+const maximumVoiceContextWorkspaceProjects = 10;
 
 /**
  * Renders the projects a creation ask may name: each with the identity a tool

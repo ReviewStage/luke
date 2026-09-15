@@ -288,17 +288,6 @@ const BRAIN_SUBMISSION_REJECTION = {
 export type BrainSubmissionRejection =
   (typeof BRAIN_SUBMISSION_REJECTION)[keyof typeof BRAIN_SUBMISSION_REJECTION];
 
-export const BRAIN_SUBMISSION_OUTCOME = {
-  ACCEPTED: "accepted",
-  REJECTED: "rejected",
-} as const;
-
-export interface BrainSubmission {
-  submissionId: string;
-  question: string;
-  origin: BrainRequestOrigin;
-}
-
 /**
  * What a submission's refusal says on the strip, in fixed words: never
  * composed with the ask, so a refusal can only ever be reported in these.

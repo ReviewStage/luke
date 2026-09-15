@@ -8,16 +8,8 @@ import { CHILD_SPAWN_REFUSAL, type ChildSpawnRefusal } from "@sidecar/runtime";
  */
 export const REFUSAL_REASON = {
   UNOBSERVED_SESSION: "not an observed session",
-  ANNOUNCE_IN_ASK: "reply in text: this is a developer ask, and your final text is the speech",
-  NOT_ALLOWED: "not run: the tool policy does not offer this tool in this turn",
-  NOT_OFFERED: "not run: no such tool in this turn",
   EMPTY_BRIEFING: "a briefing needs words",
-  ACTION_FAILED: "the action did not complete",
-  UNREADABLE_ANSWER: "the action answered in a shape this build cannot read",
-  READ_FAILED: "the transcript could not be read",
   RUN_REVOKED: "not run: this ask was cancelled or its run ended",
-  NOT_CHECKPOINTED: "not run: the action could not be recorded before running, so it was not run",
-  CALL_ID_REUSED: "not run: this call id was already used with different arguments",
   NO_WORKSPACE: "not run: this agent has no workspace",
   MALFORMED_ARGUMENTS: "not run: the call's arguments are not the strings the tool takes",
   NO_CHILDREN: "not run: this conversation cannot delegate",
@@ -26,7 +18,6 @@ export const REFUSAL_REASON = {
   UNKNOWN_CHILD: "no child of this conversation has that id",
   EMPTY_TASK: "a task needs words",
   EMPTY_NOTE: "a note entry needs words",
-  NO_MEMORY: "not run: this agent has no notebook index",
 } as const;
 
 /** A spawn refusal in the words the model reads; the service answers the code and this the sentence. */
