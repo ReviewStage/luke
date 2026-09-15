@@ -8,9 +8,7 @@
  * in these modules is part of the contract, so the barrel is written as one
  * door per module rather than as a second list to forget a name in.
  *
- * Three things stand apart. `./websocket` is the socket binding, because it
- * reaches `ws` and `node:http` and a bundle that only wants the vocabulary
- * must not resolve them; `./server` is the host's server, because it composes
+ * Two things stand apart. `./server` is the host's server, because it composes
  * `effect/unstable/rpc`'s runtime over the group `./rpc` derives; and `./testing` is
  * the transport that carries every envelope through text, which nothing that
  * ships composes. The handler vocabulary a host writes its table against

@@ -1,39 +1,25 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { isRecord, isWireString, type UnparsedWireValue, type WireRecord } from "@sidecar/wire";
-import { Context, Deferred, Effect, Fiber, Layer, type Scope } from "effect";
-import { WebSocket } from "ws";
+import { isRecord, isWireString } from "@sidecar/wire";
+import { Deferred, Effect, Fiber, type Scope } from "effect";
 import { gatewayClient } from "./client.js";
-import { type InvocationMemory, invocationMemory, NODE_INVOCATION_REFUSAL } from "./invocations.js";
+import { type InvocationMemory, invocationMemory } from "./invocations.js";
 import type { GatewayMethodTable } from "./methods.js";
 import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_EVENT,
-  GATEWAY_HANDSHAKE_HEADER,
   GATEWAY_METHOD,
-  GATEWAY_PROTOCOL_VERSION,
   type GatewayClientIdentity,
   type GatewayResponse,
   NODE_CAPABILITY_STATUS,
   type NodeInvocation,
-  nodeInvocationAnswerToWire,
-  nodeInvocationFromWire,
   RefusedRefusal,
 } from "./protocol.js";
 import { type GatewayInProcessHost, gatewayInProcessHost } from "./server.js";
 import { TextLoopbackTransport } from "./testing.js";
 import { InProcessTransport } from "./transport.js";
-import {
-  bearerAuthentication,
-  connectWebSocketGateway,
-  GATEWAY_FRAME,
-  GatewaySocketBinding,
-  layerGatewaySocket,
-  WEB_SOCKET_GATEWAY_DEFAULTS,
-} from "./websocket.js";
 
-const TOKEN = "a-shared-secret";
 const OPERATOR: GatewayClientIdentity = {
   clientId: "desktop",
   role: GATEWAY_CLIENT_ROLE.OPERATOR,
@@ -99,28 +85,6 @@ function hostWithNodes(): Effect.Effect<
   );
 }
 
-/** The same host on an ephemeral socket, bound for as long as the test's scope stands. */
-const socketHost = (): Effect.Effect<
-  { readonly nodes: NodeRegistry; readonly port: number },
-  never,
-  Scope.Scope
-> =>
-  Effect.gen(function* () {
-    const { methods, nodes, nextId } = nodeMethods();
-    const context = yield* Layer.build(
-      layerGatewaySocket({
-        methods: methods,
-        configurationRevision: () => 1,
-        sessionRevision: () => undefined,
-        snapshot: () => ({}),
-        now: () => 0,
-        createEventId: nextId,
-        authenticate: bearerAuthentication(TOKEN),
-      }),
-    ).pipe(Effect.orDie);
-    return { nodes, port: Context.get(context, GatewaySocketBinding).port };
-  });
-
 /** The one door each host admitted this client through; a host without one would be a second connection for the same client. */
 function doorOf(
   doors: ReadonlyMap<GatewayInProcessHost, InProcessTransport>,
@@ -129,59 +93,6 @@ function doorOf(
   const door = doors.get(host);
   if (!door) throw new Error("the host was never given a door");
   return door;
-}
-
-function socketUrl(port: number): string {
-  return `ws://${WEB_SOCKET_GATEWAY_DEFAULTS.HOST}:${port}/`;
-}
-
-/** A raw socket admitted as a node, so a test can send frames the client never would. */
-function rawSocket(port: number, clientId: string): Promise<WebSocket> {
-  return new Promise((resolve, reject) => {
-    const socket = new WebSocket(socketUrl(port), {
-      headers: {
-        [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}`,
-        [GATEWAY_HANDSHAKE_HEADER.PROTOCOL_VERSION]: String(GATEWAY_PROTOCOL_VERSION),
-        [GATEWAY_HANDSHAKE_HEADER.CLIENT_ID]: clientId,
-        [GATEWAY_HANDSHAKE_HEADER.CLIENT_ROLE]: GATEWAY_CLIENT_ROLE.OPERATOR,
-      },
-    });
-    socket.once("open", () => resolve(socket));
-    socket.once("error", reject);
-  });
-}
-
-function frames(socket: WebSocket): WireRecord[] {
-  const seen: WireRecord[] = [];
-  socket.on("message", (data) => {
-    // SAFETY: the host sends JSON text frames; parsing yields a wire value the readers check.
-    const value = JSON.parse(data.toString()) as UnparsedWireValue;
-    if (isRecord(value)) seen.push(value);
-  });
-  return seen;
-}
-
-function sendRequest(socket: WebSocket, id: string, method: string, params: WireRecord): void {
-  socket.send(
-    JSON.stringify({
-      kind: GATEWAY_FRAME.REQUEST,
-      envelope: {
-        protocolVersion: GATEWAY_PROTOCOL_VERSION,
-        id,
-        method,
-        params,
-        idempotencyKey: id,
-      },
-    }),
-  );
-}
-
-async function until(predicate: () => boolean, label: string): Promise<void> {
-  for (let attempt = 0; attempt < 200; attempt += 1) {
-    if (predicate()) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-  assert.fail(label);
 }
 
 const INVOCATION: NodeInvocation = {
@@ -305,172 +216,6 @@ for (const kind of ["in-process", "loopback"] as const) {
 }
 
 it.live(
-  "over the socket: an ask dispatched to a node whose connection closes answers unknown, one made after answers unavailable, and a new connection is never replayed the old ask",
-  () =>
-    Effect.scoped(
-      Effect.flatMap(socketHost(), (hosted) =>
-        Effect.promise(async () => {
-          const first = await rawSocket(hosted.port, "desktop");
-          const seenByFirst = frames(first);
-          sendRequest(first, "reg-1", GATEWAY_METHOD.NODE_REGISTER, {
-            nodeId: NODE_ID,
-            capabilities: [CAPABILITY],
-          });
-          await until(
-            () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
-            "the registration answered",
-          );
-          // The host asks; the node has performed the effect and dies before answering.
-          const pending = Effect.runPromise(
-            hosted.nodes.invoke(CAPABILITY, { url: "https://effect.test" }),
-          );
-          await until(
-            () => seenByFirst.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-            "the invocation reached the node",
-          );
-          const dispatched = seenByFirst.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
-          assert.ok(dispatched && isRecord(dispatched.envelope));
-          const invocation = nodeInvocationFromWire(dispatched.envelope);
-          assert.ok(invocation);
-          first.terminate();
-          const lost = await pending;
-          assert.equal(lost.status, NODE_CAPABILITY_STATUS.UNKNOWN);
-          if (lost.status === NODE_CAPABILITY_STATUS.UNKNOWN) {
-            assert.equal(lost.reason, NODE_INVOCATION_REFUSAL.ANSWER_LOST);
-          }
-          // Nothing connected offers the capability now: never dispatched.
-          const undispatched = await Effect.runPromise(
-            hosted.nodes.invoke(CAPABILITY, { url: "https://later.test" }),
-          );
-          assert.equal(undispatched.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-          // A relaunched client registers again and hears no frame for the lost ask;
-          // its reconnect replay carries no invocation either, because none is an event.
-          const second = await rawSocket(hosted.port, "desktop");
-          const seenBySecond = frames(second);
-          sendRequest(second, "reg-2", GATEWAY_METHOD.NODE_REGISTER, {
-            nodeId: NODE_ID,
-            capabilities: [CAPABILITY],
-          });
-          sendRequest(second, "rc-1", GATEWAY_METHOD.RECONNECT, { lastSequence: 0 });
-          await until(
-            () =>
-              seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.RESPONSE).length === 2,
-            "the second client's registration and reconnection answered",
-          );
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          assert.equal(
-            seenBySecond.filter((frame) => frame.kind === GATEWAY_FRAME.INVOCATION).length,
-            0,
-          );
-          const replay = seenBySecond.find(
-            (frame) =>
-              frame.kind === GATEWAY_FRAME.RESPONSE &&
-              isRecord(frame.envelope) &&
-              frame.envelope.id === "rc-1",
-          );
-          assert.ok(replay && isRecord(replay.envelope) && isRecord(replay.envelope.result));
-          assert.deepEqual(replay.envelope.result.events, []);
-          // A late answer for the lost ask, from the new connection, lands nowhere.
-          second.send(
-            JSON.stringify({
-              kind: GATEWAY_FRAME.ANSWER,
-              envelope: nodeInvocationAnswerToWire({
-                invocationId: invocation.invocationId,
-                result: { status: NODE_CAPABILITY_STATUS.OK, value: "too late" },
-              }),
-            }),
-          );
-          // And a fresh ask is dispatched to the new connection alone, once.
-          const fresh = Effect.runPromise(
-            hosted.nodes.invoke(CAPABILITY, { url: "https://fresh.test" }),
-          );
-          await until(
-            () => seenBySecond.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-            "the fresh invocation reached the second client",
-          );
-          const freshFrame = seenBySecond.find((frame) => frame.kind === GATEWAY_FRAME.INVOCATION);
-          assert.ok(freshFrame && isRecord(freshFrame.envelope));
-          const freshInvocation = nodeInvocationFromWire(freshFrame.envelope);
-          assert.ok(freshInvocation && freshInvocation.invocationId !== invocation.invocationId);
-          second.send(
-            JSON.stringify({
-              kind: GATEWAY_FRAME.ANSWER,
-              envelope: nodeInvocationAnswerToWire({
-                invocationId: freshInvocation.invocationId,
-                result: { status: NODE_CAPABILITY_STATUS.OK, value: "opened" },
-              }),
-            }),
-          );
-          const answered = await fresh;
-          assert.deepEqual(answered, { status: NODE_CAPABILITY_STATUS.OK, value: "opened" });
-          second.terminate();
-        }),
-      ),
-    ),
-);
-
-it.live(
-  "over the socket: another connection's answer to a node's ask is ignored; only the node's own connection settles it",
-  () =>
-    Effect.scoped(
-      Effect.flatMap(socketHost(), (hosted) =>
-        Effect.promise(async () => {
-          const node = await rawSocket(hosted.port, "desktop");
-          const other = await rawSocket(hosted.port, "intruder");
-          const seenByNode = frames(node);
-          frames(other);
-          sendRequest(node, "reg", GATEWAY_METHOD.NODE_REGISTER, {
-            nodeId: NODE_ID,
-            capabilities: [CAPABILITY],
-          });
-          await until(
-            () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.RESPONSE),
-            "registered",
-          );
-          const pending = Effect.runPromise(
-            hosted.nodes.invoke(CAPABILITY, { url: "https://guarded.test" }),
-          );
-          await until(
-            () => seenByNode.some((frame) => frame.kind === GATEWAY_FRAME.INVOCATION),
-            "dispatched",
-          );
-          const frame = seenByNode.find((held) => held.kind === GATEWAY_FRAME.INVOCATION);
-          assert.ok(frame && isRecord(frame.envelope));
-          const invocation = nodeInvocationFromWire(frame.envelope);
-          assert.ok(invocation);
-          other.send(
-            JSON.stringify({
-              kind: GATEWAY_FRAME.ANSWER,
-              envelope: nodeInvocationAnswerToWire({
-                invocationId: invocation.invocationId,
-                result: { status: NODE_CAPABILITY_STATUS.OK, value: "forged" },
-              }),
-            }),
-          );
-          let settled = false;
-          void pending.then(() => {
-            settled = true;
-          });
-          await new Promise((resolve) => setTimeout(resolve, 40));
-          assert.equal(settled, false);
-          node.send(
-            JSON.stringify({
-              kind: GATEWAY_FRAME.ANSWER,
-              envelope: nodeInvocationAnswerToWire({
-                invocationId: invocation.invocationId,
-                result: { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" },
-              }),
-            }),
-          );
-          assert.deepEqual(await pending, { status: NODE_CAPABILITY_STATUS.OK, value: "genuine" });
-          node.terminate();
-          other.terminate();
-        }),
-      ),
-    ),
-);
-
-it.live(
   "a client that adopts a replaced host follows the new host's numbering from its snapshot rather than dropping its events",
   () =>
     Effect.gen(function* () {
@@ -538,48 +283,6 @@ it.live(
       oldHost.log.publish(GATEWAY_EVENT.SESSIONS_CHANGED, "old-6");
       assert.equal(heard.length, 6);
     }),
-);
-
-it.live(
-  "the socket client serves invocations only while a handler is served, answering unavailable otherwise",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const hosted = yield* socketHost();
-        const connected = yield* connectWebSocketGateway({
-          url: socketUrl(hosted.port),
-          headers: { [GATEWAY_HANDSHAKE_HEADER.AUTHORIZATION]: `Bearer ${TOKEN}` },
-          client: OPERATOR,
-        });
-        assert.ok(connected.ok);
-        const client = yield* gatewayClient({
-          transport: connected.connection,
-          createId: () => `c-${Math.random()}`,
-        });
-        assert.ok(
-          (yield* client.call(GATEWAY_METHOD.NODE_REGISTER, {
-            nodeId: NODE_ID,
-            capabilities: [CAPABILITY],
-          })).ok,
-        );
-        const unserved = yield* hosted.nodes.invoke(CAPABILITY, { url: "https://none.test" });
-        assert.equal(unserved.status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        if (unserved.status === NODE_CAPABILITY_STATUS.UNAVAILABLE) {
-          assert.equal(unserved.reason, NODE_INVOCATION_REFUSAL.NOT_SERVING);
-        }
-        const opened: string[] = [];
-        yield* connected.connection.serveInvocations?.((invocation) =>
-          Effect.sync(() => {
-            opened.push(String(invocation.params.url));
-            return { status: NODE_CAPABILITY_STATUS.OK, value: undefined };
-          }),
-        ) ?? Effect.void;
-        const served = yield* hosted.nodes.invoke(CAPABILITY, { url: "https://served.test" });
-        assert.equal(served.status, NODE_CAPABILITY_STATUS.OK);
-        assert.deepEqual(opened, ["https://served.test"]);
-        yield* connected.connection.close();
-      }),
-    ),
 );
 
 it.live(
