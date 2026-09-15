@@ -873,10 +873,14 @@ developer's line settled adopts that row under its id rather than cutting a
 second. A
 `session.delegation.created` is the one event held rather than consumed as it
 arrives: the writer cuts the developer's ask from the segments already on
-record before the delegation's offset, and the API may deliver the delegation
-ahead of the deltas it is about, so the event is consumed only when the
-service asks for the developer's utterance to be written, after every delta
-that arrived ahead of that ask has taken its place. That order is a queue's:
+record, and the API may deliver the delegation ahead of the deltas it is
+about and place its offset before the utterance's last fragment, so the ask
+is cut only when the service asks for the developer's utterance to be
+written, after every delta that arrived ahead of that ask has taken its
+place, and cut to the end of the utterance the service's ledger grouped the
+ask as where that reaches past the offset (`recordSpokenAsk`), so an ask's
+last word is its own row's rather than the next ask's first or nobody's.
+That order is a queue's:
 one fiber of the socket's scope makes every write, taking them from a queue
 each arrival puts one on, so where an event lands in the sequence is decided
 where it arrives rather than by whichever fiber reached the store first. The write answers true
@@ -1413,8 +1417,9 @@ event on a briefing's message once the session's voice follows the
 commentary append that carried it (the first output delta beginning at or
 after the append's acknowledged end), and the developer's spoken ask as a
 user message on the voice channel, cut from the stored user segments between
-the previous ask's end and the delegation's offset and named with the
-session, the delegation, and the span. A row whose `closed_at` is still
+the previous ask's end and the delegation's offset or the end of the
+utterance the service's ledger grouped the ask as, whichever is later, and
+named with the session, the delegation, and the span. A row whose `closed_at` is still
 null may keep gaining segments, because an instance that dies at its
 duration bound never sends `session.closed` and the re-attach lands on the
 same row; the writer reads nothing from the row's state but its id. It

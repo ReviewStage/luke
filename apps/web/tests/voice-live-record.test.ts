@@ -16,7 +16,7 @@ import {
 } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
 import { type ToolSet, tool } from "ai";
-import { Effect, Layer, Schema, Scope } from "effect";
+import { Deferred, Effect, Layer, Schema, Scope } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -112,12 +112,15 @@ async function elapse(delayMs: number): Promise<void> {
 
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
+  /** While set, each ask is taken at once and answered only when this settles, as a brain across the network answers. */
+  answerWhen: Deferred.Deferred<void> | undefined;
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
   submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
-    return Effect.sync(() => {
+    return Effect.gen({ self: this }, function* () {
       this.asks.push(ask);
+      if (this.answerWhen !== undefined) yield* Deferred.await(this.answerWhen);
       this.#runs += 1;
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
     });
@@ -516,4 +519,44 @@ test("the record door answers from the stream: an undelegated utterance and Luke
     [2, VOICE_SEGMENT_ROLE.ASSISTANT, "Opening it.", 1200, 2000],
     [3, VOICE_SEGMENT_ROLE.USER, "Now run it.", 3000, 3800],
   ]);
+});
+
+test("a delegation placed ahead of the ask's last fragment, the fragment landing while the brain is asked, leaves the whole utterance on record as the ask, once", async () => {
+  const live = await target();
+  const f = await stand(live);
+  await f.open();
+  f.brain.answerWhen = Deferred.makeUnsafe<void>();
+
+  f.socket.receive(heard("Open the failing", 1000, 2200));
+  // The API places the delegation's offset inside the utterance, ahead of its last fragment.
+  f.socket.receive(delegated("dl_1", 2300));
+  await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  f.socket.receive(heard(" one.", 2400, 2600));
+  await until(
+    async () => (await segments(live.liveSessionId)).length === 2,
+    "the last fragment on record",
+  );
+  await database.run(Deferred.succeed(f.brain.answerWhen, undefined));
+  await until(async () => (await messageRows(live.conversation)).length === 1, "the ask on record");
+
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  const metadata: UserMessageMetadata = {
+    author: MESSAGE_AUTHOR.DEVELOPER,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: voiceSessionId,
+    delegation_id: "dl_1",
+    from_ms: 1000,
+    to_ms: 2600,
+  };
+  assert.deepEqual(await messageRows(live.conversation), [
+    {
+      clientId: "dl_1",
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "Open the failing one.", state: "done" }],
+      metadata,
+    },
+  ]);
+  // The settle timer finds the row on record and writes it no second time.
+  await elapse(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  assert.equal((await messageRows(live.conversation)).length, 1);
 });
