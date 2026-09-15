@@ -87,15 +87,13 @@ export const TOOL_EXECUTION = {
   MEMORY: "memory",
 } as const;
 
-export type ToolExecution = (typeof TOOL_EXECUTION)[keyof typeof TOOL_EXECUTION];
-
 export const TOOL_EFFECT = {
   READ: "read",
   WRITE: "write",
   SPEAK: "speak",
 } as const;
 
-export type ToolEffect = (typeof TOOL_EFFECT)[keyof typeof TOOL_EFFECT];
+type ToolEffect = (typeof TOOL_EFFECT)[keyof typeof TOOL_EFFECT];
 
 /**
  * Where a tool runs and what it does. A performer carries acts, a workspace
@@ -139,14 +137,6 @@ export interface SkillDescriptor {
   readonly agents: readonly string[];
 }
 
-export const MEMORY_CAPABILITY = {
-  KEYWORD: "keyword",
-  VECTOR: "vector",
-  NOTEBOOK: "notebook",
-} as const;
-
-export type MemoryCapability = (typeof MEMORY_CAPABILITY)[keyof typeof MEMORY_CAPABILITY];
-
 export const CREDENTIAL_REFERENCE_KIND = {
   /** The developer's own provider key, held encrypted under the credential provider named. */
   PROVIDER_KEY: "provider-key",
@@ -167,7 +157,6 @@ interface BuiltinModelAdapter {
 }
 
 interface BuiltinMemoryProvider {
-  readonly capabilities: readonly MemoryCapability[];
   /** The embedding adapter this provider runs its vectors on; a vector provider without one is a type error. */
   readonly embeddingAdapterId: string;
 }
@@ -183,12 +172,6 @@ interface Builtins {
   readonly modelAdapters: Readonly<Record<string, BuiltinModelAdapter>>;
   readonly memoryProviders: Readonly<Record<string, BuiltinMemoryProvider>>;
 }
-
-const NOTEBOOK_MEMORY_CAPABILITIES = [
-  MEMORY_CAPABILITY.KEYWORD,
-  MEMORY_CAPABILITY.VECTOR,
-  MEMORY_CAPABILITY.NOTEBOOK,
-] as const;
 
 /**
  * The built-ins by kind, under the ids a configuration names. The
@@ -217,11 +200,9 @@ export const BUILTINS = {
   },
   memoryProviders: {
     [BUILTIN_MEMORY_PROVIDER.OPENAI]: {
-      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
       embeddingAdapterId: BUILTIN_EMBEDDING_ADAPTER.OPENAI,
     },
     [BUILTIN_MEMORY_PROVIDER.HOSTED]: {
-      capabilities: NOTEBOOK_MEMORY_CAPABILITIES,
       embeddingAdapterId: BUILTIN_EMBEDDING_ADAPTER.HOSTED,
     },
   },

@@ -156,13 +156,6 @@ test("a child's task turn loses announce like an ask, and the session tools stan
     assert.ok(tool, name);
     assert.ok(tool.groups.includes(TOOL_GROUP.SESSIONS));
   }
-  // At the depth cap the child restriction removes every session tool; below it, delegation stays.
-  const capped = resolveToolPolicy(catalog, {}, { depth: 5 });
-  const below = resolveToolPolicy(catalog, {}, { depth: 1 });
-  assert.equal(capped.allows(BRAIN_TOOL.SESSIONS_SPAWN), false);
-  assert.equal(capped.allows(BRAIN_TOOL.SESSIONS_HISTORY), false);
-  assert.equal(below.allows(BRAIN_TOOL.SESSIONS_SPAWN), true);
-  assert.equal(below.allows(BRAIN_TOOL.SUBAGENTS), true);
 });
 
 test("the notebook stands in the catalog under the memory group as the provider's two reads, and no action stands under it", () => {

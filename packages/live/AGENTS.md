@@ -40,9 +40,8 @@ the host, and a web function alike.
   `INTRODUCTION` names no delegation capability and says never, because the
   accountless endpoint wires no carrier.
 
-No full persona stands here — `@sidecar/guide`'s is the brain's, and shapes
-what the brain hands the voice — and the backend preamble is a prompt section
-of `@sidecar/brain`.
+No full persona stands here: `@sidecar/guide`'s is the brain's, and shapes
+what the brain hands the voice.
 
 ## What the voice knows of the desk, and what it must not
 

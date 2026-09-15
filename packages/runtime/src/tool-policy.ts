@@ -4,9 +4,9 @@ import type { ToolDescriptor } from "./registry.js";
  * What a run may call, decided by policy rather than by who opened it. A
  * policy is an allow list, a deny list, or both; layers apply in OpenClaw's
  * order — global, then the agent's, then the provider's, then the session's,
- * then the child restriction when the run is a child's, then the turn's own
- * layer, the one fact about a turn's kind the host adds beneath the
- * configuration — and at every layer deny wins over allow. An allow list narrows the catalog to what it names
+ * then the child's, then the turn's own layer, the one fact about a turn's
+ * kind the host adds beneath the configuration — and at every layer deny wins
+ * over allow. An allow list narrows the catalog to what it names
  * (a name outside the catalog is ignored, never invented); a deny list
  * removes what it names; a layer naming neither leaves the set as it stood.
  * A group name (`group:read`) stands for every tool the registry filed
@@ -43,32 +43,6 @@ export const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = Object.values(TOOL_
 export type ConfiguredToolPolicyLayer = Exclude<ToolPolicyLayer, typeof TOOL_POLICY_LAYER.TURN>;
 
 export type ToolPolicyLayers = Partial<Record<ConfiguredToolPolicyLayer, ToolPolicy>>;
-
-/**
- * The tools a child run always loses, whatever any allow list says, from
- * OpenClaw `b7528507` (`docs/tools/subagents.md`): administration, direct
- * delivery, and conversation management. Below the depth cap a child keeps
- * delegation and session inspection; at the cap those go too. None of these
- * tools exist in this build yet; the list is the parity fixture the child
- * lifecycle will apply when it arrives, and a prefix entry ending in `*`
- * matches every tool under it.
- */
-export const CHILD_TOOL_EXCLUSIONS = {
-  ALWAYS: [
-    "gateway",
-    "agents_list",
-    "session_status",
-    "progress_card",
-    "cron",
-    "message",
-    "sessions_send",
-    "conversations_*",
-  ],
-  AT_DEPTH_CAP: ["subagents", "sessions_list", "sessions_history", "sessions_spawn"],
-} as const;
-
-/** OpenClaw's default depth cap for delegation: children at this depth spawn nothing further. */
-export const CHILD_DEPTH_CAP = 5;
 
 export const GROUP_PREFIX = "group:";
 const WILDCARD_SUFFIX = "*";
@@ -107,17 +81,6 @@ export interface ChildPolicyContext {
   readonly depthCap?: number;
 }
 
-/** The child restriction layer for a child at this depth: the fixed exclusions, widened at the cap. */
-function childToolPolicy(child: ChildPolicyContext): ToolPolicy {
-  const cap = child.depthCap ?? CHILD_DEPTH_CAP;
-  return {
-    deny:
-      child.depth >= cap
-        ? [...CHILD_TOOL_EXCLUSIONS.ALWAYS, ...CHILD_TOOL_EXCLUSIONS.AT_DEPTH_CAP]
-        : [...CHILD_TOOL_EXCLUSIONS.ALWAYS],
-  };
-}
-
 function applyLayer(
   standing: ReadonlySet<string>,
   policy: ToolPolicy,
@@ -144,16 +107,14 @@ function applyLayer(
 }
 
 /**
- * Resolves the layers over the catalog into the effective policy. A child
- * context adds the child restriction after whatever the configuration's own
- * child layer said, because the exclusions are not a configuration: nothing
- * an allow list says can restore them. The turn's own layer comes last, for
- * the same reason: it states a fact about the turn's kind, not a preference.
+ * Resolves the layers over the catalog into the effective policy. The turn's
+ * own layer comes last, because it states a fact about the turn's kind rather
+ * than a preference: nothing a configured allow list says can restore what it
+ * removed.
  */
 export function resolveToolPolicy(
   catalog: readonly ToolDescriptor[],
   layers: ToolPolicyLayers,
-  child?: ChildPolicyContext,
   turn?: ToolPolicy,
 ): EffectiveToolPolicy {
   const denied: ToolDenial[] = [];
@@ -161,9 +122,6 @@ export function resolveToolPolicy(
   for (const layer of TOOL_POLICY_ORDER) {
     const policy = layer === TOOL_POLICY_LAYER.TURN ? turn : layers[layer];
     if (policy) standing = applyLayer(standing, policy, layer, catalog, denied);
-    if (layer === TOOL_POLICY_LAYER.CHILD && child) {
-      standing = applyLayer(standing, childToolPolicy(child), layer, catalog, denied);
-    }
   }
   const allowed = catalog.filter((tool) => standing.has(tool.schema.name));
   const names = new Set(allowed.map((tool) => tool.schema.name));

@@ -76,7 +76,7 @@ export function isWorkspaceFile(name: string): name is WorkspaceFile {
   return WORKSPACE_FILE_LIST.includes(name);
 }
 
-export interface WorkspaceSeeding {
+interface WorkspaceSeeding {
   readonly directory: string;
   /** The files written because they were missing; an existing file, edited or not, is never listed. */
   readonly seeded: readonly WorkspaceFile[];
@@ -230,45 +230,6 @@ export interface DailyNote {
   readonly name: string;
   readonly path: string;
   readonly content: string;
-}
-
-/**
- * Today's and yesterday's notes, slugged variants included, for priming a
- * conversation that just started fresh. Read only when asked: an ordinary
- * turn never sees them.
- */
-export async function recentDailyNotes(
-  directory: string,
-  now: number,
-): Promise<readonly DailyNote[]> {
-  const notes = path.join(directory, DAILY_NOTES_DIRECTORY);
-  let names: string[];
-  try {
-    names = await fs.readdir(notes);
-  } catch {
-    return [];
-  }
-  const days = new Set([dayStamp(now), dayStamp(now - 24 * 60 * 60 * 1000)]);
-  const eligible = names
-    .filter((name) => {
-      const match = DAILY_NOTE_PATTERN.exec(name);
-      return match !== null && days.has(name.slice(0, 10));
-    })
-    .sort();
-  const read: DailyNote[] = [];
-  let remaining = BOOTSTRAP_BOUNDS.MAXIMUM_TOTAL_CHARS;
-  for (const name of eligible) {
-    const file = path.join(notes, name);
-    const content = await readIfPresent(file);
-    if (content === undefined) continue;
-    const cut = content.slice(
-      0,
-      Math.min(BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE, Math.max(0, remaining)),
-    );
-    remaining -= cut.length;
-    read.push({ name, path: file, content: cut });
-  }
-  return read;
 }
 
 export const WORKSPACE_FILE_REFUSAL = {

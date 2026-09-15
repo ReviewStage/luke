@@ -1,7 +1,6 @@
 import type { ActionToolDefinition } from "@sidecar/actions";
 import { type NotebookMemoryToolShape, notebookMemoryToolShapes } from "@sidecar/memory";
 import {
-  type ChildPolicyContext,
   type EffectiveToolPolicy,
   resolveToolPolicy,
   TOOL_EFFECT,
@@ -188,20 +187,17 @@ export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
 
 /**
  * The one resolution a turn's tools get: the configured layers over the
- * catalog, the child restriction when the conversation is a child's, then
- * the turn's own layer. Maintenance names no trigger and adds no layer of
- * its own, because it runs no tools.
+ * catalog, then the turn's own layer. Maintenance names no trigger and adds
+ * no layer of its own, because it runs no tools.
  */
 export function resolveTurnToolPolicy(
   catalog: readonly ToolDescriptor[],
   layers: ToolPolicyLayers,
   trigger?: BrainTurnTrigger,
-  child?: ChildPolicyContext,
 ): EffectiveToolPolicy {
   return resolveToolPolicy(
     catalog,
     layers,
-    child,
     trigger === undefined ? undefined : turnToolPolicy(trigger),
   );
 }

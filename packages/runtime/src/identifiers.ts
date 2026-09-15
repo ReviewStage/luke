@@ -34,7 +34,7 @@ export const agentId = (value: string): AgentId => identifier("agent", value);
 export const sessionKey = (value: string): SessionKey => identifier("session-key", value);
 
 /** The provider and provider-session pair that identifies an observed coding session. */
-export interface SourceSessionRef {
+interface SourceSessionRef {
   providerId: string;
   providerSessionId: string;
 }

@@ -26,7 +26,7 @@ export const CHILD_RUN_STATUS = {
   CANCELLED: "cancelled",
 } as const;
 
-export type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_STATUS];
+type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_STATUS];
 
 const CHILD_RUN_TERMINAL_STATUS: ReadonlySet<ChildRunStatus> = new Set([
   CHILD_RUN_STATUS.COMPLETED,

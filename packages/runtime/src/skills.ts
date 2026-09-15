@@ -11,10 +11,7 @@ import type { SkillDescriptor } from "./registry.js";
  * and the agent asking, never from anything a transcript said.
  */
 
-export const SKILL_FILE = "SKILL.md";
-
-/** The most of one skill's instructions a load answers with, cut from the end. */
-const MAXIMUM_SKILL_CHARS = 20_000;
+const SKILL_FILE = "SKILL.md";
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u;
 
@@ -76,7 +73,7 @@ function parseSkillFrontMatter(text: string): SkillFrontMatter {
 }
 
 /** A skill directory's descriptor from its SKILL.md, or nothing when the file names no skill. */
-export function skillDescriptorFrom(location: string, text: string): SkillDescriptor | undefined {
+function skillDescriptorFrom(location: string, text: string): SkillDescriptor | undefined {
   const front = parseSkillFrontMatter(text);
   const name = front.name ?? path.basename(path.dirname(location));
   if (!name) return undefined;
@@ -130,31 +127,7 @@ export function eligibleSkills(
   );
 }
 
+/** What a workspace tool answers when asked to load one skill's whole instructions. */
 export type SkillLoad =
   | { readonly ok: true; readonly instructions: string; readonly truncated: boolean }
   | { readonly ok: false; readonly reason: string };
-
-/**
- * Loads one skill's whole instructions on demand. The location has to be
- * one an eligible descriptor listed: a path the model composed itself is
- * refused, so the read reaches nothing the discovery did not.
- */
-export async function loadSkill(
-  location: string,
-  eligible: readonly SkillDescriptor[],
-  maximumChars: number = MAXIMUM_SKILL_CHARS,
-): Promise<SkillLoad> {
-  if (!eligible.some((skill) => skill.location === location)) {
-    return { ok: false, reason: "not an eligible skill" };
-  }
-  try {
-    const text = await fs.readFile(location, "utf8");
-    return {
-      ok: true,
-      instructions: text.slice(0, maximumChars),
-      truncated: text.length > maximumChars,
-    };
-  } catch {
-    return { ok: false, reason: "the skill could not be read" };
-  }
-}
