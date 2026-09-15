@@ -28,14 +28,14 @@ export function opensConversationTimeBreak(
   return recordedAt - previousRecordedAt >= CONVERSATION_TIME_BREAK_MS;
 }
 
-export interface ConversationTimeBreakLabel {
+interface ConversationTimeBreakLabel {
   /** The day, as a reader would name it: Today, Yesterday, a weekday, or a date. */
   day: string;
   /** The clock time on that day. */
   time: string;
 }
 
-export interface ConversationTimeBreakFormatterOptions {
+interface ConversationTimeBreakFormatterOptions {
   locale?: string;
   timeZone?: string;
 }

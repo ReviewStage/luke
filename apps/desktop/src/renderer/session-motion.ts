@@ -202,7 +202,7 @@ export function parsePixels(value: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-export interface ReorderPlan {
+interface ReorderPlan {
   /**
    * Elements that persisted and moved: how far each must be offset, in pixels,
    * to appear back where it was before springing to where it now sits.

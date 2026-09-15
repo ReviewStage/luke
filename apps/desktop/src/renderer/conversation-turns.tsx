@@ -507,7 +507,7 @@ function ToolCallRow({
 }
 
 /** The reader's press on a fold, remembered with the turn state it was made under. */
-export interface FoldChoice {
+interface FoldChoice {
   readonly pending: boolean;
   readonly open: boolean;
 }

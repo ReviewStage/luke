@@ -40,7 +40,7 @@ export const CONNECTION_SECTION = {
   CALENDAR: "calendar",
 } as const;
 
-export type ConnectionSection = (typeof CONNECTION_SECTION)[keyof typeof CONNECTION_SECTION];
+type ConnectionSection = (typeof CONNECTION_SECTION)[keyof typeof CONNECTION_SECTION];
 
 /**
  * How much of a block a connection is. A provider gets one of its own, because

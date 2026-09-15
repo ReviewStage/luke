@@ -121,7 +121,7 @@ export function signInLabelFit(labelWidth: number): number {
  * than counted — the marks say which apps are working, and a remainder glyph
  * would put a number back beside the housing that says nothing about which.
  */
-export interface WingSlot {
+interface WingSlot {
   id: string;
   provider: ProviderTally;
 }
@@ -140,7 +140,7 @@ export function wingSlots(
  * answer their own speaker, so both meters stand when both are talking, and
  * nothing here yields to the other side.
  */
-export interface WingPlacement {
+interface WingPlacement {
   /** Luke's meter, beside his face on the left wing. */
   lukeMeter: boolean;
   /** The developer's meter, in the marks' place on the right wing. */

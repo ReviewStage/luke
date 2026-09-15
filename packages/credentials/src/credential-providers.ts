@@ -62,9 +62,8 @@ export interface CredentialFormat {
 /**
  * Where the user creates a key, said the same way for every provider: the
  * lead, then the destination drawn as the link that opens the provider's key
- * page, then a full stop and the trail if there is one. Structured rather
- * than one string so the link can sit on the destination itself instead of
- * beside the sentence.
+ * page, then a full stop. Structured rather than one string so the link can
+ * sit on the destination itself instead of beside the sentence.
  */
 interface CredentialHint {
   /** The sentence up to the linked words: "Create a key in Conductor under". */
@@ -75,8 +74,6 @@ interface CredentialHint {
    * {@link CredentialProvider.apiKeysUrl}.
    */
   destination: string;
-  /** A sentence after the link, only where the page alone can still go wrong. */
-  trail?: string;
 }
 
 export interface CredentialProvider {

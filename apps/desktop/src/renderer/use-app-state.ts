@@ -29,7 +29,7 @@ class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
  * fails with `Cause.NoSuchElementError`, which is the same emptiness by
  * another name.
  */
-export type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
+type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
 
 /**
  * Where the state is read from. The bridge is what a window holds; a test

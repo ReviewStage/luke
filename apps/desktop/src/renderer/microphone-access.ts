@@ -43,7 +43,7 @@ function microphoneStatusDetail(status: MicrophoneStatus): string | undefined {
   }
 }
 /** What the Microphone row says, and what it offers. */
-export interface MicrophoneAccessRow {
+interface MicrophoneAccessRow {
   /** Absent wherever the row's name and its controls already say everything. */
   detail?: string;
   /** Whether to offer the button that gives Luke the microphone. */

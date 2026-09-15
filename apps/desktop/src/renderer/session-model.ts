@@ -130,7 +130,7 @@ export function sessionFiltersFromSpoken(
 }
 
 /** What a spoken search is told it did: the count, and the honest word for a zero. */
-export interface SpokenSearchOutcome {
+interface SpokenSearchOutcome {
   matches: number;
   note?: string;
 }

@@ -39,7 +39,6 @@
   --mark-copilot: #ffffff;
   --mark-cursor: #ffffff;
   --mark-grok-build: #fcfcfc;
-  --mark-linear: #5e6ad2;
   --mark-omp-top: #ed4abf;
   --mark-omp-middle: #9b4dff;
   --mark-omp-bottom: #5ad8e6;
@@ -881,13 +880,6 @@ html[data-keyboard="true"] .compact-hover-target:focus-visible {
    publishes it in. */
 .provider-mark[data-mark="grok-build"] {
   color: var(--mark-grok-build);
-  transform: scale(0.94);
-}
-
-/* Linear's mark is drawn full-bleed the way the Codex and Cursor marks are, so
-   it takes the same scale they do. */
-.provider-mark[data-mark="linear"] {
-  color: var(--mark-linear);
   transform: scale(0.94);
 }
 

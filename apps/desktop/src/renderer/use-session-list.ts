@@ -41,7 +41,7 @@ import type { WorkspaceProviderOption } from "./settings/controls";
  */
 const SEARCH_QUERY_STORE_DELAY_MS = 400;
 
-export interface UseSessionListOptions {
+interface UseSessionListOptions {
   state: AppStateSnapshot | undefined;
   /** The document's own settings, which the stored view is baselined against. */
   settings: AppSettingsView | undefined;
@@ -52,7 +52,7 @@ export interface UseSessionListOptions {
   showSessionsTab: () => void;
 }
 
-export interface SessionList {
+interface SessionList {
   /** The rows as arranged, and the counts the widen button reads. */
   list: ArrangedSessions;
   /** What the capsule reports, taken before the list is narrowed. */

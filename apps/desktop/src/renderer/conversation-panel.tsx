@@ -16,7 +16,7 @@ import { MarkdownMessage } from "./markdown-message";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
 
-export interface ConversationEntryPresentation {
+interface ConversationEntryPresentation {
   speaker: ConversationEntrySpeaker;
   label: string;
 }
