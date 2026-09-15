@@ -4,9 +4,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result, type Schema } from "effect";
 import { test } from "vitest";
 import {
-  GATEWAY_EVENT,
   GATEWAY_METHOD,
-  isGatewayEventKind,
   isGatewayMethod,
   isMutatingGatewayMethod,
   LIVE_SDP_MAX_CHARACTERS,
@@ -53,7 +51,6 @@ test("the five live session methods are in the vocabulary, and every one of them
     assert.equal(isGatewayMethod(method), true);
     assert.equal(isMutatingGatewayMethod(method), true);
   }
-  assert.equal(isGatewayEventKind(GATEWAY_EVENT.VOICE_LIVE_SESSION_CHANGED), true);
 });
 
 test("a stop answer carries one boolean and nothing else is read from it", () => {
@@ -76,14 +73,6 @@ test("the retired Realtime vocabulary is no longer in the contract", () => {
     "delivery.acknowledge",
   ]) {
     assert.equal(isGatewayMethod(method), false);
-  }
-  for (const event of [
-    "speech.offered",
-    "speech.withdrawn",
-    "delivery.offered",
-    "deliveries.withdrawn",
-  ]) {
-    assert.equal(isGatewayEventKind(event), false);
   }
 });
 

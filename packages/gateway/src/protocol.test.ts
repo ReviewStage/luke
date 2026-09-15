@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
+import type { WireValue } from "@sidecar/wire";
 import { Effect, Fiber, type Scope } from "effect";
 import { test } from "vitest";
 import { gatewayClient } from "./client.js";
-import { NodeRegistry } from "./nodes.js";
 import {
   GATEWAY_CLIENT_ROLE,
   GATEWAY_ERROR,
@@ -17,7 +16,6 @@ import {
   gatewayReconnectAnswerFromWire,
   gatewayRequestFromWire,
   gatewayRequestToWire,
-  NODE_CAPABILITY_STATUS,
   RefusedRefusal,
 } from "./protocol.js";
 import { type GatewayInProcessHost, gatewayInProcessHost } from "./server.js";
@@ -30,15 +28,8 @@ const OPERATOR: GatewayClientIdentity = {
 };
 const NODE: GatewayClientIdentity = { clientId: "node", role: GATEWAY_CLIENT_ROLE.NODE };
 
-/** A wire value the test expects to be a record; anything else fails the test where it stands. */
-function recordOf(value: WireValue | undefined): WireRecord {
-  assert.ok(isRecord(value));
-  return value;
-}
-
 interface Harness {
   host: GatewayInProcessHost;
-  nodes: NodeRegistry;
   effects: string[];
   configurationRevision: { value: number };
   sessionRevision: Map<string, string>;
@@ -49,7 +40,6 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
   const effects: string[] = [];
   const configurationRevision = { value: 1 };
   const sessionRevision = new Map<string, string>([["agent:main:main", "gen-1"]]);
-  const nodes = new NodeRegistry();
   let ids = 0;
   const counters = { snapshots: 0 };
   return Effect.map(
@@ -64,14 +54,6 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
           effects.push("clear");
           return Effect.succeed({ outcome: "complete" });
         },
-        [GATEWAY_METHOD.NODE_INVOKE]: (params) =>
-          Effect.map(nodes.invoke(String(params.capability), {}), (result) => {
-            if (result.status === NODE_CAPABILITY_STATUS.OK) {
-              effects.push(`invoked ${String(params.capability)}`);
-              return { status: result.status };
-            }
-            return { status: result.status, reason: result.reason };
-          }),
         [GATEWAY_METHOD.VOICE_DIAGNOSTICS]: () => {
           throw new Error("the index fell over");
         },
@@ -90,7 +72,6 @@ function harness(replayWindow = 500): Effect.Effect<Harness, never, Scope.Scope>
     }),
     (host) => ({
       host,
-      nodes,
       effects,
       configurationRevision,
       sessionRevision,
@@ -380,40 +361,6 @@ for (const kind of ["in-process", "loopback"] as const) {
         assert.equal(answer.ok, false);
         if (!answer.ok) assert.equal(answer.error.code, GATEWAY_ERROR.DISCONNECTED);
         assert.deepEqual(h.effects, []);
-      }),
-  );
-
-  it.live(
-    `[${kind}] a disconnected required node answers a typed unavailable and nothing records the action as done`,
-    () =>
-      Effect.gen(function* () {
-        const h = yield* harness();
-        const c = yield* client(transportFor(kind, h.host));
-        const changes: WireValue[] = [];
-        c.on(GATEWAY_EVENT.NODE_CHANGED, (event) => changes.push(event.payload));
-        h.nodes.onChange((nodes) => {
-          h.host.log.publish(GATEWAY_EVENT.NODE_CHANGED, {
-            nodes: nodes.map((node) => ({ ...node, capabilities: [...node.capabilities] })),
-          });
-        });
-        const unknown = yield* c.call(GATEWAY_METHOD.NODE_INVOKE, {
-          capability: "os.openExternal",
-        });
-        assert.ok(unknown.ok);
-        if (unknown.ok) {
-          assert.equal(recordOf(unknown.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        }
-        h.nodes.register({
-          nodeId: "desktop-native",
-          capabilities: { "os.openExternal": () => undefined },
-        });
-        const ok = yield* c.call(GATEWAY_METHOD.NODE_INVOKE, { capability: "os.openExternal" });
-        assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
-        h.nodes.setConnected("desktop-native", false);
-        const gone = yield* c.call(GATEWAY_METHOD.NODE_INVOKE, { capability: "os.openExternal" });
-        assert.ok(gone.ok && recordOf(gone.result).status === NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        assert.deepEqual(h.effects, ["invoked os.openExternal"]);
-        assert.equal(changes.length, 2);
       }),
   );
 }

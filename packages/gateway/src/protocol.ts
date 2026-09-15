@@ -652,12 +652,6 @@ export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT
 
 const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
 
-const readsGatewayEventKind = Schema.is(GatewayEventKindSchema);
-
-export function isGatewayEventKind(value: UnparsedWireValue): value is GatewayEventKind {
-  return readsGatewayEventKind(value);
-}
-
 export const GatewayEventSchema = Schema.Struct({
   eventId: GatewayIdentifierSchema,
   /** One more than the event before it, from 1, so a gap is a number a client can see. */

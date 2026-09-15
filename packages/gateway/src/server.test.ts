@@ -12,7 +12,7 @@ import {
 } from "@sidecar/wire";
 import { Context, Deferred, Effect, Fiber, Layer, Option, Result, Stream } from "effect";
 import { Headers } from "effect/unstable/http";
-import { Rpc, RpcMessage } from "effect/unstable/rpc";
+import { Rpc, RpcMessage, RpcSerialization } from "effect/unstable/rpc";
 import { test } from "vitest";
 import type { GatewayMethodContext, GatewayMethodTable } from "./methods.js";
 import {
@@ -39,7 +39,7 @@ import {
   GATEWAY_REQUEST_HEADER,
   GatewayMutates,
   GatewayRpcs,
-  layerGatewayEnvelopeSerialization,
+  gatewayEnvelopeSerialization,
 } from "./rpc.js";
 import {
   GatewayAdmission,
@@ -170,7 +170,10 @@ function serverLayer(harness: Harness = {}) {
   );
   const serialization = Layer.unwrap(
     Effect.map(GatewayEventLog, (log) =>
-      layerGatewayEnvelopeSerialization({ revision: log.revision }),
+      Layer.succeed(
+        RpcSerialization.RpcSerialization,
+        gatewayEnvelopeSerialization({ revision: log.revision }),
+      ),
     ),
   );
   const transport = layerGatewayInProcessProtocol.pipe(Layer.provide(serialization));

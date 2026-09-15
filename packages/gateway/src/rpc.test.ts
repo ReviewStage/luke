@@ -25,7 +25,7 @@ import {
   GATEWAY_REQUEST_HEADER,
   GatewayRpcs,
   gatewayEnvelopeSerialization,
-  gatewayRequestVersion,
+  gatewayHeaderFields,
   gatewayRpcMutates,
 } from "./rpc.js";
 
@@ -218,14 +218,14 @@ it.effect(
       const held = yield* Effect.promise(() => golden(GOLDEN.UNSUPPORTED_VERSION));
       const carried = onlyMessage(parser.decode(frame(held.request)));
       assert.ok(carriesHeaders(carried));
-      const spoken = gatewayRequestVersion(carried.headers);
+      const spoken = gatewayHeaderFields(carried.headers).protocolVersion;
       assert.equal(spoken, 0);
       const refusal = gatewayVersionRefusal(spoken);
       assert.ok(Option.isSome(refusal));
       assert.ok(refusal.value instanceof UnsupportedVersionRefusal);
       assert.equal(refusal.value.code, GATEWAY_ERROR.UNSUPPORTED_VERSION);
       assert.deepEqual(gatewayVersionRefusal(GATEWAY_PROTOCOL_VERSION), Option.none());
-      assert.equal(gatewayRequestVersion([]), GATEWAY_PROTOCOL_VERSION);
+      assert.equal(gatewayHeaderFields([]).protocolVersion, GATEWAY_PROTOCOL_VERSION);
 
       const exit = Exit.fail(refusal.value);
       const encodedExit = yield* Schema.encodeEffect(

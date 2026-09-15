@@ -143,6 +143,3 @@ export interface ReasoningSummary {
   /** The item itself, opaque and whole, as the context ingested it; carried for a record and never read inside. */
   readonly item: WireRecord;
 }
-
-/** A hook may answer at once or after a wait; its caller awaits either. */
-export type MaybePromise<Value> = Value | Promise<Value>;
