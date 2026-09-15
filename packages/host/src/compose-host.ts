@@ -211,6 +211,7 @@ export const hostAssemblyLayer: Layer.Layer<
       cloudKeyHeld: calendars.settleKeyGate,
       setVoice: (voice) =>
         Effect.sync(() => account.voiceCapabilities.liveSessions?.setVoice(voice)),
+      endLiveSession: Effect.suspend(() => live.service.endSession()),
       refreshAnnouncementHold: calendars.refreshAnnouncementHold,
       reportPresence: devices.reportPresence,
       broadcastWorkspaceProjects: observation.broadcastWorkspaceProjects,

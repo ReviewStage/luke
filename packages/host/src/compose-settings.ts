@@ -66,6 +66,8 @@ interface SettingsLinks {
   /** The vault holds a Conductor key, stored just now or found at sign-in; onboarding's key step is answered. */
   readonly cloudKeyHeld: Effect.Effect<void>;
   setVoice: (voice: StoredSettings["voice"]) => Effect.Effect<void>;
+  /** The standing live session ended once the voice moved, since a session keeps the voice it was created with. */
+  readonly endLiveSession: Effect.Effect<void>;
   /** The announcement hold read again for the panel once the pause or the meeting setting moved. */
   readonly refreshAnnouncementHold: Effect.Effect<void>;
   /** The device heartbeat sent now, so the quiet instant the pause or the meeting setting moved reaches the service at once. */
@@ -671,6 +673,7 @@ export const composeSettings = /* @__PURE__ */ Effect.fn("composeSettings")(
 
     const sideEffects = hostSettingSideEffects({
       setVoice: (voice) => linked((links) => links.setVoice(voice)),
+      endLiveSession: linked((links) => links.endLiveSession),
       refreshAnnouncementHold: linked((links) => links.refreshAnnouncementHold),
       reportPresence: linked((links) => links.reportPresence),
     });
