@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { BRAIN_ASK_REFUSAL } from "@sidecar/brain/requests";
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { RUN_PROFILE } from "#shared/messages/app-state";
@@ -13,6 +12,9 @@ import {
   voiceNoticeToShow,
 } from "./use-voice-view";
 import { VOICE_ACTIVITY_HANGOVER_MS } from "./voice/voice-level-meter";
+
+const ASK_REFUSED = "My notes are full of asks whose endings I haven't managed to file yet.";
+const ASK_CONFLICTED = "That ask arrived under an id I already have for different words.";
 
 const NOBODY = { listening: false, lukeSpeaking: false };
 const LUKE = { listening: false, lukeSpeaking: true };
@@ -102,17 +104,17 @@ test("the panel's own strip lines stand over the voice window's while they last,
   );
   const both = panelVoiceView(reported, {
     error: CLEAR_FAILED_REASON,
-    notice: BRAIN_ASK_REFUSAL.full,
+    notice: ASK_REFUSED,
   });
   assert.equal(both.voiceError, CLEAR_FAILED_REASON);
-  assert.equal(both.voiceNotice, BRAIN_ASK_REFUSAL.full);
+  assert.equal(both.voiceNotice, ASK_REFUSED);
   assert.equal(both.voiceStatus, reported.voiceStatus);
   const noticeOnly = panelVoiceView(reported, {
     error: undefined,
-    notice: BRAIN_ASK_REFUSAL.conflict,
+    notice: ASK_CONFLICTED,
   });
   assert.equal(noticeOnly.voiceError, reported.voiceError, "a refusal displaces no fault");
-  assert.equal(noticeOnly.voiceNotice, BRAIN_ASK_REFUSAL.conflict);
+  assert.equal(noticeOnly.voiceNotice, ASK_CONFLICTED);
 });
 
 test("a quiet level lets the hangover run out from the last loud one, never past it", () => {
