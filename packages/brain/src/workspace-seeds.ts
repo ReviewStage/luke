@@ -45,6 +45,9 @@ const SEED_AGENTS = [
   "  drop the oldest superseded lines first, and a standing directive never. Skip transient",
   "  details and uncertain inferences. Never record a credential; record a sensitive fact",
   "  only when explicitly asked. Do not mention routine memory edits.",
+  "- Before answering anything about prior work, decisions, dates, people, preferences, or",
+  "  todos, run memory_search, then memory_get to pull only the lines you need. If you're still",
+  "  not confident, say you checked. If the search ran keyword-only or wasn't available, say so.",
   "",
 ].join("\n");
 
