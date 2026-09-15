@@ -213,9 +213,6 @@ public final class LivePeer {
     /// The session the service created for this peer's offer, so its word about a session can be matched to it.
     public private(set) var sessionId: String?
 
-    /// Luke's track, as the connection handed it up; WebRTC plays it through the device's own output.
-    public private(set) var remoteTrack: (any LiveAudioTrack)?
-
     private var connection: (any LivePeerConnection)?
     private var channel: (any LiveDataChannel)?
     private var microphone: (any LiveAudioTrack)?
@@ -328,7 +325,6 @@ public final class LivePeer {
     private func build() throws {
         let connection = try seams.makePeerConnection()
         self.connection = connection
-        connection.onRemoteTrack = { [weak self] track in self?.remoteTrack = track }
         connection.onTransportStateChange = { [weak self] in self?.transportChanged() }
         let microphone = try seams.openMicrophone()
         microphone.isEnabled = false
@@ -482,7 +478,6 @@ public final class LivePeer {
         connection?.onRemoteTrack = nil
         microphone?.isEnabled = false
         micLive = false
-        remoteTrack = nil
         connection?.close()
         self.status = status
     }

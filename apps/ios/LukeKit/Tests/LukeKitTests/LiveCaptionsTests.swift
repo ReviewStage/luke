@@ -18,7 +18,7 @@ final class LiveCaptionsTests: XCTestCase {
         captions.append(.user, Self.delta(" there", 1_500, 1_800))
         XCTAssertEqual(
             captions.rows,
-            [LiveCaptionRow(rowId: 1, speaker: .user, words: "Hello  there", settled: false)],
+            [LiveCaptionRow(rowId: 1, speaker: .user, words: "Hello  there")],
             "a fragment is appended as received: no trim, no inserted space"
         )
     }
@@ -64,18 +64,16 @@ final class LiveCaptionsTests: XCTestCase {
         var now = Date(timeIntervalSince1970: 10)
         let captions = LiveCaptions(now: { now })
         captions.append(.assistant, Self.delta("Done.", 0, 400))
-        XCTAssertFalse(captions.rows[0].settled)
         XCTAssertTrue(captions.unsettled)
 
         now = now.addingTimeInterval(1.999)
-        XCTAssertFalse(captions.rows[0].settled, "a fragment may still join for the gap plus the margin")
+        XCTAssertTrue(captions.unsettled, "a fragment may still join for the gap plus the margin")
 
         now = now.addingTimeInterval(0.001)
-        XCTAssertTrue(captions.rows[0].settled)
         XCTAssertFalse(captions.unsettled)
 
         captions.append(.assistant, Self.delta(" Really.", 400, 900))
-        XCTAssertFalse(captions.rows[0].settled, "a late fragment reopens the row it joined")
+        XCTAssertTrue(captions.unsettled, "a late fragment reopens the row it joined")
         XCTAssertEqual(captions.rows[0].words, "Done. Really.")
     }
 }

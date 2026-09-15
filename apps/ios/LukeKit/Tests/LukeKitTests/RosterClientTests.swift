@@ -220,15 +220,11 @@ final class RosterSessionActionAdvertisementTests: XCTestCase {
             "canRenameWorkspace": true,
         ])
         XCTAssertEqual(s?.canReceiveMessage, true)
-        XCTAssertEqual(
-            s?.controls,
-            [
-                RosterSessionControl(id: "cancel-turn", label: "Stop", kind: .stop),
-                RosterSessionControl(id: "archive-workspace", label: "Archive", kind: .archive),
-                // A kind this build does not know is dropped; the control stays.
-                RosterSessionControl(id: "approve-plan", label: "Approve the plan"),
-            ]
-        )
+        XCTAssertEqual(s?.controls.map(\.id), ["cancel-turn", "archive-workspace", "approve-plan"])
+        XCTAssertEqual(s?.controls.map(\.label), ["Stop", "Archive", "Approve the plan"])
+        XCTAssertEqual(s?.controls.compactMap(\.kind), [.stop, .archive])
+        // A kind this build does not know is dropped; the control stays.
+        XCTAssertNil(s?.controls.last?.kind)
         XCTAssertEqual(s?.spawnableAgents, ["claude", "codex"])
         XCTAssertEqual(s?.canRename, true)
         XCTAssertEqual(s?.canRenameWorkspace, true)

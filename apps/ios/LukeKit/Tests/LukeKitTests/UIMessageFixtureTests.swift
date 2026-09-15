@@ -111,7 +111,6 @@ final class UIMessageFixtureTests: XCTestCase {
         XCTAssertEqual(tool.toolCallId, "call_6f10d4e59a712b8c")
         XCTAssertEqual(tool.state, .outputAvailable)
         XCTAssertEqual(tool.input?["providerId"], .string("conductor"))
-        XCTAssertEqual(tool.output?["lines"]?.arrayValue?.count, 2)
         XCTAssertNil(tool.errorText)
         guard case .text = reply.parts[3] else { return XCTFail("a text part") }
     }

@@ -28,13 +28,10 @@ public struct ActionMessageAnswer: Codable, Equatable, Sendable {
 public struct ActionWorkspaceAnswer: Codable, Equatable, Sendable {
     public let result: ActionResult
     public let reason: String?
-    /// The created session's provider id, when the provider reports one.
-    public let providerSessionId: String?
 
-    public init(result: ActionResult, reason: String?, providerSessionId: String?) {
+    public init(result: ActionResult, reason: String?) {
         self.result = result
         self.reason = reason
-        self.providerSessionId = providerSessionId
     }
 }
 

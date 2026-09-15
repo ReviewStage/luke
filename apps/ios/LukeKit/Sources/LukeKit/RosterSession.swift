@@ -23,12 +23,6 @@ public struct RosterSessionControl: Identifiable, Hashable, Sendable {
     /// the control still works, drawn as a plain action by its label.
     public let kind: RosterSessionControlKind?
 
-    public init(id: String, label: String, kind: RosterSessionControlKind? = nil) {
-        self.id = id
-        self.label = label
-        self.kind = kind
-    }
-
     init?(json: [String: Any]) {
         guard
             let id = json["id"] as? String, !id.isEmpty,

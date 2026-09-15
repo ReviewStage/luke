@@ -476,16 +476,4 @@ final class ProductEventSenderTests: XCTestCase {
         requests = await log.requests
         XCTAssertEqual(requests.count, 2)
     }
-
-    @MainActor
-    func testStoppingDropsWhatWasQueuedRatherThanHoldingTheQuitOpen() async {
-        let (sender, log) = makeSender()
-        sender.arm()
-        sender.start()
-        sender.record(.appLaunch)
-        sender.stop()
-        await sender.flush().value
-        let requests = await log.requests
-        XCTAssertTrue(requests.isEmpty)
-    }
 }

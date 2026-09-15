@@ -40,15 +40,13 @@ public enum ConversationDetail: Equatable, Sendable, Identifiable {
 }
 
 /// One of Luke's messages as a rating names it: the row the service takes a
-/// verdict on, the conversation it stands in, and which kind of message it
-/// is to the count. Only an assistant message is one — a message Luke said
+/// verdict on, and which kind of message it is to the count. Only an assistant message is one — a message Luke said
 /// to the developer, a reply or a briefing — which is exactly the set the
 /// service accepts a rating for; the developer's own ask and the brain's note
 /// to itself carry none, so no control is drawn where the service would
 /// refuse it. A compaction summary is Luke's too but never enters the view.
 public struct RateableMessage: Equatable, Sendable {
     public let messageId: String
-    public let conversationId: String
     public let kind: ProductRatedMessageKind
 }
 
@@ -181,10 +179,7 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
         var drawn: [Drawn] = []
         var details: [ConversationDetail] = []
         for message in group.messages {
-            Self.draw(
-                message, conversationId: group.conversationId, judgment: judgment, roster: roster,
-                into: &drawn, details: &details
-            )
+            Self.draw(message, judgment: judgment, roster: roster, into: &drawn, details: &details)
         }
         var rows = Self.placeActions(drawn, turnId: group.turnId)
         if !details.isEmpty { rows.append(.details(id: "\(group.turnId):details", items: details)) }
@@ -200,7 +195,6 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
 
     private static func draw(
         _ view: ConversationReadMessage,
-        conversationId: String,
         judgment: ConversationJudgment,
         roster: [RosterSession],
         into drawn: inout [Drawn],
@@ -225,7 +219,6 @@ public struct ConversationTurnRows: Equatable, Sendable, Identifiable {
             )
             let rateable = RateableMessage(
                 messageId: message.id,
-                conversationId: conversationId,
                 kind: view.tools.contains { $0.kind == .announce } ? .announcement : .reply
             )
             var lastWords: Int?
