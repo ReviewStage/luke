@@ -1,22 +1,16 @@
 /**
  * The app guide: what the app knows about itself, said in a form a spoken
  * conversation can be handed. The guide is data rather than prose so the same
- * snapshot can be rendered as context, validated against, and — the reason it
- * exists at all — kept honest: a setting the guide does not carry is one the
- * conversation cannot claim, offer, or change.
+ * snapshot can be validated against and — the reason it exists at all — kept
+ * honest: a setting the guide does not carry is one the conversation cannot
+ * claim, offer, or change.
  *
  * The app assembles the snapshot; this module only defines its shape and how
  * it reads. Nothing here may ever carry a credential: the guide says *whether*
  * a provider is connected, never what connects it.
  */
 
-import {
-  isRecord,
-  isWireBoolean,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
+import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Schema } from "effect";
 
 /** How a setting takes a value: a switch, or one choice from a fixed set. */
@@ -29,15 +23,13 @@ type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
 
 export const AppSettingKindSchema = Schema.Literals(Object.values(APP_SETTING_KIND));
 
-const readsAppSettingKind = Schema.is(AppSettingKindSchema);
-
 /** The two words a toggle's state is said in, on screen and out loud. */
 export const APP_TOGGLE_VALUE = {
   ON: "on",
   OFF: "off",
 } as const;
 
-export type AppToggleValue = (typeof APP_TOGGLE_VALUE)[keyof typeof APP_TOGGLE_VALUE];
+type AppToggleValue = (typeof APP_TOGGLE_VALUE)[keyof typeof APP_TOGGLE_VALUE];
 
 /**
  * One user-owned setting, as the guide describes it: what it is called, what
@@ -83,7 +75,7 @@ export interface AppGuideSetting {
 }
 
 /** One thing the app knows about itself that is not a setting. */
-export interface AppGuideFact {
+interface AppGuideFact {
   label: string;
   detail: string;
 }
@@ -107,13 +99,6 @@ export type AppUpdateAction = (typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE
 
 export const AppUpdateActionSchema = Schema.Literals(Object.values(APP_UPDATE_ACTION));
 
-const readsAppUpdateAction = Schema.is(AppUpdateActionSchema);
-
-/** Guards an action arriving from a tool call's untrusted arguments. */
-export function isAppUpdateAction(value: UnparsedWireValue): value is AppUpdateAction {
-  return readsAppUpdateAction(value);
-}
-
 /** The two waits during which the Updates row's button offers nothing. */
 export const APP_UPDATE_WAIT = {
   /** A check is already out. */
@@ -130,8 +115,6 @@ export const AppUpdateWaitSchema = Schema.Literals(Object.values(APP_UPDATE_WAIT
 export type AppUpdateButton = AppUpdateAction | AppUpdateWait;
 
 export const AppUpdateButtonSchema = Schema.Union([AppUpdateActionSchema, AppUpdateWaitSchema]);
-
-const readsAppUpdateButton = Schema.is(AppUpdateButtonSchema);
 
 /**
  * The Updates row, as the guide describes it: the running version, where the
@@ -159,59 +142,6 @@ export interface AppGuideSnapshot {
 /** The guide before the app has said anything, which allows nothing. */
 export const EMPTY_APP_GUIDE: AppGuideSnapshot = { facts: [], settings: [] };
 
-function isStringList(value: UnparsedWireValue): value is readonly string[] {
-  return Array.isArray(value) && value.every(isWireString);
-}
-
-function isAppGuideFact(value: UnparsedWireValue): value is AppGuideFact & WireRecord {
-  return isRecord(value) && isWireString(value.label) && isWireString(value.detail);
-}
-
-function isAppGuideSetting(value: UnparsedWireValue): value is AppGuideSetting & WireRecord {
-  if (!isRecord(value)) return false;
-  if (value.efforts !== undefined) {
-    if (!isRecord(value.efforts)) return false;
-    if (
-      !Object.values(value.efforts).every((levels) => levels === undefined || isStringList(levels))
-    )
-      return false;
-  }
-  return (
-    isWireString(value.id) &&
-    isWireString(value.label) &&
-    isWireString(value.description) &&
-    readsAppSettingKind(value.kind) &&
-    isWireString(value.value) &&
-    (value.defaultValue === undefined || isWireString(value.defaultValue)) &&
-    (value.choices === undefined || isStringList(value.choices)) &&
-    isWireBoolean(value.adjustable) &&
-    isWireString(value.manual)
-  );
-}
-
-function isAppGuideUpdate(value: UnparsedWireValue): value is AppGuideUpdate & WireRecord {
-  return (
-    isRecord(value) &&
-    isWireString(value.version) &&
-    isWireString(value.detail) &&
-    readsAppUpdateButton(value.button)
-  );
-}
-
-/**
- * Guards a guide snapshot crossing a process boundary. The guide is what an
- * app action is validated against, so a snapshot that arrives malformed is
- * refused whole rather than read as a guide that happens to allow less.
- */
-export function isAppGuideSnapshot(
-  value: UnparsedWireValue,
-): value is AppGuideSnapshot & WireRecord {
-  if (!isRecord(value)) return false;
-  if (!Array.isArray(value.facts) || !value.facts.every(isAppGuideFact)) return false;
-  if (!Array.isArray(value.settings) || !value.settings.every(isAppGuideSetting)) return false;
-  return value.update === undefined || isAppGuideUpdate(value.update);
-}
-
 /**
  * The panel surfaces a spoken ask can bring forward. The set is the panel's
  * own tab bar; a surface outside it has no press to mirror.
@@ -225,13 +155,6 @@ export const APP_PANEL_TAB = {
 export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
 
 export const AppPanelTabSchema = Schema.Literals(Object.values(APP_PANEL_TAB));
-
-const readsAppPanelTab = Schema.is(AppPanelTabSchema);
-
-/** Guards a tab arriving from a tool call's untrusted arguments. */
-export function isAppPanelTab(value: UnparsedWireValue): value is AppPanelTab {
-  return readsAppPanelTab(value);
-}
 
 /**
  * The two kinds of note the feedback composer writes, exactly as the composer
@@ -251,13 +174,6 @@ export type FeedbackComposerKind =
 
 export const FeedbackComposerKindSchema = Schema.Literals(Object.values(FEEDBACK_COMPOSER_KIND));
 
-const readsFeedbackComposerKind = Schema.is(FeedbackComposerKindSchema);
-
-/** Guards a kind arriving from a tool call's untrusted arguments. */
-export function isFeedbackComposerKind(value: UnparsedWireValue): value is FeedbackComposerKind {
-  return readsFeedbackComposerKind(value);
-}
-
 /**
  * The two orders the session list reads in. Defined here rather than in the
  * renderer because a spoken ask names an order too, and the words the panel's
@@ -272,13 +188,6 @@ export const SESSION_LIST_SORT = {
 export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LIST_SORT];
 
 export const SessionListSortSchema = Schema.Literals(Object.values(SESSION_LIST_SORT));
-
-const readsSessionListSort = Schema.is(SessionListSortSchema);
-
-/** Guards a sort arriving from a tool call's untrusted arguments. */
-export function isSessionListSort(value: UnparsedWireValue): value is SessionListSort {
-  return readsSessionListSort(value);
-}
 
 /**
  * The ways someone says a switch's two states out loud. A spoken value is a
@@ -317,51 +226,4 @@ export function appGuideSetting(
   settingId: string | undefined,
 ): AppGuideSetting | undefined {
   return guide.settings.find((setting) => setting.id === settingId);
-}
-
-function settingEffortsText(setting: AppGuideSetting): string | undefined {
-  const efforts = setting.efforts;
-  if (!efforts || !setting.choices) return undefined;
-  const entries = setting.choices.flatMap((choice) => {
-    const levels = efforts[choice];
-    return levels && levels.length > 0 ? [`${choice}:${levels.join("/")}`] : [];
-  });
-  return entries.length > 0 ? `efforts=${entries.join(", ")}` : undefined;
-}
-
-function settingLine(setting: AppGuideSetting): string {
-  const efforts = settingEffortsText(setting);
-  const parts = [
-    `- ${setting.label} — ${setting.description} [setting_id=${setting.id}]`,
-    `value=${setting.value}`,
-    ...(setting.defaultValue !== undefined ? [`default=${setting.defaultValue}`] : []),
-    ...(setting.choices ? [`choices=${setting.choices.join(", ")}`] : []),
-    ...(efforts !== undefined ? [efforts] : []),
-  ];
-  return parts.join("; ");
-}
-
-/**
- * Renders the guide the conversation is allowed to know about itself: the
- * facts, then every setting with its current value, its default, and how it
- * changes. The
- * ids are printed in the same breath as the values so a spoken change can
- * name a setting the way tool calls name sessions — exactly as listed.
- * The update line prints the button on the same terms: it is the value a
- * spoken update ask is validated against, so it is said where the state is.
- */
-export function appGuideContextText(guide: AppGuideSnapshot): string {
-  if (guide.facts.length === 0 && guide.settings.length === 0) {
-    return "The app guide has not been provided.";
-  }
-  const update = guide.update;
-  return [
-    "App guide — what Luke is and how Luke is configured:",
-    ...guide.facts.map((fact) => `- ${fact.label}: ${fact.detail}`),
-    ...(update
-      ? [`- Updates now: ${update.detail} [version=${update.version}; button=${update.button}]`]
-      : []),
-    "Settings:",
-    ...guide.settings.map(settingLine),
-  ].join("\n");
 }
