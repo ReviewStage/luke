@@ -163,6 +163,91 @@ export function listChildren(
   return Effect.map(findChildren({ userId, limit }), (rows) => rows.map(toChildRecord));
 }
 
+/** What a delegation writes down as it opens a child: whose it is, what it hangs from, and how it was named. */
+export interface ChildOpen {
+  readonly userId: string;
+  readonly parentConversationId: string;
+  readonly spawnedByMessageId: string;
+  /** The name the delegation gave the child, or none. */
+  readonly label: string | null;
+  /** Whether the delegation waits on the child's completion coming back to the parent. */
+  readonly expectsCompletion: boolean;
+  readonly now: Date;
+}
+
+const ChildIdRowSchema = Schema.Struct({ id: Schema.String });
+
+/**
+ * The insert selects from the parent's row, so a parent that does not stand
+ * for the account — cleared, another account's, or no row at all — inserts
+ * nothing, and the delegation learns so from the empty answer rather than
+ * from a child hanging under a conversation its account cannot read.
+ */
+const insertChild = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    spawnedByMessageId: Schema.String,
+    label: Schema.NullOr(Schema.String),
+    expectsCompletion: Schema.Boolean,
+    now: Schema.Date,
+  }),
+  Result: ChildIdRowSchema,
+  execute: (write) =>
+    statement(
+      (sql) => sql`
+        insert into conversations (
+          user_id, kind, parent_conversation_id, spawned_by_message_id, label,
+          expects_completion, created_at, last_activity_at
+        )
+        select parent.user_id, ${CONVERSATION_KIND.CHILD}, parent.id, ${write.spawnedByMessageId},
+               ${write.label}, ${write.expectsCompletion}, ${write.now}, ${write.now}
+        from conversations parent
+        where parent.id = ${write.parentConversationId}
+          and parent.user_id = ${write.userId}
+          and parent.deleted_at is null
+        returning id
+      `,
+    ),
+});
+
+/** Opens a child under the account's standing parent, answering its id; nothing where the parent does not stand for the account. */
+export function openChildConversation(
+  open: ChildOpen,
+): Effect.Effect<string | undefined, ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(insertChild(open), (row) =>
+    Option.getOrUndefined(Option.map(row, (found) => found.id)),
+  );
+}
+
+const discardChild = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        delete from conversations
+        where id = ${request.childId}
+          and user_id = ${request.userId}
+          and kind = ${CONVERSATION_KIND.CHILD}
+          and runtime_session_id is null
+      `,
+    ),
+});
+
+/**
+ * Removes a child no session ever ran: the row a delegation opened and eve
+ * then refused a session for. It is a delete rather than Clear's stamp
+ * because nothing was said in it, so there is nothing to keep, and it holds
+ * to a row recording no session, so a child a session has since claimed is
+ * left standing whatever the caller believed.
+ */
+export function discardChildConversation(
+  userId: string,
+  childId: string,
+): Effect.Effect<void, ChildReadFailure, SqlClient.SqlClient> {
+  return discardChild({ userId, childId });
+}
+
 /** One of the account's standing children by id, or none. */
 export function readChild(
   userId: string,
