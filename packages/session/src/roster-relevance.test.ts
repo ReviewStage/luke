@@ -1,17 +1,19 @@
 import assert from "node:assert/strict";
 import {
-  isRosterRelevant,
   normalizeSession,
   rosterRelevantSessions,
   SESSION_STATUS,
   type Session,
   type SessionStatus,
-  sessionRosterRetentionMs,
 } from "@sidecar/session";
 import { test } from "vitest";
 
 const TEST_NOW = Date.parse("2026-09-09T12:00:00.000Z");
 const DAY_MS = 24 * 60 * 60 * 1000;
+// The two windows the module keeps to itself, restated here so a change to
+// either is a change this suite reports rather than one it follows.
+const RESCUE_MS = 3 * DAY_MS;
+const SETTLED_MS = 2 * DAY_MS;
 
 function session(
   providerSessionId: string,
@@ -24,31 +26,30 @@ function session(
   );
 }
 
+/** Whether the roster still earns one session a row, read through the filter that is this module's door. */
+function keepsRow(subject: Session, now: number): boolean {
+  return rosterRelevantSessions([subject], now).length === 1;
+}
+
 test("a session that is live or asking stays on the roster at any age", () => {
   for (const status of [SESSION_STATUS.WORKING, SESSION_STATUS.WAITING]) {
-    assert.equal(
-      isRosterRelevant(session("run:1", status, TEST_NOW - 100 * DAY_MS), TEST_NOW),
-      true,
-    );
+    assert.equal(keepsRow(session("run:1", status, TEST_NOW - 100 * DAY_MS), TEST_NOW), true);
   }
 });
 
 test("a failure stays through its rescue window and then leaves", () => {
-  const retention = sessionRosterRetentionMs(SESSION_STATUS.ERROR);
+  const retention = RESCUE_MS;
   const atHorizon = session("run:1", SESSION_STATUS.ERROR, TEST_NOW - retention);
   const pastHorizon = session("run:2", SESSION_STATUS.ERROR, TEST_NOW - retention - 1);
-  assert.equal(isRosterRelevant(atHorizon, TEST_NOW), true);
-  assert.equal(isRosterRelevant(pastHorizon, TEST_NOW), false);
+  assert.equal(keepsRow(atHorizon, TEST_NOW), true);
+  assert.equal(keepsRow(pastHorizon, TEST_NOW), false);
 });
 
 test("a settled or quiet session stays while its ending is news and then leaves", () => {
   for (const status of [SESSION_STATUS.COMPLETE, SESSION_STATUS.UNKNOWN]) {
-    const retention = sessionRosterRetentionMs(status);
-    assert.equal(isRosterRelevant(session("run:1", status, TEST_NOW - retention), TEST_NOW), true);
-    assert.equal(
-      isRosterRelevant(session("run:2", status, TEST_NOW - retention - 1), TEST_NOW),
-      false,
-    );
+    const retention = SETTLED_MS;
+    assert.equal(keepsRow(session("run:1", status, TEST_NOW - retention), TEST_NOW), true);
+    assert.equal(keepsRow(session("run:2", status, TEST_NOW - retention - 1), TEST_NOW), false);
   }
 });
 
@@ -66,9 +67,9 @@ test("a standing row never ages out, however old its own timestamp", () => {
   // Its provider re-reports it while it exists and drops it when it is gone,
   // so retention has nothing to age out — unlike the settled chat beside it.
   assert.equal(standing.standing, true);
-  assert.equal(isRosterRelevant(standing, TEST_NOW), true);
+  assert.equal(keepsRow(standing, TEST_NOW), true);
   assert.equal(
-    isRosterRelevant(session("run:1", SESSION_STATUS.COMPLETE, TEST_NOW - 100 * DAY_MS), TEST_NOW),
+    keepsRow(session("run:1", SESSION_STATUS.COMPLETE, TEST_NOW - 100 * DAY_MS), TEST_NOW),
     false,
   );
 });

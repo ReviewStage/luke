@@ -1,15 +1,8 @@
-import { Effect } from "effect";
 import { normalizeSession, normalizeSessionIdentity } from "./normalize.js";
-import type { SessionProviderPlugin } from "./provider-plugin.js";
 import type { SessionIdentity, SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation, Session } from "./session-shape.js";
 
 type SessionRosterListener = (sessions: readonly Session[]) => void;
-
-type SessionObservationTransform = (
-  providerId: string,
-  observations: readonly ProviderSessionObservation[],
-) => readonly ProviderSessionObservation[];
 
 type ProviderSessions = Map<string, Session>;
 
@@ -82,22 +75,5 @@ export class SessionRoster {
     const sessions = this.list();
     for (const listener of this.#listeners) listener(sessions);
     return sessions;
-  }
-
-  /** Reads one provider's pass and takes its newest full observation as that provider's sessions. */
-  refresh(
-    plugin: Pick<SessionProviderPlugin, "provider" | "observe">,
-    transform?: SessionObservationTransform,
-  ): Effect.Effect<readonly Session[]> {
-    return Effect.map(
-      Effect.suspend(() => plugin.observe()),
-      (observed) => {
-        const providerId = normalizedProviderId(plugin.provider);
-        return this.replaceProvider(
-          plugin.provider,
-          transform ? transform(providerId, observed) : observed,
-        );
-      },
-    );
   }
 }

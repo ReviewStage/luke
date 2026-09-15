@@ -10,10 +10,8 @@ import {
   ProviderIdSchema,
   SESSION_APPLICATION_ID,
   SESSION_FILTER,
-  SESSION_LINK_SCHEME,
   SessionApplicationIdSchema,
   SessionFilterSchema,
-  SessionLinkSchemeSchema,
   TOOL_PART_STATE,
   ToolPartStateSchema,
   WorkspaceProviderIdSchema,
@@ -71,14 +69,6 @@ test("a session filter is a place, the voice kind, an app, or an agent, and noth
   settlesVocabulary(SessionApplicationIdSchema, Object.values(SESSION_APPLICATION_ID), [
     SESSION_FILTER.VOICE,
     PROVIDER_ID.CODEX,
-  ]);
-});
-
-test("an openable address wears one of the schemes this build fixed", () => {
-  settlesVocabulary(SessionLinkSchemeSchema, Object.values(SESSION_LINK_SCHEME), [
-    "http:",
-    "file:",
-    "https",
   ]);
 });
 

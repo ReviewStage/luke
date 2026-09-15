@@ -10,8 +10,6 @@ import {
   type SessionProvider,
   SessionRoster,
 } from "@sidecar/session";
-import { runTest } from "@sidecar/wire/testing";
-import { Effect } from "effect";
 import { test } from "vitest";
 import {
   ACTION_KIND,
@@ -261,53 +259,6 @@ test("a session runs on this machine unless its provider observed it elsewhere",
         observation("elsewhere", 100, { location: "orbit" as SessionLocation }),
       ]),
     /Unknown session location: orbit/,
-  );
-});
-
-test("refresh replaces one adapter's sessions whole and leaves other providers untouched", async () => {
-  const roster = new SessionRoster();
-  roster.replaceProvider(codex, [observation("stale", 10), observation("active", 20)]);
-  roster.replaceProvider(claude, [observation("review", 30, { status: SESSION_STATUS.WAITING })]);
-
-  await runTest(
-    roster.refresh({
-      provider: codex,
-      observe: () => Effect.succeed([observation("active", 50), observation("new", 60)]),
-    }),
-  );
-
-  // The roster is the latest pass: a session the provider stopped reporting
-  // is gone, with nothing kept back for it.
-  assert.deepEqual(
-    roster.list().map(({ providerId, providerSessionId }) => ({ providerId, providerSessionId })),
-    [
-      { providerId: codex.id, providerSessionId: "new" },
-      { providerId: codex.id, providerSessionId: "active" },
-      { providerId: claude.id, providerSessionId: "review" },
-    ],
-  );
-  assert.equal(
-    roster.get({ providerId: "claude-code", providerSessionId: "review" })?.status,
-    SESSION_STATUS.WAITING,
-  );
-  assert.equal(roster.get({ providerId: "codex", providerSessionId: "stale" }), undefined);
-});
-
-test("a refresh may reshape the observation before it lands, per provider", async () => {
-  const roster = new SessionRoster();
-  await runTest(
-    roster.refresh(
-      { provider: codex, observe: () => Effect.succeed([observation("run:1", 10)]) },
-      (providerId, observations) =>
-        observations.map((observed) => ({
-          ...observed,
-          title: `${providerId}: ${observed.title}`,
-        })),
-    ),
-  );
-  assert.equal(
-    roster.get({ providerId: codex.id, providerSessionId: "run:1" })?.title,
-    "codex: Implement the shared session core",
   );
 });
 

@@ -79,8 +79,3 @@ export function compactionSummaryMessage(
     parts: [part],
   };
 }
-
-/** Whether a stored row is a compaction: an assistant row whose metadata names what it folded. */
-export function isCompactionMessage(message: StoredUIMessage): message is CompactionMessage {
-  return message.role === MESSAGE_ROLE.ASSISTANT && message.metadata.compaction !== undefined;
-}
