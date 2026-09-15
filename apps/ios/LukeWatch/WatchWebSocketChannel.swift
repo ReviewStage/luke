@@ -49,7 +49,7 @@ final class WatchWebSocketChannel: VoiceSocket, @unchecked Sendable {
             guard let self else { return }
             switch state {
             case .ready:
-                lock.withLock { isReady = true }
+                lock.withLock { self.isReady = true }
                 settle(.opened)
             case .failed, .cancelled:
                 settle(.failed)
