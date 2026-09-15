@@ -3,7 +3,6 @@ import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER } from "@sidecar/credentials/snapshot";
 import { CREDENTIAL_PROVIDERS, isCredentialProviderId } from "@sidecar/credentials/vocabulary";
 import {
-  FEEDBACK_KIND,
   type FeedbackResult,
   type FeedbackSubmission,
   feedbackSubmission,
@@ -151,7 +150,6 @@ export const ACT_KIND = {
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
   WINDOW_QUIT: "window.quit",
-  FEEDBACK_SUMMON: "feedback.summon",
   FEEDBACK_SEND: "feedback.send",
   ONBOARDING_SKIP_CALENDAR: "onboarding.skipCalendar",
   ONBOARDING_COMPLETE_CALENDAR: "onboarding.completeCalendar",
@@ -179,12 +177,12 @@ export type ActKind = (typeof ACT_KIND)[keyof typeof ACT_KIND];
  * offered an act: a JSON Schema node written here would be a second statement
  * of a rule the parser already holds, free to drift from it.
  */
-export interface ActSchema<Value> {
+interface ActSchema<Value> {
   read(value: UnparsedWireValue): SchemaRead<Value>;
 }
 
 /** One kind's whole declaration: what its payload takes, what its answer is, and what its refusal says. */
-export interface ActDeclaration<Payload, Result> {
+interface ActDeclaration<Payload, Result> {
   readonly payload: ActSchema<Payload>;
   readonly result: WireGuard<Result>;
   readonly refusal: string;
@@ -620,11 +618,6 @@ export const ACT = {
     refusal: "Could not copy that to the clipboard on this system.",
   },
   [ACT_KIND.WINDOW_QUIT]: press("Could not quit on this system."),
-  [ACT_KIND.FEEDBACK_SUMMON]: {
-    payload: record({ kind: EffectSchema.Literals(Object.values(FEEDBACK_KIND)) }),
-    result: answersNothing,
-    refusal: "Could not open the composer on this system.",
-  },
   [ACT_KIND.FEEDBACK_SEND]: {
     payload: fields<{ submission: FeedbackSubmission }>({
       submission: (value) => feedbackSubmission(value) !== undefined,

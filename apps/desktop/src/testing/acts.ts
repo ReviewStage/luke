@@ -105,7 +105,6 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.WINDOW_FOCUS_PANEL]: { kind: ACT_KIND.WINDOW_FOCUS_PANEL },
   [ACT_KIND.WINDOW_COPY_TEXT]: { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "checkout" } },
   [ACT_KIND.WINDOW_QUIT]: { kind: ACT_KIND.WINDOW_QUIT },
-  [ACT_KIND.FEEDBACK_SUMMON]: { kind: ACT_KIND.FEEDBACK_SUMMON, payload: { kind: "feedback" } },
   [ACT_KIND.FEEDBACK_SEND]: {
     kind: ACT_KIND.FEEDBACK_SEND,
     payload: { submission: { kind: "feedback", message: "it works", images: [] } },

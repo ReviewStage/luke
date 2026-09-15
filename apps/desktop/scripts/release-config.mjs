@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { PACKAGED_ARCHITECTURE } from "./package-config.mjs";
 
-export const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
+const NOTARY_KEYCHAIN_PROFILE = "luke-notary";
 // The version-free asset name every release carries beside the versioned DMG,
 // so the download link on the website can point at the latest release forever.
 export const RELEASE_LATEST_DMG_FILE_NAME = "Luke.dmg";
