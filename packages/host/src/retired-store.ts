@@ -20,7 +20,7 @@ const RETIRED_STORE_ENTRY = {
 type RetiredStoreEntry = (typeof RETIRED_STORE_ENTRY)[keyof typeof RETIRED_STORE_ENTRY];
 
 /** The entries under the agent's directory a launch removes, in the order it removes them. */
-export const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
+const RETIRED_STORE_ENTRIES: readonly RetiredStoreEntry[] = [
   RETIRED_STORE_ENTRY.DATABASE,
   RETIRED_STORE_ENTRY.WRITE_AHEAD_LOG,
   RETIRED_STORE_ENTRY.SHARED_MEMORY,

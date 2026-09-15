@@ -12,9 +12,9 @@ import type { GatewayInProcessHost } from "@sidecar/gateway/server";
 import { ACTION_RESULT_STATUS, isRecord, isWireString } from "@sidecar/wire";
 import { temporaryDirectory } from "@sidecar/wire/testing";
 import { Effect, Layer, Result } from "effect";
-import { hostLayer } from "./compose-host.js";
+import { hostAssemblyLayer } from "./compose-host.js";
 import { type Composer, DuplicateGatewayMethod, foldMethods } from "./composer.js";
-import { HostTag } from "./effect/host.js";
+import { HostTag, hostStandingLayer } from "./effect/host.js";
 import { testKernelLayer } from "./testing/test-kernel.js";
 
 function stubComposer(methods: readonly GatewayMethod[]): Composer {
@@ -24,9 +24,12 @@ function stubComposer(methods: readonly GatewayMethod[]): Composer {
   };
 }
 
-/** `hostLayer` over a fixture state root, standing every composer for the scope it is provided to. */
+/** The host over a fixture state root, standing every composer for the scope it is provided to. */
 function fixtureHostLayer(stateRoot: string) {
-  return Layer.provide(hostLayer, testKernelLayer({ stateRoot }));
+  return Layer.provide(
+    Layer.provide(hostStandingLayer, hostAssemblyLayer),
+    testKernelLayer({ stateRoot }),
+  );
 }
 
 /** One client of the composed host, as the desktop's own operator is: one connection, every request on it. */

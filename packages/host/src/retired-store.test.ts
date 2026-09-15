@@ -7,7 +7,7 @@ import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import { Effect } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import * as PlatformError from "effect/PlatformError";
-import { RETIRED_STORE_ENTRIES, removeRetiredStore } from "./retired-store.js";
+import { removeRetiredStore } from "./retired-store.js";
 
 const withRoot = <A>(run: (root: string) => Effect.Effect<A, never, FileSystem.FileSystem>) =>
   Effect.scoped(Effect.flatMap(temporaryDirectoryScoped("luke-retired-store-"), run)).pipe(
@@ -37,12 +37,6 @@ it.effect(
           "# USER.md\n",
         );
         assert.equal(reports.length, 0);
-        assert.deepEqual(RETIRED_STORE_ENTRIES, [
-          "agent.sqlite",
-          "agent.sqlite-wal",
-          "agent.sqlite-shm",
-          "archives",
-        ]);
       }),
     ),
 );
