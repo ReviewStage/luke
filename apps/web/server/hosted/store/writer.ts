@@ -1446,8 +1446,13 @@ const reasoningCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
  * turn's answer closes the turn's journal, its parts replaced whole by the
  * projection the turn told, since the projection is the message as the
  * runtime's own record has it and the journal was the record of it in flight.
- * A closed journal takes the same projection again as a repeat and a
- * different one as the late write it is.
+ * A journal anything followed while the turn ran — Luke's words said around
+ * the ask as the brain worked, an aside, a second line of the developer's —
+ * closes at a fresh position behind them, so the thread reads as it was
+ * heard: what was said while he worked, then what he did and thought, then
+ * what was said of it. A journal nothing followed keeps its place. A closed
+ * journal takes the same projection again as a repeat and a different one as
+ * the late write it is.
  */
 const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
@@ -1484,8 +1489,27 @@ const messageCompleted = /* @__PURE__ */ Effect.fnUntraced(function* (
     metadata: nullable(message.metadata),
     finishedAt: context.now(),
   });
+  yield* moveJournalBehindWhatFollowed(context, row.id);
   return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
+
+/**
+ * The closed journal follows whatever landed after it while its turn ran:
+ * where a row of the conversation stands past it, the journal moves to a
+ * fresh position — past every device's cursor, so a device that previewed
+ * the journal reads it again where it now stands and lets the copy go —
+ * and where nothing does, it stays where it opened and moves no sequence.
+ */
+function moveJournalBehindWhatFollowed(context: WriterContext, id: string): Write<void> {
+  return Effect.gen(function* () {
+    const followed = yield* findMessageFollowing({
+      conversationId: context.target.conversationId,
+      id,
+    });
+    if (Option.isNone(followed)) return;
+    yield* moveMessage({ id, seq: yield* allocateMessageSeq(context) });
+  });
+}
 
 function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWriteResult> {
   switch (event.kind) {
@@ -1910,18 +1934,22 @@ const findAskTurn = SqlSchema.findOneOption({
     ),
 });
 
-/** The user rows of the turn's asks still standing outside it, in the order they were written. */
-const findUnattachedAskLines = SqlSchema.findAll({
+/**
+ * The rows of the turn's asks still standing outside it, in the order they
+ * were written: the developer's line, keyed by the ask's own id, and the
+ * voice model's rows about it, which name the ask as their `delegation_id`.
+ */
+const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
-  Result: RowIdSchema,
+  Result: Schema.Struct({ id: Schema.String, role: MessageRoleSchema }),
   execute: (key) =>
     statement(
       (sql) => sql`
-        select messages.id
+        select messages.id, messages.role
         from messages
         join asks
           on asks.conversation_id = messages.conversation_id
-         and asks.client_id = messages.client_id
+         and asks.client_id in (messages.client_id, messages.metadata ->> 'delegation_id')
         where asks.conversation_id = ${key.conversationId}
           and asks.turn_id = ${key.turnId}::uuid
           and messages.turn_id is null
@@ -1954,6 +1982,26 @@ const findTurnWorkBefore = SqlSchema.findAll({
           and role <> ${MESSAGE_ROLE.USER}
           and seq < ${key.seq}
         order by seq asc
+      `,
+    ),
+});
+
+/** The first row of the conversation standing past one row's position, where any does. */
+const findMessageFollowing = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
+  Result: RowIdSchema,
+  execute: (key) =>
+    statement(
+      (sql) => sql`
+        select later.id
+        from messages placed
+        join messages later
+          on later.conversation_id = placed.conversation_id
+         and later.seq > placed.seq
+        where placed.conversation_id = ${key.conversationId}
+          and placed.id = ${key.id}
+        order by later.seq asc
+        limit 1
       `,
     ),
 });
@@ -2006,7 +2054,7 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
   context: WriterContext,
   turnId: string,
 ): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
-  const standing = yield* findUnattachedAskLines({
+  const standing = yield* findUnattachedAskRows({
     conversationId: context.target.conversationId,
     turnId,
   });
@@ -2016,9 +2064,13 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("attachAskLines")(function* (
     // The received message ordinarily precedes the first step, so nothing of
     // the turn's stands yet; where one does — a received message eve told
     // again after the step, an attach refused the first time — the work moves
-    // behind the line all the same, so the order holds by the store's own
-    // sequence on every path a line enters a turn by.
-    yield* moveTurnWorkAfter(context, turnId, seq);
+    // behind the developer's line all the same, so the order holds by the
+    // store's own sequence on every path a line enters a turn by. Luke's words
+    // about the ask — "checking now", said the moment the voice handed the
+    // question over and written while the dispatch was still under way —
+    // follow the line in the order said and move nothing: the journal closes
+    // behind whatever followed it on its own.
+    if (row.role === MESSAGE_ROLE.USER) yield* moveTurnWorkAfter(context, turnId, seq);
     attached.push(row.id);
   }
   return { ok: true, attached };

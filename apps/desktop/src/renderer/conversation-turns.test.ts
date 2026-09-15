@@ -35,6 +35,7 @@ import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import {
   announcedWords,
+  answeredAloud,
   ConversationTurns,
   foldOpen,
   judgmentOf,
@@ -90,11 +91,12 @@ test("the fixture scenarios draw every session action kind, folded or as a row o
   ]);
   assert.ok(count(markup, "data-tool-calls-fold", "settled") >= 1);
   assert.ok(count(markup, "data-tool-calls-fold", "running") >= 1);
-  // Every fold's line leads with the chevron, and nothing else draws one.
+  // Every fold's line leads with the chevron — the tool folds and the folds of thinking — and nothing else draws one.
   assert.equal(
     count(markup, "class", "settings-chevron"),
     count(markup, "data-tool-calls-fold", "settled") +
-      count(markup, "data-tool-calls-fold", "running"),
+      count(markup, "data-tool-calls-fold", "running") +
+      count(markup, "data-thinking-fold", "true"),
   );
   // Both the accepted actions and the other outcomes stand in the thread.
   assert.ok(count(markup, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED) >= 7);
@@ -221,7 +223,9 @@ test("a message of one tool call draws the row itself, stamped, with no fold and
   assert.equal(count(asked, "data-tool-kind", "transcript"), 1);
   assert.equal(actionRows(asked), 0);
   assert.equal(count(asked, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 1);
-  assert.equal(count(asked, "class", "conversation-action-mark"), 1);
+  // Two marks: the read's page on its row, and the brain on the fold of the thought before it.
+  assert.equal(count(asked, "class", "conversation-action-mark"), 2);
+  assert.equal(count(asked, "data-thinking-fold", "true"), 1);
   assert.equal(count(asked, "class", "conversation-action-chip"), 1);
   assert.equal(count(asked, "class", "conversation-time"), 3);
 });
@@ -312,6 +316,9 @@ test("a reasoning part folds to a line on Luke's side, and an announcement is hi
   const markup = render(groups, OPEN);
   // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
   assert.equal(count(markup, "data-reasoning", "true"), 1);
+  // The reasoning row and the brain's written row open on the same one word, for now.
+  const reasoning = entries(markup).find((row) => row.includes('data-reasoning="true"'));
+  assert.ok(reasoning?.includes("Thinking"));
   assert.equal(count(markup, "data-unspoken", "true"), 0);
 
   const announced = FIXTURE_INPUT.observed[0]?.messages[0];
@@ -550,7 +557,7 @@ function entries(markup: string): readonly string[] {
   return markup.split('<li class="conversation-entry"').slice(1);
 }
 
-test("a message Luke read aloud folds to its words as written, the reading is the bubble, and the message's rating moves onto the reading", () => {
+test("in a spoken turn the brain's words fold as Luke's thinking, a row apart from his reasoning, where the record placed them among what his voice said, and the journal's rating stands on the reading", () => {
   const READ_TURN = "1c000000-0000-4000-8000-000000000401";
   const JOURNAL = "1c000000-0000-4000-8000-000000000402";
   const READING = "1c000000-0000-4000-8000-000000000403";
@@ -561,8 +568,28 @@ test("a message Luke read aloud folds to its words as written, the reading is th
     status: TURN_STATUS.SETTLED,
     queuedAt: at,
     startedAt: at,
-    settledAt: at + 4_000,
+    settledAt: at + 6_000,
   };
+  const spoken = (id: string, text: string, seq: number, fromMs: number, readFrom?: string) =>
+    ({
+      message: {
+        id,
+        role: MESSAGE_ROLE.ASSISTANT,
+        parts: [{ type: "text", text, state: "done" }],
+        metadata: {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_1",
+          delegation_id: "dl_1",
+          from_ms: fromMs,
+          to_ms: fromMs + 1_000,
+          ...(readFrom === undefined ? undefined : { read_from: readFrom }),
+        },
+      },
+      seq,
+      createdAt: at + fromMs,
+      tools: [],
+    }) satisfies ConversationViewMessage;
   const ask: ConversationViewMessage = {
     message: {
       id: "1c000000-0000-4000-8000-000000000400",
@@ -581,64 +608,91 @@ test("a message Luke read aloud folds to its words as written, the reading is th
     createdAt: at,
     tools: [],
   };
+  const checking = spoken("1c000000-0000-4000-8000-000000000404", "Checking now.", 2, 1_500);
+  const reading_transcript = spoken(
+    "1c000000-0000-4000-8000-000000000405",
+    "I'm reading one session's transcript.",
+    3,
+    3_000,
+  );
+  // The journal opened at the turn's first step and closed behind the words said while it ran.
   const journal: ConversationViewMessage = {
     message: {
       id: JOURNAL,
       role: MESSAGE_ROLE.ASSISTANT,
-      parts: [{ type: "text", text: "It is on the failing test.", state: "done" }],
+      parts: [{ type: "text", text: "It is on the `failing` test.", state: "done" }],
       metadata: { author: MESSAGE_AUTHOR.BRAIN },
     },
-    seq: 2,
-    createdAt: at + 4_000,
+    seq: 4,
+    createdAt: at + 2_000,
     tools: [],
   };
-  const reading: ConversationViewMessage = {
-    message: {
-      id: READING,
-      role: MESSAGE_ROLE.ASSISTANT,
-      parts: [{ type: "text", text: "It's on the failing test!", state: "done" }],
-      metadata: {
-        author: MESSAGE_AUTHOR.VOICE_MODEL,
-        channel: MESSAGE_CHANNEL.VOICE,
-        voice_session_id: "vs_1",
-        delegation_id: "dl_1",
-        from_ms: 5_000,
-        to_ms: 7_000,
-        read_from: JOURNAL,
-      },
-    },
-    seq: 3,
-    createdAt: at + 8_000,
-    tools: [],
-  };
+  const reading = spoken(READING, "It's on the failing test!", 5, 7_000, JOURNAL);
   const group: ConversationViewTurnGroup = {
     turnId: READ_TURN,
     turn,
     source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
-    messages: [ask, journal, reading],
+    messages: [ask, checking, reading_transcript, journal, reading],
   };
   const markup = render([group]);
-  assert.equal(count(markup, "data-read-aloud", "true"), 1);
+  // The brain's words fold as his thinking, in markdown, as a row of their own and not
+  // a reasoning row.
+  assert.equal(count(markup, "data-written", "true"), 1);
+  assert.equal(count(markup, "data-reasoning", "true"), 0);
   assert.equal(count(markup, "data-reading", "true"), 1);
-  assert.equal(ratingControls(markup), 1, "one control for the one message rated, the brain's");
   const rows = entries(markup);
-  const folded = rows.find((row) => row.includes('data-read-aloud="true"'));
+  const thought = rows.find((row) => row.includes('data-written="true"'));
   const said = rows.find((row) => row.includes('data-reading="true"'));
-  assert.ok(folded && said);
-  assert.equal(ratingControls(folded), 0);
-  assert.equal(ratingControls(said), 1);
-  assert.ok(folded.includes("As written") && folded.includes("It is on the failing test."));
+  assert.ok(thought && said);
+  assert.ok(thought.includes("Thinking") && thought.includes("<code>failing</code>"));
   assert.ok(said.includes("failing test!"));
-  // The fold comes before the reading, as the words as written come before the words said.
-  assert.ok(rows.indexOf(folded) < rows.indexOf(said));
+  // The rows stand in the record's sequence: the ask, what was said while the brain
+  // worked, the thought, then the reading — the thought never sorts above the words before it.
+  assert.deepEqual(
+    rows.map((row) =>
+      row.includes('data-speaker="you"')
+        ? "you"
+        : row.includes('data-written="true"')
+          ? "thought"
+          : row.includes('data-reading="true"')
+            ? "reading"
+            : "said",
+    ),
+    ["you", "said", "said", "thought", "reading"],
+  );
+  // One control per message of Luke's with words said: the two lines of his own, and the
+  // reading carrying the journal's; the thought carries none.
+  assert.equal(ratingControls(markup), 3);
+  assert.equal(ratingControls(thought), 0);
+  assert.equal(ratingControls(said), 1);
 
-  // Without the reading, the journal is the bubble and takes the rating itself.
-  const unread = render([{ ...group, messages: [ask, journal] }]);
-  assert.equal(count(unread, "data-read-aloud", "true"), 0);
-  assert.equal(ratingControls(unread), 1);
+  // Without the reading, the thought stands as it is and the brain's judgment goes unrated.
+  const unread = render([{ ...group, messages: [ask, checking, reading_transcript, journal] }]);
+  assert.equal(count(unread, "data-written", "true"), 1);
+  assert.equal(ratingControls(unread), 2);
+
+  // The same journal under a typed turn is the answer itself: a bubble carrying its rating.
+  const typed = render([
+    { ...group, turn: { ...turn, origin: TURN_ORIGIN.TYPED }, messages: [ask, journal] },
+  ]);
+  assert.equal(count(typed, "data-written", "true"), 0);
+  assert.equal(count(typed, "data-speaker", "luke"), 1);
+  assert.equal(ratingControls(typed), 1);
+
+  // Only a turn the developer opened by speaking hands its answer to the voice.
+  assert.equal(answeredAloud(turn), true);
+  for (const origin of [
+    TURN_ORIGIN.TYPED,
+    TURN_ORIGIN.ROSTER_DIFF,
+    TURN_ORIGIN.HOLD_RELEASE,
+    TURN_ORIGIN.CHILD,
+  ]) {
+    assert.equal(answeredAloud({ ...turn, origin }), false);
+  }
+  assert.equal(answeredAloud(undefined), false);
 });
 
-test("a briefing read aloud folds to the briefing as written, and the reading in its own group is the bubble carrying the briefing's rating", () => {
+test("a briefing a device read aloud folds as the brain's written words, the reading in its own group is the bubble carrying the briefing's rating, and one nothing said of stays the bubble", () => {
   const ANNOUNCED = "1d000000-0000-4000-8000-000000000501";
   const READING = "1d000000-0000-4000-8000-000000000502";
   const at = FIXTURE_NOW - 30_000;
@@ -710,14 +764,25 @@ test("a briefing read aloud folds to the briefing as written, and the reading in
     readingGroup,
   ];
   const markup = render(groups);
-  assert.equal(count(markup, "data-read-aloud", "true"), 1);
+  assert.equal(count(markup, "data-written", "true"), 1);
   assert.equal(count(markup, "data-reading", "true"), 1);
+  assert.equal(count(markup, "data-speaker", "luke"), 2);
   assert.equal(ratingControls(markup), 1);
   const rows = entries(markup);
+  const folded = rows.find((row) => row.includes('data-written="true"'));
   const said = rows.find((row) => row.includes('data-reading="true"'));
-  assert.ok(said);
+  assert.ok(folded && said);
+  assert.ok(folded.includes("Thinking") && folded.includes("finished while you were away"));
+  assert.equal(ratingControls(folded), 0);
   assert.equal(ratingControls(said), 1);
   assert.ok(said.includes("wrapped up"));
+  // The same briefing with no spoken row — pushed to a phone, or claimed by nobody — is the bubble, rated itself.
+  const [announcedGroup] = groups;
+  assert.ok(announcedGroup);
+  const pushed = render([announcedGroup]);
+  assert.equal(count(pushed, "data-written", "true"), 0);
+  assert.equal(count(pushed, "data-speaker", "luke"), 1);
+  assert.equal(ratingControls(pushed), 1);
   // A reading whose source is not in the thread is drawn as words of Luke's own, rated as such.
   const alone = render([readingGroup]);
   assert.equal(count(alone, "data-reading", "true"), 0);

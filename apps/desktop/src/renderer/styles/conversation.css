@@ -683,54 +683,37 @@ button.conversation-action-chip:focus-visible {
   font-weight: 620;
 }
 
-/* The brain's words as written, folded to one line above the bubble of what
-   Luke's voice actually said of them, at the inset his thoughts fold to: the
-   source is there to check against without reading as a second thing said. */
-.conversation-source {
-  min-width: 0;
-  max-width: min(82%, 58ch);
+/* Luke's thinking — the model's reasoning, or the brain's written words in a
+   turn his voice answered — folded under a line drawn like a fold of tool
+   calls: the chevron, his brain for a mark, one word. It reads from his edge
+   the way the tool fold does, at the inset his marks stand at, and is never a
+   bubble: thinking is not something he said, and it shares nothing with the
+   wait's `.conversation-thinking` bubble but the word. It is a row of its
+   own beside the tool fold, never inside it. Closed until pressed; the
+   chevron turns while it stands open, as the tool fold's does. */
+.conversation-entry[data-thinking-fold] .conversation-message {
+  justify-content: flex-start;
   padding: 2px 0 2px var(--conversation-row-inset);
+  text-align: left;
+}
+
+.conversation-thinking-fold {
+  width: 100%;
+  min-width: 0;
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: 10.5px;
   line-height: 1.4;
 }
 
-.conversation-source-summary {
-  cursor: pointer;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 620;
+.conversation-thinking-fold[open] > .conversation-turn-summary .settings-chevron {
+  transform: rotate(90deg);
 }
 
-.conversation-source-words {
+.conversation-thinking-fold-words {
   display: block;
-  padding-top: 3px;
-  overflow-wrap: anywhere;
-}
-
-/* Luke's thought, folded to one line on his side of the thread that opens on
-   its words. A native disclosure rather than a control of Luke's own, and no
-   bubble: a thought is not something he said. Its line stands at the inset
-   his marks do, and its header is a press, so the pointer says so. */
-.conversation-reasoning {
-  min-width: 0;
   max-width: min(82%, 58ch);
-  padding: 2px 0 2px var(--conversation-row-inset);
-  color: var(--text-secondary);
+  padding: 4px 0 2px;
   font-size: 11px;
-  line-height: 1.4;
-}
-
-.conversation-reasoning-summary {
-  cursor: pointer;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 620;
-}
-
-.conversation-reasoning-words {
-  display: block;
-  padding-top: 3px;
   overflow-wrap: anywhere;
 }
 
@@ -756,6 +739,13 @@ button.conversation-action-chip:focus-visible {
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
+}
+
+/* A mark on a fold's line — the brain, or Luke's face — centres on the line
+   like the chevron beside it; the step down a text row's mark takes to meet
+   its first line has nothing to meet here. */
+.conversation-turn-summary .conversation-action-mark {
+  margin-top: 0;
 }
 
 .conversation-turn-summary::-webkit-details-marker {

@@ -926,8 +926,12 @@ share one id, the delegation's, which the service submits the ask under, so
 the line is tied to the turn the ask ran whichever write lands second: the
 voice writer reads the ask's turn under the conversation's lock as it writes
 the row, and the relay, at a spoken turn's received message, takes into the
-turn any row of the turn's asks still standing without one, under the same
-lock. The race is removed rather than won. The store owns the order inside
+turn any row of the turn's asks still standing without one, and behind it
+any row of Luke's about that ask — his "checking now", said the moment the
+voice handed the question over and written while the dispatch was still under
+way — under the same lock, in the order said. The race is removed rather than
+won, and no line of his is left as a group of its own to be placed by its
+instant after the whole turn it belongs to. The store owns the order inside
 the group as it owns the order of the conversation: the sequence a device
 pages by is the sequence a group is drawn in, so the writer places the
 developer's line ahead of the turn's work by that sequence rather than
@@ -942,7 +946,12 @@ now stands; and a line the turn takes with a journal already open — a
 received message eve told again after the step — moves the journal behind it
 the same way, so the developer's line precedes the turn's work on every path
 a line enters a turn by, and no renderer sorts a group by anything but the
-sequence. Every device holds a message once, by its id, where its latest
+sequence. The turn's answer closes the journal behind whatever landed after
+it while the turn ran — Luke's words said around the ask as the brain worked,
+an aside, a second line of the developer's — by moving it to a fresh position
+where any row stands past it, and leaves it where it opened where none does,
+so the thread reads as it was heard: what was said while he worked, then what
+he did and thought, then what was said of it. Every device holds a message once, by its id, where its latest
 delivery placed it; `reads-wire.ts` states the rule and the desktop's
 `conversation-view-sync.ts` and the phone's `ConversationThread.swift` keep
 it. A device from before this rule holds the line where it first read it and
@@ -1400,9 +1409,12 @@ the voice session and span it was cut from, the delegation it followed, and,
 where the store could tell, `read_from`: the message the words were read
 aloud from — the delegation's turn's journal where that turn had settled
 within two minutes of the write, in which case the row joins the turn, or the
-briefing whose `speech.spoken` began inside the span. The desktop folds a
-message read from to its words as written and draws the reading as the
-bubble, with the message's rating on it. No audio is ever stored.
+briefing whose `speech.spoken` began inside the span. The desktop draws the
+reading as the bubble, with the message's rating on it; a briefing read from
+folds as Luke's thinking above the reading, where one nothing said of stays
+his bubble, and the journal of a spoken turn folds the same way whether or
+not a reading names it, since what he said of it is the voice's own row. No
+audio is ever stored.
 
 Two writers share those tables and never a column. The voice service's own
 `server/voice/session-record.ts` owns the session row's whole life: it is

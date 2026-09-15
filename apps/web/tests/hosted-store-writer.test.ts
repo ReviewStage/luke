@@ -1574,6 +1574,173 @@ test("a spoken reply under a delegation joins the delegation's turn, and is read
   });
 });
 
+test("the turn's answer closes the journal behind what landed while the turn ran, and leaves a journal nothing followed where it opened", async () => {
+  const target = await conversation();
+  const asks = askRecord();
+  const stream = new Stream();
+  const askId = randomUUID();
+  const spoken = (clientId: string, fromMs: number) =>
+    database.run(
+      writer.recordSpokenReply(target, {
+        clientId,
+        text: `said ${fromMs}`,
+        metadata: {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_fixture_1",
+          from_ms: fromMs,
+          to_ms: fromMs + 1_000,
+          delegation_id: askId,
+        },
+      }),
+    );
+  // The developer's spoken ask, dispatched to the turn the stream is about to run.
+  const ask = await database.run(
+    asks.record({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      clientId: askId,
+      origin: "spoken",
+      question: "What is the fixture session doing?",
+      createdAt: new Date(NOW),
+    }),
+  );
+  await database.run(
+    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: stream.turnId })),
+  );
+  await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
+    stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
+    stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
+  ]);
+  // Luke's words while the brain works: his row joins the running turn, behind the open journal.
+  assert.ok((await spoken("checking", 2_000)).ok);
+  assert.ok((await spoken("reading-one", 4_000)).ok);
+  const placed = (rows: Awaited<ReturnType<typeof storedMessages>>) =>
+    rows.map((row) => [row.clientId, row.seq, row.turnId, row.finishedAt !== null]);
+  assert.deepEqual(placed(await storedMessages(target)), [
+    [askId, 1, stream.turnId, true],
+    [stream.turnId, 2, stream.turnId, false],
+    ["checking", 3, stream.turnId, true],
+    ["reading-one", 4, stream.turnId, true],
+  ]);
+
+  // The answer closes the journal at a fresh position behind them, finished, with the parts told.
+  await feed(target, [
+    stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
+    stream.answered(randomUUID(), REPLY_PARTS),
+    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
+  ]);
+  const rows = await storedMessages(target);
+  assert.deepEqual(placed(rows), [
+    [askId, 1, stream.turnId, true],
+    ["checking", 3, stream.turnId, true],
+    ["reading-one", 4, stream.turnId, true],
+    [stream.turnId, 5, stream.turnId, true],
+  ]);
+  assert.deepEqual(rows[3]?.parts, REPLY_PARTS);
+  assert.deepEqual(await counters(target), { message: 6, event: 1 });
+
+  // The reading of the answer lands after it, read from the journal where it now stands.
+  assert.ok((await spoken("reading", 9_000)).ok);
+  const reading = (await storedMessages(target)).find((row) => row.clientId === "reading");
+  assert.equal(reading?.seq, 6);
+  assert.equal(reading?.turnId, stream.turnId);
+  assert.deepEqual(reading?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_1",
+    from_ms: 9_000,
+    to_ms: 10_000,
+    delegation_id: askId,
+    read_from: rows[3]?.id,
+  });
+
+  // The answer told again is a repeat, and moves nothing.
+  await feed(target, [stream.answered(randomUUID(), REPLY_PARTS)]);
+  assert.deepEqual(
+    (await storedMessages(target)).map((row) => row.seq),
+    [1, 3, 4, 5, 6],
+  );
+  assert.deepEqual(await counters(target), { message: 7, event: 1 });
+});
+
+test("Luke's words about an ask said before the ask learned its turn follow the ask's line into the turn at the received message, in the order said, and never stand as a group of their own", async () => {
+  const target = await conversation();
+  const asks = askRecord();
+  const stream = new Stream();
+  const askId = randomUUID();
+  const spoken = (clientId: string, fromMs: number) =>
+    database.run(
+      writer.recordSpokenReply(target, {
+        clientId,
+        text: `said ${fromMs}`,
+        metadata: {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_fixture_1",
+          from_ms: fromMs,
+          to_ms: fromMs + 1_000,
+          delegation_id: askId,
+        },
+      }),
+    );
+  // The ask is recorded but its dispatch has not named a turn; Luke has already said he is checking.
+  const ask = await database.run(
+    asks.record({
+      userId: target.userId,
+      conversationId: target.conversationId,
+      clientId: askId,
+      origin: "spoken",
+      question: "What is the fixture session doing?",
+      createdAt: new Date(NOW),
+    }),
+  );
+  assert.ok((await spoken("checking", 1_500)).ok);
+  assert.ok((await spoken("desk", 2_500)).ok);
+  const before = (await storedMessages(target)).map((row) => [row.clientId, row.seq, row.turnId]);
+  assert.deepEqual(before, [
+    ["checking", 1, null],
+    ["desk", 2, null],
+  ]);
+
+  // The dispatch names the turn, eve starts it and tells the received message: the relay attaches.
+  await database.run(
+    asks.dispatchOnce(target, ask.id, async () => ({ sessionId: "wrun_1", turnId: stream.turnId })),
+  );
+  await feed(target, [
+    stream.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
+    stream.words(askId, "What is the fixture session doing?", TYPED_ASK),
+  ]);
+  const attached = await database.run(writer.attachAskLines(target, stream.turnId));
+  assert.ok(attached.ok);
+  assert.equal(attached.attached.length, 2);
+  const placed = (rows: Awaited<ReturnType<typeof storedMessages>>) =>
+    rows.map((row) => [row.clientId, row.seq, row.turnId]);
+  assert.deepEqual(placed(await storedMessages(target)), [
+    [askId, 3, stream.turnId],
+    ["checking", 4, stream.turnId],
+    ["desk", 5, stream.turnId],
+  ]);
+
+  // The turn's work then closes behind them, and a second attach finds nothing left outside.
+  await feed(target, [
+    stream.toolCall("call_1", "read_transcript", TRANSCRIPT_INPUT),
+    stream.toolAnswered("call_1", "read_transcript", TRANSCRIPT_OUTPUT),
+    stream.answered(randomUUID(), REPLY_PARTS),
+    stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
+  ]);
+  assert.deepEqual(placed(await storedMessages(target)), [
+    [askId, 3, stream.turnId],
+    ["checking", 4, stream.turnId],
+    ["desk", 5, stream.turnId],
+    [stream.turnId, 6, stream.turnId],
+  ]);
+  const again = await database.run(writer.attachAskLines(target, stream.turnId));
+  assert.ok(again.ok);
+  assert.deepEqual(again.attached, []);
+});
+
 test("adopting a spoken line re-keys it to the delegation, names the delegation in its metadata, takes it into the ask's turn ahead of the turn's work, and is one adoption however often it is asked", async () => {
   const target = await conversation();
   const line = await database.run(
