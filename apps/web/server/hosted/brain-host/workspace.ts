@@ -2,7 +2,6 @@ import { Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
-  BOOTSTRAP_BOUNDS,
   BOOTSTRAP_FILE_ORDER,
   BRAIN_IDENTITY_LINE,
   BRAIN_INPUT_MARKER,
@@ -19,9 +18,11 @@ import {
   isWorkspaceFile,
   PROMPT_PROFILE,
   parseDailyNoteName,
+  tooLargeRefusal,
   WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
+  workspaceFileBound,
 } from "../../core.js";
 import type { HostedStore } from "../store/index.js";
 import { BRAIN_HOST } from "./bounds.js";
@@ -31,9 +32,9 @@ import { BRAIN_HOST } from "./bounds.js";
  * under `agents/main/workspace`, one row per user per file, seeded once from
  * the brain's own seeds and edited only by the brain's workspace tools. The
  * prompt is composed from the rows exactly as the desktop composes it from
- * the directory — the bootstrap order, the per-file and total bounds, the
- * pure builder — and the tools can name nothing but the six bootstrap files
- * and a dated note under `memory/`.
+ * the directory — the bootstrap order, each file's own bound and the total
+ * bound, the pure builder — and the tools can name nothing but the bootstrap
+ * files and a dated note under `memory/`.
  */
 
 /** The slice of the store the workspace reaches. */
@@ -69,12 +70,13 @@ export const seedHostedWorkspace = /* @__PURE__ */ Effect.fn("seedHostedWorkspac
 const NO_SKILLS = "not loaded: this agent lists no skills";
 
 /**
- * The workspace tools' reach: the rows, bounded like the files, with no
- * skills to load. `BrainWorkspaceAccess` answers `Effect<A, never, never>`,
- * but a row is read over `SqlClient`, so the request's own client is
- * provided into each read here and `Effect.orDie` stands for the error the
- * contract has nowhere to say — a row this service cannot read is not a
- * refusal the model is offered a reason for.
+ * The workspace tools' reach: the rows, each cut or refused at its file's
+ * own bound exactly as the files are, with no skills to load.
+ * `BrainWorkspaceAccess` answers `Effect<A, never, never>`, but a row is read
+ * over `SqlClient`, so the request's own client is provided into each read
+ * here and `Effect.orDie` stands for the error the contract has nowhere to
+ * say — a row this service cannot read is not a refusal the model is offered
+ * a reason for.
  */
 export function hostedWorkspaceAccess(
   client: SqlClient.SqlClient,
@@ -92,15 +94,14 @@ export function hostedWorkspaceAccess(
         if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
         const row = yield* run(store.workspace.read(userId, path));
         if (!row) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.NOT_FOUND };
-        return { ok: true, content: row.content.slice(0, BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) };
+        return { ok: true, content: row.content.slice(0, workspaceFileBound(path)) };
       }),
     write: (name, content) =>
       Effect.gen(function* () {
         const path = hostedWorkspacePath(name);
         if (!path) return { ok: false, reason: WORKSPACE_FILE_REFUSAL.OUTSIDE_WORKSPACE };
-        if (content.length > BOOTSTRAP_BOUNDS.MAXIMUM_CHARS_PER_FILE) {
-          return { ok: false, reason: WORKSPACE_FILE_REFUSAL.TOO_LARGE };
-        }
+        const bound = workspaceFileBound(path);
+        if (content.length > bound) return { ok: false, reason: tooLargeRefusal(bound) };
         yield* run(store.workspace.write(userId, path, content, now()));
         return { ok: true, chars: content.length };
       }),
