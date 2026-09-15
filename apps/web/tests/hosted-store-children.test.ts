@@ -290,6 +290,28 @@ test("the children head is the latest stamp any child reached, a Clear's stamp i
   const second = await childOf(userId, parent, { createdAt: at(30) });
   assert.deepEqual(await head(), { id: second, changedAt: instantText(at(30)) });
 
+  // The task's line moves the head, since the list answers its excerpt; a later line of the child's own does not.
+  await insertMessage(database.run, {
+    userId,
+    conversationId: second,
+    seq: 1,
+    clientId: "client-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "fixture task" }],
+    createdAt: at(35),
+  });
+  assert.deepEqual(await head(), { id: second, changedAt: instantText(at(35)) });
+  await insertMessage(database.run, {
+    userId,
+    conversationId: second,
+    seq: 2,
+    clientId: "client-2",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: "fixture reply" }],
+    createdAt: at(36),
+  });
+  assert.deepEqual(await head(), { id: second, changedAt: instantText(at(35)) });
+
   await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

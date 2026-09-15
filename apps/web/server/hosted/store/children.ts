@@ -110,10 +110,11 @@ type ChildRow = typeof ChildRowSchema.Type;
  * The rows every read here selects from: the account's children under
  * `conditions`, each joined to its parent (a child without one, or under a
  * conversation of a kind no delegation runs from, is a row no delegation
- * wrote, and is not a child) and to the latest of its turns by the instant it
- * was queued, the id breaking a tie. Both joins hold to the child's own
- * account, so a parent or a turn written under another lends the child
- * nothing, whatever id it names. Whether a stamped child is among the rows is
+ * wrote, and is not a child), to the latest of its turns by the instant it
+ * was queued, the id breaking a tie, and to its first user line, which is
+ * the task it was handed. Every join holds to the child's own account, so a
+ * parent, a turn, or a line written under another lends the child nothing,
+ * whatever id it names. Whether a stamped child is among the rows is
  * the caller's condition: the record reads list what stands, the head counts
  * the stamping as the change it is.
  */
@@ -129,6 +130,15 @@ const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[])
       order by turns.queued_at desc, turns.id desc
       limit 1
     ) latest on true
+    left join lateral (
+      select parts, created_at
+      from messages
+      where messages.conversation_id = child.id
+        and messages.user_id = child.user_id
+        and messages.role = ${MESSAGE_ROLE.USER}
+      order by messages.seq asc
+      limit 1
+    ) first_line on true
     where ${sql.and([
       sql`child.kind = ${CONVERSATION_KIND.CHILD}`,
       sql.in("parent.kind", CHILD_PARENT_KINDS),
@@ -151,8 +161,9 @@ const LEADING_WHITESPACE_SQL_REGEX =
 /**
  * The task's excerpt: the text parts of the child's first user line, in
  * their order, its leading whitespace dropped so it spends none of the bound,
- * cut to the wire's bound. The cut is in characters where the wire's is in
- * UTF-16 units, so the read stays bounded and the route makes the exact cut.
+ * cut to the wire's bound; null where no line stands, since a null holds no
+ * elements. The cut is in characters where the wire's is in UTF-16 units, so
+ * the read stays bounded and the route makes the exact cut.
  */
 const taskExcerpt = (sql: SqlClient.SqlClient) =>
   sql`
@@ -165,16 +176,7 @@ const taskExcerpt = (sql: SqlClient.SqlClient) =>
         ),
         ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS}
       )
-      from (
-        select parts
-        from messages
-        where messages.conversation_id = child.id
-          and messages.user_id = child.user_id
-          and messages.role = ${MESSAGE_ROLE.USER}
-        order by messages.seq asc
-        limit 1
-      ) first_line,
-      jsonb_array_elements(first_line.parts) with ordinality as part(value, ordinality)
+      from jsonb_array_elements(first_line.parts) with ordinality as part(value, ordinality)
       where part.value ->> 'type' = ${TEXT_PART_TYPE}
     )
   `;
@@ -222,16 +224,18 @@ const findChild = SqlSchema.findOneOption({
 });
 
 /**
- * The instant a child last changed: opened, stamped by a Clear, its
- * completion delivered, or its latest turn queued, started, or settled,
- * whichever is latest. Each stamp the child has not reached falls back to its
- * opening, so the expression is never null. The stamping counts because it
+ * The instant a child last changed: opened, handed its task, stamped by a
+ * Clear, its completion delivered, or its latest turn queued, started, or
+ * settled, whichever is latest. Each stamp the child has not reached falls
+ * back to its opening, so the expression is never null. The task's line
+ * counts because the list answers its excerpt; the stamping counts because it
  * takes the child out of the list, which is a change the list reads
- * differently under; the purge that removes the row thirty days on moves the
- * head once more, to whatever then stands.
+ * differently under; and the purge that removes the row thirty days on moves
+ * the head once more, to whatever then stands.
  */
 const CHILD_CHANGED_AT_SQL =
-  "greatest(child.created_at, coalesce(child.deleted_at, child.created_at), " +
+  "greatest(child.created_at, coalesce(first_line.created_at, child.created_at), " +
+  "coalesce(child.deleted_at, child.created_at), " +
   "coalesce(child.completion_delivered_at, child.created_at), " +
   "coalesce(latest.queued_at, child.created_at), coalesce(latest.started_at, child.created_at), " +
   "coalesce(latest.settled_at, child.created_at))";

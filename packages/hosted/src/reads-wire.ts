@@ -288,10 +288,11 @@ export function encodeTurnReadCursor(cursor: TurnReadCursor): string {
 /**
  * Where the children read stands: the instant the child that last changed
  * did, as the store renders it to the microsecond, and that child's id to
- * break a tie. A child changes when it is opened, when its latest turn is
- * queued, starts, or settles, when its completion reaches its parent, and
- * when a Clear stamps it out of the list, so the head moves exactly when the
- * list would read differently. The same shape
+ * break a tie. A child changes when it is opened, when the line that is its
+ * task is written, when its latest turn is queued, starts, or settles, when
+ * its completion reaches its parent, and when a Clear stamps it out of the
+ * list, so the head moves exactly when the list would read differently. The
+ * same shape
  * as a turn cursor, and opaque to a device all the same: the children read
  * takes no cursor, and a device compares the head to the one it last saw.
  */
