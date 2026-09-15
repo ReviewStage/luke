@@ -12,31 +12,32 @@ struct LukeWatchView: View {
             case .signedOut:
                 SignedOutView()
             case .signedIn:
-                signedInPages
+                signedInStack
             }
         }
         .onChange(of: watchSession.accountScope) {
             // The roster and where the watch stood are the signed-in
-            // developer's own: the next account starts clean.
+            // developer's own: the next account starts clean, on Luke.
             rosterStore.reset()
             navigation.reset()
         }
     }
 
-    private var signedInPages: some View {
-        // The pages, the stack above the list, and the Conversation's reading
-        // are the signed-in developer's own: a changed account rebuilds them
-        // from nothing.
-        SignedInPages().id(watchSession.accountScope)
+    private var signedInStack: some View {
+        // The stack over Luke and the Conversation's reading are the signed-in
+        // developer's own: a changed account rebuilds them from nothing.
+        SignedInStack().id(watchSession.accountScope)
     }
 }
 
-/// The two pages one signed-in account swipes between. The Conversation's
-/// reading is owned here, so it is torn down with the pages: the next account
-/// starts with nothing of the last one's thread. It polls under the device
-/// row the registrar stored, or reads the messages alone before a
-/// registration lands, over the URLSession the wrist waits for a path on.
-private struct SignedInPages: View {
+/// The one stack a signed-in account stands in: the Luke screen at its root,
+/// the sessions list pushed over it from the top-left button, and a session's
+/// own screen over the list. The Conversation's reading is owned here, so it
+/// is torn down with the stack: the next account starts with nothing of the
+/// last one's thread. It polls under the device row the registrar stored, or
+/// reads the messages alone before a registration lands, over the URLSession
+/// the wrist waits for a path on.
+private struct SignedInStack: View {
     @Environment(WatchNavigation.self) private var navigation
     @State private var conversation = ConversationStore(
         client: ConversationReadClient(
@@ -53,19 +54,17 @@ private struct SignedInPages: View {
 
     var body: some View {
         @Bindable var navigation = navigation
-        // The list stands to the left of Luke, and Luke is still the page the
-        // watch opens on: a swipe to the right reaches the sessions.
-        return TabView(selection: $navigation.page) {
-            NavigationStack(path: $navigation.path) {
-                WatchRosterView()
-            }
-            .tag(WatchPage.sessions)
-            NavigationStack {
-                WatchVoiceView()
-            }
-            .tag(WatchPage.voice)
+        return NavigationStack(path: $navigation.path) {
+            WatchVoiceView()
+                .navigationDestination(for: WatchRoute.self) { route in
+                    switch route {
+                    case .sessions:
+                        WatchRosterView()
+                    case .session(let session):
+                        WatchSessionDetailView(session: session)
+                    }
+                }
         }
-        .tabViewStyle(.page)
         .environment(conversation)
     }
 }
