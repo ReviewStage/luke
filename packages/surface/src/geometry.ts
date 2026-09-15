@@ -15,7 +15,7 @@ export interface Rectangle {
   height: number;
 }
 
-export interface DisplayGeometry {
+interface DisplayGeometry {
   bounds: Rectangle;
   workArea: Rectangle;
   scaleFactor?: number;
@@ -73,7 +73,7 @@ export const SIMULATED_HOUSING_WIDTH = 210;
 
 export type WindowMode = "compact" | "expanded";
 
-export interface NotchWindowLayout extends Rectangle {
+interface NotchWindowLayout extends Rectangle {
   notch: ResolvedNotchGeometry;
 }
 

@@ -23,9 +23,3 @@ export {
   MAXIMUM_ACCOUNT_CALENDARS,
   MAXIMUM_CALENDAR_LABEL_LENGTH,
 } from "./reader.js";
-export {
-  APPLE_CALENDAR_ID,
-  APPLE_CALENDAR_NAME,
-  GOOGLE_CALENDAR_ID,
-  GOOGLE_CALENDAR_NAME,
-} from "./vocabulary.js";

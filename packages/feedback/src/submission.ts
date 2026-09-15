@@ -18,7 +18,7 @@ export type FeedbackKind = (typeof FEEDBACK_KIND)[keyof typeof FEEDBACK_KIND];
 
 const FEEDBACK_KINDS: readonly string[] = Object.values(FEEDBACK_KIND);
 
-export function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
+function isFeedbackKind(value: UnparsedWireValue): value is FeedbackKind {
   return isWireString(value) && FEEDBACK_KINDS.includes(value);
 }
 
@@ -51,7 +51,7 @@ export const FEEDBACK_IMAGE_TYPE = {
   WEBP: "image/webp",
 } as const;
 
-export type FeedbackImageType = (typeof FEEDBACK_IMAGE_TYPE)[keyof typeof FEEDBACK_IMAGE_TYPE];
+type FeedbackImageType = (typeof FEEDBACK_IMAGE_TYPE)[keyof typeof FEEDBACK_IMAGE_TYPE];
 
 const FEEDBACK_IMAGE_TYPES: readonly string[] = Object.values(FEEDBACK_IMAGE_TYPE);
 
