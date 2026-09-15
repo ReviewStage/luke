@@ -38,8 +38,6 @@ import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow } from "./store/asks.
 import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 import type { StoreWriter } from "./store/writer.js";
 
-export type { AskRecord, AskRow } from "./store/asks.js";
-
 /**
  * The ask routes: `POST /api/brain/ask`, `GET /api/brain/turns/{id}`, and
  * `POST /api/brain/turns/{id}/cancel`. An ask is admitted before eve is
@@ -511,7 +509,7 @@ export const stopAsk = /* @__PURE__ */ Effect.fn("stopAsk")(function* (
 
 /** `POST /api/brain/turns/{id}/cancel`: the gate and the path's id, then `stopAsk` under the caller's own bearer. */
 /** What the Stop route holds beyond the ask routes: the writer, for the one write a Stop makes on a turn's row. Only the cancel function composes it, so the read routes' bundles never reach the writer. */
-export interface BrainTurnCancelOptions extends BrainAskOptions {
+interface BrainTurnCancelOptions extends BrainAskOptions {
   writer: Pick<StoreWriter, "requestTurnCancel">;
 }
 

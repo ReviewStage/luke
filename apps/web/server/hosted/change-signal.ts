@@ -57,7 +57,7 @@ const CHANGES_METHOD = "POST";
 /** A poll's body is a device id and two instants; anything heavier is not a poll. */
 const MAXIMUM_CHANGES_BODY_BYTES = 4_096;
 
-export interface ChangeSignalOptions {
+interface ChangeSignalOptions {
   request: Request;
   resolveUserId: (request: Request) => Effect.Effect<string | undefined>;
   store: Pick<HostedStore, "directory" | "turns" | "roster">;

@@ -22,11 +22,8 @@ import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_REFUSAL,
-  type AskRecord,
-  type AskRow,
   acceptAsk,
   askStanding,
-  type BrainTurnCancelOptions,
   handleBrainAsk,
   handleBrainTurn,
   handleBrainTurnCancel,
@@ -48,8 +45,14 @@ import {
   recordedRuntimeSession,
 } from "../server/hosted/brain-host/recorded-session";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { STORE_WRITE_EFFECT, STORE_WRITE_REFUSAL, storeWriter } from "../server/hosted/store";
-import { ASK_DISPATCH_REFUSAL, newestSession } from "../server/hosted/store/asks";
+import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
+import {
+  ASK_DISPATCH_REFUSAL,
+  type AskRecord,
+  type AskRow,
+  newestSession,
+} from "../server/hosted/store/asks";
+import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
@@ -240,13 +243,16 @@ function fakeEve(): FakeEve {
   return eve;
 }
 
+/** The widest of the three route bundles, named from the route that takes it: the module keeps the shape private. */
+type CancelOptions = Parameters<typeof handleBrainTurnCancel>[0];
+
 interface Harness {
   readonly asks: ReturnType<typeof memoryAsks>;
   readonly eve: FakeEve;
   clock: number;
   /** What the world does while a held read sleeps; the clock moves by the sleep either way. */
   whileSleeping: () => Promise<void>;
-  options(request: Request, userId: string | undefined): BrainTurnCancelOptions;
+  options(request: Request, userId: string | undefined): CancelOptions;
 }
 
 function harness(): Harness {

@@ -10,8 +10,9 @@ import {
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { RATING_REFUSAL, type RatingStore, rateMessage, storeWriter } from "../server/hosted/store";
+import { rateMessage, storeWriter } from "../server/hosted/store";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
+import { RATING_REFUSAL, type RatingStore } from "../server/hosted/store/ratings";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

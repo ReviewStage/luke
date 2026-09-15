@@ -31,12 +31,7 @@ import {
   hostedActionCarrier,
 } from "../server/hosted/brain-host/performer";
 import { hostedRosterFrom } from "../server/hosted/brain-host/roster";
-import {
-  type HostedToolSeams,
-  type HostedTurnStanding,
-  hostedToolDeclarations,
-  runHostedTool,
-} from "../server/hosted/brain-host/tools";
+import { hostedToolDeclarations, runHostedTool } from "../server/hosted/brain-host/tools";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ObservedRoster } from "../server/hosted/observed-roster";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -103,6 +98,10 @@ function eveContext(aborted = false): EveToolContext {
     getSkill: unreachable,
   };
 }
+
+/** The two shapes `runHostedTool` takes, named from its own signature: the module keeps them private. */
+type HostedToolSeams = Parameters<typeof runHostedTool>[3];
+type HostedTurnStanding = Parameters<typeof runHostedTool>[4];
 
 interface Fakes {
   readonly executed: WireRecord[];

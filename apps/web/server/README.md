@@ -1302,14 +1302,12 @@ declined" from "Luke does not know", which are opposite claims. Because any
 call may answer with that envelope, a tool's declared output schema has to
 admit it, and the writer holds the catalog to that once, when it is
 composed, refusing to exist over a catalog that fails it rather than leaving
-a row nothing could read back. A compaction is written by its owner through
-`recordCompaction`, because the stream's compaction event names neither the
-first kept message nor, under eve, the summary's text; an event about a
-message goes through `recordEvent`, numbered by the conversation's event
-sequence, and a second `speech.claimed` on one message is answered as already
-claimed rather than left to the partial unique index; an event write may also
-name the kinds whose standing on the message excludes it (`unless`), checked
-under the same lock, so a speech transition decided against the events a
+a row nothing could read back. An event about a message goes through
+`recordEvent`, numbered by the conversation's event sequence, and a second
+`speech.claimed` on one message is answered as already claimed rather than
+left to the partial unique index; an event write may also name the kinds
+whose standing on the message excludes it (`unless`), checked under the
+same lock, so a speech transition decided against the events a
 caller read is refused as superseded when another landed first rather than
 re-opening a settled offer. Every write is
 idempotent — a message by `(conversation_id, client_id)`, a turn by its id, a

@@ -35,14 +35,6 @@ export interface ObservationEligibility {
   readonly providerIds: readonly string[];
   /** The earliest device last-seen instant that still counts as the account being in use. */
   readonly seenAfter: number;
-  /**
-   * The accounts the sweep may reach; every account where absent, which is
-   * the tick's call. A caller over a database other accounts are writing at
-   * the same time — a test file beside others on one Postgres — names its
-   * own, so an account that holds no key because nobody gave it one is not
-   * swept out from under the file that made it.
-   */
-  readonly userIds?: readonly string[] | undefined;
 }
 
 /** How a statement here fails: the driver's own refusal, or a row this build could not decode. */
@@ -358,7 +350,6 @@ function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligi
       user_id not in (select user_id from provider_key where ${sql.in("provider_id", eligibility.providerIds)})
       or user_id not in (select user_id from devices where last_seen_at >= ${new Date(eligibility.seenAfter)})
     )
-    ${eligibility.userIds !== undefined ? sql`and ${sql.in("user_id", eligibility.userIds)}` : sql``}
   `;
 }
 

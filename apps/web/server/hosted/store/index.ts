@@ -333,7 +333,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
 }
 
 export { CHILD_STATUS, type ChildRecord } from "./children.js";
-export { promptHashOf, toolSetHashOf } from "./content-addressed.js";
+export { promptHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";
 export {
   findMessageByClientId,
@@ -343,41 +343,24 @@ export {
   type StoredMessageRecord,
   type StoredTurnRecord,
 } from "./message-reads.js";
-export {
-  RATING_REFUSAL,
-  type RatingStore,
-  type RatingWriteResult,
-  rateMessage,
-} from "./ratings.js";
-export {
-  CONSUMED_ROSTER,
-  type ObservationPassRecord,
-  type RosterSnapshotRecord,
-} from "./roster-snapshot.js";
+export { rateMessage } from "./ratings.js";
+export type { RosterSnapshotRecord } from "./roster-snapshot.js";
 export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 export {
   claimSpeech,
-  heldBriefingsNamed,
   markSpeechPushed,
-  markSpeechSpoken,
-  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   quietUntilByAccount,
   releasedBriefings,
-  SPEECH_OFFER,
-  SPEECH_REFUSAL,
   SPEECH_STATE,
   type SpeechOffer,
   type SpeechStore,
   type SpeechSweepOutcome,
-  type SpeechSweepStore,
   sweepSpeech,
 } from "./speech.js";
 export type { StandingConversation } from "./standing-conversations.js";
 export {
-  type CommentaryAppend,
-  VOICE_WRITE_REFUSAL,
   type VoiceTarget,
   type VoiceWriteResult,
   type VoiceWriter,
@@ -386,8 +369,6 @@ export {
 export {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
-  STORE_WRITE_REFUSAL,
-  type StoreWriteResult,
   type StoreWriter,
   storeWriter,
 } from "./writer.js";

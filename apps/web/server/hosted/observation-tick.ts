@@ -31,7 +31,7 @@ interface ObservedAccount {
 }
 
 /** What one account's pass came to, as the tick counts it. */
-export interface AccountPassOutcome {
+interface AccountPassOutcome {
   complete: boolean;
   changed: boolean;
 }

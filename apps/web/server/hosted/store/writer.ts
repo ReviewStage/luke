@@ -21,14 +21,12 @@ import {
   type BrainTurnOrigin,
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
-  compactionSummaryMessage,
   isSettledToolPartState,
   isStoredToolPart,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   readStoredUIMessages,
-  SCHEMA_REFUSAL,
   type SchemaPath,
   type SchemaRefusal,
   type SpeechEventKind,
@@ -216,21 +214,6 @@ type TurnEnqueueResult =
   | typeof NO_CONVERSATION;
 
 /**
- * What one completed compaction folded, as its owner reports it: the summary
- * the model wrote, the first stored message the model still reads after it,
- * and the input tokens the folded messages had cost where the owner counted
- * them; absent otherwise, never zero.
- */
-interface CompactionWrite {
-  /** The owner's own id for the fold, the row's idempotency key. */
-  readonly clientId: string;
-  readonly turnId?: string;
-  readonly text: string;
-  readonly firstKeptMessageId: string;
-  readonly tokensBefore?: number;
-}
-
-/**
  * A user message written outside the run stream: the developer's own words
  * as another writer cut them — a spoken ask from a voice session's transcript
  * — with the metadata that says how they arrived. Idempotent on its client id.
@@ -380,11 +363,6 @@ export interface StoreWriter {
   dequeueTurn(target: ConversationTarget, turnId: string): Write<StoreWriteResult>;
   /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
   requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
-  /** Writes the assistant message a compaction stands as; the stream's own compaction event carries too little to write it. */
-  recordCompaction(
-    target: ConversationTarget,
-    compaction: CompactionWrite,
-  ): Write<StoreWriteResult>;
   /** Appends one event about a message, numbered by the conversation's event sequence. */
   recordEvent(
     target: ConversationTarget,
@@ -1527,10 +1505,8 @@ function consume(context: WriterContext, event: BrainRunEvent): Write<StoreWrite
       return reasoningCompleted(context, event);
     case BRAIN_RUN_EVENT.MESSAGE_COMPLETED:
       return messageCompleted(context, event);
-    // The stream's compaction event names neither the summary's first kept
-    // message nor, under eve, the summary's text: the compaction's owner
-    // writes the row through `recordCompaction`. The rest of the stream is
-    // the relay's, about a run's moments rather than the record.
+    // The rest of the stream is the relay's, about a run's moments rather
+    // than the record.
     case BRAIN_RUN_EVENT.COMPACTION_COMPLETED:
     case BRAIN_RUN_EVENT.SLOW_STEP:
     case BRAIN_RUN_EVENT.ACTIONS_SETTLED:
@@ -1646,63 +1622,6 @@ const requestTurnCancel = /* @__PURE__ */ Effect.fn("requestTurnCancel")(functio
     ok: true,
     effect: stamped.length === 0 ? STORE_WRITE_EFFECT.REPEATED : STORE_WRITE_EFFECT.WRITTEN,
   };
-});
-
-/** Whether a stored row is a compaction: an assistant row whose metadata names what it folded. */
-function isCompactionRow(row: MessageRow): boolean {
-  return (
-    row.metadata !== null && "compaction" in row.metadata && row.metadata.compaction !== undefined
-  );
-}
-
-/**
- * The compaction row for one completed fold, built by the session package's
- * own builder so the row is the shape every reader of a compaction expects,
- * and held to the vocabulary like every other message before it lands. An
- * owner's id names one of its own folds: a row of another kind under it is
- * the owner's mistake, not a repeat.
- */
-const recordCompaction = /* @__PURE__ */ Effect.fn("recordCompaction")(function* (
-  context: WriterContext,
-  compaction: CompactionWrite,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
-  const standing = yield* messageByClientId(context, compaction.clientId);
-  if (Option.isSome(standing)) {
-    if (!isCompactionRow(standing.value)) {
-      return yield* Effect.die(
-        new Error("a compaction's client id names a message that is not a compaction"),
-      );
-    }
-    return { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
-  }
-  if (compaction.turnId !== undefined) {
-    const turn = yield* turnRow(context, compaction.turnId);
-    if (Option.isNone(turn)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-  }
-  const built = compactionSummaryMessage(compaction.clientId, {
-    text: compaction.text,
-    firstKeptMessageId: compaction.firstKeptMessageId,
-    ...(compaction.tokensBefore !== undefined
-      ? { tokensBefore: compaction.tokensBefore }
-      : undefined),
-  });
-  if (built === undefined) {
-    return {
-      ok: false,
-      refusal: STORE_WRITE_REFUSAL.MESSAGE_REFUSED,
-      reason: SCHEMA_REFUSAL.MALFORMED,
-      path: [],
-    };
-  }
-  const read = yield* admitted(context, built);
-  if (!read.ok) return read;
-  yield* insertMessage(context, {
-    clientId: compaction.clientId,
-    turnId: compaction.turnId,
-    message: read.message,
-    finishedAt: context.now(),
-  });
-  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
 
 function spokenAskEnd(context: WriterContext, end: SpokenAskEnd): Write<SpokenAskEndResult> {
@@ -2164,8 +2083,6 @@ export function storeWriter({
       underConversation(target, (context) => dequeueTurn(context, turnId)),
     requestTurnCancel: (target, cancel) =>
       underConversation(target, (context) => requestTurnCancel(context, cancel)),
-    recordCompaction: (target, compaction) =>
-      underConversation(target, (context) => recordCompaction(context, compaction)),
     recordEvent: (target, event) =>
       underConversation(target, (context) => recordEvent(context, event)),
     recordUserMessage: (target, message) =>

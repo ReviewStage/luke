@@ -92,7 +92,7 @@ export function hostedTurnPolicy(trigger: BrainTurnTrigger): EffectiveToolPolicy
   return resolved;
 }
 
-export interface HostedToolSeams {
+interface HostedToolSeams {
   readonly conversation: ConversationTarget;
   /** The roster as the snapshot holds it now, read again for every call that needs it. */
   readonly roster: () => Effect.Effect<HostedRoster>;
@@ -105,7 +105,7 @@ export interface HostedToolSeams {
 }
 
 /** The turn a set of tools is built for: what opened it and the ids its calls are attributed to. */
-export interface HostedTurnStanding {
+interface HostedTurnStanding {
   readonly trigger: BrainTurnTrigger;
   readonly turnId: string;
   readonly runId: string;

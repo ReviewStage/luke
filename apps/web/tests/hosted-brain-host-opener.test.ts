@@ -42,9 +42,13 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { OBSERVATION_TICK } from "../server/hosted/observation-bounds";
 import { decodeObservedRoster, type ObservedRoster } from "../server/hosted/observed-roster";
-import { CONSUMED_ROSTER, releasedBriefings, storeWriter } from "../server/hosted/store";
+import { releasedBriefings, storeWriter } from "../server/hosted/store";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
-import { keepConsumedRoster, writeRosterSnapshot } from "../server/hosted/store/roster-snapshot";
+import {
+  CONSUMED_ROSTER,
+  keepConsumedRoster,
+  writeRosterSnapshot,
+} from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 
 /**

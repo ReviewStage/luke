@@ -27,21 +27,23 @@ import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   claimSpeech,
-  heldBriefingsNamed,
   markSpeechPushed,
-  markSpeechSpoken,
-  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
   releasedBriefings,
-  SPEECH_OFFER,
-  SPEECH_REFUSAL,
   SPEECH_STATE,
   type SpeechStore,
-  type SpeechSweepStore,
   storeWriter,
   sweepSpeech,
 } from "../server/hosted/store";
+import {
+  heldBriefingsNamed,
+  markSpeechSpoken,
+  type OpenSpeechOffersQuery,
+  SPEECH_OFFER,
+  SPEECH_REFUSAL,
+  type SpeechSweepStore,
+} from "../server/hosted/store/speech";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

@@ -17,12 +17,8 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  type ConversationTarget,
-  promptHashOf,
-  storeWriter,
-  toolSetHashOf,
-} from "../server/hosted/store";
+import { type ConversationTarget, promptHashOf, storeWriter } from "../server/hosted/store";
+import { toolSetHashOf } from "../server/hosted/store/content-addressed";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, readTurnById, readTurnsByConversation } from "./support/store-rows";
