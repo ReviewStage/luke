@@ -29,7 +29,6 @@ export interface ConversationRow {
   readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
   readonly spawnedByMessageId?: string | null;
-  readonly forkOfSeq?: number | null;
   readonly runtimeSessionId?: string | null;
   readonly createdAt?: Date;
   readonly deletedAt?: Date | null;
@@ -48,14 +47,14 @@ export function insertConversation(run: HostedStoreTestRun, row: ConversationRow
       const rows = yield* sql`
       insert into conversations (
         user_id, kind, provider_id, provider_session_id,
-        parent_conversation_id, spawned_by_message_id, fork_of_seq, runtime_session_id,
+        parent_conversation_id, spawned_by_message_id, runtime_session_id,
         created_at, deleted_at, next_message_seq, next_event_seq, label, completion_delivered_at,
         expects_completion
       )
       values (
         ${row.userId}, ${row.kind ?? CONVERSATION_KIND.MAIN},
         ${row.providerId ?? null}, ${row.providerSessionId ?? null},
-        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null}, ${row.forkOfSeq ?? null},
+        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null},
         ${row.runtimeSessionId ?? null}, ${row.createdAt ?? new Date()}, ${row.deletedAt ?? null},
         ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1},
         ${row.label ?? null}, ${row.completionDeliveredAt ?? null},
