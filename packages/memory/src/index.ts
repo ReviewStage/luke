@@ -1,27 +1,15 @@
 export { ESTIMATED_CHARS_PER_TOKEN, MEMORY_QUERY_MAXIMUM_CHARS } from "./defaults.js";
 export { isMaintenanceEligibleConversation } from "./eligibility.js";
 export {
-  alreadyFlushedForCompaction,
-  dailyNotePathFor,
   failedHousekeeping,
   type HousekeepingPrompt,
-  housekeepingCompleted,
-  housekeepingFellShort,
-  isAppendOnlyRewrite,
-  isDailyNotePathForDay,
-  localDayStamp,
   MEMORY_FLUSH_DEFAULTS,
-  MEMORY_HOUSEKEEPING_KIND,
   MEMORY_HOUSEKEEPING_OUTCOME,
-  type MemoryFlushAssessment,
-  type MemoryHousekeepingKind,
   type MemoryHousekeepingOutcome,
   type MemoryHousekeepingResult,
   memoryFlushPrompt,
-  memoryFlushThreshold,
-  resetCapturePrompt,
   SILENT_REPLY_TOKEN,
-  shouldRunMemoryFlush,
+  skippedHousekeeping,
 } from "./flush.js";
 export { cutPassages, hashText, type MemoryPassage, PASSAGE_BOUNDS } from "./passages.js";
 export {

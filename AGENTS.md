@@ -203,7 +203,9 @@ request, so there is no request fiber to compose it into) and
 its own process), the eve project's authored files —
 `apps/web/eve/agent.ts`, `apps/web/eve/channels/eve.ts`,
 `apps/web/eve/hooks/store.ts`, `apps/web/eve/instructions/prompt.ts`,
-`apps/web/eve/instructions/seed.ts`, and `apps/web/eve/tools/brain.ts` — each
+`apps/web/eve/instructions/seed.ts`, `apps/web/eve/memory/notebook.ts` (the
+memory slot whose `compaction.requested` capture runs the pre-compaction
+memory flush), and `apps/web/eve/tools/brain.ts` — each
 an edge because eve drives them through promise-shaped hooks of its own and
 an authored file is where this deployment runs what it hands eve. Not
 every seam under `apps/web/server/hosted/` is an effect down to its floor:

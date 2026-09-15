@@ -74,6 +74,7 @@ export {
   userMessage,
   userMetadataOf,
   WORKSPACE_TOOLS,
+  type WorkspaceToolContext,
   type WorkspaceToolModule,
   wakeInputText,
   workspaceProjectContextText,

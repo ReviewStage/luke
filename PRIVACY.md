@@ -62,8 +62,9 @@ per file per account: seeded with the same defaults the first time a turn runs
 for you, composed into the standing instructions every turn runs under (each
 cut to 20,000 characters, the stable facts about you and the curated notes to
 4,000 each, and the set to 60,000), and edited only through Luke's own
-workspace tools there, in his turns, which refuse a file past its bound rather
-than cut it, so the file he reads is the file that exists. The file's name is stored in
+workspace tools there, in his turns and in the one housekeeping call described
+under "How Luke keeps his notebook" below, which refuse a file past its bound
+rather than cut it, so the file he reads is the file that exists. The file's name is stored in
 the clear and its contents are sealed under a key only our service holds,
 each row bound to your account so it cannot be opened under another. Those
 rows are untouched by clearing the conversation and are removed when you
@@ -157,7 +158,23 @@ conversations are never embedded or indexed.
 no housekeeping turn runs here, no nightly job reads your conversations to
 learn from them, and no model call on this machine rewrites `MEMORY.md`. The
 notebook Luke keeps is the workspace rows on our service, described above,
-written only through his own workspace tools in his turns there. An earlier
+written through his own workspace tools in his turns there, and by one more
+call beside those turns: before Luke's working memory of a conversation is
+folded into its summary (described under "Luke's working memory" above), one
+bounded housekeeping call on our service reads a private copy of that
+conversation as data and may append what is durable in it — a decision, a
+result, something learned — to the dated note for the day, `memory/YYYY-MM-DD.md`,
+in the same workspace rows, through the same append his turns use; it can
+write nothing else, and appends rather than rewrites. It runs only while you
+are asking Luke something yourself, typed or spoken, never in a turn the
+scheduled observation or a hold's release opened; at most once each time the
+memory folds; on the same model and under the same daily allowance as his
+turns; and within a minute, or not at all. Nothing it reads or says appears
+in the conversation, on any device, or in a notification: what the
+conversation's row keeps is that the call ran, when, and how it ended (it
+stored something, found nothing to store, was skipped, was cut short, or
+failed), never a word of it. A call that fails changes nothing and Luke's
+answer to you proceeds as if it had not been asked. An earlier
 version of Luke wrote a dated note under `memory/` and promoted lines into
 `MEMORY.md` behind HTML markers on your Mac, and wrote a `DREAMS.md` beside
 it; each is left exactly where it is, for you to keep or delete, and nothing

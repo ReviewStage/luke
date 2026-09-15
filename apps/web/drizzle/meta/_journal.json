@@ -218,6 +218,13 @@
       "when": 1789600000000,
       "tag": "0031_workspace_embedding",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789650000000,
+      "tag": "0032_memory_5_flush_record",
+      "breakpoints": true
     }
   ]
 }

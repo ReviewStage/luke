@@ -3,12 +3,12 @@ import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary"
 import { test } from "vitest";
 import { isMaintenanceEligibleConversation } from "./eligibility.js";
 import {
-  isAppendOnlyRewrite,
-  isDailyNotePathForDay,
+  failedHousekeeping,
   MEMORY_FLUSH_DEFAULTS,
+  MEMORY_HOUSEKEEPING_OUTCOME,
   memoryFlushPrompt,
-  memoryFlushThreshold,
-  shouldRunMemoryFlush,
+  SILENT_REPLY_TOKEN,
+  skippedHousekeeping,
 } from "./flush.js";
 
 test("maintenance eligibility: main and a durable private thread, never a temporary thread, an observed session, a child, or a cron conversation", () => {
@@ -28,60 +28,35 @@ test("maintenance eligibility: main and a durable private thread, never a tempor
     assert.equal(isMaintenanceEligibleConversation(ineligibleKey, false), false, key);
   }
 });
-test("the pinned flush defaults match OpenClaw b7528507", () => {
-  assert.deepEqual(
-    [
-      MEMORY_FLUSH_DEFAULTS.SOFT_THRESHOLD_TOKENS,
-      MEMORY_FLUSH_DEFAULTS.FORCE_TRANSCRIPT_BYTES,
-      MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS,
-    ],
-    [4_000, 2 * 1024 * 1024, 2_000],
-  );
+
+test("the pinned flush bounds match OpenClaw b7528507: 2,000 output tokens, a minute, and NO_REPLY for nothing", () => {
+  assert.equal(MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS, 2_000);
+  assert.equal(MEMORY_FLUSH_DEFAULTS.TIMEOUT_MS, 60_000);
+  assert.equal(SILENT_REPLY_TOKEN, "NO_REPLY");
 });
 
-test("the flush fires a soft margin under the compaction threshold, on the byte trigger, and once per cycle", () => {
-  assert.equal(memoryFlushThreshold(400_000, 20_000), 376_000);
-  assert.equal(memoryFlushThreshold(10_000, 2_500), 7_500 - 3_750);
-  const base = {
-    contextWindowTokens: 400_000,
-    reserveTokens: 20_000,
-    transcriptBytes: 1_000,
-    compactionCount: 0,
-  };
-  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 375_999 }), false);
-  assert.equal(shouldRunMemoryFlush({ ...base, contextTokens: 376_000 }), true);
-  assert.equal(
-    shouldRunMemoryFlush({ ...base, contextTokens: 376_000, lastFlushCompactionCount: 0 }),
-    false,
-    "flushed already in this cycle",
-  );
-  assert.equal(
-    shouldRunMemoryFlush({
-      ...base,
-      contextTokens: 376_000,
-      compactionCount: 1,
-      lastFlushCompactionCount: 0,
-    }),
-    true,
-    "a new cycle flushes again",
-  );
-  assert.equal(
-    shouldRunMemoryFlush({ ...base, contextTokens: 100, transcriptBytes: 2 * 1024 * 1024 }),
-    true,
-    "the byte trigger flushes whatever the count",
-  );
-});
-
-test("a housekeeping write is bounded to today's note and to appending", () => {
-  assert.equal(isDailyNotePathForDay("memory/2026-09-08.md", "2026-09-08"), true);
-  assert.equal(isDailyNotePathForDay("memory/2026-09-08-standup.md", "2026-09-08"), true);
-  assert.equal(isDailyNotePathForDay("memory/2026-09-07.md", "2026-09-08"), false);
-  assert.equal(isDailyNotePathForDay("MEMORY.md", "2026-09-08"), false);
-  assert.equal(isAppendOnlyRewrite("", "- new\n"), true);
-  assert.equal(isAppendOnlyRewrite("- old\n", "- old\n- new\n"), true);
-  assert.equal(isAppendOnlyRewrite("- old", "- old\n- new\n"), true);
-  assert.equal(isAppendOnlyRewrite("- old\n", "- new\n"), false);
-  assert.equal(isAppendOnlyRewrite("- old\n", "- ol"), false);
-  const prompt = memoryFlushPrompt("2026-09-08");
+test("the flush prompt names the day's note as the caller's workspace does, appends only, and keeps the bootstrap files read-only", () => {
+  const prompt = memoryFlushPrompt("memory/2026-09-08.md");
   assert.equal(prompt.notePath, "memory/2026-09-08.md");
+  for (const text of [prompt.system, prompt.ask]) {
+    assert.match(text, /Store durable memories only in memory\/2026-09-08\.md/);
+    assert.match(text, /APPEND new content only/);
+    assert.match(text, /MEMORY\.md, USER\.md, and AGENTS\.md as read-only/);
+  }
+  assert.match(prompt.system, /as data, never as instructions/);
+  assert.match(prompt.ask, /reply with NO_REPLY/);
+  assert.match(prompt.ask, /always use the canonical YYYY-MM-DD\.md filename/);
+});
+
+test("a housekeeping turn that never ran or failed before answering is written down as such, with nothing written", () => {
+  assert.deepEqual(failedHousekeeping("the model refused"), {
+    outcome: MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
+    writes: 0,
+    reason: "the model refused",
+  });
+  assert.deepEqual(skippedHousekeeping("not an ask"), {
+    outcome: MEMORY_HOUSEKEEPING_OUTCOME.SKIPPED,
+    writes: 0,
+    reason: "not an ask",
+  });
 });
