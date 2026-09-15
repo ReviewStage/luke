@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "vitest";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 import {
@@ -58,6 +59,26 @@ test("the connect policy names both recorder hosts, and nothing else", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
   assert.deepEqual(connectSrc?.split(" "), [POSTHOG_HOST, POSTHOG_ASSETS_HOST]);
+});
+
+// The voice window loads the panel's bundle, recorder included; `App` is never
+// mounted for it, and behind that stands this policy: no host at all.
+test("the voice document loads the one bundle and may reach no host at all", () => {
+  const voice = readFileSync(new URL("./voice.html", import.meta.url), "utf8");
+  assert.equal(voice.match(/connect-src ([^;"]+)/)?.[1], "'none'");
+  assert.ok(voice.includes('<script src="renderer.js"></script>'));
+});
+
+// The recorder drops a `session_recording` option it does not know without a
+// word, and the preload rests on a global the library does not declare, so a
+// rename of either would look like masking that works or recording that is off.
+test("the installed bundle still knows every name the masking rests on", () => {
+  const bundle = readFileSync(
+    createRequire(import.meta.url).resolve("posthog-js/dist/module.full.no-external"),
+    "utf8",
+  );
+  const names = ["maskTextSelector", "maskAttributeFn", "ph-no-capture", "_POSTHOG_REMOTE_CONFIG"];
+  for (const name of names) assert.ok(bundle.includes(name), name);
 });
 
 /**

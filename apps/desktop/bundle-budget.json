@@ -1,7 +1,6 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "renderer/renderer.js": 586626,
-    "renderer/voice.js": 270260
+    "renderer/renderer.js": 586626
   }
 }

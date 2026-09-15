@@ -20,20 +20,6 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
-/** How both renderer bundles are built. Only their entries and their defines differ. */
-const RENDERER_BUNDLE = {
-  bundle: true,
-  platform: "browser",
-  format: "iife",
-  target: "chrome140",
-  jsx: "automatic",
-  minify: true,
-  plugins: sentryPlugins(),
-  define: { "process.env.NODE_ENV": '"production"' },
-  sourcemap: true,
-  logLevel: "info",
-};
-
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -103,9 +89,17 @@ await Promise.all([
   build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
-    ...RENDERER_BUNDLE,
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    jsx: "automatic",
+    minify: true,
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
     define: {
-      ...RENDERER_BUNDLE.define,
+      "process.env.NODE_ENV": '"production"',
       // The analytics project the screen recorder files into, from the
       // packaging environment rather than source, on the calendar secret's
       // terms above. A build without one records nothing at all — the same
@@ -114,17 +108,6 @@ await Promise.all([
       PACKAGED_POSTHOG_PROJECT_API_KEY: JSON.stringify(process.env.POSTHOG_PROJECT_API_KEY ?? ""),
     },
   }),
-  build({
-    // The hidden voice window's own bundle. It is a second entry rather than
-    // a role the panel's bundle branches on so that `App` and the
-    // session-replay client are unreachable from it by construction: the
-    // panel is the one surface that records, and a recording of a blank
-    // hidden window would be a session nobody consented to. Nothing here
-    // takes the recorder's project key, so a build could not configure one.
-    entryPoints: [path.join(appRoot, "src/renderer/voice/index.tsx")],
-    outfile: path.join(outputRoot, "renderer/voice.js"),
-    ...RENDERER_BUNDLE,
-  }),
 ]);
 
 await Promise.all([
@@ -132,8 +115,11 @@ await Promise.all([
     path.join(appRoot, "src/renderer/index.html"),
     path.join(outputRoot, "renderer/index.html"),
   ),
+  // The hidden voice window's document, over the same `renderer.js`: its role
+  // is main's answer, its policy allows no network, and the recording carries
+  // no words in any case (`src/renderer/session-replay.ts`).
   fs.copyFile(
-    path.join(appRoot, "src/renderer/voice/index.html"),
+    path.join(appRoot, "src/renderer/voice.html"),
     path.join(outputRoot, "renderer/voice.html"),
   ),
 ]);
@@ -144,9 +130,9 @@ await Promise.all(
   ),
 );
 
-// The panel's and the voice window's bundles are the two that a browser context
-// parses at every window open, so their compressed size is a cost the user pays
-// rather than one the build absorbs. The baseline is recorded rather than
+// The renderer bundle is what a browser context parses at every window open,
+// the panels' and the hidden voice window's alike, so its compressed size is a
+// cost the user pays rather than one the build absorbs. The baseline is recorded rather than
 // derived, because the number worth holding is the one a reviewer agreed to: a
 // dependency that adds a fifth to the panel is a decision, and
 // `LUKE_UPDATE_BUNDLE_BUDGET=1` is how that decision is written down once it has

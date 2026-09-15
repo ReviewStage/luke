@@ -26,12 +26,14 @@ when nothing does. **A new command is a new `ACT_KIND` entry with its payload
 schema, its answer's guard, and its one router row. There is no second write path
 to add one on.**
 
-## Two bundles, not one branching on a role
+## One bundle, two documents, one role branch
 
-The voice window can neither mount `App` nor import `session-replay.ts` — neither
-is reachable from its entry, so the bundler holds the line rather than a grep.
-**The panel is the one surface that records, and a recording of a blank hidden
-window would be a session nobody consented to.**
+The panels and the hidden voice window load the same `renderer.js`;
+`src/renderer/index.tsx` mounts `VoiceHost` or the panel's `Surface` by the role
+main decided for the window that asked. **The panel is the one surface that
+records**: `App` is where `applySessionReplay` is called and the voice role never
+mounts it, `voice.html` is `connect-src 'none'`, and the recording carries no
+words in any case (`session-replay.ts`).
 
 No credential reaches the voice window, nothing there appends to the model, and it
 writes no Conversation line. The policy — whether a session stands, what the keys

@@ -3,22 +3,23 @@ import * as Sentry from "@sentry/electron/renderer";
 import { Effect } from "effect";
 import { createRoot } from "react-dom/client";
 import { ACT_KIND } from "#shared/messages/acts";
+import type { AppStateSnapshot } from "#shared/messages/app-state";
+import { WINDOW_ROLE } from "#shared/messages/session";
 import { actRequest } from "./act";
 import { App } from "./app";
 import { IntroductionTakeover } from "./introduction/introduction-takeover";
 import { rendererRegistry } from "./renderer-runtime";
 import { appStateFirstRead, useAppState } from "./use-app-state";
+import { VoiceHost } from "./voice/voice-host";
 
 Sentry.init();
 
 /**
- * Which surface the panel's bundle draws, from the one document main holds:
- * the spoken introduction is a fullscreen mode of the panel rather than a
- * window of its own, so it is drawn instead of `App` while it plays and the
- * takeover never runs the panel's hooks. The hidden voice window is not one
- * of them: it loads a bundle of its own, which is what keeps `App` and the
- * session-replay client out of a window nobody consented to a recording of.
- * A state that cannot be read draws nothing, never the panel.
+ * Which surface a panel draws, from the one document main holds: the spoken
+ * introduction is a fullscreen mode of the panel rather than a window of its
+ * own, so it is drawn instead of `App` while it plays and the takeover never
+ * runs the panel's hooks. A state that cannot be read draws nothing, never
+ * the panel.
  */
 function Surface(): React.JSX.Element | null {
   const state = useAppState();
@@ -26,20 +27,23 @@ function Surface(): React.JSX.Element | null {
   return state.introduction.playing ? <IntroductionTakeover /> : <App />;
 }
 
+// One root for the panels and the hidden voice window alike, mounting by the
+// role main decided for the window that asked. The voice window mounts
+// `VoiceHost` and never `App`, the one place recording starts.
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("Renderer root element is missing");
+const root = createRoot(rootElement);
+
 void (async () => {
+  let first: AppStateSnapshot;
   try {
-    await Effect.runPromise(appStateFirstRead);
+    first = await Effect.runPromise(appStateFirstRead);
   } catch (error) {
-    // A window whose state cannot be read mounts nothing: a panel in that
-    // state is already broken, since it draws from the same read, so a
-    // fallback would protect nothing. Whether this panel is the one holding a
-    // takeover cannot be known without that read either, so the abandon is
-    // sent regardless — main answers it only for a panel the introduction is
-    // holding and refuses every other sender outright, and a takeover that
-    // stands down here hands the screen back at once rather than covering it
-    // with nothing.
+    // A window whose state cannot be read mounts nothing: a fallback would
+    // protect nothing. Whether it is the panel holding a takeover cannot be
+    // known without that read either, so the abandon is sent regardless —
+    // main answers it only for the panel the introduction holds and refuses
+    // every other sender, the voice window among them.
     void window.sidecar
       .act(
         actRequest(ACT_KIND.INTRODUCTION_ABANDON, {
@@ -48,10 +52,11 @@ void (async () => {
       )
       .catch(() => undefined);
     console.error("The window's state could not be read; nothing is drawn.", error);
+    return;
   }
+  root.render(
+    <RegistryContext.Provider value={rendererRegistry}>
+      {first.window.role === WINDOW_ROLE.VOICE ? <VoiceHost /> : <Surface />}
+    </RegistryContext.Provider>,
+  );
 })();
-createRoot(rootElement).render(
-  <RegistryContext.Provider value={rendererRegistry}>
-    <Surface />
-  </RegistryContext.Provider>,
-);

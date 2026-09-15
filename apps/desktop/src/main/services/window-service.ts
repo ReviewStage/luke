@@ -130,11 +130,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const preloadPath = path.join(config.resourceDirectory, "preload.js");
   const rendererHtmlPath = path.join(config.resourceDirectory, "renderer", "index.html");
   const rendererUrl = pathToFileURL(rendererHtmlPath).href;
-  // The hidden voice window loads a bundle of its own, so that the panel's
-  // `App` and its session-replay client are unreachable from a window nobody
-  // consented to a recording of. Both documents are files this build wrote
-  // into the resource directory, and the pair is the whole of what any
-  // window here may navigate to or speak from.
+  // The hidden voice window loads the panels' bundle from a document of its
+  // own, mounting what `windowFactsFor`'s role says. Both documents are files
+  // this build wrote into the resource directory, and the pair is the whole
+  // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
 

@@ -4,28 +4,23 @@ import posthog from "posthog-js/dist/module.full.no-external";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 
 /**
- * Recording what Luke's own panel draws, on the library's own defaults.
+ * Recording the shape of what Luke's own panel draws, and none of its words.
  *
  * This is not the counted-event stream and does not share its guarantee. A
  * counted event can only say what `packages/analytics/src/product-events.ts`
- * declared, so a session title has no form it could travel in; those events
- * go to Luke's own service and are read against the allowlist a second time
- * there. This client is the analytics library configured as it ships, posting
- * straight to the processor, and everything it sends is outside that
- * allowlist: a recording is the rendered panel, so a session title, branch,
- * error line, and the account's own name and address all travel
- * because they are drawn; autocapture puts the text of whatever was clicked
- * on an event.
- * What is typed into a field stays masked by the library's default, and three
- * elements explicitly block themselves with the library's fixed
- * `ph-no-capture` class: the Conversation tab's whole subtree, the
- * feedback composer's message field, which a thumbs down can open prefilled
- * with the conversation's own words, and the Settings tab's Memory page,
- * which draws what Luke has saved about the person.
+ * declared; this client is the analytics library posting straight to the
+ * processor, and a recording is the rendered panel. What keeps a session
+ * title, a branch, an error line, a caption, or the account's own name out of
+ * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
+ * every input is masked, the attributes that carry words or an image are
+ * asterisked, and autocapture is off. What leaves is layout, pointer
+ * positions, and asterisks of the right length. Three elements also block
+ * their whole subtree with the library's fixed `ph-no-capture` class as a
+ * second line: the Conversation tab, the feedback composer's message field,
+ * and the Settings tab's Memory page.
  *
- * `PRIVACY.md` says all of that plainly, and it has to keep saying it: this
- * file and those three blocked elements are the whole of what decides it.
- * Nothing else stands between what the panel draws and what leaves the machine.
+ * `PRIVACY.md` says all of that plainly, and it has to keep saying it: the
+ * masking and those blocks are the whole of what decides it.
  *
  * What this file decides on its own is only whether to record at all, and the
  * main process is the whole of that answer: an ordinary run records, a
@@ -203,8 +198,7 @@ function projectApiKey(): string {
  * the hosted `/array/<token>/config.js` bundle rather than by anything in the
  * package's own types, so the shape is documented by what the loader reads
  * and nothing in the type system holds it still. `session-replay.test.ts`
- * asserts both halves against the installed bundle, because a library that
- * renamed either would take recording out silently.
+ * asserts the name against the installed bundle.
  */
 declare global {
   interface Window {
@@ -228,18 +222,36 @@ declare global {
  * one.
  *
  * Preloading answers it here instead. `sessionRecording` decides the gate by
- * truthiness alone, so an empty object turns recording on and leaves every
- * field the library's own default, including the input masking documented
- * above. `hasFeatureFlags: false` declines the flag fetch Luke has no use for.
- *
- * Autocapture answers to a disable flag rather than to a remote yes, which is
- * why clicks arrived throughout and recordings never did.
+ * truthiness alone, so an empty object turns recording on and supplies no
+ * masking: `init`'s `session_recording` is read first and this response
+ * second, so `SESSION_REPLAY_MASKING` stands. `hasFeatureFlags: false`
+ * declines the flag fetch Luke has no use for.
  */
 function preloadRemoteConfig(key: string): void {
   window._POSTHOG_REMOTE_CONFIG = {
     [key]: { config: { sessionRecording: {}, hasFeatureFlags: false } },
   };
 }
+
+/**
+ * What keeps the words out of the recording: every text node masked (there is
+ * no `maskAllText` for recordings, and the recorder drops an option it does
+ * not know without a word, so the names are asserted against the installed
+ * bundle), inputs masked by the library's default, the attributes that carry
+ * words or an image asterisked while `class` and `style` still lay out, and
+ * autocapture off, since a click event carries the text of what was clicked.
+ */
+const WORDS = new Set(["title", "aria-label", "aria-description", "alt", "placeholder", "src"]);
+const SESSION_REPLAY_MASKING = {
+  autocapture: false,
+  capture_dead_clicks: false,
+  mask_all_text: true,
+  session_recording: {
+    maskTextSelector: "*",
+    maskAttributeFn: (name: string, value: string): string =>
+      WORDS.has(name) ? "*".repeat(value.length) : value,
+  },
+} as const;
 
 let started = false;
 let initialized = false;
@@ -293,6 +305,7 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
     capture_pageview: false,
     capture_pageleave: false,
     capture_exceptions: false,
+    ...SESSION_REPLAY_MASKING,
     person_profiles: "always",
     persistence: "localStorage",
     debug: false,
@@ -339,10 +352,10 @@ function identifyAccount(bootstrap: SessionReplayBootstrap): void {
 
 /**
  * Opting in and out rather than only starting and stopping the recorder,
- * because this client sends more than recordings. On the library's own
- * configuration it also autocaptures what was clicked, and that does not
- * answer to `stopSessionRecording`. A stop has to reach both — a deleted
- * account whose clicks kept travelling would be the erasure failing to erase.
+ * because this client sends more than recordings: the registered build and
+ * the identified person travel on their own, and neither answers to
+ * `stopSessionRecording`. A stop has to reach all of it — a deleted account
+ * whose client kept talking would be the erasure failing to erase.
  *
  * The opt-in names no event: `$opt_in` counts a consent moving, and nothing
  * here moves one.
