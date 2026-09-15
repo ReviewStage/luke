@@ -166,7 +166,7 @@ test("the next call's row 1 is not the held row 1 of the last call unless it car
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [next.entry, returned.entry]);
 });
 
-test("the record covers a line by its words: an utterance inside a wider ask, a cut that ended inside the utterance, a reading beside its own spoken row, never a row of another speaker or of before the call", () => {
+test("the record covers a line by its words: an utterance inside a wider ask, a cut that ended inside the utterance leaving its tail live until another row shows it, a reading beside its own spoken row, never a row of another speaker or of before the call", () => {
   const firstHalf = line(1, CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
   const secondHalf = line(2, CONVERSATION_ENTRY_KIND.ASK, "Please.", true);
   const overrun = line(3, CONVERSATION_ENTRY_KIND.ASK, "And then run it. Thanks", true);
@@ -185,7 +185,20 @@ test("the record covers a line by its words: an utterance inside a wider ask, a 
     // Luke's own spoken row of the reading, cut from the same transcript the line was drawn from.
     recorded(MESSAGE_ROLE.ASSISTANT, "Opening it now! It is on the failing test", OPENED + 6_000),
   );
-  assert.deepEqual(shownLiveEntries(hold, record), []);
+  assert.deepEqual(
+    shownLiveEntries(hold, record).map((entry) => entry.words),
+    ["Thanks"],
+  );
+  assert.deepEqual(
+    shownLiveEntries(
+      hold,
+      view(
+        ...record.groups.flatMap((group) => group.messages),
+        recorded(MESSAGE_ROLE.USER, "Thanks", OPENED + 5_500),
+      ),
+    ),
+    [],
+  );
 
   // Luke's row never covers the developer's line, and a row from before the call covers nothing of it.
   const wrongSpeaker = view(
@@ -268,7 +281,7 @@ test("a line is covered by whole words only: a short line is not found inside a 
   assert.deepEqual(shownLiveEntries(hold, longer), [yes.entry, no.entry]);
   const words = view(recorded(MESSAGE_ROLE.USER, "Yes, no.", OPENED + 1_000));
   assert.deepEqual(shownLiveEntries(hold, words), []);
-  // A cut that ended inside the utterance covers it only at a word's end.
+  // A cut that ended inside the utterance covers it only through the whole word it reached.
   const cutShort = line(3, CONVERSATION_ENTRY_KIND.ASK, "Restart the fixture agent", true);
   const cut = foldLiveLines(NO_LIVE_LINES, [cutShort], OPENED);
   assert.deepEqual(
@@ -277,6 +290,6 @@ test("a line is covered by whole words only: a short line is not found inside a 
   );
   assert.deepEqual(
     shownLiveEntries(cut, view(recorded(MESSAGE_ROLE.USER, "Restart the fixture", OPENED + 1_000))),
-    [],
+    [{ ...cutShort.entry, words: "agent" }],
   );
 });

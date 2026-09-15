@@ -271,37 +271,69 @@ function recordedSince(view: ConversationViewSnapshot, since: number): RecordedW
   return rows;
 }
 
+/** One coverage a stored row gives a spoken line: the comparable words it took, and whether nothing of the line is left. */
+interface TakenWords {
+  readonly words: number;
+  readonly complete: boolean;
+}
+
+function comparableWordCount(words: string): number {
+  return words.length === 0 ? 0 : words.split(" ").length;
+}
+
+/**
+ * What of one line is still ahead of the record after its first `covered`
+ * comparable words: the same line where none were taken, nothing where all
+ * were, or the remaining tail from the next whole word on. The live row's
+ * original punctuation is kept on that tail, since what is left is still the
+ * row the transcript drew rather than a re-rendering of its normalized copy.
+ */
+function unmatchedTail(entry: ConversationEntry, covered: number): ConversationEntry | undefined {
+  if (covered <= 0) return entry;
+  let seen = 0;
+  for (const match of entry.words.matchAll(/[\p{L}\p{N}]+/gu)) {
+    if (seen === covered) {
+      const tail = entry.words.slice(match.index ?? 0).trimStart();
+      return tail.length === 0 ? undefined : { ...entry, words: tail };
+    }
+    seen += 1;
+  }
+  return undefined;
+}
+
 /**
  * Whether the row's words, past what earlier lines covered, cover a spoken
- * line's whole words, and takes them if so: the line inside what is left —
- * one utterance of an ask the delegation cut wider — or what is left the
- * first words of the line, where a
- * cut ended inside the utterance and the rest went to the next ask. Walking
- * the row forward is what lets one wide row cover each utterance inside it
- * once, and keeps one short row from covering the same word said twice.
+ * line's remaining whole words, and how many they took if so: the remainder
+ * inside what is left — one utterance of an ask the delegation cut wider —
+ * or what is left the first words of that remainder, where a cut ended
+ * inside the utterance and the rest went to the next ask. Walking the row
+ * forward is what lets one wide row cover each utterance inside it once,
+ * keeps one short row from covering the same word said twice, and leaves any
+ * suffix not yet on record standing on screen.
  */
-function takes(row: RecordedWords, spoken: string): boolean {
+function takes(row: RecordedWords, spoken: string): TakenWords | undefined {
   const needle = ` ${spoken} `;
   const at = row.words.indexOf(needle, row.covered);
   if (at !== -1) {
     // The trailing space stays uncovered: it is the next word's leading one.
     row.covered = at + needle.length - 1;
-    return true;
+    return { words: comparableWordCount(spoken), complete: true };
   }
   const rest = row.words.slice(row.covered).trim();
   if (rest.length > 0 && (spoken === rest || spoken.startsWith(`${rest} `))) {
     row.covered = row.words.length;
-    return true;
+    return { words: comparableWordCount(rest), complete: spoken === rest };
   }
-  return false;
+  return undefined;
 }
 
 /**
  * The lines the Conversation tab draws ahead of the record: the hold's drawn
- * lines less every line a row of this call already shows. Lines are matched
+ * lines less every word a row of this call already shows. Lines are matched
  * oldest first against the rows in the view's order, each row's words walked
  * forward as its lines are found, so the developer saying the same word
- * twice is two lines until the record holds the word twice.
+ * twice is two lines until the record holds the word twice, and a line the
+ * record only cut a prefix of still leaves its unmatched tail drawn.
  */
 export function shownLiveEntries(
   hold: LiveLineHold,
@@ -309,11 +341,23 @@ export function shownLiveEntries(
 ): readonly ConversationEntry[] {
   if (hold.openedAt === undefined) return hold.entries;
   const recorded = recordedSince(view, hold.openedAt - LIVE_LINE_RECORD_SLACK_MS);
-  return hold.entries.filter((entry) => {
+  return hold.entries.flatMap((entry) => {
     const role = roleOfKind(entry.kind);
-    if (role === undefined) return true;
+    if (role === undefined) return [entry];
     const spoken = comparable(entry.words);
-    if (spoken.length === 0) return false;
-    return !recorded.some((row) => row.role === role && takes(row, spoken));
+    if (spoken.length === 0) return [];
+    let covered = 0;
+    let remaining = spoken;
+    for (const row of recorded) {
+      if (row.role !== role || remaining.length === 0) continue;
+      const taken = takes(row, remaining);
+      if (taken === undefined) continue;
+      covered += taken.words;
+      if (taken.complete) return [];
+      remaining = comparable(unmatchedTail(entry, covered)?.words ?? "");
+      if (remaining.length === 0) return [];
+    }
+    const unmatched = unmatchedTail(entry, covered);
+    return unmatched === undefined ? [] : [unmatched];
   });
 }
