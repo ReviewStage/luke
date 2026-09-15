@@ -1,8 +1,6 @@
 export {
   APP_SETTING_ID,
-  APP_SETTING_ID_LIST,
   type AppSettingId,
-  AppSettingIdSchema,
   isAppSettingId,
 } from "./app-settings.js";
 export {
@@ -15,23 +13,15 @@ export {
   type AppGuideSnapshot,
   type AppGuideUpdate,
   type AppPanelTab,
-  AppPanelTabSchema,
-  AppSettingKindSchema,
   type AppUpdateAction,
-  AppUpdateActionSchema,
   type AppUpdateButton,
-  AppUpdateButtonSchema,
-  type AppUpdateWait,
-  AppUpdateWaitSchema,
   appGuideSetting,
   appToggleText,
   appToggleValue,
   EMPTY_APP_GUIDE,
   FEEDBACK_COMPOSER_KIND,
   type FeedbackComposerKind,
-  FeedbackComposerKindSchema,
   SESSION_LIST_SORT,
   type SessionListSort,
-  SessionListSortSchema,
 } from "./guide.js";
 export { LUKE_PERSONA } from "./persona.js";
