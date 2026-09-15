@@ -27,7 +27,6 @@ export {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
-  NOTEBOOK_RECALL_ID,
   type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
   type NotebookMemoryToolShape,

@@ -58,7 +58,7 @@ function context(revoked: () => boolean = () => false) {
   return { ctx, carried, rosterReads };
 }
 
-test("every row of the actions table is a module, in the table's order, the notebook's two writes among them", () => {
+test("every row of the actions table is a module, in the table's order", () => {
   const rows = Object.values(ACTIONS);
   assert.deepEqual(
     ACTION_TOOLS.map((tool) => [tool.name, tool.kind, tool.family]),
@@ -70,8 +70,7 @@ test("every row of the actions table is a module, in the table's order, the note
     assert.deepEqual(emitJsonSchema(tool.inputSchema), emitJsonSchema(request));
     assert.equal(actionToolNamed(tool.name), tool);
   }
-  assert.equal(actionToolNamed("remember_fact")?.kind, ACTION_KIND.REMEMBER);
-  assert.equal(actionToolNamed("forget_fact")?.kind, ACTION_KIND.FORGET);
+  assert.equal(actionToolNamed("send_session_message")?.kind, ACTION_KIND.MESSAGE);
   assert.equal(actionToolNamed("delete_everything"), undefined);
 });
 

@@ -29,7 +29,6 @@ import {
   type Refusal,
   type ValidatedAction,
 } from "./admit.js";
-import { maximumRememberedFacts } from "./memory.js";
 
 const NOW = 1_800_000_000_000;
 
@@ -124,8 +123,6 @@ const FIELDS = {
   [ACTION_KIND.PANEL]: { tab: "sessions" },
   [ACTION_KIND.FEEDBACK]: { kind: "feedback" },
   [ACTION_KIND.UPDATE]: { action: "check" },
-  [ACTION_KIND.REMEMBER]: { words: "prefers concise answers" },
-  [ACTION_KIND.FORGET]: { id: "fact-one" },
 } satisfies Record<ActionKind, WireRecord>;
 
 const SESSION_KINDS = [
@@ -442,37 +439,6 @@ test("a setting the guide does not carry is one the conversation cannot change",
   );
 });
 
-test("only an id from the remembered list can be named, and the cap refuses rather than evicts", async () => {
-  const held = [{ id: "fact-one", words: "prefers concise answers" }];
-  const notebook = context({ rememberedFacts: held });
-  assert.equal(
-    refused(await decide({ kind: ACTION_KIND.FORGET, fields: { id: "fact-two" } }, notebook)),
-    ACTION_REFUSAL.NO_SUCH_FACT,
-  );
-  assert.equal(
-    refused(
-      await decide(
-        { kind: ACTION_KIND.REMEMBER, fields: { words: "x", replaces: "fact-two" } },
-        notebook,
-      ),
-    ),
-    ACTION_REFUSAL.NO_SUCH_FACT,
-  );
-  const full = Array.from({ length: maximumRememberedFacts }, (_, index) => ({
-    id: `fact-${index}`,
-    words: `something ${index}`,
-  }));
-  assert.equal(
-    refused(
-      await decide(
-        { kind: ACTION_KIND.REMEMBER, fields: FIELDS[ACTION_KIND.REMEMBER] },
-        context({ rememberedFacts: full }),
-      ),
-    ),
-    ACTION_REFUSAL.MEMORY_FULL,
-  );
-});
-
 test("opening a session is not a write: the action carries an identity, never an address", async () => {
   const admitted = await decide(
     { kind: ACTION_KIND.OPEN, fields: FIELDS[ACTION_KIND.OPEN] },
@@ -501,8 +467,6 @@ const READS = {
   [ACTION_KIND.PANEL]: ["roster"],
   [ACTION_KIND.FEEDBACK]: [],
   [ACTION_KIND.UPDATE]: [],
-  [ACTION_KIND.REMEMBER]: [],
-  [ACTION_KIND.FORGET]: [],
 } satisfies Record<ActionKind, readonly ("roster" | "projects" | "defaults")[]>;
 
 test("each action is admitted against the observed state it names, and against nothing wider", async () => {
@@ -533,7 +497,6 @@ test("each action is admitted against the observed state it names, and against n
           agentModels: () => [],
         },
         guide: EMPTY_APP_GUIDE,
-        rememberedFacts: [{ id: "fact-one", words: "prefers concise answers" }],
       },
     );
     // Sorted, because which of a creation's two reads runs first is admission's

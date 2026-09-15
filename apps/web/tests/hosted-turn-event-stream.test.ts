@@ -471,7 +471,7 @@ function toolPart(name: string, callId: string): StoredUIMessage["parts"][number
 
 test("the projection: a turn with no journal or no slow call tells no slow step, a provider write is the other slow kind, and one slow step is told however many slow calls follow", () => {
   assert.deepEqual(projectTurnEvents(TURN, undefined), []);
-  assert.deepEqual(projectTurnEvents(TURN, journal([toolPart(ACTION_TOOL.REMEMBER_FACT, "c1")])), [
+  assert.deepEqual(projectTurnEvents(TURN, journal([toolPart(ACTION_TOOL.RENAME_SESSION, "c1")])), [
     {
       turnId: TURN.id,
       seq: 1,

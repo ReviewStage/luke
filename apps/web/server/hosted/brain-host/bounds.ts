@@ -14,9 +14,7 @@ export const BRAIN_HOST = {
   MODEL_CONTEXT_WINDOW_TOKENS: 400_000,
   /** The fraction of the window at which eve folds the session's context. */
   COMPACTION_THRESHOLD: 0.8,
-  /** How many stored messages the standing context carries of the recent exchange. */
-  RECENT_MESSAGES: 20,
-  /** The longest one recent message is rendered, in characters. */
+  /** The longest one stored message is rendered in the rotation seed, in characters. */
   RECENT_MESSAGE_CHARS: 600,
   /** How many stored messages a rotated session is seeded with, newest last. */
   SEED_MESSAGES: 60,

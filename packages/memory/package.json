@@ -14,7 +14,6 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@sidecar/actions": "workspace:*",
     "@sidecar/runtime": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "effect": "catalog:"

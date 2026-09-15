@@ -19,7 +19,6 @@ import {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
   NOTEBOOK_MEMORY_REFUSAL,
-  NOTEBOOK_RECALL_ID,
   type NotebookMemoryAccess,
   type NotebookMemoryProviderSeams,
   notebookMemoryProvider,
@@ -61,7 +60,6 @@ function harness(overrides: Partial<NotebookMemoryProviderSeams> = {}) {
   const provider = notebookMemoryProvider({
     scope: SCOPE,
     access,
-    facts: () => [{ id: "f1", words: "prefers espresso" }],
     recentNotes: () =>
       Effect.succeed([
         { name: "2026-09-10.md", path: "memory/2026-09-10.md", content: "- shipped" },
@@ -105,25 +103,22 @@ test("the two tools are the notebook's reads, in catalog order, each a module wh
 });
 
 it.effect(
-  "recall renders the facts under a stable id every turn and the recent notes unkeyed into an empty history alone",
+  "recall renders the recent notes unkeyed into an empty history alone, and nothing into an ongoing one",
   () =>
     Effect.gen(function* () {
       const { provider } = harness();
       const fresh = yield* provider.recall(SCOPE, { items: [], signal: NEVER });
       assert.deepEqual(
         fresh.messages.map((message) => message.id),
-        [NOTEBOOK_RECALL_ID.FACTS, undefined],
+        [undefined],
       );
+      assert.ok(fresh.messages[0]?.content.includes("2026-09-10.md"));
       const ongoing = yield* provider.recall(SCOPE, {
         items: [{ type: "message" }],
         signal: NEVER,
       });
-      assert.deepEqual(
-        ongoing.messages.map((message) => message.id),
-        [NOTEBOOK_RECALL_ID.FACTS],
-      );
-      assert.equal(ongoing.messages[0]?.content, fresh.messages[0]?.content);
-      const empty = harness({ facts: () => [], recentNotes: () => Effect.succeed([]) });
+      assert.deepEqual(ongoing.messages, []);
+      const empty = harness({ recentNotes: () => Effect.succeed([]) });
       const recalled = yield* empty.provider.recall(SCOPE, { items: [], signal: NEVER });
       assert.deepEqual(recalled.messages, []);
     }),
@@ -197,7 +192,6 @@ test("a provider built without a capture offers none, so a conversation whose me
   const uncaptured = notebookMemoryProvider({
     scope: SCOPE,
     access: undefined,
-    facts: () => [],
     recentNotes: () => Effect.succeed([]),
   });
   assert.equal(uncaptured.capture, undefined);

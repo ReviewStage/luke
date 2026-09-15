@@ -126,9 +126,11 @@ export function holdReleasedInputText(held: readonly BrainDelivery[], now: numbe
 
 /**
  * The standing context, rebuilt every turn and never remembered: the roster
- * as the host rendered it, then whatever else the host renders — projects,
- * remembered facts, the recent conversation, the app guide. It rides after
- * the history so the instructions-plus-history prefix stays cacheable.
+ * as the host rendered it, then whatever else the host renders — today the
+ * projects a workspace can be created in, and nothing of the conversation,
+ * which is the session's own history, or of the developer, which is USER.md
+ * in the prompt. It rides after the history so the instructions-plus-history
+ * prefix stays cacheable.
  */
 export function standingContextText(
   rosterText: string,

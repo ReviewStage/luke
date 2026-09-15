@@ -288,18 +288,3 @@ export const FEEDBACK_REQUEST = Schema.Struct({
 });
 
 export const UPDATE_REQUEST = Schema.Struct({ action: UPDATE_ACTION });
-
-export const REMEMBER_REQUEST = Schema.Struct({
-  // The words are flattened and cut to their bound rather than refused past
-  // it, which no text combinator says, so the bound stays `rememberedFactText`'s.
-  words: boundedText({ description: "A concise durable fact about the developer." }),
-  replaces: optional(
-    boundedText({
-      description: "The id of the remembered entry this one stands in for, when it changes one.",
-    }),
-  ),
-});
-
-export const FORGET_REQUEST = Schema.Struct({
-  id: boundedText({ description: "The remembered entry's id." }),
-});

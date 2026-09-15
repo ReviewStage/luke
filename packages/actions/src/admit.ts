@@ -78,13 +78,6 @@ import {
   UPDATE_ACTION,
   WORKSPACE_NAME,
 } from "./action-schemas.js";
-import {
-  holdsRememberedFact,
-  maximumRememberedFactLength,
-  maximumRememberedFacts,
-  type RememberedFact,
-  rememberedFactText,
-} from "./memory.js";
 
 /**
  * An action that ran the gauntlet, carrying the turn's origin for Conversation to
@@ -151,8 +144,6 @@ export interface AdmitContext {
   readonly projects?: ActionProjects;
   /** The app's own word about itself; absent in a run that reports none, which then admits no app action. */
   readonly guide?: AppGuideSnapshot;
-  /** The facts standing right now; an id the conversation never saw names nothing. */
-  readonly rememberedFacts?: readonly RememberedFact[];
 }
 
 /**
@@ -201,9 +192,6 @@ export const ACTION_REFUSAL = {
   NO_COMPOSER: "The composer writes feedback or a prompt, nothing else.",
   NO_UPDATE_REPORT: "This run does not report where updates stand.",
   NO_UPDATE_ACTION: "The Updates button checks, downloads, or restarts.",
-  NO_SUCH_FACT: "Nothing remembered goes by that id.",
-  MEMORY_BOUND: `A memory has to be under ${maximumRememberedFactLength} characters and longer than nothing.`,
-  MEMORY_FULL: `Luke already remembers ${maximumRememberedFacts} things; replace or forget one first.`,
 } as const;
 
 export type ActionRefusalReason = (typeof ACTION_REFUSAL)[keyof typeof ACTION_REFUSAL];
@@ -905,29 +893,6 @@ const admitUpdate: Decider<typeof ACTION_KIND.UPDATE> = (fields, context) => {
   return { kind: ACTION_KIND.UPDATE, action };
 };
 
-const admitRemember: Decider<typeof ACTION_KIND.REMEMBER> = (fields, context) => {
-  const facts = context.rememberedFacts ?? [];
-  const words = rememberedFactText(fields.words);
-  if (!words) return refuse(ACTION_REFUSAL.MEMORY_BOUND);
-  const replaces = textArgument(fields, "replaces");
-  if (replaces !== undefined && !holdsRememberedFact(facts, replaces)) {
-    return refuse(ACTION_REFUSAL.NO_SUCH_FACT);
-  }
-  // A replacement retires one as it lands; a new fact never evicts silently.
-  if (replaces === undefined && facts.length >= maximumRememberedFacts) {
-    return refuse(ACTION_REFUSAL.MEMORY_FULL);
-  }
-  return { kind: ACTION_KIND.REMEMBER, words, ...(replaces ? { replaces } : undefined) };
-};
-
-const admitForget: Decider<typeof ACTION_KIND.FORGET> = (fields, context) => {
-  const id = textArgument(fields, "id");
-  if (!id || !holdsRememberedFact(context.rememberedFacts ?? [], id)) {
-    return refuse(ACTION_REFUSAL.NO_SUCH_FACT);
-  }
-  return { kind: ACTION_KIND.FORGET, id };
-};
-
 const ADMITTERS = {
   [ACTION_KIND.MESSAGE]: admitMessage,
   [ACTION_KIND.CONTROL]: admitControl,
@@ -940,8 +905,6 @@ const ADMITTERS = {
   [ACTION_KIND.PANEL]: admitPanel,
   [ACTION_KIND.FEEDBACK]: decidedAtOnce(admitFeedback),
   [ACTION_KIND.UPDATE]: decidedAtOnce(admitUpdate),
-  [ACTION_KIND.REMEMBER]: decidedAtOnce(admitRemember),
-  [ACTION_KIND.FORGET]: decidedAtOnce(admitForget),
 } as const satisfies { [K in ActionKind]: Admitter<K> };
 
 const turnOver = Effect.fail(new AdmitRefusal({ reason: ACTION_REFUSAL.TURN_OVER }));

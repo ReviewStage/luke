@@ -770,9 +770,6 @@ importers:
 
   packages/memory:
     dependencies:
-      '@sidecar/actions':
-        specifier: workspace:*
-        version: link:../actions
       '@sidecar/runtime':
         specifier: workspace:*
         version: link:../runtime

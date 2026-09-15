@@ -23,7 +23,6 @@ import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import {
   type HostedActionCarrier,
-  type HostedFactsWriter,
   hostedActionCarrier,
 } from "../server/hosted/brain-host/performer";
 import { hostedRosterFrom } from "../server/hosted/brain-host/roster";
@@ -100,33 +99,18 @@ function eveContext(aborted = false): EveToolContext {
   };
 }
 
-function factsWriter(remembered: string[]): HostedFactsWriter {
-  return {
-    list: () => Effect.sync(() => remembered.map((words, index) => ({ id: `f-${index}`, words }))),
-    remember: (ask) =>
-      Effect.sync(() => {
-        remembered.push(ask.words);
-        return true;
-      }),
-    forget: () => Effect.succeed(false),
-  };
-}
-
 interface Fakes {
-  readonly remembered: string[];
   readonly executed: WireRecord[];
   readonly carrier: HostedActionCarrier;
   readonly seams: HostedToolSeams;
 }
 
 function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key" }): Fakes {
-  const remembered: string[] = [];
   const executed: WireRecord[] = [];
   const roster = () => Effect.succeed(hostedRosterFrom(ROSTER, NOW));
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({}),
-    facts: factsWriter(remembered),
     apiKey: () => Effect.succeed(options.apiKey),
     execute: (input) =>
       Effect.sync(() => {
@@ -151,7 +135,7 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
     },
     now: () => NOW,
   };
-  return { remembered, executed, carrier, seams };
+  return { executed, carrier, seams };
 }
 
 const ASK: HostedTurnStanding = { trigger: BRAIN_TURN_TRIGGER.ASK, turnId: "t-1", runId: "t-1" };
@@ -186,19 +170,6 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
     ask,
   );
   assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
-});
-
-test("remember_fact runs admission inside its module and lands in the facts through the carrier", async () => {
-  const { seams, remembered } = fakes();
-  const answer = await call(seams, ASK, ACTION_TOOL.REMEMBER_FACT, {
-    words: "prefers short replies",
-  });
-  assert.equal(answer.status, ACTION_OUTPUT_STATUS.ACCEPTED);
-  assert.deepEqual(remembered, ["prefers short replies"]);
-
-  const unreadable = await call(seams, ASK, ACTION_TOOL.REMEMBER_FACT, { words: 7 });
-  assert.equal(unreadable.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.deepEqual(remembered, ["prefers short replies"]);
 });
 
 test("a session message is admitted against the stored roster and carried with the account's key; no key, no carry", async () => {
@@ -237,7 +208,6 @@ test("a session message is admitted against the stored roster and carried with t
 });
 
 test("a created workspace keeps the created session identity in its action envelope", async () => {
-  const remembered: string[] = [];
   const roster = () =>
     Effect.succeed(
       hostedRosterFrom(
@@ -264,7 +234,6 @@ test("a created workspace keeps the created session identity in its action envel
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({}),
-    facts: factsWriter(remembered),
     apiKey: () => Effect.succeed("conductor-key"),
     execute: () =>
       Effect.succeed({
@@ -332,7 +301,6 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
   const carrier = hostedActionCarrier({
     roster,
     defaults: () => Effect.succeed({ agentDefaults: { conductor: stored } }),
-    facts: factsWriter([]),
     apiKey: () => Effect.succeed("conductor-key"),
     execute: (input) =>
       Effect.sync(() => {
@@ -413,16 +381,16 @@ test("announce answers accepted for words and refuses an empty briefing; it is o
 });
 
 test("a call whose turn is over is refused before anything runs", async () => {
-  const { seams, remembered } = fakes();
+  const { seams, executed } = fakes();
   const answer = await call(
     seams,
     ASK,
-    ACTION_TOOL.REMEMBER_FACT,
-    { words: "too late" },
+    ACTION_TOOL.SEND_SESSION_MESSAGE,
+    { provider_id: "conductor", provider_session_id: SESSION_UUID, text: "too late" },
     eveContext(true),
   );
   assert.equal(answer.status, ACTION_OUTPUT_STATUS.REFUSED);
-  assert.deepEqual(remembered, []);
+  assert.deepEqual(executed, []);
 });
 
 test("a briefing is offered as an event on the turn's own journal row, and refused where no journal stands", async () => {

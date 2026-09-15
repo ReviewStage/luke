@@ -5,9 +5,9 @@
  *
  * The session actions are the ones the panel's rows offer — the writes, and the
  * press that opens a session where its provider keeps it. Creating a workspace
- * is the session action with no row yet to mirror. The last six are the same presses
+ * is the session action with no row yet to mirror. The last four are the same presses
  * turned toward the app itself: a settings change, showing the panel, opening
- * the feedback composer, the Updates row's button, and the notebook's two writes.
+ * the feedback composer, and the Updates row's button.
  *
  * Whether a call may run is not this file's question: `admit` answers it once,
  * and a row declares only its name, its family, its kind, its prose, and its
@@ -23,11 +23,9 @@ import {
   CONTROL_REQUEST,
   CREATE_WORKSPACE_REQUEST,
   FEEDBACK_REQUEST,
-  FORGET_REQUEST,
   MESSAGE_REQUEST,
   OPEN_REQUEST,
   PANEL_REQUEST,
-  REMEMBER_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
   SETTING_REQUEST,
@@ -155,27 +153,6 @@ export const ACTIONS = {
       "downloaded. Only the action the button currently offers runs — the app guide's Updates " +
       "line names it.",
     request: erase(UPDATE_REQUEST),
-  },
-  REMEMBER_FACT: {
-    name: "remember_fact",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.REMEMBER,
-    description:
-      "Silently save a concise stable preference, personal fact, goal, or recurring constraint " +
-      "from this developer-opened turn. Skip transient details and uncertain inferences. Never " +
-      "save credentials; save sensitive facts only when explicitly asked. Do not mention routine " +
-      "memory changes. Skip duplicates, and pass an existing id as replaces when updating a " +
-      "contradiction.",
-    request: erase(REMEMBER_REQUEST),
-  },
-  FORGET_FACT: {
-    name: "forget_fact",
-    family: ACTION_FAMILY.APP,
-    kind: ACTION_KIND.FORGET,
-    description:
-      "Silently forget an outdated or explicitly unwanted memory. Only an id from the remembered " +
-      "list can be named. Do not mention routine memory changes.",
-    request: erase(FORGET_REQUEST),
   },
 } as const satisfies Record<string, ToolSpec<ActionFamily, ActionKind>>;
 

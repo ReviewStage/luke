@@ -41,7 +41,7 @@ export const TOOL_GROUP = {
   SKILLS: "skills",
   /** Delegation and the inspection of Luke's own conversations, OpenClaw's session tools. */
   SESSIONS: "sessions",
-  /** The memory provider's tools and the notebook's two writes, OpenClaw's memory tools. */
+  /** The memory provider's tools, the notebook's search and read, OpenClaw's memory tools; the notebook is written through `write_workspace_file`. */
   MEMORY: "memory",
 } as const;
 

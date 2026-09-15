@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ACTION_FAMILY, ACTION_TOOL, actionToolDefinitions } from "@sidecar/actions";
+import { ACTION_TOOL, actionToolDefinitions } from "@sidecar/actions";
 import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import {
   GROUP_PREFIX,
@@ -35,7 +35,7 @@ test("the catalog holds every action, every brain tool, and every memory tool on
   for (const tool of actionToolDefinitions()) {
     const entry = catalog.find((candidate) => candidate.schema.name === tool.name);
     assert.ok(entry, `${tool.name} is in the catalog`);
-    // Every action is the performer's to carry, the notebook's two writes included.
+    // Every action is the performer's to carry.
     assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
     assert.ok(entry.groups.includes(TOOL_GROUP.ACTIONS));
   }
@@ -165,7 +165,7 @@ test("a child's task turn loses announce like an ask, and the session tools stan
   assert.equal(below.allows(BRAIN_TOOL.SUBAGENTS), true);
 });
 
-test("the notebook stands in the catalog under the memory group: the provider's reads as reads, its two writes as actions the performer carries", () => {
+test("the notebook stands in the catalog under the memory group as the provider's two reads, and no action stands under it", () => {
   const catalog = brainToolCatalog();
   const entryOf = (name: string) => {
     const entry = catalog.find((tool) => tool.schema.name === name);
@@ -178,29 +178,25 @@ test("the notebook stands in the catalog under the memory group: the provider's 
     assert.equal(entry.effect, TOOL_EFFECT.READ);
     assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.READ]);
   }
-  const notebookWrites = [ACTION_TOOL.REMEMBER_FACT, ACTION_TOOL.FORGET_FACT];
-  for (const name of notebookWrites) {
-    const entry = entryOf(name);
-    assert.equal(entry.execution, TOOL_EXECUTION.PERFORMER);
-    assert.equal(entry.effect, TOOL_EFFECT.WRITE);
-    assert.deepEqual([...entry.groups], [TOOL_GROUP.MEMORY, TOOL_GROUP.ACTIONS, ACTION_FAMILY.APP]);
+  // The notebook is written through the workspace tool, which is no action and no memory tool.
+  for (const tool of actionToolDefinitions()) {
+    assert.equal(entryOf(tool.name).groups.includes(TOOL_GROUP.MEMORY), false, tool.name);
   }
-  assert.equal(
-    catalog.filter((tool) => tool.schema.name === ACTION_TOOL.REMEMBER_FACT).length,
-    1,
-    "a notebook write is listed once, as an action",
-  );
+  const written = entryOf(BRAIN_TOOL.WRITE_WORKSPACE_FILE);
+  assert.equal(written.execution, TOOL_EXECUTION.WORKSPACE);
+  assert.deepEqual([...written.groups], [TOOL_GROUP.WORKSPACE]);
   const denied = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.MEMORY}`] },
   });
-  for (const name of [...Object.values(NOTEBOOK_MEMORY_TOOL), ...notebookWrites]) {
+  for (const name of Object.values(NOTEBOOK_MEMORY_TOOL)) {
     assert.equal(denied.allows(name), false);
   }
   assert.equal(denied.allows(BRAIN_TOOL.READ_TRANSCRIPT), true);
+  assert.equal(denied.allows(BRAIN_TOOL.WRITE_WORKSPACE_FILE), true);
   const deniedActions = resolveToolPolicy(catalog, {
     agent: { deny: [`${GROUP_PREFIX}${TOOL_GROUP.ACTIONS}`] },
   });
-  assert.equal(deniedActions.allows(ACTION_TOOL.REMEMBER_FACT), false);
+  assert.equal(deniedActions.allows(ACTION_TOOL.CHANGE_APP_SETTING), false);
   assert.equal(deniedActions.allows(NOTEBOOK_MEMORY_TOOL.SEARCH), true);
 });
 

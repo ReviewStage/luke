@@ -82,7 +82,6 @@ test("every action kind the fixtures carry composes an action row, and a brain t
       ACTION_KIND.CREATE_WORKSPACE,
       ACTION_KIND.MESSAGE,
       ACTION_KIND.OPEN,
-      ACTION_KIND.REMEMBER,
       ACTION_KIND.RENAME_SESSION,
       ACTION_KIND.RENAME_WORKSPACE,
       ACTION_KIND.SETTING,
@@ -252,30 +251,17 @@ test("an action on Luke himself is worded by its request, a setting by its guide
     ),
     "Checked for updates",
   );
-  assert.equal(
-    words(
-      toolRow(
-        part(
-          "remember_fact",
-          { words: "Likes tea.", replaces: "m1" },
-          answered({ status: "accepted" }),
-        ),
-        FIXTURE_ROSTER,
-      ),
-    ),
-    'Remembered "Likes tea." in place of an earlier note',
-  );
   const refused = toolRow(
     part(
-      "forget_fact",
-      { id: "m1" },
-      answered({ status: ACTION_OUTPUT_STATUS.REFUSED, reason: "no such entry" }),
+      "open_feedback_composer",
+      { kind: "feedback" },
+      answered({ status: ACTION_OUTPUT_STATUS.REFUSED, reason: "not run here" }),
     ),
     FIXTURE_ROSTER,
   );
-  assert.equal(words(refused), "Forgot something remembered before");
+  assert.equal(words(refused), "Opened the feedback composer");
   assert.equal(refused.status, TOOL_ROW_STATUS.REFUSED);
-  assert.equal(refused.reason, "no such entry");
+  assert.equal(refused.reason, "not run here");
 });
 
 test("a chip names a held session by the roster and opens exactly when its row would", () => {

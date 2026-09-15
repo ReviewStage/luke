@@ -85,7 +85,6 @@ const FIXTURE_TOOL_KINDS: ConversationViewToolKinds = new Map([
   ["rename_workspace", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["rename_session", CONVERSATION_VIEW_TOOL_KIND.ACTION],
   ["change_app_setting", CONVERSATION_VIEW_TOOL_KIND.ACTION],
-  ["remember_fact", CONVERSATION_VIEW_TOOL_KIND.ACTION],
 ]);
 
 const identity = (providerSessionId: string) => ({
@@ -460,7 +459,6 @@ export const FIXTURE_INPUT: ConversationViewInput = {
           { status: "accepted", notes: [{ path: "memory/2026-09-14.md", chars: 40 }] },
         ),
         call("change_app_setting", { setting_id: "announcements", value: "on" }, accepted({})),
-        call("remember_fact", { words: "Prefers the panel clipped to the notch." }, accepted({})),
         { type: "step-start" },
         {
           type: "text",

@@ -15,9 +15,9 @@ import { Effect, Result } from "effect";
 import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /**
- * The action tools as modules: one per row of the actions table, the
- * notebook's two writes included. Each one's `execute` is the whole gauntlet an action
- * runs — `admitEffect()` first, against the roster admission reads for itself
+ * The action tools as modules: one per row of the actions table. Each one's
+ * `execute` is the whole gauntlet an action runs — `admitEffect()` first,
+ * against the roster admission reads for itself
  * through the readers the host supplies, then the carrier, which takes only
  * what admission minted. Nothing in a module knows the agent: the standing it
  * runs under, the readers, and the carrier all arrive in its context, so a
@@ -28,7 +28,7 @@ import type { ToolContext, ToolModule } from "./tool-module.js";
 /**
  * The readers admission consults, as the host supplies them for one
  * execution: the roster and the projects as the latest pass reports them,
- * the guide, the issues, the facts. The readers answer what stands when
+ * the guide. The readers answer what stands when
  * admission asks, never a copy a caller took earlier; who opened the turn
  * and whether it still stands come from the context, not from here.
  */

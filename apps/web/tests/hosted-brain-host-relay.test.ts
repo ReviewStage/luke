@@ -6,7 +6,6 @@ import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import {
-  ACTION_TOOL,
   ASK_ORIGIN,
   BRAIN_REQUEST_FAILURE,
   BRAIN_RUN_EVENT,
@@ -110,8 +109,8 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
           {
             kind: "tool-call",
             callId: "call-1",
-            toolName: ACTION_TOOL.REMEMBER_FACT,
-            input: { words: "prefers short replies" },
+            toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+            input: { name: "USER.md", content: "- 2026-09-15: prefers short replies" },
           },
         ],
       },
@@ -126,8 +125,8 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
         result: {
           kind: "tool-result",
           callId: "call-1",
-          toolName: ACTION_TOOL.REMEMBER_FACT,
-          output: { status: "accepted" },
+          toolName: BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+          output: { status: "accepted", chars: 35 },
         },
       },
     }),
@@ -241,7 +240,7 @@ it.effect(
       // reasoning, then the call — although eve told the reasoning last.
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, STEP_START, "text"],
       );
       const toolPart = answer.parts.find((part) => isToolUIPart(part));
       assert.ok(toolPart);
@@ -469,7 +468,7 @@ it.effect("a tool call's part stands on the journal before its result and settle
     // The step was told before the call it bounds, so the journal reads the boundary first.
     assert.deepEqual(
       journal.parts.map((part) => part.type),
-      [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`],
+      [STEP_START, `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`],
     );
     const pending = journal.parts.find((part) => isToolUIPart(part));
     assert.ok(pending);
@@ -683,7 +682,7 @@ it.effect(
       assert.ok(answer);
       assert.deepEqual(
         answer.parts.map((part) => part.type),
-        [STEP_START, "reasoning", `tool-${ACTION_TOOL.REMEMBER_FACT}`, STEP_START, "text"],
+        [STEP_START, "reasoning", `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, STEP_START, "text"],
       );
     }),
 );
@@ -996,7 +995,7 @@ it.effect(
         [
           [
             MESSAGE_ROLE.ASSISTANT,
-            [STEP_START, `tool-${ACTION_TOOL.REMEMBER_FACT}`, "reasoning", STEP_START],
+            [STEP_START, `tool-${BRAIN_TOOL.WRITE_WORKSPACE_FILE}`, "reasoning", STEP_START],
           ],
         ],
       );

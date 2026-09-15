@@ -86,8 +86,9 @@ marked deleted, a new empty one is opened in its place, every Mac on the
 account stops showing it on its next read, and the service removes the
 marked conversation thirty days later. A Clear the service did not take
 leaves the thread standing and says so. Nothing on your Mac holds a copy to
-forget. Clearing never touches the separate things Luke remembers about you,
-described next, and never touches your agents' own files.
+forget. Clearing never touches Luke's workspace rows, described above, which
+is where the things he remembers about you live, and never touches your
+agents' own files.
 
 Earlier versions of Luke kept the conversation, his working memory, the
 things he remembers about you, and a search index over his workspace files in
@@ -117,22 +118,26 @@ ask are opening an address you asked to open and running the Calendar helper
 behind macOS's own consent dialog.
 
 **Things Luke remembers about you.** When Luke runs a turn for you on our
-service, he may silently save a concise preference, personal fact, goal, or
-recurring constraint that looks useful later. He skips temporary details and
-uncertain guesses, never saves credentials, and saves sensitive facts only when
-you explicitly ask. Each is a row of its own in our database, its words sealed
-the same way as his workspace files there and bound to your account; a changed
-fact replaces the one it corrects, clearing the conversation does not touch
-them, and they are removed when you delete your account. Nothing on your Mac
-saves or reads one: an earlier version kept them as lines of `USER.md` in the
-workspace it held here, and a `USER.md` that version left is neither read nor
-written by this one. The iOS app keeps no such memory of its own. You can ask Luke what
-he remembers, correct something, or tell him to forget it. They travel with the
-rest of Luke's working memory when he thinks on our service, so he can
-personalize replies, on the same terms as the rest of that call — one model
-call per request, and nothing of it stored or logged by our service beyond the
-rows themselves. They are never sent to a coding-agent provider or a tracker,
-and they are never used to decide anything on your behalf.
+service, he may record a concise preference, personal fact, goal, or recurring
+constraint that looks useful later, as a dated line in `USER.md`, one of the
+workspace files described above. He skips temporary details and uncertain
+guesses, never records credentials, and records sensitive facts only when you
+explicitly ask. `USER.md` is a workspace row like the others: sealed the same
+way, bound to your account, edited only by Luke's own workspace tool in his
+turns there, untouched by clearing the conversation, and removed when you
+delete your account. A line a newer one replaces is marked superseded rather
+than silently dropped, so what he knew and since when is on the page for you
+to read. Nothing on your Mac saves or reads one: an earlier version kept them
+as lines of a `USER.md` in the workspace it held here, and a `USER.md` that
+version left is neither read nor written by this one; a version between kept
+them as database rows of their own, and this one keeps no such rows. The iOS
+app keeps no such memory of its own. You can ask Luke what he remembers,
+correct something, or tell him to forget it. The file travels with the rest of
+Luke's working memory when he thinks on our service, so he can personalize
+replies, on the same terms as the rest of that call — one model call per
+request, and nothing of it stored or logged by our service beyond the row
+itself. It is never sent to a coding-agent provider or a tracker, and it is
+never used to decide anything on your behalf.
 
 **Luke's notebook index.** Luke keeps no search index over his workspace
 files any more. An earlier version kept one in the database above — `MEMORY.md`,
@@ -149,10 +154,10 @@ written only through his own workspace tools in his turns there. An earlier
 version of Luke wrote a dated note under `memory/` and promoted lines into
 `MEMORY.md` behind HTML markers on your Mac, and wrote a `DREAMS.md` beside
 it; each is left exactly where it is, for you to keep or delete, and nothing
-reads any of them. Asking Luke to forget removes the remembered fact you name
-from our service; a fact he no longer holds under that name he says so about
-rather than claiming it erased. Forgetting does not delete the conversation
-itself; Clear is still the separate action above.
+reads any of them. Asking Luke to forget removes the line you name from his
+`USER.md` on our service; a thing he never wrote down he says so about rather
+than claiming it erased. Forgetting does not delete the conversation itself;
+Clear is still the separate action above.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
 address, and which of the two you used. We also keep the records that keep you
@@ -177,8 +182,8 @@ his — an answer he gave without running a turn, what he said before and after
 one, a briefing or a reply he read aloud — each written once it has settled,
 so the Conversation shows the words you actually heard beside the turns he
 ran and the messages he read from.
-Unlike his workspace files and the facts he
-remembers, described below, these rows are not sealed: they are stored as
+Unlike his workspace files, the things he
+remembers about you among them, these rows are not sealed: they are stored as
 written, and our own operators can read them. They stand until you clear
 the conversation, which marks it deleted so that every device stops drawing
 it at its next read and the service removes it thirty days later, or until
@@ -468,11 +473,12 @@ Send.
   service when a scheduled pass wakes the conversation following that session
   and when you ask him something: it carries that conversation's working
   memory — the bounded transcript excerpts described above, the session
-  fields, the recent lines of your conversation, and the things he remembers
-  about you — on our key. No such call is made from your Mac, your phone, or
-  your watch: none of the three apps composes instructions, offers tools, or
-  holds a record the reply joins; the record is the conversation our service
-  keeps, described under "Your account" above. OpenAI stores the request and its reply under its own
+  fields, the conversation so far, and his workspace files, the things he
+  remembers about you among them — on our key. No such call is made from your
+  Mac, your phone, or your watch: none of the three apps composes
+  instructions, offers tools, or holds a record the reply joins; the record is
+  the conversation our service keeps, described under "Your account" above.
+  OpenAI stores the request and its reply under its own
   retention policy, and our service performs one model call per request and
   stores and logs none of the request, the reply, or the encrypted reasoning
   that travels in it. Each call counts against your daily review allowance.
@@ -558,9 +564,10 @@ Your calendar access is encrypted in the macOS Keychain. Your
 Conductor key, and the latest roster of your
 Conductor sessions with what changed since the pass before, are stored
 encrypted in our own database and nowhere on your Mac, as described above. When Luke runs a turn for
-you on our service, the workspace files and remembered facts that turn reads
-and writes are stored sealed in the same database, and the conversation it
-writes is stored there unsealed, each as described above. Your account information is held by our own
+you on our service, the workspace files that turn reads and writes, the things
+he remembers about you among them, are stored sealed in the same database, and
+the conversation it writes is stored there unsealed, each as described above.
+Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 
 ## Your choices
@@ -601,7 +608,7 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, any provider API keys
   you synced to the hosted service, your device rows, the conversation our
-  service kept with its workspace files and remembered facts, and the stored
+  service kept with its workspace files, and the stored
   roster of your sessions, and asks PostHog to erase your usage data
   and recordings, including the iOS app's. The Apple Watch app sends no
   direct PostHog data, and its counted events are erased with your Luke

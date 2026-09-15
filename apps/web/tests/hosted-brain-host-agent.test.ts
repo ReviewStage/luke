@@ -52,8 +52,6 @@ test("the hosted policy withholds the machine's tools and the notebook's reads, 
     assert.equal(observationNames.includes(denied), false);
   }
   for (const kept of [
-    ACTION_TOOL.REMEMBER_FACT,
-    ACTION_TOOL.FORGET_FACT,
     ACTION_TOOL.SEND_SESSION_MESSAGE,
     BRAIN_TOOL.LIST_SESSIONS,
     BRAIN_TOOL.READ_TRANSCRIPT,

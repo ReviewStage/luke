@@ -1,4 +1,3 @@
-import { type RememberedFact, rememberedFactsText } from "@sidecar/actions";
 import { type DailyNote, TOOL_EFFECT } from "@sidecar/runtime";
 import {
   MEMORY_CAPTURE_OUTCOME,
@@ -28,18 +27,15 @@ import { NOTEBOOK_MEMORY_TOOL, type NotebookMemoryToolName } from "./tool-names.
 /**
  * The notebook as a memory provider: `USER.md`, `MEMORY.md`, and the dated
  * notes, behind the one contract the runtime's vocabulary names. Recall
- * renders the remembered facts the host hands it into every turn and, into a
- * conversation opening fresh, the recent daily notes once. Capture is the
- * housekeeping turn the host runs: the pre-compaction flush, or the reset
- * capture. The tools are the notebook's two reads, its search and its read,
- * each a module of the shape every tool of the brain is declared in and
- * each answered by the access the host hands in, or refused when it hands
- * none. The notebook's two writes, `remember_fact` and `forget_fact`, are
- * rows of the actions table and action tools of the brain's own: admitted
- * inside their module by the same `admitEffect()` as every other action and
- * carried by the host's performer, so no call of theirs reaches the host
- * raw, and nothing here carries one. The provider is built over one scope
- * and answers for no other.
+ * renders, into a conversation opening fresh, the recent daily notes once.
+ * Capture is the housekeeping turn the host runs: the pre-compaction flush,
+ * or the reset capture. The tools are the notebook's two reads, its search
+ * and its read, each a module of the shape every tool of the brain is
+ * declared in and each answered by the access the host hands in, or refused
+ * when it hands none. The notebook is written through the brain's own
+ * `write_workspace_file` alone: what Luke knows of the developer is the dated
+ * directive lines of `USER.md`, and nothing here carries a write. The
+ * provider is built over one scope and answers for no other.
  */
 
 /**
@@ -64,9 +60,6 @@ export interface NotebookMemoryAccess {
 /** The most results one memory search answers, and the longest query it takes. */
 export const maximumMemorySearchResults = 20;
 export const maximumMemoryQueryLength = MEMORY_QUERY_MAXIMUM_CHARS;
-
-/** The id the remembered facts stand under in every turn's context, so a turn's rendering supersedes the last. */
-export const NOTEBOOK_RECALL_ID = { FACTS: "notebook-facts" } as const;
 
 export const NOTEBOOK_MEMORY_REFUSAL = {
   NO_INDEX: "not read: no notebook index stands",
@@ -167,8 +160,6 @@ export interface NotebookMemoryProviderSeams {
   readonly scope: MemoryScope;
   /** The index's search and read for this conversation; nothing when no index stands, which refuses both reads. */
   readonly access: NotebookMemoryAccess | undefined;
-  /** The notebook's entries as they stand now, rendered whole into every turn. */
-  readonly facts: () => readonly RememberedFact[];
   /** Today's and yesterday's notes, read only for a conversation opening fresh. */
   readonly recentNotes: () => Effect.Effect<readonly DailyNote[]>;
   /** One housekeeping turn over a copy of the context; absent for a conversation whose memory is never captured. */
@@ -243,8 +234,6 @@ export function notebookMemoryProvider(seams: NotebookMemoryProviderSeams): Memo
   ): Effect.fn.Return<MemoryRecallResult> {
     if (!owned(scope)) return { messages: [] };
     const messages: MemoryRecallMessage[] = [];
-    const facts = rememberedFactsText(seams.facts());
-    if (facts !== undefined) messages.push({ id: NOTEBOOK_RECALL_ID.FACTS, content: facts });
     if (history.items.length === 0) {
       const notes = yield* seams.recentNotes();
       if (notes.length > 0 && !history.signal.aborted) {
