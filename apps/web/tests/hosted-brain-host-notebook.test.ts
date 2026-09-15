@@ -137,6 +137,36 @@ test("a hybrid search embeds the query and every uncached passage once, caches t
   assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), passages);
 });
 
+test("a deleted note's vectors are pruned by the next search even when nothing new is embedded, and an emptied notebook prunes the cache to nothing", async () => {
+  const userId = await seededUser();
+  const seen: string[][] = [];
+  const notebook = await access(userId, fakeEmbedder(seen));
+  await Effect.runPromise(notebook.search({ query: "notch", signal: NEVER }));
+  const cached = await countRowsForUser(database.run, "workspace_embedding", userId);
+  assert.equal(cached, 4);
+
+  assert.equal(
+    await database.run(database.store.workspace.delete(userId, "memory/2026-07-17.md")),
+    true,
+  );
+  const afterDelete = await Effect.runPromise(notebook.search({ query: "notch", signal: NEVER }));
+  assert.equal(afterDelete.mode, RETRIEVAL_MODE.HYBRID);
+  assert.deepEqual(seen[1], ["notch"], "nothing new was embedded");
+  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), cached - 1);
+
+  for (const path of ["MEMORY.md", "USER.md", "memory/2026-09-14.md"]) {
+    await database.run(database.store.workspace.delete(userId, path));
+  }
+  const emptied = await Effect.runPromise(notebook.search({ query: "notch", signal: NEVER }));
+  assert.deepEqual(emptied, {
+    status: ACTION_RESULT_STATUS.ACCEPTED,
+    mode: RETRIEVAL_MODE.HYBRID,
+    results: [],
+  });
+  assert.equal(seen.length, 2, "an empty notebook embeds nothing");
+  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 0);
+});
+
 test("a result names the path and the range memory_get takes back, a snippet, and a score in (0, 1], at most the ceiling of them", async () => {
   const userId = await seededUser();
   const notebook = await access(userId, undefined);

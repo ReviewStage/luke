@@ -31,7 +31,8 @@ import type { HostedEmbedder } from "./embedding.js";
  * searches is the embedding cache — a hash and a vector per passage, never
  * a word — filled for the passages a search finds unembedded, at most
  * `EMBED_BATCH` of them a search so no turn waits on a backfill, and pruned
- * to the passages the workspace holds now. The query is embedded once, in
+ * on every search to the passages the workspace holds now, so a deleted or
+ * rewritten note's vectors go the next time anyone searches. The query is embedded once, in
  * the same call as those passages, under the turn's own signal: a turn that
  * ends mid-call answers keyword-only rather than waiting the model out.
  * `memory_get` reads one of the same files by line range, bounded, and
@@ -168,9 +169,14 @@ export function hostedNotebookAccess(seams: HostedNotebookSeams): NotebookMemory
     Effect.gen(function* () {
       const embedder = seams.embedder;
       if (!embedder) return keywordOnly(NOTEBOOK_SEARCH_NOTE.NO_CREDENTIAL);
-      if (passages.length === 0) return { mode: RETRIEVAL_MODE.HYBRID, vectors: new Map() };
       const byHash = new Map(passages.map((passage) => [passage.hash, passage]));
       const hashes = [...byHash.keys()];
+      // The cache follows the workspace on every search, not only one that
+      // embeds something new: a note deleted or rewritten since the last
+      // search loses its vectors here, one statement, before anything is
+      // read, and an emptied notebook prunes the account's cache to nothing.
+      yield* store.embeddings.prune(userId, hashes);
+      if (passages.length === 0) return { mode: RETRIEVAL_MODE.HYBRID, vectors: new Map() };
       const cached = yield* store.embeddings.read(userId, embedder.model, hashes);
       const uncached = hashes.flatMap((hash) => {
         const passage = byHash.get(hash);
@@ -201,7 +207,6 @@ export function hostedNotebookAccess(seams: HostedNotebookSeams): NotebookMemory
       });
       if (writes.length > 0) {
         yield* store.embeddings.write(userId, embedder.model, writes, seams.now());
-        yield* store.embeddings.prune(userId, hashes);
       }
       const pending = uncached.length - embedding.length;
       return {
