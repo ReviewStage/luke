@@ -4,7 +4,7 @@ import type { SessionProviderPlugin } from "./provider-plugin.js";
 import type { SessionIdentity, SessionProvider } from "./session-identity.js";
 import type { ProviderSessionObservation, Session } from "./session-shape.js";
 
-export type SessionRosterListener = (sessions: readonly Session[]) => void;
+type SessionRosterListener = (sessions: readonly Session[]) => void;
 
 type SessionObservationTransform = (
   providerId: string,

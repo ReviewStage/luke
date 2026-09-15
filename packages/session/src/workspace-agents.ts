@@ -6,7 +6,7 @@ import { isProviderId, PROVIDER_ID, type ProviderId } from "./provider-identity.
  * a person reads. The label stands alone — no vendor beside it — because a
  * model's own name already says whose it is.
  */
-export interface WorkspaceAgentModel {
+interface WorkspaceAgentModel {
   id: string;
   label: string;
 }

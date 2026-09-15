@@ -150,7 +150,7 @@ export interface LiveConversationLine {
  * What one line's optional fields are held to, which is a question of where
  * it came from rather than of the line itself.
  */
-export interface StoredConversationEntryOptions {
+interface StoredConversationEntryOptions {
   /**
    * `true` reads a settled line: every optional field is validated and a
    * clock is required, so a record from a build that spelled an entry

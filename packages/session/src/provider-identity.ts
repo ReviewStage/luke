@@ -6,8 +6,7 @@ export const PROVIDER_LOCATION_KIND = {
   CLOUD: "cloud",
 } as const;
 
-export type ProviderLocationKind =
-  (typeof PROVIDER_LOCATION_KIND)[keyof typeof PROVIDER_LOCATION_KIND];
+type ProviderLocationKind = (typeof PROVIDER_LOCATION_KIND)[keyof typeof PROVIDER_LOCATION_KIND];
 
 /**
  * Stable provider identifiers shared by adapters, the registry, and the UI.
@@ -25,7 +24,7 @@ export type ProviderId = (typeof PROVIDER_ID)[keyof typeof PROVIDER_ID];
 
 export const ProviderIdSchema = Schema.Literals(Object.values(PROVIDER_ID));
 
-export interface ProviderIdentity {
+interface ProviderIdentity {
   readonly id: ProviderId;
   readonly displayName: string;
   readonly location: ProviderLocationKind;

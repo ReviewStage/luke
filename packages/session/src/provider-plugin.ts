@@ -69,7 +69,7 @@ export interface ActionInput<Request> {
  * a kind that project permits is the handler's own check, since only the
  * provider knows what its endpoint accepts.
  */
-export interface WorkspaceCreationInput {
+interface WorkspaceCreationInput {
   readonly project: WorkspaceProject;
   readonly agent?: string;
   readonly name?: string;
@@ -122,7 +122,7 @@ export interface ActionHandlers {
   ): Effect.Effect<ProviderActionResult>;
 }
 
-export interface ReadHandlers {
+interface ReadHandlers {
   transcript(providerSessionId: string): Effect.Effect<ProviderTranscriptResult>;
   transcriptSince(
     providerSessionId: string,
@@ -163,7 +163,7 @@ export interface PluginActionRequests {
 }
 
 /** What each action answers with. */
-export interface PluginActionResults {
+interface PluginActionResults {
   message: ProviderActionResult;
   control: ProviderActionResult;
   createWorkspace: ProviderWorkspaceResult;

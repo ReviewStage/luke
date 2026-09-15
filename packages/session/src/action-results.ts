@@ -30,7 +30,7 @@ export type ProviderTranscriptResult =
  * cursor is absent only when the provider handed back no position to resume
  * from, so the next read begins as this one did.
  */
-export interface ProviderTranscriptSinceReading {
+interface ProviderTranscriptSinceReading {
   text: string;
   cursor?: string;
   truncated: boolean;

@@ -144,7 +144,7 @@ export const CONVERSATION_VIEW_ACTION_OUTCOME = {
   REFUSED: "refused",
 } as const;
 
-export type ConversationViewActionOutcome =
+type ConversationViewActionOutcome =
   (typeof CONVERSATION_VIEW_ACTION_OUTCOME)[keyof typeof CONVERSATION_VIEW_ACTION_OUTCOME];
 
 function actionOutcome(part: StoredToolPart): ConversationViewActionOutcome {
