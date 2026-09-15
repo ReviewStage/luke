@@ -80,6 +80,9 @@ test("children are listed newest first, bounded by the limit, and read one by id
     startedAt: null,
     settledAt: null,
     failure: null,
+    nextMessageSeq: 1,
+    nextEventSeq: 1,
+    journalRevision: 0,
   });
   assert.equal(listed[2]?.label, "fixture one");
   assert.equal(listed[1]?.label, null);

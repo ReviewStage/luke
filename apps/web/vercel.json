@@ -101,6 +101,10 @@
           "dest": "/api/default.js?route=conversation/children"
         },
         {
+          "src": "/api/conversation/children/messages",
+          "dest": "/api/default.js?route=conversation/children/messages"
+        },
+        {
           "src": "/api/conversation/clear",
           "dest": "/api/default.js?route=conversation/clear"
         },

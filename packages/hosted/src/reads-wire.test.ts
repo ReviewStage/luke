@@ -50,6 +50,7 @@ const FIXTURE = {
   EVENTS: "conversation-events-answer.json",
   TURNS: "brain-turns-answer.json",
   CHILDREN: "children-answer.json",
+  CHILD_MESSAGES: "child-messages-answer.json",
   CHANGES_REQUEST: "changes-request.json",
   CHANGES_ANSWER: "changes-answer.json",
 } as const;
@@ -428,6 +429,33 @@ test("the children answer fixture reads each child where its latest turn leaves 
   );
   const crowded = Array.from({ length: CHILDREN_READ_BOUNDS.MAX_CHILDREN + 1 }, () => first);
   assert.equal(parseAnswer(childrenAnswerSchema, { children: crowded }), undefined);
+});
+
+test("the child messages answer fixture is a main's page over the one child: its task line in a group of its own, the child turn's reply under its turn, and a cursor positioned on the child alone", async () => {
+  const answer = expectReadAnswer(
+    conversationMessagesAnswerSchema,
+    await fixture(FIXTURE.CHILD_MESSAGES),
+  );
+  assert.deepEqual(
+    answer.conversations.map((conversation) => [conversation.id, conversation.kind]),
+    [[SETTLED_CHILD, CONVERSATION_VIEW_SOURCE.MAIN]],
+  );
+  const [taskLine, reply] = answer.groups;
+  assert.ok(taskLine && reply);
+  assert.equal(taskLine.turn, undefined);
+  assert.equal(taskLine.turnId, taskLine.messages[0]?.message.id);
+  assert.equal(reply.turn?.origin, TURN_ORIGIN.CHILD);
+  assert.deepEqual(
+    answer.groups.map((group) => [group.conversationId, group.source.kind, group.messages.length]),
+    [
+      [SETTLED_CHILD, CONVERSATION_VIEW_SOURCE.MAIN, 1],
+      [SETTLED_CHILD, CONVERSATION_VIEW_SOURCE.MAIN, 1],
+    ],
+  );
+  assert.deepEqual(parse(sequenceReadCursorSchema, answer.next), {
+    positions: [{ conversationId: SETTLED_CHILD, seq: 2 }],
+  });
+  assert.equal(answer.hasMore, false);
 });
 
 test("a children head is the turn cursor's shape minted from the children's own stamps, and refuses anything else", () => {

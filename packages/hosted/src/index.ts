@@ -172,6 +172,7 @@ export {
   type BrainTurnRecord,
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
+  CHILD_MESSAGES_QUERY,
   CHILD_STATUS,
   CHILDREN_READ_BOUNDS,
   type ChangesAnswer,

@@ -12,7 +12,7 @@ import {
   type TurnStatus,
 } from "../../core.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { InstantColumnSchema } from "./database.js";
+import { EpochMillisColumnSchema, InstantColumnSchema } from "./database.js";
 
 /**
  * The account's children: the conversations a delegation opened, each a row
@@ -48,6 +48,10 @@ export interface ChildRecord {
   readonly startedAt: Date | null;
   readonly settledAt: Date | null;
   readonly failure: string | null;
+  /** The counters a page of the child's own rows is read against, as the standing conversations carry them. */
+  readonly nextMessageSeq: number;
+  readonly nextEventSeq: number;
+  readonly journalRevision: number;
 }
 
 /**
@@ -92,6 +96,9 @@ const ChildRowSchema = Schema.Struct({
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
+  nextMessageSeq: EpochMillisColumnSchema,
+  nextEventSeq: EpochMillisColumnSchema,
+  journalRevision: EpochMillisColumnSchema,
 }).pipe(
   Schema.encodeKeys({
     parentConversationId: "parent_conversation_id",
@@ -101,6 +108,9 @@ const ChildRowSchema = Schema.Struct({
     turnStatus: "turn_status",
     startedAt: "started_at",
     settledAt: "settled_at",
+    nextMessageSeq: "next_message_seq",
+    nextEventSeq: "next_event_seq",
+    journalRevision: "journal_revision",
   }),
 );
 
@@ -187,7 +197,8 @@ const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[
     select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
            ${taskExcerpt(sql)} as task,
            child.created_at, child.completion_delivered_at,
-           latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure
+           latest.status as turn_status, latest.started_at, latest.settled_at, latest.failure,
+           child.next_message_seq, child.next_event_seq, child.journal_revision
     ${childrenFrom(sql, conditions)}
     order by child.created_at desc, child.id desc
     limit ${limit}
