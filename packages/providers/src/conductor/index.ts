@@ -1,7 +1,6 @@
 import { type ProviderSessionObservation, WORKSPACE_TASK_SUPPORT } from "@sidecar/session";
 import type { Effect, Layer } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
-import type { AdapterDiagnosticCallback } from "../shared/adapter-diagnostics.js";
 import { type CloudSessionPlugin, cloudPass } from "../shared/cloud-pass.js";
 import { conductorActions } from "./actions.js";
 import {
@@ -24,7 +23,6 @@ export interface ConductorPluginOptions {
   httpClient?: Layer.Layer<HttpClient.HttpClient>;
   now?: () => number;
   minimumRefreshIntervalMs?: number;
-  onDiagnostic?: AdapterDiagnosticCallback;
   /**
    * The roster the brain's transcript reads answer for, when a host holds
    * one the plugin did not read itself: the hosted brain reads against the

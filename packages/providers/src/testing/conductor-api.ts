@@ -27,13 +27,13 @@ export const TEST_CONDUCTOR_STATUS = {
   ERROR: "error",
 } as const;
 
-export type TestProject = {
+type TestProject = {
   id: string;
   name: string;
   gitRemote: string;
 };
 
-export interface TestWorkspace {
+interface TestWorkspace {
   id: string;
   projectId: string;
   name: string;

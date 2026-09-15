@@ -87,11 +87,11 @@ interface ProviderFixtureInput {
   readonly sql: (name: string) => Promise<string>;
 }
 
-export type ProviderPluginFactory = (
+type ProviderPluginFactory = (
   input: ProviderFixtureInput,
 ) => SessionProviderPlugin | Promise<SessionProviderPlugin>;
 
-export interface ProviderFixtures {
+interface ProviderFixtures {
   /** The provider id, which is also the fixture directory's name. */
   readonly providerId: string;
   readonly observation: ProviderObservation;
@@ -108,8 +108,6 @@ export interface ProviderFixtures {
   /** Set when this build documents reading this provider's transcript. */
   readonly transcript?: {
     readonly sessionId: string;
-    /** An observed session whose stored shape this build renders nothing from. */
-    readonly unrenderableSessionId?: string;
     /**
      * Set for a cloud provider whose transcript read is its documented
      * messages endpoint: the read reaches the provider, and only that route.
@@ -688,21 +686,6 @@ export function describeProviderContract(
       assert.equal(api.requests().length, requestsAfterPass);
     }
   });
-
-  // "The read renders only what the provider actually wrote down, and a
-  // provider whose stored shape this build cannot render faithfully keeps the
-  // honest refusal instead."
-  if (fixtures.transcript?.unrenderableSessionId) {
-    test(named("refuses a stored shape it cannot render, rather than guessing"), async (t) => {
-      const { plugin } = await contractCase(t);
-      await runTest(plugin.observe());
-
-      const reading = plugin.reads?.transcript?.(fixtures.transcript?.unrenderableSessionId ?? "");
-      const read = reading ? await runTest(reading) : undefined;
-
-      assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
-    });
-  }
 
   // "a message whose author the stored shape does not name is dropped rather
   // than guessed at… it never rides an observation pass, it can express

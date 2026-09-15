@@ -113,7 +113,6 @@ interface StubOptions {
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   onDiagnostic?: AdapterDiagnosticCallback;
-  requestHeaders?: Readonly<Record<string, string>>;
   /** Observes and routes nothing: a provider whose actions are all absent. */
   routesNothing?: boolean;
 }
@@ -133,7 +132,6 @@ function stubPluginFor(
   const pass: CloudPass = cloudPass({
     provider: STUB_PROVIDER,
     defaultBaseUrl: TEST_BASE_URL,
-    ...(overrides.requestHeaders ? { requestHeaders: overrides.requestHeaders } : undefined),
     readApiKey: overrides.readApiKey ?? (() => Effect.succeed(apiKey)),
     baseUrl: TEST_BASE_URL,
     httpClient,
@@ -283,21 +281,6 @@ test("authenticates a bounded read and encodes the route a subclass asked for", 
   assert.equal(request.accept, "application/json");
   assert.equal(request.contentType, undefined);
   assert.equal(request.body, undefined);
-});
-
-test("lets a provider pin its own request headers without touching the credential", async () => {
-  const { layer, requests } = recordingHttpClient(() => jsonResponse({}));
-  const plugin = stubPluginFor(layer, {
-    requestHeaders: { Accept: "application/vnd.stub+json", "X-Stub-Api-Version": "2026-03-10" },
-  });
-
-  await runTest(plugin.observe());
-
-  const [request] = requests;
-  assert.ok(request);
-  assert.equal(request.accept, "application/vnd.stub+json");
-  assert.equal(request.headers.get("x-stub-api-version"), "2026-03-10");
-  assert.equal(request.authorization, `Bearer ${TEST_API_KEY}`);
 });
 
 // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.

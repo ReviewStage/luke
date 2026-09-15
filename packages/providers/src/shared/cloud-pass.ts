@@ -121,13 +121,6 @@ export interface CloudPassInput {
   now?: () => number;
   minimumRefreshIntervalMs?: number;
   /**
-   * The headers every request carries besides the credential, for a provider
-   * that asks for its own media type or a version pin. The authorization
-   * header is layered on after these, so nothing here can replace the
-   * credential.
-   */
-  requestHeaders?: Readonly<Record<string, string>>;
-  /**
    * Called when an observation pass fails for a reason other than a network
    * or credential fault — a TypeError in an adapter's parsing, for example —
    * or when an adapter reports a problem of its own, named by the kind.
@@ -235,8 +228,6 @@ export function cloudPass(input: CloudPassInput): CloudPass {
     },
     { nonNegative: ["minimumRefreshIntervalMs"] },
   );
-  const requestHeaders = input.requestHeaders ?? DEFAULT_REQUEST_HEADERS;
-
   let credential: string | undefined;
   /**
    * Bumped only when the credential changes or is rejected — unlike the pass
@@ -297,7 +288,7 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   ): HttpClientRequest.HttpClientRequest =>
     HttpClientRequest.make(document === undefined ? HTTP_METHOD.GET : HTTP_METHOD.POST)(address, {
       headers: {
-        ...requestHeaders,
+        ...DEFAULT_REQUEST_HEADERS,
         ...authorizationHeaders(apiKey),
       },
       ...(document === undefined
@@ -458,10 +449,10 @@ export function cloudPass(input: CloudPassInput): CloudPass {
   ): Effect.fn.Return<CloudWriteOutcome, HttpClientError.HttpClientError, HttpClient.HttpClient> {
     const name = provider.displayName;
     const requested = HttpClientRequest.post(url(route.segments, {}, route.action), {
-      // The same layering as a read: the provider's own headers first, the
-      // credential after them so no override can replace it.
+      // The same layering as a read: the shared headers first, the credential
+      // after them so no header of the route's can replace it.
       headers: {
-        ...requestHeaders,
+        ...DEFAULT_REQUEST_HEADERS,
         ...authorizationHeaders(apiKey),
       },
       // An endpoint that documents an empty request gets exactly that, not

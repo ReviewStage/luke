@@ -6,8 +6,6 @@
 export const ADAPTER_DIAGNOSTIC_KIND = {
   /** An observation pass failed for a reason that is neither a network nor a credential fault. */
   PASS_FAILURE: "pass_failure",
-  /** A read woke a workspace the provider bills for being awake. */
-  ACCIDENTAL_WAKE: "accidental_wake",
 } as const;
 
 export type AdapterDiagnosticKind =
