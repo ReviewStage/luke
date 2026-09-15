@@ -39,9 +39,7 @@ export function unavailableInvocation(
 }
 
 /** Dispatched and unanswered: the action may have happened and is never repeated on that account. */
-export function unknownInvocation(
-  invocation: Pick<NodeInvocation, "capability">,
-): NodeCapabilityResult {
+function unknownInvocation(invocation: Pick<NodeInvocation, "capability">): NodeCapabilityResult {
   return {
     status: NODE_CAPABILITY_STATUS.UNKNOWN,
     capability: invocation.capability,
@@ -56,10 +54,6 @@ export class PendingInvocations {
     { capability: string; deferred: Deferred.Deferred<NodeCapabilityResult> }
   >();
   #closed = false;
-
-  get size(): number {
-    return this.#pending.size;
-  }
 
   /**
    * Puts one ask on the ledger as it is called and answers with the effect
@@ -111,12 +105,12 @@ export type NodeInvocationHandler = (
   invocation: NodeInvocation,
 ) => Effect.Effect<NodeCapabilityResult>;
 
-export const INVOCATION_MEMORY_DEFAULTS = {
+const INVOCATION_MEMORY_DEFAULTS = {
   /** How many settled invocation ids a node remembers, so a late duplicate frame is answered rather than performed. */
   SETTLED_CAPACITY: 256,
 } as const;
 
-export interface InvocationMemoryOptions {
+interface InvocationMemoryOptions {
   readonly handler: NodeInvocationHandler;
   readonly capacity?: number;
 }

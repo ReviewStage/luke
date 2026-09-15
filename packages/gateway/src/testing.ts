@@ -32,7 +32,7 @@ import { ServerBoundTransport } from "./transport.js";
  * through text is the whole of what it is for.
  */
 
-export interface TextLoopbackTransportOptions {
+interface TextLoopbackTransportOptions {
   /** Delays each response by this many milliseconds, on the clock given, so a late answer can be tested. */
   responseDelayMs?: number;
   schedule?: (work: () => void, delayMs: number) => void;
@@ -56,8 +56,6 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   readonly #options: TextLoopbackTransportOptions;
   #dropNext = 0;
   #repeatNextInvocation = 0;
-  /** The events the server emitted while the transport was down, or that were dropped: the gap the client must find. */
-  #missed: GatewayEvent[] = [];
 
   constructor(
     host: GatewayInProcessHost,
@@ -102,7 +100,6 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   protected carryEvent(event: GatewayEvent): void {
     if (!this.connected() || this.#dropNext > 0) {
       if (this.#dropNext > 0) this.#dropNext -= 1;
-      this.#missed.push(event);
       return;
     }
     const carried = gatewayEventFromWire(throughText(gatewayEventToWire(event)));
@@ -143,10 +140,5 @@ export class TextLoopbackTransport extends ServerBoundTransport {
   /** Loses the next `count` events on the wire, as a socket that closed mid-stream would. */
   dropNextEvents(count: number): void {
     this.#dropNext = count;
-  }
-
-  /** The events the wire lost, for a test to check the client recovered every one. */
-  missed(): readonly GatewayEvent[] {
-    return [...this.#missed];
   }
 }
