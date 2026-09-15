@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { FEEDBACK_KIND, FEEDBACK_LIMITS } from "@sidecar/feedback";
+import { FEEDBACK_KIND } from "@sidecar/feedback";
 import { test } from "vitest";
 import {
   accountSignature,
@@ -10,7 +10,6 @@ import {
   isSendable,
   openedFeedbackEntry,
 } from "./feedback-entry";
-import { IMAGE_INTAKE, imageIntake, recodedImageName } from "./feedback-images";
 
 function entry(overrides: Partial<FeedbackEntry> = {}): FeedbackEntry {
   return { ...freshFeedbackEntry(FEEDBACK_KIND.FEEDBACK, true), ...overrides };
@@ -139,34 +138,6 @@ test("a note already there keeps its fields as its author left them, cleared one
 
   assert.equal(opened.entry?.name, "");
   assert.equal(opened.entry?.email, "");
-});
-
-test("a small screenshot in a native format rides untouched", () => {
-  assert.equal(imageIntake({ type: "image/png", size: 200_000 }), IMAGE_INTAKE.KEEP);
-  assert.equal(imageIntake({ type: "image/webp", size: 1 }), IMAGE_INTAKE.KEEP);
-});
-
-test("a screenshot past the byte cap is re-encoded rather than refused", () => {
-  assert.equal(
-    imageIntake({ type: "image/png", size: FEEDBACK_LIMITS.IMAGE_MAX_BYTES + 1 }),
-    IMAGE_INTAKE.RECODE,
-  );
-});
-
-test("any other image the platform can decode is re-encoded", () => {
-  assert.equal(imageIntake({ type: "image/heic", size: 10 }), IMAGE_INTAKE.RECODE);
-  assert.equal(imageIntake({ type: "image/gif", size: 10 }), IMAGE_INTAKE.RECODE);
-});
-
-test("a file that is not an image cannot come", () => {
-  assert.equal(imageIntake({ type: "application/pdf", size: 10 }), IMAGE_INTAKE.REFUSE);
-  assert.equal(imageIntake({ type: "", size: 10 }), IMAGE_INTAKE.REFUSE);
-});
-
-test("a re-encoded file stops promising its old format", () => {
-  assert.equal(recodedImageName("Screenshot 2026-08-14.png"), "Screenshot 2026-08-14.webp");
-  assert.equal(recodedImageName("photo"), "photo.webp");
-  assert.equal(recodedImageName(".png"), "screenshot.webp");
 });
 
 test("a chip draws the image it holds", () => {

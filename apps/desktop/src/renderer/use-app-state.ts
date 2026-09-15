@@ -8,7 +8,7 @@ import type { AppStateSnapshot } from "#shared/messages/app-state";
 import { rendererRegistry, rendererRuntime } from "./renderer-runtime";
 
 /** The two bridge calls a window reads its state through, and nothing else. */
-export interface AppStateSource {
+interface AppStateSource {
   subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) => () => void;
   read: () => Promise<AppStateSnapshot>;
 }
@@ -32,17 +32,12 @@ class AppStateUnread extends Data.TaggedError("AppStateUnread")<{
 type AppStateUnavailable = AppStateUnread | Cause.NoSuchElementError;
 
 /**
- * Where the state is read from. The bridge is what a window holds; a test
- * holds a source of its own, in a registry of its own, which is why the source
- * is an atom rather than a module constant.
- *
- * The two calls are thunks read at each use rather than at module load: this
- * module is imported by the tests that exercise the rule below, which have no
- * bridge. It is kept alive so a source set into a registry stands there for
- * that registry's life, rather than being swept between the set and the read
- * it was set for.
+ * Where the state is read from: the bridge this window holds. The two calls
+ * are thunks read at each use rather than at module load, and the atom is kept
+ * alive so the source stands in the registry for that registry's life rather
+ * than being swept between the set and the read it was set for.
  */
-export const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
+const appStateSourceAtom: Atom.Writable<AppStateSource> = Atom.keepAlive(
   Atom.make({
     subscribe: (onDelivered: (delivered: AppStateSnapshot) => void) =>
       window.sidecar.onAppState(onDelivered),
@@ -111,9 +106,8 @@ const adopted = (
  * subscription is every reader's: a component unmounting is no reason to stop
  * listening, and the window going away is the whole of its life.
  */
-export const appStateAtom: Atom.Atom<
-  AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>
-> = Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
+const appStateAtom: Atom.Atom<AsyncResult.AsyncResult<AppStateSnapshot, AppStateUnavailable>> =
+  Atom.keepAlive(rendererRuntime.atom((get) => adopted(deliveries(get(appStateSourceAtom)))));
 
 /**
  * The document as main holds it, read before anything is drawn over it: the

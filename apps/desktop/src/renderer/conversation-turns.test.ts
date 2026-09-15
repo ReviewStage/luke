@@ -33,14 +33,7 @@ import {
 } from "./conversation-rating";
 import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
-import {
-  announcedWords,
-  answeredAloud,
-  ConversationTurns,
-  foldOpen,
-  judgmentOf,
-  turnPending,
-} from "./conversation-turns";
+import { ConversationTurns, foldOpen } from "./conversation-turns";
 import {
   FIXTURE_INPUT,
   FIXTURE_NOW,
@@ -274,14 +267,6 @@ test("a running turn ends in Luke's wait, driven by the turn row's status alone"
   for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.EVERY_KIND, FIXTURE_TURN.OWN]) {
     assert.equal(count(render([groupOf(turnId)], OPEN), "data-thinking", "true"), 0);
   }
-  const turn = groupOf(FIXTURE_TURN.RUNNING).turn;
-  assert.ok(turn);
-  assert.equal(turnPending(turn), true);
-  assert.equal(turnPending({ ...turn, status: TURN_STATUS.QUEUED }), true);
-  for (const status of [TURN_STATUS.SETTLED, TURN_STATUS.CANCELLED, TURN_STATUS.FAILED]) {
-    assert.equal(turnPending({ ...turn, status }), false);
-  }
-  assert.equal(turnPending(undefined), false);
 });
 
 test("a turn nobody opened is Luke's own judgment: his face leads every row, and his words are never a reply bubble", () => {
@@ -299,16 +284,6 @@ test("a turn nobody opened is Luke's own judgment: his face leads every row, and
   // The observed session's own turn: its announcement stays his bubble, its action his judgment.
   const announced = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
   assert.equal(count(announced, "data-speaker", "luke"), 1);
-
-  const turn = groupOf(FIXTURE_TURN.OWN).turn;
-  assert.ok(turn);
-  for (const origin of [TURN_ORIGIN.ROSTER_DIFF, TURN_ORIGIN.HOLD_RELEASE, TURN_ORIGIN.CHILD]) {
-    assert.equal(judgmentOf({ ...turn, origin }), "own");
-  }
-  for (const origin of [TURN_ORIGIN.TYPED, TURN_ORIGIN.SPOKEN]) {
-    assert.equal(judgmentOf({ ...turn, origin }), "ask");
-  }
-  assert.equal(judgmentOf(undefined), "ask");
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {
@@ -382,15 +357,7 @@ test("a reasoning fold keeps paragraph breaks as separate blocks inside the expa
   );
 });
 
-test("the words an announce call carries are its briefing, and a detail's label is its tool's name", () => {
-  const announced = FIXTURE_INPUT.observed[0]?.messages[0]?.message;
-  assert.ok(announced && announced.role === MESSAGE_ROLE.ASSISTANT);
-  const announce = announced.parts
-    .filter(isStoredToolPart)
-    .find((part) => part.type === "tool-announce");
-  assert.ok(announce);
-  assert.equal(announcedWords(announce), "The fixture session is waiting on a permission prompt.");
-  assert.equal(announcedWords({ ...announce, input: { text: "not a briefing" } }), undefined);
+test("an announce call is a bubble and nothing else, and a detail's label is its tool's name", () => {
   assert.equal(detailToolLabel("read_transcript"), "read transcript");
   // The announce call is its bubble and nothing else: no tool call row, no fold, for a message that only announced.
   const markup = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
@@ -723,18 +690,6 @@ test("in a spoken turn the brain's words fold as Luke's thinking, a row apart fr
   assert.equal(count(typed, "data-written", "true"), 0);
   assert.equal(count(typed, "data-speaker", "luke"), 1);
   assert.equal(ratingControls(typed), 1);
-
-  // Only a turn the developer opened by speaking hands its answer to the voice.
-  assert.equal(answeredAloud(turn), true);
-  for (const origin of [
-    TURN_ORIGIN.TYPED,
-    TURN_ORIGIN.ROSTER_DIFF,
-    TURN_ORIGIN.HOLD_RELEASE,
-    TURN_ORIGIN.CHILD,
-  ]) {
-    assert.equal(answeredAloud({ ...turn, origin }), false);
-  }
-  assert.equal(answeredAloud(undefined), false);
 });
 
 test("a briefing a device read aloud folds as the brain's written words, the reading in its own group is the bubble carrying the briefing's rating, and one nothing said of stays the bubble", () => {

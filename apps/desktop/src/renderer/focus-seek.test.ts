@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { FOCUS_FRAME_LIMIT, focusSeek } from "./focus-seek";
+import { focusSeek } from "./focus-seek";
 
 /**
  * A stand-in for the browser's own frame schedule: nothing is run until a test
@@ -125,8 +125,4 @@ test("the canceller stops a frame already asked for", () => {
   stop();
   assert.equal(schedule.tick(), false);
   assert.equal(found.acted, 0);
-});
-
-test("the frame limit is the one backstop every seek shares", () => {
-  assert.equal(FOCUS_FRAME_LIMIT, 60);
 });

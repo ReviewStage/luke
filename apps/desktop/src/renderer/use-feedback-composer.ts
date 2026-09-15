@@ -63,7 +63,6 @@ export interface FeedbackComposer {
    * say what it found.
    */
   begin: (kind: FeedbackKind, fromPanel: boolean, draft?: string, returnTo?: PanelTab) => boolean;
-  takeSpokenDraft: () => string | undefined;
 }
 
 /**
@@ -95,7 +94,6 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
    * being asked for again — or left — before the celebration finished.
    */
   const finishHeld = useRef<(() => void) | undefined>(undefined);
-  const spokenDraft = useRef<string | undefined>(undefined);
   const stillRef = useRef(stillMotion);
   stillRef.current = stillMotion;
 
@@ -255,12 +253,6 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
     else surface.leave();
   }, [dropConfirmation, entry.latest, surface.leave, surface.presentation, surface.restorePanel]);
 
-  const takeSpokenDraft = useCallback(() => {
-    const draft = spokenDraft.current;
-    spokenDraft.current = undefined;
-    return draft;
-  }, []);
-
   /**
    * Takes picked or pasted files aboard. Encoding happens here on the user's
    * machine — scaled and re-written where a screenshot would not fit the
@@ -322,6 +314,5 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
     },
     confirming,
     begin,
-    takeSpokenDraft,
   };
 }

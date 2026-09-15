@@ -9,7 +9,7 @@ import {
   CREDENTIAL_PROVIDER_LIST,
   CREDENTIAL_SOURCE,
 } from "@sidecar/credentials/vocabulary";
-import { FEEDBACK_KIND, feedbackKindForLifecycleEvent } from "@sidecar/feedback";
+import { FEEDBACK_KIND } from "@sidecar/feedback";
 import { WingFace as LukeFace } from "@sidecar/panel";
 import { FIXTURE_EPOCH_MS, FIXTURE_SPEAKING_CAPTIONS } from "@sidecar/session/fixtures";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
@@ -571,30 +571,18 @@ export function App(): React.JSX.Element {
     setSettingsView,
   ]);
 
-  // The mode main decided, and the one event only a window can be told: the
-  // feedback composer a spoken request opens.
+  // The mode and the tab main decided for this window.
   useEffect(() => {
     const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
       if (eventName === "mode:compact") applyAuthoritativeMode("compact");
       if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
       if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
-      // A spoken feedback request stands the surface straight down to
-      // the composer's shape, on the kind that was asked for. The window was
-      // expanded before this event was sent; this is the renderer's half. The
-      // tab still moves to settings so that coming back to the panel later
-      // lands beside the section the shape belongs to, and a draft a spoken
-      // open left waiting is taken up here, then forgotten.
-      const feedbackKind = feedbackKindForLifecycleEvent(eventName);
-      if (feedbackKind) {
-        changeTab(PANEL_TAB.SETTINGS);
-        feedback.begin(feedbackKind, false, feedback.takeSpokenDraft());
-      }
     });
     return () => {
       cancelHover();
       removeLifecycle();
     };
-  }, [applyAuthoritativeMode, cancelHover, changeTab, feedback.begin, feedback.takeSpokenDraft]);
+  }, [applyAuthoritativeMode, cancelHover, changeTab]);
 
   // The one greeting an unauthed launch gets: the panel opens on the sign-in
   // gate exactly once, then behaves like any panel — Escape, the pointer, and

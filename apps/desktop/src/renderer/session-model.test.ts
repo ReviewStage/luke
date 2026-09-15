@@ -30,11 +30,9 @@ import {
   type SessionArrangement,
   type SessionFilter,
   type SessionView,
-  sessionFiltersFromSpoken,
   sessionListRuns,
   sessionRunKeys,
   sessionTally,
-  spokenSearchOutcome,
   toggledSessionFilters,
   workspaceTrayActions,
   workspaceTrayChange,
@@ -507,24 +505,6 @@ test("the voice filter narrows to realtime voice chats and has a spoken name", (
     ),
     ["codex-voice"],
   );
-  assert.deepEqual(sessionFiltersFromSpoken([SESSION_FILTER.VOICE]), [SESSION_FILTER.VOICE]);
-});
-
-test("a spoken narrowing of several values reads as the matching chips combined", () => {
-  assert.deepEqual(
-    sessionFiltersFromSpoken([SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX, SESSION_FILTER.VOICE]),
-    [SESSION_FILTER.LOCAL, PROVIDER_ID.CODEX, SESSION_FILTER.VOICE],
-  );
-  // A repeated value is one chip, not a tighter ask.
-  assert.deepEqual(sessionFiltersFromSpoken([SESSION_FILTER.CLOUD, SESSION_FILTER.CLOUD]), [
-    SESSION_FILTER.CLOUD,
-  ]);
-  // The whole list is the empty selection.
-  assert.deepEqual(sessionFiltersFromSpoken(["all"]), []);
-  // A value no chip of this build holds makes the whole ask nothing rather
-  // than a guess: a selection quietly missing one of its values would show
-  // more than the ask named.
-  assert.equal(sessionFiltersFromSpoken([SESSION_FILTER.LOCAL, "not-an-agent"]), undefined);
 });
 
 // The fixture above covers the agents it happens to contain. Every agent the
@@ -878,9 +858,6 @@ test("sessions Superset manages earn a chip and can be narrowed to", () => {
   assert.deepEqual(narrowed.filters, [SESSION_FILTER.SUPERSET]);
   assert.deepEqual(idsOf(narrowed), ["claude-managed"]);
   assert.equal(narrowed.total, 2);
-
-  // The spoken vocabulary is the chips' own, so the same word narrows by voice.
-  assert.deepEqual(sessionFiltersFromSpoken(["superset"]), [SESSION_FILTER.SUPERSET]);
 });
 
 test("an app filter matches annotations as well as a namesake provider", () => {
@@ -932,9 +909,6 @@ test("an app filter matches annotations as well as a namesake provider", () => {
     ).sessions.map((session) => session.id),
     ["codex-conductor"],
   );
-  assert.deepEqual(sessionFiltersFromSpoken([SESSION_APPLICATION_ID.CHATGPT]), [
-    SESSION_APPLICATION_ID.CHATGPT,
-  ]);
 });
 
 // A Superset chip counting every session narrows nothing, like a lone
@@ -1145,41 +1119,6 @@ test("a query finds a session by its status word, even under a busy detail line"
 
   const waiting = arrangeSessions(rows, view({ query: "needs you" }));
   assert.deepEqual(idsOf(waiting), ["stuck"]);
-});
-
-test("a spoken search is told exactly what the list will show", () => {
-  const rows = liveRows(
-    normalizeSession(CLAUDE_PROVIDER, {
-      providerSessionId: "parser",
-      title: "Rework the parser",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: 1_000,
-    }),
-    normalizeSession(CODEX_PROVIDER, {
-      providerSessionId: "login",
-      title: "Fix the login flow",
-      status: SESSION_STATUS.WORKING,
-      lastActivityAt: 2_000,
-    }),
-  );
-
-  assert.deepEqual(spokenSearchOutcome(rows, view({ query: "parser" })), {
-    matches: 1,
-  });
-  // An emptied search answers with its honest zero rather than a refusal —
-  // and when the filter in force is what hides the matches, the note says so
-  // the way the list's own empty state does.
-  assert.deepEqual(spokenSearchOutcome(rows, view({ query: "zanzibar" })), {
-    matches: 0,
-    note: "No sessions match those words.",
-  });
-  assert.deepEqual(
-    spokenSearchOutcome(rows, view({ filters: [PROVIDER_ID.CODEX], query: "parser" })),
-    {
-      matches: 0,
-      note: "No shown sessions match, but the filter in force hides 1 session that would.",
-    },
-  );
 });
 
 test("a blank query is no search at all", () => {

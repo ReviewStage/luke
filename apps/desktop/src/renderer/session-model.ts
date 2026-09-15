@@ -1,4 +1,3 @@
-import { SESSION_LIST_ALL } from "@sidecar/actions";
 import { SESSION_LIST_SORT, type SessionListSort } from "@sidecar/guide";
 import {
   ACTION_KIND,
@@ -89,76 +88,6 @@ export function sameSessionFilters(
   second: readonly SessionFilter[],
 ): boolean {
   return first.length === second.length && first.every((filter) => second.includes(filter));
-}
-
-/** One spoken value read as the chip it names, or nothing when no chip holds it. */
-function sessionFilterFromSpoken(value: string): SessionFilter | undefined {
-  if (
-    value === SESSION_FILTER.LOCAL ||
-    value === SESSION_FILTER.CLOUD ||
-    value === SESSION_FILTER.VOICE
-  ) {
-    return value;
-  }
-  if (isSessionApplicationId(value)) return value;
-  if (isHostedAgentId(value)) return value;
-  return isProviderId(value) ? value : undefined;
-}
-
-/**
- * Reads a spoken narrowing into the list's own selection. The values are the
- * same strings the chips use — the coarse scopes, voice kind, app ids, and
- * provider ids — so a validated spoken ask maps one-to-one, and several
- * values combine exactly as the matching chips would. A spoken ask says what
- * the list should show, so it replaces a hand-picked combination rather than
- * joining it: `all` is the empty selection. A value no chip of this build
- * holds makes the whole ask nothing rather than a guess — a selection quietly
- * missing one of its values would show more than the ask named while
- * reporting the narrowing happened.
- */
-export function sessionFiltersFromSpoken(
-  values: readonly string[],
-): readonly SessionFilter[] | undefined {
-  if (values.length === 1 && values[0] === SESSION_LIST_ALL) return [];
-  const selection: SessionFilter[] = [];
-  for (const value of values) {
-    const filter = sessionFilterFromSpoken(value);
-    if (filter === undefined) return undefined;
-    if (!selection.includes(filter)) selection.push(filter);
-  }
-  return selection;
-}
-
-/** What a spoken search is told it did: the count, and the honest word for a zero. */
-interface SpokenSearchOutcome {
-  matches: number;
-  note?: string;
-}
-
-/**
- * What a spoken search is told it did, read against the same arrangement the
- * panel is about to draw. A spoken filter that would show nothing is refused
- * before it is carried, but an emptied search is the list's honest answer
- * rather than a stale choice — so the outcome carries the count instead of a
- * refusal, and names the matches a filter is hiding the way the list's own
- * empty state does, so the sentence Luke says can never claim rows the list
- * will not draw.
- */
-export function spokenSearchOutcome(
-  sessions: readonly SessionView[],
-  view: SessionArrangement,
-): SpokenSearchOutcome {
-  const list = arrangeSessions(sessions, view);
-  const matches = list.sessions.length;
-  if (matches > 0) return { matches };
-  const beyond = list.search?.beyondFilter ?? 0;
-  if (beyond === 0) return { matches, note: "No sessions match those words." };
-  return {
-    matches,
-    note: `No shown sessions match, but the filter in force hides ${beyond} ${
-      beyond === 1 ? "session" : "sessions"
-    } that would.`,
-  };
 }
 
 /**

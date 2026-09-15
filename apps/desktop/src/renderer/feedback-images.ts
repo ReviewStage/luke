@@ -3,10 +3,10 @@ import { FEEDBACK_IMAGE_TYPE, FEEDBACK_LIMITS, isFeedbackImageType } from "@side
 
 /**
  * What becomes of a picked file: it rides as it is, it is re-encoded first, or
- * it cannot come. Decided from the type and size alone, so the decision is
- * testable without a canvas.
+ * it cannot come. Decided from the type and size alone, before a canvas is
+ * reached for.
  */
-export const IMAGE_INTAKE = {
+const IMAGE_INTAKE = {
   KEEP: "keep",
   RECODE: "recode",
   REFUSE: "refuse",
@@ -26,7 +26,7 @@ const RECODE_ROUNDS = [
   { maxEdge: 1400, quality: 0.6 },
 ] as const;
 
-export function imageIntake(file: { type: string; size: number }): ImageIntake {
+function imageIntake(file: { type: string; size: number }): ImageIntake {
   // A format the submission carries natively rides untouched while it fits;
   // past the cap it is re-encoded rather than refused, because the cap exists
   // for a request-body limit the user should never have to think about.
@@ -39,7 +39,7 @@ export function imageIntake(file: { type: string; size: number }): ImageIntake {
 }
 
 /** The recode writes WebP, so the name should stop promising the old format. */
-export function recodedImageName(name: string): string {
+function recodedImageName(name: string): string {
   const stem = name.replace(/\.[^.]*$/, "");
   return `${stem || "screenshot"}.webp`;
 }
