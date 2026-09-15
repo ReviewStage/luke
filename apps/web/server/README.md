@@ -1198,8 +1198,11 @@ is left exactly as it was. Ids, keys, sequences, instants, states, and fixed
 vocabulary words stand clear so they can be indexed, and so does
 `workspace_file`'s `content`: the notebook is stored as written, readable by
 an operator the way the conversation tables are, since migration
-`0033_workspace_file_content` dropped its sealed column (and every row then
-standing, which no SQL could open) for a plain one.
+`0033_workspace_file_content` replaced its sealed column with a plain one. That
+migration adds `content` only where it does not stand, keeps a row already
+carrying plaintext there, and drops every row carrying none, since no SQL can
+open an envelope; the rows it dropped on production were untouched seeds an
+account's next turn writes again.
 
 The conversation tables — `conversations`, `messages`, `turns`, `events`,
 `tool_sets`, and `provider_cursors` — are the shape `plan/storage-plan.md` on the
