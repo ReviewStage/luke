@@ -918,8 +918,8 @@ spoken as the build's own note for it, never composed with the ask. One
 spoken ask leaves one developer line: the transcript's row, cut at the
 delegation by the voice writer under the delegation's id. Eve's received
 message for a spoken turn is the question the service composed around those
-words, which stands on the ask's record and is not written as a user row,
-where a typed ask's, an observation's, and a hold release's are;
+words, which is not written as a user row, where a typed ask's, an
+observation's, and a hold release's are;
 `BRAIN_HOST_TURN_KIND` says for each kind whose row the received message is,
 so the relay consults the table rather than a branch. The line and the ask
 share one id, the delegation's, which the service submits the ask under, so

@@ -710,7 +710,6 @@ test("a delegation arriving after the developer's line settled adopts that line 
       conversationId: live.conversation.conversationId,
       clientId: "dl_late",
       origin: ASK_ORIGIN.SPOKEN,
-      question: "Open the failing one.",
       createdAt: new Date(NOW),
     }),
   );
