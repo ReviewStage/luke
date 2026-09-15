@@ -1,6 +1,6 @@
 {
   "name": "@luke/ios-parity",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "Diffs the iOS app's hand-transcribed Swift vocabularies against the TypeScript sets they mirror",

@@ -1,6 +1,6 @@
 {
   "name": "@luke/trace-export",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "description": "Turns a recorded development trace into the document the local unbox-ai viewer opens",
