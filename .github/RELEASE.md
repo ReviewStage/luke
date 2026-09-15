@@ -50,9 +50,12 @@ nothing.
 2. **Confirm the hosted service is live.** The service deploys from `main` on merge while
    the desktop ships on the tag, so a build released ahead of its service answers 404
    where a feature expected an endpoint. The one endpoint with no fallback at all is
-   `/api/voice/introduction-mint` — the spoken introduction runs before any account or
-   key exists, so that endpoint is its only possible voice, and a desktop carrying the
-   introduction must not be tagged until the service serving it is live.
+   `/api/voice/introduction` — the spoken introduction runs before any account or key
+   exists, so that WebSocket is its only possible voice, and a desktop carrying the
+   introduction must not be tagged until the service serving it is live. The two
+   Realtime mints beside it, `/api/voice/mint` and `/api/voice/introduction-mint`, serve
+   only the installed desktops of releases before 0.6.0 and go with LUKE-226 once those
+   have updated.
 
 3. **Tag the merged commit.** The tag must point at the squash-merged commit on `main`
    and its version must match `apps/desktop/package.json` exactly; the workflow refuses a
