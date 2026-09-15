@@ -1,1 +1,1 @@
-ALTER TABLE "asks" DROP COLUMN "question";
+ALTER TABLE "asks" DROP COLUMN IF EXISTS "question";
