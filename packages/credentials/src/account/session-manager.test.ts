@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer, HTTP_STATUS, jsonResponse } from "@sidecar/wire/testing";
+import {
+  type FakeResponder,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  jsonResponse,
+} from "@sidecar/wire/testing";
 import { Deferred, Effect, Exit, Fiber, type Scope, Stream } from "effect";
-import { AccountClient, type FetchLike, type StoredAccount } from "./client.js";
+import { AccountClient, type StoredAccount } from "./client.js";
 import { AccountSessionManager } from "./session-manager.js";
 import { ACCOUNT_PROVIDER, ACCOUNT_STATUS } from "./snapshot.js";
 
@@ -180,7 +185,7 @@ it.effect("refresh keeps a valid stored account signed in without rewriting it",
  * over must never be read as the service's own refusal.
  */
 function refreshingClient(tokenEndpoint: (request: Request) => Promise<Response>): AccountClient {
-  const fetchStub: FetchLike = async (input, init) => {
+  const fetchStub: FakeResponder = async (input, init) => {
     const request = new Request(input, init);
     if (request.url.endsWith("/oauth2/userinfo")) {
       return jsonResponse({ error: "invalid_token" }, HTTP_STATUS.UNAUTHORIZED);

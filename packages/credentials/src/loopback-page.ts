@@ -35,7 +35,7 @@ export const LOOPBACK_CONNECTION_SOURCE = {
 export type LoopbackConnectionSource =
   (typeof LOOPBACK_CONNECTION_SOURCE)[keyof typeof LOOPBACK_CONNECTION_SOURCE];
 
-export interface LoopbackPage {
+interface LoopbackPage {
   tone: LoopbackPageTone;
   /** The pill's one word or two: "Signed in", "Not completed". */
   badge: string;
