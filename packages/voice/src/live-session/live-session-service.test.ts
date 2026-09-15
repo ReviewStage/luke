@@ -55,7 +55,6 @@ import {
 import type { DeveloperUtteranceRecord, LiveRecord, LukeUtteranceRecord } from "./live-record.js";
 import {
   ANTICIPATION_FACTS_PREFIX,
-  ASK_UNRECORDED_NOTE,
   LiveSessionService,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -1737,7 +1736,7 @@ it.effect(
 );
 
 it.effect(
-  "an ask whose record write fails is answered with the unrecorded note once, and its run's later events reach nothing",
+  "an ask whose record write lands nothing is answered all the same: no note is spoken, and the run's deferred events are replayed",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1753,79 +1752,58 @@ it.effect(
         runId: "run-1",
         sentence: "Sent.",
       });
+      yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
       f.record.release(false);
       yield* settle();
       const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 1);
-      assert.equal(
-        commentary[0] && "content" in commentary[0] && commentary[0].content,
-        ASK_UNRECORDED_NOTE,
+      assert.deepEqual(
+        commentary.map((event) => ("content" in event ? event.content : undefined)),
+        ["Sent."],
       );
       assert.equal(
         commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
         "item_1",
       );
-      sideband.acknowledge(0, 1000, 1100);
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-        runId: "run-1",
-        sentence: "Late.",
-      });
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
-        runId: "run-1",
-        end: LIVE_BRAIN_RUN_END.FAILED,
-      });
-      yield* advanceClock(1000);
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       assert.equal(f.record.developer.length, 0);
     }),
 );
 
 it.effect(
-  "a steered ask whose sibling's record write fails is settled once every write is in: one unrecorded note, nothing spoken",
+  "a follow-up delegated seconds after an ask, whose own write lands nothing, is spoken to as the sibling it is: no note, the exchange's reply said once",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
       const sideband = yield* f.open();
       yield* settle();
       f.record.hold();
-      sideband.input("What failed?", 0, 800);
+      sideband.input("Can we add captions?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      sideband.input("In the API repo.", 5000, 5800);
-      sideband.delegation("item_2", 5900);
+      sideband.input("Is that possible?", 3000, 3800);
+      sideband.delegation("item_2", 3900);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
         runId: "run-2",
-        sentence: "Two tests.",
+        sentence: "Yes, the live route can carry captions.",
       });
-      f.record.release(false);
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
       f.record.release(true);
       yield* settle();
+      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
+      f.record.release(false);
+      yield* settle();
       const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.equal(commentary.length, 1);
-      assert.equal(
-        commentary[0] && "content" in commentary[0] && commentary[0].content,
-        ASK_UNRECORDED_NOTE,
+      assert.deepEqual(
+        commentary.map((event) => ("content" in event ? event.content : undefined)),
+        ["Yes, the live route can carry captions."],
       );
       assert.equal(
         commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
-        "item_1",
+        "item_2",
       );
-      sideband.acknowledge(0, 6000, 6100);
-      f.brain.fire({
-        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
-        runId: "run-2",
-        sentence: "Late.",
-      });
-      yield* settle();
-      assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
       assert.equal(f.record.developer.length, 1);
     }),
 );

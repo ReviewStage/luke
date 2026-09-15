@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
-  ASK_UNRECORDED_NOTE,
   LIVE_BRAIN_RUN_END,
   LIVE_BRAIN_RUN_EVENT,
   LIVE_BRAIN_SUBMISSION,
@@ -412,20 +411,20 @@ test("a delegation delivered ahead of the words it is about is held, and is the 
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, IGNORED, WRITTEN]);
 });
 
-test("an ask the record refuses is answered with the unrecorded note alone, and its reply is dropped", async () => {
+test("an ask the record refuses is answered all the same: nothing is said of the record, and the reply is spoken", async () => {
   const live = await target(false);
   const f = await stand(live);
   await f.open();
 
   f.socket.receive(heard("Stop the fixture.", 600, 1800));
   f.socket.receive(delegated("dl_2", 2000));
-  await until(() => f.commentary().length === 1, "the refusal to be spoken");
+  await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
   f.brain.reply("run-1", "Stopping it.");
-  await sleep(20);
+  await until(() => f.commentary().length === 1, "the reply to be spoken");
 
   assert.deepEqual(
     f.commentary().map((event) => [event.delegation_id, event.content]),
-    [["dl_2", ASK_UNRECORDED_NOTE]],
+    [["dl_2", "Stopping it."]],
   );
   assert.deepEqual(await messageRows(live.conversation), []);
   const refused = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION } as const;
