@@ -1,12 +1,7 @@
 import assert from "node:assert/strict";
 import { PRODUCT_SETTING_VALUE } from "@sidecar/analytics";
 import { CREDENTIAL_PROVIDER_ID, CREDENTIAL_SOURCE } from "@sidecar/credentials/vocabulary";
-import {
-  APP_SETTING_ID,
-  APP_SETTING_ID_LIST,
-  APP_SETTING_KIND,
-  isAppSettingId,
-} from "@sidecar/guide";
+import { APP_SETTING_ID, APP_SETTING_KIND, isAppSettingId } from "@sidecar/guide";
 import { isLiveVoice, LIVE_DEFAULTS, LIVE_VOICE, LIVE_VOICE_LIST } from "@sidecar/live";
 import { PROVIDER_ID } from "@sidecar/session";
 import { test } from "vitest";
@@ -175,7 +170,7 @@ test("every settings id is described by exactly one field, and placed on one pag
       assert.equal(settingFieldForGuideId(id), field, id);
     }
   }
-  for (const id of APP_SETTING_ID_LIST) {
+  for (const id of Object.values(APP_SETTING_ID)) {
     // Which calendars count is chosen on the rows themselves, so it is the one
     // id no field stores; the page table names it all the same.
     if (id === APP_SETTING_ID.CALENDAR_SELECTED) {

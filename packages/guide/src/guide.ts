@@ -107,7 +107,7 @@ export const APP_UPDATE_WAIT = {
   DOWNLOADING: "downloading",
 } as const;
 
-export type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
+type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
 
 export const AppUpdateWaitSchema = Schema.Literals(Object.values(APP_UPDATE_WAIT));
 

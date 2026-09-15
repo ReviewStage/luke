@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
+import type { UnparsedWireValue } from "@sidecar/wire";
+import { Result, Schema } from "effect";
+import { test } from "vitest";
+import { APP_SETTING_ID, AppSettingIdSchema } from "./app-settings.js";
 import {
   APP_PANEL_TAB,
-  APP_SETTING_ID,
   APP_SETTING_KIND,
   APP_UPDATE_ACTION,
   APP_UPDATE_WAIT,
   AppPanelTabSchema,
-  AppSettingIdSchema,
   AppSettingKindSchema,
   AppUpdateActionSchema,
   AppUpdateButtonSchema,
@@ -15,10 +17,7 @@ import {
   FeedbackComposerKindSchema,
   SESSION_LIST_SORT,
   SessionListSortSchema,
-} from "@sidecar/guide";
-import type { UnparsedWireValue } from "@sidecar/wire";
-import { Result, Schema } from "effect";
-import { test } from "vitest";
+} from "./guide.js";
 
 const NOTHING_ANY_VOCABULARY_HOLDS: readonly UnparsedWireValue[] = [
   "",
