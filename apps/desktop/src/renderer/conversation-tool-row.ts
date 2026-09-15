@@ -13,7 +13,6 @@ import {
   MESSAGE_REQUEST,
   OPEN_REQUEST,
   PANEL_REQUEST,
-  REMEMBER_REQUEST,
   RENAME_SESSION_REQUEST,
   RENAME_WORKSPACE_REQUEST,
   SETTING_REQUEST,
@@ -526,20 +525,6 @@ function composeRuns(
         runs: [{ text: read.ok ? UPDATE_WORDS[read.value.action] : "Pressed the Updates row" }],
       };
     }
-    case ACTION_KIND.REMEMBER: {
-      const read = parsedRequest(REMEMBER_REQUEST, input);
-      return {
-        runs: [
-          {
-            text: read.ok
-              ? `Remembered "${read.value.words}"${read.value.replaces === undefined ? "" : " in place of an earlier note"}`
-              : "Remembered something",
-          },
-        ],
-      };
-    }
-    case ACTION_KIND.FORGET:
-      return { runs: [{ text: "Forgot something remembered before" }] };
   }
 }
 

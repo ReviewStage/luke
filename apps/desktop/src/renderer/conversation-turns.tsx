@@ -16,7 +16,6 @@ import {
   ProviderMark,
   SearchIcon,
   StopIcon,
-  TrashIcon,
   WingFace,
 } from "@sidecar/panel";
 import {
@@ -162,8 +161,6 @@ const ROW_GLYPH = {
   [TOOL_ROW_KIND.PANEL]: DisplayIcon,
   [TOOL_ROW_KIND.FEEDBACK]: MegaphoneIcon,
   [TOOL_ROW_KIND.UPDATE]: DownloadIcon,
-  [TOOL_ROW_KIND.REMEMBER]: BookIcon,
-  [TOOL_ROW_KIND.FORGET]: TrashIcon,
   [TOOL_ROW_KIND.ROSTER]: ListIcon,
   [TOOL_ROW_KIND.TRANSCRIPT]: DocumentIcon,
   [TOOL_ROW_KIND.WORKSPACE_READ]: DocumentIcon,
