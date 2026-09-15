@@ -73,7 +73,7 @@ export interface SessionToolContext extends ToolContext {
   journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
 }
 
-type SessionToolModule = ToolModule<WireRecord, SessionToolContext>;
+export type SessionToolModule = ToolModule<WireRecord, SessionToolContext>;
 
 /** A text trimmed and refused when left with nothing. */
 function trimmedText(description: string): EffectSchema.Codec<string, string> {
