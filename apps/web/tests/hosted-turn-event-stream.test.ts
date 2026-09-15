@@ -28,6 +28,7 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { DISPATCH_QUERY } from "../server/function-dispatch";
 import {
   FUNCTION_GROUP,
@@ -83,6 +84,7 @@ const relay = new StreamRelay({
   asks: askRecord(),
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
+  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -166,6 +168,7 @@ function standingFor(target: ConversationTarget): RelayStanding {
   return {
     sessionId: `wrun_${randomUUID()}`,
     target,
+    kind: CONVERSATION_KIND.MAIN,
     turn: BRAIN_HOST_TURN.SPOKEN,
     model: "scripted-model",
     state: memoryRelayState(),

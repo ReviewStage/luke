@@ -332,6 +332,7 @@ it.effect(
             stops.push([stopped.conversationId, session, eveTurnId, turnId]);
           }),
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
@@ -339,6 +340,7 @@ it.effect(
         sessionId,
         target,
         turn: BRAIN_HOST_TURN.TYPED,
+        kind: CONVERSATION_KIND.MAIN,
         state: memoryRelayState(),
       };
       const start = (turn: string, deliveries: readonly string[]): MessageStreamEvent => {
@@ -491,6 +493,7 @@ it.effect(
             stops.push([stopped.conversationId, session, eveTurnId, stoppedTurn]);
           }),
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
@@ -501,7 +504,13 @@ it.effect(
       await database.run(
         relay.handle(
           { ...started, meta: { ...started.meta, deliveryIds: ["delivery-l"] } },
-          { sessionId, target, turn: BRAIN_HOST_TURN.TYPED, state: memoryRelayState() },
+          {
+            sessionId,
+            target,
+            kind: CONVERSATION_KIND.MAIN,
+            turn: BRAIN_HOST_TURN.TYPED,
+            state: memoryRelayState(),
+          },
         ),
       );
       assert.deepEqual(stops, [
@@ -601,12 +610,14 @@ it.effect(
         asks: askEffects,
         stopTurn: () => Effect.void,
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: () => undefined,
       });
       const standing: RelayStanding = {
         sessionId,
         target: { userId, conversationId },
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.TYPED,
         state: memoryRelayState(),
       };

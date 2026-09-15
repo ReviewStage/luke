@@ -1,6 +1,10 @@
 export {
   askInputText,
   BRAIN_INPUT_MARKER,
+  CHILD_COMPLETION_STATUS,
+  type ChildCompletion,
+  type ChildCompletionStatus,
+  childCompletionInputText,
   childTaskInputText,
   holdReleasedInputText,
   standingContextText,

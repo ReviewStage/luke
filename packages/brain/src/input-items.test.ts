@@ -6,15 +6,18 @@ import {
   type Session,
   type SessionProvider,
 } from "@sidecar/session";
-import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
+import { isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import {
   askInputText,
   BRAIN_INPUT_MARKER,
+  CHILD_COMPLETION_STATUS,
+  childCompletionInputText,
   childTaskInputText,
   holdReleasedInputText,
   wakeInputText,
 } from "./input-items.js";
+import { maximumChildTaskLength } from "./tools/names.js";
 import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 
 const NOW = 1_800_000_000_000;
@@ -114,4 +117,71 @@ test("a child task item is the subagent marker, a space, and the task as briefed
     childTaskInputText("Summarise the fixture repository's open questions."),
     `${BRAIN_INPUT_MARKER.SUBAGENT_TASK} Summarise the fixture repository's open questions.`,
   );
+});
+test("a child-completion item opens with its marker and carries the child, its end, and its final reply as data", () => {
+  const text = childCompletionInputText(
+    {
+      childId: "child-1",
+      label: "fixture label",
+      status: CHILD_COMPLETION_STATUS.FAILED,
+      result: "Partial notes.",
+      failure: "model",
+    },
+    NOW,
+  );
+  assert.equal(
+    text.split("\n")[0],
+    `${BRAIN_INPUT_MARKER.CHILD_COMPLETION} ${new Date(NOW).toISOString()}`,
+  );
+  assert.deepEqual(itemBody(text), {
+    child_id: "child-1",
+    label: "fixture label",
+    status: CHILD_COMPLETION_STATUS.FAILED,
+    result: "Partial notes.",
+    truncated: false,
+    failure: "model",
+  });
+  // A child with no label and no failure carries neither key, and a run that completed says so.
+  assert.deepEqual(
+    itemBody(
+      childCompletionInputText(
+        {
+          childId: "child-2",
+          label: undefined,
+          status: CHILD_COMPLETION_STATUS.COMPLETED,
+          result: "Done.",
+          failure: undefined,
+        },
+        NOW,
+      ),
+    ),
+    {
+      child_id: "child-2",
+      status: CHILD_COMPLETION_STATUS.COMPLETED,
+      result: "Done.",
+      truncated: false,
+    },
+  );
+});
+
+test("a child's final reply past the task bound is cut from the front, keeping its conclusion, and said to be cut", () => {
+  const result = `${"a".repeat(maximumChildTaskLength)}tail`;
+  const body = itemBody(
+    childCompletionInputText(
+      {
+        childId: "child-3",
+        label: undefined,
+        status: CHILD_COMPLETION_STATUS.CANCELLED,
+        result,
+        failure: undefined,
+      },
+      NOW,
+    ),
+  );
+  assert.equal(body.truncated, true);
+  const kept = body.result;
+  assert.ok(isWireString(kept));
+  assert.equal(kept.length, maximumChildTaskLength);
+  assert.ok(kept.endsWith("tail"));
+  assert.ok(kept.startsWith("aaaa"));
 });

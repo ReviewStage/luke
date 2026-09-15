@@ -1,9 +1,9 @@
 /**
- * recorded-session.ts -- the conversation row's session, read and claimed without eve's code.
+ * recorded-session.ts -- the conversation row's session, read, claimed, and locked without eve's code.
  *
  * The statements over a conversation's record that a handover to eve needs:
- * the eve session it runs in, where one has been recorded, and the
- * forward-only claim of a session for it. They stand apart from the
+ * the eve session it runs in, where one has been recorded; the forward-only
+ * claim of a session for it; and its row lock. They stand apart from the
  * admission in `conversation.ts` on purpose. The admission reads the caller
  * through the door's authenticators, which import the eve package, and the
  * opener's bundle is the scheduled tick's function, which talks to eve over
@@ -87,6 +87,20 @@ const findRecordedSession = SqlSchema.findOneOption({
     ),
 });
 
+const lockRow = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (target) =>
+    Effect.flatMap(
+      SqlClient.SqlClient,
+      (sql) => sql`
+        select id from conversations
+        where id = ${target.conversationId} and user_id = ${target.userId} and deleted_at is null
+        for update
+      `,
+    ),
+});
+
 /** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
 export function recordedRuntimeSession(
   target: ConversationTarget,
@@ -122,3 +136,17 @@ export const claimRuntimeSession = /* @__PURE__ */ Effect.fn("claimRuntimeSessio
   const recorded = yield* findRecordedSession(target.conversationId);
   return Option.isSome(recorded) && recorded.value.runtimeSessionId === runtimeSessionId;
 });
+
+/**
+ * The conversation's row lock, the same one an ask's dispatch takes, for a
+ * caller inside a transaction about to hand eve a turn: two handovers into
+ * a conversation with no session would each open one, and the one the
+ * forward-only claim loses would never have its turn read, so the second
+ * waits here, reads the session the first opened, and sends into it.
+ * Answers whether the row stands for the account.
+ */
+export function lockConversationRow(
+  target: ConversationTarget,
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(lockRow(target), Option.isSome);
+}

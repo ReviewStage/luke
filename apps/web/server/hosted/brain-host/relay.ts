@@ -1,4 +1,4 @@
-import { Effect, type Schema } from "effect";
+import { Cause, Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -29,6 +29,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
@@ -128,10 +129,14 @@ export function memoryRelayState(initial: RelayState = EMPTY_RELAY_STATE): Relay
   };
 }
 
+type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
+
 /** The session an event belongs to and the conversation the host admitted it for. */
 export interface RelayStanding {
   readonly sessionId: string;
   readonly target: ConversationTarget;
+  /** The kind of conversation admitted, as its row says; a child's turn end owes its parent a completion. */
+  readonly kind: ConversationKind;
   /** The kind of turn the request that opened the current turn named; nothing when it named none. */
   readonly turn: BrainHostTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
@@ -165,6 +170,8 @@ interface StreamRelaySeams {
   ) => RelayEffect<void>;
   /** Puts a turn's briefing on offer, once its announce call is on the journal; answers whether the offer landed. */
   readonly offer: (target: ConversationTarget, turnId: string) => RelayEffect<boolean>;
+  /** Delivers a child's completion to its parent once the child's turn is sealed: the mark on the child's row, then the one turn into the parent. */
+  readonly deliverCompletion: (child: ConversationTarget) => RelayEffect<void>;
   readonly now: () => number;
   /** Where a write the writer refused is said; the relay never throws into eve's turn. */
   readonly report: (message: string) => void;
@@ -689,6 +696,20 @@ export class StreamRelay {
       // that settles it, which a dropped turn would answer with nothing.
       if (!sealed) return;
       standing.state.update((state) => this.#without(state, eveTurnId));
+      // A child's sealed turn is a completion owed to its parent, delivered
+      // from here so the parent hears of it the moment it is on record; the
+      // seam claims the child's row before it sends, so an end eve re-emits
+      // or the sweep a minute later delivers nothing twice. A delivery that
+      // fails is said and left to the sweep: the seal stands, and a hook that
+      // failed here would only have eve tell the same end again.
+      if (standing.kind !== CONVERSATION_KIND.CHILD) return;
+      yield* Effect.catchCause(this.#seams.deliverCompletion(standing.target), (cause) => {
+        if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+        this.#seams.report(
+          `The completion of child ${standing.target.conversationId} could not be delivered from turn ${eveTurnId}: ${String(Cause.squash(cause))}.`,
+        );
+        return Effect.void;
+      });
     });
   }
 
