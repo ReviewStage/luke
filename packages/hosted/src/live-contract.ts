@@ -13,12 +13,7 @@ import {
   SEED_ITEM_TYPE,
   SEED_ROLE,
 } from "@sidecar/live";
-import {
-  EXCESS_KEYS,
-  SCHEMA_REFUSAL,
-  type SchemaRead,
-  type UnparsedWireValue,
-} from "@sidecar/wire";
+import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { type HostedQuota, hostedQuotaSchema } from "./service-wire.js";
@@ -242,7 +237,7 @@ export interface SessionAttachedFrame {
 }
 
 /** Either frame a socket may open with. */
-export type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
+type SessionOpeningFrame = SessionCreateFrame | SessionAttachFrame;
 
 /** The desktop's word on its peer after the handshake: idle, or heard again. */
 export interface SessionActivityFrame {
@@ -517,25 +512,10 @@ function admittedAnswer<Value, Encoded>(
   return Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(value));
 }
 
-/** The value a schema admitted, or the refusal and where it happened. */
-function read<Value, Encoded>(
-  schema: Schema.Codec<Value, Encoded>,
-  value: UnparsedWireValue,
-): SchemaRead<Value> {
-  return Result.match(readEither(schema)(value), {
-    onFailure: ({ refusal, path }) => ({ ok: false, refusal, path }),
-    onSuccess: (parsed) => ({ ok: true, value: parsed }),
-  });
-}
-
 export function sessionCreateFrameFromWire(
   value: UnparsedWireValue,
 ): SessionCreateFrame | undefined {
   return admitted(sessionCreateFrameSchema, value);
-}
-
-export function sessionCreateFrameRead(value: UnparsedWireValue): SchemaRead<SessionCreateFrame> {
-  return read(sessionCreateFrameSchema, value);
 }
 
 export function sessionAudioCreateFrameFromWire(

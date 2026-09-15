@@ -16,7 +16,7 @@ import {
   vaultKeysListAnswerSchema,
 } from "./vault-wire.js";
 
-export interface HostedVaultClientOptions extends AccountToken {
+interface HostedVaultClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   /** The `HttpClient` a test hands over in place of the ambient fetch client. */

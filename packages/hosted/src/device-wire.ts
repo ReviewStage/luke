@@ -1,7 +1,7 @@
 import { isWireString, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { wireRefusal } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, SchemaTransformation } from "effect";
-import { isWireUuid, WIRE_UUID_LENGTH, wireUuidSchema } from "./service-wire.js";
+import { isWireUuid, wireUuidSchema } from "./service-wire.js";
 
 /**
  * One device record per app installation, on every platform Luke runs on.
@@ -97,8 +97,6 @@ const pushToken = trimmedText(DEVICE_TOKEN_BOUNDS.MAX_LENGTH)
  * the hosted wire's one UUID rule, the canonical lowercase hyphenated form,
  * which is the only one either side ever writes.
  */
-export const DEVICE_ID_LENGTH = WIRE_UUID_LENGTH;
-
 export const isDeviceWireId = isWireUuid;
 
 /** The hosted wire's one UUID rule, which every id on this wire shares. */
@@ -180,10 +178,6 @@ const deviceHeartbeatRequestCore = EffectSchema.Struct({
 export const deviceHeartbeatRequestSchema = deviceHeartbeatRequestCore;
 
 /** Whether the heartbeat found the row; `false` tells the client to register again. */
-export interface DeviceHeartbeatAnswer {
-  seen: boolean;
-}
-
 const deviceHeartbeatAnswerCore = EffectSchema.Struct({ seen: EffectSchema.Boolean });
 
 export const deviceHeartbeatAnswerSchema = deviceHeartbeatAnswerCore;

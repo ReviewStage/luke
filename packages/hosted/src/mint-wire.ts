@@ -42,7 +42,7 @@ export const HOSTED_CALLS_URL = `https://api.openai.com/v1${REALTIME_CALLS_PATH}
  */
 export const HOSTED_WS_BASE_URL = "wss://api.openai.com/v1/realtime";
 
-export interface HostedMintAnswer {
+interface HostedMintAnswer {
   connection: RealtimeConnection;
   quota?: HostedQuota;
 }

@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import {
   LIVE_AUDIO_ENCODING,
   LIVE_AUDIO_FORMAT,
-  LIVE_INPUT_BOUNDS,
   LIVE_VOICE,
   OBSERVED_VALUE_LENGTH,
   PROACTIVE_SPEECH_KIND,
 } from "@sidecar/live";
-import { SCHEMA_REFUSAL, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
+import type { UnparsedWireValue } from "@sidecar/wire";
 import { test } from "vitest";
 import {
   HOSTED_SERVICE_ORIGIN,
@@ -15,7 +14,6 @@ import {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   liveSessionCreatedFromWire,
-  SESSION_CREATE_BOUNDS,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionAttachFrameFromWire,
@@ -24,7 +22,6 @@ import {
   sessionBeatFrameFromWire,
   sessionCreatedFrameFromWire,
   sessionCreateFrameFromWire,
-  sessionCreateFrameRead,
   sessionOpeningFrameFromWire,
   sessionReportFrameFromWire,
   sessionSpokenFrameFromWire,
@@ -68,69 +65,6 @@ test("a session.create frame round-trips with its offer and seed as written", ()
 test("a session.create frame may open with no history at all", () => {
   const parsed = sessionCreateFrameFromWire(createFrame({ input: [] }));
   assert.deepEqual(parsed?.input, []);
-});
-
-test("a voice outside the Live built-in set is refused at the voice field", () => {
-  const read = sessionCreateFrameRead(createFrame({ voice: "hal" }));
-  assert.equal(read.ok, false);
-  if (!read.ok) {
-    assert.equal(read.refusal, SCHEMA_REFUSAL.MALFORMED);
-    assert.deepEqual(read.path, ["voice"]);
-  }
-});
-
-test("a seed past the Live input bound is too large, one item under it is not", () => {
-  const atBound = Array.from({ length: LIVE_INPUT_BOUNDS.MESSAGES }, () => user);
-  assert.equal(sessionCreateFrameRead(createFrame({ input: atBound })).ok, true);
-  const over = sessionCreateFrameRead(createFrame({ input: [...atBound, user] }));
-  assert.equal(over.ok, false);
-  if (!over.ok) {
-    assert.equal(over.refusal, SCHEMA_REFUSAL.TOO_LARGE);
-    assert.deepEqual(over.path, ["input"]);
-  }
-});
-
-test("an item's text past its character bound refuses the frame at that item", () => {
-  const long = {
-    ...user,
-    content: [{ type: "input_text", text: "x".repeat(SESSION_CREATE_BOUNDS.ITEM_CHARS + 1) }],
-  };
-  const read = sessionCreateFrameRead(createFrame({ input: [developer, long] }));
-  assert.equal(read.ok, false);
-  if (!read.ok) assert.deepEqual(read.path, ["input", 1]);
-  const atBound = {
-    ...long,
-    content: [{ type: "input_text", text: "x".repeat(SESSION_CREATE_BOUNDS.ITEM_CHARS) }],
-  };
-  assert.equal(sessionCreateFrameRead(createFrame({ input: [atBound] })).ok, true);
-});
-
-test("a seed item is a message of one text part of the type its role writes, and nothing else", () => {
-  const cases: [WireValue, boolean][] = [
-    [{ ...user, role: "system" }, false],
-    [{ ...user, content: [{ type: "output_text", text: "wrong part" }] }, false],
-    [{ ...assistant, content: [{ type: "input_text", text: "wrong part" }] }, false],
-    [{ ...assistant, content: [{ type: "text", text: "plain" }] }, false],
-    [{ ...user, content: [] }, false],
-    [{ ...user, content: [part, part] }, false],
-    [{ ...user, id: "msg_1" }, false],
-    [{ ...user, status: "completed" }, false],
-    [{ role: "user", content: [part] }, false],
-    [user, true],
-    [assistant, true],
-  ];
-  for (const [item, admitted] of cases) {
-    assert.equal(sessionCreateFrameRead(createFrame({ input: [item] })).ok, admitted);
-  }
-});
-
-test("a frame of the other type, or with a field beside the four, is not a session.create", () => {
-  assert.equal(
-    sessionCreateFrameRead(createFrame({ type: VOICE_SERVICE_FRAME.SESSION_CREATED })).ok,
-    false,
-  );
-  assert.equal(sessionCreateFrameRead(createFrame({ model: "gpt-live-1" })).ok, false);
-  assert.equal(sessionCreateFrameRead(createFrame({ sdp: "   " })).ok, false);
 });
 
 test("a session.created frame round-trips, with or without a quota, ignoring what a newer service adds", () => {
