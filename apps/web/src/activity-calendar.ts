@@ -13,7 +13,7 @@ export const DAYS_PER_WEEK = 7;
 
 const DAY_MS = 86_400_000;
 
-export interface CalendarWeek<Day extends { day: string }> {
+interface CalendarWeek<Day extends { day: string }> {
   /** The week's UTC Sunday, as YYYY-MM-DD. */
   weekStart: string;
   /** Seven slots, Sunday first; a slot the span does not cover is undefined. */
