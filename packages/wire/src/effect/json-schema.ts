@@ -98,10 +98,8 @@ const INTEGER: Bounds = { integer: true };
 const EFFECT_CHECK = {
   MIN_LENGTH: "effect/schema/isMinLength",
   MAX_LENGTH: "effect/schema/isMaxLength",
-  LENGTH_BETWEEN: "effect/schema/isLengthBetween",
   GREATER_THAN_OR_EQUAL_TO: "effect/schema/isGreaterThanOrEqualTo",
   LESS_THAN_OR_EQUAL_TO: "effect/schema/isLessThanOrEqualTo",
-  BETWEEN: "effect/schema/isBetween",
   INT: "effect/schema/isInt",
 } as const;
 
@@ -126,26 +124,12 @@ const BOUND_READERS = new Map<string, BoundReader>([
     boundReader(Schema.Struct({ maxLength: Schema.Number }), (payload) => payload),
   ],
   [
-    EFFECT_CHECK.LENGTH_BETWEEN,
-    boundReader(
-      Schema.Struct({ minimum: Schema.Number, maximum: Schema.Number }),
-      ({ minimum, maximum }) => ({ minLength: minimum, maxLength: maximum }),
-    ),
-  ],
-  [
     EFFECT_CHECK.GREATER_THAN_OR_EQUAL_TO,
     boundReader(Schema.Struct({ minimum: Schema.Number }), (payload) => payload),
   ],
   [
     EFFECT_CHECK.LESS_THAN_OR_EQUAL_TO,
     boundReader(Schema.Struct({ maximum: Schema.Number }), (payload) => payload),
-  ],
-  [
-    EFFECT_CHECK.BETWEEN,
-    boundReader(
-      Schema.Struct({ minimum: Schema.Number, maximum: Schema.Number }),
-      (payload) => payload,
-    ),
   ],
   [EFFECT_CHECK.INT, () => Option.some(INTEGER)],
 ]);

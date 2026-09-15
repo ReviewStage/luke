@@ -11,7 +11,7 @@ import { Schema } from "effect";
  */
 
 /** A JSON primitive before this build has validated field names. */
-export type WirePrimitive = string | number | boolean | null;
+type WirePrimitive = string | number | boolean | null;
 
 /** A JSON object before this build has validated field names. */
 export type WireRecord = { readonly [key: string]: WireValue };
@@ -107,35 +107,6 @@ export function isUnitLevel(value: UnparsedWireValue): value is number {
   return readsUnitLevel(value);
 }
 
-/** A non-empty array of wire numbers, or nothing; `width` pins the length when the caller knows it. */
-export function numberVector(value: UnparsedWireValue, width?: number): number[] | undefined {
-  if (!Array.isArray(value) || value.length === 0) return undefined;
-  if (width !== undefined && value.length !== width) return undefined;
-  const vector: number[] = [];
-  for (const component of value) {
-    if (!isWireNumber(component)) return undefined;
-    vector.push(component);
-  }
-  return vector;
-}
-
-/** Vectors of one width: the width given, or the first vector's when none is. */
-export function numberVectors(
-  value: UnparsedWireValue | readonly UnparsedWireValue[],
-  width?: number,
-): number[][] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const vectors: number[][] = [];
-  let expected = width;
-  for (const entry of value) {
-    const vector = numberVector(entry, expected);
-    if (!vector) return undefined;
-    expected = vector.length;
-    vectors.push(vector);
-  }
-  return vectors;
-}
-
 const readsWireBoolean = Schema.is(Schema.Boolean);
 
 /** Narrows a wire value to boolean; by `typeof` for the reason {@link isWireString} gives. */
@@ -173,20 +144,6 @@ export function isInstant(value: UnparsedWireValue): value is number {
 export function wholeNumber(value: UnparsedWireValue): number | undefined {
   if (!isWireNumber(value) || !Number.isFinite(value)) return undefined;
   return value;
-}
-
-/**
- * Collapses the newlines and runs of spaces a one-line row cannot show. A
- * value longer than the bound is cut with an ellipsis that takes one
- * character of that bound, so two callers cannot truncate the same phrase
- * two different ways.
- */
-export function oneLine(value: string | undefined, maximumLength: number): string | undefined {
-  const normalized = value?.replace(/\s+/gu, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.length > maximumLength
-    ? `${normalized.slice(0, maximumLength - 1).trimEnd()}…`
-    : normalized;
 }
 
 /**
@@ -234,7 +191,7 @@ export function nonNegativeNumber(value: number | undefined, fallback: number): 
 }
 
 /** Constructor options after defaults are merged and bounds are applied. */
-export type ResolvedNumericOptions<K extends string> = { readonly [P in K]: number };
+type ResolvedNumericOptions<K extends string> = { readonly [P in K]: number };
 
 /**
  * Bounds a bag of numeric constructor options against their defaults. Each
@@ -309,8 +266,6 @@ export const HTTP_STATUS = {
   CONFLICT: 409,
   TOO_MANY_REQUESTS: 429,
 } as const;
-
-export type HttpStatus = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS];
 
 export const HttpStatusSchema = Schema.Literals(Object.values(HTTP_STATUS));
 

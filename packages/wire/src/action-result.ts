@@ -13,13 +13,6 @@ export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTI
 
 export const ActionResultStatusSchema = Schema.Literals(Object.values(ACTION_RESULT_STATUS));
 
-const readsActionResultStatus = Schema.is(ActionResultStatusSchema);
-
-/** Whether an untrusted value names one of the three statuses an action can end in. */
-export function isActionResultStatus(value: UnparsedWireValue): value is ActionResultStatus {
-  return readsActionResultStatus(value);
-}
-
 /**
  * The one sentence an adapter answers an action its target's latest observation
  * did not advertise. It is written once because it is one refusal: the latest

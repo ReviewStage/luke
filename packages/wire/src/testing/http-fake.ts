@@ -51,7 +51,7 @@ function header(headers: Headers, name: string): string | undefined {
 }
 
 /** The body as sent, when it was sent as text; a test records nothing else. */
-export function requestBody(body: BodyInit | null | undefined): string | undefined {
+function requestBody(body: BodyInit | null | undefined): string | undefined {
   if (body === null || body === undefined) return undefined;
   if (Object.prototype.toString.call(body) !== "[object String]") return undefined;
   // SAFETY: Object.prototype.toString confirmed a string body before recording.

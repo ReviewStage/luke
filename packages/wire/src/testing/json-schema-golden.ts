@@ -26,7 +26,7 @@ const GOLDEN_SUFFIX = ".json";
  * travels inside, so a golden can hold the whole of what a model is handed
  * rather than the parameters alone.
  */
-export interface JsonSchemaGoldenTool {
+interface JsonSchemaGoldenTool {
   readonly type: "function";
   readonly name: string;
   readonly description: string;
@@ -53,25 +53,13 @@ export function jsonSchemaOf(source: RecordedJsonSchemaSource): JsonSchemaNode {
 }
 
 /**
- * Every export of a module that emits a JSON Schema. A recorded set declared
- * as `RecordedJsonSchemas<typeof module>` is exhaustive by construction: a
- * schema added to that module does not compile until it is recorded, which is
- * what keeps a rewrite of the emitter from quietly moving bytes nobody pinned.
- * A module that declares its schemas as Effect's own states the same thing
- * through `RecordedEffectJsonSchemas`; the two are separate because a module
- * holds Effect schemas that show no node to any model — a fixed value set
- * declared beside its `as const` object, a refusal declared as a tagged error
- * — and those are not bytes a golden pins.
+ * Every export of a module that is an Effect schema. A recorded set declared
+ * as `RecordedEffectJsonSchemas<typeof module>` is exhaustive by construction:
+ * a schema added to that module does not compile until it is recorded, which
+ * is what keeps a rewrite of the emitter from quietly moving bytes nobody
+ * pinned.
  */
-export type JsonSchemaExportName<Module> = {
-  [Key in keyof Module]: Module[Key] extends JsonSchemaSource ? Key : never;
-}[keyof Module];
-
-export type RecordedJsonSchemas<Module> = {
-  readonly [Key in JsonSchemaExportName<Module>]: JsonSchemaSource;
-};
-
-export type EffectJsonSchemaExportName<Module> = {
+type EffectJsonSchemaExportName<Module> = {
   [Key in keyof Module]: Module[Key] extends Schema.Top ? Key : never;
 }[keyof Module];
 

@@ -70,7 +70,7 @@ export type SpeechHeldEventPayload = EffectSchema.Schema.Type<typeof SPEECH_HELD
  * and where on that session's own clock the speech began. The device that
  * spoke is the event row's own column.
  */
-export const SPEECH_SPOKEN_EVENT_PAYLOAD = EffectSchema.Struct({
+const SPEECH_SPOKEN_EVENT_PAYLOAD = EffectSchema.Struct({
   voiceSessionId: text,
   atMs: nonNegativeInteger,
 });
@@ -85,9 +85,7 @@ export const SPEECH_EXPIRY_REASON = {
   HOLD_RELEASED: "hold_released",
 } as const;
 
-export type SpeechExpiryReason = (typeof SPEECH_EXPIRY_REASON)[keyof typeof SPEECH_EXPIRY_REASON];
-
-export const SPEECH_EXPIRED_EVENT_PAYLOAD = EffectSchema.Struct({
+const SPEECH_EXPIRED_EVENT_PAYLOAD = EffectSchema.Struct({
   reason: EffectSchema.Literals(Object.values(SPEECH_EXPIRY_REASON)),
 });
 
@@ -103,7 +101,7 @@ export const MESSAGE_RATING = {
 
 export type MessageRating = (typeof MESSAGE_RATING)[keyof typeof MESSAGE_RATING];
 
-export const MessageRatingSchema = EffectSchema.Literals(Object.values(MESSAGE_RATING));
+const MessageRatingSchema = EffectSchema.Literals(Object.values(MESSAGE_RATING));
 
 /**
  * The one word a rating event says that is not a verdict: the developer took
@@ -111,7 +109,7 @@ export const MessageRatingSchema = EffectSchema.Literals(Object.values(MESSAGE_R
  * thumb. A press on the filled thumb writes it, and it is never folded onto a
  * message; a reader sees no rating where it is the newest word.
  */
-export const RATING_WITHDRAWN = "withdrawn";
+const RATING_WITHDRAWN = "withdrawn";
 
 /** Every word a rating event's `rating` may say: a verdict, or its withdrawal. */
 export const RATING_WORD = {
