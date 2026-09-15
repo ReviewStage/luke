@@ -70,7 +70,7 @@ export interface LiveVoiceBridge {
   stopSpeaking(): Effect.Effect<boolean>;
 }
 
-export interface LiveVoiceOrchestratorOptions {
+interface LiveVoiceOrchestratorOptions {
   bridge: LiveVoiceBridge;
   createCall: (events: LiveVoiceCallEvents) => LiveVoiceCall;
   /** The services the notice strip's clocks are run under, since the strip is armed from synchronous callbacks that belong to no fiber. */

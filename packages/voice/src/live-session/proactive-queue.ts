@@ -35,7 +35,7 @@ export type ProactiveRequest<Delivery> =
   | { kind: typeof PROACTIVE_SPEECH_KIND.BRIEFING; delivery: Delivery; turn: ProactiveSpeechTurn }
   | { kind: BeatKind; turn: BeatTurn };
 
-export interface ProactiveQueueOptions {
+interface ProactiveQueueOptions {
   now: () => number;
   trace: LiveTrace;
 }

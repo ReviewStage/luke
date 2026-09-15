@@ -106,7 +106,7 @@ export function scriptedOpenSocket(answers: ScriptedOpening[]): ScriptedSocketSe
 }
 
 /** What one reader of a sideband heard, in arrival order: the events it read, then the close that ended them. */
-export interface SidebandReading {
+interface SidebandReading {
   readonly events: LiveServerEvent[];
   readonly closes: SocketClose[];
 }
