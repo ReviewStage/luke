@@ -443,7 +443,21 @@ export const FIXTURE_INPUT: ConversationViewInput = {
         call(
           "write_workspace_file",
           { name: "memory/2026-09-14.md", content: "Decided: clip the panel to the notch." },
-          { status: "rejected", reason: "not run: this agent has no workspace" },
+          {
+            status: "rejected",
+            reason:
+              "not run: a dated note under memory/ is appended to with append_daily_note, never rewritten whole",
+          },
+        ),
+        call(
+          "append_daily_note",
+          { content: "- Decided: clip the panel to the notch." },
+          { status: "accepted", path: "memory/2026-09-14.md", chars: 40 },
+        ),
+        call(
+          "list_daily_notes",
+          {},
+          { status: "accepted", notes: [{ path: "memory/2026-09-14.md", chars: 40 }] },
         ),
         call("change_app_setting", { setting_id: "announcements", value: "on" }, accepted({})),
         call("remember_fact", { words: "Prefers the panel clipped to the notch." }, accepted({})),

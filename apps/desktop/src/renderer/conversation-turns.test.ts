@@ -229,6 +229,8 @@ test("the brain's own tools draw as rows of the turn's working, each led by a ma
     "notebook-read",
     "workspace-read",
     "workspace-write",
+    "daily-note-append",
+    "daily-notes-list",
   ]) {
     assert.equal(count(working, "data-tool-kind", kind), 1, kind);
   }
@@ -237,10 +239,10 @@ test("the brain's own tools draw as rows of the turn's working, each led by a ma
   assert.equal(count(working, "data-action-kind", "setting"), 1);
   assert.equal(count(working, "data-action-kind", "remember"), 1);
   // Every row wears a mark, and the refused write alone carries a reason.
-  assert.equal(count(working, "class", "conversation-action-mark"), 7);
+  assert.equal(count(working, "class", "conversation-action-mark"), 9);
   assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.REFUSED), 1);
   assert.equal(count(working, "class", "conversation-action-reason"), 1);
-  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 6);
+  assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 8);
 });
 
 test("the wait is the thread's last object: once after the newest turn, and never above a later turn", () => {

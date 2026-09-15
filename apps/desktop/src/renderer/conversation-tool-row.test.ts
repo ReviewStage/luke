@@ -140,6 +140,30 @@ test("the brain's own tools are worded by their arguments, never their answers, 
     ),
     'Loaded the skill at "skills/x/SKILL.md"',
   );
+  // An entry's words stay in the note: the row says a note grew, not what it gained.
+  const appended = toolRow(
+    part(
+      "append_daily_note",
+      { content: "- Decided: clip the panel to the notch." },
+      answered({ status: "accepted", path: "memory/2026-09-14.md", chars: 40 }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(appended.kind, TOOL_ROW_KIND.DAILY_NOTE_APPEND);
+  assert.equal(appended.status, TOOL_ROW_STATUS.ACCEPTED);
+  assert.equal(words(appended), "Added to today's note");
+  assert.doesNotMatch(words(appended), /notch/u);
+  const listedNotes = toolRow(
+    part(
+      "list_daily_notes",
+      {},
+      answered({ status: "accepted", notes: [{ path: "memory/2026-09-14.md", chars: 40 }] }),
+    ),
+    FIXTURE_ROSTER,
+  );
+  assert.equal(listedNotes.kind, TOOL_ROW_KIND.DAILY_NOTES_LIST);
+  assert.equal(words(listedNotes), "Listed his dated notes");
+  assert.doesNotMatch(words(listedNotes), /2026/u);
   assert.equal(
     words(
       toolRow(part("sessions_spawn", { task: "…", label: "Tests" }, answered({})), FIXTURE_ROSTER),
