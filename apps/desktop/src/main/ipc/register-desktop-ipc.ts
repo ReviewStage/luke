@@ -145,6 +145,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       }
       return operator.host.rateConversationMessage(messageId, rating);
     },
+    // The Memory page is a page of the Settings tab, and a tab exists only on
+    // a panel; the hidden voice window and the introduction's takeover draw
+    // none, so they are refused before the host is reached. What the notebook
+    // holds and whether the service can be asked are the host's to decide.
+    [ACT_KIND.NOTEBOOK_READ]: (_payload, sender) => {
+      if (!sender.panel || sender.introduction) {
+        throw new ActRefused(ACT[ACT_KIND.NOTEBOOK_READ].refusal);
+      }
+      return operator.host.readNotebook();
+    },
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
     [ACT_KIND.WINDOW_QUIT]: () => config.quit(),

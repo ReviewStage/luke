@@ -38,6 +38,7 @@ import type {
   WorkspaceProviderOption,
 } from "./controls";
 import { FeedbackSection } from "./feedback-section";
+import { MemorySection } from "./memory-page";
 import { SETTINGS_PAGE, SettingsNavRow, SettingsPageHeader } from "./pages";
 import { pageResetControl } from "./reset";
 import { SchemaSettingRows } from "./schema-rows";
@@ -300,6 +301,13 @@ export function SettingsPanel({
             writes={writes}
           />
         </>
+      ) : null}
+
+      {view === SETTINGS_VIEW.MEMORY && !search ? (
+        <MemorySection
+          signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN}
+          panelOpen={panelOpen}
+        />
       ) : null}
 
       {view !== SETTINGS_VIEW.ROOT || search ? null : (

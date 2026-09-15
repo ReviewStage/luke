@@ -76,6 +76,10 @@
     "dest": "/api/default.js?route=brain/ask"
   },
   {
+    "src": "/api/brain/notebook",
+    "dest": "/api/default.js?route=brain/notebook"
+  },
+  {
     "src": "/api/brain/turns",
     "dest": "/api/default.js?route=brain/turns"
   },

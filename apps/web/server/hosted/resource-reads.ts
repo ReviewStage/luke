@@ -85,9 +85,14 @@ export interface ResourceReadOptions {
 
 type ReadGate = { readonly userId: string; readonly query: URLSearchParams } | Response;
 
-/** The gate every read shares, in the hosted order: method, bearer, brake. */
-const readGate = /* @__PURE__ */ Effect.fnUntraced(function* (
-  options: ResourceReadOptions,
+/**
+ * The gate every read shares, in the hosted order: method, bearer, brake.
+ * Exported for the notebook read beside this module, which stands behind the
+ * same brake as the three reads here rather than a count of its own, so a
+ * device's polling and its owner's looking share one allowance.
+ */
+export const readGate = /* @__PURE__ */ Effect.fnUntraced(function* (
+  options: Pick<ResourceReadOptions, "request" | "resolveUserId">,
 ): Effect.fn.Return<ReadGate> {
   const { request, resolveUserId } = options;
   if (request.method !== "GET") {

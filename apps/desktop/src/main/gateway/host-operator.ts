@@ -14,6 +14,8 @@ import {
   GATEWAY_METHOD,
   gatewayEventReader,
   type LiveTransportState,
+  type NotebookReadResult,
+  notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   type VoiceLiveSessionChanged,
   voiceCreateLiveSessionResultSchema,
@@ -174,6 +176,8 @@ export interface HostOperator {
   clearConversation(): Effect.Effect<boolean>;
   /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
   refreshConversation(): Effect.Effect<void>;
+  /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
+  readNotebook(): Effect.Effect<NotebookReadResult | undefined>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
   rateConversationMessage(
     messageId: string,
@@ -469,6 +473,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.cleared === true,
       ),
     refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
+    readNotebook: () =>
+      Effect.map(client.call(GATEWAY_METHOD.NOTEBOOK_READ), (answer) =>
+        answer.ok
+          ? Result.getOrUndefined(
+              readEither(notebookReadResultSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+            )
+          : undefined,
+      ),
     rateConversationMessage: (messageId, rating) =>
       Effect.map(
         client.call(GATEWAY_METHOD.CONVERSATION_RATE_MESSAGE, { messageId, rating }),

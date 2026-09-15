@@ -1090,3 +1090,60 @@
 .calendar-choice:hover .calendar-choice-name {
   color: var(--text-primary);
 }
+
+/* The Memory page: what Luke has saved, drawn as the Markdown it is written
+   in. Each file stands under the path the service holds it at, set in the
+   panel's monospace so it reads as a path rather than a title, with the
+   moment it last changed beneath. The words themselves are the thread's own
+   markdown component at the settings copy size, so a note here reads at the
+   size the rest of the page does. */
+.memory-page {
+  gap: 12px;
+}
+
+.memory-head {
+  align-items: flex-start;
+}
+
+.memory-head .settings-note {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-state {
+  padding: 0 2px;
+}
+
+.memory-file {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 13px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.memory-file-path {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.memory-file-path code {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10.5px;
+  color: var(--text-secondary);
+}
+
+.memory-file-note {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.memory-words {
+  color: var(--text-primary);
+  font-size: 11.5px;
+  line-height: 1.45;
+}

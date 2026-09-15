@@ -14,6 +14,7 @@ import {
   type ConversationClearAnswer,
   conversationClearAnswerSchema,
 } from "./conversation-clear-wire.js";
+import { type NotebookAnswer, notebookAnswerSchema } from "./notebook-wire.js";
 import {
   type HostedMessageRatingAnswer,
   type HostedMessageRatingRequest,
@@ -161,6 +162,20 @@ export class HostedConversationClient {
   ): Effect.Effect<ConversationReadResult<BrainTurnsAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
       Result.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
+    );
+  }
+
+  /**
+   * Luke's notebook as the service holds it, read whole and bounded for its
+   * owner to look at; nothing on this Mac keeps it past the screen that
+   * asked. Nothing for a refusal, a fault, or a body outside the contract,
+   * because the one caller does the same thing about each: says the notebook
+   * could not be read just now.
+   */
+  notebook(): Effect.Effect<NotebookAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.BRAIN_NOTEBOOK },
+      notebookAnswerSchema,
     );
   }
 

@@ -22,6 +22,7 @@ import {
   type ConversationRateResult,
   type ConversationReadResult,
   type HostedMessageRatingRequest,
+  type NotebookAnswer,
   type ReadPageQuery,
 } from "@sidecar/hosted";
 import { CONVERSATION_VIEW_SOURCE, type ConversationViewSnapshot } from "@sidecar/session";
@@ -107,6 +108,7 @@ interface FakeClient extends ConversationReadsClient, ConversationHeadsClient {
   /** A gate a messages read waits at before answering, so a test can hold a poll open. */
   messagesGate: Promise<void>;
   clearAnswer: { opened: string; openedAt: number; cleared: number } | undefined;
+  notebookAnswer: NotebookAnswer | undefined;
   rateAnswer: ConversationRateResult;
   /** Every rating request as it left, so a test can read what traveled. */
   readonly rated: { messageId: string; request: HostedMessageRatingRequest }[];
@@ -119,6 +121,10 @@ function fakeClient(): FakeClient {
     messagesAnswer: ok(messagesAnswer("hello")),
     messagesGate: Promise.resolve(),
     clearAnswer: { opened: "3c000000-0000-4000-8000-000000000009", openedAt: NOW + 1, cleared: 1 },
+    notebookAnswer: {
+      files: [{ path: "MEMORY.md", content: "# Memory\n", chars: 9, updatedAt: NOW }],
+      omittedNotes: 0,
+    },
     rateAnswer: { ok: true, answer: { id: RATING_EVENT, seq: 4 } },
     rated: [],
     rate: (messageId, request) =>
@@ -153,6 +159,11 @@ function fakeClient(): FakeClient {
       Effect.sync(() => {
         client.calls.push("clear");
         return client.clearAnswer;
+      }),
+    notebook: () =>
+      Effect.sync(() => {
+        client.calls.push("notebook");
+        return client.notebookAnswer;
       }),
   };
   return client;
@@ -721,4 +732,43 @@ test("a rating whose params are not one message and one verdict is refused as in
     [GATEWAY_ERROR.INVALID_PARAMS],
   );
   assert.deepEqual(client.rated, []);
+});
+
+/** The notebook read as a client would call it, answered as the record the host carries. */
+async function readNotebook(composer: ReturnType<typeof composeConversation>) {
+  const handler = composer.methods[GATEWAY_METHOD.NOTEBOOK_READ];
+  assert.ok(handler);
+  return Effect.runPromise(
+    handler(
+      {},
+      {
+        client: { clientId: "test", role: GATEWAY_CLIENT_ROLE.OPERATOR },
+        request: {
+          protocolVersion: GATEWAY_PROTOCOL_VERSION,
+          method: GATEWAY_METHOD.NOTEBOOK_READ,
+          params: {},
+        },
+      },
+    ),
+  );
+}
+
+test("the notebook read carries the service's own record, and answers empty behind a closed gate or an unanswered call", async () => {
+  const { composer, client } = harness();
+  assert.deepEqual(await readNotebook(composer), client.notebookAnswer);
+  assert.deepEqual(client.calls, ["notebook"]);
+
+  // The service did not answer: an empty record, which the client reads as
+  // unreadable just now rather than as a notebook with nothing in it.
+  client.notebookAnswer = undefined;
+  assert.deepEqual(await readNotebook(composer), {});
+
+  // A run that sends nothing, or an account whose capabilities are down,
+  // never asks at all.
+  const offline = harness({ sendsNetwork: false });
+  assert.deepEqual(await readNotebook(offline.composer), {});
+  const signedOut = harness({ active: false });
+  assert.deepEqual(await readNotebook(signedOut.composer), {});
+  assert.deepEqual(offline.client.calls, []);
+  assert.deepEqual(signedOut.client.calls, []);
 });

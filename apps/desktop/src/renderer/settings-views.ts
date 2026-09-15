@@ -20,6 +20,7 @@ export const SETTINGS_SUBVIEW_LIST = [
   SETTINGS_VIEW.APPEARANCE,
   SETTINGS_VIEW.SHORTCUTS,
   SETTINGS_VIEW.CONNECTIONS,
+  SETTINGS_VIEW.MEMORY,
 ] as const;
 
 export type SettingsSubview = (typeof SETTINGS_SUBVIEW_LIST)[number];
@@ -85,6 +86,7 @@ const NAV_ROW_ID = {
   [SETTINGS_VIEW.APPEARANCE]: "settings-nav-appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "settings-nav-shortcuts",
   [SETTINGS_VIEW.CONNECTIONS]: "settings-nav-connections",
+  [SETTINGS_VIEW.MEMORY]: "settings-nav-memory",
 };
 
 /**

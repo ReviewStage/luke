@@ -59,6 +59,8 @@ const GATEWAY_METHODS = {
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
+  /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
+  NOTEBOOK_READ: { name: "notebook.read", mutates: false },
   NODE_REGISTER: { name: "node.register", mutates: true },
   NODE_UNREGISTER: { name: "node.unregister", mutates: true },
   NODE_INVOKE: { name: "node.invoke", mutates: true },
@@ -311,6 +313,39 @@ export const conversationRateMessageResultSchema = Schema.Struct({
 });
 
 export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
+
+/**
+ * One file of Luke's notebook as `notebook.read` carries it: where it stands
+ * in the workspace, its Markdown from the front and cut at the service's own
+ * bound, how many characters the whole row holds, and when it last changed.
+ * The shape is the hosted wire's `notebookFileSchema` said again here,
+ * because this package cannot reach `@sidecar/hosted` and the renderer's
+ * act vocabulary reads its answers through this one.
+ */
+export const notebookFileSchema = Schema.Struct({
+  path: Schema.NonEmptyString,
+  content: Schema.String,
+  chars: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  /** Epoch milliseconds of the row's last write. */
+  updatedAt: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+export type NotebookFile = typeof notebookFileSchema.Type;
+
+/**
+ * What `notebook.read` answers when the service answered: the curated files
+ * first and the newest dated notes after, and how many older notes stand
+ * behind them uncarried. A host that could not ask — the run sends nothing,
+ * the account gate is closed, the call did not land — answers an empty
+ * record instead, which a client reads as the notebook being unreadable
+ * just now rather than empty.
+ */
+export const notebookReadResultSchema = Schema.Struct({
+  files: Schema.Array(notebookFileSchema),
+  omittedNotes: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+
+export type NotebookReadResult = typeof notebookReadResultSchema.Type;
 
 const GATEWAY_METHODS_BY_NAME: ReadonlyMap<string, GatewayMethodEntry> = new Map(
   GATEWAY_METHOD_ENTRIES.map((entry) => [entry.name, entry]),

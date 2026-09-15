@@ -13,6 +13,8 @@ import {
   conversationRateMessageParamsSchema,
   conversationRateMessageResultSchema,
   LIVE_SDP_MAX_CHARACTERS,
+  type NotebookReadResult,
+  notebookReadResultSchema,
   type VoiceCreateLiveSessionResult,
   voiceCreateLiveSessionParamsSchema,
   voiceCreateLiveSessionResultSchema,
@@ -117,6 +119,12 @@ export const ACT_KIND = {
    * The one write the tab makes about a message, and the panel's alone.
    */
   CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
+  /**
+   * The Settings tab's Memory page asking what Luke has saved: his notebook
+   * as the service holds it, carried through the host's one read of it and
+   * drawn once, read-only, on the panel alone. Nothing of it is kept.
+   */
+  NOTEBOOK_READ: "notebook.read",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -539,6 +547,13 @@ export const ACT = {
       isReadable(conversationRateMessageResultSchema),
     ),
     refusal: "Could not record that rating on this system.",
+  },
+  [ACT_KIND.NOTEBOOK_READ]: {
+    payload: noPayload,
+    result: wireResult<NotebookReadResult | undefined>(
+      (value) => value === undefined || isReadable(notebookReadResultSchema)(value),
+    ),
+    refusal: "Could not read Luke's memory on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
