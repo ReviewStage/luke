@@ -11,7 +11,6 @@ import type { TurnOpeningOutcome } from "../server/hosted/brain-host/opener";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "../server/hosted/observation-bounds";
 import {
-  type AccountPassOutcome,
   handleObservationTick,
   type ObservationTickOptions,
 } from "../server/hosted/observation-tick";
@@ -61,7 +60,7 @@ interface Recorded {
 function tickOptions(
   overrides: Partial<ObservationTickOptions> = {},
   accounts: string[] = ["user-a", "user-b"],
-  outcome: (userId: string) => Effect.Effect<AccountPassOutcome> = () =>
+  outcome: ObservationTickOptions["observe"] = () =>
     Effect.succeed({ complete: true, changed: false }),
   opening: (userId: string) => Effect.Effect<TurnOpeningOutcome> = () =>
     Effect.succeed(NOTHING_OPENED),
@@ -157,7 +156,7 @@ test("the tick is off without CRON_SECRET or the encryption secret, and refuses 
 });
 
 test("a tick forgets the ineligible, lists accounts seen within the week, and observes each, counting outcomes", async () => {
-  const outcomes = new Map<string, AccountPassOutcome>([
+  const outcomes = new Map([
     ["user-a", { complete: true, changed: true }],
     ["user-b", { complete: false, changed: false }],
     ["user-c", { complete: true, changed: false }],

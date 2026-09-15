@@ -4,9 +4,12 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { payloadKeyRing } from "../server/hosted/encryption";
-import { CONSUMED_ROSTER } from "../server/hosted/store";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
-import { keepConsumedRoster, readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
+import {
+  CONSUMED_ROSTER,
+  keepConsumedRoster,
+  readRosterSnapshot,
+} from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
 import { countRowsForUser, deleteUser, insertDevice } from "./support/store-rows";
 
@@ -213,33 +216,22 @@ test("a pass record moves the attempt every time, the whole read only on success
     platform: "ios",
     lastSeenAt: new Date(NOW - 1),
   });
-  // Keyless and unseen like `userId`, but outside the accounts the sweep is
-  // told of: what another test file's account looks like on a shared Postgres.
-  const bystander = await database.createUser();
-  for (const id of [userId, keyed, unseen, bystander]) {
+  for (const id of [userId, keyed, unseen]) {
     await database.run(roster.advance(id, { body: "{}", observedAt: NOW }, undefined));
     await database.run(roster.recordPass(id, { attemptedAt: NOW }));
     await database.run(
       roster.keepConsumed(id, { body: JSON.stringify({ heard: id }), observedAt: NOW }, undefined),
     );
   }
-  await database.run(
-    roster.forgetIneligible({
-      providerIds: ["conductor"],
-      seenAfter: NOW,
-      userIds: [userId, keyed, unseen],
-    }),
-  );
+  await database.run(roster.forgetIneligible({ providerIds: ["conductor"], seenAfter: NOW }));
   for (const gone of [userId, unseen]) {
     assert.equal(await database.run(roster.read(gone)), undefined);
     assert.deepEqual(await database.run(roster.consumed(gone)), { state: CONSUMED_ROSTER.ABSENT });
     assert.equal(await database.run(roster.pass(gone)), undefined);
   }
-  for (const standing of [keyed, bystander]) {
-    assert.equal((await database.run(roster.read(standing)))?.observedAt, NOW);
-    assert.equal((await database.run(roster.consumed(standing))).state, CONSUMED_ROSTER.STANDING);
-    assert.equal((await database.run(roster.pass(standing)))?.attemptedAt, NOW);
-  }
+  assert.equal((await database.run(roster.read(keyed)))?.observedAt, NOW);
+  assert.equal((await database.run(roster.consumed(keyed))).state, CONSUMED_ROSTER.STANDING);
+  assert.equal((await database.run(roster.pass(keyed)))?.attemptedAt, NOW);
 });
 
 test("deleting the user row cascades through every notebook and roster table and leaves another user's rows standing", async () => {

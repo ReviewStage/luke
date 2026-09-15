@@ -23,7 +23,8 @@ import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-ho
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
 import { hostedToolDeclarations } from "../../server/hosted/brain-host/tools";
 import { payloadKeyRing, VAULT_ENCRYPTION_ENVIRONMENT } from "../../server/hosted/encryption";
-import { hostedStore, toolSetHashOf } from "../../server/hosted/store";
+import { hostedStore } from "../../server/hosted/store";
+import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import {
   readMessagesByConversationTyped,
   readToolSetsByHash,

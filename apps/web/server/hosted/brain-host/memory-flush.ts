@@ -55,7 +55,7 @@ import type { ConversationTarget } from "../store/index.js";
  * an error eve sees, so compaction proceeds whatever became of the flush.
  */
 
-export const MEMORY_FLUSH = {
+const MEMORY_FLUSH = {
   /** The most characters of the session's context the turn is handed, cut from the front so the newest words stay. */
   CONTEXT_CHARS: 400_000,
   /** The most characters of a model's own error the outcome's reason keeps. */

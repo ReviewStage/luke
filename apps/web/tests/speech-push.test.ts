@@ -40,17 +40,19 @@ import {
 import {
   claimSpeech,
   markSpeechPushed,
-  type OpenSpeechOffersQuery,
   offerSpeech,
   openSpeechOffers,
-  SPEECH_OFFER,
-  SPEECH_REFUSAL,
   SPEECH_STATE,
   type SpeechOffer,
-  type SpeechSweepStore,
   storeWriter,
   sweepSpeech,
 } from "../server/hosted/store";
+import {
+  type OpenSpeechOffersQuery,
+  SPEECH_OFFER,
+  SPEECH_REFUSAL,
+  type SpeechSweepStore,
+} from "../server/hosted/store/speech";
 import { type HostedBriefingDelivery, hostedBriefings } from "../server/voice/live-briefings";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

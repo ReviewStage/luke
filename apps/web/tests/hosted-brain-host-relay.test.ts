@@ -30,13 +30,10 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import {
-  type ConversationTarget,
-  SPEECH_OFFER,
-  STORE_WRITE_REFUSAL,
-  storeWriter,
-} from "../server/hosted/store";
+import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { SPEECH_OFFER } from "../server/hosted/store/speech";
+import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { stampedEveEvent } from "./support/eve-events";
 import { spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

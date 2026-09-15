@@ -22,7 +22,7 @@ import { Effect, type Schema as EffectSchema, Result } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { type ChangeSignalOptions, handleChanges } from "../server/hosted/change-signal";
+import { handleChanges } from "../server/hosted/change-signal";
 import { deviceSeams } from "../server/hosted/device-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -64,7 +64,7 @@ function sorted<Value>(positions: readonly [string, Value][]): [string, Value][]
   return [...positions].sort(([a], [b]) => (a < b ? -1 : 1));
 }
 
-function options(userId: string, request: Request): ChangeSignalOptions {
+function options(userId: string, request: Request) {
   return {
     request,
     resolveUserId: () => Effect.succeed(userId),

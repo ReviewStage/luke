@@ -3,7 +3,7 @@ import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { HTTP_STATUS } from "../server/core";
-import { HOSTED_EMBEDDING, hostedEmbedder } from "../server/hosted/brain-host/embedding";
+import { hostedEmbedder } from "../server/hosted/brain-host/embedding";
 import { HOSTED_OPENAI_DEFAULTS } from "../server/hosted/openai";
 
 /**
@@ -27,7 +27,7 @@ function answer(data: readonly ReturnType<typeof embedding>[]): Response {
   return new Response(
     JSON.stringify({
       object: "list",
-      model: HOSTED_EMBEDDING.MODEL,
+      model: "text-embedding-3-small",
       data,
       usage: { total_tokens: 3 },
     }),
@@ -65,10 +65,10 @@ test("one POST carries the texts and the model under Luke's key, and the vectors
     [0, 1],
   ]);
   assert.equal(seen.length, 1);
-  assert.equal(seen[0]?.url, `${HOSTED_OPENAI_DEFAULTS.BASE_URL}${HOSTED_EMBEDDING.PATH}`);
+  assert.equal(seen[0]?.url, `${HOSTED_OPENAI_DEFAULTS.BASE_URL}/embeddings`);
   assert.equal(seen[0]?.authorization, "Bearer sk-test-not-a-real-key");
   assert.deepEqual(JSON.parse(seen[0]?.body ?? "{}"), {
-    model: HOSTED_EMBEDDING.MODEL,
+    model: "text-embedding-3-small",
     input: ["first", "second"],
     encoding_format: "float",
   });

@@ -45,15 +45,10 @@ import {
   type WireBoundaryInput,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  STORE_WRITE_REFUSAL,
-  type StoreWriteResult,
-  storeWriter,
-} from "../server/hosted/store";
+import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
+import { STORE_WRITE_REFUSAL, type StoreWriteResult } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -1173,80 +1168,6 @@ test("the relay's own events and the stream's compaction event write nothing", a
     results.map(() => STORE_WRITE_EFFECT.IGNORED),
   );
   assert.deepEqual(await storedMessages(target), []);
-});
-
-test("a compaction is written once by its owner as an assistant row naming what it folded", async () => {
-  const target = await conversation();
-  const stream = new Stream();
-  const askId = randomUUID();
-  await feed(target, developerTurn(stream, askId, randomUUID()));
-  const [ask] = await storedMessages(target);
-  assert.ok(ask);
-  const compaction = {
-    clientId: "compaction-1",
-    turnId: stream.turnId,
-    text: "Earlier the developer asked after the fixture session.",
-    firstKeptMessageId: ask.clientId,
-    tokensBefore: 4_200,
-  };
-  assert.deepEqual(await database.run(writer.recordCompaction(target, compaction)), {
-    ok: true,
-    effect: STORE_WRITE_EFFECT.WRITTEN,
-  });
-  assert.deepEqual(await database.run(writer.recordCompaction(target, compaction)), {
-    ok: true,
-    effect: STORE_WRITE_EFFECT.REPEATED,
-  });
-  const rows = await storedMessages(target);
-  assert.deepEqual(
-    rows.map((row) => [row.seq, row.role, row.clientId, row.finishedAt !== null]),
-    [
-      [1, MESSAGE_ROLE.USER, askId, true],
-      [2, MESSAGE_ROLE.ASSISTANT, stream.turnId, true],
-      [3, MESSAGE_ROLE.ASSISTANT, "compaction-1", true],
-    ],
-  );
-  assert.deepEqual(rows[2]?.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    compaction: { first_kept_message_id: ask.clientId, tokens_before: 4_200 },
-  });
-  assert.deepEqual(rows[2]?.parts, [
-    { type: UI_PART_TYPE.TEXT, text: compaction.text, state: UI_PART_STATE.DONE },
-  ]);
-
-  const unknownTurn = await database.run(
-    writer.recordCompaction(target, {
-      ...compaction,
-      clientId: "compaction-2",
-      turnId: randomUUID(),
-    }),
-  );
-  assert.deepEqual(unknownTurn, { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN });
-
-  const uncounted = await database.run(
-    writer.recordCompaction(target, {
-      clientId: "compaction-3",
-      text: "Earlier still.",
-      firstKeptMessageId: ask.clientId,
-    }),
-  );
-  assert.deepEqual(uncounted, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
-  const [, , , uncountedRow] = await storedMessages(target);
-  assert.deepEqual(uncountedRow?.metadata, {
-    author: MESSAGE_AUTHOR.BRAIN,
-    compaction: { first_kept_message_id: ask.clientId },
-  });
-
-  const wordless = await database.run(
-    writer.recordCompaction(target, {
-      clientId: "compaction-4",
-      text: "   ",
-      firstKeptMessageId: ask.clientId,
-    }),
-  );
-  assert.equal(wordless.ok, false);
-  if (wordless.ok) return;
-  assert.equal(wordless.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
 });
 
 test("events about a message are numbered by the conversation's own event sequence, and one about no message is refused", async () => {

@@ -14,20 +14,19 @@ import {
 } from "../server/core";
 import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import {
-  type CommentaryAppend,
   type ConversationTarget,
   claimSpeech,
   offerSpeech,
-  SPEECH_OFFER,
   STORE_WRITE_EFFECT,
   storeWriter,
-  VOICE_WRITE_REFUSAL,
   type VoiceTarget,
   type VoiceWriteResult,
   type VoiceWriter,
   voiceWriter,
 } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { SPEECH_OFFER } from "../server/hosted/store/speech";
+import { type CommentaryAppend, VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
 import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -131,19 +130,18 @@ async function claim(conversation: ConversationTarget, messageId: string): Promi
 async function announced(conversation: ConversationTarget): Promise<string> {
   const enqueued = await database.run(store.enqueueTurn(conversation, { origin: "roster_diff" }));
   assert.ok(enqueued.ok);
-  const written = await database.run(
-    store.recordCompaction(conversation, {
-      clientId: `briefing-${enqueued.turnId}`,
-      turnId: enqueued.turnId,
-      text: "Earlier briefings folded.",
-      firstKeptMessageId: "00000000-0000-4000-8000-000000000000",
-    }),
-  );
-  assert.ok(written.ok);
-  const rows = await readMessagesByConversationTyped(database.run, conversation.conversationId);
-  const row = rows[rows.length - 1];
-  assert.ok(row);
-  return row.id;
+  const standing = await readMessagesByConversationTyped(database.run, conversation.conversationId);
+  return await insertMessage(database.run, {
+    userId: conversation.userId,
+    conversationId: conversation.conversationId,
+    seq: standing.length + 1,
+    turnId: enqueued.turnId,
+    clientId: `briefing-${enqueued.turnId}`,
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: "A briefing.", state: "done" }],
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    finishedAt: new Date(NOW),
+  });
 }
 
 async function speechEvents(conversation: ConversationTarget) {

@@ -1,10 +1,10 @@
 import { Effect } from "effect";
 import type { ObservationStore } from "../../server/hosted/observation-pass";
+import type { RosterSnapshotRecord } from "../../server/hosted/store";
 import {
   CONSUMED_ROSTER,
   type ObservationPassRecord,
-  type RosterSnapshotRecord,
-} from "../../server/hosted/store";
+} from "../../server/hosted/store/roster-snapshot";
 
 /**
  * The roster slice of the hosted store held in memory, for the handler tests

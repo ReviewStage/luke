@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { test } from "vitest";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { handleMessageRating, type MessageRatingOptions } from "../server/hosted/message-rating";
-import { RATING_REFUSAL, type RatingWriteResult } from "../server/hosted/store";
+import { RATING_REFUSAL, type RatingWriteResult } from "../server/hosted/store/ratings";
 import { runWithoutDatabase } from "./support/no-database";
 
 const MESSAGE_ID = "2b000000-0000-4000-8000-000000000012";

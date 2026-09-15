@@ -31,11 +31,11 @@ import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,
   storeWriter,
-  VOICE_WRITE_REFUSAL,
   type VoiceTarget,
   type VoiceWriteResult,
   voiceWriter,
 } from "../server/hosted/store";
+import { VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
 import {
   LIVE_CLIENT_EVENT,
   type LiveAppendEvent,

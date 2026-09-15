@@ -14,7 +14,7 @@ import { HOSTED_OPENAI_DEFAULTS } from "../openai.js";
  * embedder, and the search runs keyword-only and says so.
  */
 
-export const HOSTED_EMBEDDING = {
+const HOSTED_EMBEDDING = {
   /** The embeddings model every hosted passage and query is embedded by; a build-fixed choice, not a request field. */
   MODEL: "text-embedding-3-small",
   /** OpenAI's embeddings endpoint under the hosted base URL. */

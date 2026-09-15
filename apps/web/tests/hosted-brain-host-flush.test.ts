@@ -16,11 +16,7 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import {
-  contextAsData,
-  MEMORY_FLUSH,
-  MEMORY_FLUSH_REFUSAL,
-} from "../server/hosted/brain-host/memory-flush";
+import { contextAsData, MEMORY_FLUSH_REFUSAL } from "../server/hosted/brain-host/memory-flush";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
@@ -459,5 +455,4 @@ test("the context is handed as data: system messages left out, tool calls and re
   assert.match(cut, /^\[earlier context cut\]\n/);
   assert.equal(cut.length, "[earlier context cut]\n".length + 20);
   assert.ok(cut.endsWith("[user]\n[file]"));
-  assert.ok(MEMORY_FLUSH.CONTEXT_CHARS > 0);
 });
