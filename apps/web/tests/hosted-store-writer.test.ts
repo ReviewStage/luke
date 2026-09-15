@@ -1486,6 +1486,94 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   assert.equal(otherSession.line, undefined);
 });
 
+test("a spoken reply under a delegation joins the delegation's turn, and is read from the turn's journal where the turn had just settled; one under no known turn, or long after the settle, is read from nothing", async () => {
+  const target = await conversation();
+  const spoken = (clientId: string, fromMs: number, toMs: number, delegationId?: string) =>
+    database.run(
+      writer.recordSpokenReply(target, {
+        clientId,
+        text: `said ${fromMs}`,
+        metadata: {
+          author: MESSAGE_AUTHOR.VOICE_MODEL,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_fixture_1",
+          from_ms: fromMs,
+          to_ms: toMs,
+          ...(delegationId === undefined ? undefined : { delegation_id: delegationId }),
+        },
+      }),
+    );
+  const asks = askRecord();
+  const dispatched = async (clientId: string, turnId: string) => {
+    const ask = await database.run(
+      asks.record({
+        userId: target.userId,
+        conversationId: target.conversationId,
+        clientId,
+        origin: "spoken",
+        question: "Open the failing one.",
+        createdAt: new Date(NOW),
+      }),
+    );
+    await database.run(
+      asks.dispatchOnce(target, ask.id, async () => ({ sessionId: `wrun_${clientId}`, turnId })),
+    );
+  };
+
+  // A turn that settled a second after now, as a reply's turn does just before the voice reads it.
+  const fresh = new Stream();
+  await feed(target, developerTurn(fresh, randomUUID(), randomUUID()));
+  await dispatched("dl_fresh", fresh.turnId);
+  const journal = (await storedMessages(target)).find((row) => row.clientId === fresh.turnId);
+  assert.ok(journal);
+  assert.ok((await spoken("reading-1", 9000, 12_000, "dl_fresh")).ok);
+  const reading = (await storedMessages(target)).find((row) => row.clientId === "reading-1");
+  assert.equal(reading?.turnId, fresh.turnId);
+  assert.deepEqual(reading?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_1",
+    from_ms: 9000,
+    to_ms: 12_000,
+    delegation_id: "dl_fresh",
+    read_from: journal.id,
+  });
+
+  // A turn that settled long before the words: they join it, but are a beat or an aside, not its reply.
+  const stale = new Stream();
+  await feed(target, [
+    stale.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK, NOW - 11 * 60_000),
+    stale.words(randomUUID(), "Anything new?", TYPED_ASK),
+    stale.answered(randomUUID(), REPLY_PARTS),
+    stale.ended(BRAIN_REQUEST_STATUS.SUCCEEDED, { at: NOW - 10 * 60_000 }),
+  ]);
+  await dispatched("dl_stale", stale.turnId);
+  assert.ok((await spoken("aside-1", 20_000, 21_000, "dl_stale")).ok);
+  const aside = (await storedMessages(target)).find((row) => row.clientId === "aside-1");
+  assert.equal(aside?.turnId, stale.turnId);
+  assert.deepEqual(aside?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_1",
+    from_ms: 20_000,
+    to_ms: 21_000,
+    delegation_id: "dl_stale",
+  });
+
+  // A delegation whose ask has no turn yet: the row stands under no turn and was read from nothing.
+  assert.ok((await spoken("early-1", 30_000, 31_000, "dl_unknown")).ok);
+  const early = (await storedMessages(target)).find((row) => row.clientId === "early-1");
+  assert.equal(early?.turnId, null);
+  assert.deepEqual(early?.metadata, {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+    voice_session_id: "vs_fixture_1",
+    from_ms: 30_000,
+    to_ms: 31_000,
+    delegation_id: "dl_unknown",
+  });
+});
+
 test("adopting a spoken line re-keys it to the delegation, names the delegation in its metadata, takes it into the ask's turn ahead of the turn's work, and is one adoption however often it is asked", async () => {
   const target = await conversation();
   const line = await database.run(

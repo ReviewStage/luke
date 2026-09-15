@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import {
+  CONVERSATION_VIEW_SOURCE,
+  CONVERSATION_VIEW_TOOL_KIND,
+  type ConversationViewMessage,
+  type ConversationViewTurn,
   type ConversationViewTurnGroup,
   isStoredToolPart,
   MESSAGE_ROLE,
   type SessionIdentity,
   selectConversationView,
+  TOOL_PART_STATE,
 } from "@sidecar/session";
 import {
   CONVERSATION_EVENT_KIND,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_RATING,
   RATING_WORD,
   TURN_ORIGIN,
@@ -536,4 +543,183 @@ test("the offered draft quotes the ask the turn answered and then the rated mess
     ratingFeedbackDraft({ messageId: FIXTURE_RATED_MESSAGE, words: "w" }).length <
       FEEDBACK_LIMITS.MESSAGE_MAX_LENGTH,
   );
+});
+
+/** The rows of the list, each from its opening tag to the next, so a test can say which row carries what. */
+function entries(markup: string): readonly string[] {
+  return markup.split('<li class="conversation-entry"').slice(1);
+}
+
+test("a message Luke read aloud folds to its words as written, the reading is the bubble, and the message's rating moves onto the reading", () => {
+  const READ_TURN = "1c000000-0000-4000-8000-000000000401";
+  const JOURNAL = "1c000000-0000-4000-8000-000000000402";
+  const READING = "1c000000-0000-4000-8000-000000000403";
+  const at = FIXTURE_NOW - 30_000;
+  const turn: ConversationViewTurn = {
+    id: READ_TURN,
+    origin: TURN_ORIGIN.SPOKEN,
+    status: TURN_STATUS.SETTLED,
+    queuedAt: at,
+    startedAt: at,
+    settledAt: at + 4_000,
+  };
+  const ask: ConversationViewMessage = {
+    message: {
+      id: "1c000000-0000-4000-8000-000000000400",
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "Open the failing one.", state: "done" }],
+      metadata: {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_1",
+        delegation_id: "dl_1",
+        from_ms: 0,
+        to_ms: 1_000,
+      },
+    },
+    seq: 1,
+    createdAt: at,
+    tools: [],
+  };
+  const journal: ConversationViewMessage = {
+    message: {
+      id: JOURNAL,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [{ type: "text", text: "It is on the failing test.", state: "done" }],
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    },
+    seq: 2,
+    createdAt: at + 4_000,
+    tools: [],
+  };
+  const reading: ConversationViewMessage = {
+    message: {
+      id: READING,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [{ type: "text", text: "It's on the failing test!", state: "done" }],
+      metadata: {
+        author: MESSAGE_AUTHOR.VOICE_MODEL,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_1",
+        delegation_id: "dl_1",
+        from_ms: 5_000,
+        to_ms: 7_000,
+        read_from: JOURNAL,
+      },
+    },
+    seq: 3,
+    createdAt: at + 8_000,
+    tools: [],
+  };
+  const group: ConversationViewTurnGroup = {
+    turnId: READ_TURN,
+    turn,
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [ask, journal, reading],
+  };
+  const markup = render([group]);
+  assert.equal(count(markup, "data-read-aloud", "true"), 1);
+  assert.equal(count(markup, "data-reading", "true"), 1);
+  assert.equal(ratingControls(markup), 1, "one control for the one message rated, the brain's");
+  const rows = entries(markup);
+  const folded = rows.find((row) => row.includes('data-read-aloud="true"'));
+  const said = rows.find((row) => row.includes('data-reading="true"'));
+  assert.ok(folded && said);
+  assert.equal(ratingControls(folded), 0);
+  assert.equal(ratingControls(said), 1);
+  assert.ok(folded.includes("As written") && folded.includes("It is on the failing test."));
+  assert.ok(said.includes("failing test!"));
+  // The fold comes before the reading, as the words as written come before the words said.
+  assert.ok(rows.indexOf(folded) < rows.indexOf(said));
+
+  // Without the reading, the journal is the bubble and takes the rating itself.
+  const unread = render([{ ...group, messages: [ask, journal] }]);
+  assert.equal(count(unread, "data-read-aloud", "true"), 0);
+  assert.equal(ratingControls(unread), 1);
+});
+
+test("a briefing read aloud folds to the briefing as written, and the reading in its own group is the bubble carrying the briefing's rating", () => {
+  const ANNOUNCED = "1d000000-0000-4000-8000-000000000501";
+  const READING = "1d000000-0000-4000-8000-000000000502";
+  const at = FIXTURE_NOW - 30_000;
+  const announced: ConversationViewMessage = {
+    message: {
+      id: ANNOUNCED,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-announce",
+          toolCallId: "call-announce",
+          state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+          input: { briefing: "Two sessions finished while you were away." },
+          output: {},
+        },
+      ],
+      metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    },
+    seq: 1,
+    createdAt: at,
+    tools: [
+      {
+        toolCallId: "call-announce",
+        toolName: "announce",
+        state: TOOL_PART_STATE.OUTPUT_AVAILABLE,
+        kind: CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE,
+        unspoken: false,
+      },
+    ],
+  };
+  const reading: ConversationViewMessage = {
+    message: {
+      id: READING,
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [{ type: "text", text: "Two sessions wrapped up while you were out.", state: "done" }],
+      metadata: {
+        author: MESSAGE_AUTHOR.VOICE_MODEL,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_1",
+        from_ms: 1_000,
+        to_ms: 4_000,
+        read_from: ANNOUNCED,
+      },
+    },
+    seq: 2,
+    createdAt: at + 5_000,
+    tools: [],
+  };
+  const readingGroup: ConversationViewTurnGroup = {
+    turnId: "reading-only",
+    turn: undefined,
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [reading],
+  };
+  const groups: ConversationViewTurnGroup[] = [
+    {
+      turnId: "1d000000-0000-4000-8000-000000000500",
+      turn: {
+        id: "1d000000-0000-4000-8000-000000000500",
+        origin: TURN_ORIGIN.ROSTER_DIFF,
+        status: TURN_STATUS.SETTLED,
+        queuedAt: at,
+        startedAt: at,
+        settledAt: at + 1_000,
+      },
+      source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+      messages: [announced],
+    },
+    readingGroup,
+  ];
+  const markup = render(groups);
+  assert.equal(count(markup, "data-read-aloud", "true"), 1);
+  assert.equal(count(markup, "data-reading", "true"), 1);
+  assert.equal(ratingControls(markup), 1);
+  const rows = entries(markup);
+  const said = rows.find((row) => row.includes('data-reading="true"'));
+  assert.ok(said);
+  assert.equal(ratingControls(said), 1);
+  assert.ok(said.includes("wrapped up"));
+  // A reading whose source is not in the thread is drawn as words of Luke's own, rated as such.
+  const alone = render([readingGroup]);
+  assert.equal(count(alone, "data-reading", "true"), 0);
+  assert.equal(ratingControls(alone), 1);
 });

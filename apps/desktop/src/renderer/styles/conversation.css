@@ -683,6 +683,31 @@ button.conversation-action-chip:focus-visible {
   font-weight: 620;
 }
 
+/* The brain's words as written, folded to one line above the bubble of what
+   Luke's voice actually said of them, at the inset his thoughts fold to: the
+   source is there to check against without reading as a second thing said. */
+.conversation-source {
+  min-width: 0;
+  max-width: min(82%, 58ch);
+  padding: 2px 0 2px var(--conversation-row-inset);
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.conversation-source-summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.conversation-source-words {
+  display: block;
+  padding-top: 3px;
+  overflow-wrap: anywhere;
+}
+
 /* Luke's thought, folded to one line on his side of the thread that opens on
    its words. A native disclosure rather than a control of Luke's own, and no
    bubble: a thought is not something he said. Its line stands at the inset

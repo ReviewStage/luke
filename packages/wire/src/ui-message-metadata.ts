@@ -187,15 +187,52 @@ export const COMPACTION_METADATA = EffectSchema.Struct({
 
 export type CompactionMetadata = EffectSchema.Schema.Type<typeof COMPACTION_METADATA>;
 
-/** What an assistant row says about itself. */
-export const ASSISTANT_MESSAGE_METADATA = EffectSchema.Struct({
+/**
+ * What an assistant row says about itself: who wrote it, and, for a row of
+ * the voice model's — one of Luke's settled utterances cut from a voice
+ * session — the session and span it was cut from, the delegation it followed
+ * where the developer's line before it was handed to the brain, and the
+ * message it was read aloud from where it was one: the brain's briefing, or
+ * the journal of the turn that delegation ran. A view folds that message's
+ * words behind the words actually said. Only the voice model's row carries
+ * any of those, and its span runs forward or comes together.
+ */
+const ASSISTANT_MESSAGE_STRUCT = EffectSchema.Struct({
   author: EffectSchema.Literals([
     MESSAGE_AUTHOR.BRAIN,
     MESSAGE_AUTHOR.VOICE_MODEL,
     MESSAGE_AUTHOR.CHILD,
   ]),
   compaction: EffectSchema.optional(COMPACTION_METADATA),
+  channel: EffectSchema.optional(EffectSchema.Literal(MESSAGE_CHANNEL.VOICE)),
+  voice_session_id: EffectSchema.optional(identifier),
+  delegation_id: EffectSchema.optional(identifier),
+  from_ms: EffectSchema.optional(spanInstant),
+  to_ms: EffectSchema.optional(spanInstant),
+  read_from: EffectSchema.optional(identifier),
 });
+
+type AssistantMessageStruct = EffectSchema.Schema.Type<typeof ASSISTANT_MESSAGE_STRUCT>;
+
+/** The voice fields are the voice model's alone, and its span is coherent. */
+function spokenByVoiceModel(metadata: AssistantMessageStruct): boolean {
+  const spoken =
+    metadata.channel !== undefined ||
+    metadata.voice_session_id !== undefined ||
+    metadata.delegation_id !== undefined ||
+    metadata.from_ms !== undefined ||
+    metadata.to_ms !== undefined ||
+    metadata.read_from !== undefined;
+  if (spoken && metadata.author !== MESSAGE_AUTHOR.VOICE_MODEL) return false;
+  if (metadata.from_ms === undefined || metadata.to_ms === undefined) {
+    return metadata.from_ms === metadata.to_ms;
+  }
+  return metadata.from_ms <= metadata.to_ms;
+}
+
+export const ASSISTANT_MESSAGE_METADATA = ASSISTANT_MESSAGE_STRUCT.check(
+  EffectSchema.makeFilter(spokenByVoiceModel),
+);
 
 export type AssistantMessageMetadata = EffectSchema.Schema.Type<typeof ASSISTANT_MESSAGE_METADATA>;
 
