@@ -1,4 +1,10 @@
-import type { SkillLoad, WorkspaceReadResult, WorkspaceWriteResult } from "@sidecar/runtime";
+import {
+  CURATED_FILE_BUDGET,
+  type SkillLoad,
+  WORKSPACE_FILE,
+  type WorkspaceReadResult,
+  type WorkspaceWriteResult,
+} from "@sidecar/runtime";
 import {
   ACTION_RESULT_STATUS,
   isWireString,
@@ -110,7 +116,11 @@ const WRITE_WORKSPACE_FILE: WorkspaceToolModule = {
   description:
     "Replace one of your own workspace files with new content, whole. Use it to keep " +
     "MEMORY.md, USER.md, and dated notes current; read the file first so nothing is lost. " +
-    "Content past the per-file bound is refused rather than cut.",
+    `USER.md and MEMORY.md are budgeted small, ${CURATED_FILE_BUDGET[WORKSPACE_FILE.USER]} ` +
+    `and ${CURATED_FILE_BUDGET[WORKSPACE_FILE.MEMORY]} characters: keep durable decisions ` +
+    "and short summaries there and put detail in a dated note. A write past a file's bound " +
+    "is refused rather than cut, and the refusal names the bound, so read the file, " +
+    "condense it, and rewrite it to fit.",
   inputSchema: WRITE_WORKSPACE_FILE_INPUT,
   execute(input: WireRecord, context: WorkspaceToolContext): Effect.Effect<WireRecord> {
     return Effect.suspend(() => {
