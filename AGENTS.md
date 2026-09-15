@@ -335,6 +335,20 @@ and `apps/web/server/hosted/store/message-reads.ts` all produce or read it.
   for drift a deletion happened to leave behind (`apps/desktop/bundle-budget.json`,
   checked with 5% slack).
 
+## Code style
+
+The model is Redis. Full rules with sources and examples in `docs/STYLE.md`.
+
+- Fight complexity by not creating it. Every dependency, layer, and
+  abstraction earns its lines or is refused.
+- Order a file: header, imports, constants, private helpers, public API,
+  entry points last. Line one: `name.ts -- one line of purpose.`
+- Name by layer then verb. Guard early, one exit. Assert invariants.
+- A function is read in one pass. Files may be long; functions may not.
+- One-line guide comments inside functions. Why comments talk: "Note that
+  we X, because Y." Design comments sit above the function. No trivial
+  comments.
+
 ## TypeScript
 
 - No stringly typed fixed value sets. Use `as const` SCREAMING_SNAKE_CASE objects,
