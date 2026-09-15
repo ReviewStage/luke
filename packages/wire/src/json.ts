@@ -255,8 +255,6 @@ export const HTTP_METHOD = {
 
 export type HttpMethod = (typeof HTTP_METHOD)[keyof typeof HTTP_METHOD];
 
-export const HttpMethodSchema = Schema.Literals(Object.values(HTTP_METHOD));
-
 /** The statuses this build branches on at the HTTP boundary. */
 export const HTTP_STATUS = {
   UNAUTHORIZED: 401,
@@ -266,8 +264,6 @@ export const HTTP_STATUS = {
   CONFLICT: 409,
   TOO_MANY_REQUESTS: 429,
 } as const;
-
-export const HttpStatusSchema = Schema.Literals(Object.values(HTTP_STATUS));
 
 /**
  * A base address with no trailing separator, so a path joined to it cannot

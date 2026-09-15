@@ -11,8 +11,6 @@ export const ACTION_RESULT_STATUS = {
 
 export type ActionResultStatus = (typeof ACTION_RESULT_STATUS)[keyof typeof ACTION_RESULT_STATUS];
 
-export const ActionResultStatusSchema = Schema.Literals(Object.values(ACTION_RESULT_STATUS));
-
 /**
  * The one sentence an adapter answers an action its target's latest observation
  * did not advertise. It is written once because it is one refusal: the latest

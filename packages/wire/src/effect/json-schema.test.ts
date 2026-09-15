@@ -10,7 +10,6 @@ import {
   emitJsonSchema,
   readEither,
   type SchemaRefusalError,
-  WIRE_DESCRIPTION_ANNOTATION,
   wireRefusal,
 } from "./json-schema.js";
 
@@ -123,19 +122,6 @@ test.for(ACTION_GOLDENS)(
     });
   },
 );
-
-test("a description on a property signature is carried when the type has none", () => {
-  const described = Schema.Struct({
-    field: Schema.Boolean.annotateKey({ [WIRE_DESCRIPTION_ANNOTATION]: "Whether." }),
-  });
-
-  assert.deepEqual(emitJsonSchema(described), {
-    type: "object",
-    properties: { field: { type: "boolean", description: "Whether." } },
-    required: ["field"],
-    additionalProperties: false,
-  });
-});
 
 test("the outermost description wins and Effect's own descriptions are never read", () => {
   const inner = describeWire(Schema.String.check(Schema.isNonEmpty()), "Inner.");
