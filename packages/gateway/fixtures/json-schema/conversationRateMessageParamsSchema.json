@@ -10,7 +10,8 @@
       "type": "string",
       "enum": [
         "up",
-        "down"
+        "down",
+        "withdrawn"
       ]
     }
   },

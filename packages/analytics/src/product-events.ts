@@ -5,8 +5,8 @@ import {
   isRecord,
   isWireNumber,
   isWireString,
-  MESSAGE_RATING,
-  type MessageRating,
+  RATING_WORD,
+  type RatingWord,
   type UnparsedWireValue,
 } from "@sidecar/wire";
 import { Schema } from "effect";
@@ -314,9 +314,10 @@ export const ProductSettingValueSchema = Schema.Literals(Object.values(PRODUCT_S
 /**
  * Which kind of Luke's messages a rating landed on, never the message: a
  * reply to the developer, or a briefing he announced on his own. The verdict
- * itself travels as `MESSAGE_RATING`, the stored event's own two words; the
- * note a developer may leave with a rating is their free text and travels in
- * the rating request alone, never here, and no message id travels either.
+ * itself travels as `RATING_WORD`, the stored event's own three words, a
+ * withdrawal counted the same way as the verdict it took back; the note a
+ * developer may leave with a rating is their free text and travels in the
+ * rating request alone, never here, and no message id travels either.
  */
 export const PRODUCT_RATED_MESSAGE_KIND = {
   REPLY: "reply",
@@ -417,7 +418,7 @@ interface ProductEventPropertyValue {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: ProductSignInAge;
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: AppSettingId;
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: ProductSettingValue;
-  [PRODUCT_EVENT_PROPERTY.RATING]: MessageRating;
+  [PRODUCT_EVENT_PROPERTY.RATING]: RatingWord;
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: ProductRatedMessageKind;
 }
 
@@ -453,7 +454,7 @@ const PRODUCT_EVENT_PROPERTY_VALUES = {
   [PRODUCT_EVENT_PROPERTY.SIGN_IN_AGE]: Object.values(PRODUCT_SIGN_IN_AGE),
   [PRODUCT_EVENT_PROPERTY.SETTING_ID]: Object.values(APP_SETTING_ID),
   [PRODUCT_EVENT_PROPERTY.SETTING_VALUE]: Object.values(PRODUCT_SETTING_VALUE),
-  [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(MESSAGE_RATING),
+  [PRODUCT_EVENT_PROPERTY.RATING]: Object.values(RATING_WORD),
   [PRODUCT_EVENT_PROPERTY.MESSAGE_KIND]: Object.values(PRODUCT_RATED_MESSAGE_KIND),
 } as const satisfies Record<EnumeratedProductEventProperty, readonly string[]>;
 

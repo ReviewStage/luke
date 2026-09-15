@@ -387,6 +387,37 @@ final class ConversationThreadTests: XCTestCase {
         thread.record(ratingEvent(5, "up", messageId: "m2"))
         XCTAssertEqual(thread.ratings, ["m1": .down, "m2": .up])
         XCTAssertEqual(thread.eventsCursor, "e4")
+        // A withdrawal read as the newest word takes the thumb off; one this device wrote does the same at once.
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(6, "withdrawn")], next: "e6", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m2": .up])
+        thread.record(ratingEvent(7, "withdrawn", messageId: "m2"))
+        XCTAssertEqual(thread.ratings, [:])
+        // The verdict it took back, arriving late, does not bring the thumb back; a verdict given after it stands.
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(2, "down"), ratingEvent(8, "up")], next: "e8", hasMore: false))
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+    }
+
+    func testAWithdrawalReadAsTheNewestWordTakesTheFoldedThumbOff() {
+        var thread = ConversationThread()
+        let rated = ConversationReadMessage(
+            message: reply(id: "m1", parts: [.text("words")]),
+            seq: 1,
+            createdAt: Date(timeIntervalSince1970: 100),
+            tools: [],
+            rating: RatingEventPayload(rating: .up)
+        )
+        thread.apply(
+            ConversationMessagesAnswer(
+                conversations: mainOnly, groups: [group(turnId: "t1", turn: nil, messages: [rated])], next: "c1", hasMore: false
+            )
+        )
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+        // Still replaying from before the fold: the folded thumb stands.
+        thread.apply(ConversationEventsAnswer(events: [ratingEvent(2, "withdrawn")], next: "e2", hasMore: true))
+        XCTAssertEqual(thread.ratings, ["m1": .up])
+        // Caught up: the withdrawal is the newest word, and the message stands unrated.
+        thread.apply(ConversationEventsAnswer(events: [], next: "e2", hasMore: false))
+        XCTAssertEqual(thread.ratings, [:])
     }
 
     func testARatingLeavesWithTheConversationThatHeldItsMessage() {

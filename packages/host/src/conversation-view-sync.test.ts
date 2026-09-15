@@ -14,6 +14,8 @@ import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_RATING,
   type MessageRating,
+  RATING_WORD,
+  type RatingWord,
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
@@ -549,7 +551,7 @@ test("a Clear the service confirmed empties the picture from the answer alone: m
 function ratingEvent(
   messageIdNumber: number,
   seq: number,
-  rating: MessageRating | undefined,
+  rating: RatingWord | undefined,
   conversationId = MAIN,
 ): ConversationReadEvent {
   return {
@@ -638,6 +640,38 @@ test("a rating this device wrote shows at once, whatever the events read has rea
   assert.equal(sync.revision, shown);
   // A rating on a message this device does not hold lands nowhere.
   sync.recordRating(messageId(9), 6, { rating: MESSAGE_RATING.UP });
+  assert.equal(sync.revision, shown);
+});
+
+test("a withdrawal is the newest word like any verdict: read back it unrates the message, and this device's own shows at once", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([
+      mainGroup(turnId(1), [
+        ask(1, 1, "well?", NOW),
+        rated(reply(2, 2, NOW + 1), MESSAGE_RATING.UP),
+      ]),
+    ]),
+  );
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.UP);
+  // Another device took the verdict back since the fold: the thumb comes off.
+  sync.applyEvents([ratingEvent(2, 3, RATING_WORD.WITHDRAWN)], "e1", false);
+  assert.equal(ratingOf(sync, 2), undefined);
+  // The verdict it took back, arriving late, does not bring the thumb back.
+  sync.applyEvents([ratingEvent(2, 2, MESSAGE_RATING.UP)], "e2", false);
+  assert.equal(ratingOf(sync, 2), undefined);
+  // A verdict given after the withdrawal stands again.
+  sync.applyEvents([ratingEvent(2, 4, MESSAGE_RATING.DOWN)], "e3", false);
+  assert.equal(ratingOf(sync, 2), MESSAGE_RATING.DOWN);
+  // This device takes it back: shown from the answer, before any read carries it.
+  const before = sync.revision;
+  sync.recordRating(messageId(2), 5, { rating: RATING_WORD.WITHDRAWN });
+  assert.equal(ratingOf(sync, 2), undefined);
+  assert.ok(sync.revision > before);
+  // The write's own event, read back: nothing newer, nothing moved.
+  const shown = sync.revision;
+  sync.applyEvents([ratingEvent(2, 5, RATING_WORD.WITHDRAWN)], "e4", false);
+  assert.equal(ratingOf(sync, 2), undefined);
   assert.equal(sync.revision, shown);
 });
 

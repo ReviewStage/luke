@@ -13,7 +13,8 @@ import Foundation
 /// them; a turn is replaced by id as its stamps move; and the marks the
 /// service folded onto each message — an announcement's unspoken mark, the
 /// developer's latest rating — are amended by the newer events read since,
-/// a second rating being a second event and never an edit. The three
+/// a second rating being a second event and never an edit, and a withdrawal
+/// a third that leaves the message unrated. The three
 /// cursors are the strings the service minted, echoed back on the next read
 /// and never composed here. Every device that reads to the end holds the same
 /// rows in the same order, because the order is the view's own: a group's
@@ -65,11 +66,12 @@ public struct ConversationThread: Equatable, Sendable {
     /// read stands at or past the fold.
     private struct RatingMark: Equatable, Sendable {
         let seq: Int
-        let rating: MessageRating
+        /// The verdict the event leaves standing: nothing where it withdrew one.
+        let rating: MessageRating?
         let own: Bool
     }
 
-    /// The key a rating event's verdict travels under in its payload — `RATING_EVENT_PAYLOAD_FIELDS`.
+    /// The key a rating event's word travels under in its payload — `RATING_EVENT_PAYLOAD`.
     private static let ratingPayloadKey = "rating"
 
     public init() {}
@@ -145,7 +147,9 @@ public struct ConversationThread: Equatable, Sendable {
 
     /// Takes one event as the latest word about its message where it is
     /// newer than the one held: a speech event moves the announcement's mark,
-    /// a rating event the message's verdict.
+    /// a rating event the message's verdict, a withdrawal among them taking
+    /// the verdict off. A rating event whose word is outside the vocabulary
+    /// is not taken.
     private mutating func take(_ event: ConversationReadEvent, own: Bool) {
         if event.kind.isSpeech {
             let standing = latestSpeech[event.messageId]
@@ -154,19 +158,20 @@ public struct ConversationThread: Equatable, Sendable {
             }
             return
         }
-        guard let rating = event.payload?[Self.ratingPayloadKey]?.stringValue.flatMap(MessageRating.init(rawValue:)) else {
+        guard let word = event.payload?[Self.ratingPayloadKey]?.stringValue.flatMap(RatingWord.init(rawValue:)) else {
             return
         }
         let standing = latestRating[event.messageId]
         if standing == nil || standing!.seq < event.seq {
-            latestRating[event.messageId] = RatingMark(seq: event.seq, rating: rating, own: own)
+            latestRating[event.messageId] = RatingMark(seq: event.seq, rating: word.verdict, own: own)
         }
     }
 
     /// The developer's latest verdict on each message the thread holds: the
     /// rating the service folded onto the message, amended by a rating this
     /// device wrote since, and by the rating events read since once the events
-    /// read stands at or past the fold.
+    /// read stands at or past the fold. A message whose newest word withdrew
+    /// the verdict is absent here, as one never rated is.
     public var ratings: [String: MessageRating] {
         var verdicts: [String: MessageRating] = [:]
         for group in groups.values {
@@ -175,7 +180,11 @@ public struct ConversationThread: Equatable, Sendable {
             }
         }
         for (id, mark) in latestRating where eventsCaughtUp || mark.own {
-            verdicts[id] = mark.rating
+            if let rating = mark.rating {
+                verdicts[id] = rating
+            } else {
+                verdicts.removeValue(forKey: id)
+            }
         }
         return verdicts
     }

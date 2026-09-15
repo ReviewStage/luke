@@ -20,7 +20,11 @@ export {
   MessageRatingSchema,
   maximumRatingNoteLength,
   RATING_EVENT_PAYLOAD,
+  RATING_WITHDRAWN,
+  RATING_WORD,
   type RatingEventPayload,
+  type RatingWord,
+  RatingWordSchema,
   SPEECH_EXPIRED_EVENT_PAYLOAD,
   SPEECH_EXPIRY_REASON,
   SPEECH_HELD_EVENT_PAYLOAD,
@@ -32,6 +36,9 @@ export {
   type SpeechHeldEventPayload,
   type SpeechOfferedEventPayload,
   type SpeechSpokenEventPayload,
+  STANDING_RATING,
+  type StandingRating,
+  standingRating,
 } from "./conversation-event.js";
 export {
   HTTP_METHOD,

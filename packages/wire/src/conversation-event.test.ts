@@ -8,6 +8,9 @@ import {
   MESSAGE_RATING,
   maximumRatingNoteLength,
   RATING_EVENT_PAYLOAD,
+  RATING_WORD,
+  STANDING_RATING,
+  standingRating,
 } from "./conversation-event.js";
 import { readEither } from "./effect/json-schema.js";
 import { unparsedWire } from "./json.js";
@@ -50,4 +53,21 @@ test("a rating payload is a verdict with an optional bounded note, and nothing e
     SCHEMA_REFUSAL.MALFORMED,
     ["turnId"],
   ]);
+});
+
+test("a rating event may withdraw the verdict, and a withdrawal never stands on a message", () => {
+  const parse = (value: Parameters<typeof unparsedWire>[0]) =>
+    Result.getOrUndefined(readEither(RATING_EVENT_PAYLOAD)(unparsedWire(value)));
+  assert.deepEqual(parse({ rating: RATING_WORD.WITHDRAWN }), { rating: RATING_WORD.WITHDRAWN });
+  // The standing shape is the verdict's alone: a page or a view never carries the withdrawal.
+  assert.equal(
+    Result.isFailure(readEither(STANDING_RATING)(unparsedWire({ rating: RATING_WORD.WITHDRAWN }))),
+    true,
+  );
+  assert.equal(standingRating({ rating: RATING_WORD.WITHDRAWN }), undefined);
+  assert.equal(standingRating(undefined), undefined);
+  assert.deepEqual(standingRating({ rating: MESSAGE_RATING.DOWN, note: "Too early." }), {
+    rating: MESSAGE_RATING.DOWN,
+    note: "Too early.",
+  });
 });

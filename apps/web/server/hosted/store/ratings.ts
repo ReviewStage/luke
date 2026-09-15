@@ -14,7 +14,8 @@ import { STORE_WRITE_REFUSAL, type StoreWriter } from "./writer.js";
  * A rating is an event on one of Luke's messages, recorded through the store
  * writer like every other event: numbered by the conversation's event
  * sequence, appended and never updated, so a developer who rates a message
- * twice leaves two facts and a read takes the newer. Two refusals stand in
+ * twice leaves two facts and a read takes the newer, and one who takes a
+ * verdict back leaves a third that says so. Two refusals stand in
  * front of the write, and they are different checks. A message the caller
  * does not own — another account's, or one in a conversation the Clear
  * stamped — reads as no message at all, so nothing of it is learned. A

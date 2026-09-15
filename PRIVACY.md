@@ -52,7 +52,11 @@ is what is shown, not what is kept. A thumbs up or down you give one of Luke's
 messages there is written to the same service as a rating event beside that
 message, naming the verdict and the Mac it came from, so it shows on every
 device signed in to your account, including the next time you open Luke; a
-second verdict is a second event, and the newest is what every device shows.
+second verdict is a second event, pressing the filled thumb again takes your
+verdict back as a third event that says so and leaves the message unrated,
+and the newest is what every device shows. Taking a verdict back does not
+erase it: the record keeps every verdict you gave and the fact that you took
+it back, and only the newest is shown.
 Pressing thumbs down also offers the feedback composer, prefilled with that
 message and your ask before it, and nothing of it leaves the Mac unless you
 press Send. What the service keeps of it is described under "Your account"
@@ -178,8 +182,8 @@ result, the briefing he offered you among them; the words an observation
 turn opened with, which for a Conductor session include the messages that
 chat gained since he last looked; the turn's model, token counts, and the
 ids of OpenAI's responses; and the events about each message — that a briefing was offered,
-claimed, spoken, pushed, held, or expired, and each rating you gave — naming
-the device that took part. When you speak with Luke through your account
+claimed, spoken, pushed, held, or expired, and each rating you gave or took
+back — naming the device that took part. When you speak with Luke through your account
 and he answers you himself, without running a turn, that exchange is kept
 too, the same way: what you said as your line and what he said as his,
 each written once it has settled, so the Conversation shows a spoken
@@ -202,9 +206,10 @@ launch, or the introduction where it plays before you sign in — is not sent
 then: it waits in a file in Luke's own data folder, for at most seven days
 and at most two hundred counts, and is sent under the account that next
 signs in, even when that is in a later launch. A Mac that never signs in
-sends none of them. A thumbs up or down you give one of Luke's messages is
-counted with the verdict and whether the message was a reply or a briefing,
-and never with the message, its id, or a note you left. Nothing you type or
+sends none of them. A thumbs up or down you give one of Luke's messages, or
+take back, is counted with the verdict or the fact that you took it back and
+whether the message was a reply or a briefing, and never with the message,
+its id, or a note you left. Nothing you type or
 say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 

@@ -109,8 +109,8 @@ public enum ProductEvent: Equatable, Sendable {
     case settingsReset
     /// A voice session created for this phone: counted when `session.created` lands, as the desktop counts it.
     case voiceCallStart(source: ProductVoiceSessionSource)
-    /// A thumb on one of Luke's messages: the verdict and the message's kind, never its id or a note.
-    case conversationRated(rating: MessageRating, kind: ProductRatedMessageKind)
+    /// A thumb on one of Luke's messages, or the press that takes it back: the word and the message's kind, never its id or a note.
+    case conversationRated(rating: RatingWord, kind: ProductRatedMessageKind)
 
     public var name: String {
         switch self {

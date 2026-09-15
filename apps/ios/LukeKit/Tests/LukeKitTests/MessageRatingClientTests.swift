@@ -42,6 +42,29 @@ final class MessageRatingClientTests: XCTestCase {
         XCTAssertEqual(body, ["rating": "down", "deviceId": deviceId])
     }
 
+    func testAWithdrawalIsPutTheSameWayAsItsOwnWord() async throws {
+        let http = StubHTTP()
+        http.body = Data(#"{"id":"4d000000-0000-4000-8000-000000000010","seq":10}"#.utf8)
+        let client = MessageRatingClient(serviceURL: serviceURL, http: http)
+        let answer = try await client.rate(messageId: messageId, .withdrawn, deviceId: deviceId, accessToken: "token")
+        XCTAssertEqual(answer, MessageRatingAnswer(id: "4d000000-0000-4000-8000-000000000010", seq: 10))
+        let request = try XCTUnwrap(http.requests.first)
+        XCTAssertEqual(request.httpMethod, "PUT")
+        XCTAssertEqual(request.url?.path, "/api/conversation/messages/\(messageId)/rating")
+        let body = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(request.httpBody)) as? [String: String]
+        )
+        XCTAssertEqual(body, ["rating": "withdrawn", "deviceId": deviceId])
+    }
+
+    func testAWordLeavesItsVerdictStanding() {
+        XCTAssertEqual(RatingWord(.up), .up)
+        XCTAssertEqual(RatingWord(.down), .down)
+        XCTAssertEqual(RatingWord.up.verdict, .up)
+        XCTAssertEqual(RatingWord.down.verdict, .down)
+        XCTAssertNil(RatingWord.withdrawn.verdict)
+    }
+
     private func refusal(status: Int, body: String) async throws -> MessageRatingError? {
         let http = StubHTTP()
         http.status = status

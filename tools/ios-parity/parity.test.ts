@@ -90,6 +90,7 @@ import {
   MESSAGE_RATING,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
@@ -724,6 +725,14 @@ test("MessageRating is MESSAGE_RATING", () => {
     swiftEnumRawValues(swift(`${KIT}/MessageRatingClient.swift`), "MessageRating"),
     MESSAGE_RATING,
     "a verdict the phone cannot name is refused by the rating route and cannot draw the control's state",
+  );
+});
+
+test("RatingWord is RATING_WORD", () => {
+  assertSameSet(
+    swiftEnumRawValues(swift(`${KIT}/MessageRatingClient.swift`), "RatingWord"),
+    RATING_WORD,
+    "a word the phone cannot say is refused by the rating route, and one it cannot read leaves a thumb it should have taken off",
   );
 });
 

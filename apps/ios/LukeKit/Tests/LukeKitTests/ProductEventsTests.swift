@@ -68,6 +68,12 @@ final class ProductEventsTests: XCTestCase {
             rated.wireProperties(appVersion: "0.1.1") as? [String: String],
             ["rating": "down", "message_kind": "announcement"]
         )
+        let withdrawn = ProductEvent.conversationRated(rating: .withdrawn, kind: .reply)
+        XCTAssertEqual(withdrawn.name, "conversation:rated")
+        XCTAssertEqual(
+            withdrawn.wireProperties(appVersion: "0.1.1") as? [String: String],
+            ["rating": "withdrawn", "message_kind": "reply"]
+        )
     }
 
     /// A roster row's provider id reaches a count only through this set, so
