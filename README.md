@@ -34,10 +34,9 @@
 
 ### Talk to Luke
 
-Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app, or press
-<kbd>⌥</kbd><kbd>L</kbd> to type to him instead. He can tell you about the
-status of your agents, kick fresh ones off for you, or message them on your
-behalf.
+Hold <kbd>⌥</kbd><kbd>Space</kbd> to talk to Luke from any app; every ask is
+spoken, and there is nothing to type into. He can tell you about the status of
+your agents, kick fresh ones off for you, or message them on your behalf.
 
 The **Conversation** tab draws the conversation Luke's own service keeps for
 your account, the same thread on every Mac you sign in on, showing its 200

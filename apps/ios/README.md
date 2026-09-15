@@ -429,7 +429,8 @@ a press on the filled thumb, whose item reads Remove Thumbs Up or Remove
 Thumbs Down, writes a third whose word is `withdrawn` (`RatingWord`, the
 wire's `RATING_WORD`) and leaves the message unrated, the thread taking a
 withdrawal read as the newest word as no verdict at all. The watch,
-which draws no menu, constructs the store without a rating client. The
+which draws no menu, hands the store the rating client its constructor asks
+for and never calls it: a rating is shown on the wrist and given elsewhere. The
 developer's own ask and the brain's notes to itself offer no thumbs, since
 the service refuses a rating on either; before this installation's device row
 is registered the two items are disabled rather than hidden; the count that
@@ -554,8 +555,8 @@ sends `session.close`. Nothing on the wrist mints a credential, dispatches a
 tool, seeds a context item, or sets a speed: the exchange is the service's,
 the brain answers, and the Live model has no speed. A primary socket has no
 attach, so a call ends when the service's function invocation does, at its
-cap or sooner; the screen then says the call ended, and the next press opens
-a new one.
+800-second cap (`VOICE_FUNCTION_MAX_DURATION_SECONDS`) or sooner; the screen
+then says the call ended, and the next press opens a new one.
 
 watchOS draws one line through that traffic. HTTP over `URLSession` is open
 to every app, and every hosted read and act on the watch travels that way,
