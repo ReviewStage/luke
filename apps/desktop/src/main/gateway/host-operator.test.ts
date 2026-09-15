@@ -139,6 +139,26 @@ it.effect("every clearable plain setting crosses the wire when cleared", () =>
   }),
 );
 
+it.effect(
+  "opening a child transcript travels as a keyed mutation naming the child, and the close carries nothing",
+  () =>
+    Effect.gen(function* () {
+      const { transport, requests } = recordingTransport();
+      const operator = yield* operatorOver(transport);
+
+      // The transport above answers a settings write, which is no open; the operator reads that as the host not taking it.
+      assert.equal(yield* operator.openChildTranscript("child-1"), false);
+      yield* operator.closeChildTranscript();
+
+      const [opened, closed] = requests;
+      assert.equal(opened?.method, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT);
+      assert.deepEqual(crossesTheWire(opened)?.params, { childId: "child-1" });
+      assert.ok(opened?.idempotencyKey);
+      assert.equal(closed?.method, GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
+      assert.deepEqual(crossesTheWire(closed)?.params, {});
+    }),
+);
+
 it.effect("a forgotten entry travels as an absent value field", () =>
   Effect.gen(function* () {
     const { transport, requests } = recordingTransport();

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": "./src/index.js",
+    "./reads-wire": "./src/reads-wire.js"
   },
   "types": "./src/index.ts",
   "scripts": {

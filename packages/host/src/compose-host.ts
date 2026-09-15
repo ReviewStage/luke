@@ -254,6 +254,7 @@ export const hostAssemblyLayer: Layer.Layer<
                 settings.store.get(APP_SETTING_SCHEMA.workspaceProjectDefaults.field),
               )
             : undefined;
+          const childTranscript = conversation.childTranscriptSnapshot();
           return {
             settings: carried(snapshot),
             account: carried(account.snapshot()),
@@ -261,6 +262,10 @@ export const hostAssemblyLayer: Layer.Layer<
             sessionsSettled: observation.rosterSettled(),
             announcementsHeld: quiet,
             conversationView: carried(conversation.snapshot()),
+            children: carried(conversation.childrenSnapshot()),
+            ...(childTranscript !== undefined
+              ? { childTranscript: carried(childTranscript) }
+              : undefined),
             workspaceProjects: carried(
               workspaceProjectDefaults === undefined
                 ? []
