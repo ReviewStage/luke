@@ -35,7 +35,7 @@ export interface MintSeams {
 
 export const MINT_METHOD = "POST";
 
-export type MintAnswer = HttpServerResponse.HttpServerResponse;
+type MintAnswer = HttpServerResponse.HttpServerResponse;
 
 export function refuseMint(refusal: HostedRefusal): Effect.Effect<never, MintAnswer> {
   return Effect.fail(hostedRefusalResponse(refusal));

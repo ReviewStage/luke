@@ -88,7 +88,7 @@ export interface RealtimeConnectionMintOptions {
  * — the upstream failed — and the status it answered, when it answered at
  * all, is the whole of what travels onward; the upstream's own words never do.
  */
-export type RealtimeConnectionMint =
+type RealtimeConnectionMint =
   | { failure: { upstreamStatus?: number } }
   | { connection: RealtimeConnection };
 

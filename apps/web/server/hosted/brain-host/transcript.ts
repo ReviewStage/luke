@@ -25,7 +25,7 @@ import { type HostedRoster, observedSession } from "./roster.js";
  * and only over the bookmark the read began from.
  */
 
-export interface TranscriptReadSeams {
+interface TranscriptReadSeams {
   /** The request's own connection, which is what answers the cursor's own reads. */
   readonly client: SqlClient.SqlClient;
   readonly userId: string;

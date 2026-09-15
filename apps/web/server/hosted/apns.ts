@@ -119,7 +119,7 @@ interface ApnsSystemFields {
  * app reads on a tap, which Apple places beside `aps` at the top level of the
  * wire object. Every custom value is a string the caller already bounded.
  */
-export interface ApnsPayload {
+interface ApnsPayload {
   aps: ApnsSystemFields;
   custom: Readonly<Record<string, string>>;
 }
@@ -267,7 +267,7 @@ function http2ApnsTransport(): ApnsTransport {
   };
 }
 
-export interface ApnsSenderOptions {
+interface ApnsSenderOptions {
   credentials: ApnsCredentials;
   transport?: ApnsTransport;
   now?: () => number;

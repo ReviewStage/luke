@@ -119,7 +119,7 @@ export const SPEECH_PUSH_DECISION = {
   DUE: "due",
 } as const;
 
-export type SpeechPushDecision = (typeof SPEECH_PUSH_DECISION)[keyof typeof SPEECH_PUSH_DECISION];
+type SpeechPushDecision = (typeof SPEECH_PUSH_DECISION)[keyof typeof SPEECH_PUSH_DECISION];
 
 /**
  * The rule, as a function of what was read: the offer's standing, and
@@ -141,7 +141,7 @@ export function speechPushDecision(
 }
 
 /** A device the push can address: its row, and the token and gateway Apple issued it. */
-export interface PushableDevice {
+interface PushableDevice {
   readonly deviceId: string;
   readonly token: string;
   readonly environment: PushEnvironment;
@@ -199,7 +199,7 @@ export interface SpeechPushSeams {
   readonly forgetDevice: DeviceSeams["forgetDevice"];
 }
 
-export interface SpeechPushOptions {
+interface SpeechPushOptions {
   readonly now: number;
   /** The most open offers the pass reads, oldest first. */
   readonly limit?: number | undefined;

@@ -190,7 +190,7 @@ function queuedAnswer(ask: AskRow): HostedBrainTurnAnswer {
 }
 
 /** Where an id stands, as the turn read answers it, with the record and the row it was read from. */
-export type AskStanding =
+type AskStanding =
   | {
       readonly answer: HostedBrainTurnAnswer;
       /** The ask the id named, where it was an ask's id; a turn's own id names no ask. */
@@ -255,7 +255,7 @@ export const ASK_REFUSAL = {
   STORE: "store",
 } as const;
 
-export type AskOutcome =
+type AskOutcome =
   | { readonly ok: true; readonly answer: HostedBrainAskAnswer }
   | { readonly ok: false; readonly refusal: typeof ASK_REFUSAL.NOT_FOUND }
   | { readonly ok: false; readonly refusal: typeof ASK_REFUSAL.UPSTREAM; readonly status: number }
@@ -424,14 +424,14 @@ export const STOP_REFUSAL = {
   UPSTREAM: "upstream",
 } as const;
 
-export type StopOutcome =
+type StopOutcome =
   | { readonly ok: true; readonly answer: HostedBrainTurnAnswer }
   | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_FOUND }
   | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.NOT_RUNNING }
   | { readonly ok: false; readonly refusal: typeof STOP_REFUSAL.UPSTREAM; readonly status: number };
 
 /** What a Stop needs: the standing reads, the record's stamp, the writer's stamp, eve as the caller reaches it, and the clock. */
-export interface StopSeams extends AskStandingReads {
+interface StopSeams extends AskStandingReads {
   readonly asks: Pick<AskRecord, "named" | "cancelRequested">;
   readonly writer: Pick<StoreWriter, "requestTurnCancel">;
   readonly eve: EveSessions;

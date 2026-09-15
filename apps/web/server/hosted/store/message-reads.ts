@@ -57,7 +57,7 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
-export type MessageReadFailure = SqlError | Schema.SchemaError;
+type MessageReadFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>

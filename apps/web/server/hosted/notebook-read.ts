@@ -37,7 +37,7 @@ export interface NotebookReadOptions {
 const CURATED_ORDER: readonly string[] = [WORKSPACE_FILE.MEMORY, WORKSPACE_FILE.USER];
 
 /** The paths one answer carries, in its order, and the count of older notes it leaves out. */
-export interface NotebookOrder {
+interface NotebookOrder {
   readonly kept: readonly string[];
   readonly omittedNotes: number;
 }
