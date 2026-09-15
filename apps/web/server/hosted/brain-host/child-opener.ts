@@ -1,7 +1,7 @@
 import { Effect, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { discardChildConversation, openChildConversation } from "../store/children.js";
+import { abandonChildConversation, openChildConversation } from "../store/children.js";
 import type { ConversationTarget } from "../store/index.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { claimRuntimeSession } from "./conversation.js";
@@ -11,6 +11,7 @@ import {
   type EveSessions,
   type EveSessionsOptions,
 } from "./eve-sessions.js";
+import { recordedRuntimeSession } from "./recorded-session.js";
 
 /**
  * The child opener: what a delegation becomes. A child is a conversation of
@@ -26,11 +27,18 @@ import {
  * first. Nothing here bounds how many children an account may open, and
  * nothing here carries a completion back; each is another module's.
  *
- * A child eve refused a session for is no child: the row is removed again,
- * since nothing was ever said in it, and the refusal is answered typed so the
- * caller decides what to tell the brain. A deployment with no secret or no
- * origin for eve opens nothing and inserts nothing, the kill switch every
- * hosted door keeps.
+ * A child eve refused a session for is no child: the row is stamped as
+ * Clear stamps one, so nothing lists it and the purge takes it, and the
+ * refusal is answered typed so the caller decides what to tell the brain.
+ * The stamp holds to a row no session has claimed, because eve's answer and
+ * its session's start are two events and only the row says which came
+ * first: an answer lost or unreadable after eve had already started the
+ * session finds the row claimed, and the child is answered as opened under
+ * the session the row records rather than reported refused while it runs;
+ * and an open interrupted before eve answered stamps the row on its way
+ * out, so a session starting late finds a cleared conversation and is
+ * refused. A deployment with no secret or no origin for eve opens nothing
+ * and inserts nothing, the kill switch every hosted door keeps.
  */
 
 /** The one kind of turn the opener sends, which is what its eve client is admitted for and nothing wider. */
@@ -64,7 +72,8 @@ export interface ChildSpawn {
 export const CHILD_OPEN_REFUSAL = {
   UNCONFIGURED:
     "Not opened: this deployment holds no secret or no origin for eve, so it opens no child.",
-  NO_PARENT: "Not opened: the delegating conversation does not stand for this account.",
+  NO_PARENT:
+    "Not opened: the delegating conversation or its message does not stand for this account.",
   EVE_REFUSED: "Not opened: eve refused to open the child's session.",
 } as const;
 
@@ -98,7 +107,7 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
   });
   if (childId === undefined) {
     seams.report(
-      `A child of conversation ${spawn.parent.conversationId} could not be opened: the conversation does not stand for account ${userId}.`,
+      `A child of conversation ${spawn.parent.conversationId} could not be opened: the conversation or message ${spawn.spawnedByMessageId} does not stand for account ${userId}.`,
     );
     return { ok: false, refusal: CHILD_OPEN_REFUSAL.NO_PARENT };
   }
@@ -106,8 +115,11 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
     origin,
     caller: { kind: EVE_CALLER.DEPLOYMENT, secret, account: userId },
   });
+  const target: ConversationTarget = { userId, conversationId: childId };
+  const abandon = abandonChildConversation(userId, childId, new Date(seams.now()));
   // eve's open is a request over the network: an answer refusing it and a call that never answered
-  // are the same child not opened, said with what is known of each.
+  // are the same child not opened, said with what is known of each; a caller ending before eve
+  // answers stamps the row on its way out.
   const sessionId = yield* Effect.tryPromise({
     try: () =>
       eve.open({ conversationId: childId, turn: BRAIN_HOST_TURN.CHILD_TASK, message: spawn.task }),
@@ -124,11 +136,18 @@ export const openChild = /* @__PURE__ */ Effect.fn("openChild")(function* (
       seams.report(`A session for child ${childId} could not be opened: ${failure}.`);
       return Effect.succeed(undefined);
     }),
+    Effect.onInterrupt(() => Effect.ignore(abandon)),
   );
   if (sessionId === undefined) {
-    yield* discardChildConversation(userId, childId);
-    return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
+    if (yield* abandon) return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
+    // The row was claimed before the answer was read: eve started the session, whatever it answered.
+    const claimed = yield* recordedRuntimeSession(target);
+    if (claimed === undefined) return { ok: false, refusal: CHILD_OPEN_REFUSAL.EVE_REFUSED };
+    seams.report(
+      `Child ${childId} runs in session ${claimed}, which claimed it before eve's answer was read.`,
+    );
+    return { ok: true, childId, sessionId: claimed };
   }
-  yield* claimRuntimeSession({ userId, conversationId: childId }, sessionId, new Date(seams.now()));
+  yield* claimRuntimeSession(target, sessionId, new Date(seams.now()));
   return { ok: true, childId, sessionId };
 });

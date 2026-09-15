@@ -31,7 +31,7 @@ const READER = "server/hosted/store/message-reads.ts";
 /** The speech module: folds a briefing's standing from the events on its message and writes every transition through the writer. */
 const SPEECH_READER = "server/hosted/store/speech.ts";
 
-/** The children directory: derives where a child stands from the latest of its turns, and writes none. */
+/** The children module: derives where a child stands from the latest of its turns, holds a child's open to a message of its parent's, and writes neither table. */
 const CHILDREN_READER = "server/hosted/store/children.ts";
 
 /** The tables each module names at all. */
@@ -39,7 +39,7 @@ const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [WRITER, WRITTEN_TABLES],
   [READER, WRITTEN_TABLES],
   [SPEECH_READER, new Set(["messages", "events"])],
-  [CHILDREN_READER, new Set(["turns"])],
+  [CHILDREN_READER, new Set(["messages", "turns"])],
 ]);
 
 /** The modules that may write one of the three tables, which is the writer and nothing else. */

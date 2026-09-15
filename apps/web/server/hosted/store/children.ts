@@ -177,11 +177,16 @@ export interface ChildOpen {
 
 const ChildIdRowSchema = Schema.Struct({ id: Schema.String });
 
+/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+const lockUser = (userId: string) =>
+  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+
 /**
  * The insert selects from the parent's row, so a parent that does not stand
- * for the account — cleared, another account's, or no row at all — inserts
- * nothing, and the delegation learns so from the empty answer rather than
- * from a child hanging under a conversation its account cannot read.
+ * for the account — cleared, another account's, or no row at all — or a
+ * spawning message that is not the parent's own inserts nothing, and the
+ * delegation learns so from the empty answer rather than from a child
+ * hanging under a conversation its account cannot read.
  */
 const insertChild = SqlSchema.findOneOption({
   Request: Schema.Struct({
@@ -206,46 +211,72 @@ const insertChild = SqlSchema.findOneOption({
         where parent.id = ${write.parentConversationId}
           and parent.user_id = ${write.userId}
           and parent.deleted_at is null
+          and exists (
+            select 1 from messages
+            where messages.id = ${write.spawnedByMessageId}
+              and messages.conversation_id = parent.id
+              and messages.user_id = parent.user_id
+          )
         returning id
       `,
     ),
 });
 
-/** Opens a child under the account's standing parent, answering its id; nothing where the parent does not stand for the account. */
+/**
+ * Opens a child under the account's standing parent, answering its id;
+ * nothing where the parent or its spawning message does not stand for the
+ * account. The open takes the account's user row lock first, the same lock
+ * Clear holds, so a child opened beside a Clear is either stamped with its
+ * parent or refused against the parent Clear stamped, and never left
+ * standing under a cleared one.
+ */
 export function openChildConversation(
   open: ChildOpen,
 ): Effect.Effect<string | undefined, ChildReadFailure, SqlClient.SqlClient> {
-  return Effect.map(insertChild(open), (row) =>
-    Option.getOrUndefined(Option.map(row, (found) => found.id)),
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        yield* lockUser(open.userId);
+        const inserted = yield* insertChild(open);
+        return Option.getOrUndefined(Option.map(inserted, (row) => row.id));
+      }),
+    ),
   );
 }
 
-const discardChild = SqlSchema.void({
-  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
+const abandonChild = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
+  Result: ChildIdRowSchema,
   execute: (request) =>
     statement(
       (sql) => sql`
-        delete from conversations
+        update conversations
+        set deleted_at = ${request.now}
         where id = ${request.childId}
           and user_id = ${request.userId}
           and kind = ${CONVERSATION_KIND.CHILD}
+          and deleted_at is null
           and runtime_session_id is null
+        returning id
       `,
     ),
 });
 
 /**
- * Removes a child no session ever ran: the row a delegation opened and eve
- * then refused a session for. It is a delete rather than Clear's stamp
- * because nothing was said in it, so there is nothing to keep, and it holds
- * to a row recording no session, so a child a session has since claimed is
- * left standing whatever the caller believed.
+ * Stamps a child no session has claimed, the row a delegation opened and
+ * then heard no session for from eve, so it is listed by nothing and the
+ * purge takes it with the rest; a session that starts for it after the
+ * stamp finds a cleared conversation and is refused. Answers whether the
+ * row was stamped: a child a session has claimed meanwhile is left standing
+ * whatever the caller heard, since the claim is the truth that a session
+ * runs it.
  */
-export function discardChildConversation(
+export function abandonChildConversation(
   userId: string,
   childId: string,
-): Effect.Effect<void, ChildReadFailure, SqlClient.SqlClient> {
-  return discardChild({ userId, childId });
+  now: Date,
+): Effect.Effect<boolean, ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(abandonChild({ userId, childId, now }), Option.isSome);
 }
 
 /** One of the account's standing children by id, or none. */
