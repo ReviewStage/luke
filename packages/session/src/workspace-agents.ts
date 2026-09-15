@@ -6,7 +6,7 @@ import { isProviderId, PROVIDER_ID, type ProviderId } from "./provider-identity.
  * a person reads. The label stands alone — no vendor beside it — because a
  * model's own name already says whose it is.
  */
-export interface WorkspaceAgentModel {
+interface WorkspaceAgentModel {
   id: string;
   label: string;
 }
@@ -157,11 +157,6 @@ export function workspaceAgentModelLabel(
     (candidate) => candidate.agent === selection.agent,
   );
   return entry?.models.find((model) => model.id === selection.model)?.label ?? selection.model;
-}
-
-/** Guards a selection arriving over IPC: its shape first, then the table. */
-export function isWorkspaceAgentSelection(providerId: string, value: UnparsedWireValue): boolean {
-  return parseWorkspaceAgentSelection(providerId, value) !== undefined;
 }
 
 export function parseWorkspaceAgentSelection(

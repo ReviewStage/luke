@@ -1,4 +1,3 @@
-import { text, type UnparsedWireValue } from "@sidecar/wire";
 import { isOpenableSessionLink, SESSION_LINK_SCHEME } from "./session-identity.js";
 import type { SessionDiffSummary } from "./session-shape.js";
 
@@ -18,19 +17,6 @@ export const maximumSpawnableAgentLength = 40;
 export const maximumSpawnableAgents = 8;
 /** One line of context beside a title, not a paragraph. */
 export const maximumSessionDetailLength = 120;
-/**
- * The one line Luke derives about what a local session is working on, read
- * from the rendering of its own transcript. A phrase, never a sentence: it
- * names the work in an announcement in place of a title that only ever said
- * where the conversation began.
- */
-export const maximumSessionSubjectLength = 80;
-/**
- * How much of a transcript file's end one read may load. It is the one bound
- * on how much of a session a rendering can carry, so it is also the most a
- * rendering could measure when it is validated on the wire.
- */
-export const transcriptReadTailBytes = 256 * 1024;
 /** Long enough for any provider's session address without becoming a payload. */
 export const maximumSessionLinkLength = 300;
 /** A reply typed into a row, not a document pasted through one. */
@@ -44,17 +30,6 @@ export const maximumSessionMessageLength = 4_000;
  * transfer.
  */
 export const maximumAskLength = maximumSessionMessageLength;
-
-/**
- * The text of a message on its way to a session, or nothing. Unlike an observed
- * field this one is refused rather than cut when it runs long: a truncated
- * message says something its author did not.
- */
-export function sessionMessageText(value: UnparsedWireValue): string | undefined {
-  const normalized = text(value);
-  if (!normalized || normalized.length > maximumSessionMessageLength) return undefined;
-  return normalized;
-}
 
 export function requiredText(value: string, field: string): string {
   const normalized = value.trim();
@@ -172,14 +147,3 @@ export const maximumWorkspaceNameLength = 80;
 
 /** How many projects the app will offer workspace creation in at once. */
 export const maximumObservedWorkspaceProjects = 20;
-
-/**
- * The name a new workspace was asked for under, or nothing. Refused rather
- * than cut when it runs long, the same posture as a message: a truncated name
- * says something its author did not.
- */
-export function workspaceNameText(value: UnparsedWireValue): string | undefined {
-  const normalized = text(value);
-  if (!normalized || normalized.length > maximumWorkspaceNameLength) return undefined;
-  return normalized;
-}

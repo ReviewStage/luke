@@ -94,7 +94,7 @@ export type AdvertisedAction =
    */
   | { kind: typeof ACTION_KIND.RENAME_WORKSPACE; target: string };
 
-export type AdvertisedActionOf<Kind extends AdvertisedActionKind> = Extract<
+type AdvertisedActionOf<Kind extends AdvertisedActionKind> = Extract<
   AdvertisedAction,
   { kind: Kind }
 >;

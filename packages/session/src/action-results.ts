@@ -18,20 +18,6 @@ import {
  */
 export type ProviderActionResult = ActionResult;
 
-/**
- * What became of a control. Providers must report unsupported or rejected
- * controls explicitly; the core deliberately provides no fallback path such
- * as terminal input injection.
- */
-export type ProviderControlResult = ProviderActionResult;
-
-/**
- * What became of a send. A rejection carries a reason the user can act on,
- * never the message itself; unsupported means the adapter has no documented
- * way to message this session, which is an answer rather than a failure.
- */
-export type ProviderMessageResult = ProviderActionResult;
-
 export type ProviderTranscriptResult =
   | { status: typeof ACTION_RESULT_STATUS.ACCEPTED; transcript: string }
   | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
@@ -44,7 +30,7 @@ export type ProviderTranscriptResult =
  * cursor is absent only when the provider handed back no position to resume
  * from, so the next read begins as this one did.
  */
-export interface ProviderTranscriptSinceReading {
+interface ProviderTranscriptSinceReading {
   text: string;
   cursor?: string;
   truncated: boolean;

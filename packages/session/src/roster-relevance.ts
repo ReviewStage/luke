@@ -10,7 +10,7 @@ import { SESSION_STATUS, type SessionStatus } from "./session-status.js";
  * left behind; a settled or unreadable session says only where work ended,
  * which is news while the user might still come back for it and history after.
  */
-export const SESSION_ROSTER_RETENTION_MS = {
+const SESSION_ROSTER_RETENTION_MS = {
   RESCUE_MS: 3 * 24 * 60 * 60 * 1000,
   SETTLED_MS: 2 * 24 * 60 * 60 * 1000,
 } as const;
