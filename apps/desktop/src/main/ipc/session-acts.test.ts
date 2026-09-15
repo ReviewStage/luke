@@ -6,12 +6,7 @@ import type { WebContents } from "electron";
 import { test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
 import { ActRefused, type ActSender, createActRouter } from "../act-router";
-import {
-  ROW_WRITE_REFUSAL,
-  type SessionActsDependencies,
-  sessionActRows,
-  WRITE_REFUSAL,
-} from "./session-acts";
+import { sessionActRows } from "./session-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
@@ -42,7 +37,7 @@ interface Asked {
 /** The host's row writes as this process reaches them, recording what crossed and answering as told. */
 function fixture(answer: () => Effect.Effect<SessionWriteResult>) {
   const asked: Asked = { messages: [], controls: [] };
-  const writes: SessionActsDependencies["writes"] = {
+  const writes: Parameters<typeof sessionActRows>[0]["writes"] = {
     sendMessage: (identity, text) =>
       Effect.suspend(() => {
         asked.messages.push({ identity, text });
@@ -100,7 +95,7 @@ test("a host that could not be asked answers the row with this build's own sente
     await answered(
       f.rows[ACT_KIND.SESSION_SEND_MESSAGE]({ identity: IDENTITY, text: "hi" }, PANEL),
     ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: WRITE_REFUSAL.MESSAGE },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "That message could not be sent." },
   );
   assert.deepEqual(
     await answered(
@@ -109,7 +104,7 @@ test("a host that could not be asked answers the row with this build's own sente
         PANEL,
       ),
     ),
-    { status: ACTION_RESULT_STATUS.REJECTED, reason: WRITE_REFUSAL.CONTROL },
+    { status: ACTION_RESULT_STATUS.REJECTED, reason: "That control could not be run." },
   );
 });
 
@@ -143,7 +138,10 @@ test("through the router, a refused sender reads as the row's own refusal and an
       VOICE,
     ),
   );
-  assert.deepEqual(refused, { status: ACT_OUTCOME_STATUS.REFUSED, reason: ROW_WRITE_REFUSAL });
+  assert.deepEqual(refused, {
+    status: ACT_OUTCOME_STATUS.REFUSED,
+    reason: "Only a session row on the panel can send that.",
+  });
   const done = await Effect.runPromise(
     router.performAct(
       { kind: ACT_KIND.SESSION_SEND_MESSAGE, payload: { identity: IDENTITY, text: "hi" } },

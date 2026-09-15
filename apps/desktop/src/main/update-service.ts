@@ -174,7 +174,7 @@ interface LastRunVersionStore {
   write(version: string): void;
 }
 
-export interface UpdateServiceOptions {
+interface UpdateServiceOptions {
   /** The running build's version, as the packaged app reports it. */
   currentVersion: string;
   /** Every state the service moves through, for the broadcast to carry. */

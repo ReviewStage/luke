@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { OutputAudioState } from "#shared/messages/audio";
 import { fakeNativeHelper } from "#testing/native-helper";
-import { type OutputVolumeWatch, outputVolumeWatcher, parseOutputLine } from "./output-volume";
+import { type OutputVolumeWatch, outputVolumeWatcher } from "./output-volume";
 
 interface Harness {
   watcher: OutputVolumeWatch;
@@ -98,12 +98,14 @@ test("a second start is refused rather than standing up a helper nobody reads", 
 });
 
 test("a line that does not parse is dropped rather than guessed at", () => {
-  assert.equal(parseOutputLine("output muted=2 volume=0.5"), undefined);
-  assert.equal(parseOutputLine("output muted=1 volume=1.5"), undefined);
-  assert.equal(parseOutputLine("output muted=1"), undefined);
-  assert.equal(parseOutputLine("ready"), undefined);
-  assert.deepEqual(parseOutputLine("output muted=0 volume=0.07"), {
-    muted: false,
-    volume: 0.07,
-  });
+  const context = harness();
+  context.watcher.start();
+  context.emit("output muted=2 volume=0.5\n");
+  context.emit("output muted=1 volume=1.5\n");
+  context.emit("output muted=1\n");
+  context.emit("ready\n");
+  assert.deepEqual(context.events, []);
+  // The next whole line still lands: a dropped one withdraws nothing.
+  context.emit("output muted=0 volume=0.07\n");
+  assert.deepEqual(context.events, ["state:0:0.07"]);
 });

@@ -2,11 +2,7 @@ import assert from "node:assert/strict";
 import { Effect, Scope } from "effect";
 import { test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
-import {
-  type UpdaterEngineEvents,
-  UpdateService,
-  type UpdateServiceOptions,
-} from "./update-service";
+import { type UpdaterEngineEvents, UpdateService } from "./update-service";
 
 function sleep(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -55,7 +51,9 @@ function fakeEngine() {
  * `stop()` interrupts the tracked fibers directly and does not depend on the
  * scope's own closing to do it.
  */
-function service(options: Partial<UpdateServiceOptions> & { states?: UpdateSnapshot[] }) {
+function service(
+  options: Partial<Parameters<typeof UpdateService.make>[0]> & { states?: UpdateSnapshot[] },
+) {
   const states = options.states ?? [];
   const scope = Effect.runSync(Scope.make());
   return Effect.runSync(
