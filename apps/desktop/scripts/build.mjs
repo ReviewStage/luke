@@ -20,20 +20,6 @@ const DOCK_ICON_IMAGES = {
   "luke-icon-dark.png": "luke-icon-dark-512.png",
 };
 
-/** How the renderer bundle is built, shared with the stylesheet build beside it. */
-const RENDERER_BUNDLE = {
-  bundle: true,
-  platform: "browser",
-  format: "iife",
-  target: "chrome140",
-  jsx: "automatic",
-  minify: true,
-  plugins: sentryPlugins(),
-  define: { "process.env.NODE_ENV": '"production"' },
-  sourcemap: true,
-  logLevel: "info",
-};
-
 function sentryPlugins() {
   if (!process.env.SENTRY_AUTH_TOKEN) return [];
   return [
@@ -103,9 +89,17 @@ await Promise.all([
   build({
     entryPoints: [path.join(appRoot, "src/renderer/index.tsx")],
     outfile: path.join(outputRoot, "renderer/renderer.js"),
-    ...RENDERER_BUNDLE,
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    jsx: "automatic",
+    minify: true,
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
     define: {
-      ...RENDERER_BUNDLE.define,
+      "process.env.NODE_ENV": '"production"',
       // The analytics project the screen recorder files into, from the
       // packaging environment rather than source, on the calendar secret's
       // terms above. A build without one records nothing at all — the same
