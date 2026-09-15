@@ -299,7 +299,7 @@ function ReasoningRow({ text }: { text: string }): React.JSX.Element {
       <small className="visually-hidden">{VOICE.LUKE.label}</small>
       <div className="conversation-message">
         <ThinkingFold>
-          <span className="conversation-thinking-fold-words">{text}</span>
+          <MarkdownMessage words={text} className="conversation-thinking-fold-words" />
         </ThinkingFold>
       </div>
     </li>

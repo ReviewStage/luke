@@ -337,6 +337,51 @@ test("a reasoning part folds to a line on Luke's side, and an announcement is hi
   assert.equal(count(unheard, "data-reasoning", "true"), 0);
 });
 
+test("a reasoning fold keeps paragraph breaks as separate blocks inside the expanded thinking text", () => {
+  const at = FIXTURE_NOW - 30_000;
+  const group: ConversationViewTurnGroup = {
+    turnId: "paragraph-reasoning",
+    turn: {
+      id: "paragraph-reasoning",
+      origin: TURN_ORIGIN.TYPED,
+      status: TURN_STATUS.SETTLED,
+      queuedAt: at,
+      startedAt: at,
+      settledAt: at + 1_000,
+    },
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [
+      {
+        message: {
+          id: "paragraph-reasoning-message",
+          role: MESSAGE_ROLE.ASSISTANT,
+          metadata: { author: MESSAGE_AUTHOR.BRAIN },
+          parts: [
+            {
+              type: "reasoning",
+              text: "Read the trace first.\n\nThen compare the renderer styles.",
+              state: "done",
+            },
+          ],
+        },
+        seq: 1,
+        createdAt: at,
+        tools: [],
+      },
+    ],
+  };
+
+  const reasoning = entries(render([group], OPEN)).find((row) =>
+    row.includes('data-reasoning="true"'),
+  );
+  assert.ok(reasoning);
+  assert.ok(
+    reasoning.includes(
+      '<div class="markdown conversation-thinking-fold-words"><p>Read the trace first.</p>\n<p>Then compare the renderer styles.</p></div>',
+    ),
+  );
+});
+
 test("the words an announce call carries are its briefing, and a detail's label is its tool's name", () => {
   const announced = FIXTURE_INPUT.observed[0]?.messages[0]?.message;
   assert.ok(announced && announced.role === MESSAGE_ROLE.ASSISTANT);
