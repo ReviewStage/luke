@@ -16,7 +16,7 @@ type AppStateSlice = Exclude<keyof AppState, "version">;
  * the store is the one thing that patches one: a window is handed whole
  * snapshots.
  */
-export type AppStatePatch = { readonly [Slice in AppStateSlice]?: AppState[Slice] };
+type AppStatePatch = { readonly [Slice in AppStateSlice]?: AppState[Slice] };
 
 /**
  * A patch's entries with the pairing its own type carries, which

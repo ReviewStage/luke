@@ -61,8 +61,6 @@ export interface WindowService extends DesktopService {
   readonly dock: DockPresence;
   /** The takeover's own voice session, opened through the accountless endpoint for the signed-in developer. */
   readonly introductionSession: IntroductionSession;
-  /** Hands a payload to every panel and the voice window, less the window given. */
-  broadcast: <Payload>(channel: string, payload: Payload, except?: WebContents) => void;
   /**
    * One `app:state` per window, each composed with that window's own facts.
    * The one place the document becomes a push, so what a window is told and
@@ -450,7 +448,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hotkeys,
     dock,
     introductionSession,
-    broadcast,
     publishAppState,
     windowFactsFor,
     sendToVoice,

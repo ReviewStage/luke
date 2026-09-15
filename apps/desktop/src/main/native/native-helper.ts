@@ -17,7 +17,7 @@ export interface NativeHelperProcess {
   kill?(): void;
 }
 
-export interface NativeHelperOptions {
+interface NativeHelperOptions {
   binary: string;
   arguments?: readonly string[];
   input?: "ignore" | "pipe";

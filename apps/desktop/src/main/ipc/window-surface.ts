@@ -33,7 +33,7 @@ const MICROPHONE_STATUS_COUNTED_AS = {
   [MICROPHONE_STATUS.UNKNOWN]: undefined,
 } satisfies Record<MicrophoneStatus, ProductPermissionResult | undefined>;
 
-export interface WindowSurfaceDependencies {
+interface WindowSurfaceDependencies {
   panels: PanelManager;
   requestMicrophone: () => Promise<MicrophoneStatus>;
   microphoneRoute: () => MicrophoneRoute | undefined;

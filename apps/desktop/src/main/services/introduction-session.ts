@@ -8,7 +8,7 @@ import { introductionSeedItems } from "@sidecar/live";
 import type { IntroductionLiveSessionOpened, IntroductionSessionSource } from "@sidecar/voice";
 import { Effect } from "effect";
 
-export interface IntroductionSessionDependencies {
+interface IntroductionSessionDependencies {
   source: IntroductionSessionSource;
   recordProductEvent: RecordProductEvent;
 }

@@ -27,11 +27,11 @@ import {
   WINDOW_LEVEL,
 } from "./hardened-window";
 
-export interface PanelDuck {
+interface PanelDuck {
   setExchangeActive(active: boolean): void;
 }
 
-export interface PanelManagerOptions {
+interface PanelManagerOptions {
   runMode: RunMode;
   mediaDuck: PanelDuck;
   preloadPath: string;

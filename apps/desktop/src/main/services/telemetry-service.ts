@@ -42,7 +42,7 @@ export interface TelemetryService extends DesktopService {
   deliverFeedback: (submission: FeedbackSubmission) => Effect.Effect<FeedbackResult>;
 }
 
-export interface TelemetryServiceDependencies {
+interface TelemetryServiceDependencies {
   config: DesktopConfig;
   /** The one way a counted event leaves this process: the host's own stream, through the operator. */
   recordEvent: RecordProductEvent;

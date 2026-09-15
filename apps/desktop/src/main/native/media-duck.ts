@@ -20,7 +20,7 @@ type MediaDuckCommand = (typeof MEDIA_DUCK_COMMAND)[keyof typeof MEDIA_DUCK_COMM
  */
 const MEDIA_DUCK_RELEASE_DELAY_MS = 1_000;
 
-export interface MediaDuckControllerOptions {
+interface MediaDuckControllerOptions {
   /** Injectable so the ordering can be exercised without a Mac or a binary. */
   spawnHelper?: () => NativeHelperProcess | undefined;
   releaseDelayMs?: number;

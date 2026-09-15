@@ -33,12 +33,9 @@ private enum TalkKey {
 
     static let modifiers: [String: UInt32] = [
         "alt": UInt32(optionKey),
-        "option": UInt32(optionKey),
         "shift": UInt32(shiftKey),
         "control": UInt32(controlKey),
-        "ctrl": UInt32(controlKey),
         "command": UInt32(cmdKey),
-        "commandorcontrol": UInt32(cmdKey),
     ]
 
     /// Reads an Electron accelerator such as `Alt+Space`. A chord this does not

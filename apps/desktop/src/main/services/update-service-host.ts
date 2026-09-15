@@ -21,7 +21,7 @@ export interface UpdateServiceHost {
   openChangelog: () => void;
 }
 
-export interface UpdateServiceHostDependencies {
+interface UpdateServiceHostDependencies {
   config: DesktopConfig;
   recordProductEvent: RecordProductEvent;
   /**

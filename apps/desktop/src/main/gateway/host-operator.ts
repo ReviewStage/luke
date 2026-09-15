@@ -217,7 +217,7 @@ export interface HostOperator {
   onSessionReplayChanged(listener: (replay: HostSessionReplay) => void): () => void;
 }
 
-export interface HostOperatorOptions {
+interface HostOperatorOptions {
   client: GatewayClient;
   /** The settings a refused write is answered with when the host cannot say; the last snapshot the client saw. */
   lastSettings: () => AppSettings | undefined;
