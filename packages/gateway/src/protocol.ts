@@ -652,12 +652,6 @@ export type GatewayEventKind = (typeof GATEWAY_EVENT)[keyof typeof GATEWAY_EVENT
 
 const GatewayEventKindSchema = Schema.Literals(Object.values(GATEWAY_EVENT));
 
-const readsGatewayEventKind = Schema.is(GatewayEventKindSchema);
-
-export function isGatewayEventKind(value: UnparsedWireValue): value is GatewayEventKind {
-  return readsGatewayEventKind(value);
-}
-
 export const GatewayEventSchema = Schema.Struct({
   eventId: GatewayIdentifierSchema,
   /** One more than the event before it, from 1, so a gap is a number a client can see. */
@@ -709,17 +703,6 @@ export const GATEWAY_HANDSHAKE_HEADER = {
   CLIENT_ID: "x-luke-gateway-client",
   CLIENT_ROLE: "x-luke-gateway-role",
 } as const;
-
-/** How a handshake ended, when it did not end in a connection. */
-export const GATEWAY_HANDSHAKE_REFUSAL = {
-  UNAUTHORIZED: "unauthorized",
-  UNSUPPORTED_VERSION: "unsupported_version",
-  SHUTTING_DOWN: "shutting_down",
-  MALFORMED: "malformed",
-} as const;
-
-export type GatewayHandshakeRefusal =
-  (typeof GATEWAY_HANDSHAKE_REFUSAL)[keyof typeof GATEWAY_HANDSHAKE_REFUSAL];
 
 /** Who is asking: the one operator client, or a node offering capabilities. */
 export const GATEWAY_CLIENT_ROLE = {
@@ -851,8 +834,6 @@ const writeNodeCapabilityResult = Schema.encodeSync(NodeCapabilityResultSchema);
 const readNodeCapabilityResult = Schema.decodeUnknownOption(NodeCapabilityResultSchema);
 const writeNodeInvocation = Schema.encodeSync(NodeInvocationSchema);
 const readNodeInvocation = Schema.decodeUnknownOption(NodeInvocationSchema);
-const writeNodeInvocationAnswer = Schema.encodeSync(NodeInvocationAnswerSchema);
-const readNodeInvocationAnswer = Schema.decodeUnknownOption(NodeInvocationAnswerSchema);
 
 export function nodeCapabilityResultToWire(result: NodeCapabilityResult): WireRecord {
   return writeNodeCapabilityResult(result);
@@ -864,16 +845,6 @@ export function nodeInvocationToWire(invocation: NodeInvocation): WireRecord {
 
 export function nodeInvocationFromWire(value: UnparsedWireValue): NodeInvocation | undefined {
   return Option.getOrUndefined(readNodeInvocation(value));
-}
-
-export function nodeInvocationAnswerToWire(answer: NodeInvocationAnswer): WireRecord {
-  return writeNodeInvocationAnswer(answer);
-}
-
-export function nodeInvocationAnswerFromWire(
-  value: UnparsedWireValue,
-): NodeInvocationAnswer | undefined {
-  return Option.getOrUndefined(readNodeInvocationAnswer(value));
 }
 
 export function nodeCapabilityResultFromWire(

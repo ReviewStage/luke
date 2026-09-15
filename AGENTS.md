@@ -238,10 +238,6 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
 
 ### The permanent adaptors
 
-- **`packages/runtime/src/execution.ts`**'s `MaybePromise` vocabulary — a hook
-  answers in a `Promise` or a bare value because the OpenClaw port of
-  `b7528507` it was written for awaited them and imported nothing from
-  `effect`.
 - **`packages/credentials/src/single-flight.ts`** — the check-and-create of
   the one `Deferred` every concurrent caller joins is an uninterruptible step
   that cannot suspend, so it runs synchronously (`Effect.runSync`) and forks

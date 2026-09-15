@@ -10,7 +10,6 @@ import {
 import { TextLoopbackTransport } from "@sidecar/gateway/testing";
 import { isRecord, type WireRecord, type WireValue } from "@sidecar/wire";
 import { Effect } from "effect";
-import { HOST_NATIVE_NODE_ID } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
 const NOW = 1_800_000_000_000;
@@ -51,22 +50,6 @@ for (const kind of ["in-process", "loopback"] as const) {
         });
         assert.ok(missing.ok);
         assert.equal(recordOf(missing.result).status, NODE_CAPABILITY_STATUS.UNAVAILABLE);
-        const opened: string[] = [];
-        f.service.nodes.register({
-          nodeId: HOST_NATIVE_NODE_ID,
-          capabilities: {
-            "os.openExternal": (params) => {
-              opened.push(String(params.url));
-              return undefined;
-            },
-          },
-        });
-        const ok = yield* f.client.call(GATEWAY_METHOD.NODE_INVOKE, {
-          capability: "os.openExternal",
-          params: { url: "https://example.test" },
-        });
-        assert.ok(ok.ok && recordOf(ok.result).status === NODE_CAPABILITY_STATUS.OK);
-        assert.deepEqual(opened, ["https://example.test"]);
         // A registration over the wire binds the node to the connection it came
         // on: an ask of it is dispatched there and nowhere else, and a connection
         // that serves no handler answers unavailable, the ask never dispatched.

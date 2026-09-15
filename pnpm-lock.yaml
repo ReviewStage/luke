@@ -597,9 +597,6 @@ importers:
 
   packages/gateway:
     dependencies:
-      '@sidecar/runtime':
-        specifier: workspace:*
-        version: link:../runtime
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire

@@ -1,14 +1,6 @@
-import type { MaybePromise } from "@sidecar/runtime/vocabulary";
-import type { WireRecord, WireValue } from "@sidecar/wire";
+import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { NODE_CAPABILITY_STATUS, type NodeCapabilityResult } from "./protocol.js";
-
-export type NodeCapabilityHandler = (params: WireRecord) => MaybePromise<WireValue | undefined>;
-
-export interface NodeRegistration {
-  nodeId: string;
-  capabilities: Readonly<Record<string, NodeCapabilityHandler>>;
-}
 
 /** A node on the other side of a connection: what it offers, and the one connection its asks travel on. */
 export type RemoteNodeInvoker = (
@@ -25,7 +17,7 @@ export interface RemoteNodeRegistration {
 interface HeldNode {
   nodeId: string;
   capabilities: readonly string[];
-  /** Performs one capability in this process, or asks the connection the node registered on. */
+  /** Asks the connection the node registered on to perform one capability. */
   perform: (capability: string, params: WireRecord) => Effect.Effect<NodeCapabilityResult>;
   connected: boolean;
 }
@@ -51,33 +43,6 @@ export type NodeRegistryListener = (nodes: readonly NodeSnapshot[]) => void;
 export class NodeRegistry {
   readonly #nodes = new Map<string, HeldNode>();
   readonly #listeners = new Set<NodeRegistryListener>();
-
-  register(registration: NodeRegistration): void {
-    this.#nodes.set(registration.nodeId, {
-      nodeId: registration.nodeId,
-      capabilities: Object.keys(registration.capabilities),
-      perform: (capability, params) => {
-        const handler = registration.capabilities[capability];
-        if (!handler) return Effect.succeed(this.#unknown(capability));
-        return Effect.match(
-          Effect.tryPromise({ try: async () => await handler(params), catch: (error) => error }),
-          {
-            onSuccess: (value): NodeCapabilityResult => ({
-              status: NODE_CAPABILITY_STATUS.OK,
-              value,
-            }),
-            onFailure: (error): NodeCapabilityResult => ({
-              status: NODE_CAPABILITY_STATUS.FAILED,
-              capability,
-              reason: error instanceof Error ? error.message : String(error),
-            }),
-          },
-        );
-      },
-      connected: true,
-    });
-    this.#changed();
-  }
 
   /**
    * Registers a node whose capabilities are performed on the connection that

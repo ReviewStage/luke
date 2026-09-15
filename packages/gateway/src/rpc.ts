@@ -1,5 +1,5 @@
 import { isRecord, valueFromJsonText, type WireRecord } from "@sidecar/wire";
-import { Cause, Context, Exit, Layer, Option, Result, Schema } from "effect";
+import { Cause, Context, Exit, Option, Result, Schema } from "effect";
 import { Rpc, RpcGroup, RpcSerialization } from "effect/unstable/rpc";
 import type { FromClientEncoded, FromServerEncoded } from "effect/unstable/rpc/RpcMessage";
 import {
@@ -146,11 +146,6 @@ export function gatewayHeaderFields(
     ...(idempotencyKey !== undefined ? { idempotencyKey } : undefined),
     ...(Object.keys(expectedRevision).length > 0 ? { expectedRevision } : undefined),
   };
-}
-
-/** The protocol version a decoded request said it speaks; a request that named none speaks this build's. */
-export function gatewayRequestVersion(headers: RequestHeaders): number {
-  return gatewayHeaderFields(headers).protocolVersion;
 }
 
 function requestFromMessage(message: RpcRequestMessage): GatewayRequest {
@@ -339,10 +334,3 @@ export function gatewayEnvelopeSerialization(
 
 type RpcExitMessage = typeof RpcExitMessageSchema.Type;
 type RpcChunkMessage = typeof RpcChunkMessageSchema.Type;
-
-/** The serialization as the layer a server or client protocol reads it from. */
-export function layerGatewayEnvelopeSerialization(
-  options: GatewayEnvelopeSerializationOptions,
-): Layer.Layer<RpcSerialization.RpcSerialization> {
-  return Layer.succeed(RpcSerialization.RpcSerialization, gatewayEnvelopeSerialization(options));
-}
