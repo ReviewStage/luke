@@ -4,7 +4,6 @@ import {
   anticipationOf,
   PREFETCH_DEBOUNCE_MS,
   renderAskContext,
-  TRANSCRIPT_ROLE_LABEL,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
   UTTERANCE_GAP_MS,
@@ -136,9 +135,9 @@ test("the ask context is both speakers since the offset with the developer's lat
   assert.equal(context.ask?.rowId, 3);
   assert.equal(context.ask?.text, "Actually, only Codex.");
   assert.deepEqual(renderAskContext(context).split("\n"), [
-    `${TRANSCRIPT_ROLE_LABEL.assistant}: Let me look.`,
-    `${TRANSCRIPT_ROLE_LABEL.user}: Actually, only Codex.`,
-    `${TRANSCRIPT_ROLE_LABEL.assistant}: Sure.`,
+    "Assistant: Let me look.",
+    "Developer: Actually, only Codex.",
+    "Assistant: Sure.",
   ]);
 });
 

@@ -18,7 +18,7 @@ export const TRANSCRIPT_SPEAKER = {
 export type TranscriptSpeaker = (typeof TRANSCRIPT_SPEAKER)[keyof typeof TRANSCRIPT_SPEAKER];
 
 /** How the ask context labels each speaker's lines for the backend that reads them. */
-export const TRANSCRIPT_ROLE_LABEL = {
+const TRANSCRIPT_ROLE_LABEL = {
   [TRANSCRIPT_SPEAKER.USER]: "Developer",
   [TRANSCRIPT_SPEAKER.ASSISTANT]: "Assistant",
 } as const satisfies Record<TranscriptSpeaker, string>;

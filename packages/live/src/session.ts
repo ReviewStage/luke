@@ -281,69 +281,6 @@ export const LIVE_SESSION_OUTCOME = {
 export type LiveSessionOutcome = (typeof LIVE_SESSION_OUTCOME)[keyof typeof LIVE_SESSION_OUTCOME];
 
 /**
- * Every non-attempt, non-success outcome as its own tagged error, so a caller
- * that wants a typed failure has one to carry rather than a bare string. Each
- * class's `code` is the exact legacy string `LIVE_SESSION_OUTCOME` already
- * names, so a caller still comparing that string with `===` and one that
- * throws or yields the class agree on the same wire value.
- */
-export class NoAccountRefusal extends Schema.TaggedError<NoAccountRefusal>()("NoAccountRefusal", {
-  code: Schema.Literal(LIVE_SESSION_OUTCOME.NO_ACCOUNT),
-}) {}
-
-export class DisabledByFixtureRefusal extends Schema.TaggedError<DisabledByFixtureRefusal>()(
-  "DisabledByFixtureRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE) },
-) {}
-
-export class HttpErrorRefusal extends Schema.TaggedError<HttpErrorRefusal>()("HttpErrorRefusal", {
-  code: Schema.Literal(LIVE_SESSION_OUTCOME.HTTP_ERROR),
-}) {}
-
-export class NetworkErrorRefusal extends Schema.TaggedError<NetworkErrorRefusal>()(
-  "NetworkErrorRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.NETWORK_ERROR) },
-) {}
-
-export class MalformedResponseRefusal extends Schema.TaggedError<MalformedResponseRefusal>()(
-  "MalformedResponseRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE) },
-) {}
-
-export class SidebandFailedRefusal extends Schema.TaggedError<SidebandFailedRefusal>()(
-  "SidebandFailedRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.SIDEBAND_FAILED) },
-) {}
-
-export class NotSignedInRefusal extends Schema.TaggedError<NotSignedInRefusal>()(
-  "NotSignedInRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.NOT_SIGNED_IN) },
-) {}
-
-export class QuotaExhaustedRefusal extends Schema.TaggedError<QuotaExhaustedRefusal>()(
-  "QuotaExhaustedRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED) },
-) {}
-
-export class HostedUnavailableRefusal extends Schema.TaggedError<HostedUnavailableRefusal>()(
-  "HostedUnavailableRefusal",
-  { code: Schema.Literal(LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE) },
-) {}
-
-/** Every outcome-as-error class this module declares, for a test's own membership check. */
-export const LIVE_SESSION_REFUSALS = [
-  NoAccountRefusal,
-  DisabledByFixtureRefusal,
-  HttpErrorRefusal,
-  NetworkErrorRefusal,
-  MalformedResponseRefusal,
-  SidebandFailedRefusal,
-  NotSignedInRefusal,
-  QuotaExhaustedRefusal,
-  HostedUnavailableRefusal,
-] as const;
-
-/**
  * What the host knows about why voice is or is not available. It carries no
  * credential material: never the account's token, and never a session's SDP.
  */

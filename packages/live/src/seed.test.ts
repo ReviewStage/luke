@@ -13,7 +13,6 @@ import {
   SEED_CONTENT_TYPE,
   SEED_ITEM_TYPE,
   SEED_ROLE,
-  type SeedRole,
   seedItemTokens,
 } from "./seed.js";
 
@@ -62,7 +61,7 @@ test("no message is the application's own: a seed is the conversation's two voic
     line(CONVERSATION_ENTRY_KIND.ASK, "what needs me?", 1),
     line(CONVERSATION_ENTRY_KIND.REPLY, "Nothing yet.", 2),
   ]);
-  const spoken: readonly SeedRole[] = [SEED_ROLE.USER, SEED_ROLE.ASSISTANT];
+  const spoken: readonly string[] = [SEED_ROLE.USER, SEED_ROLE.ASSISTANT];
 
   for (const item of items) assert.equal(spoken.includes(item.role), true);
 });

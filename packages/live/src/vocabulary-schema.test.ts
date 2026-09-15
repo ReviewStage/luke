@@ -17,21 +17,10 @@ import {
 import { LIVE_SCENE, LiveSceneSchema } from "./instructions.js";
 import { PROACTIVE_SPEECH_KIND, ProactiveSpeechKindSchema } from "./proactive.js";
 import {
-  DisabledByFixtureRefusal,
-  HostedUnavailableRefusal,
-  HttpErrorRefusal,
   LIVE_DELEGATION_TYPE,
-  LIVE_SESSION_OUTCOME,
-  LIVE_SESSION_REFUSALS,
   LIVE_TRANSPORT_TYPE,
   LiveDelegationTypeSchema,
   LiveTransportTypeSchema,
-  MalformedResponseRefusal,
-  NetworkErrorRefusal,
-  NoAccountRefusal,
-  NotSignedInRefusal,
-  QuotaExhaustedRefusal,
-  SidebandFailedRefusal,
 } from "./session.js";
 import { LIVE_VOICE, LiveVoiceSchema } from "./voices.js";
 
@@ -89,53 +78,4 @@ test("proactive speech is one of the kinds this build knows how to word", () => 
 
 test("a voice arriving from storage or IPC is a schema of the SDK's built-in set", () => {
   settlesVocabulary(LiveVoiceSchema, Object.values(LIVE_VOICE));
-});
-
-test("every non-success session outcome has its own tagged error carrying the legacy code", () => {
-  assert.equal(LIVE_SESSION_REFUSALS.length, 9);
-  assert.equal(new NoAccountRefusal({ code: LIVE_SESSION_OUTCOME.NO_ACCOUNT }).code, "no-account");
-  assert.equal(
-    new DisabledByFixtureRefusal({ code: LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE }).code,
-    "disabled-by-fixture",
-  );
-  assert.equal(new HttpErrorRefusal({ code: LIVE_SESSION_OUTCOME.HTTP_ERROR }).code, "http-error");
-  assert.equal(
-    new NetworkErrorRefusal({ code: LIVE_SESSION_OUTCOME.NETWORK_ERROR }).code,
-    "network-error",
-  );
-  assert.equal(
-    new MalformedResponseRefusal({ code: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE }).code,
-    "malformed-response",
-  );
-  assert.equal(
-    new SidebandFailedRefusal({ code: LIVE_SESSION_OUTCOME.SIDEBAND_FAILED }).code,
-    "sideband-failed",
-  );
-  assert.equal(
-    new NotSignedInRefusal({ code: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN }).code,
-    "not-signed-in",
-  );
-  assert.equal(
-    new QuotaExhaustedRefusal({ code: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED }).code,
-    "quota-exhausted",
-  );
-  assert.equal(
-    new HostedUnavailableRefusal({ code: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE }).code,
-    "hosted-unavailable",
-  );
-});
-
-test("each refusal's tag names its own class alone", () => {
-  const tags = [
-    new NoAccountRefusal({ code: LIVE_SESSION_OUTCOME.NO_ACCOUNT })._tag,
-    new DisabledByFixtureRefusal({ code: LIVE_SESSION_OUTCOME.DISABLED_BY_FIXTURE })._tag,
-    new HttpErrorRefusal({ code: LIVE_SESSION_OUTCOME.HTTP_ERROR })._tag,
-    new NetworkErrorRefusal({ code: LIVE_SESSION_OUTCOME.NETWORK_ERROR })._tag,
-    new MalformedResponseRefusal({ code: LIVE_SESSION_OUTCOME.MALFORMED_RESPONSE })._tag,
-    new SidebandFailedRefusal({ code: LIVE_SESSION_OUTCOME.SIDEBAND_FAILED })._tag,
-    new NotSignedInRefusal({ code: LIVE_SESSION_OUTCOME.NOT_SIGNED_IN })._tag,
-    new QuotaExhaustedRefusal({ code: LIVE_SESSION_OUTCOME.QUOTA_EXHAUSTED })._tag,
-    new HostedUnavailableRefusal({ code: LIVE_SESSION_OUTCOME.HOSTED_UNAVAILABLE })._tag,
-  ];
-  assert.equal(new Set(tags).size, LIVE_SESSION_REFUSALS.length);
 });
