@@ -156,51 +156,6 @@ export interface ReasoningSummary {
   readonly item: WireRecord;
 }
 
-export const MODEL_RESPONSE_OUTCOME = {
-  ANSWERED: "answered",
-  FAILED: "failed",
-} as const;
-
-/** Why a model call failed, as a fixed word: the service the adapter spoke to refused or broke. */
-export const MODEL_FAILURE = {
-  UPSTREAM: "upstream",
-} as const;
-
-type ModelFailure = (typeof MODEL_FAILURE)[keyof typeof MODEL_FAILURE];
-
-/** An answer stopped short, with the status and reason the provider gave. */
-interface ModelIncomplete {
-  readonly status?: string;
-  readonly reason: string;
-}
-
-/**
- * One inference, normalized: the provider items the context engine ingests
- * verbatim, the text the model wrote, the tool calls to dispatch, the usage
- * counted, and whether it stopped short. The items stay opaque here; only an
- * engine of the same format reads inside them.
- */
-interface ModelAnswer {
-  readonly outcome: typeof MODEL_RESPONSE_OUTCOME.ANSWERED;
-  readonly items: readonly WireRecord[];
-  readonly text: string;
-  readonly toolCalls: readonly ToolInvocation[];
-  readonly usage?: ModelUsage;
-  readonly incomplete?: ModelIncomplete;
-  /** The provider's id for this response, when it named one; a run keeps every one it was answered with. */
-  readonly responseId?: string;
-  /** The summaries of the reasoning items this answer carried, in the order the items stand. */
-  readonly reasoning?: readonly ReasoningSummary[];
-}
-
-export type ModelResponse =
-  | ModelAnswer
-  | {
-      readonly outcome: typeof MODEL_RESPONSE_OUTCOME.FAILED;
-      readonly failure: ModelFailure;
-      readonly reason: string;
-    };
-
 export const CONTEXT_INPUT_KIND = {
   /** Words from the host: an ask, an observation, a released hold, each already marked as data. */
   USER_TEXT: "user_text",

@@ -264,48 +264,6 @@ function finiteNumber(value: UnparsedWireValue): value is number {
   return isWireNumber(value) && Number.isFinite(value) && value >= 0;
 }
 
-/**
- * The answer to a submission. Accepted names the run — the same run for a
- * retry of the same submission — and rejected says why in a word the host
- * words for the developer.
- */
-const BRAIN_SUBMISSION_REJECTION = {
-  EMPTY: "empty",
-  ABSENT: "absent",
-  PERSISTENCE: "persistence",
-  /** The submission id is already taken by an ask with other words or another origin. */
-  CONFLICT: "conflict",
-  /** The generation holds as many records as it may, and none is yet eligible to be let go. */
-  FULL: "full",
-  /**
-   * The generation's checkpoint was written by a runtime this build does not
-   * run; it is kept whole, and nothing may open a turn over it until a
-   * compatible runtime loads it or the developer starts fresh.
-   */
-  INCOMPATIBLE: "incompatible",
-} as const;
-
-export type BrainSubmissionRejection =
-  (typeof BRAIN_SUBMISSION_REJECTION)[keyof typeof BRAIN_SUBMISSION_REJECTION];
-
-/**
- * What a submission's refusal says on the strip, in fixed words: never
- * composed with the ask, so a refusal can only ever be reported in these.
- */
-export const BRAIN_ASK_REFUSAL = {
-  [BRAIN_SUBMISSION_REJECTION.ABSENT]:
-    "I can't reach my judgment right now: no Luke account is signed in on this Mac.",
-  [BRAIN_SUBMISSION_REJECTION.EMPTY]: "I didn't catch an ask in that.",
-  [BRAIN_SUBMISSION_REJECTION.PERSISTENCE]:
-    "I couldn't write that ask down, so I haven't taken it. Ask me again in a moment.",
-  [BRAIN_SUBMISSION_REJECTION.CONFLICT]:
-    "That ask arrived under an id I already have for different words. Ask it afresh.",
-  [BRAIN_SUBMISSION_REJECTION.FULL]:
-    "My notes are full of asks whose endings I haven't managed to file yet. Give me a moment and ask again.",
-  [BRAIN_SUBMISSION_REJECTION.INCOMPATIBLE]:
-    "My memory was written by a different version of me, so I can't take that on until it's cleared or that version is back.",
-} as const satisfies Record<BrainSubmissionRejection, string>;
-
 function actionsPhrase(count: number): string {
   return count === 1 ? "one thing you asked" : `${count} things you asked`;
 }

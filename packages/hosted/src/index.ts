@@ -215,11 +215,6 @@ export {
   realtimeCredentialIsUsable,
 } from "./realtime-contract.js";
 export {
-  RESPONSES_CONTENT_PART_TYPE,
-  RESPONSES_INPUT_ITEM_TYPE,
-  RESPONSES_MESSAGE_ROLE,
-} from "./responses-input.js";
-export {
   HostedRosterClient,
   type HostedRosterClientOptions,
   snapshotRoster,
