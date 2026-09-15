@@ -7,9 +7,7 @@ import {
   productEventFromWire,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { FEEDBACK_LIFECYCLE_EVENT } from "@sidecar/feedback";
 import { BrowserWindow } from "electron";
-import { channels } from "#shared/bridge";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import {
   MICROPHONE_STATUS,
@@ -46,25 +44,23 @@ export interface WindowSurfaceDependencies {
 type WindowSurfaceActKind =
   | typeof ACT_KIND.WINDOW_SET_EXPANDED
   | typeof ACT_KIND.WINDOW_FOCUS_PANEL
-  | typeof ACT_KIND.FEEDBACK_SUMMON
   | typeof ACT_KIND.MICROPHONE_REQUEST
   | typeof ACT_KIND.MICROPHONE_ROUTE;
 
 /**
- * What the panel asks of the window it is drawn in. Each of the first three is
- * a panel's own act and refused from anywhere else: the mode, the focus, and
- * the composer are all about the display one panel stands on, and no other
- * surface has one.
+ * What the panel asks of the window it is drawn in. Each of the first two is
+ * a panel's own act and refused from anywhere else: the mode and the focus are
+ * both about the display one panel stands on, and no other surface has one.
  */
 export function windowSurfaceActRows(
   dependencies: WindowSurfaceDependencies,
 ): Pick<ActRows, WindowSurfaceActKind> {
   const { panels } = dependencies;
   /**
-   * The display the asking panel stands on. One statement of the standing all
-   * three kinds below need: a window that is not a panel, and a panel on no
-   * display, are the same refusal, because each of the three is about the
-   * display one panel stands on and no other surface has one.
+   * The display the asking panel stands on. One statement of the standing both
+   * kinds below need: a window that is not a panel, and a panel on no display,
+   * are the same refusal, because each of the two is about the display one
+   * panel stands on and no other surface has one.
    */
   const panelDisplay = (sender: ActSender, kind: WindowSurfaceActKind): number => {
     const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
@@ -80,11 +76,6 @@ export function windowSurfaceActRows(
       ),
     [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
       panels.focusIfExpanded(panelDisplay(sender, ACT_KIND.WINDOW_FOCUS_PANEL));
-    },
-    [ACT_KIND.FEEDBACK_SUMMON]: ({ kind }, sender) => {
-      panels.setMode(panelDisplay(sender, ACT_KIND.FEEDBACK_SUMMON), "expanded", true);
-      sender.sender.send(channels.onLifecycle, FEEDBACK_LIFECYCLE_EVENT[kind]);
-      dependencies.recordProductEvent(PRODUCT_EVENT.FEEDBACK_OPEN, {});
     },
     [ACT_KIND.MICROPHONE_REQUEST]: async () => {
       const status = await dependencies.requestMicrophone();

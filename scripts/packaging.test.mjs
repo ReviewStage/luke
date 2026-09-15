@@ -11,7 +11,6 @@ import {
 } from "../apps/desktop/scripts/electron-builder-config.mjs";
 import {
   APP_UPDATE_CACHE_DIR_NAME,
-  APP_UPDATE_CONFIG_FILE_NAME,
   APP_UPDATE_FEED_URL,
   APPLE_EVENTS_USAGE_DESCRIPTION,
   addonCompilerArguments,
@@ -99,7 +98,6 @@ test("electron-builder generates the updater config electron-updater reads befor
     "utf8",
   );
 
-  assert.equal(APP_UPDATE_CONFIG_FILE_NAME, "app-update.yml");
   assert.deepEqual(appUpdatePublishConfig, ELECTRON_BUILDER_UPDATE_PUBLISH_CONFIG);
   assert.equal(ELECTRON_BUILDER_UPDATE_FEED_URL, APP_UPDATE_FEED_URL);
   assert.equal(ELECTRON_BUILDER_UPDATE_CACHE_DIR_NAME, APP_UPDATE_CACHE_DIR_NAME);

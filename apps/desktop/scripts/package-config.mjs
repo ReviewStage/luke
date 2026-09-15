@@ -164,6 +164,5 @@ export function signingModeDefine(env) {
  * src/update-service.ts, and the cache directory must stay `luke-updater` so
  * downloaded updates from the pre-builder transition are not orphaned.
  */
-export const APP_UPDATE_CONFIG_FILE_NAME = "app-update.yml";
 export const APP_UPDATE_FEED_URL = "https://github.com/ReviewStage/luke/releases/latest/download/";
 export const APP_UPDATE_CACHE_DIR_NAME = "luke-updater";
