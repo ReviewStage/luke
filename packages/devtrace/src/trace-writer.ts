@@ -6,37 +6,12 @@ import type { PlatformError } from "effect/PlatformError";
 import { type AgentWireTrace, sanitizedTraceEvent, TRACE_ENTRY_KIND } from "./vocabulary.js";
 
 /**
- * One model request a brain turn made, as the trace records it. The input
- * travels as counts alone — how many items, how many JSON characters — the
- * way an audio append travels as its byte count: a turn's input carries
- * transcript text, and the trace widening to it is a product decision. The
- * answer side keeps the outcome, the kinds of items that came back, and the
- * token counts the payload reported; the model when the client knows one,
- * absent through the hosted service, whose model the desktop never learns.
- */
-export interface BrainRequestTraceRecord {
-  inputItems: number;
-  inputChars: number;
-  outcome: string;
-  elapsedMs: number;
-  model?: string;
-  outputItemKinds?: readonly string[];
-  inputTokens?: number;
-  outputTokens?: number;
-  /** How much of the input the provider answered from its prefix cache, when it reported any. */
-  cachedInputTokens?: number;
-  /** Whether the request asked for a prefix cache at all; the key itself is a hash and is not recorded. */
-  promptCacheKeyed?: boolean;
-  error?: string;
-}
-
-/**
  * One decision the speech arbiter took about a proactive turn: which kind of
  * turn, what was decided of it, and how many requests stood pending after.
  * Nothing worded travels — a briefing's text is transcript-derived, and the
  * trace widening to it is a product decision.
  */
-export interface SpeechTraceRecord {
+interface SpeechTraceRecord {
   kind: string;
   decision: string;
   pendingCount: number;
@@ -50,7 +25,6 @@ export interface SpeechTraceRecord {
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
   | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN_REQUEST } & BrainRequestTraceRecord)
   | ({
       kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH;
     } & BrainPrefetchTraceRecord)
@@ -74,7 +48,7 @@ type TraceWork =
       readonly done: Deferred.Deferred<void>;
     };
 
-export interface AgentTraceWriterOptions {
+interface AgentTraceWriterOptions {
   /** Where the trace lands, created on the first line rather than up front. */
   directory: string;
   now?: () => Date;
@@ -174,27 +148,6 @@ export class AgentTraceWriter {
       ...trace,
       event: sanitizedTraceEvent(trace.event),
     });
-  }
-
-  recordBrainTurn(record: BrainTurnTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN, ...record });
-  }
-
-  recordBrainRequest(record: BrainRequestTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_REQUEST, ...record });
-  }
-
-  /** The prefetch's outcome, take, waits, and sizes; the words so far, the plan, and what a read answered never reach the line. */
-  recordBrainPrefetch(record: BrainPrefetchTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.BRAIN_PREFETCH, ...record });
-  }
-
-  /**
-   * Nested rather than spread: the record's own `kind` names the speech turn,
-   * and the line's `kind` names the entry, and the two must not collide.
-   */
-  recordSpeechDecision(record: SpeechTraceRecord): void {
-    this.#append({ kind: TRACE_ENTRY_KIND.SPEECH, speech: record });
   }
 
   #append(entry: PendingTraceEntry): void {
