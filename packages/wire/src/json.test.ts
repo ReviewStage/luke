@@ -2,10 +2,6 @@ import assert from "node:assert/strict";
 import { Schema } from "effect";
 import { test } from "vitest";
 import {
-  HTTP_METHOD,
-  HTTP_STATUS,
-  HttpMethodSchema,
-  HttpStatusSchema,
   isInstant,
   isOptionalWireString,
   isRecord,
@@ -118,19 +114,6 @@ test("WireValueSchema admits nested primitives, records, and arrays, and refuses
   assert.equal(readsWireValue({ handler: () => {} }), false);
   assert.equal(readsWireValue(new Date()), false);
   assert.equal(readsWireValue(boxed("x")), false);
-});
-
-test("HttpMethodSchema and HttpStatusSchema admit exactly the declared set", () => {
-  const readsHttpMethod = Schema.is(HttpMethodSchema);
-  const readsHttpStatus = Schema.is(HttpStatusSchema);
-  for (const method of Object.values(HTTP_METHOD)) {
-    assert.equal(readsHttpMethod(method), true);
-  }
-  for (const status of Object.values(HTTP_STATUS)) {
-    assert.equal(readsHttpStatus(status), true);
-  }
-  assert.equal(readsHttpMethod("PATCH"), false);
-  assert.equal(readsHttpStatus(500), false);
 });
 
 test("valueFromJsonText reads JSON as the data it carries and keeps other text as text", () => {

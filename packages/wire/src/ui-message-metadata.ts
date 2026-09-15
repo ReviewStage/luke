@@ -1,6 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { wireRefusal } from "./effect/json-schema.js";
-import { EXCESS_KEYS, SCHEMA_REFUSAL } from "./schema-vocabulary.js";
+import { SCHEMA_REFUSAL } from "./schema-vocabulary.js";
 
 /**
  * What a stored message says about itself beside its parts. The message
@@ -17,10 +17,7 @@ import { EXCESS_KEYS, SCHEMA_REFUSAL } from "./schema-vocabulary.js";
  *
  * Every shape below is an Effect `Schema.Struct`, declared and exported
  * directly: a caller reads one with `readEither` and shows it with
- * `emitJsonSchema`, both from `@sidecar/wire/effect`. The
- * `Schema.toStandardSchemaV1` twins beside `USER_MESSAGE_METADATA` and
- * `ASSISTANT_MESSAGE_METADATA` are what the ai SDK's `validateUIMessages`
- * takes directly.
+ * `emitJsonSchema`, both from `@sidecar/wire/effect`.
  */
 
 /** The roles a stored message may carry, as the SDK names them. */
@@ -44,8 +41,6 @@ export const MESSAGE_AUTHOR = {
 
 export type MessageAuthor = (typeof MESSAGE_AUTHOR)[keyof typeof MESSAGE_AUTHOR];
 
-export const MessageAuthorSchema = EffectSchema.Literals(Object.values(MESSAGE_AUTHOR));
-
 /** How a developer's ask arrived. */
 export const MESSAGE_CHANNEL = {
   TYPED: "typed",
@@ -53,8 +48,6 @@ export const MESSAGE_CHANNEL = {
 } as const;
 
 export type MessageChannel = (typeof MESSAGE_CHANNEL)[keyof typeof MESSAGE_CHANNEL];
-
-export const MessageChannelSchema = EffectSchema.Literals(Object.values(MESSAGE_CHANNEL));
 
 /**
  * What the brain wrote a user row down for itself about: the words a turn
@@ -85,16 +78,7 @@ export const OBSERVATION_SOURCE = {
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];
 
-export const ObservationSourceSchema = EffectSchema.Literals(Object.values(OBSERVATION_SOURCE));
-
-/**
- * A read whose keys stop at the ones the declaration names, the way a strict
- * wire record does. Effect v4 settles parse options at the read rather than on
- * the declaration, so the two standard schemas below state it here; every
- * other reader of these shapes goes through `readEither`, which refuses an
- * unnamed key already.
- */
-const STRICT_READ = { parseOptions: { onExcessProperty: EXCESS_KEYS.REFUSE } } as const;
+const ObservationSourceSchema = EffectSchema.Literals(Object.values(OBSERVATION_SOURCE));
 
 /** A text trimmed of its ends, refused when nothing but whitespace remains, the way `s.text` reads one. */
 const trimmedText = EffectSchema.Trim.check(EffectSchema.isNonEmpty());
@@ -167,12 +151,6 @@ export const USER_MESSAGE_METADATA = EffectSchema.Union([
   OBSERVATION_METADATA,
 ]).annotate(wireRefusal(SCHEMA_REFUSAL.MALFORMED));
 
-/** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for a user row's metadata. */
-export const USER_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.toStandardSchemaV1(
-  USER_MESSAGE_METADATA,
-  STRICT_READ,
-);
-
 /**
  * A compaction row's account of what it folded: the first message the model
  * still reads after it, which is always knowable, and how many tokens the
@@ -235,12 +213,6 @@ export const ASSISTANT_MESSAGE_METADATA = ASSISTANT_MESSAGE_STRUCT.check(
 );
 
 export type AssistantMessageMetadata = EffectSchema.Schema.Type<typeof ASSISTANT_MESSAGE_METADATA>;
-
-/** The Standard Schema v1 the ai SDK's `validateUIMessages` takes for an assistant row's metadata. */
-export const ASSISTANT_MESSAGE_METADATA_STANDARD_SCHEMA = EffectSchema.toStandardSchemaV1(
-  ASSISTANT_MESSAGE_METADATA,
-  STRICT_READ,
-);
 
 /** The metadata a stored message of either speaking role carries. */
 export type StoredMessageMetadata = UserMessageMetadata | AssistantMessageMetadata;

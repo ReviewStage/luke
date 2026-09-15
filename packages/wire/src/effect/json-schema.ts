@@ -47,9 +47,6 @@ const WIRE_ANNOTATION = {
   JSON_SCHEMA: "@sidecar/wire/effect/WireJsonSchema",
 } as const;
 
-/** The name a node's own sentence is carried under; a test reads it directly. */
-export const WIRE_DESCRIPTION_ANNOTATION = WIRE_ANNOTATION.DESCRIPTION;
-
 const readDescription = Schema.decodeUnknownOption(Schema.String);
 const readRefusal = Schema.decodeUnknownOption(Schema.Literals(Object.values(SCHEMA_REFUSAL)));
 
