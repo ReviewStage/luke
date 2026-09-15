@@ -7,7 +7,7 @@ import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
 
-export { conversationOwnedBy } from "./recorded-session.js";
+export { claimRuntimeSession, conversationOwnedBy } from "./recorded-session.js";
 
 /**
  * The host's own check of who a session is for. eve authenticates a request
@@ -66,10 +66,6 @@ const OwnerRowSchema = Schema.Struct({
   userId: Schema.String,
 }).pipe(Schema.encodeKeys({ userId: "user_id" }));
 
-const RecordedSessionSchema = Schema.Struct({
-  runtimeSessionId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ runtimeSessionId: "runtime_session_id" }));
-
 const findConversation = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRowSchema,
@@ -92,39 +88,6 @@ const findRuntimeSessionOwner = SqlSchema.findOneOption({
         select user_id
         from conversations
         where runtime_session_id = ${runtimeSessionId} and deleted_at is null
-      `,
-    ),
-});
-
-const ClaimSchema = Schema.Struct({
-  userId: Schema.String,
-  conversationId: Schema.String,
-  runtimeSessionId: Schema.String,
-  now: Schema.Date,
-});
-
-const claimSession = SqlSchema.void({
-  Request: ClaimSchema,
-  execute: (claim) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set runtime_session_id = ${claim.runtimeSessionId}, last_activity_at = ${claim.now}
-        where id = ${claim.conversationId}
-          and user_id = ${claim.userId}
-          and deleted_at is null
-          and (runtime_session_id is null or runtime_session_id < ${claim.runtimeSessionId})
-      `,
-    ),
-});
-
-const findRecordedSession = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: RecordedSessionSchema,
-  execute: (conversationId) =>
-    statement(
-      (sql) => sql`
-        select runtime_session_id from conversations where id = ${conversationId}
       `,
     ),
 });
@@ -171,19 +134,3 @@ export function runtimeSessionOwner(
     Option.getOrUndefined(Option.map(found, (row) => row.userId)),
   );
 }
-
-/**
- * Claims the conversation for the eve session now starting, only forward:
- * the row takes the id when it records none or an older one, and a start
- * replayed for a session the conversation has since rotated away from
- * changes nothing. Answers whether the row now records this session.
- */
-export const claimRuntimeSession = /* @__PURE__ */ Effect.fn("claimRuntimeSession")(function* (
-  target: ConversationTarget,
-  runtimeSessionId: string,
-  now: Date,
-): Effect.fn.Return<boolean, ConversationFailure, SqlClient.SqlClient> {
-  yield* claimSession({ ...target, runtimeSessionId, now });
-  const recorded = yield* findRecordedSession(target.conversationId);
-  return Option.isSome(recorded) && recorded.value.runtimeSessionId === runtimeSessionId;
-});

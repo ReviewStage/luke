@@ -21,8 +21,8 @@ import { type QueuedTurnRecord, queuedTurns } from "../store/message-reads.js";
 import { CONSUMED_ROSTER, type RosterSnapshotRecord } from "../store/roster-snapshot.js";
 import { releasedBriefings } from "../store/speech.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
-import { EVE_SEND_OUTCOME, type EveSessions } from "./eve-sessions.js";
-import { recordedRuntimeSession } from "./recorded-session.js";
+import type { EveSessions } from "./eve-sessions.js";
+import { handToEve } from "./handover.js";
 import type { HostedRoster } from "./roster.js";
 import { type HostedTranscriptReads, keepTranscriptCursor } from "./transcript.js";
 import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-events.js";
@@ -327,33 +327,6 @@ function plan(change: DatedRosterDiff, roster: HostedRoster, limit: number): Pla
   }
   return { openings: [...openings.values()], heldBack: [...heldBack.values()] };
 }
-
-/** Whether eve took the message: sent to the session the conversation runs in, or opened in a new one where none runs. */
-const handToEve = /* @__PURE__ */ Effect.fn("handToEve")(function* (
-  seams: TurnOpenerSeams,
-  target: ConversationTarget,
-  turn: ScheduledTurn,
-  words: string,
-): Effect.fn.Return<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  const message = { conversationId: target.conversationId, turn, message: words };
-  const recorded = yield* recordedRuntimeSession(target);
-  if (recorded !== undefined) {
-    const sent = yield* Effect.promise(() => seams.eve.send(recorded, message));
-    if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-    if (sent.outcome === EVE_SEND_OUTCOME.FAILED) {
-      seams.report(
-        `eve refused a ${turn} turn on conversation ${target.conversationId} with status ${sent.status}.`,
-      );
-      return false;
-    }
-  }
-  const opened = yield* Effect.promise(() => seams.eve.open(message));
-  if (opened.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-  seams.report(
-    `eve refused to open a session for conversation ${target.conversationId} with status ${opened.status}.`,
-  );
-  return false;
-});
 
 /** One session's transcript since the cursor kept for it, riding on its first wake; a read that throws is a read not made, and the cursor stands for the next. */
 const withTranscript = /* @__PURE__ */ Effect.fnUntraced(function* (

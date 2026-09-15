@@ -464,8 +464,11 @@ test("a conversation already running in an eve session is sent to, not reopened;
   );
   assert.ok(retiredConversation);
   await setConversationRuntimeSessionId(retiredConversation, SESSION_ID);
+  const reopened = "wrun_01M000000000000000000REOPEN";
   const retired = fakeEve((handed) =>
-    handed.kind === "send" ? { outcome: EVE_SEND_OUTCOME.RETIRED } : ACCEPTING(handed),
+    handed.kind === "send"
+      ? { outcome: EVE_SEND_OUTCOME.RETIRED }
+      : { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: reopened, deliveryId: "delivery-1" },
   );
   const outcome = await database.run(
     openObservationTurns(seams({ eve: retired.eve, roster: rosterNow }), retiredUser),
@@ -476,6 +479,12 @@ test("a conversation already running in an eve session is sent to, not reopened;
     ["send", "open"],
   );
   assert.equal((await bookmarkOf(retiredUser))?.observedAt, NOW + 3_000);
+  // The session eve opened is the conversation's at once, forward-only, so a second handover
+  // landing before eve's own start has claimed it sends into this session rather than opening another.
+  assert.deepEqual(
+    (await observedConversations(retiredUser)).map((row) => row.runtimeSessionId),
+    [reopened],
+  );
 });
 
 test("a turn eve refuses leaves the cursor and the bookmark standing, and nothing of the visit is recorded", async () => {
