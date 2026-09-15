@@ -1,12 +1,8 @@
 import assert from "node:assert/strict";
 import { CHILD_SPAWN_REFUSAL } from "@sidecar/runtime";
 import {
-  CHILD_CLEANUP,
-  CHILD_CONTEXT_MODE,
   CHILD_RUN_STATUS,
-  type ChildCompletionRecord,
   type ChildRunRecord,
-  COMPLETION_DELIVERY_STATUS,
   CONVERSATION_KIND,
   childSessionKey,
   DEFAULT_AGENT_ID,
@@ -34,16 +30,8 @@ function childRecord(childId: string, label?: string): ChildRunRecord {
     agentId: DEFAULT_AGENT_ID,
     requesterSessionKey: MAIN_SESSION_KEY,
     childSessionKey: childSessionKey(childId),
-    childRunId: `${childId}-run`,
     task: "look",
     ...(label !== undefined ? { label } : undefined),
-    depth: 1,
-    requestedContext: CHILD_CONTEXT_MODE.ISOLATED,
-    context: CHILD_CONTEXT_MODE.ISOLATED,
-    policy: { allowed: [], denied: [] },
-    timeoutMs: 0,
-    cleanup: CHILD_CLEANUP.KEEP,
-    completionDestination: MAIN_SESSION_KEY,
     expectsCompletion: true,
     status: CHILD_RUN_STATUS.COMPLETED,
     acceptedAt: NOW,
@@ -51,16 +39,6 @@ function childRecord(childId: string, label?: string): ChildRunRecord {
     resultText: "done",
   };
 }
-
-const COMPLETION: ChildCompletionRecord = {
-  completionId: "completion:child-1",
-  childId: "child-1",
-  destination: MAIN_SESSION_KEY,
-  status: CHILD_RUN_STATUS.COMPLETED,
-  createdAt: NOW + 1_000,
-  delivery: COMPLETION_DELIVERY_STATUS.DELIVERED,
-  attempts: 1,
-};
 
 /** The host's delegation, recording every spawn and cancel it was asked. */
 function delegation() {
@@ -75,18 +53,10 @@ function delegation() {
           ? { accepted: false, reason: CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT, detail: "5 active" }
           : {
               accepted: true,
-              receipt: {
-                childId: "child-2",
-                childSessionKey: childSessionKey("child-2"),
-                childRunId: "child-2-run",
-                context: CHILD_CONTEXT_MODE.ISOLATED,
-                contextNote: "started isolated",
-                depth: 1,
-              },
+              receipt: { childId: "child-2", childSessionKey: childSessionKey("child-2") },
             };
       }),
-    list: () =>
-      Effect.succeed([{ record: childRecord("child-1", "summary"), completion: COMPLETION }]),
+    list: () => Effect.succeed([childRecord("child-1", "summary")]),
     cancel: (childId) =>
       Effect.sync(() => {
         if (childId !== "child-1") return undefined;
@@ -127,8 +97,6 @@ function context(children: BrainChildAccess | undefined) {
     isRevoked: () => false,
     signal: new AbortController().signal,
     children,
-    policy: { allowed: ["sessions_spawn"], denied: ["announce"] },
-    fork: () => ({ items: [{ type: "message" }], estimatedTokens: 3 }),
     journal: (effect) =>
       Effect.flatMap(
         Effect.sync(() => {
@@ -163,7 +131,7 @@ test("the four session tools are modules in catalog order", () => {
   assert.deepEqual(required, [["task"], [], [], ["child_id"]]);
 });
 
-test("a spawn is bounded here, carries the turn's run, policy, and fork, runs through the journal, and answers a receipt that says accepted and never done", async () => {
+test("a spawn is bounded here, carries the turn's run, runs through the journal, and answers a receipt that says accepted and never done", async () => {
   const { children, spawns } = delegation();
   const { ctx, journaled } = context(children);
   const spawn = toolNamed(BRAIN_TOOL.SESSIONS_SPAWN);
@@ -172,9 +140,6 @@ test("a spawn is bounded here, carries the turn's run, policy, and fork, runs th
       {
         task: ` ${"t".repeat(maximumChildTaskLength + 10)} `,
         label: " summary ",
-        context: CHILD_CONTEXT_MODE.FORK,
-        cleanup: CHILD_CLEANUP.DELETE,
-        run_timeout_seconds: 30,
         expects_completion: false,
       },
       ctx,
@@ -185,25 +150,19 @@ test("a spawn is bounded here, carries the turn's run, policy, and fork, runs th
   assert.equal(receipt.accepted, true);
   assert.equal(receipt.completed, false);
   assert.equal(receipt.child_id, "child-2");
+  assert.equal(receipt.child_session_key, childSessionKey("child-2"));
   const [ask] = spawns;
   assert.ok(ask);
   assert.equal(ask.task.length, maximumChildTaskLength);
   assert.equal(ask.label, "summary");
-  assert.equal(ask.context, CHILD_CONTEXT_MODE.FORK);
-  assert.equal(ask.cleanup, CHILD_CLEANUP.DELETE);
-  assert.equal(ask.timeoutMs, 30_000);
   assert.equal(ask.expectsCompletion, false);
   assert.equal(ask.requesterRunId, "run-1");
-  assert.deepEqual(ask.policy, ctx.policy);
-  assert.deepEqual(ask.fork(), ctx.fork());
   // Unreadable optional fields are left out rather than guessed at; an empty task never reaches the host.
-  await Effect.runPromise(
-    spawn.execute({ task: "look", context: "sideways", run_timeout_seconds: -1 }, ctx),
-  );
+  await Effect.runPromise(spawn.execute({ task: "look", expects_completion: "yes" }, ctx));
   const second = spawns[1];
   assert.ok(second);
-  assert.equal(second.context, undefined);
-  assert.equal(second.timeoutMs, undefined);
+  assert.equal(second.expectsCompletion, undefined);
+  assert.equal(second.label, undefined);
   const empty = await Effect.runPromise(spawn.execute({ task: "  " }, ctx));
   assert.equal(empty.reason, REFUSAL_REASON.EMPTY_TASK);
   assert.equal(spawns.length, 2);
@@ -225,13 +184,9 @@ test("subagents lists as a read and cancels through the journal; a child not thi
         child_id: "child-1",
         label: "summary",
         status: CHILD_RUN_STATUS.COMPLETED,
-        depth: 1,
-        context: CHILD_CONTEXT_MODE.ISOLATED,
         accepted_at: new Date(NOW).toISOString(),
         settled_at: new Date(NOW + 1_000).toISOString(),
         has_result: true,
-        delivery: COMPLETION_DELIVERY_STATUS.DELIVERED,
-        attempts: 1,
       },
     ],
   });

@@ -1,17 +1,9 @@
-import type { ChildCancellation, ChildSpawnOutcome, ForkSnapshot } from "@sidecar/runtime";
-import {
-  CHILD_CLEANUP,
-  CHILD_CONTEXT_MODE,
-  type ChildCleanup,
-  type ChildCompletionRecord,
-  type ChildContextMode,
-  type ChildPolicyMetadata,
-  type ChildRunRecord,
-  type ChildSpawnReceipt,
-  type ConversationRecord,
-  isChildCleanup,
-  isChildContextMode,
-  type SessionKey,
+import type { ChildCancellation, ChildSpawnOutcome } from "@sidecar/runtime";
+import type {
+  ChildRunRecord,
+  ChildSpawnReceipt,
+  ConversationRecord,
+  SessionKey,
 } from "@sidecar/runtime/vocabulary";
 import {
   ACTION_RESULT_STATUS,
@@ -51,22 +43,9 @@ import type { ToolContext, ToolModule } from "./tool-module.js";
 interface BrainChildSpawnAsk {
   readonly task: string;
   readonly label?: string;
-  readonly context?: ChildContextMode;
-  readonly cleanup?: ChildCleanup;
-  readonly timeoutMs?: number;
   readonly expectsCompletion?: boolean;
   /** The run the spawn was called in, for the child's record. */
   readonly requesterRunId: string;
-  /** The effective policy of the turn that spawned, as names, for the child's record. */
-  readonly policy: ChildPolicyMetadata;
-  /** This conversation's active context, taken only if the host decides on a fork. */
-  readonly fork: () => ForkSnapshot | undefined;
-}
-
-/** One child as the host lists it: its record and, once it has ended, its completion. */
-interface BrainChildListing {
-  readonly record: ChildRunRecord;
-  readonly completion: ChildCompletionRecord | undefined;
 }
 
 /**
@@ -78,7 +57,8 @@ export interface BrainChildAccess {
   /** The conversation these tools belong to, which the listing marks current. */
   readonly sessionKey: SessionKey;
   spawn(ask: BrainChildSpawnAsk): Effect.Effect<ChildSpawnOutcome>;
-  list(): Effect.Effect<readonly BrainChildListing[]>;
+  /** This conversation's children, as their records stand. */
+  list(): Effect.Effect<readonly ChildRunRecord[]>;
   /** Cancels one of this conversation's children and its descendants; nothing for a child that is not its own. */
   cancel(childId: string): Effect.Effect<ChildCancellation | undefined>;
   conversations(): Effect.Effect<readonly ConversationRecord[]>;
@@ -89,10 +69,6 @@ export interface BrainChildAccess {
 export interface SessionToolContext extends ToolContext {
   /** Delegation, when the host wired it; absent, every session tool refuses. */
   readonly children: BrainChildAccess | undefined;
-  /** The effective policy of the turn, as names, for a child's record. */
-  readonly policy: ChildPolicyMetadata;
-  /** This conversation's active context as a fork would take it, read only if the host decides on one. */
-  fork(): ForkSnapshot | undefined;
   /** Records an effect before it runs and its result before the model reads it; the executor's journal. */
   journal(effect: Effect.Effect<WireRecord>): Effect.Effect<WireRecord>;
 }
@@ -136,23 +112,6 @@ const SESSIONS_SPAWN_INPUT = erase(
   EffectSchema.Struct({
     task: trimmedText(`The task, briefed in full, under ${maximumChildTaskLength} characters.`),
     label: EffectSchema.optionalKey(trimmedText("A short title for the work, for listings.")),
-    context: EffectSchema.optionalKey(
-      memberEnum(
-        Object.values(CHILD_CONTEXT_MODE),
-        "How the child's context starts; isolated by default.",
-      ),
-    ),
-    cleanup: EffectSchema.optionalKey(
-      memberEnum(
-        Object.values(CHILD_CLEANUP),
-        "Whether the child's conversation is kept for an hour after it ends (default) or archived at once.",
-      ),
-    ),
-    run_timeout_seconds: EffectSchema.optionalKey(
-      wholeNumber(
-        "A deadline for this child alone; 0, the default, means none beyond the ordinary run deadline.",
-      ),
-    ),
     expects_completion: EffectSchema.optionalKey(
       describeWire(
         EffectSchema.Boolean,
@@ -188,33 +147,22 @@ function childSpawnReceiptRecord(receipt: ChildSpawnReceipt): WireRecord {
     completed: false,
     child_id: receipt.childId,
     child_session_key: receipt.childSessionKey,
-    child_run_id: receipt.childRunId,
-    ...(receipt.model ? { model: receipt.model } : undefined),
-    context: receipt.context,
-    ...(receipt.contextNote ? { context_note: receipt.contextNote } : undefined),
-    depth: receipt.depth,
     completion:
       "arrives in this conversation as its own item when the child ends; do not poll for it",
   };
 }
 
-/** One child as `subagents` lists it: its record's standing and, once it has one, its completion's delivery. */
-function childSummaryRecord(
-  record: ChildRunRecord,
-  completion: ChildCompletionRecord | undefined,
-): WireRecord {
+/** One child as `subagents` lists it: its record's standing. */
+function childSummaryRecord(record: ChildRunRecord): WireRecord {
   return {
     child_id: record.childId,
     ...(record.label !== undefined ? { label: record.label } : undefined),
     status: record.status,
-    depth: record.depth,
-    context: record.context,
     accepted_at: new Date(record.acceptedAt).toISOString(),
     ...(record.settledAt !== undefined
       ? { settled_at: new Date(record.settledAt).toISOString() }
       : undefined),
     ...(record.resultText !== undefined ? { has_result: true } : undefined),
-    ...(completion ? { delivery: completion.delivery, attempts: completion.attempts } : undefined),
   };
 }
 
@@ -253,11 +201,10 @@ const SESSIONS_SPAWN: SessionToolModule = {
   name: BRAIN_TOOL.SESSIONS_SPAWN,
   description:
     "Delegate a task to a child agent that runs in a conversation of its own and reports back " +
-    "when it ends. The answer is a receipt that the child was accepted — its identifiers, the " +
-    "model it runs on, and the context it actually started with — never its result. Do not " +
-    "poll for the result: end your turn as usual and the completion arrives in this " +
-    'conversation as its own item. Children start isolated unless context is "fork", ' +
-    "which branches this conversation's current context into the child when it fits the cap.",
+    "when it ends. The answer is a receipt that the child was accepted — its identifiers — " +
+    "never its result. Do not poll for the result: end your turn as usual and the completion " +
+    "arrives in this conversation as its own item. A child starts with a clean transcript and " +
+    "knows only its task, so brief it in full.",
   inputSchema: SESSIONS_SPAWN_INPUT,
   execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
     return Effect.suspend(() => {
@@ -267,23 +214,13 @@ const SESSIONS_SPAWN: SessionToolModule = {
       const task = text(input.task)?.trim().slice(0, maximumChildTaskLength);
       if (!task) return Effect.succeed(rejection(REFUSAL_REASON.EMPTY_TASK));
       const label = text(input.label)?.trim();
-      const seconds = input.run_timeout_seconds;
-      const timeoutMs =
-        isWireNumber(seconds) && Number.isInteger(seconds) && seconds >= 0
-          ? seconds * 1000
-          : undefined;
       const ask: BrainChildSpawnAsk = {
         task,
         ...(label ? { label } : undefined),
-        ...(isChildContextMode(input.context) ? { context: input.context } : undefined),
-        ...(isChildCleanup(input.cleanup) ? { cleanup: input.cleanup } : undefined),
-        ...(timeoutMs !== undefined ? { timeoutMs } : undefined),
         ...(isWireBoolean(input.expects_completion)
           ? { expectsCompletion: input.expects_completion }
           : undefined),
         requesterRunId: context.runId,
-        policy: context.policy,
-        fork: () => context.fork(),
       };
       return context.journal(Effect.map(children.spawn(ask), spawnOutcomeRecord));
     });
@@ -314,10 +251,7 @@ const SUBAGENTS: SessionToolModule = {
         );
       }
       const listed = yield* children.list();
-      return {
-        status: ACTION_RESULT_STATUS.ACCEPTED,
-        children: listed.map(({ record, completion }) => childSummaryRecord(record, completion)),
-      };
+      return { status: ACTION_RESULT_STATUS.ACCEPTED, children: listed.map(childSummaryRecord) };
     });
   },
 };
