@@ -74,8 +74,10 @@ operating instructions, his identity, stable facts about you, curated notes,
 first-run setup notes, and dated notes — kept as rows in our database, one row
 per file per account: seeded with the same defaults the first time a turn runs
 for you, composed into the standing instructions every turn runs under (each
-cut to 20,000 characters and the set to 60,000), and edited only through
-Luke's own workspace tools there, in his turns. The file's name is stored in
+cut to 20,000 characters, the stable facts about you and the curated notes to
+4,000 each, and the set to 60,000), and edited only through Luke's own
+workspace tools there, in his turns, which refuse a file past its bound rather
+than cut it, so the file he reads is the file that exists. The file's name is stored in
 the clear and its contents are sealed under a key only our service holds,
 each row bound to your account so it cannot be opened under another. Those
 rows are untouched by clearing the conversation and are removed when you
