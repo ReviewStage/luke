@@ -1,7 +1,12 @@
+import {
+  type NotebookMemoryAccess,
+  type NotebookMemoryToolShape,
+  notebookMemoryProvider,
+  notebookMemoryToolShapes,
+} from "@sidecar/memory";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import type { ToolContext as EveToolContext, ToolDefinition } from "eve/tools";
-import { NOTEBOOK_MEMORY_TOOL } from "../../../../../packages/memory/src/index.js";
 import {
   ACTION_REFUSAL,
   ACTION_TOOL,
@@ -15,6 +20,9 @@ import {
   type EffectiveToolPolicy,
   GROUP_PREFIX,
   isRecord,
+  MEMORY_SCOPE_KIND,
+  type MemoryScope,
+  memoryToolNamed,
   READ_TOOLS,
   type ReadToolModule,
   refusedActionOutput,
@@ -45,25 +53,25 @@ import type { HostedTranscriptReads } from "./transcript.js";
  * the gate a call meets are one resolution. Every module reaches the host
  * through its context and nothing else: admission's readers and the carrier
  * for an action, the roster and the transcript reader for a read, the
- * workspace rows for a workspace tool, the briefing channel for `announce`.
+ * workspace rows for a workspace tool, the briefing channel for `announce`,
+ * and the notebook's search and read over the same rows for a memory tool.
  */
 
 /**
  * What the service cannot perform is not offered: the tools that reach a
  * machine — an open, an app setting, the panel, the feedback composer, the
- * updater — and the groups behind
- * seams the service does not wire: delegation and skills, and the notebook's
- * two reads, which the index behind them does not stand here. The workspace
- * tools stay, so `USER.md` is written the way every other workspace file
- * is. The turn's own layer still withholds `announce` from an ask.
+ * updater — and the groups behind seams the service does not wire:
+ * delegation and skills. The notebook's two reads are offered, answered by
+ * the in-process search over the account's workspace rows (`notebook.ts`).
+ * The workspace tools stay, so `USER.md` is written the way every other
+ * workspace file is. The turn's own layer still withholds `announce` from an
+ * ask.
  */
 const HOSTED_TOOL_POLICY: ToolPolicyLayers = {
   agent: {
     deny: [
       `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`,
       `${GROUP_PREFIX}${TOOL_GROUP.SKILLS}`,
-      NOTEBOOK_MEMORY_TOOL.SEARCH,
-      NOTEBOOK_MEMORY_TOOL.GET,
       ACTION_TOOL.OPEN_SESSION,
       ACTION_TOOL.CHANGE_APP_SETTING,
       ACTION_TOOL.SHOW_PANEL,
@@ -91,6 +99,8 @@ export interface HostedToolSeams {
   readonly carrier: HostedActionCarrier;
   readonly transcripts: Pick<HostedTranscriptReads, "whole">;
   readonly workspace: BrainWorkspaceAccess;
+  /** The notebook's search and read over the account's rows, for the two memory tools. */
+  readonly notebook: NotebookMemoryAccess;
   readonly now: () => number;
 }
 
@@ -144,6 +154,9 @@ export interface HostedToolDeclaration {
 
 const READ_TOOLS_BY_NAME = new Map(READ_TOOLS.map((module) => [module.name, module]));
 const WORKSPACE_TOOLS_BY_NAME = new Map(WORKSPACE_TOOLS.map((module) => [module.name, module]));
+const MEMORY_TOOLS_BY_NAME = new Map<string, NotebookMemoryToolShape>(
+  notebookMemoryToolShapes().map((shape) => [shape.name, shape]),
+);
 
 /** The module one allowed name declares, or nothing for a name the host does not wire. */
 function moduleNamed(
@@ -153,6 +166,7 @@ function moduleNamed(
   | { readonly kind: "read"; readonly module: ReadToolModule }
   | { readonly kind: "announce"; readonly module: AnnounceToolModule }
   | { readonly kind: "workspace"; readonly module: WorkspaceToolModule }
+  | { readonly kind: "memory"; readonly module: NotebookMemoryToolShape }
   | undefined {
   const action = actionToolNamed(name);
   if (action) return { kind: "action", module: action };
@@ -161,7 +175,14 @@ function moduleNamed(
   if (name === ANNOUNCE_TOOL.name) return { kind: "announce", module: ANNOUNCE_TOOL };
   const workspace = WORKSPACE_TOOLS_BY_NAME.get(name);
   if (workspace) return { kind: "workspace", module: workspace };
+  const memory = MEMORY_TOOLS_BY_NAME.get(name);
+  if (memory) return { kind: "memory", module: memory };
   return undefined;
+}
+
+/** Whose notebook a hosted turn's memory tools reach: the account's, which is the one the workspace rows are keyed by. */
+function memoryScopeOf(seams: HostedToolSeams): MemoryScope {
+  return { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: seams.conversation.userId };
 }
 
 /** The tools one turn is offered, by name in catalog order: the policy's allowed set, as declarations. */
@@ -222,6 +243,24 @@ function runOf(
           ...standing,
           workspace: seams.workspace,
           journal: (effect) => effect,
+        });
+    case "memory":
+      // The provider is the memory package's own, built over the account's
+      // scope for this one call: it guards the scope, trims and bounds the
+      // arguments, and hands the notebook access the read. Recall and
+      // capture are eve's here, so the provider is handed no notes to prime
+      // with.
+      return (fields, standing) =>
+        Effect.suspend(() => {
+          const scope = memoryScopeOf(seams);
+          const provider = notebookMemoryProvider({
+            scope,
+            access: seams.notebook,
+            recentNotes: () => Effect.succeed([]),
+          });
+          const tool = memoryToolNamed(provider, named.module.name);
+          if (!tool) return Effect.succeed(NO_SUCH_TOOL);
+          return tool.execute(fields, { ...standing, scope });
         });
   }
 }

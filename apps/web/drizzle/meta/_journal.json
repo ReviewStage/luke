@@ -211,6 +211,13 @@
       "when": 1789432000000,
       "tag": "0030_memory_1_drop_personal_fact",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789600000000,
+      "tag": "0031_workspace_embedding",
+      "breakpoints": true
     }
   ]
 }

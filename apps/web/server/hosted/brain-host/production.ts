@@ -19,6 +19,7 @@ import type { StoreWriter } from "./announce.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "./conversation.js";
 import type { SessionOwnership } from "./door.js";
+import { type HostedEmbedder, hostedEmbedder } from "./embedding.js";
 import { deploymentEveOrigin } from "./eve-origin.js";
 import type { CloudActionExecutor } from "./performer.js";
 
@@ -28,8 +29,9 @@ import type { CloudActionExecutor } from "./performer.js";
  * touches no database and needs no secret: the bearer's account through the
  * auth service's own userinfo, the stored keys out of the vault table under
  * the vault secret, the store under the payload key ring, the writer over
- * the catalog's tool set, Luke's own OpenAI key and model, and the daily
- * meter. An authored file hands what it needs here and nothing else.
+ * the catalog's tool set, Luke's own OpenAI key and model, the notebook
+ * search's embedder on that same key, and the daily meter. An authored file
+ * hands what it needs here and nothing else.
  */
 
 /**
@@ -63,6 +65,8 @@ export interface BrainHostSeams {
   readonly eveOrigin: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
   readonly openAi: () => OpenAiAccess | undefined;
+  /** The notebook search's embedder on the same key, or nothing when the deployment holds none and the search runs keyword-only. */
+  readonly embedder: () => HostedEmbedder | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
   readonly scriptedModel: () => boolean;
   readonly spend: (userId: string) => Promise<HostedSpend>;
@@ -171,6 +175,10 @@ export function productionBrainHostSeams(run: WebStoreRun): BrainHostSeams {
         apiKey,
         modelId: process.env[HOSTED_OPENAI_ENVIRONMENT.BRAIN_MODEL] || DEFAULT_BRAIN_MODEL,
       };
+    },
+    embedder: () => {
+      const apiKey = process.env[HOSTED_OPENAI_ENVIRONMENT.API_KEY];
+      return apiKey ? hostedEmbedder(apiKey) : undefined;
     },
     scriptedModel: () =>
       process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,

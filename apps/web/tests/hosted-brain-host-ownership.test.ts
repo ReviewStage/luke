@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { fakeHttpClient } from "@sidecar/wire/testing";
 import { Effect, Schema } from "effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -101,6 +103,7 @@ function hostOverTestDatabase(): TestHost {
     eveOrigin: () => undefined,
     deploymentSecret: () => undefined,
     openAi: () => undefined,
+    embedder: () => undefined,
     scriptedModel: () => false,
     spend: unreached("spend"),
     vaultRows: () => Effect.succeed([]),
@@ -443,11 +446,16 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const directive = "# USER.md\n\n- 2026-09-15: prefers short replies\n";
   const call = (sessionId: string, auth: SessionAuth) =>
     database.run(
-      host.runTool(
-        BRAIN_TOOL.WRITE_WORKSPACE_FILE,
-        binding(target, sessionId),
-        { name: "USER.md", content: directive },
-        toolContext(sessionId, auth),
+      Effect.provideService(
+        host.runTool(
+          BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+          binding(target, sessionId),
+          { name: "USER.md", content: directive },
+          toolContext(sessionId, auth),
+        ),
+        HttpClient.HttpClient,
+        // No call here reaches the network: the one tool that would is not the one called.
+        fakeHttpClient(unreached("the HTTP client")),
       ),
     );
 

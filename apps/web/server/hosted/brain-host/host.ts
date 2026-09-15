@@ -1,5 +1,6 @@
 import type { LanguageModel } from "ai";
 import { Effect, type Schema } from "effect";
+import * as HttpClient from "effect/unstable/http/HttpClient";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -38,6 +39,7 @@ import { readWorkspaceDefaults } from "./defaults.js";
 import { EVE_CALLER, eveSessions } from "./eve-sessions.js";
 import { hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
+import { hostedNotebookAccess } from "./notebook.js";
 import { hostedActionCarrier } from "./performer.js";
 import type { BrainHostSeams } from "./production.js";
 import { type RelayStateStore, StreamRelay } from "./relay.js";
@@ -138,13 +140,17 @@ export interface BrainHost {
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools one turn is offered, as declarations; the eve project binds each to `runTool`. */
   toolDeclarations(turn: HostedTurn): readonly HostedToolDeclaration[];
-  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it. */
+  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it; over the edge's `HttpClient` too, for the one embeddings call a notebook search makes. */
   runTool(
     name: string,
     binding: HostedToolBinding,
     input: UnparsedWireValue,
     context: EveToolContext,
-  ): HostEffect<WireRecord>;
+  ): Effect.Effect<
+    WireRecord,
+    SqlError | Schema.SchemaError,
+    SqlClient.SqlClient | HttpClient.HttpClient
+  >;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
@@ -338,6 +344,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           return { status: ACTION_RESULT_STATUS.REJECTED, reason: standing.refusal };
         }
         const client = yield* SqlClient.SqlClient;
+        const http = yield* HttpClient.HttpClient;
         const { userId } = binding.target;
         // Every seam below answers `Effect<A, never, never>`, so the request's
         // own client is provided into each read here and a row the service
@@ -377,6 +384,14 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             carrier,
             transcripts,
             workspace: hostedWorkspaceAccess(client, seams.store(), userId, seams.now),
+            notebook: hostedNotebookAccess({
+              client,
+              http,
+              store: seams.store(),
+              userId,
+              embedder: seams.embedder(),
+              now: seams.now,
+            }),
             now: seams.now,
           },
           {

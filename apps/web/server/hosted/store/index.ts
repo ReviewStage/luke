@@ -47,6 +47,12 @@ import {
 import { openSpeechOffers, type SpeechOffer } from "./speech.js";
 import { type StandingConversation, standingConversations } from "./standing-conversations.js";
 import {
+  pruneWorkspaceEmbeddings,
+  readWorkspaceEmbeddings,
+  type WorkspaceEmbeddingWrite,
+  writeWorkspaceEmbeddings,
+} from "./workspace-embeddings.js";
+import {
   type DailyNoteRecord,
   deleteWorkspaceFile,
   listDailyNotes,
@@ -179,6 +185,27 @@ export interface HostedStore {
     /** The dated notes under `memory/`, newest first and at most `limit` of them, each with its character count and none of its words. */
     listNotes(userId: string, limit: number): HostedStoreEffect<readonly DailyNoteRecord[]>;
   };
+  /**
+   * The notebook search's embedding cache: a vector per passage hash, under
+   * the model it was made by, and never the passage's words. Filled lazily by
+   * a search and pruned to the passages the workspace holds now.
+   */
+  embeddings: {
+    /** The cached vectors among the hashes given, under the model named; a hash embedded under another model, or never, is absent. */
+    read(
+      userId: string,
+      model: string,
+      hashes: readonly string[],
+    ): HostedStoreEffect<ReadonlyMap<string, readonly number[]>>;
+    write(
+      userId: string,
+      model: string,
+      writes: readonly WorkspaceEmbeddingWrite[],
+      now: number,
+    ): HostedStoreEffect<void>;
+    /** Drops every cached vector whose hash is not among those given; answers how many went. */
+    prune(userId: string, hashes: readonly string[]): HostedStoreEffect<number>;
+  };
   roster: {
     read(userId: string): HostedStoreEffect<RosterSnapshotRecord | undefined>;
     /** The standing snapshot's instant without opening its body; absent where none stands. */
@@ -269,6 +296,11 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       list: (userId) => listWorkspaceFiles(userId),
       listNotes: (userId, limit) => listDailyNotes(sealFor(userId), userId, limit),
     },
+    embeddings: {
+      read: (userId, model, hashes) => readWorkspaceEmbeddings(userId, model, hashes),
+      write: (userId, model, writes, now) => writeWorkspaceEmbeddings(userId, model, writes, now),
+      prune: (userId, hashes) => pruneWorkspaceEmbeddings(userId, hashes),
+    },
     roster: {
       read: (userId) => readRosterSnapshot(sealFor(userId), userId),
       observedAt: (userId) => rosterSnapshotObservedAt(userId),
@@ -330,7 +362,6 @@ export {
   sweepSpeech,
 } from "./speech.js";
 export type { StandingConversation } from "./standing-conversations.js";
-
 export {
   type CommentaryAppend,
   VOICE_WRITE_REFUSAL,
