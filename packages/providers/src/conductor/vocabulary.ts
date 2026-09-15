@@ -122,11 +122,13 @@ export const SESSION_STATUS_BY_CONDUCTOR_STATUS = {
   [CONDUCTOR_SESSION_STATUS.ERROR]: SESSION_STATUS.ERROR,
 } as const satisfies Readonly<Record<ConductorSessionStatus, SessionStatus>>;
 
-/** The lifecycle states `GET …/workspaces/{id}/status` documents. */
+/**
+ * The lifecycle states of `GET …/workspaces/{id}/status` this build acts on.
+ * A state named nowhere here is read as one more state that changes nothing:
+ * the workspace stays open and its rows say nothing about it.
+ */
 export const CONDUCTOR_WORKSPACE_STATUS = {
   INITIALIZING: "initializing",
-  READY: "ready",
-  SLEEPING: "sleeping",
   ARCHIVED: "archived",
   DELETED: "deleted",
   UPDATING: "updating",
@@ -138,10 +140,9 @@ export type ConductorWorkspaceStatus =
 /**
  * The lifecycle states worth a row's activity slot: a workspace still being
  * built or rebuilt is why its chats are quiet, and without the words a
- * just-created session reads as unaccountably idle. A ready workspace is the
- * normal case and says nothing, and a sleeping one is Conductor's own economy
- * — it wakes on the next message — so wording it would put a non-event on
- * the row.
+ * just-created session reads as unaccountably idle. Every other state is
+ * either the normal case or Conductor's own economy — a sleeping workspace
+ * wakes on the next message — so wording it would put a non-event on the row.
  */
 export const CONDUCTOR_WORKSPACE_ACTIVITY = {
   [CONDUCTOR_WORKSPACE_STATUS.INITIALIZING]: "Workspace initializing",

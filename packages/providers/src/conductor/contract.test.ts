@@ -4,7 +4,6 @@ import { conductorPlugin } from "./index.js";
 
 const CONDUCTOR_SESSION_ID = {
   IDLE: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
-  WORKING: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
 } as const;
 
 describeProviderContract(
