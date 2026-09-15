@@ -40,7 +40,9 @@ export function brainHostChannelInput(
  * The kinds of turn the deployment may open for an account, in the roles it
  * acts in: the scheduled observation's turns, and the spoken asks the voice
  * function hands to eve for the account it resolved at its own handshake and
- * holds no bearer for by the time a delegation arrives. A typed ask is only
+ * holds no bearer for by the time a delegation arrives, and a child's task
+ * and a child's completion, which the deployment hands between an account's
+ * own conversations the way it hands an observation. A typed ask is only
  * ever a developer's own request under their own bearer, so the deployment
  * opens none. A caller of another role adds its row here and nowhere else.
  */
@@ -49,4 +51,6 @@ export const DEPLOYMENT_TURNS = {
   [BRAIN_HOST_TURN.SPOKEN]: true,
   [BRAIN_HOST_TURN.OBSERVATION]: true,
   [BRAIN_HOST_TURN.HOLD_RELEASE]: true,
+  [BRAIN_HOST_TURN.CHILD_TASK]: true,
+  [BRAIN_HOST_TURN.CHILD_COMPLETION]: true,
 } as const satisfies Record<BrainHostTurn, boolean>;

@@ -91,6 +91,10 @@ export const BRAIN_HOST_TURN = {
   OBSERVATION: "observation",
   /** A hold's release: the briefings a meeting or a pause held back, handed to the conversation that decided them for one re-decision. */
   HOLD_RELEASE: "hold_release",
+  /** A child's own turn: the task its requester delegated, handed to the child conversation as its words. */
+  CHILD_TASK: "child-task",
+  /** A requester's turn opened by a child's completion, with the child's result as its words. */
+  CHILD_COMPLETION: "child-completion",
 } as const;
 
 export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
@@ -143,6 +147,16 @@ export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.HOLD_RELEASE]: {
     origin: BRAIN_TURN_ORIGIN.HOLD_RELEASE,
     trigger: BRAIN_TURN_TRIGGER.HOLD_RELEASED,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
+  [BRAIN_HOST_TURN.CHILD_TASK]: {
+    origin: BRAIN_TURN_ORIGIN.CHILD,
+    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
+  [BRAIN_HOST_TURN.CHILD_COMPLETION]: {
+    origin: BRAIN_TURN_ORIGIN.CHILD_COMPLETION,
+    trigger: BRAIN_TURN_TRIGGER.CHILD_COMPLETION,
     receivedLine: RECEIVED_LINE.RELAY,
   },
 } as const satisfies Record<
