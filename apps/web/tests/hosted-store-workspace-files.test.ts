@@ -7,8 +7,10 @@ import { payloadKeyRing } from "../server/hosted/encryption";
 import { userSeal } from "../server/hosted/store/database";
 import {
   deleteWorkspaceFile,
+  listDailyNotes,
   listWorkspaceFiles,
   readWorkspaceFile,
+  reviseWorkspaceFile,
   seedWorkspaceFile,
   writeWorkspaceFile,
 } from "../server/hosted/store/workspace-files";
@@ -71,6 +73,88 @@ it.layer(testSqlClient)("the workspace files over effect/unstable/sql", (it) => 
       assert.equal(yield* deleteWorkspaceFile(userId, NOTE_PATH), false);
       assert.equal((yield* listWorkspaceFiles(userId)).length, 1);
     }),
+  );
+
+  it.effect(
+    "lists the dated notes alone, newest first and bounded, each counted and none of it read back",
+    () =>
+      Effect.gen(function* () {
+        const { userId, seal } = yield* openUser;
+        yield* writeWorkspaceFile(seal, userId, "MEMORY.md", "# MEMORY.md", NOW);
+        yield* writeWorkspaceFile(seal, userId, "memory/2026-09-07.md", "- oldest", NOW);
+        yield* writeWorkspaceFile(seal, userId, NOTE_PATH, "- middle note", NOW + 1);
+        yield* writeWorkspaceFile(seal, userId, "memory/2026-09-11.md", "", NOW + 2);
+        yield* writeWorkspaceFile(seal, userId, "memory/2026-09-09-standup.md", "- slug", NOW + 3);
+        // Newest day first; within a day the plain note precedes its slugged variants, in byte order.
+        assert.deepEqual(
+          [...(yield* listDailyNotes(seal, userId, 60))],
+          [
+            { path: "memory/2026-09-11.md", chars: 0 },
+            { path: NOTE_PATH, chars: 13 },
+            { path: "memory/2026-09-09-standup.md", chars: 6 },
+            { path: "memory/2026-09-07.md", chars: 8 },
+          ],
+        );
+        assert.deepEqual(
+          [...(yield* listDailyNotes(seal, userId, 2))],
+          [
+            { path: "memory/2026-09-11.md", chars: 0 },
+            { path: NOTE_PATH, chars: 13 },
+          ],
+        );
+        // Another account's notes are not this one's.
+        const other = yield* openUser;
+        assert.deepEqual([...(yield* listDailyNotes(other.seal, other.userId, 60))], []);
+      }),
+  );
+
+  it.effect(
+    "revises a file from what stands, creating it where none does, and leaves it as it was where the revision declines",
+    () =>
+      Effect.gen(function* () {
+        const { userId, seal } = yield* openUser;
+        const grow = (entry: string) => (existing: string | undefined) =>
+          existing === undefined ? entry : `${existing}\n\n${entry}`;
+        assert.equal(
+          yield* reviseWorkspaceFile(seal, userId, NOTE_PATH, grow("- one"), NOW),
+          "- one",
+        );
+        assert.equal(
+          yield* reviseWorkspaceFile(seal, userId, NOTE_PATH, grow("- two"), NOW + 1),
+          "- one\n\n- two",
+        );
+        assert.equal(
+          yield* reviseWorkspaceFile(seal, userId, NOTE_PATH, () => undefined, NOW + 2),
+          undefined,
+        );
+        assert.deepEqual(Option.getOrUndefined(yield* readWorkspaceFile(seal, userId, NOTE_PATH)), {
+          path: NOTE_PATH,
+          content: "- one\n\n- two",
+          createdAt: NOW,
+          updatedAt: NOW + 1,
+        });
+        // A declined revision of a file that never stood creates nothing.
+        assert.equal(
+          yield* reviseWorkspaceFile(seal, userId, "memory/2026-09-10.md", () => undefined, NOW),
+          undefined,
+        );
+        assert.equal((yield* listWorkspaceFiles(userId)).length, 1);
+        // Revisions in flight together land one after the other: every entry survives.
+        const entries = ["- a", "- b", "- c", "- d", "- e", "- f"];
+        yield* Effect.forEach(
+          entries,
+          (entry) => reviseWorkspaceFile(seal, userId, NOTE_PATH, grow(entry), NOW + 3),
+          { concurrency: "unbounded" },
+        );
+        const grown = Option.getOrUndefined(yield* readWorkspaceFile(seal, userId, NOTE_PATH));
+        assert.ok(grown);
+        for (const entry of entries) assert.ok(grown.content.includes(entry), entry);
+        assert.equal(grown.content.split("\n\n").length, 2 + entries.length);
+        const outside = yield* Effect.exit(
+          reviseWorkspaceFile(seal, userId, "../SOUL.md", grow("- x"), NOW),
+        );
+        assert.equal(Exit.isFailure(outside), true);
+      }),
   );
 
   it.effect("fails a path outside the workspace and writes nothing for it", () =>
