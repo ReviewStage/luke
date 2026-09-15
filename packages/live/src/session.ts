@@ -139,14 +139,14 @@ interface LiveStartupOptions {
   input?: readonly InitialItem[];
 }
 
-export interface LiveSessionOptions extends LiveStartupOptions {
+interface LiveSessionOptions extends LiveStartupOptions {
   /** What the renderer's data channel may send; `RENDERER_CLIENT_EVENTS` by default. */
   clientEvents?: readonly LiveClientEventType[];
   /** What the renderer's data channel is shown; `RENDERER_SERVER_EVENTS` by default. */
   serverEvents?: readonly LiveServerEventSelector[];
 }
 
-export interface LivePrimarySessionOptions extends LiveStartupOptions {
+interface LivePrimarySessionOptions extends LiveStartupOptions {
   /** One format for both directions; `LIVE_DEFAULT_AUDIO_FORMAT` otherwise. */
   format?: LiveAudioFormat;
 }

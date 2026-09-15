@@ -53,7 +53,7 @@ export const LIVE_INPUT_BOUNDS = {
   TOKENS: 8_192,
 } as const;
 
-export interface SeedBudget {
+interface SeedBudget {
   messages: number;
   tokens: number;
 }
