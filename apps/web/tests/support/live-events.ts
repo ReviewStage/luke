@@ -65,8 +65,11 @@ export function thinkingAppended(clientEventId: string): LiveServerEvent {
   };
 }
 
-/** A client delegation the model created at one offset on the session's clock. */
-export function delegated(delegationId: string, offsetMs: number): LiveServerEvent {
+/** A client delegation the model created at one offset on the session's clock, as the writer's delegated-ask door takes it. */
+export function delegated(
+  delegationId: string,
+  offsetMs: number,
+): Extract<LiveServerEvent, { type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED }> {
   return {
     type: LIVE_SERVER_EVENT.DELEGATION_CREATED,
     event_id: liveEventId(),

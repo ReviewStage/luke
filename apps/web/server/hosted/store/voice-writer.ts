@@ -121,6 +121,18 @@ export interface VoiceWriter {
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
   /** Tells the writer which message a commentary append carries, before the stream acknowledges it. */
   noteAppend(target: VoiceTarget, append: CommentaryAppend): void;
+  /**
+   * The developer's delegated ask: the delegation's cut, run to the end of
+   * the utterance the ledger grouped the ask as where the service names it,
+   * so a last fragment the API placed at or after the delegation's offset is
+   * the ask's rather than the next one's. Without a span the cut stops at the
+   * offset, which is what the stream's own `consume` of the delegation does.
+   */
+  recordSpokenAsk(
+    target: VoiceTarget,
+    created: DelegationCreated,
+    utterance?: SpokenUtteranceSpan,
+  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
   /** The developer's settled utterance, undelegated: a finished user row cut from the session's segments over its span. */
   recordSpokenLine(
     target: VoiceTarget,
@@ -155,6 +167,7 @@ type SegmentDelta = Extract<
   }
 >;
 
+/** The delegation event as the stream carries it, which is what a delegated ask is cut by. */
 type DelegationCreated = Extract<
   LiveServerEvent,
   { type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED }
@@ -458,10 +471,20 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
    * deltas came, and written as a user message on the voice channel naming
    * the session, the delegation, and the span. A delegation with no words
    * before it writes nothing.
+   *
+   * The offset is where the cut ends only where nothing says the utterance
+   * ran on: the API may place a delegation's offset before the last fragment
+   * of the utterance it is about, and a cut that stopped there would leave
+   * the ask's last word off its row and hand it to the next ask as a first
+   * word, or nowhere. So the cut runs to the end of the utterance the ledger
+   * grouped the ask as, where the service hands that span over, and to the
+   * end of a line already settled undelegated that the delegation adopts,
+   * whichever reaches furthest; the delegation's own offset is the floor.
    */
   function recordSpokenAsk(
     target: VoiceTarget,
     created: DelegationCreated,
+    utterance?: SpokenUtteranceSpan,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
     return Effect.gen(function* () {
       const voiceSession = yield* findVoiceSession({
@@ -497,7 +520,11 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
               fromMs: candidate.toMs,
             });
       const adopting = Option.isNone(answered) ? candidate : undefined;
-      const cutEndMs = Math.max(created.offset_ms, adopting?.toMs ?? created.offset_ms);
+      const cutEndMs = Math.max(
+        created.offset_ms,
+        adopting?.toMs ?? created.offset_ms,
+        utterance?.endMs ?? created.offset_ms,
+      );
       // The cut starts where the developer's last written words end — the previous ask's, or the
       // last undelegated line's other than the one being adopted, whose own words the cut
       // includes again with whatever joined or followed them before the delegation.
@@ -646,6 +673,7 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   }
 
   return {
+    recordSpokenAsk,
     recordSpokenLine,
     recordSpokenReply,
     noteAppend(target, append) {

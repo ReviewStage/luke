@@ -1305,12 +1305,18 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // utterance undelegated already: an ask is on record only under its
       // delegation, and a record that took the utterance before tells the two
       // writes apart by the row. The settle timer, for its part, writes the row
-      // no more.
+      // no more. What is written is the row as the ledger holds it now, not as
+      // it stood when the delegation arrived: the API delivers a delegation
+      // ahead of the transcript deltas it is about, so the ask's last fragment
+      // may land while the brain is being asked, and a row written from the
+      // span claimed then would leave that word off the record for good, since
+      // this row is written once.
       session.writtenRows.add(ask.rowId);
+      const utterance = this.#rowNow(session, ask);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
         yield* this.#write({
           session,
-          utterance: ask,
+          utterance,
           delegationId,
           askContext: { sinceMs, untilMs: offsetMs },
         });
@@ -1333,7 +1339,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       exchange.pendingRecords += 1;
       yield* this.#write({
         session,
-        utterance: ask,
+        utterance,
         delegationId,
         askContext: { sinceMs, untilMs: offsetMs },
         runId: submission.runId,
@@ -1344,6 +1350,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       if (exchange.pendingRecords > 0) return;
       for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
     });
+  }
+
+  /** The utterance's row as the ledger holds it at this instant, with every fragment that joined it since it was claimed; the claim itself where the row is gone. */
+  #rowNow(session: StandingSession, claimed: TranscriptUtterance): TranscriptUtterance {
+    return session.ledger.captionLines().find((line) => line.rowId === claimed.rowId) ?? claimed;
   }
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */

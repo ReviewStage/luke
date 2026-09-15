@@ -26,12 +26,14 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
  * record and never from a grouping the service kept beside them.
  *
  * A delegation is the one event not consumed as it arrives. The writer cuts
- * the ask from the developer's segments already on record before the
- * delegation's offset, and the API may deliver a delegation ahead of the
- * transcript deltas it is about; so the event is held, and consumed only when
- * the service asks for the developer's utterance to be written under it, by
- * which time every delta that arrived ahead of that ask has taken its place
- * in the sequence. The service makes that write for every delegated ask,
+ * the ask from the developer's segments already on record, and the API may
+ * deliver a delegation ahead of the transcript deltas it is about, and place
+ * its offset before the utterance's last fragment; so the event is held, and
+ * the ask cut only when the service asks for the developer's utterance to be
+ * written under it, by which time every delta that arrived ahead of that ask
+ * has taken its place in the sequence, and cut over the span the service's
+ * ledger grouped the utterance as, so a last word the offset fell short of
+ * is the ask's. The service makes that write for every delegated ask,
  * whether or not the utterance had settled and been written undelegated
  * before, and awaits it ahead of the reply, so the write answers true only
  * when the ask is on record and the service speaks no reply to an ask the
@@ -142,7 +144,12 @@ export function hostedLiveRecord({
           // A write the store refused and one it died on are both an ask not
           // on record, as they were when the promise rejected; an interruption
           // is neither, and is the socket's scope closing under the wait.
-          return consume(delegation).pipe(
+          return enqueue(
+            writer.recordSpokenAsk(target, delegation, {
+              startMs: record.startMs,
+              endMs: record.endMs,
+            }),
+          ).pipe(
             Effect.map((written) => written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED),
             Effect.catch(() => Effect.succeed(false)),
             Effect.catchDefect(() => Effect.succeed(false)),

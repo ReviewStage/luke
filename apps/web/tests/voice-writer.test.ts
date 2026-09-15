@@ -985,3 +985,75 @@ test("a delegation delivered late, its offset inside a line Luke has already ans
     false,
   );
 });
+
+test("a delegation that arrives before the utterance settles, its offset ahead of the utterance's last fragment, cuts the ask to the utterance's end the service names: the last word is the ask's, and the next ask begins after it", async () => {
+  const live = await target();
+  const voice = writer();
+  const voiceSessionId = await sessionRowId(live.liveSessionId);
+  await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
+  // The API places the delegation's offset inside the utterance, and the last fragment starts after it.
+  await database.run(voice.consume(live, heard(" one.", 2400, 2600)));
+  assert.deepEqual(
+    await database.run(
+      voice.recordSpokenAsk(live, delegated("dl_1", 2300), { startMs: 1000, endMs: 2600 }),
+    ),
+    WRITTEN,
+  );
+  // The next ask is cut from where the first ended, so the last word is on record once.
+  await database.run(voice.consume(live, heard("Thanks.", 5000, 5400)));
+  assert.deepEqual(
+    await database.run(
+      voice.recordSpokenAsk(live, delegated("dl_2", 5600), { startMs: 5000, endMs: 5400 }),
+    ),
+    WRITTEN,
+  );
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.parts, row.metadata]),
+    [
+      [
+        "dl_1",
+        [{ type: "text", text: "Open the failing one.", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          delegation_id: "dl_1",
+          from_ms: 1000,
+          to_ms: 2600,
+        },
+      ],
+      [
+        "dl_2",
+        [{ type: "text", text: "Thanks.", state: "done" }],
+        {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: voiceSessionId,
+          delegation_id: "dl_2",
+          from_ms: 5000,
+          to_ms: 5600,
+        },
+      ],
+    ],
+  );
+});
+
+test("the stream's own consume of a delegation cuts at the offset, as before, since it names no utterance: what the door above adds is the span", async () => {
+  const live = await target();
+  const voice = writer();
+  await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
+  await database.run(voice.consume(live, heard(" one.", 2400, 2600)));
+  assert.deepEqual(await database.run(voice.consume(live, delegated("dl_1", 2300))), WRITTEN);
+  const rows = await readMessagesByConversationTyped(
+    database.run,
+    live.conversation.conversationId,
+  );
+  assert.deepEqual(
+    rows.map((row) => [row.clientId, row.parts]),
+    [["dl_1", [{ type: "text", text: "Open the failing", state: "done" }]]],
+  );
+});

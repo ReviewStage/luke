@@ -29,7 +29,7 @@ import {
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
-import { Clock, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
+import { Clock, Deferred, Duration, Effect, Fiber, Layer, type Scope, type Stream } from "effect";
 import { TestClock } from "effect/testing";
 import { liveBrainLayer } from "../effect/live-brain.js";
 import { liveRecordLayer } from "../effect/live-record.js";
@@ -175,12 +175,15 @@ class FakeSideband implements LiveSideband {
 class FakeBrain implements LiveBrain {
   readonly asks: LiveBrainAsk[] = [];
   refuse: string | undefined;
+  /** While set, each ask is taken at once and answered only when this settles, as a brain across the network answers. */
+  answerWhen: Deferred.Deferred<void> | undefined;
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
   submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
-    return Effect.sync(() => {
+    return Effect.gen({ self: this }, function* () {
       this.asks.push(ask);
+      if (this.answerWhen !== undefined) yield* Deferred.await(this.answerWhen);
       if (this.refuse !== undefined) {
         return { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: this.refuse };
       }
@@ -603,6 +606,34 @@ it.effect(
         f.record.luke.map((line) => [line.role, line.text, line.startMs, line.endMs]),
         [[CONVERSATION_ENTRY_KIND.REPLY, "Hi there.", 0, 900]],
       );
+    }),
+);
+
+it.effect(
+  "a fragment that lands on the ask's row while the brain is being asked is written under the delegation: the row goes on record as the ledger holds it at the write, not as it stood at the claim",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      sideband.input("Open the failing", 1000, 2200);
+      // The API delivers the delegation ahead of the utterance's last fragment, its offset inside the utterance.
+      sideband.delegation("item_1", 2300);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.record.developer.length, 0);
+      sideband.input(" one.", 2400, 2600);
+      yield* settle();
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      yield* settle();
+      assert.deepEqual(
+        f.record.developer.map((line) => [line.delegationId, line.text, line.startMs, line.endMs]),
+        [["item_1", "Open the failing one.", 1000, 2600]],
+      );
+      // The settle timer finds the row on record and writes it no second time.
+      yield* advanceClock(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+      assert.equal(f.record.developer.length, 1);
     }),
 );
 
