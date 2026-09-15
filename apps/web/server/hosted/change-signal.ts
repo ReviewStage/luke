@@ -6,6 +6,7 @@ import {
   type ChangesAnswer,
   type ChangesRequest,
   changesRequestSchema,
+  encodeChildrenHead,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
 } from "../core.js";
@@ -25,8 +26,8 @@ import type { HostedStore } from "./store/index.js";
  * read stands now, as the cursor a device that read it to the end would
  * hold, so a device compares each against its own and reads only what moved.
  * The heads come from the counters on the conversation rows and one ordered
- * look at the turns, never from the rows themselves, so a poll is one small
- * read however long the Conversation has grown. The messages head is two
+ * look each at the turns and the children, never from the rows themselves,
+ * so a poll is one small read however long the Conversation has grown. The messages head is two
  * counters: the last sequence handed out and the journal revision, which
  * every write to a numbered row in place moves, so a caught-up device's
  * cursor reads equal to the head while nothing is numbered or written, an
@@ -111,9 +112,10 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
     new Date(now()),
   );
 
-  const [standing, latestTurn, rosterObservedAt] = yield* Effect.all([
+  const [standing, latestTurn, childrenHead, rosterObservedAt] = yield* Effect.all([
     store.directory.standing(userId),
     store.turns.latest(userId),
+    store.directory.childrenHead(userId),
     store.roster.observedAt(userId),
   ]);
   const answer: ChangesAnswer = {
@@ -135,6 +137,9 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
       })),
     ),
     ...(latestTurn !== undefined ? { turns: encodeTurnReadCursor(latestTurn) } : undefined),
+    // The children read takes no cursor, so its head is the instant the
+    // children last changed: a device compares it to the one it last saw.
+    ...(childrenHead !== undefined ? { children: encodeChildrenHead(childrenHead) } : undefined),
     ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
   };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

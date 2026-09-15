@@ -24,8 +24,10 @@ import {
 import {
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
+  type ChildrenAnswer,
   type ConversationEventsAnswer,
   type ConversationMessagesAnswer,
+  childrenAnswerSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
   READ_QUERY,
@@ -162,6 +164,13 @@ export class HostedConversationClient {
   ): Effect.Effect<ConversationReadResult<BrainTurnsAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.BRAIN_TURNS, page, (payload) =>
       Result.getOrUndefined(readEither(brainTurnsAnswerSchema)(payload)),
+    );
+  }
+
+  /** The account's children as they stand, whole and newest first; the read takes no cursor, so there is no page to ask for. */
+  children(): Effect.Effect<ConversationReadResult<ChildrenAnswer>, never, HttpClient.HttpClient> {
+    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, {}, (payload) =>
+      Result.getOrUndefined(readEither(childrenAnswerSchema)(payload)),
     );
   }
 

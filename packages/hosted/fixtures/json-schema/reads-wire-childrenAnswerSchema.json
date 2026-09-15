@@ -1,0 +1,78 @@
+{
+  "type": "object",
+  "properties": {
+    "children": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "parentConversationId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "parentKind": {
+            "type": "string",
+            "enum": [
+              "main",
+              "observed"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "task": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "settled",
+              "cancelled",
+              "failed"
+            ]
+          },
+          "acceptedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "settledAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "failure": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "parentConversationId",
+          "parentKind",
+          "status",
+          "acceptedAt"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 100
+    }
+  },
+  "required": [
+    "children"
+  ],
+  "additionalProperties": false
+}

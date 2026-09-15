@@ -1,16 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { Effect } from "effect";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { TURN_ORIGIN, TURN_STATUS } from "../server/core";
+import { CHILDREN_READ_BOUNDS, MESSAGE_ROLE, TURN_ORIGIN, TURN_STATUS } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CHILD_STATUS, type ChildRecord } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertTurn, setConversationDeletedAt } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  insertTurn,
+  setConversationDeletedAt,
+} from "./support/store-rows";
 
 /**
  * The children directory over the real migrations on PGlite. Synthetic
- * fixtures throughout: a child's label is a fixture word, and no message is
- * written, since the read carries none.
+ * fixtures throughout: a child's label is a fixture word, and the one
+ * message written is a fixture task, since the read carries an excerpt of it.
  */
 
 const NOW = 1_800_000_000_000;
@@ -66,6 +73,7 @@ test("children are listed newest first, bounded by the limit, and read one by id
     parentConversationId: parent,
     parentKind: CONVERSATION_KIND.MAIN,
     label: "fixture three",
+    task: null,
     createdAt: at(3),
     completionDeliveredAt: at(4),
     status: CHILD_STATUS.ACCEPTED,
@@ -157,7 +165,7 @@ test("a child's status is its latest turn's: accepted before one runs, then runn
   assert.equal((await read()).status, CHILD_STATUS.CANCELLED);
 });
 
-test("a stamped child, another account's child, and a row of another kind are listed by nothing", async () => {
+test("a stamped child, another account's child, a row of another kind, and a child under a child are listed by nothing", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
   const parent = await parentOf(userId);
@@ -171,14 +179,154 @@ test("a stamped child, another account's child, and a row of another kind are li
     parentConversationId: parent,
     createdAt: at(5),
   });
+  // A child cannot open a child of its own, so a row under one is no delegation's.
+  const nested = await childOf(userId, standing, { createdAt: at(6) });
 
   assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
     standing,
   ]);
+  assert.equal(await database.run(database.store.directory.child(userId, nested)), undefined);
+  assert.equal((await database.run(database.store.directory.childrenHead(userId)))?.id, stamped);
   assert.deepEqual(ids(await database.run(database.store.directory.children(other, 10))), [
     elsewhere,
   ]);
   assert.equal(await database.run(database.store.directory.child(userId, stamped)), undefined);
   assert.equal(await database.run(database.store.directory.child(userId, elsewhere)), undefined);
   assert.equal(await database.run(database.store.directory.child(other, standing)), undefined);
+});
+
+/** The store's rendering of an instant for a head: the UTC wall clock to the millisecond the test set, and the zone spelled. */
+function instantText(date: Date): string {
+  return `${date
+    .toISOString()
+    .replace("T", " ")
+    .replace(/\.?0*Z$/u, "")}+00`;
+}
+
+test("a child's task is the text of its first user line, cut to the wire's bound, and no other line's", async () => {
+  const userId = await database.createUser();
+  const parent = await parentOf(userId);
+  const child = await childOf(userId, parent, { createdAt: at(1) });
+  const line = (seq: number, role: string, parts: readonly unknown[]) =>
+    insertMessage(database.run, {
+      userId,
+      conversationId: child,
+      seq,
+      clientId: `client-${seq}`,
+      role,
+      parts,
+    });
+  const task = async () =>
+    (await database.run(database.store.directory.child(userId, child)))?.task;
+
+  assert.equal(await task(), null);
+
+  // A line of another role ahead of the task, and one holding no text, are not the task.
+  await line(1, MESSAGE_ROLE.ASSISTANT, [{ type: "text", text: "fixture reply" }]);
+  await line(2, MESSAGE_ROLE.USER, [{ type: "reasoning", text: "fixture thought" }]);
+  assert.equal(await task(), null);
+
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`delete from messages where conversation_id = ${child} and seq = 2`;
+    }),
+  );
+  await line(2, MESSAGE_ROLE.USER, [
+    { type: "text", text: "Draft the notes." },
+    { type: "step-start" },
+    { type: "text", text: "Keep them short." },
+  ]);
+  await line(3, MESSAGE_ROLE.USER, [{ type: "text", text: "fixture follow-up" }]);
+  assert.equal(await task(), "Draft the notes. Keep them short.");
+
+  // Leading whitespace of any kind JavaScript's trim drops spends none of the bound; the cut falls on the words.
+  const long = await childOf(userId, parent, { createdAt: at(2) });
+  await insertMessage(database.run, {
+    userId,
+    conversationId: long,
+    seq: 1,
+    clientId: "client-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [
+      { type: "text", text: `${"\u00a0".repeat(150)}${" \t\n".repeat(50)}${"\u3000".repeat(20)}` },
+      { type: "text", text: "word ".repeat(100) },
+    ],
+  });
+  assert.equal(
+    (await database.run(database.store.directory.child(userId, long)))?.task,
+    "word ".repeat(100).slice(0, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS),
+  );
+});
+
+test("the children head is the latest stamp any child reached, a Clear's stamp included, with that child's id, and nothing while none was opened", async () => {
+  const userId = await database.createUser();
+  const head = () => database.run(database.store.directory.childrenHead(userId));
+  assert.equal(await head(), undefined);
+
+  const parent = await parentOf(userId);
+  const first = await childOf(userId, parent, { createdAt: at(1) });
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(1)) });
+
+  // A turn queued moves the head as its status would move the list; each later stamp moves it again.
+  const turn = await insertTurn(database.run, {
+    userId,
+    conversationId: first,
+    origin: TURN_ORIGIN.CHILD,
+    status: TURN_STATUS.QUEUED,
+    queuedAt: at(10),
+  });
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(10)) });
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${at(20)} where id = ${turn}
+      `;
+    }),
+  );
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(20)) });
+
+  const second = await childOf(userId, parent, { createdAt: at(30) });
+  assert.deepEqual(await head(), { id: second, changedAt: instantText(at(30)) });
+
+  // The task's line moves the head, since the list answers its excerpt; a later line of the child's own does not.
+  await insertMessage(database.run, {
+    userId,
+    conversationId: second,
+    seq: 1,
+    clientId: "client-1",
+    role: MESSAGE_ROLE.USER,
+    parts: [{ type: "text", text: "fixture task" }],
+    createdAt: at(35),
+  });
+  assert.deepEqual(await head(), { id: second, changedAt: instantText(at(35)) });
+  await insertMessage(database.run, {
+    userId,
+    conversationId: second,
+    seq: 2,
+    clientId: "client-2",
+    role: MESSAGE_ROLE.ASSISTANT,
+    parts: [{ type: "text", text: "fixture reply" }],
+    createdAt: at(36),
+  });
+  assert.deepEqual(await head(), { id: second, changedAt: instantText(at(35)) });
+
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`update conversations set completion_delivered_at = ${at(40)} where id = ${first}`;
+    }),
+  );
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(40)) });
+
+  // A stamped child leaves the list, so its stamping moves the head; another account's child never reaches it.
+  await setConversationDeletedAt(database.run, first, at(50));
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(50)) });
+  assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
+    second,
+  ]);
+  const other = await database.createUser();
+  await childOf(other, await parentOf(other), { createdAt: at(60) });
+  assert.deepEqual(await head(), { id: first, changedAt: instantText(at(50)) });
 });

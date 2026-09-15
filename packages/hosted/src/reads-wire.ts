@@ -285,6 +285,32 @@ export function encodeTurnReadCursor(cursor: TurnReadCursor): string {
   return encodeCursor(turnReadCursorRecord, { changedAt: cursor.changedAt, id: cursor.id });
 }
 
+/**
+ * Where the children read stands: the instant the child that last changed
+ * did, as the store renders it to the microsecond, and that child's id to
+ * break a tie. A child changes when it is opened, when the line that is its
+ * task is written, when its latest turn is queued, starts, or settles, when
+ * its completion reaches its parent, and when a Clear stamps it out of the
+ * list, so the head moves exactly when the list would read differently. The
+ * same shape
+ * as a turn cursor, and opaque to a device all the same: the children read
+ * takes no cursor, and a device compares the head to the one it last saw.
+ */
+export interface ChildrenHead {
+  readonly changedAt: string;
+  readonly id: string;
+}
+
+export const childrenHeadSchema = encodedCursorSchema(turnReadCursorRecord);
+
+const encodedChildrenHeadSchema = trimmedText({
+  max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
+}).check(EffectSchema.makeFilter((encoded) => admitted(childrenHeadSchema, encoded) !== undefined));
+
+export function encodeChildrenHead(head: ChildrenHead): string {
+  return encodeCursor(turnReadCursorRecord, { changedAt: head.changedAt, id: head.id });
+}
+
 /** The page bound a read may ask for: at least one row, at most the page's own maximum. */
 export const readLimitSchema = wholeNumber(1).check(
   EffectSchema.isLessThanOrEqualTo(READ_PAGE_BOUNDS.MAX_LIMIT),
@@ -569,6 +595,85 @@ export const brainTurnsAnswerSchema = EffectSchema.Struct({
   hasMore: EffectSchema.Boolean,
 });
 
+/**
+ * Where a child stands, derived from its latest turn: accepted before one
+ * runs (no turn yet, or one still queued), then the turn's own status. The
+ * store derives it and the wire carries it; a child has no run record of its
+ * own to fall out of step with.
+ */
+export const CHILD_STATUS = {
+  ACCEPTED: "accepted",
+  RUNNING: TURN_STATUS.RUNNING,
+  SETTLED: TURN_STATUS.SETTLED,
+  CANCELLED: TURN_STATUS.CANCELLED,
+  FAILED: TURN_STATUS.FAILED,
+} as const;
+
+export type ChildStatus = (typeof CHILD_STATUS)[keyof typeof CHILD_STATUS];
+
+const CHILD_STATUS_NAMES = Object.values(CHILD_STATUS);
+
+/** The bounds of the children read: the most children one answer lists, and the most of a task's words it carries. */
+export const CHILDREN_READ_BOUNDS = {
+  MAX_CHILDREN: 100,
+  TASK_EXCERPT_CHARS: 200,
+} as const;
+
+/** The kind of conversation a child was delegated from: the main, or an observed session's. */
+const CHILD_PARENT_KIND_NAMES = Object.values(CONVERSATION_VIEW_SOURCE);
+
+/**
+ * One child as the children read answers it: the conversation a delegation
+ * opened, under the conversation that delegated it, where it stands now. The
+ * task is an excerpt — the first words the parent handed it, cut at
+ * `TASK_EXCERPT_CHARS` — and never the child's own words or its result, which
+ * are read as a conversation's messages are. The stamps are the latest turn's,
+ * each absent until the turn reached it; `acceptedAt` is the child's own
+ * opening. A child is answered whole on every read, so a device replaces the
+ * child it holds by id rather than appending.
+ */
+export interface ChildRead {
+  readonly id: string;
+  readonly parentConversationId: string;
+  readonly parentKind: ConversationViewSource["kind"];
+  readonly label?: string;
+  readonly task?: string;
+  readonly status: ChildStatus;
+  readonly acceptedAt: number;
+  readonly startedAt?: number;
+  readonly settledAt?: number;
+  readonly failure?: string;
+}
+
+const childReadSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  parentConversationId: wireUuidSchema,
+  parentKind: EffectSchema.Literals(CHILD_PARENT_KIND_NAMES),
+  label: EffectSchema.optionalKey(trimmedText()),
+  task: EffectSchema.optionalKey(trimmedText({ max: CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS })),
+  status: EffectSchema.Literals(CHILD_STATUS_NAMES),
+  acceptedAt: countedNumber,
+  startedAt: EffectSchema.optionalKey(countedNumber),
+  settledAt: EffectSchema.optionalKey(countedNumber),
+  failure: EffectSchema.optionalKey(trimmedText()),
+});
+
+/**
+ * The children endpoint's answer: the account's standing children, newest
+ * first, at most `MAX_CHILDREN` of them and no cursor, since a child's status
+ * changes in place and the list is short. The change signal's `children` head
+ * says when to read it again.
+ */
+export interface ChildrenAnswer {
+  readonly children: readonly ChildRead[];
+}
+
+export const childrenAnswerSchema = EffectSchema.Struct({
+  children: EffectSchema.Array(childReadSchema).check(
+    EffectSchema.isMaxLength(CHILDREN_READ_BOUNDS.MAX_CHILDREN),
+  ),
+});
+
 const unreadableRowSchema = EffectSchema.Struct({
   conversationId: wireUuidSchema,
   seq: wholeNumber(1),
@@ -626,16 +731,21 @@ export const changesRequestSchema = EffectSchema.Struct({
  * Where every resource's read stands now: the cursor a device reading each
  * to its end would hold. A device compares each against the cursor it holds
  * and reads the resource whose head differs; `turns` is absent while the
- * account has no turn, and `rosterObservedAt` while no roster snapshot
- * stands. `seen` says whether the device row the request named is the
- * account's, exactly as the heartbeat says it; `false` tells the device to
- * register again, and the signal is answered either way.
+ * account has no turn, `children` while no child was ever opened (a Clear
+ * that stamped one moves the head rather than clearing it, since the list
+ * reads differently after it), and `rosterObservedAt` while no roster
+ * snapshot stands. `seen` says whether
+ * the device row the request named is the account's, exactly as the
+ * heartbeat says it; `false` tells the device to register again, and the
+ * signal is answered either way.
  */
 export interface ChangesAnswer {
   readonly seen: boolean;
   readonly messages: string;
   readonly events: string;
   readonly turns?: string;
+  /** The children head: compared to the one last seen, since the children read takes no cursor. */
+  readonly children?: string;
   /** Epoch milliseconds of the latest roster snapshot the scheduled observation wrote. */
   readonly rosterObservedAt?: number;
 }
@@ -645,5 +755,6 @@ export const changesAnswerSchema = EffectSchema.Struct({
   messages: encodedSequenceReadCursorSchema,
   events: encodedSequenceReadCursorSchema,
   turns: EffectSchema.optionalKey(encodedTurnReadCursorSchema),
+  children: EffectSchema.optionalKey(encodedChildrenHeadSchema),
   rosterObservedAt: EffectSchema.optionalKey(countedNumber),
 });

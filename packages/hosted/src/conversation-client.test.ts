@@ -45,32 +45,37 @@ it.effect(
       const messages = yield* Effect.promise(() => fixture("conversation-messages-answer.json"));
       const events = yield* Effect.promise(() => fixture("conversation-events-answer.json"));
       const turns = yield* Effect.promise(() => fixture("brain-turns-answer.json"));
+      const children = yield* Effect.promise(() => fixture("children-answer.json"));
       const api = fakeCloudApi({
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}`]: { answer: () => messages },
         [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_EVENTS}`]: { answer: () => events },
         [`GET ${HOSTED_SERVICE_PATH.BRAIN_TURNS}`]: { answer: () => turns },
+        [`GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`]: { answer: () => children },
       });
       const page: ReadPageQuery = { after: "c3VyZQ", limit: 50 };
 
-      const [read, eventsRead, turnsRead] = yield* Effect.provide(
+      const [read, eventsRead, turnsRead, childrenRead] = yield* Effect.provide(
         Effect.all([
           client().messages(page),
           client().events(),
           client().turns({ after: "dHVybg" }),
+          client().children(),
         ]),
         api.layer,
       );
 
-      assert.ok(read.ok && eventsRead.ok && turnsRead.ok);
+      assert.ok(read.ok && eventsRead.ok && turnsRead.ok && childrenRead.ok);
       assert.equal(read.answer.groups.length, 2);
       assert.equal(eventsRead.answer.events.length > 0, true);
       assert.equal(turnsRead.answer.turns.length > 0, true);
+      assert.equal(childrenRead.answer.children.length, 2);
       assert.deepEqual(recordedRoutes(api.requests()), [
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_MESSAGES}?after=c3VyZQ&limit=50`,
         `GET ${HOSTED_SERVICE_PATH.CONVERSATION_EVENTS}`,
         `GET ${HOSTED_SERVICE_PATH.BRAIN_TURNS}?after=dHVybg`,
+        `GET ${HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN}`,
       ]);
-      assert.deepEqual(api.credentials(), ["token-1", "token-1", "token-1"]);
+      assert.deepEqual(api.credentials(), ["token-1", "token-1", "token-1", "token-1"]);
     }),
 );
 

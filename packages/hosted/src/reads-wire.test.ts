@@ -23,10 +23,15 @@ import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
   brainTurnsAnswerSchema,
+  CHILD_STATUS,
+  CHILDREN_READ_BOUNDS,
   changesAnswerSchema,
   changesRequestSchema,
+  childrenAnswerSchema,
+  childrenHeadSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
+  encodeChildrenHead,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
   READ_CURSOR_BOUNDS,
@@ -44,6 +49,7 @@ const FIXTURE = {
   MESSAGES: "conversation-messages-answer.json",
   EVENTS: "conversation-events-answer.json",
   TURNS: "brain-turns-answer.json",
+  CHILDREN: "children-answer.json",
   CHANGES_REQUEST: "changes-request.json",
   CHANGES_ANSWER: "changes-answer.json",
 } as const;
@@ -51,6 +57,8 @@ const FIXTURE = {
 const MAIN = "3c000000-0000-4000-8000-000000000001";
 const OBSERVED = "3c000000-0000-4000-8000-000000000002";
 const TURN = "1a000000-0000-4000-8000-000000000003";
+const SETTLED_CHILD = "3c000000-0000-4000-8000-000000000011";
+const RUNNING_CHILD = "3c000000-0000-4000-8000-000000000012";
 const DEVICE = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
 async function fixture(name: (typeof FIXTURE)[keyof typeof FIXTURE]): Promise<UnparsedWireValue> {
@@ -351,6 +359,84 @@ test("the turns answer fixture reads each turn with its own cursor, and the answ
   });
 });
 
+test("the children answer fixture reads each child where its latest turn leaves it, with the stamps it reached and the words it was handed", async () => {
+  const answer = expectReadAnswer(childrenAnswerSchema, await fixture(FIXTURE.CHILDREN));
+  assert.deepEqual(
+    answer.children.map((child) => [child.id, child.parentKind, child.status]),
+    [
+      [RUNNING_CHILD, CONVERSATION_VIEW_SOURCE.OBSERVED, CHILD_STATUS.RUNNING],
+      [SETTLED_CHILD, CONVERSATION_VIEW_SOURCE.MAIN, CHILD_STATUS.SETTLED],
+    ],
+  );
+  const [running, settled] = answer.children;
+  assert.ok(running && settled);
+  assert.equal(running.label, undefined);
+  assert.equal(running.settledAt, undefined);
+  assert.equal(running.failure, undefined);
+  assert.equal(running.startedAt, 1757505780000);
+  assert.equal(settled.label, "release notes");
+  assert.equal(settled.parentConversationId, MAIN);
+  assert.deepEqual(
+    [settled.acceptedAt, settled.startedAt, settled.settledAt],
+    [1757505600000, 1757505610000, 1757505700000],
+  );
+  assert.equal(settled.task, "Draft the release notes for 0.6.0 from the merged pull requests.");
+
+  // A child is answered with no task before its line stands and with no stamps before a turn runs.
+  assert.deepEqual(
+    parseAnswer(childrenAnswerSchema, {
+      children: [
+        {
+          id: SETTLED_CHILD,
+          parentConversationId: MAIN,
+          parentKind: CONVERSATION_VIEW_SOURCE.MAIN,
+          status: CHILD_STATUS.ACCEPTED,
+          acceptedAt: 1757505600000,
+        },
+      ],
+    })?.children[0]?.task,
+    undefined,
+  );
+  assert.deepEqual(parseAnswer(childrenAnswerSchema, { children: [] }), { children: [] });
+
+  // A parent of a kind no delegation runs from, a status the store never derives, and a task past the excerpt bound are each refused.
+  const raw = await fixture(FIXTURE.CHILDREN);
+  assert.ok(isRecord(raw) && Array.isArray(raw.children));
+  const [first, ...rest] = raw.children;
+  assert.ok(isRecord(first));
+  const withFirst = (child: Record<string, WireValue>) => ({
+    children: [{ ...first, ...child }, ...rest],
+  });
+  assert.equal(parseAnswer(childrenAnswerSchema, withFirst({ parentKind: "child" })), undefined);
+  assert.equal(
+    parseAnswer(childrenAnswerSchema, withFirst({ status: TURN_STATUS.QUEUED })),
+    undefined,
+  );
+  assert.equal(
+    parseAnswer(
+      childrenAnswerSchema,
+      withFirst({ task: "w".repeat(CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS + 1) }),
+    ),
+    undefined,
+  );
+  assert.notEqual(
+    parseAnswer(
+      childrenAnswerSchema,
+      withFirst({ task: "w".repeat(CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS) }),
+    ),
+    undefined,
+  );
+  const crowded = Array.from({ length: CHILDREN_READ_BOUNDS.MAX_CHILDREN + 1 }, () => first);
+  assert.equal(parseAnswer(childrenAnswerSchema, { children: crowded }), undefined);
+});
+
+test("a children head is the turn cursor's shape minted from the children's own stamps, and refuses anything else", () => {
+  const head = { changedAt: "2026-09-10 12:03:00+00", id: RUNNING_CHILD };
+  assert.deepEqual(parse(childrenHeadSchema, encodeChildrenHead(head)), head);
+  assert.equal(parse(childrenHeadSchema, "not a head"), undefined);
+  assert.throws(() => encodeChildrenHead({ changedAt: "soon", id: RUNNING_CHILD }), TypeError);
+});
+
 test("the change-signal request names the device and carries each instant as a number, null, or absent, and refuses anything else", async () => {
   assert.deepEqual(expectRead(changesRequestSchema, await fixture(FIXTURE.CHANGES_REQUEST)), {
     deviceId: DEVICE,
@@ -379,6 +465,10 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
     [0, 3],
   );
   assert.equal(parse(turnReadCursorSchema, answer.turns ?? "")?.id, TURN);
+  assert.deepEqual(parse(childrenHeadSchema, answer.children ?? ""), {
+    changedAt: "2026-09-10 12:03:00+00",
+    id: RUNNING_CHILD,
+  });
   assert.equal(answer.rosterObservedAt, 1757505780000);
   assert.deepEqual(
     parseAnswer(changesAnswerSchema, {
@@ -387,6 +477,16 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
       events: answer.events,
     }),
     { seen: false, messages: answer.messages, events: answer.events },
+  );
+  // A children head that is not one this build mints refuses the answer, as any other head would.
+  assert.equal(
+    parseAnswer(changesAnswerSchema, {
+      seen: true,
+      messages: answer.messages,
+      events: answer.events,
+      children: "%%%",
+    }),
+    undefined,
   );
 });
 

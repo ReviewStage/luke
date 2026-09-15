@@ -1,0 +1,24 @@
+{
+  "children": [
+    {
+      "id": "3c000000-0000-4000-8000-000000000012",
+      "parentConversationId": "3c000000-0000-4000-8000-000000000002",
+      "parentKind": "observed",
+      "task": "Read the failing test in the checkout workspace and say which assertion changed.",
+      "status": "running",
+      "acceptedAt": 1757505720000,
+      "startedAt": 1757505780000
+    },
+    {
+      "id": "3c000000-0000-4000-8000-000000000011",
+      "parentConversationId": "3c000000-0000-4000-8000-000000000001",
+      "parentKind": "main",
+      "label": "release notes",
+      "task": "Draft the release notes for 0.6.0 from the merged pull requests.",
+      "status": "settled",
+      "acceptedAt": 1757505600000,
+      "startedAt": 1757505610000,
+      "settledAt": 1757505700000
+    }
+  ]
+}

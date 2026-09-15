@@ -111,6 +111,8 @@ const EFFECT_MODULE_SCHEMAS = {
     conversationMessagesAnswerSchema: readsWire.conversationMessagesAnswerSchema,
     conversationEventsAnswerSchema: readsWire.conversationEventsAnswerSchema,
     brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
+    childrenHeadSchema: readsWire.childrenHeadSchema,
+    childrenAnswerSchema: readsWire.childrenAnswerSchema,
     changesRequestSchema: readsWire.changesRequestSchema,
     changesAnswerSchema: readsWire.changesAnswerSchema,
     unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,

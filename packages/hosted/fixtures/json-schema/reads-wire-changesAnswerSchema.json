@@ -17,6 +17,11 @@
       "minLength": 1,
       "maxLength": 32768
     },
+    "children": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
     "rosterObservedAt": {
       "type": "number",
       "minimum": 0
