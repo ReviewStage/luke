@@ -1,9 +1,6 @@
-import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { ConversationTarget } from "../store/index.js";
-
 /**
+ * recorded-session.ts -- the conversation row's session, read and claimed without eve's code.
+ *
  * The statements over a conversation's record that a handover to eve needs:
  * the eve session it runs in, where one has been recorded, and the
  * forward-only claim of a session for it. They stand apart from the
@@ -14,9 +11,25 @@ import type { ConversationTarget } from "../store/index.js";
  * door is what keeps the tick's bundle free of it.
  */
 
+import { Effect, Option, Schema } from "effect";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { ConversationTarget } from "../store/index.js";
+
 const StandingSessionSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
 }).pipe(Schema.encodeKeys({ runtimeSessionId: "runtime_session_id" }));
+
+const OwnerRowSchema = Schema.Struct({
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+
+const ClaimSchema = Schema.Struct({
+  userId: Schema.String,
+  conversationId: Schema.String,
+  runtimeSessionId: Schema.String,
+  now: Schema.Date,
+});
 
 const findStandingSession = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
@@ -32,19 +45,6 @@ const findStandingSession = SqlSchema.findOneOption({
     ),
 });
 
-/** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
-export function recordedRuntimeSession(
-  target: ConversationTarget,
-): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.map(findStandingSession(target), (row) =>
-    Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
-  );
-}
-
-const OwnerRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
-
 const findConversationOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
@@ -57,24 +57,6 @@ const findConversationOwner = SqlSchema.findOneOption({
         where id = ${conversationId} and deleted_at is null
       `,
     ),
-});
-
-/** Whether a conversation stands and belongs to the account. */
-export function conversationOwnedBy(
-  userId: string,
-  conversationId: string,
-): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
-  return Effect.map(
-    findConversationOwner(conversationId),
-    (found) => Option.isSome(found) && found.value.userId === userId,
-  );
-}
-
-const ClaimSchema = Schema.Struct({
-  userId: Schema.String,
-  conversationId: Schema.String,
-  runtimeSessionId: Schema.String,
-  now: Schema.Date,
 });
 
 const claimSession = SqlSchema.void({
@@ -104,6 +86,26 @@ const findRecordedSession = SqlSchema.findOneOption({
       `,
     ),
 });
+
+/** The eve session the account's own standing conversation runs in, where one has been recorded; a cleared or foreign conversation records none. */
+export function recordedRuntimeSession(
+  target: ConversationTarget,
+): Effect.Effect<string | undefined, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(findStandingSession(target), (row) =>
+    Option.isSome(row) ? (row.value.runtimeSessionId ?? undefined) : undefined,
+  );
+}
+
+/** Whether a conversation stands and belongs to the account. */
+export function conversationOwnedBy(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.map(
+    findConversationOwner(conversationId),
+    (found) => Option.isSome(found) && found.value.userId === userId,
+  );
+}
 
 /**
  * Claims the conversation for the eve session now starting, only forward:

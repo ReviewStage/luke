@@ -1,12 +1,6 @@
-import { Effect, type Schema } from "effect";
-import type { SqlClient } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { ConversationTarget } from "../store/index.js";
-import type { BrainHostTurn } from "./bounds.js";
-import { EVE_SEND_OUTCOME, type EveSessions } from "./eve-sessions.js";
-import { claimRuntimeSession, recordedRuntimeSession } from "./recorded-session.js";
-
 /**
+ * handover.ts -- the one send-else-open the deployment hands a conversation a turn through.
+ *
  * The one way the deployment hands a conversation a turn of the host's own:
  * sent to the eve session the conversation's row records, or opened in a new
  * session where none is recorded or eve has retired the recorded one. The
@@ -18,6 +12,14 @@ import { claimRuntimeSession, recordedRuntimeSession } from "./recorded-session.
  * conversation holds the conversation's row lock around the call, as an
  * ask's dispatch does, so the second reads the session the first opened.
  */
+
+import { Effect, type Schema } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import type { ConversationTarget } from "../store/index.js";
+import type { BrainHostTurn } from "./bounds.js";
+import { EVE_SEND_OUTCOME, type EveSessions } from "./eve-sessions.js";
+import { claimRuntimeSession, recordedRuntimeSession } from "./recorded-session.js";
 
 export interface HandoverSeams<Turn extends BrainHostTurn> {
   readonly eve: EveSessions<Turn>;
