@@ -1,3 +1,4 @@
+import { ChevronIcon } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
   type ConversationEntry,
@@ -5,7 +6,7 @@ import {
   type ConversationViewSnapshot,
   type SessionIdentity,
 } from "@sidecar/session";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   CONVERSATION_ENTRY_SPEAKER,
   type ConversationEntrySpeaker,
@@ -113,9 +114,50 @@ export function ConversationClearButton({ onClear }: { onClear: () => void }): R
   );
 }
 
-/** How many rows a stored thread stands as, for the scroll that follows an append. */
-function messageCount(view: ConversationViewSnapshot): number {
-  return view.groups.reduce((total, group) => total + group.messages.length, 0);
+export interface ConversationScrollMetrics {
+  readonly scrollTop: number;
+  readonly scrollHeight: number;
+  readonly clientHeight: number;
+}
+
+/** How far a reader stands from the thread's tail: zero when they are on it or the thread fits whole. */
+export function conversationDistanceFromTail({
+  scrollTop,
+  scrollHeight,
+  clientHeight,
+}: ConversationScrollMetrics): number {
+  return Math.max(scrollHeight - scrollTop - clientHeight, 0);
+}
+
+/** Whether the thread still counts as being followed, with a little room for a small drift above the tail. */
+export function followsConversationTail(metrics: ConversationScrollMetrics): boolean {
+  return conversationDistanceFromTail(metrics) <= STREAM_FOLLOW_SLACK_PX;
+}
+
+function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
+  return {
+    scrollTop: element.scrollTop,
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+  };
+}
+
+function scrollToConversationTail(element: HTMLDivElement): void {
+  element.scrollTop = element.scrollHeight;
+}
+
+function ConversationJumpToBottomButton({ onClick }: { onClick: () => void }): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="conversation-jump-to-bottom"
+      aria-label="Scroll to the latest message"
+      title="Scroll to the latest message"
+      onClick={onClick}
+    >
+      <ChevronIcon />
+    </button>
+  );
 }
 
 export function ConversationPanel({
@@ -154,27 +196,30 @@ export function ConversationPanel({
   spokenAskPending?: boolean;
 }): React.JSX.Element {
   const list = useRef<HTMLDivElement | null>(null);
-  const entryCount = messageCount(view);
-  const liveLength = live.reduce((total, entry) => total + entry.words.length, 0);
-  useEffect(() => {
-    // Reading the count binds the scroll to an append, a clear, or a spoken
-    // turn's place arriving, not to an unrelated render of the same conversation.
-    if (entryCount === 0 && !spokenAskPending) return;
-    const element = list.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [entryCount, spokenAskPending]);
+  const [following, setFollowing] = useState(true);
+  const followingRef = useRef(following);
+  followingRef.current = following;
+  const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
 
   useEffect(() => {
-    // A streaming line only carries the reader along; unlike an append, it
-    // never pulls one back who has scrolled up while Luke talks.
-    if (liveLength === 0) return;
+    if (thread) return;
+    setFollowing(true);
+  }, [thread]);
+
+  useLayoutEffect(() => {
+    if (!thread || !followingRef.current) return;
+    const element = list.current;
+    if (element) scrollToConversationTail(element);
+  }, [thread, view, live, spokenAskPending]);
+
+  const syncFollowing = () => {
     const element = list.current;
     if (!element) return;
-    const fromTail = element.scrollHeight - element.scrollTop - element.clientHeight;
-    if (fromTail <= STREAM_FOLLOW_SLACK_PX) element.scrollTop = element.scrollHeight;
-  }, [liveLength]);
-
-  const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
+    setFollowing((standing) => {
+      const next = followsConversationTail(scrollMetrics(element));
+      return standing === next ? standing : next;
+    });
+  };
 
   return (
     <section
@@ -188,32 +233,44 @@ export function ConversationPanel({
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
       {thread ? (
-        <div className="conversation-scroll" ref={list}>
-          {/* The pull is the thread's own sideways scroll, on a scroller of its
-              own so the vertical one keeps its scrollbar: the list is one
-              stamp column wider than the view, and snapping puts it back the
-              moment the fingers lift, which only the browser can see. */}
-          <div className="conversation-pull">
-            <ConversationTurns
-              groups={view.groups}
-              roster={roster}
-              now={now}
-              {...(onOpenChat ? { onOpenChat } : undefined)}
-              {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
-            >
-              {/* A line still being said has no durable id, and its words change
-                  on every delta — a key made of either would remount the bubble
-                  mid-sentence, while its position holds still for exactly as
-                  long as the line does. */}
-              {live.map((entry, index) => (
-                <ConversationStreamingRow key={`live:${entry.kind}:${index}`} entry={entry} />
-              ))}
-              {/* After the lines still being said: the newest spoken turn's
-                  place, held while its first words are still on the service's
-                  clock. */}
-              {spokenAskPending ? <ConversationListeningRow /> : null}
-            </ConversationTurns>
+        <div className="conversation-thread">
+          <div className="conversation-scroll" ref={list} onScroll={syncFollowing}>
+            {/* The pull is the thread's own sideways scroll, on a scroller of its
+                own so the vertical one keeps its scrollbar: the list is one
+                stamp column wider than the view, and snapping puts it back the
+                moment the fingers lift, which only the browser can see. */}
+            <div className="conversation-pull">
+              <ConversationTurns
+                groups={view.groups}
+                roster={roster}
+                now={now}
+                {...(onOpenChat ? { onOpenChat } : undefined)}
+                {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
+              >
+                {/* A line still being said has no durable id, and its words change
+                    on every delta — a key made of either would remount the bubble
+                    mid-sentence, while its position holds still for exactly as
+                    long as the line does. */}
+                {live.map((entry, index) => (
+                  <ConversationStreamingRow key={`live:${entry.kind}:${index}`} entry={entry} />
+                ))}
+                {/* After the lines still being said: the newest spoken turn's
+                    place, held while its first words are still on the service's
+                    clock. */}
+                {spokenAskPending ? <ConversationListeningRow /> : null}
+              </ConversationTurns>
+            </div>
           </div>
+          {following ? null : (
+            <ConversationJumpToBottomButton
+              onClick={() => {
+                const element = list.current;
+                if (!element) return;
+                scrollToConversationTail(element);
+                setFollowing(true);
+              }}
+            />
+          )}
         </div>
       ) : view.settled ? (
         <div className="conversation-empty">
@@ -222,7 +279,9 @@ export function ConversationPanel({
       ) : (
         // Nothing read yet says neither "nothing said" nor a thread: the room
         // stands empty until the first read lands.
-        <div className="conversation-scroll" ref={list} />
+        <div className="conversation-thread">
+          <div className="conversation-scroll" ref={list} onScroll={syncFollowing} />
+        </div>
       )}
       {view.unreadable ? (
         <p className="conversation-notice" role="status">

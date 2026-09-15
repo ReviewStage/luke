@@ -3,7 +3,12 @@ import { CONVERSATION_ENTRY_KIND, type ConversationViewTurnGroup } from "@sideca
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { ConversationPanel, conversationEntryPresentation } from "./conversation-panel";
+import {
+  ConversationPanel,
+  conversationDistanceFromTail,
+  conversationEntryPresentation,
+  followsConversationTail,
+} from "./conversation-panel";
 import { CONVERSATION_ENTRY_SPEAKER, thinkingElapsedLabel } from "./conversation-rows";
 import {
   FIXTURE_NOW,
@@ -144,4 +149,23 @@ test("the wait's age is worded once it is worth a word", () => {
   assert.equal(thinkingElapsedLabel(NOW, NOW + 9_999), undefined);
   assert.equal(thinkingElapsedLabel(NOW, NOW + 10_000), "Still thinking · 0:10");
   assert.equal(thinkingElapsedLabel(NOW, NOW + 605_000), "Still thinking · 10:05");
+});
+
+test("the thread counts a reader as following while they are at or near its tail", () => {
+  assert.equal(
+    conversationDistanceFromTail({ scrollTop: 320, scrollHeight: 640, clientHeight: 320 }),
+    0,
+  );
+  assert.equal(
+    conversationDistanceFromTail({ scrollTop: 280, scrollHeight: 640, clientHeight: 320 }),
+    40,
+  );
+  assert.equal(
+    followsConversationTail({ scrollTop: 592, scrollHeight: 960, clientHeight: 320 }),
+    true,
+  );
+  assert.equal(
+    followsConversationTail({ scrollTop: 560, scrollHeight: 960, clientHeight: 320 }),
+    false,
+  );
 });
