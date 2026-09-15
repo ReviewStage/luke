@@ -1670,7 +1670,7 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
   const asks = askRecord();
   const stream = new Stream();
   const askId = randomUUID();
-  const spoken = (clientId: string, fromMs: number) =>
+  const spoken = (clientId: string, fromMs: number, readFrom?: string) =>
     database.run(
       writer.recordSpokenReply(target, {
         clientId,
@@ -1682,6 +1682,7 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
           from_ms: fromMs,
           to_ms: fromMs + 1_000,
           delegation_id: askId,
+          ...(readFrom === undefined ? undefined : { read_from: readFrom }),
         },
       }),
     );
@@ -1698,10 +1699,14 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
   );
   assert.ok((await spoken("checking", 1_500)).ok);
   assert.ok((await spoken("desk", 2_500)).ok);
+  // A briefing read aloud in the same breath names the delegation too, but is the briefing's.
+  const briefing = randomUUID();
+  assert.ok((await spoken("briefing-reading", 2_800, briefing)).ok);
   const before = (await storedMessages(target)).map((row) => [row.clientId, row.seq, row.turnId]);
   assert.deepEqual(before, [
     ["checking", 1, null],
     ["desk", 2, null],
+    ["briefing-reading", 3, null],
   ]);
 
   // The dispatch names the turn, eve starts it and tells the received message: the relay attaches.
@@ -1718,9 +1723,10 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
   const placed = (rows: Awaited<ReturnType<typeof storedMessages>>) =>
     rows.map((row) => [row.clientId, row.seq, row.turnId]);
   assert.deepEqual(placed(await storedMessages(target)), [
-    [askId, 3, stream.turnId],
-    ["checking", 4, stream.turnId],
-    ["desk", 5, stream.turnId],
+    ["briefing-reading", 3, null],
+    [askId, 4, stream.turnId],
+    ["checking", 5, stream.turnId],
+    ["desk", 6, stream.turnId],
   ]);
 
   // The turn's work then closes behind them, and a second attach finds nothing left outside.
@@ -1731,10 +1737,11 @@ test("Luke's words about an ask said before the ask learned its turn follow the 
     stream.ended(BRAIN_REQUEST_STATUS.SUCCEEDED),
   ]);
   assert.deepEqual(placed(await storedMessages(target)), [
-    [askId, 3, stream.turnId],
-    ["checking", 4, stream.turnId],
-    ["desk", 5, stream.turnId],
-    [stream.turnId, 6, stream.turnId],
+    ["briefing-reading", 3, null],
+    [askId, 4, stream.turnId],
+    ["checking", 5, stream.turnId],
+    ["desk", 6, stream.turnId],
+    [stream.turnId, 7, stream.turnId],
   ]);
   const again = await database.run(writer.attachAskLines(target, stream.turnId));
   assert.ok(again.ok);

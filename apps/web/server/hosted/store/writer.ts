@@ -1937,7 +1937,9 @@ const findAskTurn = SqlSchema.findOneOption({
 /**
  * The rows of the turn's asks still standing outside it, in the order they
  * were written: the developer's line, keyed by the ask's own id, and the
- * voice model's rows about it, which name the ask as their `delegation_id`.
+ * voice model's rows about it, which name the ask as their `delegation_id`
+ * and were read from nothing — a briefing read aloud in the same breath names
+ * the delegation too, but is the briefing's, and stands where it was said.
  */
 const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
@@ -1953,6 +1955,7 @@ const findUnattachedAskRows = SqlSchema.findAll({
         where asks.conversation_id = ${key.conversationId}
           and asks.turn_id = ${key.turnId}::uuid
           and messages.turn_id is null
+          and messages.metadata ->> 'read_from' is null
         order by messages.seq asc
       `,
     ),
