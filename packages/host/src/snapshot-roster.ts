@@ -12,7 +12,7 @@ import {
 import { Effect } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 
-export interface SnapshotRosterDependencies {
+interface SnapshotRosterDependencies {
   client: Pick<HostedRosterClient, "observe">;
   registry: SessionRoster;
   /** Whether the pass that began this read still owns the roster once the read answers. */
@@ -54,7 +54,7 @@ export const drawSnapshotRoster = /* @__PURE__ */ Effect.fn("drawSnapshotRoster"
   }
 });
 
-export interface SnapshotProjectsDependencies {
+interface SnapshotProjectsDependencies {
   client: Pick<HostedRosterClient, "projects">;
   /** Whether the pass that began this read still owns the list once the read answers. */
   isCurrent: () => boolean;

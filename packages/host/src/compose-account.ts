@@ -72,7 +72,7 @@ export interface AccountComposer extends Composer {
   link: (links: AccountLinks) => Effect.Effect<void>;
 }
 
-export interface AccountDependencies {
+interface AccountDependencies {
   settings: SettingsComposer;
 }
 

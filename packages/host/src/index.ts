@@ -24,7 +24,6 @@ export {
   HOST_OPERATOR_CLIENT_ID,
 } from "./node-capabilities.js";
 export { type RunMode, runModeFor, sentryReportingEnabled } from "./run-mode.js";
-export { createGatewayService } from "./service.js";
-export { OPEN_REFUSAL, type SessionOpens } from "./session-opens.js";
+export { OPEN_REFUSAL } from "./session-opens.js";
 export type { SessionRowActions } from "./session-row-actions.js";
 export { openSocketOverWs } from "./voice/socket-over-ws.js";

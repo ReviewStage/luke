@@ -87,11 +87,8 @@ The stop is asked for only while Luke is speaking, since the instruction the
 service appends for it is standing text a silent model would read as a rule for
 its next answer.
 
-## Two doors that exist for the graph
+## One door that exists for the graph
 
 `account-preferences-client.ts` would belong beside the vault client in
 `@sidecar/hosted`, but the snapshot it carries is `@sidecar/settings` vocabulary
 and `settings` already reaches `hosted`. This is the lowest package holding both.
-
-`@sidecar/host/testing` holds `testKernelLayer`, every seam the host's own tests
-compose it over a fixture state root with, so nothing that ships can reach it.
