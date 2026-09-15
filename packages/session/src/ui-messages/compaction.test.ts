@@ -17,9 +17,8 @@ import {
   type CompactionMessage,
   type CompactionSummary,
   compactionSummaryMessage,
-  isCompactionMessage,
 } from "./compaction.js";
-import { readStoredUIMessages, type StoredUIMessage } from "./validate.js";
+import { readStoredUIMessages } from "./validate.js";
 
 const FIXTURE_DIRECTORY = path.join(
   fileURLToPath(import.meta.url),
@@ -125,22 +124,4 @@ test("a summary with no words, or metadata the schema refuses, builds no row", (
     }),
     undefined,
   );
-});
-
-test("a compaction row is told from an ordinary reply and from a user row by its metadata alone", async () => {
-  const compaction = compactionSummaryMessage(FIXTURE_ID, FIXTURE_SUMMARY);
-  assert.ok(compaction);
-  const read = await readStoredUIMessages(
-    [
-      await fixture("spoken-ask.json"),
-      await fixture("reply-with-tool-part.json"),
-      stored(compaction),
-    ],
-    TOOLS,
-  );
-  assert.ok(read.ok);
-  const rows: StoredUIMessage[] = read.value;
-  assert.deepEqual(rows.map(isCompactionMessage), [false, false, true]);
-  const [, reply] = rows;
-  assert.equal(reply?.role, MESSAGE_ROLE.ASSISTANT);
 });

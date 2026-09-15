@@ -16,7 +16,7 @@ const SESSION_ROSTER_RETENTION_MS = {
 } as const;
 
 /** The retention one status earns. */
-export function sessionRosterRetentionMs(status: SessionStatus): number {
+function sessionRosterRetentionMs(status: SessionStatus): number {
   if (status === SESSION_STATUS.ERROR) return SESSION_ROSTER_RETENTION_MS.RESCUE_MS;
   if (status === SESSION_STATUS.COMPLETE || status === SESSION_STATUS.UNKNOWN) {
     return SESSION_ROSTER_RETENTION_MS.SETTLED_MS;
@@ -27,7 +27,7 @@ export function sessionRosterRetentionMs(status: SessionStatus): number {
 }
 
 /** Whether a session's status still earns it a place on the roster. */
-export function isRosterRelevant(
+function isRosterRelevant(
   session: Pick<Session, "status" | "lastActivityAt" | "standing">,
   now: number,
 ): boolean {

@@ -91,9 +91,7 @@ export const SESSION_LINK_SCHEME = {
   SUPERSET: "superset:",
 } as const;
 
-export const SessionLinkSchemeSchema = Schema.Literals(Object.values(SESSION_LINK_SCHEME));
-
-const readsSessionLinkScheme = Schema.is(SessionLinkSchemeSchema);
+const readsSessionLinkScheme = Schema.is(Schema.Literals(Object.values(SESSION_LINK_SCHEME)));
 
 /** Whether an address is one Luke may ask the system to open. */
 export function isOpenableSessionLink(link: string): boolean {
