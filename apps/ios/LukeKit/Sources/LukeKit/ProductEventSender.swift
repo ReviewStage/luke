@@ -140,12 +140,6 @@ public final class ProductEventSender {
         self.timer = timer
     }
 
-    public func stop() {
-        timer?.invalidate()
-        timer = nil
-        queue.removeAll()
-    }
-
     /// Sends what is queued, at most one request at a time. Never throws: a
     /// failure is a count nobody has, which is the trade this whole pipeline
     /// makes. A flush called mid-request chains behind it rather than

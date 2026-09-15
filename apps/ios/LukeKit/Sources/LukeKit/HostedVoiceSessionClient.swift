@@ -382,8 +382,6 @@ public final class HostedVoiceSessionClient {
 public final class HostedVoiceSession {
     public let sessionId: String
     public let sdpAnswer: String
-    /// The allowance the session was spent against, where the service said.
-    public let quota: HostedQuota?
 
     /// The answer as `LivePeerSeams.createSession` hands it to the peer: the id and the SDP answer to set as the remote description.
     public var created: LiveSessionCreated { LiveSessionCreated(sessionId: sessionId, sdpAnswer: sdpAnswer) }
@@ -416,7 +414,6 @@ public final class HostedVoiceSession {
     ) {
         sessionId = created.sessionId
         sdpAnswer = created.sdpAnswer
-        quota = created.quota
         self.socket = socket
         self.attach = attach
         self.delays = delays
@@ -620,8 +617,6 @@ public final class HostedVoiceSession {
 @MainActor
 public final class HostedAudioSession {
     public let sessionId: String
-    /// The allowance the session was spent against, where the service said.
-    public let quota: HostedQuota?
     /// The format the session was created under, which is the format of every sample sent and received.
     public let format: LiveAudioFormat
 
@@ -639,7 +634,6 @@ public final class HostedAudioSession {
 
     fileprivate init(created: SessionAudioCreatedFrame, format: LiveAudioFormat, socket: any VoiceSocket) {
         sessionId = created.sessionId
-        quota = created.quota
         self.format = format
         self.socket = socket
         var continuation: AsyncStream<HostedVoiceSessionEvent>.Continuation!

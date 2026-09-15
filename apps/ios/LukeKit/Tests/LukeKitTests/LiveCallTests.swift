@@ -353,19 +353,6 @@ final class LiveCallTests: XCTestCase {
     }
 
     @MainActor
-    func testRowsSettleInPlaceOnTheTick() async throws {
-        let harness = Harness(captionSettleTick: .milliseconds(10))
-        _ = await harness.pressAndOpen()
-
-        harness.hear(.assistant, "Done.", 0, 400)
-        XCTAssertEqual(harness.call.captions.map(\.settled), [false])
-
-        harness.now = harness.now.addingTimeInterval(2)
-        await until { harness.call.captions.first?.settled == true }
-        XCTAssertEqual(harness.call.captions, [LiveCaptionRow(rowId: 1, speaker: .assistant, words: "Done.", settled: true)])
-    }
-
-    @MainActor
     func testTheStopControlSendsTheServicesStopOnlyWhileLukeSpeaksAndMutes() async throws {
         let harness = Harness()
         _ = await harness.pressAndOpen()

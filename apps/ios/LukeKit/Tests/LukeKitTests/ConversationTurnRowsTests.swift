@@ -35,11 +35,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertEqual(reply, "Sent.")
         XCTAssertEqual(
             replyRateable,
-            RateableMessage(
-                messageId: "2b000000-0000-4000-8000-000000000012",
-                conversationId: "3c000000-0000-4000-8000-000000000001",
-                kind: .reply
-            )
+            RateableMessage(messageId: "2b000000-0000-4000-8000-000000000012", kind: .reply)
         )
     }
 
@@ -92,11 +88,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         XCTAssertFalse(unspoken)
         XCTAssertEqual(
             rateable,
-            RateableMessage(
-                messageId: "2b000000-0000-4000-8000-000000000032",
-                conversationId: "3c000000-0000-4000-8000-000000000002",
-                kind: .announcement
-            )
+            RateableMessage(messageId: "2b000000-0000-4000-8000-000000000032", kind: .announcement)
         )
     }
 
@@ -270,6 +262,6 @@ final class ConversationTurnRowsTests: XCTestCase {
             return XCTFail("two rows of words")
         }
         XCTAssertNil(first)
-        XCTAssertEqual(last, RateableMessage(messageId: "m", conversationId: "c", kind: .reply))
+        XCTAssertEqual(last, RateableMessage(messageId: "m", kind: .reply))
     }
 }

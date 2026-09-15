@@ -41,9 +41,8 @@ extension RatingWord {
 }
 
 /// What recording a rating answers — `HostedMessageRatingAnswer`: the event
-/// row's id and its place in the conversation's event sequence.
+/// row's place in the conversation's event sequence.
 public struct MessageRatingAnswer: Equatable, Sendable {
-    public let id: String
     public let seq: Int
 }
 
@@ -110,9 +109,10 @@ public final class MessageRatingClient: Sendable {
             default: throw MessageRatingError.serverError(status: status, apiError: reason)
             }
         }
-        guard let id = json["id"] as? String, !id.isEmpty, let seq = json["seq"] as? Int, seq >= 1 else {
+        // The id is still required of the answer, the way the contract promises it, and read by nobody.
+        guard (json["id"] as? String)?.isEmpty == false, let seq = json["seq"] as? Int, seq >= 1 else {
             throw MessageRatingError.invalidResponse
         }
-        return MessageRatingAnswer(id: id, seq: seq)
+        return MessageRatingAnswer(seq: seq)
     }
 }

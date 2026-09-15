@@ -70,13 +70,6 @@ public struct WorkspaceAgentOption: Identifiable, Equatable, Sendable {
 
     public var id: String { "\(providerId):\(agent)" }
 
-    public init(providerId: String, agent: String, models: [WorkspaceAgentModelChoice], efforts: [String]) {
-        self.providerId = providerId
-        self.agent = agent
-        self.models = models
-        self.efforts = efforts
-    }
-
     init?(json: [String: Any]) {
         guard
             let providerId = json["providerId"] as? String,

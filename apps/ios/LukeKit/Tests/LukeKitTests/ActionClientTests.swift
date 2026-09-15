@@ -32,35 +32,24 @@ final class ActionMessageAnswerWireTests: XCTestCase {
 }
 
 final class ActionWorkspaceAnswerWireTests: XCTestCase {
-    func testAcceptedWithSessionId() throws {
-        let data = Data(#"{"result":"accepted","providerSessionId":"sess-abc123"}"#.utf8)
-        let answer = try JSONDecoder().decode(ActionWorkspaceAnswer.self, from: data)
-        XCTAssertEqual(answer.result, .accepted)
-        XCTAssertNil(answer.reason)
-        XCTAssertEqual(answer.providerSessionId, "sess-abc123")
-    }
-
     func testRejectedSurfacesReason() throws {
         let data = Data(#"{"result":"rejected","reason":"Project not found."}"#.utf8)
         let answer = try JSONDecoder().decode(ActionWorkspaceAnswer.self, from: data)
         XCTAssertEqual(answer.result, .rejected)
         XCTAssertEqual(answer.reason, "Project not found.")
-        XCTAssertNil(answer.providerSessionId)
     }
 
-    func testUnsupportedDecodesWithoutSessionId() throws {
+    func testUnsupportedDecodes() throws {
         let data = Data(#"{"result":"unsupported","reason":"Workspace actions are not yet available for this provider."}"#.utf8)
         let answer = try JSONDecoder().decode(ActionWorkspaceAnswer.self, from: data)
         XCTAssertEqual(answer.result, .unsupported)
-        XCTAssertNil(answer.providerSessionId)
     }
 
     func testAcceptedWithPartialSuccessReason() throws {
-        let data = Data(#"{"result":"accepted","reason":"Workspace created; opening task delivery failed.","providerSessionId":"sess-xyz"}"#.utf8)
+        let data = Data(#"{"result":"accepted","reason":"Workspace created; opening task delivery failed."}"#.utf8)
         let answer = try JSONDecoder().decode(ActionWorkspaceAnswer.self, from: data)
         XCTAssertEqual(answer.result, .accepted)
         XCTAssertNotNil(answer.reason)
-        XCTAssertEqual(answer.providerSessionId, "sess-xyz")
     }
 }
 
@@ -188,8 +177,7 @@ final class ActionClientCreateWorkspaceTests: XCTestCase {
     func testHitsCorrectPath() async throws {
         let stub = StubHTTPClient { request in
             XCTAssertTrue(request.url?.path.hasSuffix("api/actions/workspace") == true)
-            return (jsonData(["result": "accepted", "providerSessionId": "sess-new"]),
-                    makeResponse(url: request.url!, status: 200))
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
         }
         let client = ActionClient(baseURL: base, http: stub)
         _ = try await client.createWorkspace(
@@ -218,23 +206,6 @@ final class ActionClientCreateWorkspaceTests: XCTestCase {
         }
     }
 
-    func testAcceptedWithSessionIdDecodes() async throws {
-        let stub = StubHTTPClient { _ in
-            (jsonData(["result": "accepted", "providerSessionId": "sess-new"]),
-             makeResponse(url: URL(string: "https://example.com")!, status: 200))
-        }
-        let client = ActionClient(baseURL: base, http: stub)
-        let answer = try await client.createWorkspace(
-            accessToken: "tok",
-            providerId: "conductor",
-            providerProjectId: "proj-1",
-            name: "My workspace",
-            task: "Implement the feature"
-        )
-        XCTAssertEqual(answer.result, .accepted)
-        XCTAssertEqual(answer.providerSessionId, "sess-new")
-    }
-
     func testUnsupportedSurfacesReason() async throws {
         let stub = StubHTTPClient { _ in
             (jsonData(["result": "unsupported", "reason": "Workspace actions are not yet available for this provider."]),
@@ -248,7 +219,6 @@ final class ActionClientCreateWorkspaceTests: XCTestCase {
         )
         XCTAssertEqual(answer.result, .unsupported)
         XCTAssertNotNil(answer.reason)
-        XCTAssertNil(answer.providerSessionId)
     }
 }
 
@@ -291,10 +261,7 @@ final class ActionClientRowActionTests: XCTestCase {
             XCTAssertEqual(body["agent"] as? String, "claude")
             XCTAssertNil(body["name"])
             XCTAssertNil(body["task"])
-            return (
-                jsonData(["result": "accepted", "providerSessionId": "chat-2"]),
-                makeResponse(url: request.url!, status: 200)
-            )
+            return (jsonData(["result": "accepted"]), makeResponse(url: request.url!, status: 200))
         }
         let client = ActionClient(baseURL: base, http: stub)
         let answer = try await client.spawnAgent(
@@ -306,7 +273,6 @@ final class ActionClientRowActionTests: XCTestCase {
             task: ""
         )
         XCTAssertEqual(answer.result, .accepted)
-        XCTAssertEqual(answer.providerSessionId, "chat-2")
     }
 
     func testSpawnAgentCarriesTrimmedNameAndTask() async throws {

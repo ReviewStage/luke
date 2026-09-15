@@ -21,20 +21,16 @@ final class HostedVoiceSessionClientTests: XCTestCase {
     private static let deviceId = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
     private static let requestTimeout = Duration.seconds(10)
 
-    private static func created(quota: Bool = true) -> [String: Any] {
-        var frame: [String: Any] = ["type": "session.created", "sessionId": sessionId, "sdpAnswer": sdpAnswer]
-        if quota { frame["quota"] = ["used": 3, "limit": 50, "resetsAt": 1_800_003_600_000] }
-        return frame
+    private static func created() -> [String: Any] {
+        ["type": "session.created", "sessionId": sessionId, "sdpAnswer": sdpAnswer]
     }
 
     private static func attached(_ id: String = sessionId) -> [String: Any] {
         ["type": "session.attached", "sessionId": id]
     }
 
-    private static func audioCreated(quota: Bool = true) -> [String: Any] {
-        var frame: [String: Any] = ["type": "session.created", "sessionId": sessionId]
-        if quota { frame["quota"] = ["used": 3, "limit": 50, "resetsAt": 1_800_003_600_000] }
-        return frame
+    private static func audioCreated() -> [String: Any] {
+        ["type": "session.created", "sessionId": sessionId]
     }
 
     // MARK: - Fakes
@@ -321,18 +317,15 @@ final class HostedVoiceSessionClientTests: XCTestCase {
         XCTAssertEqual(session.sessionId, Self.sessionId)
         XCTAssertEqual(session.sdpAnswer, Self.sdpAnswer)
         XCTAssertEqual(session.created, LiveSessionCreated(sessionId: Self.sessionId, sdpAnswer: Self.sdpAnswer))
-        XCTAssertEqual(session.quota?.used, 3)
-        XCTAssertEqual(session.quota?.limit, 50)
         XCTAssertFalse(socket.closedByClient)
         session.close()
     }
 
     @MainActor
     func testAnUnregisteredDeviceSendsNoDeviceHeader() async throws {
-        let opener = ScriptedOpener([Self.answering(Self.created(quota: false))])
+        let opener = ScriptedOpener([Self.answering(Self.created())])
         let session = try opened(await client(opener, deviceId: nil).create(sdpOffer: Self.sdpOffer, voice: .marin))
         XCTAssertEqual(opener.sockets.first?.headers.fields, ["Authorization": "Bearer token-1"])
-        XCTAssertNil(session.quota)
         session.close()
     }
 
@@ -823,7 +816,6 @@ final class HostedVoiceSessionClientTests: XCTestCase {
         XCTAssertNil(create["input"])
         XCTAssertEqual(session.sessionId, Self.sessionId)
         XCTAssertEqual(session.format, .pcm16At16k)
-        XCTAssertEqual(session.quota?.used, 3)
         XCTAssertFalse(socket.closedByClient)
         session.close()
         XCTAssertEqual(
@@ -865,13 +857,12 @@ final class HostedVoiceSessionClientTests: XCTestCase {
 
     @MainActor
     func testA401OnTheAudioRouteRenewsTheBearerOnceToo() async throws {
-        let opener = ScriptedOpener([Self.refusing(status: 401), Self.answering(Self.audioCreated(quota: false))])
+        let opener = ScriptedOpener([Self.refusing(status: 401), Self.answering(Self.audioCreated())])
         let account = Session()
         let session = try opened(await client(opener, session: account).createAudio(voice: .marin))
         XCTAssertEqual(account.refreshes, 1)
         XCTAssertEqual(opener.sockets.map(\.headers.bearer), ["token-1", "token-fresh"])
         XCTAssertEqual(opener.sockets.map(\.url), [Self.audioURL, Self.audioURL])
-        XCTAssertNil(session.quota)
         session.close()
     }
 

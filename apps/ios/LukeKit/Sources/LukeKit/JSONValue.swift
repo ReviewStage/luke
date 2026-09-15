@@ -50,10 +50,4 @@ public indirect enum JSONValue: Equatable, Sendable, Decodable {
         guard case .number(let number) = self else { return nil }
         return number
     }
-
-    public var arrayValue: [JSONValue]? {
-        guard case .array(let array) = self else { return nil }
-        return array
-    }
-
 }

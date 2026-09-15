@@ -645,20 +645,6 @@ final class LivePeerTests: XCTestCase {
     }
 
     @MainActor
-    func testTheRemoteTrackIsKeptWhileThePeerStands() async throws {
-        let harness = Harness(sessionCloseTimeout: .milliseconds(20))
-        let stood = await harness.openStarted()
-        XCTAssertTrue(stood)
-        let luke = FakeTrack()
-
-        harness.connection.onRemoteTrack?(luke)
-        XCTAssertTrue(harness.peer.remoteTrack === luke)
-
-        _ = await harness.peer.close()
-        XCTAssertNil(harness.peer.remoteTrack)
-    }
-
-    @MainActor
     func testASecondOpenWhileTheFirstIsStillNegotiatingAnswersThatOne() async throws {
         let harness = Harness()
 

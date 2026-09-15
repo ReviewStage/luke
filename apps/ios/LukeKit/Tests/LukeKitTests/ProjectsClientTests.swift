@@ -104,10 +104,10 @@ final class WorkspaceAgentOptionTests: XCTestCase {
             "efforts": [],
         ])
 
-        XCTAssertEqual(
-            option,
-            WorkspaceAgentOption(providerId: "superset", agent: "composer", models: [], efforts: [])
-        )
+        XCTAssertEqual(option?.providerId, "superset")
+        XCTAssertEqual(option?.agent, "composer")
+        XCTAssertEqual(option?.models, [])
+        XCTAssertEqual(option?.efforts, [])
     }
 
     func testOnlyMalformedModelsIsNoOption() {

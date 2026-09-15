@@ -17,23 +17,21 @@ public enum LiveTranscriptBounds {
     public static let utteranceSettleMarginMs = 800
 }
 
-/// One caption row: whose it is, its words so far, and whether a fragment may
-/// still join it — the desktop's `LiveCaptionRow`.
+/// One caption row: whose it is and its words so far — the desktop's
+/// `LiveCaptionRow`.
 public struct LiveCaptionRow: Equatable, Sendable, Identifiable {
     /// Assigned once when the row opens and never moved, so a late fragment grows a row in place.
     public let rowId: Int
     public let speaker: LiveTranscriptSpeaker
     /// The fragments' text concatenated exactly as received, in arrival order.
     public let words: String
-    public let settled: Bool
 
     public var id: Int { rowId }
 
-    public init(rowId: Int, speaker: LiveTranscriptSpeaker, words: String, settled: Bool) {
+    public init(rowId: Int, speaker: LiveTranscriptSpeaker, words: String) {
         self.rowId = rowId
         self.speaker = speaker
         self.words = words
-        self.settled = settled
     }
 }
 
@@ -77,13 +75,12 @@ public final class LiveCaptions {
         groups[index].startMs = min(groups[index].startMs, delta.startMs)
         groups[index].endMs = max(groups[index].endMs, delta.endMs)
         groups[index].lastArrival = arrived
-        return row(groups[index], at: arrived)
+        return row(groups[index])
     }
 
     /// Every utterance as a row, in the order the rows were opened.
     public var rows: [LiveCaptionRow] {
-        let instant = now()
-        return groups.map { row($0, at: instant) }
+        groups.map { row($0) }
     }
 
     /// Whether a fragment may still join any row, so the caller knows to read the rows again later.
@@ -120,8 +117,8 @@ public final class LiveCaptions {
         return groups.count - 1
     }
 
-    private func row(_ group: Group, at instant: Date) -> LiveCaptionRow {
-        LiveCaptionRow(rowId: group.rowId, speaker: group.speaker, words: group.words, settled: settled(group, at: instant))
+    private func row(_ group: Group) -> LiveCaptionRow {
+        LiveCaptionRow(rowId: group.rowId, speaker: group.speaker, words: group.words)
     }
 
     private func settled(_ group: Group, at instant: Date) -> Bool {
