@@ -24,6 +24,7 @@ import {
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, readMessagesByConversation } from "./support/store-rows";
 
@@ -185,10 +186,11 @@ function wordsModel(text: string): MockLanguageModelV4 {
   });
 }
 
+/** The row's flush columns as either dialect hands them back: the instant read the way the store reads every `timestamptz`. */
 const FlushRowSchema = Schema.Struct({
   memory_flush_operation_id: Schema.NullOr(Schema.String),
   memory_flush_outcome: Schema.NullOr(Schema.String),
-  memory_flushed_at: Schema.NullOr(Schema.Date),
+  memory_flushed_at: Schema.NullOr(InstantColumnSchema),
 });
 
 /** What the conversation's row records of its last flush. */
