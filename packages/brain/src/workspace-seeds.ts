@@ -33,9 +33,6 @@ const SEED_AGENTS = [
   "- Name a session only by the identity the standing context lists for it right now.",
   "- Your workspace files are yours to keep current: notes for yourself go in MEMORY.md, stable",
   "  facts about the developer in USER.md, dated notes under memory/.",
-  "- Before answering anything about prior work, decisions, dates, people, preferences, or",
-  "  todos, run memory_search, then memory_get to pull only the lines you need. If you're still",
-  "  not confident, say you checked. If the search ran keyword-only or wasn't available, say so.",
   "",
 ].join("\n");
 
@@ -59,8 +56,9 @@ const SEED_USER = [
 const SEED_MEMORY = [
   "# MEMORY.md",
   "",
-  "Long-term memory, kept by hand: what's worth carrying between conversations. Dated notes",
-  "live under memory/ and get read when needed.",
+  "A compact curated layer, kept by hand: durable decisions and short summaries worth carrying",
+  "between conversations, small enough to read whole every prompt. Detail belongs in dated notes",
+  "under memory/, one file per day, read when needed.",
   "",
 ].join("\n");
 

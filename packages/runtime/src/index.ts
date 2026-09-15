@@ -95,6 +95,7 @@ export {
   type BootstrapFile,
   boundBootstrapFiles,
   CHILD_BOOTSTRAP_FILES,
+  CURATED_FILE_BUDGET,
   DAILY_NOTES_DIRECTORY,
   type DailyNote,
   dailyNoteName,
@@ -104,6 +105,7 @@ export {
   readWorkspaceFile,
   recentDailyNotes,
   seedWorkspace,
+  tooLargeRefusal,
   WORKSPACE_FILE,
   WORKSPACE_FILE_REFUSAL,
   type WorkspaceFile,
@@ -111,6 +113,7 @@ export {
   type WorkspaceSeeding,
   type WorkspaceSeeds,
   type WorkspaceWriteResult,
+  workspaceFileBound,
   workspaceFilePath,
   writeWorkspaceFile,
 } from "./workspace.js";
