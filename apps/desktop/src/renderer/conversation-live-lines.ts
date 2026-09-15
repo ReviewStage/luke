@@ -57,7 +57,7 @@ interface HeldLiveLine {
   readonly since: number;
 }
 
-export interface LiveLineHold {
+interface LiveLineHold {
   /** The voice window's last report. */
   readonly lines: readonly LiveConversationLine[];
   /** When the standing call's first line was reported; nothing while no line stands or is held. */

@@ -157,7 +157,7 @@ function SessionRun({
   );
 }
 
-export interface PanelBodyProps {
+interface PanelBodyProps {
   accountRequired: boolean;
   account: AccountSnapshot;
   /** Starts a sign-in; the app stands the panel down to the waiting popup. */

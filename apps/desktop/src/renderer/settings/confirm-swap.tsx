@@ -26,7 +26,7 @@ function answerOrder(index: number): React.CSSProperties {
  * that only mean anything together: a question with no word on its answer is
  * not a state a line can be in.
  */
-export interface SwapQuestion {
+interface SwapQuestion {
   /** What is being asked, in the words a hand and a reader both get. */
   question: string;
   stage: ConfirmStage;

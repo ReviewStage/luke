@@ -5,7 +5,7 @@ import { useStagedFocus } from "../credential-entry";
 import { type Destination, DestinationNote } from "../destination-note";
 
 /** What any secret being entered holds, whichever flow is entering it. */
-export interface SecretEntry {
+interface SecretEntry {
   /** What has been typed or pasted so far. Empty until it has been. */
   draft: string;
   /** True while the secret is being sent. */

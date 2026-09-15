@@ -44,7 +44,7 @@ function captionSizeStyle(
   });
 }
 
-export interface UseCaptionPresentationOptions {
+interface UseCaptionPresentationOptions {
   /** Luke's own words this frame, or nothing while he is not speaking. */
   lukeCaptions: readonly string[] | undefined;
   /** The developer's own words this frame, or nothing while none are being said. */
@@ -60,7 +60,7 @@ export interface UseCaptionPresentationOptions {
   leavingPanel: boolean;
 }
 
-export interface CaptionPresentation {
+interface CaptionPresentation {
   /** The caption element itself, whose box the hover test measures. */
   ref: RefObject<HTMLSpanElement | null>;
   /** The wrapped stack inside it, which is what is measured. */

@@ -66,10 +66,9 @@
 }
 
 /* He keeps the panel's own ink through every gesture: the wing recolours
-   listening and talking because there the colour reports whose turn a
-   conversation is, and here there is no conversation for it to report. */
-.sign-in-luke .luke-face[data-motion="listening"],
-.sign-in-luke .luke-face[data-motion="talking"] {
+   listening because there the colour reports whose turn a conversation is, and
+   here there is no conversation for it to report. */
+.sign-in-luke .luke-face[data-motion="listening"] {
   color: var(--text-primary);
 }
 

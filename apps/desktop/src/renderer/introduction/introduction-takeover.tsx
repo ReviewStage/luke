@@ -95,7 +95,7 @@ export const INTRODUCTION_EVENT = {
   STOOD_DOWN: "stood-down",
 } as const;
 
-export type IntroductionEvent = (typeof INTRODUCTION_EVENT)[keyof typeof INTRODUCTION_EVENT];
+type IntroductionEvent = (typeof INTRODUCTION_EVENT)[keyof typeof INTRODUCTION_EVENT];
 
 /**
  * Where each event moves each beat. An event a beat does not name leaves it

@@ -120,7 +120,7 @@ export function noticedMotion(
 }
 
 /** One thing Luke might do with a moment, and how much of the pool it takes. */
-export interface WeightedAside {
+interface WeightedAside {
   motion: FaceMotion;
   weight: number;
 }
@@ -276,7 +276,7 @@ interface PlayingGesture {
 }
 
 /** What the face is doing, and what the drawing needs to know to do it. */
-export interface FacePlay {
+interface FacePlay {
   /** Absent while the face is still, which is most of the time. */
   motion?: FaceMotion | undefined;
   /** Set while the motion is a rest, which is the only kind that repeats. */

@@ -21,7 +21,7 @@ import {
 import { type PanelEntrySurface, panelEntryOpen, usePanelEntry } from "./use-panel-entry";
 import { useStateWithRef } from "./use-state-with-ref";
 
-export interface UseConnectionsOptions {
+interface UseConnectionsOptions {
   surface: PanelEntrySurface;
   /** The two holds the presentation cluster reads without waiting a render. */
   credentialHeld: RefObject<boolean>;

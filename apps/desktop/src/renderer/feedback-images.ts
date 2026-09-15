@@ -12,7 +12,7 @@ export const IMAGE_INTAKE = {
   REFUSE: "refuse",
 } as const;
 
-export type ImageIntake = (typeof IMAGE_INTAKE)[keyof typeof IMAGE_INTAKE];
+type ImageIntake = (typeof IMAGE_INTAKE)[keyof typeof IMAGE_INTAKE];
 
 /**
  * How a re-encode is drawn: scaled to fit the longest edge and written as

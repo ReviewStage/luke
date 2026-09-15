@@ -8,7 +8,7 @@ import { useStateWithRef } from "./use-state-with-ref";
  * replace it underneath but ending it outright. A rejection is the last
  * send's reason, cleared by typing again.
  */
-export interface PanelEntryBase {
+interface PanelEntryBase {
   busy: boolean;
   rejection?: string | undefined;
 }
@@ -61,7 +61,7 @@ interface PanelEntryHost {
  */
 export type PanelEntrySurface = Omit<PanelEntryHost, "aside">;
 
-export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
+interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEntryHost {
   /**
    * Whether giving up from the aside shape returns to the panel. A key page
    * that was opened, or a composer asked for by voice, leaves instead.
@@ -82,7 +82,7 @@ export interface UsePanelEntryOptions<T extends PanelEntryBase> extends PanelEnt
   afterDelivery?: (finish: () => void) => void;
 }
 
-export interface PanelEntry<T extends PanelEntryBase> {
+interface PanelEntry<T extends PanelEntryBase> {
   entry: T | undefined;
   latest: () => T | undefined;
   apply: (next: T | undefined) => void;

@@ -63,16 +63,6 @@ export interface FeedbackComposer {
    * say what it found.
    */
   begin: (kind: FeedbackKind, fromPanel: boolean, draft?: string, returnTo?: PanelTab) => boolean;
-  /** Leaves the shape and keeps the draft — Escape's meaning here. */
-  dismiss: () => void;
-  latest: () => FeedbackEntry | undefined;
-  /**
-   * Holds the words a spoken open asked to start the note with, until the
-   * composer's lifecycle event consumes them. The composer's own channel
-   * carries names alone, so the draft waits here — and only ever the
-   * developer's own words, under the spoken tool's contract.
-   */
-  holdSpokenDraft: (draft: string | undefined) => void;
   takeSpokenDraft: () => string | undefined;
 }
 
@@ -265,22 +255,18 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
     else surface.leave();
   }, [dropConfirmation, entry.latest, surface.leave, surface.presentation, surface.restorePanel]);
 
-  /**
-   * Takes picked or pasted files aboard. Encoding happens here on the user's
-   * machine — scaled and re-written where a screenshot would not fit the
-   * request a submission has to travel as — and what could not come is said
-   * beside the field rather than dropped in silence.
-   */
-  const holdSpokenDraft = useCallback((draft: string | undefined) => {
-    spokenDraft.current = draft;
-  }, []);
-
   const takeSpokenDraft = useCallback(() => {
     const draft = spokenDraft.current;
     spokenDraft.current = undefined;
     return draft;
   }, []);
 
+  /**
+   * Takes picked or pasted files aboard. Encoding happens here on the user's
+   * machine — scaled and re-written where a screenshot would not fit the
+   * request a submission has to travel as — and what could not come is said
+   * beside the field rather than dropped in silence.
+   */
   const attach = useCallback(
     async (files: readonly File[]) => {
       const current = entry.latest();
@@ -336,9 +322,6 @@ export function useFeedbackComposer(options: UseFeedbackComposerOptions): Feedba
     },
     confirming,
     begin,
-    dismiss,
-    latest: entry.latest,
-    holdSpokenDraft,
     takeSpokenDraft,
   };
 }

@@ -36,7 +36,7 @@ export const CLEAR_FAILED_REASON =
  * main process answered to this panel's own press, which the voice window
  * never saw and so never reports.
  */
-export interface PanelStripLines {
+interface PanelStripLines {
   error: string | undefined;
   notice: string | undefined;
 }
@@ -81,7 +81,7 @@ export function voiceActiveFor(input: {
  * the launch profile alone, so every frame of an evidence run is the same
  * frame.
  */
-export interface FixtureVoice {
+interface FixtureVoice {
   speakers: VoiceSpeakers;
   muted: boolean;
 }
@@ -190,7 +190,7 @@ function useVoiceActive(report: LevelReport, voice: WaveformVoice, live: boolean
 /** The thread before the first read lands, which is what a panel with no document yet compares live lines against. */
 const UNREAD_CONVERSATION: ConversationViewSnapshot = { groups: [], settled: false };
 
-export interface VoiceViewState {
+interface VoiceViewState {
   /** The live conversation as the voice window last reported it. */
   view: VoiceView;
   /**
