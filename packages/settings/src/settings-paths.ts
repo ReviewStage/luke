@@ -9,16 +9,11 @@
  */
 
 /** Where the switches live, said once so every entry words it the same way. */
-export const SETTINGS_TAB = "the panel's Settings tab";
+const SETTINGS_TAB = "the panel's Settings tab";
 
 export const VOICE_PAGE = `${SETTINGS_TAB}, on its Voice page`;
 export const APPEARANCE_PAGE = `${SETTINGS_TAB}, on its Appearance page`;
-export const SHORTCUTS_PAGE = `${SETTINGS_TAB}, on its Keyboard shortcuts page`;
 export const CONNECTIONS_PAGE = `${SETTINGS_TAB}, on its Connections page`;
-/** Where the Updates section stands, for the fact about it. */
-export const FRONT_PAGE = `${SETTINGS_TAB}, on its front page`;
-/** Where the signed-in identity and the two ways out of it live. */
-export const ACCOUNT_SECTION = `the Account section, at the foot of ${SETTINGS_TAB}'s front page`;
 export const CONDUCTOR_ROW_PATH = `the Conductor row under Providers, in ${CONNECTIONS_PAGE} — drawn once Conductor is connected`;
 
 /**

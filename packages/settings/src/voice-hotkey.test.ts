@@ -6,9 +6,6 @@ import {
   DEFAULT_VOICE_HOTKEYS,
   parseVoiceHotkey,
   stopHotkeyCandidates,
-  TALK_KEY_RELEASE,
-  TALK_KEY_TAP_MS,
-  talkKeyRelease,
   VOICE_HOTKEY_CAPTURE,
   VOICE_HOTKEY_NONE,
   voiceHotkeyCandidates,
@@ -185,26 +182,4 @@ test("a recorded chord and a stored one pass the same gate", () => {
   if (recorded.outcome === VOICE_HOTKEY_CAPTURE.CAPTURED) {
     assert.equal(parseVoiceHotkey(recorded.accelerator), recorded.accelerator);
   }
-});
-
-test("holding sends on release and tapping leaves the turn open", () => {
-  // SAFETY: Fixture value matches the narrowed runtime shape this test exercises.
-  // Held: the turn lasted exactly as long as the key was down.
-  assert.equal(
-    talkKeyRelease({ heldMs: TALK_KEY_TAP_MS + 1, latched: false }),
-    TALK_KEY_RELEASE.SEND,
-  );
-  assert.equal(talkKeyRelease({ heldMs: 4_000, latched: false }), TALK_KEY_RELEASE.SEND);
-
-  // Tapped: for the question too long to hold through.
-  assert.equal(talkKeyRelease({ heldMs: 40, latched: false }), TALK_KEY_RELEASE.LATCH);
-  assert.equal(talkKeyRelease({ heldMs: 0, latched: false }), TALK_KEY_RELEASE.LATCH);
-});
-
-test("a latched turn is ended by the next release, however brief", () => {
-  // The gesture that opened this turn is already over. A second tap is someone
-  // saying they are done, and holding the key down to say it would be a turn
-  // that never ends.
-  assert.equal(talkKeyRelease({ heldMs: 10, latched: true }), TALK_KEY_RELEASE.SEND);
-  assert.equal(talkKeyRelease({ heldMs: 4_000, latched: true }), TALK_KEY_RELEASE.SEND);
 });

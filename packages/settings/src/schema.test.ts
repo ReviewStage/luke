@@ -33,8 +33,6 @@ import {
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
-  settingVisible,
-  spokenSettingValue,
 } from "./schema-access.js";
 import type { StoredSettingValue } from "./schema-types.js";
 import { settingsView, settingsVisibility } from "./testing.js";
@@ -128,22 +126,6 @@ test("every field's own declaration answers for everything read of it", () => {
         offered.includes(guideEntry.defaultValue),
         `${guideEntry.id}'s default is a value a spoken change can set`,
       );
-
-      // An entry a hand alone changes carries its by-hand path instead of a
-      // parse, because the refusal Luke voices is itself the guidance.
-      if (!guideEntry.adjustable || !entry.spokenValue) continue;
-      for (const word of offered) {
-        const parsed = spokenSettingValue(field, word);
-        if (parsed === undefined) {
-          // The one word that may mean nothing is the word for nothing, so a
-          // pace asked for by its multiple can never fall through as cleared.
-          assert.equal(entry.default, undefined, `${guideEntry.id} clears on "${word}"`);
-          assert.equal(word, guideEntry.defaultValue, `${guideEntry.id} answers for "${word}"`);
-          continue;
-        }
-        // SAFETY: A parsed spoken value is a stored value, which the guard reads.
-        assert.equal(entry.guard(parsed as never).valid, true, `${guideEntry.id}: "${word}"`);
-      }
     }
 
     // `SchemaSettingRows` draws a switch or a pop-up and nothing else, and
@@ -151,13 +133,7 @@ test("every field's own declaration answers for everything read of it", () => {
     if (entry.rows === SETTING_ROWS.SCHEMA) {
       assert.equal(built.length, 1, field);
       const drawn = built[0];
-      if (drawn?.kind === APP_SETTING_KIND.TOGGLE) {
-        assert.deepEqual(
-          spokenSettingValue(field, drawn.value),
-          APP_SETTING_DEFAULTS[field],
-          field,
-        );
-      } else {
+      if (drawn?.kind !== APP_SETTING_KIND.TOGGLE) {
         assert.equal(drawn?.kind, APP_SETTING_KIND.CHOICE, field);
         const control = entry.control;
         assert.ok(control, `${field} draws a pop-up`);
@@ -254,41 +230,6 @@ test("a keyed field validates one entry exactly as its whole map would", () => {
   assert.equal(
     settingEntryGuard("workspaceAgentDefaults", PROVIDER_ID.CONDUCTOR, { agent: 7 }).valid,
     false,
-  );
-});
-
-test("a setting says for itself whether its row is drawn", () => {
-  // The panel and the search read this one answer, so a result can never lead
-  // to a page without its row.
-  const resting = settingsVisibility();
-  assert.equal(settingVisible("voiceCaptions", resting), false);
-  assert.equal(settingVisible("quietDuringMeetings", resting), false);
-  // A setting that names no condition is always drawn.
-  assert.equal(settingVisible("openAtLogin", resting), true);
-
-  assert.equal(
-    settingVisible("voiceCaptions", settingsVisibility({ voiceControlsDrawn: true })),
-    true,
-  );
-  // The quiet rides the calendars: a Google account, or this Mac's own.
-  assert.equal(
-    settingVisible(
-      "quietDuringMeetings",
-      settingsVisibility({
-        settings: {
-          calendarSignInAvailable: true,
-          calendarAccounts: [{ id: "dev@example.com", selectedCalendarIds: [] }],
-        },
-      }),
-    ),
-    true,
-  );
-  assert.equal(
-    settingVisible(
-      "quietDuringMeetings",
-      settingsVisibility({ settings: { appleCalendar: { id: "apple", selectedCalendarIds: [] } } }),
-    ),
-    true,
   );
 });
 

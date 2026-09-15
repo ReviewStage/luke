@@ -200,7 +200,6 @@ export function choiceSetting<
   manual: string;
   sideEffect: SettingSideEffectId;
   resetScope?: SettingsResetScope;
-  rows?: typeof SETTING_ROWS.SCHEMA | typeof SETTING_ROWS.BESPOKE;
   adjustable: boolean;
   /**
    * The vocabulary's own guard for its own values. Passed rather than built
@@ -247,7 +246,7 @@ export function choiceSetting<
     order: spec.order,
     resetScope: spec.resetScope,
     sideEffect: spec.sideEffect,
-    rows: spec.rows ?? SETTING_ROWS.SCHEMA,
+    rows: SETTING_ROWS.SCHEMA,
     ids: [spec.id],
     guide: (settings) => ({
       id: spec.id,
