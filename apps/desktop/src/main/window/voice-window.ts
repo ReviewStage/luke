@@ -31,7 +31,10 @@ const REOPEN_DELAY_MS = 1_000;
  * The one hidden window that will hold the live conversation, so that it
  * outlives every panel: a panel reload, close, or display change must not end
  * an exchange. It loads the same renderer bundle as the panels under the same
- * hardening, differing only in its bootstrap role, and it is never shown,
+ * hardening, differing only in its bootstrap role — safe because the panels'
+ * recording carries no words and this window's document allows no network,
+ * so there is nothing the shared bundle could record or post from here — and
+ * it is never shown,
  * never focused, and never a target for anything drawn. It exists at most
  * once, and everything it may ask of the main process is answered against
  * `owns()` rather than against anything the renderer claims.

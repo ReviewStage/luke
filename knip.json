@@ -31,7 +31,6 @@
         "src/main/index.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
-        "src/renderer/voice/index.tsx",
         "src/**/*.test.ts",
         "scripts/*.mjs",
         "electron-builder.ts"

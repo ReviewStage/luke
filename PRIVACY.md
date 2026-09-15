@@ -243,21 +243,19 @@ say and nothing from a session can appear in one: no titles, branches, file
 paths, prompts, or error text.
 
 **Screen recordings.** Luke records what his own panel draws, and never your
-screen, your editor, your terminal, or any other app. A recording shows whatever
-the panel showed you, including session titles, branches and error
-text, your name and email address, and any screenshot you attached to the
-feedback form. The Conversation tab is blocked from recordings, so neither the words in your
-conversation with Luke nor the things he remembers about you are included, and
-the feedback form's message field is blocked the same way, since a thumbs down
-can open it prefilled with those words. The Memory page in Settings, which
-draws what he has saved, is blocked the same way. The caption strip under Luke's shape is
-not blocked: with Captions on, it draws his spoken words and yours as you speak
-to him, so a recording made while you talk to Luke includes what you said. Text
-you type into a field is replaced
-with blocks before the recording leaves your Mac, so an API key or a sign-in
-code you enter is not in it. While recording is on, Luke also reports what you
-clicked, including the text on it; the fixed list above does not cover those
-clicks.
+screen, your editor, your terminal, or any other app. The recording is the
+shape of the panel, not its words: before it leaves your Mac, every piece of
+text the panel shows is replaced with blocks of the same length, so a session
+title, a branch, an error line, a caption of what you or Luke said, your name
+and email address, a tooltip, and the label of a button all appear as blocks.
+Text you type into a field is replaced the same way, so an API key or a
+sign-in code you enter is not in it, and a screenshot you attach to the
+feedback form is left out, since a picture of your screen could carry another
+app's words. The Conversation tab, the feedback form's message field, and the
+Memory page in Settings are left out of the recording entirely rather than
+blocked out, as a second line. Luke does not report what you clicked; a
+recording shows where the pointer went and what the panel looked like, and
+nothing it said.
 
 Recording starts when Luke opens, before you sign in, so it covers the
 signed-out panel, the sign-in, and the spoken introduction that follows your
@@ -566,9 +564,9 @@ Send.
   availability. Google returns busy times only, so event titles and attendees
   are never available to Luke.
 - PostHog, for usage data and screen recordings, from the Mac, iOS, and
-  Apple Watch apps. The counts go through our own service; the recordings and
-  desktop clicks go from Luke to PostHog directly, and the watch app sends
-  PostHog nothing directly.
+  Apple Watch apps. The counts go through our own service; the recordings go
+  from Luke to PostHog directly, and the watch app sends PostHog nothing
+  directly.
 - Apple, for briefing notifications. When no device of yours is placed to
   say a briefing, our service hands Luke's words to Apple's push notification
   service, addressed to the push token your device registered, and Apple

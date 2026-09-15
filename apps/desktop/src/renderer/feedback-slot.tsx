@@ -316,7 +316,11 @@ export function FeedbackSlot({
           />
         </div>
 
-        <div className="feedback-images">
+        {/* A screenshot is drawn inline as its own `data:` address, and the
+            recording masks that attribute — but a picture of the person's
+            screen is the one thing here that could carry another app's words,
+            so the chips and the preview below block themselves outright too. */}
+        <div className="feedback-images ph-no-capture">
           {entry.images.map((image, index) => (
             <span className="feedback-image" key={`${image.name}-${String(index)}`}>
               {/* The chip is the way to look closer: a thumbnail is enough to
@@ -383,7 +387,7 @@ export function FeedbackSlot({
           <button
             type="button"
             ref={previewButton}
-            className="feedback-preview"
+            className="feedback-preview ph-no-capture"
             data-open={String(previewOpen)}
             aria-label={`Close the preview of ${shownPreview.name}`}
             aria-hidden={!previewOpen}

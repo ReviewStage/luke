@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { test } from "vitest";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 import {
+  maskWordBearingAttribute,
   POSTHOG_ASSETS_HOST,
   POSTHOG_HOST,
+  SESSION_REPLAY_MASKING,
   sessionReplayWanted,
   withoutLocalAddress,
 } from "./session-replay";
@@ -58,6 +61,77 @@ test("the connect policy names both recorder hosts, and nothing else", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const connectSrc = html.match(/connect-src ([^;"]+)/)?.[1];
   assert.deepEqual(connectSrc?.split(" "), [POSTHOG_HOST, POSTHOG_ASSETS_HOST]);
+});
+
+/**
+ * The hidden voice window loads the panel's own bundle from a document of its
+ * own, so the recorder is in it. What keeps a recording from ever leaving that
+ * window is that `App`, where recording starts, is never mounted for the voice
+ * role — and, behind that, this policy: a document that may reach no host
+ * cannot post a recording however the bundle is configured.
+ */
+test("the voice document loads the one bundle and may reach no host at all", () => {
+  const voice = readFileSync(new URL("./voice.html", import.meta.url), "utf8");
+  const panel = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.equal(voice.match(/connect-src ([^;"]+)/)?.[1], "'none'");
+  assert.ok(voice.includes('<script src="renderer.js"></script>'));
+  assert.ok(panel.includes('<script src="renderer.js"></script>'));
+});
+
+/**
+ * The recording is layout and asterisks, and this is the whole of what makes
+ * it so. Asserted as one value so a field going missing is a failed equality
+ * rather than a recording that quietly carries words again.
+ */
+test("the recorder is told to mask every word and to capture no click", () => {
+  assert.deepEqual(SESSION_REPLAY_MASKING, {
+    autocapture: false,
+    capture_dead_clicks: false,
+    mask_all_text: true,
+    session_recording: {
+      maskTextSelector: "*",
+      maskAttributeFn: maskWordBearingAttribute,
+    },
+  });
+});
+
+test("an attribute that carries words or a picture is asterisked to its length", () => {
+  for (const name of ["title", "aria-label", "aria-description", "alt", "placeholder", "src"]) {
+    assert.equal(maskWordBearingAttribute(name, "Open in Cursor"), "**************", name);
+  }
+});
+
+test("an attribute that carries structure comes through as it came", () => {
+  // `class` and `style` are what let the recording lay out at all; masking
+  // them would leave nothing to look at, which is the argument against the
+  // library's `maskAllElementAttributes`.
+  for (const name of ["class", "style", "id", "role", "data-hit-region", "href", "type"]) {
+    assert.equal(maskWordBearingAttribute(name, "session-row open"), "session-row open", name);
+  }
+});
+
+/**
+ * The recorder copies from `session_recording` only the option names it
+ * already knows and drops the rest without a word, and the preloaded config
+ * rests on a global the library does not declare — so a rename of either
+ * would look exactly like masking that works, or recording that is off. The
+ * names are read off the installed bundle, the one the renderer is built from.
+ */
+test("the installed bundle still knows every name the masking rests on", () => {
+  const bundle = readFileSync(
+    createRequire(import.meta.url).resolve("posthog-js/dist/module.full.no-external"),
+    "utf8",
+  );
+  for (const name of [
+    "maskTextSelector",
+    "maskAttributeFn",
+    "mask_all_text",
+    "capture_dead_clicks",
+    "ph-no-capture",
+    "_POSTHOG_REMOTE_CONFIG",
+  ]) {
+    assert.ok(bundle.includes(name), name);
+  }
 });
 
 /**

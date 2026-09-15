@@ -2,10 +2,11 @@
  * The renderer's Effect edge: the browser runtime the atoms' own work runs on,
  * and the registry that holds them.
  *
- * There is one of each per bundle rather than one per window, because the
- * panel and the voice window are two bundles of the same modules: each
- * instantiates this one, so each root provides its own registry and each holds
- * the one browser `ManagedRuntime` the factory builds inside it. Nothing here
+ * There is one of each per window: every window, a panel or the hidden voice
+ * window, is its own document loading the one renderer bundle, so each
+ * instantiates this module once, provides its own registry from the root,
+ * and holds the one browser `ManagedRuntime` the factory builds inside it.
+ * The panel and the voice window never share one. Nothing here
  * may reach a layer that reaches `node:` — the renderer is a sandboxed browser
  * context, and a runtime is exactly the place a Node-reaching service would
  * arrive unnoticed.
@@ -26,7 +27,7 @@ import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 export const rendererRuntime = Atom.keepAlive(Atom.runtime(Layer.empty));
 
 /**
- * The registry both roots provide, so a hook reading an atom and a callback
+ * The registry the root provides, so a hook reading an atom and a callback
  * reading the same atom outside React read the one value rather than two.
  * Its `scheduleTask` is the React binding's own, which is what batches a
  * delivery's redraws into one.
