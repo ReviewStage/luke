@@ -1,40 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
-import { runTest, TestReporter, testReporter } from "./effect.js";
+import { Context, Effect, Layer } from "effect";
+import { runTest } from "./effect.js";
 
-describe("TestReporter", () => {
-  it.effect("collects report calls into the order they were made", () =>
-    Effect.gen(function* () {
-      const reporter = yield* TestReporter;
-
-      yield* reporter.report("first");
-      yield* reporter.report("second");
-
-      assert.deepEqual(reporter.messages(), ["first", "second"]);
-    }).pipe(Effect.provideServiceEffect(TestReporter, testReporter)),
-  );
-
-  it.effect("starts empty", () =>
-    Effect.gen(function* () {
-      const reporter = yield* TestReporter;
-
-      assert.deepEqual(reporter.messages(), []);
-    }).pipe(Effect.provideServiceEffect(TestReporter, testReporter)),
-  );
-
-  it.effect("keeps two instances of the collector independent", () =>
-    Effect.gen(function* () {
-      const first = yield* testReporter;
-      const second = yield* testReporter;
-
-      yield* first.report("only first");
-
-      assert.deepEqual(first.messages(), ["only first"]);
-      assert.deepEqual(second.messages(), []);
-    }),
-  );
-});
+class Answer extends Context.Service<Answer, { readonly value: number }>()(
+  "@sidecar/wire/testing/effect.test/Answer",
+) {}
 
 describe("runTest", () => {
   it("runs an Effect with no requirements to its resolved value", async () => {
@@ -48,15 +19,14 @@ describe("runTest", () => {
   });
 
   it("provides a layer to an Effect that requires it", async () => {
-    const messages = await runTest(
+    const value = await runTest(
       Effect.gen(function* () {
-        const reporter = yield* TestReporter;
-        yield* reporter.report("via layer");
-        return reporter.messages();
+        const answer = yield* Answer;
+        return answer.value;
       }),
-      Layer.effect(TestReporter, testReporter),
+      Layer.succeed(Answer, { value: 42 }),
     );
 
-    assert.deepEqual(messages, ["via layer"]);
+    assert.equal(value, 42);
   });
 });

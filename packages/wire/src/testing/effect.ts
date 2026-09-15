@@ -1,29 +1,4 @@
-import { Context, Effect, type Layer } from "effect";
-
-/**
- * The `report: (message: string) => void` seam many packages inject, as an
- * Effect service a test can provide instead of a closure over an array: the
- * same collection either way, but reached through `Effect.gen` rather than
- * threaded as a constructor argument.
- */
-export class TestReporter extends Context.Service<
-  TestReporter,
-  {
-    readonly report: (message: string) => Effect.Effect<void>;
-    readonly messages: () => readonly string[];
-  }
->()("@sidecar/wire/testing/TestReporter") {}
-
-/** A `TestReporter` whose `messages()` answers every `report()` call, in order. */
-export const testReporter: Effect.Effect<Context.Service.Shape<typeof TestReporter>> = Effect.sync(
-  () => {
-    const messages: string[] = [];
-    return {
-      report: (message) => Effect.sync(() => messages.push(message)),
-      messages: () => messages,
-    };
-  },
-);
+import { Effect, type Layer } from "effect";
 
 /**
  * Runs an Effect to a `Promise` for a test still written on `node:assert`

@@ -5,7 +5,7 @@ export {
   fakeCloudApi,
   recordedRoutes,
 } from "./cloud-fake.js";
-export { runTest, TestReporter, testReporter } from "./effect.js";
+export { runTest } from "./effect.js";
 export {
   type FakeResponder,
   fakeHttpClient,
@@ -18,7 +18,6 @@ export {
   type RecordingHttpClient,
   recordedRequest,
   recordingHttpClient,
-  requestBody,
 } from "./http-fake.js";
 export {
   isJsonObject,
@@ -27,17 +26,13 @@ export {
   type ParsedJsonObject,
 } from "./json.js";
 export {
-  type EffectJsonSchemaExportName,
-  type JsonSchemaExportName,
   type JsonSchemaGolden,
-  type JsonSchemaGoldenTool,
   type JsonSchemaSource,
   jsonSchemaGoldenRoot,
   jsonSchemaOf,
   matchJsonSchemaGolden,
   type RecordedEffectJsonSchemas,
   type RecordedJsonSchemaSource,
-  type RecordedJsonSchemas,
   settleJsonSchemaGolden,
   settleJsonSchemaGoldenSet,
 } from "./json-schema-golden.js";
