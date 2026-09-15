@@ -2,14 +2,14 @@ import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { DAILY_NOTES_DIRECTORY } from "../../core.js";
-import { EpochMillisColumnSchema, type UserSeal } from "./database.js";
+import { EpochMillisColumnSchema } from "./database.js";
 
 /**
  * The identity workspace and the notebook, one row per user per file. A path
  * is workspace-relative and plain — no leading slash, no empty or `..`
  * segment — so a row can never name a file outside the workspace; the
- * contents are sealed whole and rewritten whole, the way the desktop's
- * workspace files land through a rename.
+ * contents are stored in the clear, written whole and rewritten whole, the
+ * way the desktop's workspace files land through a rename.
  *
  * The first module here on `effect/unstable/sql`: every read and write below is an
  * `Effect<A, SqlError | SchemaError, SqlClient>`, the statement is the client's
@@ -57,7 +57,7 @@ const FileKeySchema = Schema.Struct({
 const FileWriteSchema = Schema.Struct({
   userId: Schema.String,
   path: WorkspacePathSchema,
-  sealedContent: Schema.String,
+  content: Schema.String,
   now: Schema.Number,
 });
 
@@ -69,21 +69,20 @@ const DailyNotesRequestSchema = Schema.Struct({
   limit: Schema.Number,
 });
 
-/** A dated note's row as the listing reads it: its path and its sealed contents, opened only to be counted. */
-const SealedDailyNoteSchema = Schema.Struct({
+/** A dated note's row as the listing reads it: its path and its contents, read only to be counted. */
+const DailyNoteRowSchema = Schema.Struct({
   path: Schema.String,
-  sealedContent: Schema.String,
-}).pipe(Schema.encodeKeys({ sealedContent: "sealed_content" }));
+  content: Schema.String,
+});
 
-/** The row as `workspace_file` holds it, contents still sealed. */
-const SealedWorkspaceFileSchema = Schema.Struct({
+/** The row as `workspace_file` holds it. */
+const WorkspaceFileRowSchema = Schema.Struct({
   path: Schema.String,
-  sealedContent: Schema.String,
+  content: Schema.String,
   createdAt: EpochMillisColumnSchema,
   updatedAt: EpochMillisColumnSchema,
 }).pipe(
   Schema.encodeKeys({
-    sealedContent: "sealed_content",
     createdAt: "created_at",
     updatedAt: "updated_at",
   }),
@@ -115,11 +114,11 @@ export interface WorkspaceFileRecord {
 
 const findFile = SqlSchema.findOneOption({
   Request: FileKeySchema,
-  Result: SealedWorkspaceFileSchema,
+  Result: WorkspaceFileRowSchema,
   execute: (key) =>
     statement(
       (sql) => sql`
-        select path, sealed_content, created_at, updated_at
+        select path, content, created_at, updated_at
         from workspace_file
         where user_id = ${key.userId} and path = ${key.path}
       `,
@@ -131,10 +130,10 @@ const upsertFile = SqlSchema.void({
   execute: (write) =>
     statement(
       (sql) => sql`
-        insert into workspace_file (user_id, path, sealed_content, created_at, updated_at)
-        values (${write.userId}, ${write.path}, ${write.sealedContent}, ${write.now}, ${write.now})
+        insert into workspace_file (user_id, path, content, created_at, updated_at)
+        values (${write.userId}, ${write.path}, ${write.content}, ${write.now}, ${write.now})
         on conflict (user_id, path) do update
-          set sealed_content = excluded.sealed_content, updated_at = excluded.updated_at
+          set content = excluded.content, updated_at = excluded.updated_at
       `,
     ),
 });
@@ -145,8 +144,8 @@ const insertFile = SqlSchema.findAll({
   execute: (write) =>
     statement(
       (sql) => sql`
-        insert into workspace_file (user_id, path, sealed_content, created_at, updated_at)
-        values (${write.userId}, ${write.path}, ${write.sealedContent}, ${write.now}, ${write.now})
+        insert into workspace_file (user_id, path, content, created_at, updated_at)
+        values (${write.userId}, ${write.path}, ${write.content}, ${write.now}, ${write.now})
         on conflict (user_id, path) do nothing
         returning path
       `,
@@ -187,11 +186,11 @@ const findFiles = SqlSchema.findAll({
  */
 const findDailyNotes = SqlSchema.findAll({
   Request: DailyNotesRequestSchema,
-  Result: SealedDailyNoteSchema,
+  Result: DailyNoteRowSchema,
   execute: (request) =>
     statement(
       (sql) => sql`
-        select path, sealed_content
+        select path, content
         from workspace_file
         where user_id = ${request.userId} and starts_with(path, ${DAILY_NOTES_PREFIX})
         order by path collate "C" desc
@@ -205,7 +204,6 @@ const lockUser = (userId: string) =>
   statement((sql) => sql`select id from "user" where id = ${userId} for update`);
 
 export function readWorkspaceFile(
-  seal: UserSeal,
   userId: string,
   path: string,
 ): Effect.Effect<Option.Option<WorkspaceFileRecord>, WorkspaceFileFailure, SqlClient.SqlClient> {
@@ -213,7 +211,7 @@ export function readWorkspaceFile(
     findFile({ userId, path }),
     Option.map((row) => ({
       path: row.path,
-      content: seal.open(row.sealedContent),
+      content: row.content,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     })),
@@ -222,13 +220,12 @@ export function readWorkspaceFile(
 
 /** Writes the file whole, creating it or replacing it. */
 export function writeWorkspaceFile(
-  seal: UserSeal,
   userId: string,
   path: string,
   content: string,
   now: number,
 ): Effect.Effect<void, WorkspaceFileFailure, SqlClient.SqlClient> {
-  return upsertFile({ userId, path, sealedContent: seal.seal(content), now });
+  return upsertFile({ userId, path, content, now });
 }
 
 /**
@@ -239,7 +236,6 @@ export function writeWorkspaceFile(
  * what landed, or nothing where the revision declined.
  */
 export function reviseWorkspaceFile(
-  seal: UserSeal,
   userId: string,
   path: string,
   revise: (existing: string | undefined) => string | undefined,
@@ -249,10 +245,10 @@ export function reviseWorkspaceFile(
     sql.withTransaction(
       Effect.gen(function* () {
         yield* lockUser(userId);
-        const standing = yield* readWorkspaceFile(seal, userId, path);
+        const standing = yield* readWorkspaceFile(userId, path);
         const revised = revise(Option.getOrUndefined(standing)?.content);
         if (revised === undefined) return undefined;
-        yield* upsertFile({ userId, path, sealedContent: seal.seal(revised), now });
+        yield* upsertFile({ userId, path, content: revised, now });
         return revised;
       }),
     ),
@@ -261,16 +257,12 @@ export function reviseWorkspaceFile(
 
 /** Writes the file only where none stands: the seeding a launch does once, and an edit never undone by an upgrade. */
 export function seedWorkspaceFile(
-  seal: UserSeal,
   userId: string,
   path: string,
   content: string,
   now: number,
 ): Effect.Effect<boolean, WorkspaceFileFailure, SqlClient.SqlClient> {
-  return Effect.map(
-    insertFile({ userId, path, sealedContent: seal.seal(content), now }),
-    (written) => written.length > 0,
-  );
+  return Effect.map(insertFile({ userId, path, content, now }), (written) => written.length > 0);
 }
 
 export function deleteWorkspaceFile(
@@ -286,13 +278,12 @@ export function listWorkspaceFiles(
   return findFiles(userId);
 }
 
-/** The user's dated notes under `memory/`, newest first and at most `limit` of them, each opened only to count its characters. */
+/** The user's dated notes under `memory/`, newest first and at most `limit` of them, each read only to count its characters. */
 export function listDailyNotes(
-  seal: UserSeal,
   userId: string,
   limit: number,
 ): Effect.Effect<readonly DailyNoteRecord[], WorkspaceFileFailure, SqlClient.SqlClient> {
   return Effect.map(findDailyNotes({ userId, limit }), (rows) =>
-    rows.map((row) => ({ path: row.path, chars: seal.open(row.sealedContent).length })),
+    rows.map((row) => ({ path: row.path, chars: row.content.length })),
   );
 }

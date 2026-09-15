@@ -6,7 +6,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
  * The embedding cache behind the notebook's search: one row per user per
  * passage hash, holding the numeric vector OpenAI's embeddings model answered
  * for the passage and the model it was answered under, and never a word of
- * the passage. The passage's words stand only in `workspace_file`, sealed;
+ * the passage. The passage's words stand only in `workspace_file`;
  * the hash here is SHA-256 of them, which names the passage to a search that
  * has just cut the same words again and identifies nothing to anyone else.
  * A search fills the cache lazily for the passages it finds unembedded and
