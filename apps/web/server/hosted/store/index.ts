@@ -154,7 +154,7 @@ export interface HostedStore {
     children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
     /** One of the account's standing children by id, on the same terms; nothing where none stands. */
     child(userId: string, childId: string): HostedStoreEffect<ChildRecord | undefined>;
-    /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond; nothing while no child stands. */
+    /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
     childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
   };
   main: {

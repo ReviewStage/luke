@@ -27,12 +27,15 @@ import { InstantColumnSchema } from "./database.js";
 
 export { CHILD_STATUS };
 
-type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
+/** The kinds a delegation runs from: a child cannot open a child of its own, and a thread delegates nothing. */
+const CHILD_PARENT_KINDS = [CONVERSATION_KIND.MAIN, CONVERSATION_KIND.OBSERVED] as const;
+
+type ChildParentKind = (typeof CHILD_PARENT_KINDS)[number];
 
 export interface ChildRecord {
   readonly id: string;
   readonly parentConversationId: string;
-  readonly parentKind: ConversationKind;
+  readonly parentKind: ChildParentKind;
   /** The name the delegation gave the child, or none. */
   readonly label: string | null;
   /** The first words the parent handed the child, cut at the wire's excerpt bound; none before a line stands or where it holds no text. */
@@ -49,9 +52,10 @@ export interface ChildRecord {
 
 /**
  * Where the account's children stand as one instant: the latest of any
- * child's stamps, as Postgres renders it to the microsecond, and that child's
- * id to break a tie. Text rather than a `Date` on the turn cursor's own terms:
- * a millisecond cannot tell two stamps set in the same millisecond apart.
+ * child's stamps, the Clear that stamped one included, as Postgres renders it
+ * to the microsecond, and that child's id to break a tie. Text rather than a
+ * `Date` on the turn cursor's own terms: a millisecond cannot tell two stamps
+ * set in the same millisecond apart.
  */
 export interface ChildrenHeadPosition {
   readonly changedAt: string;
@@ -71,12 +75,7 @@ const TEXT_PART_TYPE: TextUIPart["type"] = "text";
 const ChildRowSchema = Schema.Struct({
   id: Schema.String,
   parentConversationId: Schema.String,
-  parentKind: Schema.Literals([
-    CONVERSATION_KIND.MAIN,
-    CONVERSATION_KIND.OBSERVED,
-    CONVERSATION_KIND.CHILD,
-    CONVERSATION_KIND.THREAD,
-  ]),
+  parentKind: Schema.Literals(CHILD_PARENT_KINDS),
   label: Schema.NullOr(Schema.String),
   task: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
@@ -108,12 +107,15 @@ const ChildRowSchema = Schema.Struct({
 type ChildRow = typeof ChildRowSchema.Type;
 
 /**
- * The rows every read here selects from: the account's standing children
- * under `conditions`, each joined to its parent (a child without one is a
- * row no delegation wrote, and is not a child) and to the latest of its
- * turns by the instant it was queued, the id breaking a tie. Both joins hold
- * to the child's own account, so a parent or a turn written under another
- * lends the child nothing, whatever id it names.
+ * The rows every read here selects from: the account's children under
+ * `conditions`, each joined to its parent (a child without one, or under a
+ * conversation of a kind no delegation runs from, is a row no delegation
+ * wrote, and is not a child) and to the latest of its turns by the instant it
+ * was queued, the id breaking a tie. Both joins hold to the child's own
+ * account, so a parent or a turn written under another lends the child
+ * nothing, whatever id it names. Whether a stamped child is among the rows is
+ * the caller's condition: the record reads list what stands, the head counts
+ * the stamping as the change it is.
  */
 const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[]) =>
   sql`
@@ -129,21 +131,27 @@ const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[])
     ) latest on true
     where ${sql.and([
       sql`child.kind = ${CONVERSATION_KIND.CHILD}`,
-      sql`child.deleted_at is null`,
+      sql.in("parent.kind", CHILD_PARENT_KINDS),
       ...conditions,
     ])}
   `;
 
+/** The rows the record reads list: the standing children, a Clear-stamped one gone with its parent. */
+const standingChild = (sql: SqlClient.SqlClient) => sql`child.deleted_at is null`;
+
 /**
  * The task's excerpt: the text parts of the child's first user line, in
- * their order, cut to the wire's bound. The cut is in characters where the
- * wire's is in UTF-16 units, so the read stays bounded and the route makes
- * the exact cut.
+ * their order, its leading whitespace dropped so it spends none of the bound,
+ * cut to the wire's bound. The cut is in characters where the wire's is in
+ * UTF-16 units, so the read stays bounded and the route makes the exact cut.
  */
 const taskExcerpt = (sql: SqlClient.SqlClient) =>
   sql`
     (
-      select left(string_agg(part.value ->> 'text', ' ' order by part.ordinality), ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS})
+      select left(
+        regexp_replace(string_agg(part.value ->> 'text', ' ' order by part.ordinality), '^\\s+', ''),
+        ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS}
+      )
       from (
         select parts
         from messages
@@ -175,7 +183,11 @@ const findChildren = SqlSchema.findAll({
   Result: ChildRowSchema,
   execute: (request) =>
     statement((sql) =>
-      selectChildren(sql, [sql`child.user_id = ${request.userId}`], request.limit),
+      selectChildren(
+        sql,
+        [sql`child.user_id = ${request.userId}`, standingChild(sql)],
+        request.limit,
+      ),
     ),
 });
 
@@ -186,20 +198,28 @@ const findChild = SqlSchema.findOneOption({
     statement((sql) =>
       selectChildren(
         sql,
-        [sql`child.user_id = ${request.userId}`, sql`child.id = ${request.childId}`],
+        [
+          sql`child.user_id = ${request.userId}`,
+          sql`child.id = ${request.childId}`,
+          standingChild(sql),
+        ],
         1,
       ),
     ),
 });
 
 /**
- * The instant a child last changed: opened, its completion delivered, or its
- * latest turn queued, started, or settled, whichever is latest. Each stamp
- * the child has not reached falls back to its opening, so the expression is
- * never null.
+ * The instant a child last changed: opened, stamped by a Clear, its
+ * completion delivered, or its latest turn queued, started, or settled,
+ * whichever is latest. Each stamp the child has not reached falls back to its
+ * opening, so the expression is never null. The stamping counts because it
+ * takes the child out of the list, which is a change the list reads
+ * differently under; the purge that removes the row thirty days on moves the
+ * head once more, to whatever then stands.
  */
 const CHILD_CHANGED_AT_SQL =
-  "greatest(child.created_at, coalesce(child.completion_delivered_at, child.created_at), " +
+  "greatest(child.created_at, coalesce(child.deleted_at, child.created_at), " +
+  "coalesce(child.completion_delivered_at, child.created_at), " +
   "coalesce(latest.queued_at, child.created_at), coalesce(latest.started_at, child.created_at), " +
   "coalesce(latest.settled_at, child.created_at))";
 
@@ -369,7 +389,7 @@ export function readChild(
   return Effect.map(findChild({ userId, childId }), Option.map(toChildRecord));
 }
 
-/** Where the account's children stand: the child that changed last and the instant it did; none while no child stands. */
+/** Where the account's children stand: the child that changed last and the instant it did, a stamped child counted; none while no child was ever opened. */
 export function childrenHead(
   userId: string,
 ): Effect.Effect<Option.Option<ChildrenHeadPosition>, ChildReadFailure, SqlClient.SqlClient> {

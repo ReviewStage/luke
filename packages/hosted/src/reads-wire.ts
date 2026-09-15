@@ -729,8 +729,10 @@ export const changesRequestSchema = EffectSchema.Struct({
  * Where every resource's read stands now: the cursor a device reading each
  * to its end would hold. A device compares each against the cursor it holds
  * and reads the resource whose head differs; `turns` is absent while the
- * account has no turn, `children` while it has no child, and
- * `rosterObservedAt` while no roster snapshot stands. `seen` says whether
+ * account has no turn, `children` while no child was ever opened (a Clear
+ * that stamped one moves the head rather than clearing it, since the list
+ * reads differently after it), and `rosterObservedAt` while no roster
+ * snapshot stands. `seen` says whether
  * the device row the request named is the account's, exactly as the
  * heartbeat says it; `false` tells the device to register again, and the
  * signal is answered either way.

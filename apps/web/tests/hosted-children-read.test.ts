@@ -233,7 +233,7 @@ test("a stamped child, another account's child, and a child under a parent of an
   const standing = await childOf(userId, main, { createdAt: at(1_000) });
   const stamped = await childOf(userId, main, { createdAt: at(2_000) });
   await setConversationDeletedAt(database.run, stamped, at(3_000));
-  // A child cannot open a child of its own, so a row under one is no delegation's and is left out.
+  // A child cannot open a child of its own, so a row under one is no delegation's and the store lists it to no one.
   await childOf(userId, standing, { createdAt: at(4_000) });
   const otherMain = await insertConversation(database.run, {
     userId: other,

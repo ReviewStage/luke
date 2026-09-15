@@ -233,11 +233,13 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     nextMessageSeq: 1,
     nextEventSeq: 2,
   });
+  // Opened on the test's own clock, so the Clear below stamps it at an instant after its opening.
   const child = await insertConversation(database.run, {
     userId,
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: main,
     nextMessageSeq: 9,
+    createdAt: new Date(NOW - 60_000),
   });
   assert.ok(main && observed && child);
   // A sub-millisecond instant, so the turn cursor's own precision (finer than a JS `Date`) is what the test compares.
@@ -356,6 +358,8 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     ]),
   );
   assert.equal(cleared.turns, undefined);
-  // The child went with its parent, so no child stands and the head is absent.
-  assert.equal(cleared.children, undefined);
+  // The child went with its parent: the list reads empty now, and the head moved to say so.
+  assert.ok(cleared.children !== undefined);
+  assert.notEqual(cleared.children, heads.children);
+  assert.equal(parse(childrenHeadSchema, cleared.children)?.id, child);
 });

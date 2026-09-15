@@ -585,19 +585,8 @@ function taskExcerpt(task: string | null): string | undefined {
   return trimmed.slice(0, CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS).trimEnd();
 }
 
-/**
- * One child as the wire carries it, or nothing for a child whose parent is
- * of a kind the wire does not name. A child cannot open a child of its own
- * and a thread delegates nothing, so such a row is one no delegation wrote;
- * it is left out of the answer rather than refusing the answer whole.
- */
-function readChild(child: ChildRecord): ChildRead | undefined {
-  if (
-    child.parentKind !== CONVERSATION_KIND.MAIN &&
-    child.parentKind !== CONVERSATION_KIND.OBSERVED
-  ) {
-    return undefined;
-  }
+/** One child as the wire carries it: the store's record with its instants as epoch milliseconds and each unset column left out. */
+function readChild(child: ChildRecord): ChildRead {
   const label = child.label?.trim();
   const task = taskExcerpt(child.task);
   return {
@@ -637,9 +626,7 @@ export const handleConversationChildren = /* @__PURE__ */ Effect.fn("handleConve
       userId,
       CHILDREN_READ_BOUNDS.MAX_CHILDREN,
     );
-    const answer: ChildrenAnswer = {
-      children: children.map(readChild).filter((child) => child !== undefined),
-    };
+    const answer: ChildrenAnswer = { children: children.map(readChild) };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );
