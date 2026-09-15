@@ -40,9 +40,11 @@ import { NOTEBOOK_MEMORY_TOOL, type NotebookMemoryToolName } from "./tool-names.
 
 /**
  * The two memory tools as one conversation is offered them, each answering
- * the record the model reads. No host builds one today: the SQLite index
- * that answered them is gone, so the provider is handed none and both reads
- * refuse by their own word.
+ * the record the model reads. The hosted brain builds one over the account's
+ * workspace rows (`apps/web/server/hosted/brain-host/notebook.ts`), ranking
+ * the passages this package cuts and scores in process; the desktop builds
+ * none, since the SQLite index that answered there is gone, so a provider
+ * handed none refuses both reads by their own word.
  */
 export interface NotebookMemoryAccess {
   search(ask: {

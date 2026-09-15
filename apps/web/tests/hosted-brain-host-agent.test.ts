@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { NOTEBOOK_MEMORY_TOOL } from "@sidecar/memory";
 import { test } from "vitest";
 import agent from "../eve/agent";
 import { ACTION_TOOL, BRAIN_TOOL, BRAIN_TURN_TRIGGER, brainToolCatalog } from "../server/core";
@@ -10,7 +11,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
  * What the eve agent is declared as, held to the trust decisions the host
  * carries: eve's own default tools are off, a session has no clock of eve's,
  * follow-ups queue, and the hosted tool policy withholds what the service
- * cannot perform while keeping the notebook's two writes.
+ * cannot perform while keeping the notebook's two reads and two writes.
  */
 
 test("the agent runs none of eve's default tools and sessions have no lifetime of eve's", () => {
@@ -31,7 +32,7 @@ test("follow-ups queue behind a turn under way, and the account bearer is checke
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the hosted policy withholds the machine's tools and the notebook's reads, keeps its writes, and offers announce only to an observation", () => {
+test("the hosted policy withholds the machine's tools, keeps the notebook's reads and writes, and offers announce only to an observation", () => {
   const ask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ASK);
   const observation = hostedTurnPolicy(BRAIN_TURN_TRIGGER.ROSTER);
   const askNames = ask.allowed.map((tool) => tool.schema.name);
@@ -45,8 +46,6 @@ test("the hosted policy withholds the machine's tools and the notebook's reads, 
     ACTION_TOOL.RUN_UPDATE_ACTION,
     BRAIN_TOOL.SESSIONS_SPAWN,
     BRAIN_TOOL.LOAD_SKILL,
-    "memory_search",
-    "memory_get",
   ]) {
     assert.equal(askNames.includes(denied), false);
     assert.equal(observationNames.includes(denied), false);
@@ -59,6 +58,8 @@ test("the hosted policy withholds the machine's tools and the notebook's reads, 
     BRAIN_TOOL.WRITE_WORKSPACE_FILE,
     BRAIN_TOOL.APPEND_DAILY_NOTE,
     BRAIN_TOOL.LIST_DAILY_NOTES,
+    NOTEBOOK_MEMORY_TOOL.SEARCH,
+    NOTEBOOK_MEMORY_TOOL.GET,
   ]) {
     assert.equal(askNames.includes(kept), true);
     assert.equal(observationNames.includes(kept), true);

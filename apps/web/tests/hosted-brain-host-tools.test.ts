@@ -1,4 +1,9 @@
 import assert from "node:assert/strict";
+import {
+  maximumMemorySearchResults,
+  NOTEBOOK_MEMORY_TOOL,
+  type NotebookMemoryAccess,
+} from "@sidecar/memory";
 import { Effect } from "effect";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
@@ -126,6 +131,7 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
       whole: () =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
+    notebook: unsearchedNotebook,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -137,6 +143,12 @@ function fakes(options: { readonly apiKey?: string } = { apiKey: "conductor-key"
   };
   return { executed, carrier, seams };
 }
+
+/** A notebook these tests never search: reaching it past the provider is the failure, named. */
+const unsearchedNotebook: NotebookMemoryAccess = {
+  search: () => Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not searched" }),
+  get: () => Effect.succeed({ status: ACTION_RESULT_STATUS.REJECTED, reason: "not read" }),
+};
 
 const ASK: HostedTurnStanding = { trigger: BRAIN_TURN_TRIGGER.ASK, turnId: "t-1", runId: "t-1" };
 const OBSERVATION: HostedTurnStanding = {
@@ -249,6 +261,7 @@ test("a created workspace keeps the created session identity in its action envel
       whole: () =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
+    notebook: unsearchedNotebook,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -321,6 +334,7 @@ test("the carrier hands the stored agent pairing to a creation and a spawn, and 
       whole: () =>
         Effect.succeed({ status: ACTION_RESULT_STATUS.ACCEPTED, transcript: "Developer: hi" }),
     },
+    notebook: unsearchedNotebook,
     workspace: {
       read: () => Effect.succeed({ ok: false, reason: "not read in these tests" }),
       write: () => Effect.succeed({ ok: false, reason: "not written in these tests" }),
@@ -364,6 +378,43 @@ test("read_transcript answers for a session the roster holds and refuses one it 
     provider_session_id: OTHER_UUID,
   });
   assert.equal(unheld.status, ACTION_RESULT_STATUS.REJECTED);
+});
+
+test("memory_search and memory_get dispatch through the memory provider to the notebook access, the arguments trimmed and bounded on the way", async () => {
+  const asks: WireRecord[] = [];
+  const notebook: NotebookMemoryAccess = {
+    search: (ask) =>
+      Effect.sync(() => {
+        asks.push({ query: ask.query, max_results: ask.maxResults ?? null });
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, mode: "keyword", results: [] };
+      }),
+    get: (ask) =>
+      Effect.sync(() => {
+        asks.push({ path: ask.path, from: ask.from ?? null, lines: ask.lines ?? null });
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, path: ask.path, text: "" };
+      }),
+  };
+  const seams: HostedToolSeams = { ...fakes().seams, notebook };
+  const searched = await call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, {
+    query: "  notch   decision ",
+    max_results: 500,
+  });
+  assert.equal(searched.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.equal(searched.mode, "keyword");
+  const read = await call(seams, OBSERVATION, NOTEBOOK_MEMORY_TOOL.GET, {
+    path: "MEMORY.md",
+    from: 3,
+    lines: 2,
+  });
+  assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
+  assert.deepEqual(asks, [
+    { query: "notch decision", max_results: maximumMemorySearchResults },
+    { path: "MEMORY.md", from: 3, lines: 2 },
+  ]);
+
+  const empty = await call(seams, ASK, NOTEBOOK_MEMORY_TOOL.SEARCH, { query: "   " });
+  assert.equal(empty.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.equal(asks.length, 2, "an empty query never reaches the notebook");
 });
 
 test("announce answers accepted for words and refuses an empty briefing; it is offered only on an observation turn", async () => {

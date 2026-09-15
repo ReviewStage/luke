@@ -139,12 +139,19 @@ request, and nothing of it stored or logged by our service beyond the row
 itself. It is never sent to a coding-agent provider or a tracker, and it is
 never used to decide anything on your behalf.
 
-**Luke's notebook index.** Luke keeps no search index over his workspace
-files any more. An earlier version kept one in the database above — `MEMORY.md`,
-`USER.md`, and the notes under `memory/`, cut into passages with a numeric
-embedding of each made by OpenAI's embeddings model — and nothing on your Mac
-makes an embedding now. Luke's own conversations were never embedded or
-indexed.
+**Luke's notebook index.** Luke keeps no standing search index over his
+workspace files. When Luke, thinking on our service, searches his notebook
+(his `memory_search` tool), the service reads your workspace rows there —
+`MEMORY.md`, `USER.md`, and the notes under `memory/` — cuts them into
+passages, and asks OpenAI's embeddings model, under Luke's own key, for a
+numeric embedding of each passage it has not embedded before and of the search
+itself; it ranks the passages in that same request and keeps only a hash of
+each passage and its embedding, never the passage's words, dropping the
+embeddings of passages your files no longer hold. A deployment without that
+key searches by keywords alone, and Luke says so when it did. His `memory_get`
+tool reads an excerpt of one of those same files by line range and nothing
+outside them. Nothing on your Mac makes an embedding, and Luke's own
+conversations are never embedded or indexed.
 
 **How Luke keeps his notebook.** Nothing on your Mac writes Luke's notebook:
 no housekeeping turn runs here, no nightly job reads your conversations to

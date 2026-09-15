@@ -82,6 +82,7 @@ const DECLARED_TABLES = [
   "voice_session_usage",
   "voice_sessions",
   "voice_transcript_segments",
+  "workspace_embedding",
   "workspace_file",
 ].sort();
 

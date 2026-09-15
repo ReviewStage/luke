@@ -69,6 +69,7 @@ const seams: BrainHostSeams = {
       database.run(conversationOwnedBy(userId, conversationId)),
   },
   openAi: () => undefined,
+  embedder: () => undefined,
   deploymentSecret: () => undefined,
   scriptedModel: () => true,
   spend: unreached("spend"),

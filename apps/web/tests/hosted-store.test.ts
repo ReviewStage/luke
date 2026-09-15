@@ -248,6 +248,9 @@ test("deleting the user row cascades through every notebook and roster table and
   for (const id of [userId, other]) {
     await database.run(database.store.workspace.write(id, "USER.md", "# user", NOW));
     await database.run(
+      database.store.embeddings.write(id, "embed-test", [{ hash: "h-1", vector: [1] }], NOW),
+    );
+    await database.run(
       database.store.roster.advance(id, { body: "{}", observedAt: NOW }, undefined),
     );
     await database.run(database.store.roster.recordPass(id, { attemptedAt: NOW }));
@@ -265,6 +268,7 @@ test("deleting the user row cascades through every notebook and roster table and
   // roster_diff stands unwritten and unread until its drop lands; nothing seeds it, so nothing here can prove it.
   for (const table of [
     "workspace_file",
+    "workspace_embedding",
     "roster_snapshot",
     "roster_consumed",
     "observation_pass",

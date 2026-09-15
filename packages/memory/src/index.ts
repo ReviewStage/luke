@@ -23,6 +23,7 @@ export {
   SILENT_REPLY_TOKEN,
   shouldRunMemoryFlush,
 } from "./flush.js";
+export { cutPassages, hashText, type MemoryPassage, PASSAGE_BOUNDS } from "./passages.js";
 export {
   maximumMemoryQueryLength,
   maximumMemorySearchResults,
@@ -34,4 +35,12 @@ export {
   notebookMemoryToolShapes,
   primedNotesText,
 } from "./provider.js";
+export {
+  MEMORY_RANKING,
+  type PassageCandidate,
+  type RankedPassage,
+  RETRIEVAL_MODE,
+  type RetrievalMode,
+  rankPassages,
+} from "./ranking.js";
 export { NOTEBOOK_MEMORY_TOOL, type NotebookMemoryToolName } from "./tool-names.js";
