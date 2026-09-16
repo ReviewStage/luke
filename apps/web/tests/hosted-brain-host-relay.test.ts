@@ -28,6 +28,7 @@ import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
 import {
   memoryRelayState,
   type RelayStanding,
+  redactCredentials,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -640,11 +641,11 @@ it.effect(
               turnId: "turn_0",
               sequence: 0,
               code: "model_error",
-              message: "upstream failed: key sk-fixture refused",
+              message: "upstream failed: key sk-fixture0001 refused",
               details: {
                 name: "AI_APICallError",
                 statusCode: 429,
-                apiErrorMessage: "key sk-fixture refused",
+                apiErrorMessage: "key sk-fixture0001 refused",
                 detail: "Error: at fixture.ts:1",
               },
             },
@@ -655,10 +656,13 @@ it.effect(
       const failedRows = await rows(failed);
       assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
       assert.equal(failedRows.turnRows[0]?.failure, "model");
-      // The row keeps eve's code and the fixed words of its details, and none of the provider's or the stack's own.
-      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error AI_APICallError 429");
+      // The row keeps eve's code, the details' key names, their fixed words, and the message with its key redacted; no other value of the details.
+      assert.equal(
+        failedRows.turnRows[0]?.failureDetail,
+        "model_error [apiErrorMessage,detail,name,statusCode] AI_APICallError 429 upstream failed: key [redacted] refused",
+      );
 
-      // A name not shaped like an error's class name is an unrecognized error's own, and no word of those details is kept.
+      // A name not shaped like an error's class name is an unrecognized error's own, and no value of those details is kept.
       const unshaped = await conversation();
       const unshapedStanding = standingFor(unshaped, BRAIN_HOST_TURN.TYPED);
       await play(events.slice(0, requested + 1), unshapedStanding);
@@ -677,7 +681,10 @@ it.effect(
           unshapedStanding,
         ),
       );
-      assert.equal((await rows(unshaped)).turnRows[0]?.failureDetail, "model_error");
+      assert.equal(
+        (await rows(unshaped)).turnRows[0]?.failureDetail,
+        "model_error [name,statusCode] refused",
+      );
       const failedJournal = failedRows.messageRows.find(
         (row) => row.role === MESSAGE_ROLE.ASSISTANT,
       );
@@ -1188,3 +1195,31 @@ it.effect(
       }
     }),
 );
+
+it("a failure message keeps its words and loses every run shaped like a credential", () => {
+  assert.equal(
+    redactCredentials("Rate limit reached for gpt-5 in organization org-fixture on tokens per min"),
+    "Rate limit reached for gpt-5 in organization org-fixture on tokens per min",
+  );
+  assert.equal(redactCredentials("key sk-fixture0001 refused"), "key [redacted] refused");
+  assert.equal(
+    redactCredentials("Authorization: Bearer abc.def refused"),
+    "Authorization: [redacted] refused",
+  );
+  assert.equal(
+    redactCredentials(`token eyJ${"a".repeat(16)}.payload expired`),
+    "token [redacted] expired",
+  );
+  assert.equal(
+    redactCredentials(`digest ${"0f".repeat(16)} mismatched`),
+    "digest [redacted] mismatched",
+  );
+  assert.equal(
+    redactCredentials(`blob ${"Ab+/".repeat(8)}= mismatched`),
+    "blob [redacted] mismatched",
+  );
+  assert.equal(
+    redactCredentials("url ?api_key=fixture&token=fixture secret=fixture"),
+    "url ?[redacted] [redacted]",
+  );
+});
