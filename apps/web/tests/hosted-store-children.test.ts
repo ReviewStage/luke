@@ -206,7 +206,7 @@ test("a stamped child, another account's child, a row of another kind, and a chi
 
 test("a child opens under a main or an observed parent, and under no thread or child, however the parent stands", async () => {
   const userId = await database.createUser();
-  const opened = async (parentConversationId: string) => {
+  const opened = async (parentConversationId: string, now: Date) => {
     const spawnedByMessageId = await insertMessage(database.run, {
       userId,
       conversationId: parentConversationId,
@@ -222,15 +222,15 @@ test("a child opens under a main or an observed parent, and under no thread or c
         spawnedByMessageId,
         label: null,
         expectsCompletion: true,
-        now: at(1),
+        now,
       }),
     );
   };
 
   const main = await parentOf(userId);
   const observed = await parentOf(userId, CONVERSATION_KIND.OBSERVED);
-  const underMain = await opened(main);
-  const underObserved = await opened(observed);
+  const underMain = await opened(main, at(1));
+  const underObserved = await opened(observed, at(2));
   assert.ok(underMain && underObserved);
   assert.equal((await child(userId, underMain))?.parentKind, CONVERSATION_KIND.MAIN);
   assert.equal((await child(userId, underObserved))?.parentKind, CONVERSATION_KIND.OBSERVED);
@@ -242,8 +242,8 @@ test("a child opens under a main or an observed parent, and under no thread or c
     parentConversationId: main,
     createdAt: at(0),
   });
-  assert.equal(await opened(thread), undefined);
-  assert.equal(await opened(underMain), undefined);
+  assert.equal(await opened(thread, at(3)), undefined);
+  assert.equal(await opened(underMain, at(4)), undefined);
   assert.deepEqual(ids(await database.run(database.store.directory.children(userId, 10))), [
     underObserved,
     underMain,
