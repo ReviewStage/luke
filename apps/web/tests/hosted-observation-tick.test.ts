@@ -22,7 +22,7 @@ import { noDatabase, runWithoutDatabase } from "./support/no-database";
 const CRON_SECRET = "cron-secret-1";
 const ENCRYPTION_SECRET = "a".repeat(64);
 const TICK_TIME = Date.parse("2026-08-12T02:45:00.000Z");
-const SWEPT: SpeechSweepOutcome = { held: 1, released: 0, expired: 3, turns: 0 };
+const SWEPT: SpeechSweepOutcome = { expired: 3 };
 const PUSHED: SpeechPushOutcome = {
   pushed: 1,
   undelivered: 0,
@@ -40,7 +40,6 @@ const completedFor = (accounts: number): ChildCompletionSweepOutcome => ({
 /** What one account's opening answers unless a test says otherwise: nothing pending, nothing opened. */
 const NOTHING_OPENED: TurnOpeningOutcome = {
   observation: 0,
-  holdRelease: 0,
   failed: 0,
   reseeded: 0,
 };
@@ -289,15 +288,15 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
       speech: SWEPT,
       push: PUSHED,
       children: completedFor(1),
-      turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+      turns: { observation: 0, failed: 1, reseeded: 0 },
     });
   }),
 );
 
 test("each account's opening runs after its own pass, inside the same share of the tick, and its counts are summed; a pass that throws is still followed by its opening", async () => {
   const openings = new Map<string, TurnOpeningOutcome>([
-    ["user-a", { observation: 2, holdRelease: 0, failed: 0, reseeded: 0 }],
-    ["user-b", { observation: 0, holdRelease: 1, failed: 1, reseeded: 1 }],
+    ["user-a", { observation: 2, failed: 0, reseeded: 0 }],
+    ["user-b", { observation: 0, failed: 1, reseeded: 1 }],
   ]);
   const { options, recorded } = tickOptions(
     {},
@@ -328,7 +327,7 @@ test("each account's opening runs after its own pass, inside the same share of t
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
-    turns: { observation: 2, holdRelease: 1, failed: 1, reseeded: 1 },
+    turns: { observation: 2, failed: 1, reseeded: 1 },
   });
   assert.deepEqual(recorded.ran, [
     "observe:user-a",
@@ -348,7 +347,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     (userId) =>
       Effect.sync(() => {
         if (userId === "user-a") throw new Error("eve went away");
-        return { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 };
+        return { observation: 1, failed: 0, reseeded: 0 };
       }),
   );
 
@@ -365,7 +364,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
-    turns: { observation: 1, holdRelease: 0, failed: 1, reseeded: 0 },
+    turns: { observation: 1, failed: 1, reseeded: 0 },
   });
 });
 

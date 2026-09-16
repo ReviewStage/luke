@@ -345,8 +345,6 @@ export interface StoreWriter {
   consume(target: ConversationTarget, event: BrainRunEvent): Write<StoreWriteResult>;
   /** Writes a turn as queued, ahead of the stream telling its start; answers the turn's id. */
   enqueueTurn(target: ConversationTarget, enqueue: TurnEnqueue): Write<TurnEnqueueResult>;
-  /** Removes a queued turn the opener has handed to eve; a row eve has started, or one a message names, is left standing. */
-  dequeueTurn(target: ConversationTarget, turnId: string): Write<StoreWriteResult>;
   /** Stamps the instant a Stop was asked on a turn the conversation holds, once. */
   requestTurnCancel(target: ConversationTarget, cancel: TurnCancelRequest): Write<TurnCancelResult>;
   /** Appends one event about a message, numbered by the conversation's event sequence. */
@@ -408,7 +406,6 @@ const TURN_ORIGIN_OF_BRAIN_ORIGIN = {
   [BRAIN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
   [BRAIN_TURN_ORIGIN.OBSERVATION]: TURN_ORIGIN.ROSTER_DIFF,
-  [BRAIN_TURN_ORIGIN.HOLD_RELEASE]: TURN_ORIGIN.HOLD_RELEASE,
   [BRAIN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
   [BRAIN_TURN_ORIGIN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
 } as const satisfies Record<BrainTurnOrigin, TurnOrigin>;
@@ -1544,34 +1541,6 @@ const enqueueTurn = /* @__PURE__ */ Effect.fn("enqueueTurn")(function* (
   return { ok: true, turnId, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
 
-/**
- * A queued row is the opener's inbox, never the run's record: the turn eve
- * runs for it is recorded by the relay under eve's own identity, with the
- * origin the message named, so once eve has taken the message the queued
- * row has done its work and goes. A row eve has since started is eve's turn
- * and is not the opener's to remove, and a row a message names is a record
- * whatever its status; both are left as they stand.
- */
-const findMessageNamingTurn = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: RowIdSchema,
-  execute: (turnId) =>
-    statement((sql) => sql`select id from messages where turn_id = ${turnId} limit 1`),
-});
-
-const deleteQueuedTurn = SqlSchema.void({
-  Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
-  execute: (request) =>
-    statement(
-      (sql) => sql`
-        delete from turns
-        where id = ${request.turnId}
-          and conversation_id = ${request.conversationId}
-          and status = ${TURN_STATUS.QUEUED}
-      `,
-    ),
-});
-
 const stampTurnCancel = SqlSchema.findAll({
   Request: Schema.Struct({
     turnId: Schema.String,
@@ -1589,22 +1558,6 @@ const stampTurnCancel = SqlSchema.findAll({
         returning id
       `,
     ),
-});
-
-const dequeueTurn = /* @__PURE__ */ Effect.fn("dequeueTurn")(function* (
-  context: WriterContext,
-  turnId: string,
-): Effect.fn.Return<StoreWriteResult, WriteFailure, SqlClient.SqlClient> {
-  const standing = yield* turnRow(context, turnId);
-  if (Option.isNone(standing)) return { ok: false, refusal: STORE_WRITE_REFUSAL.NO_TURN };
-  if (standing.value.status !== TURN_STATUS.QUEUED) {
-    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-  }
-  if (Option.isSome(yield* findMessageNamingTurn(turnId))) {
-    return { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
-  }
-  yield* deleteQueuedTurn({ turnId, conversationId: context.target.conversationId });
-  return { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
 
 /**
@@ -2152,8 +2105,6 @@ export function storeWriter({
     consume: (target, event) => underConversation(target, (context) => consume(context, event)),
     enqueueTurn: (target, enqueue) =>
       underConversation(target, (context) => enqueueTurn(context, enqueue)),
-    dequeueTurn: (target, turnId) =>
-      underConversation(target, (context) => dequeueTurn(context, turnId)),
     requestTurnCancel: (target, cancel) =>
       underConversation(target, (context) => requestTurnCancel(context, cancel)),
     recordEvent: (target, event) =>

@@ -9,7 +9,6 @@ export const BRAIN_TURN_TRIGGER = {
   WAKE: "wake",
   ROSTER: "roster",
   ASK: "ask",
-  HOLD_RELEASED: "hold-released",
   /** A child's own run: the delegated task, whose final text is the result its requester is handed. */
   CHILD_TASK: "child-task",
   /** A requester's turn opened by a child's completion, when no run of its own was there to steer. */

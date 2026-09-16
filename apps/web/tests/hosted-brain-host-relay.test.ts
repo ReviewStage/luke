@@ -1108,27 +1108,6 @@ it.effect(
 );
 
 it.effect(
-  "a hold-release turn lands under the hold_release origin, its received message the brain's own note of a hold released",
-  () =>
-    Effect.promise(async () => {
-      const target = await conversation(CONVERSATION_KIND.OBSERVED);
-      const standing = standingFor(target, BRAIN_HOST_TURN.HOLD_RELEASE);
-      await play(typedTurn("turn_0", 0), standing);
-
-      const { turnRows, messageRows } = await rows(target);
-      assert.equal(turnRows.length, 1);
-      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.HOLD_RELEASE);
-      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
-      const words = messageRows.find((row) => row.role === MESSAGE_ROLE.USER);
-      assert.ok(words);
-      assert.deepEqual(words.metadata, {
-        author: MESSAGE_AUTHOR.BRAIN,
-        source: OBSERVATION_SOURCE.HOLD_RELEASE,
-      });
-    }),
-);
-
-it.effect(
   "a sealed turn of a child conversation hands the child to the completion seam once; a turn of any other kind of conversation hands nothing",
   () =>
     Effect.promise(async () => {

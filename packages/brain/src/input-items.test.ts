@@ -13,7 +13,6 @@ import {
   CHILD_COMPLETION_STATUS,
   childCompletionInputText,
   childTaskInputText,
-  holdReleasedInputText,
   wakeInputText,
 } from "./input-items.js";
 import { maximumChildTaskLength } from "./tools/names.js";
@@ -65,28 +64,6 @@ test("a wake item carries each event's observed fields and transcript delta as d
           updated_at: new Date(NOW - 1_000).toISOString(),
         },
         transcript_delta: { status: "accepted", truncated: false, text: "assistant: done" },
-      },
-    ],
-  });
-});
-
-test("a hold-released item lists the held briefings", () => {
-  const body = itemBody(
-    holdReleasedInputText(
-      [
-        {
-          briefing: "Checkout agent wants a decision.",
-          decidedAt: NOW - 60_000,
-        },
-      ],
-      NOW,
-    ),
-  );
-  assert.deepEqual(body, {
-    held_briefings: [
-      {
-        briefing: "Checkout agent wants a decision.",
-        decided_at: new Date(NOW - 60_000).toISOString(),
       },
     ],
   });

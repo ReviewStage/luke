@@ -5,7 +5,6 @@ export {
   type ChildCompletionStatus,
   childCompletionInputText,
   childTaskInputText,
-  holdReleasedInputText,
   standingContextText,
   wakeInputText,
 } from "./input-items.js";
@@ -94,7 +93,6 @@ export {
 } from "./ui-messages.js";
 export {
   BRAIN_WAKE_KIND,
-  type BrainDelivery,
   type BrainTranscriptDelta,
   type BrainWakeEvent,
 } from "./wake-events.js";

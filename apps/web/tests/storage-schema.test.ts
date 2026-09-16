@@ -500,17 +500,17 @@ test("an event keeps its kind, device, and payload as written", async () => {
   const conversationId = await insertTestConversation(userId);
   const messageId = await insertTestMessage(userId, conversationId);
   const id = await insertTestEvent(userId, conversationId, messageId, {
-    kind: CONVERSATION_EVENT_KIND.SPEECH_HELD,
+    kind: CONVERSATION_EVENT_KIND.SPEECH_EXPIRED,
     deviceId: "mac-1",
-    payload: { until: 1_700_000_000_000 },
+    payload: { reason: "due" },
   });
 
   const events = await readEventsByMessage(database.run, messageId);
   const row = events.find((event) => event.id === id);
   assert.ok(row);
-  assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_HELD);
+  assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED);
   assert.equal(row.device_id, "mac-1");
-  assert.deepEqual(row.payload, { until: 1_700_000_000_000 });
+  assert.deepEqual(row.payload, { reason: "due" });
   assert.equal(Number(row.seq), 1);
   assert.ok(instantColumn(row.created_at) instanceof Date);
 });

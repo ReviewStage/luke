@@ -26,7 +26,6 @@ public enum MessageChannel: String, Sendable {
 public enum ObservationSource: String, Sendable {
     case hook
     case rosterLook = "roster_look"
-    case holdRelease = "hold_release"
     case child
     case childCompletion = "child_completion"
     case recalledNotes = "recalled_notes"

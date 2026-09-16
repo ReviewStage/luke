@@ -22,7 +22,6 @@
         "typed",
         "spoken",
         "roster_diff",
-        "hold_release",
         "child",
         "child_completion"
       ]

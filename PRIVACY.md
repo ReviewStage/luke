@@ -192,7 +192,7 @@ result, something learned — to the dated note for the day, `memory/YYYY-MM-DD.
 in the same workspace rows, through the same append his turns use; it can
 write nothing else, and appends rather than rewrites. It runs only while you
 are asking Luke something yourself, typed or spoken, never in a turn the
-scheduled observation or a hold's release opened; at most once each time the
+scheduled observation opened; at most once each time the
 memory folds; on the same model and under the same daily allowance as his
 turns; and within a minute, or not at all. Nothing it reads or says appears
 in the conversation, on any device, or in a notification: what the
@@ -235,7 +235,7 @@ result, the briefing he offered you among them; the words an observation
 turn opened with, which for a Conductor session include the messages that
 chat gained since he last looked; the turn's model, token counts, and the
 ids of OpenAI's responses; and the events about each message — that a briefing was offered,
-claimed, spoken, pushed, held, or expired, and each rating you gave or took
+claimed, spoken, pushed, or expired, and each rating you gave or took
 back — naming the device that took part. When you speak with Luke through
 your account, what you said is kept as your line and what his voice said as
 his — an answer he gave without running a turn, what he said before and after

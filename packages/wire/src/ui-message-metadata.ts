@@ -60,8 +60,6 @@ export const OBSERVATION_SOURCE = {
   HOOK: "hook",
   /** The roster look on the observation pass. */
   ROSTER_LOOK: "roster_look",
-  /** Briefings held through a meeting or a pause, handed back for one re-decision. */
-  HOLD_RELEASE: "hold_release",
   /** A child's own turn: the task its requester delegated, as the child reads it. */
   CHILD: "child",
   /** A requester's turn opened by a child's completion, with the child's result as its words. */

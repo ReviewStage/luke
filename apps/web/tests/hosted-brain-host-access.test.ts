@@ -419,8 +419,6 @@ test("the deployment is a principal of its own type acting for the named account
     scheduled("user-a", BRAIN_HOST_TURN.OBSERVATION, `/eve/v1/session/${SESSION_A}`),
   );
   assert.equal(actedForAccount(followUp ?? null), "user-a");
-  const release = await actor(scheduled("user-a", BRAIN_HOST_TURN.HOLD_RELEASE));
-  assert.equal(release?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.HOLD_RELEASE);
   // A child's task and a child's completion are the deployment's to open, for the named account, as an observation is.
   for (const turn of [BRAIN_HOST_TURN.CHILD_TASK, BRAIN_HOST_TURN.CHILD_COMPLETION]) {
     const child = await actor(scheduled("user-a", turn));
@@ -480,7 +478,6 @@ test("the spoken row is the one the voice function's asks admit: a spoken turn u
     [
       BRAIN_HOST_TURN.SPOKEN,
       BRAIN_HOST_TURN.OBSERVATION,
-      BRAIN_HOST_TURN.HOLD_RELEASE,
       BRAIN_HOST_TURN.CHILD_TASK,
       BRAIN_HOST_TURN.CHILD_COMPLETION,
     ],

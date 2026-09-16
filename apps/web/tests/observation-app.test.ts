@@ -131,7 +131,7 @@ const EXCHANGES: readonly Exchange[] = [
           forgetIneligible: () => Effect.void,
           purgeCleared: () => Effect.succeed(0),
           sweepAbandonedTurns: () => Effect.succeed(0),
-          sweepSpeech: () => Effect.succeed({ held: 0, released: 0, expired: 0, turns: 0 }),
+          sweepSpeech: () => Effect.succeed({ expired: 0 }),
           pushSpeech: () =>
             Effect.succeed({
               pushed: 0,
@@ -143,8 +143,7 @@ const EXCHANGES: readonly Exchange[] = [
           sweepChildCompletions: () =>
             Effect.succeed({ delivered: 0, undelivered: 0, withheld: 0 }),
           observe: () => Effect.succeed({ complete: false, changed: false }),
-          openTurns: () =>
-            Effect.succeed({ observation: 0, holdRelease: 0, failed: 0, reseeded: 0 }),
+          openTurns: () => Effect.succeed({ observation: 0, failed: 0, reseeded: 0 }),
         }),
       );
     },

@@ -1,8 +1,7 @@
 /**
  * The low-volume facts recorded about a message beside it, each an event row
  * of its own: how a briefing's delivery went, from the offer `announce` wrote
- * through a device's claim to the spoken, pushed, or expired end, held while
- * a device reports quiet; and a rating the developer gave a message. The
+ * through a device's claim to the spoken, pushed, or expired end; and a rating the developer gave a message. The
  * speech kinds are read together — the latest of them on an announcement is
  * what says whether it was ever heard — so they are told from the rating.
  */
@@ -15,7 +14,6 @@ export const CONVERSATION_EVENT_KIND = {
   SPEECH_SPOKEN: "speech.spoken",
   SPEECH_PUSHED: "speech.pushed",
   SPEECH_EXPIRED: "speech.expired",
-  SPEECH_HELD: "speech.held",
   RATING: "rating",
 } as const;
 
@@ -53,19 +51,6 @@ export type SpeechOfferedEventPayload = EffectSchema.Schema.Type<
 >;
 
 /**
- * What `speech.held` carries: the instant, in epoch milliseconds, the quiet
- * a device reported ends. While the hold stands nothing is pushed and
- * nothing is expired; when it lifts, the offer is not spoken stale but
- * re-decided, so the instant here is read only to know when the hold is
- * over, never to schedule speech.
- */
-export const SPEECH_HELD_EVENT_PAYLOAD = EffectSchema.Struct({
-  quietUntil: nonNegativeInteger,
-});
-
-export type SpeechHeldEventPayload = EffectSchema.Schema.Type<typeof SPEECH_HELD_EVENT_PAYLOAD>;
-
-/**
  * What `speech.spoken` carries where the voice said it: the voice session,
  * and where on that session's own clock the speech began. The device that
  * spoke is the event row's own column.
@@ -81,8 +66,6 @@ export type SpeechSpokenEventPayload = EffectSchema.Schema.Type<typeof SPEECH_SP
 export const SPEECH_EXPIRY_REASON = {
   /** The offer's own expiry passed with nobody having said it. */
   DUE: "due",
-  /** A hold over it lifted; the brain re-decides against the roster as it then is rather than speaking it stale. */
-  HOLD_RELEASED: "hold_released",
 } as const;
 
 const SPEECH_EXPIRED_EVENT_PAYLOAD = EffectSchema.Struct({

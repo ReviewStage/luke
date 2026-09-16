@@ -38,12 +38,13 @@ import {
  * means the Mac is awake and Luke is not being heard there, so they are
  * pushed anyway; a claim means a device is saying them, and the offer is never
  * pushed, whatever became of the claim; and a quiet instant standing on any
- * device — a meeting its calendar hold observes — means nothing is pushed
- * and nothing expires until it lifts. The quiet is read the way the sweep
- * reads it, through the same query, and an account with quiet standing is
- * left out of the read of open offers entirely, so a long meeting's held
- * offers, the oldest open rows, cannot fill the bound and starve every other
- * account's push.
+ * device — a meeting its calendar hold observes, or the pause switch
+ * restated as an instant — means nothing is pushed while it stands; the
+ * offer expires on its own instant meanwhile, since the quiet mutes and
+ * saves nothing. The quiet is read the way the briefing look reads it,
+ * through the same query, and an account with quiet standing is left out of
+ * the read of open offers entirely, so a long meeting's offers, the oldest
+ * open rows, cannot fill the bound and starve every other account's push.
  *
  * The mark precedes the send. `markSpeechPushed` settles the offer under the
  * conversation's lock, refusing where a claim or another settlement landed
@@ -113,8 +114,6 @@ export const SPEECH_PUSH_DECISION = {
   WAIT: "wait",
   /** A device holds the claim; the offer is theirs and never pushed. */
   CLAIMED: "claimed",
-  /** A hold stands on the offer; nothing is pushed and nothing expires until the sweep releases it. */
-  HELD: "held",
   /** The offer's own instant has passed; the sweep's to end, never pushed stale. */
   DUE: "due",
 } as const;
@@ -123,8 +122,8 @@ type SpeechPushDecision = (typeof SPEECH_PUSH_DECISION)[keyof typeof SPEECH_PUSH
 
 /**
  * The rule, as a function of what was read: the offer's standing, and
- * whether any speaking device of its account reports itself active now. A held offer
- * is left to the sweep; a claimed one to its claimant; one past its instant
+ * whether any speaking device of its account reports itself active now. A
+ * claimed offer is left to its claimant; one past its instant
  * to the sweep; and an offered one is pushed unless a device is active and
  * the grace since the offer has not run out.
  */
@@ -133,7 +132,6 @@ export function speechPushDecision(
   active: boolean,
   now: number,
 ): SpeechPushDecision {
-  if (offer.state === SPEECH_STATE.HELD) return SPEECH_PUSH_DECISION.HELD;
   if (offer.state === SPEECH_STATE.CLAIMED) return SPEECH_PUSH_DECISION.CLAIMED;
   if (offer.expiresAt <= now) return SPEECH_PUSH_DECISION.DUE;
   if (active && now - offer.offeredAt < SPEECH_PUSH.GRACE_MS) return SPEECH_PUSH_DECISION.WAIT;

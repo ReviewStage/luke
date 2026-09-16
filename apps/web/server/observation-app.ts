@@ -56,7 +56,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 const CLOUD_PROVIDER_IDS = Object.values(CLOUD_AGENT_PROVIDER_ID);
 
-const NOTHING_SWEPT: SpeechSweepOutcome = { held: 0, released: 0, expired: 0, turns: 0 };
+const NOTHING_SWEPT: SpeechSweepOutcome = { expired: 0 };
 
 const NOTHING_PUSHED: SpeechPushOutcome = {
   pushed: 0,
@@ -338,7 +338,6 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
         return yield* openAccountTurns(
           {
             store,
-            writer: yield* storeWriter({ tools: CATALOG_TOOL_SET }),
             eve: eveSessions<ScheduledTurn>({
               origin: eveOrigin,
               caller: { kind: EVE_CALLER.DEPLOYMENT, secret: cronSecret, account: userId },

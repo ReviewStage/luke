@@ -48,9 +48,9 @@ import { observedSideband } from "./live-sideband.js";
  * source handed in is what creates and attaches it, or the sessions route
  * hands in a session it already created for the device and the exchange
  * adopts it, seeding nothing, through `adopt`. Whether the route hands one in
- * is the route's composition's decision, by build. The account's quiet is not this composition's: a held offer is
- * `speech.held` on the record and never open here, so the service's own hold
- * stands empty and releases nothing.
+ * is the route's composition's decision, by build. The account's quiet is not this composition's: the
+ * briefing look leaves a quiet account's offers unread, so nothing here is
+ * held or released.
  *
  * The composition is a scope's, not a socket callback's: it is built in the
  * `Scope` its caller opened for the socket, and every fiber it runs is forked
