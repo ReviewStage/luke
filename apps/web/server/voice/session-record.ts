@@ -1,7 +1,11 @@
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { type DevicePlatform, isDevicePlatform } from "../core.js";
+import { devices } from "../db/devices-schema.js";
+import { db } from "../db/query.js";
+import { voiceSessions } from "../db/voice-schema.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
@@ -97,10 +101,6 @@ export interface VoiceSessionRecord {
   close(input: VoiceSessionClose): VoiceSessionRecordEffect<void>;
 }
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const VoiceCloseReasonSchema = Schema.Literals(Object.values(VOICE_CLOSE_REASON));
 
 /** The usage column: the session's seconds and whether they are the API's own confirmed count. */
@@ -116,19 +116,30 @@ const RegisterRequestSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
 });
 
+/**
+ * The device id the row may carry, read back out of the account's own
+ * `devices` rows rather than taken from the handshake: a claim on another
+ * account's device, or on a row that has gone, selects nothing and the
+ * column keeps the null that is its word for a session naming no device.
+ * There is no builder spelling for a scalar subquery standing as an inserted
+ * value, so it is a fragment over the same table, still inside the one
+ * rendered statement and with both ids bound as its parameters.
+ */
+const heldDeviceId = (deviceId: string | null, userId: string) =>
+  sql`(select ${devices.id} from ${devices} where ${devices.id} = ${deviceId} and ${devices.userId} = ${userId})`;
+
 const registerSession = SqlSchema.void({
   Request: RegisterRequestSchema,
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into voice_sessions (user_id, live_session_id, delegation_mode, device_id)
-        values (
-          ${row.userId}, ${row.liveSessionId}, ${row.delegationMode},
-          (select id from devices where id = ${row.deviceId} and user_id = ${row.userId})
-        )
-        on conflict (live_session_id) do nothing
-      `,
-    ),
+    db
+      .insert(voiceSessions)
+      .values({
+        userId: row.userId,
+        liveSessionId: row.liveSessionId,
+        delegationMode: row.delegationMode,
+        deviceId: heldDeviceId(row.deviceId, row.userId),
+      })
+      .onConflictDoNothing({ target: voiceSessions.liveSessionId }),
 });
 
 const OwnedKeySchema = Schema.Struct({ userId: Schema.String, liveSessionId: Schema.String });
@@ -138,48 +149,47 @@ const findOwnedSession = SqlSchema.findOneOption({
   Request: OwnedKeySchema,
   Result: OwnedRowSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id from voice_sessions
-        where user_id = ${key.userId} and live_session_id = ${key.liveSessionId}
-      `,
-    ),
+    db
+      .select({ id: voiceSessions.id })
+      .from(voiceSessions)
+      .where(
+        and(
+          eq(voiceSessions.userId, key.userId),
+          eq(voiceSessions.liveSessionId, key.liveSessionId),
+        ),
+      ),
 });
 
 const NoteUsageRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
-  usage: Schema.fromJsonString(VoiceUsageColumnSchema),
+  usage: VoiceUsageColumnSchema,
 });
 
 const noteSessionUsage = SqlSchema.void({
   Request: NoteUsageRequestSchema,
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update voice_sessions
-        set usage = ${row.usage}::jsonb
-        where live_session_id = ${row.liveSessionId} and closed_at is null
-      `,
-    ),
+    db
+      .update(voiceSessions)
+      .set({ usage: row.usage })
+      .where(
+        and(eq(voiceSessions.liveSessionId, row.liveSessionId), isNull(voiceSessions.closedAt)),
+      ),
 });
 
 const CloseRequestSchema = Schema.Struct({
   liveSessionId: Schema.String,
   closedAt: Schema.Date,
   closeReason: VoiceCloseReasonSchema,
-  usage: Schema.fromJsonString(VoiceUsageColumnSchema),
+  usage: VoiceUsageColumnSchema,
 });
 
 const closeSession = SqlSchema.void({
   Request: CloseRequestSchema,
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update voice_sessions
-        set closed_at = ${row.closedAt}, close_reason = ${row.closeReason}, usage = ${row.usage}::jsonb
-        where live_session_id = ${row.liveSessionId}
-      `,
-    ),
+    db
+      .update(voiceSessions)
+      .set({ closedAt: row.closedAt, closeReason: row.closeReason, usage: row.usage })
+      .where(eq(voiceSessions.liveSessionId, row.liveSessionId)),
 });
 
 export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRecord {

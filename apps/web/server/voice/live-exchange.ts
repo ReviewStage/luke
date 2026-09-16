@@ -10,10 +10,13 @@ import {
   type LiveSessionServiceOptions,
   type LiveSessionSource,
 } from "@sidecar/voice/live-session";
+import { eq } from "drizzle-orm";
 import { Effect, Layer, Option, Queue, Schema, type Scope } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { WebSocket } from "ws";
+import { db } from "../db/query.js";
+import { voiceSessions } from "../db/voice-schema.js";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { CATALOG_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { askRecord } from "../hosted/store/asks.js";
@@ -170,21 +173,18 @@ export interface AttachedExchange extends HostedLiveExchange {
   stop(): Promise<void>;
 }
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const VoiceSessionDeviceIdRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ deviceId: "device_id" }));
+});
 
 const findVoiceSessionDeviceId = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: VoiceSessionDeviceIdRowSchema,
   execute: (liveSessionId) =>
-    statement(
-      (sql) => sql`select device_id from voice_sessions where live_session_id = ${liveSessionId}`,
-    ),
+    db
+      .select({ deviceId: voiceSessions.deviceId })
+      .from(voiceSessions)
+      .where(eq(voiceSessions.liveSessionId, liveSessionId)),
 });
 
 /**

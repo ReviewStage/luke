@@ -1,6 +1,29 @@
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  max,
+  min,
+  ne,
+  or,
+  sql,
+  sum,
+} from "drizzle-orm";
 import { Duration, Effect, Option, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { account, session, user } from "../db/auth-schema.js";
+import { adminFavorite } from "../db/favorite-schema.js";
+import { db } from "../db/query.js";
+import { hostedUsage } from "../db/usage-schema.js";
 import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
 import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
@@ -30,18 +53,15 @@ const ADMIN_TOP_USERS_LIMIT = 10;
 
 type AdminQueryFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /**
- * An aggregate as the three drivers hand it back: `count` and `sum` answer a
- * bigint, which `@effect/sql-pg` reads as a JS `bigint` and the `pg` driver
- * before it read as a string, each because a 64-bit value need not fit a JS
- * number, while PGlite parses it to one. Every aggregate here counts rows or
- * sums a day's calls, well inside the safe integer range, so all three
- * readings decode to the same number. A `sum` over no rows is null, which is
- * the zero the dashboard shows.
+ * An aggregate as a row carries it. `count` and `sum` answer a bigint, which
+ * `@effect/sql-pg` reads as a JS `bigint` and the `pg` driver before it read
+ * as a string, each because a 64-bit value need not fit a JS number, while
+ * PGlite parses it to one; the builder's own aggregate helpers then read a
+ * count as a number and a sum as a string on top of that. Every aggregate
+ * here counts rows or sums a day's calls, well inside the safe integer
+ * range, so every one of those readings decodes to the same number. A `sum`
+ * over no rows is null, which is the zero the dashboard shows.
  */
 const AggregateColumnSchema = Schema.Union([
   Schema.Number,
@@ -60,13 +80,14 @@ const AdminMetricsScopeSchema = Schema.Literals([
 /**
  * The accounts a scope keeps. The default keeps every account whose role is not
  * admin — a null role predates the column's default and is an ordinary user, so
- * it stays — and `all` filters nothing. Every joined query below counts through
- * a user row, so this one condition is the whole filter.
+ * it stays — and `all` filters nothing, which is the absent condition the
+ * builder's `and` drops. Every joined query below counts through a user row,
+ * so this one condition is the whole filter.
  */
-function keptByScope(sql: SqlClient.SqlClient, scope: AdminMetricsScope) {
+function keptByScope(scope: AdminMetricsScope) {
   return scope === ADMIN_METRICS_SCOPE.ALL
-    ? sql`true`
-    : sql`("user".role <> ${USER_ROLE.ADMIN} or "user".role is null)`;
+    ? undefined
+    : or(ne(user.role, USER_ROLE.ADMIN), isNull(user.role));
 }
 
 /** A `count` row a query always answers with, or the zero an absent row means. */
@@ -83,7 +104,7 @@ function toNumber(value: number | string | null | undefined): number {
  * answer rather than the read's, because the health card is what reports it.
  */
 const probeDatabase = Effect.map(
-  Effect.timed(Effect.result(statement((sql) => sql`select 1`))),
+  Effect.timed(Effect.result(db.execute(sql`select 1`))),
   ([elapsed, probed]) => ({
     reachable: Result.isSuccess(probed),
     latencyMs: Math.round(Duration.toMillis(elapsed)),
@@ -93,14 +114,13 @@ const probeDatabase = Effect.map(
 const findUserTotal = SqlSchema.findOneOption({
   Request: AdminMetricsScopeSchema,
   Result: Schema.Struct({ value: AggregateColumnSchema }),
-  execute: (scope) =>
-    statement((sql) => sql`select count(*) as value from "user" where ${keptByScope(sql, scope)}`),
+  execute: (scope) => db.select({ value: count() }).from(user).where(keptByScope(scope)),
 });
 
 const SignInLinkRowSchema = Schema.Struct({
   userId: Schema.String,
   providerId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id", providerId: "provider_id" }));
+});
 
 /**
  * Distinct pairs rather than a count of linked rows: the chart states
@@ -111,31 +131,27 @@ const findSignInLinks = SqlSchema.findAll({
   Request: AdminMetricsScopeSchema,
   Result: SignInLinkRowSchema,
   execute: (scope) =>
-    statement(
-      (sql) => sql`
-        select distinct account.user_id, account.provider_id
-        from account
-        inner join "user" on "user".id = account.user_id
-        where ${keptByScope(sql, scope)}
-      `,
-    ),
+    db
+      .selectDistinct({ userId: account.userId, providerId: account.providerId })
+      .from(account)
+      .innerJoin(user, eq(user.id, account.userId))
+      .where(keptByScope(scope)),
 });
 
 const DayCountRowSchema = Schema.Struct({ day: Schema.String, value: AggregateColumnSchema });
+
+/** The UTC day an account was created on, which the builder has no operator for. */
+const SIGNUP_DAY = sql<string>`to_char(${user.createdAt} at time zone 'UTC', 'YYYY-MM-DD')`;
 
 const findSignupsByDay = SqlSchema.findAll({
   Request: Schema.Struct({ fetchStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: DayCountRowSchema,
   execute: (request) =>
-    statement((sql) => {
-      const day = sql`to_char("user".created_at at time zone 'UTC', 'YYYY-MM-DD')`;
-      return sql`
-        select ${day} as day, count(*) as value
-        from "user"
-        where "user".created_at >= ${request.fetchStart} and ${keptByScope(sql, request.scope)}
-        group by ${day}
-      `;
-    }),
+    db
+      .select({ day: SIGNUP_DAY, value: count() })
+      .from(user)
+      .where(and(gte(user.createdAt, request.fetchStart), keptByScope(request.scope)))
+      .groupBy(SIGNUP_DAY),
 });
 
 const readUserMetrics = /* @__PURE__ */ Effect.fn("readUserMetrics")(function* (
@@ -171,29 +187,23 @@ const findUsageByDay = SqlSchema.findAll({
   Request: Schema.Struct({ fetchStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: DaySumRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select hosted_usage.day as day, sum(hosted_usage.calls) as calls
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day >= ${request.fetchStartDay} and ${keptByScope(sql, request.scope)}
-        group by hosted_usage.day
-      `,
-    ),
+    db
+      .select({ day: hostedUsage.day, calls: sum(hostedUsage.calls) })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(gte(hostedUsage.day, request.fetchStartDay), keptByScope(request.scope)))
+      .groupBy(hostedUsage.day),
 });
 
 const findActiveUsersOnDay = SqlSchema.findOneOption({
   Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(*) as value
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day = ${request.day} and ${keptByScope(sql, request.scope)}
-      `,
-    ),
+    db
+      .select({ value: count() })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
 });
 
 /**
@@ -204,14 +214,11 @@ const findActiveUsersInWindow = SqlSchema.findOneOption({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(distinct hosted_usage.user_id) as value
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day >= ${request.windowStartDay} and ${keptByScope(sql, request.scope)}
-      `,
-    ),
+    db
+      .select({ value: countDistinct(hostedUsage.userId) })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope))),
 });
 
 const TopUserRowSchema = Schema.Struct({
@@ -223,7 +230,7 @@ const TopUserRowSchema = Schema.Struct({
   activeDays: AggregateColumnSchema,
   lastActiveDay: Schema.String,
   calls: NullableAggregateColumnSchema,
-}).pipe(Schema.encodeKeys({ activeDays: "active_days", lastActiveDay: "last_active_day" }));
+});
 
 /**
  * Ordered by days present before volume spent: the table asks who shows up
@@ -233,26 +240,27 @@ const TopUserRowSchema = Schema.Struct({
 const findTopUsers = SqlSchema.findAll({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: TopUserRowSchema,
-  execute: (request) =>
-    statement(
-      (sql) => sql`
-        select
-          "user".id,
-          "user".name,
-          "user".email,
-          "user".image,
-          "user".role,
-          count(*) as active_days,
-          max(hosted_usage.day) as last_active_day,
-          sum(hosted_usage.calls) as calls
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day >= ${request.windowStartDay} and ${keptByScope(sql, request.scope)}
-        group by "user".id, "user".name, "user".email, "user".image, "user".role
-        order by count(*) desc, sum(hosted_usage.calls) desc
-        limit ${ADMIN_TOP_USERS_LIMIT}
-      `,
-    ),
+  execute: (request) => {
+    const activeDays = count();
+    const calls = sum(hostedUsage.calls);
+    return db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        activeDays,
+        lastActiveDay: max(hostedUsage.day),
+        calls,
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(gte(hostedUsage.day, request.windowStartDay), keptByScope(request.scope)))
+      .groupBy(user.id, user.name, user.email, user.image, user.role)
+      .orderBy(desc(activeDays), desc(calls))
+      .limit(ADMIN_TOP_USERS_LIMIT);
+  },
 });
 
 const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function* (
@@ -304,10 +312,8 @@ const readUsageMetrics = /* @__PURE__ */ Effect.fn("readUsageMetrics")(function*
  * and the fold name a week identically. A signup instant is a timestamp and
  * a usage day a YYYY-MM-DD string, hence the two shapes of the same cast.
  */
-const signupWeek = (sql: SqlClient.SqlClient) =>
-  sql`to_char(date_trunc('week', "user".created_at at time zone 'UTC'), 'YYYY-MM-DD')`;
-const activityWeek = (sql: SqlClient.SqlClient) =>
-  sql`to_char(date_trunc('week', hosted_usage.day::date), 'YYYY-MM-DD')`;
+const SIGNUP_WEEK = sql<string>`to_char(date_trunc('week', ${user.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`;
+const ACTIVITY_WEEK = sql<string>`to_char(date_trunc('week', ${hostedUsage.day}::date), 'YYYY-MM-DD')`;
 
 const CohortSizeRowSchema = Schema.Struct({
   week: Schema.String,
@@ -318,23 +324,18 @@ const findCohortSizes = SqlSchema.findAll({
   Request: Schema.Struct({ oldestWeekStart: Schema.Date, scope: AdminMetricsScopeSchema }),
   Result: CohortSizeRowSchema,
   execute: (request) =>
-    statement((sql) => {
-      const week = signupWeek(sql);
-      return sql`
-        select ${week} as week, count(*) as value
-        from "user"
-        where "user".created_at >= ${request.oldestWeekStart}
-          and ${keptByScope(sql, request.scope)}
-        group by ${week}
-      `;
-    }),
+    db
+      .select({ week: SIGNUP_WEEK, value: count() })
+      .from(user)
+      .where(and(gte(user.createdAt, request.oldestWeekStart), keptByScope(request.scope)))
+      .groupBy(SIGNUP_WEEK),
 });
 
 const CohortActivityRowSchema = Schema.Struct({
   signupWeek: Schema.String,
   activityWeek: Schema.String,
   value: AggregateColumnSchema,
-}).pipe(Schema.encodeKeys({ signupWeek: "signup_week", activityWeek: "activity_week" }));
+});
 
 /**
  * Distinct accounts per (signup week, activity week) pair: a cohort member
@@ -348,22 +349,22 @@ const findCohortActivity = SqlSchema.findAll({
   }),
   Result: CohortActivityRowSchema,
   execute: (request) =>
-    statement((sql) => {
-      const signup = signupWeek(sql);
-      const activity = activityWeek(sql);
-      return sql`
-        select
-          ${signup} as signup_week,
-          ${activity} as activity_week,
-          count(distinct hosted_usage.user_id) as value
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where "user".created_at >= ${request.oldestWeekStart}
-          and hosted_usage.day >= ${request.oldestWeekStartDay}
-          and ${keptByScope(sql, request.scope)}
-        group by ${signup}, ${activity}
-      `;
-    }),
+    db
+      .select({
+        signupWeek: SIGNUP_WEEK,
+        activityWeek: ACTIVITY_WEEK,
+        value: countDistinct(hostedUsage.userId),
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(
+        and(
+          gte(user.createdAt, request.oldestWeekStart),
+          gte(hostedUsage.day, request.oldestWeekStartDay),
+          keptByScope(request.scope),
+        ),
+      )
+      .groupBy(SIGNUP_WEEK, ACTIVITY_WEEK),
 });
 
 const readRetentionMetrics = /* @__PURE__ */ Effect.fn("readRetentionMetrics")(function* (
@@ -401,41 +402,34 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("readRetentionMetrics")(f
  * attempt still increments, so only a count strictly past the limit proves a
  * refusal happened.
  */
-
-function ceilingReached(sql: SqlClient.SqlClient) {
-  return sql`hosted_usage.calls > ${HOSTED_DAILY_LIMIT}`;
-}
+const CEILING_REACHED = gt(hostedUsage.calls, HOSTED_DAILY_LIMIT);
 
 const findQuotaLimitedOnDay = SqlSchema.findOneOption({
   Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(*) as value
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day = ${request.day}
-          and ${ceilingReached(sql)}
-          and ${keptByScope(sql, request.scope)}
-      `,
-    ),
+    db
+      .select({ value: count() })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(eq(hostedUsage.day, request.day), CEILING_REACHED, keptByScope(request.scope))),
 });
 
 const findQuotaLimitedInWindow = SqlSchema.findOneOption({
   Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
   Result: CountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(*) as value
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day >= ${request.windowStartDay}
-          and ${ceilingReached(sql)}
-          and ${keptByScope(sql, request.scope)}
-      `,
-    ),
+    db
+      .select({ value: count() })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(
+        and(
+          gte(hostedUsage.day, request.windowStartDay),
+          CEILING_REACHED,
+          keptByScope(request.scope),
+        ),
+      ),
 });
 
 const readReliabilityMetrics = /* @__PURE__ */ Effect.fn("readReliabilityMetrics")(function* (
@@ -539,42 +533,41 @@ const AccountRowSchema = Schema.Struct({
   image: Schema.NullOr(Schema.String),
   role: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
-}).pipe(Schema.encodeKeys({ createdAt: "created_at" }));
+});
 
 const findAccount = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: AccountRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select id, name, email, image, role, created_at
-        from "user"
-        where id = ${userId}
-        limit 1
-      `,
-    ),
+    db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        createdAt: user.createdAt,
+      })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1),
 });
 
 const findSignInMethods = SqlSchema.findAll({
   Request: Schema.String,
-  Result: Schema.Struct({
-    providerId: Schema.String,
-  }).pipe(Schema.encodeKeys({ providerId: "provider_id" })),
+  Result: Schema.Struct({ providerId: Schema.String }),
   execute: (userId) =>
-    statement((sql) => sql`select provider_id from account where user_id = ${userId}`),
+    db.select({ providerId: account.providerId }).from(account).where(eq(account.userId, userId)),
 });
 
 const findUsageSince = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, sinceDay: Schema.String }),
   Result: Schema.Struct({ day: Schema.String, calls: AggregateColumnSchema }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select day, calls
-        from hosted_usage
-        where user_id = ${request.userId} and day >= ${request.sinceDay}
-      `,
-    ),
+    db
+      .select({ day: hostedUsage.day, calls: hostedUsage.calls })
+      .from(hostedUsage)
+      .where(and(eq(hostedUsage.userId, request.userId), gte(hostedUsage.day, request.sinceDay))),
 });
 
 const findAllTimeUsage = SqlSchema.findOneOption({
@@ -584,40 +577,33 @@ const findAllTimeUsage = SqlSchema.findOneOption({
     firstActiveDay: Schema.NullOr(Schema.String),
     lastActiveDay: Schema.NullOr(Schema.String),
     calls: NullableAggregateColumnSchema,
-  }).pipe(
-    Schema.encodeKeys({
-      activeDays: "active_days",
-      firstActiveDay: "first_active_day",
-      lastActiveDay: "last_active_day",
-    }),
-  ),
+  }),
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select
-          count(*) as active_days,
-          min(day) as first_active_day,
-          max(day) as last_active_day,
-          sum(calls) as calls
-        from hosted_usage
-        where user_id = ${userId}
-      `,
-    ),
+    db
+      .select({
+        activeDays: count(),
+        firstActiveDay: min(hostedUsage.day),
+        lastActiveDay: max(hostedUsage.day),
+        calls: sum(hostedUsage.calls),
+      })
+      .from(hostedUsage)
+      .where(eq(hostedUsage.userId, userId)),
 });
 
 const findQuotaLimitedDays = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, windowStartDay: Schema.String }),
   Result: CountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(*) as value
-        from hosted_usage
-        where user_id = ${request.userId}
-          and day >= ${request.windowStartDay}
-          and ${ceilingReached(sql)}
-      `,
-    ),
+    db
+      .select({ value: count() })
+      .from(hostedUsage)
+      .where(
+        and(
+          eq(hostedUsage.userId, request.userId),
+          gte(hostedUsage.day, request.windowStartDay),
+          CEILING_REACHED,
+        ),
+      ),
 });
 
 const DayAccountRowSchema = Schema.Struct({
@@ -635,16 +621,20 @@ const findDayAccounts = SqlSchema.findAll({
   Request: DayScopeSchema,
   Result: DayAccountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select "user".id, "user".name, "user".email, "user".image, "user".role, hosted_usage.calls
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day = ${request.day} and ${keptByScope(sql, request.scope)}
-        order by hosted_usage.calls desc, "user".id asc
-        limit ${ADMIN_DAY_ACCOUNTS_LIMIT}
-      `,
-    ),
+    db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        calls: hostedUsage.calls,
+      })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope)))
+      .orderBy(desc(hostedUsage.calls), asc(user.id))
+      .limit(ADMIN_DAY_ACCOUNTS_LIMIT),
 });
 
 const findDayTotals = SqlSchema.findOneOption({
@@ -654,14 +644,11 @@ const findDayTotals = SqlSchema.findOneOption({
     calls: NullableAggregateColumnSchema,
   }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select count(*) as accounts, sum(hosted_usage.calls) as calls
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where hosted_usage.day = ${request.day} and ${keptByScope(sql, request.scope)}
-      `,
-    ),
+    db
+      .select({ accounts: count(), calls: sum(hostedUsage.calls) })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(and(eq(hostedUsage.day, request.day), keptByScope(request.scope))),
 });
 
 /**
@@ -670,15 +657,15 @@ const findDayTotals = SqlSchema.findOneOption({
  * bound parameter — never interpolated into the SQL — with its own
  * wildcards escaped, so it can only ever name characters to find.
  */
-function keptBySearch(sql: SqlClient.SqlClient, search: string | null) {
-  if (search === null) return sql`true`;
+function keptBySearch(search: string | null) {
+  if (search === null) return undefined;
   const pattern = searchLikePattern(search);
-  return sql`("user".name ilike ${pattern} or "user".email ilike ${pattern})`;
+  return or(ilike(user.name, pattern), ilike(user.email, pattern));
 }
 
 /** The scope and the search as one condition, which is the whole roster filter. */
-function keptByRoster(sql: SqlClient.SqlClient, request: RosterFilter) {
-  return sql`${keptByScope(sql, request.scope)} and ${keptBySearch(sql, request.search)}`;
+function keptByRoster(request: RosterFilter) {
+  return and(keptByScope(request.scope), keptBySearch(request.search));
 }
 
 const RosterFilterSchema = Schema.Struct({
@@ -696,10 +683,7 @@ function nullableSearch(search: string | undefined): string | null {
 const findRosterTotal = SqlSchema.findOneOption({
   Request: RosterFilterSchema,
   Result: CountRowSchema,
-  execute: (request) =>
-    statement(
-      (sql) => sql`select count(*) as value from "user" where ${keptByRoster(sql, request)}`,
-    ),
+  execute: (request) => db.select({ value: count() }).from(user).where(keptByRoster(request)),
 });
 
 const findSessionsSeen = SqlSchema.findAll({
@@ -707,17 +691,14 @@ const findSessionsSeen = SqlSchema.findAll({
   Result: Schema.Struct({
     userId: Schema.String,
     seenAt: Schema.NullOr(InstantColumnSchema),
-  }).pipe(Schema.encodeKeys({ userId: "user_id", seenAt: "seen_at" })),
+  }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select session.user_id, max(session.updated_at) as seen_at
-        from session
-        inner join "user" on "user".id = session.user_id
-        where ${keptByRoster(sql, request)}
-        group by session.user_id
-      `,
-    ),
+    db
+      .select({ userId: session.userId, seenAt: max(session.updatedAt) })
+      .from(session)
+      .innerJoin(user, eq(user.id, session.userId))
+      .where(keptByRoster(request))
+      .groupBy(session.userId),
 });
 
 const findUsageSeen = SqlSchema.findAll({
@@ -725,17 +706,14 @@ const findUsageSeen = SqlSchema.findAll({
   Result: Schema.Struct({
     userId: Schema.String,
     lastUsageDay: Schema.NullOr(Schema.String),
-  }).pipe(Schema.encodeKeys({ userId: "user_id", lastUsageDay: "last_usage_day" })),
+  }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select hosted_usage.user_id, max(hosted_usage.day) as last_usage_day
-        from hosted_usage
-        inner join "user" on "user".id = hosted_usage.user_id
-        where ${keptByRoster(sql, request)}
-        group by hosted_usage.user_id
-      `,
-    ),
+    db
+      .select({ userId: hostedUsage.userId, lastUsageDay: max(hostedUsage.day) })
+      .from(hostedUsage)
+      .innerJoin(user, eq(user.id, hostedUsage.userId))
+      .where(keptByRoster(request))
+      .groupBy(hostedUsage.userId),
 });
 
 const RosterRowSchema = Schema.Struct({
@@ -749,13 +727,15 @@ const RosterRowSchema = Schema.Struct({
   lastActiveDay: Schema.NullOr(Schema.String),
   calls: NullableAggregateColumnSchema,
   favorite: Schema.NullOr(Schema.Boolean),
-}).pipe(
-  Schema.encodeKeys({
-    createdAt: "created_at",
-    activeDays: "active_days",
-    lastActiveDay: "last_active_day",
-  }),
-);
+});
+
+/**
+ * Whether the viewer starred the account. At most one star row joins per
+ * account, so aggregating its presence leaves the usage aggregates' fan-out
+ * untouched; there is no builder spelling for `bool_or`, so it is a fragment
+ * over the same join's own column.
+ */
+const VIEWER_STARRED = sql<boolean | null>`bool_or(${isNotNull(adminFavorite.adminId)})`;
 
 const findRosterRows = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -765,34 +745,39 @@ const findRosterRows = SqlSchema.findAll({
     viewerId: Schema.String,
   }),
   Result: RosterRowSchema,
-  execute: (request) =>
-    statement(
-      (sql) => sql`
-        select
-          "user".id,
-          "user".name,
-          "user".email,
-          "user".image,
-          "user".role,
-          "user".created_at,
-          count(hosted_usage.day) as active_days,
-          max(hosted_usage.day) as last_active_day,
-          sum(hosted_usage.calls) as calls,
-          -- At most one star row joins per account, so aggregating its
-          -- presence leaves the usage aggregates' fan-out untouched.
-          bool_or(admin_favorite.admin_id is not null) as favorite
-        from "user"
-        left join hosted_usage
-          on hosted_usage.user_id = "user".id and hosted_usage.day >= ${request.windowStartDay}
-        left join admin_favorite
-          on admin_favorite.user_id = "user".id and admin_favorite.admin_id = ${request.viewerId}
-        where ${keptByRoster(sql, request)}
-        group by
-          "user".id, "user".name, "user".email, "user".image, "user".role, "user".created_at
-        order by max(hosted_usage.day) desc nulls last, "user".created_at desc
-        limit ${ADMIN_USERS_LIMIT}
-      `,
-    ),
+  execute: (request) => {
+    const lastActiveDay = max(hostedUsage.day);
+    // Note that the ordering spells the modifier out, because Postgres puts
+    // a descending null first by default and an account never active inside
+    // the window belongs at the tail. The builder has no spelling for it.
+    const mostRecentlyActiveFirst = sql`${lastActiveDay} desc nulls last`;
+    return db
+      .select({
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        image: user.image,
+        role: user.role,
+        createdAt: user.createdAt,
+        activeDays: count(hostedUsage.day),
+        lastActiveDay,
+        calls: sum(hostedUsage.calls),
+        favorite: VIEWER_STARRED,
+      })
+      .from(user)
+      .leftJoin(
+        hostedUsage,
+        and(eq(hostedUsage.userId, user.id), gte(hostedUsage.day, request.windowStartDay)),
+      )
+      .leftJoin(
+        adminFavorite,
+        and(eq(adminFavorite.userId, user.id), eq(adminFavorite.adminId, request.viewerId)),
+      )
+      .where(keptByRoster(request))
+      .groupBy(user.id, user.name, user.email, user.image, user.role, user.createdAt)
+      .orderBy(mostRecentlyActiveFirst, desc(user.createdAt))
+      .limit(ADMIN_USERS_LIMIT);
+  },
 });
 
 const FavoriteSchema = Schema.Struct({
@@ -804,30 +789,24 @@ const FavoriteSchema = Schema.Struct({
 const findFavoriteTarget = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ id: Schema.String }),
-  execute: (userId) => statement((sql) => sql`select id from "user" where id = ${userId} limit 1`),
+  execute: (userId) => db.select({ id: user.id }).from(user).where(eq(user.id, userId)).limit(1),
 });
 
 const insertFavorite = SqlSchema.void({
   Request: FavoriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into admin_favorite (admin_id, user_id)
-        values (${write.adminId}, ${write.userId})
-        on conflict do nothing
-      `,
-    ),
+    db
+      .insert(adminFavorite)
+      .values({ adminId: write.adminId, userId: write.userId })
+      .onConflictDoNothing(),
 });
 
 const deleteFavorite = SqlSchema.void({
   Request: FavoriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        delete from admin_favorite
-        where admin_id = ${write.adminId} and user_id = ${write.userId}
-      `,
-    ),
+    db
+      .delete(adminFavorite)
+      .where(and(eq(adminFavorite.adminId, write.adminId), eq(adminFavorite.userId, write.userId))),
 });
 
 /**
