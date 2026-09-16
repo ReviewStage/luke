@@ -1,12 +1,13 @@
-import { agentsAnswerSchema, childrenAnswerSchema } from "@sidecar/hosted/reads-wire";
-import { TRANSCRIPT_KIND, WireValueSchema } from "@sidecar/wire";
-import { Schema as EffectSchema } from "effect";
-
 /**
  * What the Agents page is told from, for the document every window reads:
  * the account's children, its agents, and the one transcript the host holds
- * open, each under the schema the service's own answer is read through.
+ * open. The lists cross under the schemas the service's own answers are read
+ * through; the transcript's groups cross as wire records, read where drawn.
  */
+
+import { agentsAnswerSchema, childrenAnswerSchema } from "@sidecar/hosted/reads-wire";
+import { TRANSCRIPT_KIND, WireValueSchema } from "@sidecar/wire";
+import { Schema as EffectSchema } from "effect";
 
 /**
  * The account's children as the host's read of the service lists them, for
