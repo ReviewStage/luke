@@ -323,6 +323,11 @@ interface SpokenAskAttach {
   readonly rowIds: readonly string[];
 }
 
+/** What attaching a spoken ask did: the rows now the delegation's, by id; or a row the vocabulary refused with the delegation on it. */
+type SpokenAskAttached =
+  | AskLinesAttached
+  | Extract<StoreWriteResult, { ok: false; refusal: typeof STORE_WRITE_REFUSAL.MESSAGE_REFUSED }>;
+
 /** Where the developer's earlier spoken asks on one voice session end, for the next to be cut from. */
 interface SpokenAskEnd {
   readonly voiceSessionId: string;
@@ -418,9 +423,12 @@ export interface StoreWriter {
    * `attachAskLines` takes them at the received message otherwise. Nothing is
    * re-keyed: a row's client id stays the ledger's for life, and a row a
    * delegation already owns keeps that one. A delegation told twice attaches
-   * once and answers the same rows.
+   * once and answers the same rows. The amended row is held to the stored
+   * message vocabulary before it lands, as every write here is, so a
+   * delegation id the vocabulary refuses is a refusal and never an
+   * unreadable row.
    */
-  attachSpokenAsk(target: ConversationTarget, attach: SpokenAskAttach): Write<AskLinesAttached>;
+  attachSpokenAsk(target: ConversationTarget, attach: SpokenAskAttach): Write<SpokenAskAttached>;
   /** The latest end, on the session's clock, of the spoken asks already written for one voice session; zero for none. */
   spokenAskEnd(target: ConversationTarget, end: SpokenAskEnd): Write<SpokenAskEndResult>;
   /**
@@ -853,15 +861,14 @@ const delegateSpokenRow = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    delegationId: Schema.String,
+    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
   }),
   execute: (row) =>
     statement(
       (sql) => sql`
         ${bumpedRevision(sql, row.conversationId)}
         update messages
-        set metadata = coalesce(metadata, '{}'::jsonb)
-              || jsonb_build_object('delegation_id', ${row.delegationId}::text),
+        set metadata = ${row.metadata}::jsonb,
             revision = (select journal_revision from bumped)
         where id = ${row.id}
       `,
@@ -2166,13 +2173,18 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
   }),
   Result: Schema.Struct({
     id: Schema.String,
+    clientId: Schema.String,
     turnId: Schema.NullOr(Schema.String),
     delegationId: Schema.NullOr(Schema.String),
-  }).pipe(Schema.encodeKeys({ turnId: "turn_id", delegationId: "delegation_id" })),
+    parts: StoredPartsColumnSchema,
+    metadata: Schema.NullOr(MessageMetadataColumnSchema),
+  }).pipe(
+    Schema.encodeKeys({ clientId: "client_id", turnId: "turn_id", delegationId: "delegation_id" }),
+  ),
   execute: (key) =>
     statement(
       (sql) => sql`
-        select id, turn_id, metadata ->> 'delegation_id' as delegation_id
+        select id, client_id, turn_id, metadata ->> 'delegation_id' as delegation_id, parts, metadata
         from messages
         where conversation_id = ${key.conversationId}
           and role = ${MESSAGE_ROLE.USER}
@@ -2189,7 +2201,7 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
 const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
   context: WriterContext,
   attach: SpokenAskAttach,
-): Effect.fn.Return<AskLinesAttached, WriteFailure, SqlClient.SqlClient> {
+): Effect.fn.Return<SpokenAskAttached, WriteFailure, SqlClient.SqlClient> {
   if (attach.rowIds.length === 0) return { ok: true, attached: [] };
   const rows = yield* findSpokenRowsToAttach({
     conversationId: context.target.conversationId,
@@ -2204,10 +2216,19 @@ const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
   let lastSeq: number | undefined;
   for (const row of rows) {
     if (row.delegationId === null) {
+      // The row with the delegation on it is held to the vocabulary before it lands, as a read
+      // would hold it: a delegation id the vocabulary refuses is refused here, not stored.
+      const read = yield* admitted(context, {
+        id: row.clientId,
+        role: MESSAGE_ROLE.USER,
+        metadata: { ...row.metadata, delegation_id: attach.delegationId },
+        parts: row.parts,
+      });
+      if (!read.ok) return read;
       yield* delegateSpokenRow({
         id: row.id,
         conversationId: context.target.conversationId,
-        delegationId: attach.delegationId,
+        metadata: read.message.role === MESSAGE_ROLE.SYSTEM ? null : read.message.metadata,
       });
     }
     // Where the ask has learned its turn, a row still outside it moves in at a fresh place, as at

@@ -1979,4 +1979,18 @@ test("attaching a spoken ask gives the developer's rows the delegation in place 
     await database.run(writer.attachSpokenAsk(target, { delegationId: "dl_1", rowIds: [] })),
     { ok: true, attached: [] },
   );
+  // A delegation id the vocabulary refuses is a refusal, and the row stands as it was: the stream
+  // admits any opaque delegation id, and a row it cannot be read back with is never written.
+  assert.ok((await developerRow("row-c", "And this.", 9000, 9400)).ok);
+  const standing = (await storedMessages(target)).find((row) => row.clientId === "row-c");
+  const refused = await database.run(
+    writer.attachSpokenAsk(target, { delegationId: "x".repeat(129), rowIds: ["row-c"] }),
+  );
+  assert.equal(refused.ok, false);
+  if (refused.ok) return;
+  assert.equal(refused.refusal, STORE_WRITE_REFUSAL.MESSAGE_REFUSED);
+  assert.deepEqual(
+    (await storedMessages(target)).find((row) => row.clientId === "row-c"),
+    standing,
+  );
 });
