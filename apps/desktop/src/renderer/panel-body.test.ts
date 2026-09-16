@@ -269,6 +269,7 @@ test("a row's press opens the child or the agent, and the transcript page draws 
       kind: TRANSCRIPT_KIND.OBSERVED,
       title: "Session 9f4c5d47",
       status: CHILD_STATUS.RUNNING,
+      session: { providerId: AGENT.providerId, providerSessionId: AGENT.providerSessionId },
     },
     childTranscriptRow(CHILD),
   ]);
