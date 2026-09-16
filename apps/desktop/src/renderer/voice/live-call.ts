@@ -163,8 +163,8 @@ export class LiveCall implements LiveVoiceCall {
     this.#services = options.services;
     this.#captions = new LiveCaptions({
       onRows: (rows) => this.#onRows(rows),
-      // The window's own rows, drawn and replaced here alone, so the Web Crypto UUID is their whole identity.
-      mintRowId: () => crypto.randomUUID(),
+      // The window's own rows, drawn and replaced here alone and matched to the record by nothing, so the call's own id counter is their whole identity and no Web Crypto is reached.
+      mintRowId: () => this.#nextId(),
     });
   }
 
