@@ -19,9 +19,11 @@ import {
   type WireValue,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { sql } from "drizzle-orm";
 import { Effect, type Schema as EffectSchema, Result } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
+import { db } from "../server/db/query";
+import { turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { handleChanges } from "../server/hosted/change-signal";
 import { deviceSeams } from "../server/hosted/device-store";
@@ -49,6 +51,14 @@ const INSTALLATION_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const STRANGER_DEVICE_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae8";
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
+
+/**
+ * A queuing half a millisecond past the fixture's instant, written as the
+ * literal the column parses because a JS `Date` cannot hold it: the turn
+ * cursor carries Postgres's own microsecond precision, and what a test of
+ * that cursor compares has to be finer than a `Date` to say anything.
+ */
+const SUB_MILLISECOND_QUEUED_AT = sql`'2026-09-10 12:00:00.000500+00'::timestamptz`;
 
 const seams = deviceSeams();
 
@@ -244,20 +254,20 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     createdAt: new Date(NOW - 60_000),
   });
   assert.ok(main && observed && child);
-  // A sub-millisecond instant, so the turn cursor's own precision (finer than a JS `Date`) is what the test compares.
   const turnId = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into turns (user_id, conversation_id, origin, status, queued_at)
-        values (
-          ${userId}, ${main}, ${TURN_ORIGIN.TYPED}, ${TURN_STATUS.RUNNING},
-          '2026-09-10 12:00:00.000500+00'::timestamptz
-        )
-        returning id
-      `;
-      return rows[0]?.id;
-    }),
+    Effect.map(
+      db
+        .insert(turns)
+        .values({
+          userId,
+          conversationId: main,
+          origin: TURN_ORIGIN.TYPED,
+          status: TURN_STATUS.RUNNING,
+          queuedAt: SUB_MILLISECOND_QUEUED_AT,
+        })
+        .returning({ id: turns.id }),
+      (rows) => rows[0]?.id,
+    ),
   );
   assert.ok(turnId);
   const messageId = await insertMessage(database.run, {
@@ -352,16 +362,15 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
 
   // A turn about the observed session makes it an agent: the head names it at the turn's queuing.
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        insert into turns (user_id, conversation_id, origin, status, queued_at)
-        values (
-          ${userId}, ${observed}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.QUEUED},
-          ${new Date(NOW + 500)}
-        )
-      `;
-    }),
+    Effect.asVoid(
+      db.insert(turns).values({
+        userId,
+        conversationId: observed,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+        status: TURN_STATUS.QUEUED,
+        queuedAt: new Date(NOW + 500),
+      }),
+    ),
   );
   const observing = await answered(
     await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),

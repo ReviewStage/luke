@@ -40,10 +40,12 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { and, eq, sql } from "drizzle-orm";
 import { Effect, Schema as EffectSchema, Result } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, type StoredUIMessage } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations, messages, providerCursors, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { handleChanges } from "../server/hosted/change-signal";
@@ -147,19 +149,33 @@ function toolPart(
   } as unknown as MessageParts[number];
 }
 
-async function bumpConversationCounter(
-  conversationId: string,
-  column: "next_message_seq" | "next_event_seq",
-  seq: number,
-): Promise<void> {
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set ${sql(column)} = greatest(${sql(column)}, ${seq + 1})
-        where id = ${conversationId}
-      `;
-    }),
+/**
+ * Moves a conversation's own allocation past a row a test wrote itself, as
+ * the writer's allocation would have moved it.
+ *
+ * Note that there is one of these per counter rather than one taking the
+ * counter's name, because the update names the column it also compares
+ * against and the builder spells a column rather than interpolating its name.
+ */
+function bumpMessageCounter(conversationId: string, seq: number): Promise<void> {
+  return database.run(
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ nextMessageSeq: sql`greatest(${conversations.nextMessageSeq}, ${seq + 1})` })
+        .where(eq(conversations.id, conversationId)),
+    ),
+  );
+}
+
+function bumpEventCounter(conversationId: string, seq: number): Promise<void> {
+  return database.run(
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ nextEventSeq: sql`greatest(${conversations.nextEventSeq}, ${seq + 1})` })
+        .where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
@@ -217,7 +233,7 @@ async function insertMessage(
     conversationId,
     seq,
   });
-  await bumpConversationCounter(conversationId, "next_message_seq", seq);
+  await bumpMessageCounter(conversationId, seq);
   return id;
 }
 
@@ -239,18 +255,18 @@ async function insertEvent(
     messageId,
     seq,
   });
-  await bumpConversationCounter(conversationId, "next_event_seq", seq);
+  await bumpEventCounter(conversationId, seq);
   return id;
 }
 
+/** Every column of the account's cursor rows, because what a Clear must leave untouched is the whole row. */
 function readProviderCursorRows(userId: string) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select * from provider_cursors where user_id = ${userId} order by provider_session_id
-      `;
-    }),
+    db
+      .select()
+      .from(providerCursors)
+      .where(eq(providerCursors.userId, userId))
+      .orderBy(providerCursors.providerSessionId),
   );
 }
 
@@ -1406,10 +1422,9 @@ it.effect(
 
       // Scoped to this test's conversation: on CI every store suite shares one database, and an unscoped delete of seq 5 took a neighbour's row twice today.
       await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`delete from messages where conversation_id = ${main} and seq = 5`;
-        }),
+        Effect.asVoid(
+          db.delete(messages).where(and(eq(messages.conversationId, main), eq(messages.seq, 5))),
+        ),
       );
       await insertMessage(userId, main, 5, {
         role: MESSAGE_ROLE.ASSISTANT,
@@ -1502,13 +1517,12 @@ it.effect(
 
       const settledAt = new Date(NOW + 90_000);
       await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`
-        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}, model = ${"gpt-5"}
-        where id = ${ids.typed}
-      `;
-        }),
+        Effect.asVoid(
+          db
+            .update(turns)
+            .set({ status: TURN_STATUS.SETTLED, settledAt, model: "gpt-5" })
+            .where(eq(turns.id, ids.typed)),
+        ),
       );
       const changed = await answered(
         await database.run(
@@ -1576,12 +1590,7 @@ it.effect(
         await database.run(database.store.turns.latest(userId, gone.cursor)),
         gone.cursor,
       );
-      await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`delete from turns where id = ${extra}`;
-        }),
-      );
+      await database.run(Effect.asVoid(db.delete(turns).where(eq(turns.id, extra))));
       assert.deepEqual(
         await database.run(database.store.turns.latest(userId, gone.cursor)),
         roster.cursor,
@@ -1613,13 +1622,12 @@ it.effect(
       assert.deepEqual(await database.run(database.store.turns.latest(userId)), head.cursor);
 
       await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`
-        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${new Date(NOW + 61_000)}
-        where id = ${queued}
-      `;
-        }),
+        Effect.asVoid(
+          db
+            .update(turns)
+            .set({ status: TURN_STATUS.RUNNING, startedAt: new Date(NOW + 61_000) })
+            .where(eq(turns.id, queued)),
+        ),
       );
       const started = await database.run(database.store.turns.list(userId, { after: head.cursor }));
       assert.deepEqual(
@@ -1637,10 +1645,12 @@ it.effect(
       const userId = await database.createUser();
       const { turns: ids, observed } = await populate(userId);
       await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`update turns set settled_at = ${new Date(NOW + 90_000)} where id = ${ids.typed}`;
-        }),
+        Effect.asVoid(
+          db
+            .update(turns)
+            .set({ settledAt: new Date(NOW + 90_000) })
+            .where(eq(turns.id, ids.typed)),
+        ),
       );
       const all = await answered(
         await database.run(handleBrainTurns(options(userId, request(READ_PATH.TURNS)))),
@@ -1671,10 +1681,7 @@ it.effect(
       assert.equal(settled.next, moved.next);
 
       await database.run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`delete from conversations where id = ${observed}`;
-        }),
+        Effect.asVoid(db.delete(conversations).where(eq(conversations.id, observed))),
       );
       const none = await answered(
         await database.run(

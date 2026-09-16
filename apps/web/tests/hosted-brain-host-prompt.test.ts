@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, DEVICE_PLATFORM, WORKSPACE_FILE } from "../server/core";
+import { devices } from "../server/db/devices-schema";
+import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -185,16 +188,21 @@ async function relayTurn(
 /** The conversation's turn rows by id, since both turns of a test start on the one fixed clock. */
 /** One Mac of the account reporting its quiet instant, as the heartbeat writes it; null clears it. */
 async function reportQuiet(userId: string, quietUntil: number | null) {
+  const at = quietUntil === null ? null : new Date(quietUntil);
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const at = quietUntil === null ? null : new Date(quietUntil);
-      yield* sql`
-        insert into devices (id, user_id, installation_id, platform, quiet_until)
-        values (${`mac-${userId}`}, ${userId}, ${`install-${userId}`}, ${DEVICE_PLATFORM.MACOS}, ${at})
-        on conflict (id) do update set quiet_until = excluded.quiet_until
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .insert(devices)
+        .values({
+          id: `mac-${userId}`,
+          userId,
+          installationId: `install-${userId}`,
+          platform: DEVICE_PLATFORM.MACOS,
+          quietUntil: at,
+        })
+        // The reported instant, whether the row is this heartbeat's first or its tenth.
+        .onConflictDoUpdate({ target: devices.id, set: { quietUntil: at } }),
+    ),
   );
 }
 
@@ -209,6 +217,14 @@ const PROMPTS_TABLE = "prompts";
 
 const TableNameRowSchema = Schema.Struct({ name: Schema.String });
 
+/**
+ * Whether the build's database holds a table of that name at all.
+ *
+ * Note that this one stays a raw statement where every other read in this
+ * file is a builder: `information_schema` is a catalog no schema module under
+ * `db/` declares, and a table that is not declared there is exactly what the
+ * assertion below is looking for.
+ */
 async function tablesNamed(name: string): Promise<readonly string[]> {
   const rows = await database.run(
     Effect.gen(function* () {

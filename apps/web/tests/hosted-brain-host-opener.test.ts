@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
@@ -13,6 +14,8 @@ import {
   SESSION_STATUS,
   type SessionIdentity,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations, providerCursors } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -226,15 +229,16 @@ const CursorRowSchema = Schema.Struct({ cursor: Schema.String });
 
 async function cursorOf(userId: string, who: SessionIdentity): Promise<string | undefined> {
   const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select cursor from provider_cursors
-        where user_id = ${userId}
-          and provider_id = ${who.providerId}
-          and provider_session_id = ${who.providerSessionId}
-      `;
-    }),
+    db
+      .select({ cursor: providerCursors.cursor })
+      .from(providerCursors)
+      .where(
+        and(
+          eq(providerCursors.userId, userId),
+          eq(providerCursors.providerId, who.providerId),
+          eq(providerCursors.providerSessionId, who.providerSessionId),
+        ),
+      ),
   );
   const row = rows[0];
   return row === undefined ? undefined : Schema.decodeUnknownSync(CursorRowSchema)(row).cursor;
@@ -242,12 +246,12 @@ async function cursorOf(userId: string, who: SessionIdentity): Promise<string | 
 
 function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ runtimeSessionId: sessionId })
+        .where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
@@ -262,27 +266,29 @@ const ObservedConversationRowSchema = Schema.Struct({
   runtimeSessionId: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   workspace: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    providerSessionId: "provider_session_id",
-    runtimeSessionId: "runtime_session_id",
-  }),
-);
+});
 
 type ObservedConversationRow = typeof ObservedConversationRowSchema.Type;
 
 async function observedConversations(userId: string): Promise<ObservedConversationRow[]> {
   const rows = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select id, provider_session_id, runtime_session_id, title, workspace from conversations
-        where user_id = ${userId}
-          and kind = ${CONVERSATION_KIND.OBSERVED}
-          and deleted_at is null
-        order by provider_session_id
-      `;
-    }),
+    db
+      .select({
+        id: conversations.id,
+        providerSessionId: conversations.providerSessionId,
+        runtimeSessionId: conversations.runtimeSessionId,
+        title: conversations.title,
+        workspace: conversations.workspace,
+      })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(conversations.providerSessionId),
   );
   return rows.map((row) => Schema.decodeUnknownSync(ObservedConversationRowSchema)(row));
 }

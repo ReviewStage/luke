@@ -16,9 +16,12 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import { eq } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
+import { db } from "../server/db/query";
+import { conversations, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   ASK_REFUSAL,
@@ -358,15 +361,15 @@ async function conversation(
 ): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into conversations (user_id, kind, runtime_session_id, deleted_at)
-        values (
-          ${userId}, ${CONVERSATION_KIND.MAIN},
-          ${overrides.runtimeSessionId ?? null}, ${overrides.deletedAt ?? null}
-        )
-        returning id
-      `;
+      const rows = yield* db
+        .insert(conversations)
+        .values({
+          userId,
+          kind: CONVERSATION_KIND.MAIN,
+          runtimeSessionId: overrides.runtimeSessionId ?? null,
+          deletedAt: overrides.deletedAt ?? null,
+        })
+        .returning({ id: conversations.id });
       return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
@@ -388,19 +391,20 @@ async function turnRow(
 ): Promise<string> {
   const row = await database.run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into turns (
-          user_id, conversation_id, origin, status, eve_turn_id,
-          queued_at, started_at, settled_at, cancel_requested_at
-        )
-        values (
-          ${userId}, ${conversationId}, ${TURN_ORIGIN.TYPED}, ${overrides.status ?? TURN_STATUS.RUNNING},
-          ${overrides.eveTurnId ?? null},
-          ${new Date(NOW)}, ${new Date(NOW)}, ${overrides.settledAt ?? null}, ${overrides.cancelRequestedAt ?? null}
-        )
-        returning id
-      `;
+      const rows = yield* db
+        .insert(turns)
+        .values({
+          userId,
+          conversationId,
+          origin: TURN_ORIGIN.TYPED,
+          status: overrides.status ?? TURN_STATUS.RUNNING,
+          eveTurnId: overrides.eveTurnId ?? null,
+          queuedAt: new Date(NOW),
+          startedAt: new Date(NOW),
+          settledAt: overrides.settledAt ?? null,
+          cancelRequestedAt: overrides.cancelRequestedAt ?? null,
+        })
+        .returning({ id: turns.id });
       return yield* Schema.decodeUnknownEffect(IdRowSchema)(rows[0]);
     }),
   );
@@ -409,35 +413,28 @@ async function turnRow(
 
 function setConversationRuntimeSessionId(conversationId: string, sessionId: string) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set runtime_session_id = ${sessionId} where id = ${conversationId}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ runtimeSessionId: sessionId })
+        .where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
 function stampConversationDeletedAt(conversationId: string, deletedAt: Date) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update conversations set deleted_at = ${deletedAt} where id = ${conversationId}
-      `;
-    }),
+    Effect.asVoid(
+      db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
 function settleTurn(turnId: string, settledAt: Date) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}
-        where id = ${turnId}
-      `;
-    }),
+    Effect.asVoid(
+      db.update(turns).set({ status: TURN_STATUS.SETTLED, settledAt }).where(eq(turns.id, turnId)),
+    ),
   );
 }
 

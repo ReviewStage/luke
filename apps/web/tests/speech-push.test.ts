@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -18,7 +18,9 @@ import {
   TURN_STATUS,
   type WireRecord,
 } from "../server/core";
+import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { voiceSessions } from "../server/db/voice-schema";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,
@@ -239,7 +241,7 @@ async function deviceIds(userId: string): Promise<string[]> {
 
 const sessionRecord = voiceSessionRecord(() => clock);
 
-const VoiceSessionDeviceRowSchema = Schema.Struct({ device_id: Schema.NullOr(Schema.String) });
+const VoiceSessionDeviceRowSchema = Schema.Struct({ deviceId: Schema.NullOr(Schema.String) });
 
 /**
  * A call standing behind one device, as either signed-in route leaves it: the
@@ -265,14 +267,12 @@ async function standingCall(
           offers: database.store.speech,
           tools: CATALOG_TOOL_SET,
           deviceId: Effect.gen(function* () {
-            const sql = yield* SqlClient.SqlClient;
-            const [row] = yield* sql`
-              select device_id from voice_sessions where live_session_id = ${liveSessionId}
-            `;
+            const [row] = yield* db
+              .select({ deviceId: voiceSessions.deviceId })
+              .from(voiceSessions)
+              .where(eq(voiceSessions.liveSessionId, liveSessionId));
             if (row === undefined) return undefined;
-            return (
-              Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).device_id ?? undefined
-            );
+            return Schema.decodeUnknownSync(VoiceSessionDeviceRowSchema)(row).deviceId ?? undefined;
           }),
           deliver: (delivery) => spoken.push(delivery),
           now: () => clock,

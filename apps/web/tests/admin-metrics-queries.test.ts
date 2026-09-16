@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { USER_ROLE } from "../server/admin/admin-access";
 import { readAdminMetricsSource } from "../server/admin/admin-queries";
 import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "../server/admin/http";
+import { account, user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { hostedUsage } from "../server/db/usage-schema";
 import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
@@ -38,30 +40,25 @@ interface SeededAccount {
 
 const openUser = (name: string, createdAt: string, role: string) =>
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
     const id = `user-${randomUUID()}`;
     const email = `${id}@luke.test`;
-    yield* sql`
-      insert into "user" (id, name, email, created_at, role)
-      values (${id}, ${name}, ${email}, ${new Date(createdAt)}, ${role})
-    `;
+    yield* db.insert(user).values({ id, name, email, createdAt: new Date(createdAt), role });
     return { id, name, email } satisfies SeededAccount;
   });
 
 const linkSignIn = (userId: string, providerId: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      insert into account (id, account_id, provider_id, user_id, updated_at)
-      values (${`account-${randomUUID()}`}, ${randomUUID()}, ${providerId}, ${userId}, ${new Date(NOW)})
-    `;
-  });
+  Effect.asVoid(
+    db.insert(account).values({
+      id: `account-${randomUUID()}`,
+      accountId: randomUUID(),
+      providerId,
+      userId,
+      updatedAt: new Date(NOW),
+    }),
+  );
 
 const spend = (userId: string, day: string, calls: number) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`insert into hosted_usage (user_id, day, calls) values (${userId}, ${day}, ${calls})`;
-  });
+  Effect.asVoid(db.insert(hostedUsage).values({ userId, day, calls }));
 
 const readSource = (scope: (typeof ADMIN_METRICS_SCOPE)[keyof typeof ADMIN_METRICS_SCOPE]) =>
   readAdminMetricsSource({

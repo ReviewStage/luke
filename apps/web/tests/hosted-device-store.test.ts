@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { DEVICE_PLATFORM, PUSH_ENVIRONMENT } from "@sidecar/hosted";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { user } from "../server/db/auth-schema";
+import { devices } from "../server/db/devices-schema";
+import { db } from "../server/db/query";
 import { forgetDevice, registerDevice, touchDevice } from "../server/hosted/device-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { testSqlClient } from "./support/sql-client";
@@ -22,12 +25,8 @@ const LATER = new Date(NOW.getTime() + 120_000);
 const TOKEN = "0a".repeat(32);
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
 
@@ -42,23 +41,11 @@ const DeviceRowSchema = Schema.Struct({
   pushEnvironment: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    installationId: "installation_id",
-    activeUntil: "active_until",
-    quietUntil: "quiet_until",
-    pushToken: "push_token",
-    pushEnvironment: "push_environment",
-    createdAt: "created_at",
-    updatedAt: "updated_at",
-  }),
-);
+});
 
 const readDeviceByInstallation = (installationId: string) =>
   Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    const rows = yield* sql`select * from devices where installation_id = ${installationId}`;
+    const rows = yield* db.select().from(devices).where(eq(devices.installationId, installationId));
     return yield* Schema.decodeUnknownEffect(DeviceRowSchema)(rows[0]);
   });
 

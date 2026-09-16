@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { USER_ROLE } from "../server/admin/admin-access";
 import {
   readAdminDaySource,
@@ -15,6 +14,9 @@ import {
   ADMIN_METRICS_WINDOW,
   type AdminMetricsScope,
 } from "../server/admin/http";
+import { account, session, user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { hostedUsage } from "../server/db/usage-schema";
 import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
@@ -39,14 +41,12 @@ it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (
     Effect.gen(function* () {
       const token = `t${randomUUID().replace(/-/g, "")}`;
       const ids = yield* Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
         const open = (name: string, createdAt: string, role: string) =>
           Effect.gen(function* () {
             const id = `user-${randomUUID()}`;
-            yield* sql`
-            insert into "user" (id, name, email, created_at, role)
-            values (${id}, ${name}, ${`${id}@luke.test`}, ${new Date(createdAt)}, ${role})
-          `;
+            yield* db
+              .insert(user)
+              .values({ id, name, email: `${id}@luke.test`, createdAt: new Date(createdAt), role });
             return id;
           });
         const ada = yield* open(`Ada ${token}`, "2097-03-10T00:00:00.000Z", USER_ROLE.USER);
@@ -54,22 +54,22 @@ it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (
         const zed = yield* open(`Zed 100%${token}`, "2097-03-08T00:00:00.000Z", USER_ROLE.USER);
         const cy = yield* open(`Cy ${token}`, "2097-03-07T00:00:00.000Z", USER_ROLE.ADMIN);
 
-        yield* sql`
-        insert into account (id, account_id, provider_id, user_id, updated_at)
-        values (${`account-${randomUUID()}`}, ${randomUUID()}, ${"google"}, ${ada}, ${new Date(NOW)})
-      `;
-        yield* sql`
-        insert into session (id, expires_at, token, updated_at, user_id)
-        values (
-          ${`session-${randomUUID()}`},
-          ${new Date("2097-04-01T00:00:00.000Z")},
-          ${randomUUID()},
-          ${new Date(SESSION_SEEN_AT)},
-          ${ada}
-        )
-      `;
+        yield* db.insert(account).values({
+          id: `account-${randomUUID()}`,
+          accountId: randomUUID(),
+          providerId: "google",
+          userId: ada,
+          updatedAt: new Date(NOW),
+        });
+        yield* db.insert(session).values({
+          id: `session-${randomUUID()}`,
+          expiresAt: new Date("2097-04-01T00:00:00.000Z"),
+          token: randomUUID(),
+          updatedAt: new Date(SESSION_SEEN_AT),
+          userId: ada,
+        });
         const spend = (userId: string, day: string, calls: number) =>
-          sql`insert into hosted_usage (user_id, day, calls) values (${userId}, ${day}, ${calls})`;
+          Effect.asVoid(db.insert(hostedUsage).values({ userId, day, calls }));
         yield* spend(ada, TODAY, 3);
         yield* spend(ada, YESTERDAY, HOSTED_DAILY_LIMIT + 2);
         yield* spend(bo, YESTERDAY, 1);

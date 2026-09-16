@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { and, eq, isNull } from "drizzle-orm";
 import { Deferred, Duration, Effect, Fiber, ManagedRuntime, Schedule, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -22,6 +23,8 @@ import {
   UI_PART_TYPE,
   userMetadataOf,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { CHILD_OPEN_REFUSAL, type ChildTurn } from "../server/hosted/brain-host/child-opener";
@@ -260,23 +263,19 @@ const ChildRowSchema = Schema.Struct({
   spawnedByMessageId: Schema.String,
   label: Schema.NullOr(Schema.String),
   expectsCompletion: Schema.Boolean,
-}).pipe(
-  Schema.encodeKeys({
-    parentConversationId: "parent_conversation_id",
-    spawnedByMessageId: "spawned_by_message_id",
-    expectsCompletion: "expects_completion",
-  }),
-);
+});
 
 async function childRow(childId: string) {
   const rows = await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select parent_conversation_id, spawned_by_message_id, label, expects_completion
-        from conversations where id = ${childId} and deleted_at is null
-      `,
-    ),
+    db
+      .select({
+        parentConversationId: conversations.parentConversationId,
+        spawnedByMessageId: conversations.spawnedByMessageId,
+        label: conversations.label,
+        expectsCompletion: conversations.expectsCompletion,
+      })
+      .from(conversations)
+      .where(and(eq(conversations.id, childId), isNull(conversations.deletedAt))),
   );
   return rows[0] === undefined ? undefined : Schema.decodeUnknownSync(ChildRowSchema)(rows[0]);
 }
@@ -681,6 +680,10 @@ const LockWaitersSchema = Schema.Struct({ waiting: Schema.Number });
  * How many other backends wait on a lock now, read from `pg_locks`, which is
  * live, and not from `pg_stat_activity`, which a transaction sees as it stood
  * at its first look.
+ *
+ * Note that this one stays a raw statement where every other read in this
+ * file is a builder: `pg_locks` is a system catalog no schema module under
+ * `db/` declares, so there is no table to render it against.
  */
 const lockWaiters = (sql: SqlClient.SqlClient): Effect.Effect<number, SqlError> =>
   Effect.map(
@@ -709,12 +712,19 @@ test.skipIf(database.anotherConnection === undefined)(
           Effect.flatMap(SqlClient.SqlClient, (sql) =>
             sql.withTransaction(
               Effect.gen(function* () {
-                yield* sql`select id from conversations where id = ${child.childId} for update`;
-                yield* sql`
-                  insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
-                  values (${fixture.userId}, ${child.childId}, ${TURN_ORIGIN.CHILD},
-                          ${TURN_STATUS.RUNNING}, ${at(21)}, ${at(21)})
-                `;
+                yield* db
+                  .select({ id: conversations.id })
+                  .from(conversations)
+                  .where(eq(conversations.id, child.childId))
+                  .for("update");
+                yield* db.insert(turns).values({
+                  userId: fixture.userId,
+                  conversationId: child.childId,
+                  origin: TURN_ORIGIN.CHILD,
+                  status: TURN_STATUS.RUNNING,
+                  queuedAt: at(21),
+                  startedAt: at(21),
+                });
                 yield* Deferred.succeed(held, undefined);
                 const waiting = yield* Effect.repeat(lockWaiters(sql), {
                   schedule: Schedule.spaced(CONTENTION_WAIT.INTERVAL).pipe(

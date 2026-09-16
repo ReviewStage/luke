@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { Effect, Fiber, Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -53,26 +55,22 @@ const ChildRowSchema = Schema.Struct({
   label: Schema.NullOr(Schema.String),
   expectsCompletion: Schema.NullOr(Schema.Boolean),
   runtimeSessionId: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    parentConversationId: "parent_conversation_id",
-    spawnedByMessageId: "spawned_by_message_id",
-    expectsCompletion: "expects_completion",
-    runtimeSessionId: "runtime_session_id",
-  }),
-);
+});
 
 async function childRow(childId: string) {
   const rows = await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        select kind, user_id, parent_conversation_id, spawned_by_message_id, label,
-               expects_completion, runtime_session_id
-        from conversations where id = ${childId}
-      `,
-    ),
+    db
+      .select({
+        kind: conversations.kind,
+        userId: conversations.userId,
+        parentConversationId: conversations.parentConversationId,
+        spawnedByMessageId: conversations.spawnedByMessageId,
+        label: conversations.label,
+        expectsCompletion: conversations.expectsCompletion,
+        runtimeSessionId: conversations.runtimeSessionId,
+      })
+      .from(conversations)
+      .where(eq(conversations.id, childId)),
   );
   return rows[0] === undefined ? undefined : Schema.decodeUnknownSync(ChildRowSchema)(rows[0]);
 }
@@ -80,12 +78,12 @@ async function childRow(childId: string) {
 /** How the parent's children stand: the rows nothing stamped, and the rows a refusal stamped. */
 async function childrenOf(parentId: string): Promise<{ standing: number; stamped: number }> {
   const rows = await database.run(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`select deleted_at from conversations where parent_conversation_id = ${parentId}`,
-    ),
+    db
+      .select({ deletedAt: conversations.deletedAt })
+      .from(conversations)
+      .where(eq(conversations.parentConversationId, parentId)),
   );
-  const stamped = rows.filter((row) => row.deleted_at !== null).length;
+  const stamped = rows.filter((row) => row.deletedAt !== null).length;
   return { standing: rows.length - stamped, stamped };
 }
 

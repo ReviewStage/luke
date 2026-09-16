@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, ManagedRuntime, Result, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import { defineEval } from "eve/evals";
 import {
   BRAIN_TOOL,
@@ -17,7 +18,10 @@ import {
   unparsedWire,
   WORKSPACE_FILE,
 } from "../../server/core";
+import { user } from "../../server/db/auth-schema";
+import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
+import { conversations } from "../../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
@@ -53,14 +57,16 @@ type Run = <A, E>(effect: Effect.Effect<A, E, SqlClient.SqlClient>) => Promise<A
 
 async function ensureLocalDevUser(run: Run): Promise<void> {
   await run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        insert into "user" (id, name, email)
-        values (${LOCAL_DEV_PRINCIPAL}, ${"Local developer"}, ${"local-dev@luke.test"})
-        on conflict (id) do nothing
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .insert(user)
+        .values({
+          id: LOCAL_DEV_PRINCIPAL,
+          name: "Local developer",
+          email: "local-dev@luke.test",
+        })
+        .onConflictDoNothing({ target: user.id }),
+    ),
   );
 }
 
@@ -68,19 +74,22 @@ async function ensureLocalDevUser(run: Run): Promise<void> {
 async function standingMainConversation(run: Run): Promise<{ id: string }> {
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const IdRowSchema = Schema.Struct({ id: Schema.String });
-      const standing = yield* sql`
-        select id from conversations
-        where user_id = ${LOCAL_DEV_PRINCIPAL} and kind = ${CONVERSATION_KIND.MAIN}
-          and deleted_at is null
-      `;
+      const standing = yield* db
+        .select({ id: conversations.id })
+        .from(conversations)
+        .where(
+          and(
+            eq(conversations.userId, LOCAL_DEV_PRINCIPAL),
+            eq(conversations.kind, CONVERSATION_KIND.MAIN),
+            isNull(conversations.deletedAt),
+          ),
+        );
       if (standing[0]) return Schema.decodeUnknownSync(IdRowSchema)(standing[0]);
-      const opened = yield* sql`
-        insert into conversations (user_id, kind)
-        values (${LOCAL_DEV_PRINCIPAL}, ${CONVERSATION_KIND.MAIN})
-        returning id
-      `;
+      const opened = yield* db
+        .insert(conversations)
+        .values({ userId: LOCAL_DEV_PRINCIPAL, kind: CONVERSATION_KIND.MAIN })
+        .returning({ id: conversations.id });
       const [row] = opened;
       assert.ok(row);
       return Schema.decodeUnknownSync(IdRowSchema)(row);
@@ -94,15 +103,13 @@ function readConversationRuntimeSessionId(
 ): Promise<string | null> {
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        select runtime_session_id from conversations where id = ${conversationId}
-      `;
-      const RowSchema = Schema.Struct({
-        runtime_session_id: Schema.NullOr(Schema.String),
-      });
+      const rows = yield* db
+        .select({ runtimeSessionId: conversations.runtimeSessionId })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId));
+      const RowSchema = Schema.Struct({ runtimeSessionId: Schema.NullOr(Schema.String) });
       const [row] = rows;
-      return row === undefined ? null : Schema.decodeUnknownSync(RowSchema)(row).runtime_session_id;
+      return row === undefined ? null : Schema.decodeUnknownSync(RowSchema)(row).runtimeSessionId;
     }),
   );
 }

@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { MEMORY_FLUSH_DEFAULTS, MEMORY_HOUSEKEEPING_OUTCOME } from "@sidecar/memory";
 import type { ModelMessage } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { MemoryCompactionRequestedContext } from "eve/memory";
 import { afterAll, test } from "vitest";
 import { BRAIN_TOOL } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_REFUSAL,
@@ -184,23 +186,25 @@ function wordsModel(text: string): MockLanguageModelV4 {
 
 /** The row's flush columns as either dialect hands them back: the instant read the way the store reads every `timestamptz`. */
 const FlushRowSchema = Schema.Struct({
-  memory_flush_operation_id: Schema.NullOr(Schema.String),
-  memory_flush_outcome: Schema.NullOr(Schema.String),
-  memory_flushed_at: Schema.NullOr(InstantColumnSchema),
+  memoryFlushOperationId: Schema.NullOr(Schema.String),
+  memoryFlushOutcome: Schema.NullOr(Schema.String),
+  memoryFlushedAt: Schema.NullOr(InstantColumnSchema),
 });
 
 /** What the conversation's row records of its last flush. */
 function flushRecord(conversationId: string) {
   return database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        select memory_flush_operation_id, memory_flush_outcome, memory_flushed_at
-        from conversations
-        where id = ${conversationId}
-      `;
-      return Schema.decodeUnknownSync(FlushRowSchema)(rows[0]);
-    }),
+    Effect.map(
+      db
+        .select({
+          memoryFlushOperationId: conversations.memoryFlushOperationId,
+          memoryFlushOutcome: conversations.memoryFlushOutcome,
+          memoryFlushedAt: conversations.memoryFlushedAt,
+        })
+        .from(conversations)
+        .where(eq(conversations.id, conversationId)),
+      (rows) => Schema.decodeUnknownSync(FlushRowSchema)(rows[0]),
+    ),
   );
 }
 
@@ -251,9 +255,9 @@ test("an ask's compaction runs one housekeeping turn offered append_daily_note a
   assert.match(note?.content ?? "", /The release ships Friday/);
   assert.equal((await readMessagesByConversation(database.run, conversationId)).length, 0);
   assert.deepEqual(await flushRecord(conversationId), {
-    memory_flush_operation_id: operation,
-    memory_flush_outcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
-    memory_flushed_at: new Date(NOW),
+    memoryFlushOperationId: operation,
+    memoryFlushOutcome: MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED,
+    memoryFlushedAt: new Date(NOW),
   });
 });
 
@@ -272,13 +276,13 @@ test("one compaction cycle flushes once: a replayed capture runs no turn, and th
     reason: MEMORY_FLUSH_REFUSAL.ALREADY_FLUSHED,
   });
   assert.equal(model.doGenerateCalls.length, 1);
-  assert.equal((await flushRecord(conversationId)).memory_flush_operation_id, first);
+  assert.equal((await flushRecord(conversationId)).memoryFlushOperationId, first);
 
   const second = operationId();
   const next = await database.run(host.flush(capture(auth, { operationId: second }), model));
   assert.equal(next.outcome, MEMORY_HOUSEKEEPING_OUTCOME.COMPLETED);
   assert.equal(model.doGenerateCalls.length, 2);
-  assert.equal((await flushRecord(conversationId)).memory_flush_operation_id, second);
+  assert.equal((await flushRecord(conversationId)).memoryFlushOperationId, second);
   assert.equal((await noteFor(userId))?.content.match(/First cycle/g)?.length, 2);
 });
 
@@ -306,7 +310,7 @@ test("a scaffolding turn flushes nothing: the roster's observation, a child's ta
   }
   assert.equal(model.doGenerateCalls.length, 0);
   assert.equal(await noteFor(userId), undefined);
-  assert.equal((await flushRecord(conversationId)).memory_flush_operation_id, null);
+  assert.equal((await flushRecord(conversationId)).memoryFlushOperationId, null);
 });
 
 test("a session the host does not admit flushes nothing, and a deployment holding no model flushes nothing", async () => {
@@ -331,7 +335,7 @@ test("a session the host does not admit flushes nothing, and a deployment holdin
     reason: BRAIN_HOST_REFUSAL.NO_MODEL,
   });
   assert.equal(model.doGenerateCalls.length, 0);
-  assert.equal((await flushRecord(conversationId)).memory_flush_operation_id, null);
+  assert.equal((await flushRecord(conversationId)).memoryFlushOperationId, null);
 });
 
 test("NO_REPLY stores nothing and is written down as nothing to store; so is a reply in words", async () => {
@@ -358,7 +362,7 @@ test("NO_REPLY stores nothing and is written down as nothing to store; so is a r
   assert.equal(await noteFor(userId), undefined);
   assert.equal((await readMessagesByConversation(database.run, conversationId)).length, 0);
   assert.equal(
-    (await flushRecord(conversationId)).memory_flush_outcome,
+    (await flushRecord(conversationId)).memoryFlushOutcome,
     MEMORY_HOUSEKEEPING_OUTCOME.NOTHING_TO_STORE,
   );
 });
@@ -382,7 +386,7 @@ test("a model failure is written down as failed and a cancelled operation as int
     reason: "The account's daily hosted allowance is spent.",
   });
   assert.equal(
-    (await flushRecord(conversationId)).memory_flush_outcome,
+    (await flushRecord(conversationId)).memoryFlushOutcome,
     MEMORY_HOUSEKEEPING_OUTCOME.FAILED,
   );
 

@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { ACTION_KIND, type WireRecord, type WorkspaceAgentSelection } from "../server/core";
+import { user } from "../server/db/auth-schema";
+import { accountWorkspacePreference } from "../server/db/preferences-schema";
+import { db } from "../server/db/query";
 import { writeAccountPreferences } from "../server/hosted/account-store";
 import type { ActionRoster } from "../server/hosted/action-execute";
 import { handleSessionAction, type SessionActionOptions } from "../server/hosted/action-session";
@@ -33,12 +35,8 @@ const EMPTY_ROSTER: ActionRoster = {
 };
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   return userId;
 });
 
@@ -181,13 +179,15 @@ it.layer(testSqlClient)("the hosted action route over the account's synced agent
       const userId = yield* openUser;
       // Written past the wire's guard on purpose: a row an older build stored
       // for a model Conductor has since retired, or a corrupted one.
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        insert into account_workspace_preference
-          (user_id, provider_id, default_project_id, agent, model, effort, updated_at)
-        values
-          (${userId}, ${"conductor"}, ${null}, ${"claude"}, ${"retired-model"}, ${"high"}, ${new Date()})
-      `;
+      yield* db.insert(accountWorkspacePreference).values({
+        userId,
+        providerId: "conductor",
+        defaultProjectId: null,
+        agent: "claude",
+        model: "retired-model",
+        effort: "high",
+        updatedAt: new Date(),
+      });
 
       const handed: HandedToExecution[] = [];
       yield* handleSessionAction(creationOptions(userId, handed));
