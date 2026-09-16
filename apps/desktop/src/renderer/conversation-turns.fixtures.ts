@@ -634,7 +634,7 @@ export function fixtureChildCompletionTurns(
                 {
                   childId,
                   label,
-                  status: CHILD_COMPLETION_STATUS.COMPLETED,
+                  status: CHILD_COMPLETION_STATUS.SETTLED,
                   result: "Two of the notes are stale.",
                   failure: undefined,
                 },

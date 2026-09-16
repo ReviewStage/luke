@@ -5,7 +5,6 @@ import {
   type ChildRunRecord,
   CONVERSATION_KIND,
   childSessionKey,
-  DEFAULT_AGENT_ID,
   MAIN_SESSION_KEY,
   RUN_ORIGIN,
 } from "@sidecar/runtime/vocabulary";
@@ -27,16 +26,10 @@ const NOW = 1_800_000_000_000;
 function childRecord(childId: string, label?: string): ChildRunRecord {
   return {
     childId,
-    agentId: DEFAULT_AGENT_ID,
-    requesterSessionKey: MAIN_SESSION_KEY,
-    childSessionKey: childSessionKey(childId),
-    task: "look",
     ...(label !== undefined ? { label } : undefined),
-    expectsCompletion: true,
-    status: CHILD_RUN_STATUS.COMPLETED,
+    status: CHILD_RUN_STATUS.SETTLED,
     acceptedAt: NOW,
     settledAt: NOW + 1_000,
-    resultText: "done",
   };
 }
 
@@ -156,7 +149,6 @@ test("a spawn is bounded here, carries the turn's run, runs through the journal,
   assert.equal(ask.task.length, maximumChildTaskLength);
   assert.equal(ask.label, "summary");
   assert.equal(ask.expectsCompletion, false);
-  assert.equal(ask.requesterRunId, "run-1");
   // Unreadable optional fields are left out rather than guessed at; an empty task never reaches the host.
   await Effect.runPromise(spawn.execute({ task: "look", expects_completion: "yes" }, ctx));
   const second = spawns[1];
@@ -183,10 +175,9 @@ test("subagents lists as a read and cancels through the journal; a child not thi
       {
         child_id: "child-1",
         label: "summary",
-        status: CHILD_RUN_STATUS.COMPLETED,
+        status: CHILD_RUN_STATUS.SETTLED,
         accepted_at: new Date(NOW).toISOString(),
         settled_at: new Date(NOW + 1_000).toISOString(),
-        has_result: true,
       },
     ],
   });

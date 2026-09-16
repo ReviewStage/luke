@@ -128,7 +128,7 @@ test("a child-completion item opens with its marker and carries the child, its e
         {
           childId: "child-2",
           label: undefined,
-          status: CHILD_COMPLETION_STATUS.COMPLETED,
+          status: CHILD_COMPLETION_STATUS.SETTLED,
           result: "Done.",
           failure: undefined,
         },
@@ -137,7 +137,7 @@ test("a child-completion item opens with its marker and carries the child, its e
     ),
     {
       child_id: "child-2",
-      status: CHILD_COMPLETION_STATUS.COMPLETED,
+      status: CHILD_COMPLETION_STATUS.SETTLED,
       result: "Done.",
       truncated: false,
     },

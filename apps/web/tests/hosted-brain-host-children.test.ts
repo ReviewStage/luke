@@ -10,7 +10,6 @@ import {
   CHILD_SPAWN_REFUSAL,
   type ChildRunRecord,
   childSessionKey,
-  DEFAULT_AGENT_ID,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   CONVERSATION_KIND as RECORD_CONVERSATION_KIND,
@@ -172,7 +171,7 @@ function withAccess<A>(
   );
 }
 
-const SPAWN = { task: "fixture task", requesterRunId: "run-1" };
+const SPAWN = { task: "fixture task" };
 
 /** Another standing conversation of the account, observed since an account has one main. */
 function elsewhereIn(userId: string): Promise<string> {
@@ -426,7 +425,7 @@ test("the list answers this conversation's children as run records, newest first
     task: "fixture running task",
     turn: { status: TURN_STATUS.RUNNING, eveTurnId: EVE_TURN_ID, startedAt: at(12) },
   });
-  const completed = await childOf(fixture, {
+  const settled = await childOf(fixture, {
     createdAt: at(20),
     turn: { status: TURN_STATUS.SETTLED, startedAt: at(21), settledAt: at(22) },
   });
@@ -441,39 +440,22 @@ test("the list answers this conversation's children as run records, newest first
   const expected: ChildRunRecord[] = [
     {
       childId: failed.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(failed.childId),
-      task: "",
-      expectsCompletion: true,
       status: CHILD_RUN_STATUS.FAILED,
       acceptedAt: NOW + 30,
       settledAt: NOW + 31,
       failureDetail: "fixture failure",
     },
     {
-      childId: completed.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(completed.childId),
-      task: "",
-      expectsCompletion: true,
-      status: CHILD_RUN_STATUS.COMPLETED,
+      childId: settled.childId,
+      status: CHILD_RUN_STATUS.SETTLED,
       acceptedAt: NOW + 20,
-      startedAt: NOW + 21,
       settledAt: NOW + 22,
     },
     {
       childId: running.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(running.childId),
-      task: "fixture running task",
       label: "fixture running",
-      expectsCompletion: true,
       status: CHILD_RUN_STATUS.RUNNING,
       acceptedAt: NOW + 10,
-      startedAt: NOW + 12,
     },
   ];
   assert.deepEqual(listed, expected);

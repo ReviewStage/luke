@@ -27,14 +27,14 @@ import type { ToolContext, ToolModule } from "./tool-module.js";
 
 /**
  * The session tools, OpenClaw's delegation and conversation inspection as
- * modules. The host owns the conversations, the child service, and the
- * directory, and answers each in its own typed terms through the access in
- * the context; the records the model reads are rendered here and nowhere
+ * modules. The host owns the conversations, the store's children rows, and
+ * the directory, and answers each in its own typed terms through the access
+ * in the context; the records the model reads are rendered here and nowhere
  * else. A module validates the call's arguments and its own standing; the
  * host validates ownership, so a child named here must be this
  * conversation's and one that is not is answered with nothing. A spawn and a
  * cancel are effects and run through the journal in the context, recorded
- * before the child service hears them, so a crash mid-spawn is found as an
+ * before the child opener hears them, so a crash mid-spawn is found as an
  * action of unknown result and the same call id answers the same receipt;
  * the list and the history are reads.
  */
@@ -44,14 +44,12 @@ interface BrainChildSpawnAsk {
   readonly task: string;
   readonly label?: string;
   readonly expectsCompletion?: boolean;
-  /** The run the spawn was called in, for the child's record. */
-  readonly requesterRunId: string;
 }
 
 /**
  * How the session tools reach delegation: the host owns the conversations,
- * the child service, and the directory, and answers each in its own typed
- * terms.
+ * the store's children rows, and the directory, and answers each in its own
+ * typed terms.
  */
 export interface BrainChildAccess {
   /** The conversation these tools belong to, which the listing marks current. */
@@ -59,7 +57,7 @@ export interface BrainChildAccess {
   spawn(ask: BrainChildSpawnAsk): Effect.Effect<ChildSpawnOutcome>;
   /** This conversation's children, as their records stand. */
   list(): Effect.Effect<readonly ChildRunRecord[]>;
-  /** Cancels one of this conversation's children and its descendants; nothing for a child that is not its own. */
+  /** Cancels one of this conversation's children; nothing for a child that is not its own. */
   cancel(childId: string): Effect.Effect<ChildCancellation | undefined>;
   conversations(): Effect.Effect<readonly ConversationRecord[]>;
   /** One of this conversation's children's conversation lines, most recent last; nothing for a child that is not its own. */
@@ -162,7 +160,6 @@ function childSummaryRecord(record: ChildRunRecord): WireRecord {
     ...(record.settledAt !== undefined
       ? { settled_at: new Date(record.settledAt).toISOString() }
       : undefined),
-    ...(record.resultText !== undefined ? { has_result: true } : undefined),
   };
 }
 
@@ -220,7 +217,6 @@ const SESSIONS_SPAWN: SessionToolModule = {
         ...(isWireBoolean(input.expects_completion)
           ? { expectsCompletion: input.expects_completion }
           : undefined),
-        requesterRunId: context.runId,
       };
       return context.journal(Effect.map(children.spawn(ask), spawnOutcomeRecord));
     });
@@ -231,8 +227,8 @@ const SUBAGENTS: SessionToolModule = {
   name: BRAIN_TOOL.SUBAGENTS,
   description:
     "List the children this conversation asked for — each with its id, label, status, and " +
-    "when it was accepted and settled — or cancel one by id. Cancelling reaches every child " +
-    "it spawned in turn. Check status only when debugging; completions arrive on their own.",
+    "when it was accepted and settled — or cancel one by id. Check status only when " +
+    "debugging; completions arrive on their own.",
   inputSchema: SUBAGENTS_INPUT,
   execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {
     return Effect.gen(function* () {
@@ -259,8 +255,8 @@ const SUBAGENTS: SessionToolModule = {
 const SESSIONS_LIST: SessionToolModule = {
   name: BRAIN_TOOL.SESSIONS_LIST,
   description:
-    "List Luke's own conversations — main, the developer's threads, the observed sessions' " +
-    "conversations, and child conversations — by key, kind, name, and last activity. These " +
+    "List Luke's own conversations — main, the observed sessions' conversations, and child " +
+    "conversations — by key, kind, name, and last activity. These " +
     "are your own conversations, not the coding agents the roster lists.",
   inputSchema: SESSIONS_LIST_INPUT,
   execute(_input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {

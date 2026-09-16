@@ -22,7 +22,6 @@ export const REFUSAL_REASON = {
 
 /** A spawn refusal in the words the model reads; the service answers the code and this the sentence. */
 export const SPAWN_REFUSAL_REASON = {
-  [CHILD_SPAWN_REFUSAL.EMPTY_TASK]: "a task needs words",
   [CHILD_SPAWN_REFUSAL.DEPTH_CAP]: "not run: the delegation depth cap is reached",
   [CHILD_SPAWN_REFUSAL.REQUESTER_LIMIT]:
     "not run: this conversation already has its limit of active children",

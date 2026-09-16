@@ -49,7 +49,6 @@ export {
   brainToolCatalog,
   brainToolNotes,
   CHILD_COMPLETION_STATUS,
-  type ChildCompletionStatus,
   childCompletionInputText,
   childTaskInputText,
   holdReleasedInputText,

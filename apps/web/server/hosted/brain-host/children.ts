@@ -3,7 +3,6 @@ import { Effect } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import {
   type BrainChildAccess,
-  CHILD_RUN_STATUS,
   CHILD_SPAWN_REFUSAL,
   type ChildCancellation,
   type ChildRunRecord,
@@ -12,7 +11,6 @@ import {
   type ConversationRecord,
   childSessionKey,
   childTaskInputText,
-  DEFAULT_AGENT_ID,
   CONVERSATION_KIND as RECORD_CONVERSATION_KIND,
   type SessionKey,
   type StoredUIMessage,
@@ -72,6 +70,8 @@ export const HOSTED_CHILDREN = {
    * so the bound is taken over the lines that remain, not the rows read.
    */
   LINES_WINDOW: 200,
+  /** How many of the account's conversations, most recently written to first, one `sessions_list` answers. */
+  DIRECTORY_LIMIT: 100,
 } as const;
 
 /** The refusal the brain reads for each way the opener declines: no child was opened, and this is the nearest reason. */
@@ -100,22 +100,6 @@ export interface HostedChildrenSeams {
   readonly now: () => number;
 }
 
-/** The store's status for a child, in the brain's vocabulary: a settled turn is a completed child. */
-function runStatusOf(status: ChildRecord["status"]): ChildRunRecord["status"] {
-  switch (status) {
-    case CHILD_STATUS.ACCEPTED:
-      return CHILD_RUN_STATUS.ACCEPTED;
-    case CHILD_STATUS.RUNNING:
-      return CHILD_RUN_STATUS.RUNNING;
-    case CHILD_STATUS.SETTLED:
-      return CHILD_RUN_STATUS.COMPLETED;
-    case CHILD_STATUS.CANCELLED:
-      return CHILD_RUN_STATUS.CANCELLED;
-    case CHILD_STATUS.FAILED:
-      return CHILD_RUN_STATUS.FAILED;
-  }
-}
-
 /** Whether a child still counts against a limit: accepted or running, not yet ended. */
 function isActive(child: ChildRecord): boolean {
   return child.status === CHILD_STATUS.ACCEPTED || child.status === CHILD_STATUS.RUNNING;
@@ -128,19 +112,13 @@ function hostedSessionKeyOf(kind: StoredConversationKind, conversationId: string
     : sessionKey(conversationId);
 }
 
-/** One store child as the brain's record of a run; the result text is not kept on the row and is left unsaid. */
+/** One store child as the brain's record of a run; the store's status is the brain's, word for word. */
 function childRunRecordOf(child: ChildRecord): ChildRunRecord {
   return {
     childId: child.id,
-    agentId: DEFAULT_AGENT_ID,
-    requesterSessionKey: hostedSessionKeyOf(child.parentKind, child.parentConversationId),
-    childSessionKey: childSessionKey(child.id),
-    task: child.task ?? "",
     ...(child.label !== null ? { label: child.label } : undefined),
-    expectsCompletion: child.expectsCompletion,
-    status: runStatusOf(child.status),
+    status: child.status,
     acceptedAt: child.createdAt.getTime(),
-    ...(child.startedAt !== null ? { startedAt: child.startedAt.getTime() } : undefined),
     ...(child.settledAt !== null ? { settledAt: child.settledAt.getTime() } : undefined),
     ...(child.failure !== null ? { failureDetail: child.failure } : undefined),
   };
@@ -301,7 +279,9 @@ export function hostedChildAccess(
 
     conversations: () =>
       run(
-        Effect.map(conversationDirectory(userId), (entries) => entries.map(conversationRecordOf)),
+        Effect.map(conversationDirectory(userId, HOSTED_CHILDREN.DIRECTORY_LIMIT), (entries) =>
+          entries.map(conversationRecordOf),
+        ),
       ),
 
     lines: (childId, limit) =>
