@@ -316,7 +316,7 @@ it.effect(
       const rows = await readMessagesByConversationTyped(database.run, target.conversationId);
       // One user row stands for one spoken ask: the developer's words as the session transcribed
       // them, under the delegation's id, which is the ask's id too, and tied to the turn the ask
-      // ran. The question as eve received it is on the ask's record, never a second line.
+      // ran. The question as eve received it is written nowhere, never a second line.
       const userRows = rows
         .filter((row) => row.role === MESSAGE_ROLE.USER)
         .map((row) => [row.clientId, row.turnId]);

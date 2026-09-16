@@ -284,7 +284,6 @@ it.effect(
         conversationId: spoken.conversationId,
         clientId: delegationId,
         origin: ASK_ORIGIN.SPOKEN,
-        question: "what changed?",
         createdAt: new Date(NOW),
       });
       await record.dispatchOnce(spoken, ask.id, async () => ({
@@ -364,7 +363,6 @@ it.effect(
         conversationId: spoken.conversationId,
         clientId: laterDelegation,
         origin: ASK_ORIGIN.SPOKEN,
-        question: "and now?",
         createdAt: new Date(NOW),
       });
       await record.dispatchOnce(spoken, later.id, async () => ({
@@ -411,7 +409,6 @@ it.effect(
         conversationId: spoken.conversationId,
         clientId: delegationId,
         origin: ASK_ORIGIN.SPOKEN,
-        question: "what changed?",
         createdAt: new Date(NOW),
       });
       await record.dispatchOnce(spoken, ask.id, async () => ({
