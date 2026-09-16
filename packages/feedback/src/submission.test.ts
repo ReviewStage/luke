@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import type { JsonObject } from "@sidecar/wire/testing";
 import { test } from "vitest";
-import {
-  FEEDBACK_KIND,
-  FEEDBACK_LIFECYCLE_EVENT,
-  FEEDBACK_LIMITS,
-  feedbackKindForLifecycleEvent,
-  feedbackSubmission,
-} from "./submission.js";
+import { FEEDBACK_KIND, FEEDBACK_LIMITS, feedbackSubmission } from "./submission.js";
 
 // Wire-shaped rather than a `FeedbackImage`: what these hand the parser is
 // what a renderer sent, including the media types and bytes it must refuse.
@@ -101,16 +95,4 @@ test("an image past the byte cap is refused", () => {
     feedbackSubmission(submission({ images: [image({ base64: oversized })] })),
     undefined,
   );
-});
-
-test("feedback lifecycle events name their kinds and nothing else answers", () => {
-  assert.equal(
-    feedbackKindForLifecycleEvent(FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.FEEDBACK]),
-    FEEDBACK_KIND.FEEDBACK,
-  );
-  assert.equal(
-    feedbackKindForLifecycleEvent(FEEDBACK_LIFECYCLE_EVENT[FEEDBACK_KIND.PROMPT]),
-    FEEDBACK_KIND.PROMPT,
-  );
-  assert.equal(feedbackKindForLifecycleEvent("tab:settings"), undefined);
 });

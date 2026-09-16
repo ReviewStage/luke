@@ -14,10 +14,8 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import {
-  CLEARED_CONVERSATION_RETENTION_MS,
-  type StoredMessageRecord,
-} from "../server/hosted/store";
+import type { StoredMessageRecord } from "../server/hosted/store";
+import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,

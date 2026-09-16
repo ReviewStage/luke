@@ -1,7 +1,5 @@
 import assert from "node:assert/strict";
-import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { test } from "vitest";
-import { isMaintenanceEligibleConversation } from "./eligibility.js";
 import {
   failedHousekeeping,
   MEMORY_FLUSH_DEFAULTS,
@@ -10,26 +8,6 @@ import {
   SILENT_REPLY_TOKEN,
   skippedHousekeeping,
 } from "./flush.js";
-
-test("maintenance eligibility: main and a durable private thread, never a temporary thread, an observed session, a child, or a cron conversation", () => {
-  // SAFETY: test keys are shaped by hand to exercise the classifier.
-  const thread =
-    "agent:main:thread:11111111-1111-1111-1111-111111111111" as typeof MAIN_SESSION_KEY;
-  assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, false), true);
-  assert.equal(isMaintenanceEligibleConversation(thread, false), true);
-  assert.equal(isMaintenanceEligibleConversation(thread, true), false);
-  for (const key of [
-    "agent:main:observed:claude/code:abc",
-    "agent:main:subagent:child-1",
-    "agent:main:cron:job",
-    "agent:main:heartbeat:1",
-    "something:else",
-  ]) {
-    // SAFETY: test keys are shaped by hand to exercise the classifier.
-    const ineligibleKey = key as typeof MAIN_SESSION_KEY;
-    assert.equal(isMaintenanceEligibleConversation(ineligibleKey, false), false, key);
-  }
-});
 
 test("the pinned flush bounds match OpenClaw b7528507: 2,000 output tokens, a minute, and NO_REPLY for nothing", () => {
   assert.equal(MEMORY_FLUSH_DEFAULTS.MAXIMUM_OUTPUT_TOKENS, 2_000);

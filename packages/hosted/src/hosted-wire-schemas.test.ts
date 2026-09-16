@@ -70,7 +70,6 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionReportFrameSchema: liveContract.sessionReportFrameSchema,
     sessionSpokenFrameSchema: liveContract.sessionSpokenFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
-    liveSessionCreatedSchema: liveContract.liveSessionCreatedSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
     sessionAudioCreatedFrameSchema: liveContract.sessionAudioCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,

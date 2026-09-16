@@ -20,9 +20,7 @@ export type {
 export {
   type AgentId,
   CONVERSATION_KIND,
-  type ConversationKind,
   childSessionKey,
-  conversationKindOf,
   DEFAULT_AGENT_ID,
   isIdentifier,
   MAIN_SESSION_KEY,

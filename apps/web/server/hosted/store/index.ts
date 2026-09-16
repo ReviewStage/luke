@@ -329,7 +329,6 @@ export {
 } from "./message-reads.js";
 export { rateMessage } from "./ratings.js";
 export type { RosterSnapshotRecord } from "./roster-snapshot.js";
-export { CLEARED_CONVERSATION_RETENTION_MS } from "./soft-delete.js";
 export {
   claimSpeech,
   markSpeechPushed,

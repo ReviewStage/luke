@@ -41,10 +41,6 @@ export {
   settingsScopeChanged,
 } from "./schema-access.js";
 export {
-  CONDUCTOR_DEFAULT_CHOICE,
-  CONNECTIONS_PAGE,
-} from "./settings-paths.js";
-export {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
   DEFAULT_VOICE_HOTKEYS,

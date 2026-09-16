@@ -94,7 +94,6 @@ export {
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
-  liveSessionCreatedSchema,
   SESSION_CREATE_BOUNDS,
   type SessionActivityFrame,
   type SessionAttachedFrame,

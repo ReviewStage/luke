@@ -13,7 +13,6 @@ import {
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,
   isHostedVoiceServiceAddress,
-  liveSessionCreatedFromWire,
   sessionActivityFrameFromWire,
   sessionAttachedFrameFromWire,
   sessionAudioCreatedFrameFromWire,
@@ -65,18 +64,6 @@ test("a session.created frame round-trips, with or without a quota, ignoring wha
   const misquoted = sessionCreatedFrameFromWire({ ...created, quota: { used: -1 } });
   assert.ok(misquoted);
   assert.equal("quota" in misquoted, false);
-});
-
-test("the created session read on its own is the id and the answer, both required", () => {
-  assert.deepEqual(
-    liveSessionCreatedFromWire({ sessionId: "live_123", sdpAnswer: SDP, quota: {} }),
-    {
-      sessionId: "live_123",
-      sdpAnswer: SDP,
-    },
-  );
-  assert.equal(liveSessionCreatedFromWire({ sessionId: "live_123" }), undefined);
-  assert.equal(liveSessionCreatedFromWire({ sdpAnswer: SDP }), undefined);
 });
 
 test("an audio session.create frame is the voice and one of the four formats, with no offer and no seed", () => {

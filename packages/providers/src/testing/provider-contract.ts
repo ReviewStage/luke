@@ -76,8 +76,6 @@ interface ProviderFixtureInput {
    * loudly rather than silently.
    */
   readonly api: FakeCloudApi;
-  /** Where the observation hook's spool stands for this case, or nowhere. */
-  readonly hookEventsDirectory: () => string | undefined;
   /**
    * One of this fixture's `db/<name>.sql` scripts, with `{{home}}` replaced by
    * this case's own home: a provider that records absolute paths in its
@@ -116,8 +114,6 @@ interface ProviderFixtures {
   };
   /** Set when this provider documents a conversation read. */
   readonly conversation?: { readonly sessionId: string };
-  /** Set for a hooked provider: every token its own spool may hold. */
-  readonly hookSpool?: { readonly events: readonly string[] };
   /** A project id no pass reported, for the creation case. */
   readonly absentProjectId: string;
   /**
@@ -341,7 +337,6 @@ interface ContractCase {
 interface CaseOptions {
   readonly readApiKey?: () => Effect.Effect<string | undefined>;
   readonly minimumRefreshIntervalMs?: number;
-  readonly hookEventsDirectory?: () => string | undefined;
 }
 
 /**
@@ -381,7 +376,6 @@ export function describeProviderContract(
       minimumRefreshIntervalMs: options.minimumRefreshIntervalMs ?? 0,
       readApiKey: options.readApiKey ?? (() => Effect.succeed(apiKey)),
       api,
-      hookEventsDirectory: options.hookEventsDirectory ?? (() => undefined),
       sql: async (name) =>
         (await fs.readFile(path.join(root, "db", `${name}.sql`), "utf8")).replaceAll(
           "{{home}}",
@@ -727,36 +721,6 @@ export function describeProviderContract(
 
       assert.equal(read?.status, ACTION_RESULT_STATUS.REJECTED);
     });
-  }
-
-  // "everything the hook sharpens still observes from the transcripts alone
-  // wherever the hook is absent…"
-  if (fixtures.hookSpool) {
-    test(
-      named("observes the same sessions with no hook, an empty spool, or a foreign token"),
-      async (t) => {
-        const withoutHook = await contractCase(t);
-        const expected = (await runTest(withoutHook.plugin.observe())).map(
-          (one) => one.providerSessionId,
-        );
-
-        for (const spooled of [undefined, "{}", '{"event":"contract-unknown-token"}']) {
-          const spool = await temporaryDirectory(t, "luke-contract-spool");
-          if (spooled !== undefined) {
-            await fs.writeFile(path.join(spool, `${fixtures.sessionId}.json`), spooled);
-          }
-          const contract = await contractCase(t, { hookEventsDirectory: () => spool });
-
-          const observed = await runTest(contract.plugin.observe());
-
-          assert.deepEqual(
-            observed.map((one) => one.providerSessionId),
-            expected,
-            `a spool holding ${spooled ?? "nothing"} changed the set of sessions observed`,
-          );
-        }
-      },
-    );
   }
 
   // "The adapter seam remains the authority for actions." One pass, one roster,

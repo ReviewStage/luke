@@ -11,7 +11,6 @@
  */
 
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Schema } from "effect";
 
 /** How a setting takes a value: a switch, or one choice from a fixed set. */
 export const APP_SETTING_KIND = {
@@ -20,8 +19,6 @@ export const APP_SETTING_KIND = {
 } as const;
 
 type AppSettingKind = (typeof APP_SETTING_KIND)[keyof typeof APP_SETTING_KIND];
-
-export const AppSettingKindSchema = Schema.Literals(Object.values(APP_SETTING_KIND));
 
 /** The two words a toggle's state is said in, on screen and out loud. */
 export const APP_TOGGLE_VALUE = {
@@ -97,8 +94,6 @@ export const APP_UPDATE_ACTION = {
 
 export type AppUpdateAction = (typeof APP_UPDATE_ACTION)[keyof typeof APP_UPDATE_ACTION];
 
-export const AppUpdateActionSchema = Schema.Literals(Object.values(APP_UPDATE_ACTION));
-
 /** The two waits during which the Updates row's button offers nothing. */
 export const APP_UPDATE_WAIT = {
   /** A check is already out. */
@@ -109,12 +104,8 @@ export const APP_UPDATE_WAIT = {
 
 type AppUpdateWait = (typeof APP_UPDATE_WAIT)[keyof typeof APP_UPDATE_WAIT];
 
-export const AppUpdateWaitSchema = Schema.Literals(Object.values(APP_UPDATE_WAIT));
-
 /** What the Updates row's button is right now: one action, or one wait. */
 export type AppUpdateButton = AppUpdateAction | AppUpdateWait;
-
-export const AppUpdateButtonSchema = Schema.Union([AppUpdateActionSchema, AppUpdateWaitSchema]);
 
 /**
  * The Updates row, as the guide describes it: the running version, where the
@@ -154,8 +145,6 @@ export const APP_PANEL_TAB = {
 
 export type AppPanelTab = (typeof APP_PANEL_TAB)[keyof typeof APP_PANEL_TAB];
 
-export const AppPanelTabSchema = Schema.Literals(Object.values(APP_PANEL_TAB));
-
 /**
  * The two kinds of note the feedback composer writes, exactly as the composer
  * itself names them: feedback about the app, and a prompt for the founders.
@@ -172,8 +161,6 @@ export const FEEDBACK_COMPOSER_KIND = {
 export type FeedbackComposerKind =
   (typeof FEEDBACK_COMPOSER_KIND)[keyof typeof FEEDBACK_COMPOSER_KIND];
 
-export const FeedbackComposerKindSchema = Schema.Literals(Object.values(FEEDBACK_COMPOSER_KIND));
-
 /**
  * The two orders the session list reads in. Defined here rather than in the
  * renderer because a spoken ask names an order too, and the words the panel's
@@ -186,8 +173,6 @@ export const SESSION_LIST_SORT = {
 } as const;
 
 export type SessionListSort = (typeof SESSION_LIST_SORT)[keyof typeof SESSION_LIST_SORT];
-
-export const SessionListSortSchema = Schema.Literals(Object.values(SESSION_LIST_SORT));
 
 /**
  * The ways someone says a switch's two states out loud. A spoken value is a
