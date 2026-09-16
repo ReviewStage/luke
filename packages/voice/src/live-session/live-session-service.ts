@@ -209,8 +209,6 @@ export interface LiveSessionServiceOptions<Delivery extends BriefingDelivery> {
   createId: () => string;
   report: (message: string) => void;
   trace?: (record: LiveTraceRecord) => void;
-  /** The ledger's gap, `UTTERANCE_GAP_MS` unless a test holding the record's invariant at another threshold names one. */
-  utteranceGapMs?: number;
   /** A session was created: the one count the service makes. */
   onSessionCreated?: () => void;
   /** A proactive turn was settled spoken, for the bookkeeping the beats owe. */
@@ -951,12 +949,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         sideband,
         scope,
         channel,
-        ledger: new TranscriptLedger({
-          mintRowId: this.#options.createId,
-          ...(this.#options.utteranceGapMs === undefined
-            ? undefined
-            : { gapMs: this.#options.utteranceGapMs }),
-        }),
+        ledger: new TranscriptLedger({ mintRowId: this.#options.createId }),
         started: false,
         ended: false,
         closing: undefined,

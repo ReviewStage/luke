@@ -5,6 +5,7 @@ import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   LIVE_BRAIN_SUBMISSION,
   type LiveBrain,
+  type LiveBrainAsk,
   type LiveBrainSubmission,
   LiveSessionService,
   type LiveSessionSource,
@@ -18,9 +19,22 @@ import { TestClock } from "effect/testing";
 import { SqlClient } from "effect/unstable/sql";
 import { afterAll } from "vitest";
 import { z } from "zod";
-import { UI_PART_TYPE } from "../server/core";
+import {
+  ASK_ORIGIN,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  BRAIN_TURN_TRIGGER,
+  MAIN_SESSION_KEY,
+  UI_PART_TYPE,
+} from "../server/core";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../server/db/voice-vocabulary";
-import { storeWriter, type VoiceTarget, voiceWriter } from "../server/hosted/store";
+import {
+  type ConversationTarget,
+  storeWriter,
+  type VoiceTarget,
+  voiceWriter,
+} from "../server/hosted/store";
+import { askRecord } from "../server/hosted/store/asks";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_SERVER_EVENT,
@@ -50,28 +64,40 @@ import {
  * in the order they arrived, spell exactly what that speaker's rows spell
  * when the rows are read in the order they are placed, byte for byte, with
  * nothing trimmed, nothing inserted, nothing said twice, and nothing lost.
- * Beside it: the record holds one row per group the ledger formed at the gap
- * the session ran under; every developer row from the previous ask's end to
- * a delegation's offset carries that delegation; and no row changes its
- * client id at any point of the run.
+ * Beside it: the record holds one row per group the ledger formed; every
+ * developer row from the previous ask's end to a delegation's offset carries
+ * that delegation and its turn, and no other row does; and no row changes
+ * its client id at any point of the run.
  *
  * Each fixture is a synthetic stream — invented words, never anyone's
  * transcript — driven through the live session service as the voice
  * service composes it: the service's own ledger groups the fragments and
  * decides the attach, the hosted record is the seam, the voice writer reads
- * the words back from the segments on record, all on the real migrations in
- * PGlite. Every fixture runs at two gaps, the tuned constant and a much
- * shorter one, because the invariant is a property of the writes and not of
- * the threshold: the shorter gap cuts more rows, and the words must still
- * read the same. The service keeps time on the ambient `TestClock`, so the
- * debounce is advanced rather than waited out and no fixture holds a timing
- * literal of its own beyond the instants its words are spoken at.
+ * the words back from the segments on record, and the brain stands up the
+ * ask's turn in the store as the hosted brain does, all on the real
+ * migrations in PGlite. The service keeps time on the ambient `TestClock`,
+ * so the debounce is advanced rather than waited out, and every write takes
+ * the one `SqlClient` the suite's runtime holds.
+ *
+ * Every fixture is held at two gaps, the tuned constant and one well short of
+ * it, because the invariant is a property of the writes and not of the
+ * threshold: the shorter gap cuts more rows, and the words must still read
+ * the same. Production keeps its one constant. The ledger groups by how a
+ * pause compares with the gap, so a stream heard at a 1.2 s gap is the same
+ * stream with every instant stretched by 4.0 / 1.2 and heard at the constant;
+ * the shadow ledger the row count is checked against hears the stretched
+ * stream too, so the count it states is the count a 1.2 s gap states.
  */
 
 const NOW = Date.parse("2026-09-14T12:00:00.000Z");
 
 /** The tuned gap and a threshold well short of it, so the same words are cut into different rows. */
 const GAP_VALUES_MS = [1_200, UTTERANCE_GAP_MS] as const;
+
+/** An instant on the session's clock as it must stand for the tuned constant to group it as `gapMs` would. */
+function stretched(ms: number, gapMs: number): number {
+  return Math.round((ms * UTTERANCE_GAP_MS) / gapMs);
+}
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
@@ -85,6 +111,7 @@ const TOOLS: ToolSet = {
 };
 
 const store = await database.run(storeWriter({ tools: TOOLS, now: () => new Date(NOW) }));
+const asks = askRecord();
 const sessionRecord = voiceSessionRecord(() => NOW);
 const writer = voiceWriter({ store });
 /** The one client the suite's runtime holds, provided to the service's fibers so every statement takes the same permit. */
@@ -99,15 +126,49 @@ async function target(): Promise<VoiceTarget> {
   return { userId, liveSessionId, conversation: { userId, conversationId } };
 }
 
-/** A brain that takes every ask and answers none: the record's rows are the point, not the reply. */
-class AcceptingBrain implements LiveBrain {
-  #runs = 0;
+/**
+ * A brain that takes every ask and answers none, but leaves the ask's turn
+ * on record as the hosted brain does before the service attaches: the ask
+ * row under the delegation's id, the turn's own row started, and the ask
+ * bound to it, so the attach that follows finds the turn and takes the rows
+ * into it.
+ */
+class TurnOpeningBrain implements LiveBrain {
+  /** The turn each delegation's ask was bound to, by the delegation's id. */
+  readonly turns = new Map<string, string>();
+  readonly #conversation: ConversationTarget;
 
-  submitAsk(): Effect.Effect<LiveBrainSubmission> {
-    return Effect.sync(() => {
-      this.#runs += 1;
-      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
-    });
+  constructor(conversation: ConversationTarget) {
+    this.#conversation = conversation;
+  }
+
+  submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission> {
+    return Effect.gen({ self: this }, function* () {
+      const turnId = randomUUID();
+      const recorded = yield* asks.record({
+        userId: this.#conversation.userId,
+        conversationId: this.#conversation.conversationId,
+        clientId: ask.submissionId,
+        origin: ASK_ORIGIN.SPOKEN,
+        question: ask.question,
+        createdAt: new Date(NOW),
+      });
+      yield* store.consume(this.#conversation, {
+        kind: BRAIN_RUN_EVENT.TURN_STARTED,
+        origin: BRAIN_TURN_ORIGIN.SPOKEN,
+        trigger: BRAIN_TURN_TRIGGER.ASK,
+        at: NOW,
+        conversationId: MAIN_SESSION_KEY,
+        turnId,
+        sequence: 1,
+      });
+      yield* asks.dispatchOnce(this.#conversation, recorded.id, async () => ({
+        sessionId: `wrun_${turnId}`,
+        turnId,
+      }));
+      this.turns.set(ask.submissionId, turnId);
+      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: recorded.id };
+    }).pipe(Effect.provideService(SqlClient.SqlClient, sqlClient), Effect.orDie);
   }
 
   onRunEvent(): () => void {
@@ -226,6 +287,25 @@ const FIXTURES: readonly Fixture[] = [
   },
 ];
 
+/** The same step with every instant on the session's clock stretched, so the constant groups it as `gapMs` would. */
+function stretchedStep(step: FixtureStep, gapMs: number): FixtureStep {
+  if (step.kind !== FIXTURE_STEP.EVENT) return step;
+  const served = step.event;
+  switch (served.type) {
+    case LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA:
+    case LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA:
+      return event({
+        ...served,
+        start_ms: stretched(served.start_ms, gapMs),
+        end_ms: stretched(served.end_ms, gapMs),
+      });
+    case LIVE_SERVER_EVENT.DELEGATION_CREATED:
+      return event({ ...served, offset_ms: stretched(served.offset_ms, gapMs) });
+    default:
+      return step;
+  }
+}
+
 const SEGMENT_ROLE_OF_SPEAKER = {
   [TRANSCRIPT_SPEAKER.USER]: VOICE_SEGMENT_ROLE.USER,
   [TRANSCRIPT_SPEAKER.ASSISTANT]: VOICE_SEGMENT_ROLE.ASSISTANT,
@@ -299,6 +379,7 @@ interface RunningFixture {
   readonly voiceSessionId: string;
   readonly socket: FakeLiveSocket;
   readonly service: LiveSessionService;
+  readonly brain: TurnOpeningBrain;
   /** The session's stream as the record observes it, so a failed write fails the test rather than vanishing. */
   readonly observed: Promise<unknown>[];
   /** Waits out every write the record has been handed so far. */
@@ -310,9 +391,9 @@ interface RunningFixture {
 /**
  * The service over the hosted record, composed as the voice service composes
  * it: the record observes the sideband ahead of the service, the writer
- * reads the ambient client, and the ledger groups at the gap named.
+ * reads the ambient client, and the brain leaves each ask's turn on record.
  */
-function stand(gapMs: number) {
+function stand() {
   return Effect.gen(function* () {
     const live = yield* Effect.promise(target);
     const [sessionRow] = yield* Effect.promise(() =>
@@ -320,6 +401,7 @@ function stand(gapMs: number) {
     );
     const voiceSessionId = Schema.decodeUnknownSync(VoiceSessionIdRowSchema)(sessionRow).id;
     const record = yield* hostedLiveRecord({ writer, target: live });
+    const brain = new TurnOpeningBrain(live.conversation);
     const socket = new FakeLiveSocket();
     // The session acknowledges every thinking append at once, as the real one
     // does for an append that speaks nothing; the record observes and ignores it.
@@ -357,9 +439,8 @@ function stand(gapMs: number) {
         emit: () => undefined,
         createId: () => `id-${++ids}`,
         report: () => undefined,
-        utteranceGapMs: gapMs,
       }),
-      Layer.mergeAll(liveBrainLayer(new AcceptingBrain()), liveRecordLayer(record)),
+      Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
     const created = yield* service.createSession("offer");
     assert.ok(created);
@@ -369,6 +450,7 @@ function stand(gapMs: number) {
       voiceSessionId,
       socket,
       service,
+      brain,
       observed,
       settle: () =>
         Effect.gen(function* () {
@@ -454,14 +536,15 @@ for (const gapMs of GAP_VALUES_MS) {
   for (const fixture of FIXTURES) {
     it.effect(`${fixture.name} (gap ${gapMs} ms)`, () =>
       Effect.gen(function* () {
-        const running = yield* stand(gapMs);
-        // The shadow ledger is fed the same fragments in the same order at the same gap, so its
-        // groups are what the service's own ledger formed, ids aside.
+        const steps = fixture.steps.map((step) => stretchedStep(step, gapMs));
+        const running = yield* stand();
+        // The shadow ledger hears the same fragments in the same order, so its groups are what the
+        // service's own ledger formed, ids aside.
         let shadowIds = 0;
-        const shadow = new TranscriptLedger({ mintRowId: () => `shadow-${++shadowIds}`, gapMs });
+        const shadow = new TranscriptLedger({ mintRowId: () => `shadow-${++shadowIds}` });
         const seenIds = new Map<string, string>();
 
-        for (const [index, step] of fixture.steps.entries()) {
+        for (const [index, step] of steps.entries()) {
           yield* perform(running, shadow, step);
           assertIdsStable(seenIds, yield* running.rows(), `after step ${index + 1}`);
         }
@@ -490,23 +573,37 @@ for (const gapMs of GAP_VALUES_MS) {
         }
 
         // Each delegation owns every developer row that begins after the previous ask's end and at
-        // or before its offset, the row containing the offset among them, and no other; the ask's
-        // end is the later of its offset and the rows it took.
+        // or before its offset, the row containing the offset among them, and no other: those rows
+        // name the delegation and stand in its turn, and no other developer row stands in that turn.
+        // The ask's end is the later of its offset and the rows it took.
         const developer = rows.filter((row) => spokenBy(row, TRANSCRIPT_SPEAKER.USER));
         let previousEndMs = 0;
-        for (const delegation of delegationsOf(fixture.steps)) {
+        for (const delegation of delegationsOf(steps)) {
+          const turnId = running.brain.turns.get(delegation.id);
+          assert.ok(turnId, `${delegation.id} was asked of the brain`);
           const expected = developer.filter((row) => {
             const span = decodeSpokenRowMetadata(row.metadata);
             return span.from_ms > previousEndMs && span.from_ms <= delegation.offsetMs;
           });
-          const attached = developer.filter(
-            (row) => decodeSpokenRowMetadata(row.metadata).delegation_id === delegation.id,
-          );
+          const expectedIds = expected.map((row) => row.clientId).sort();
           assert.ok(expected.length > 0, `${delegation.id} has a row of its own`);
           assert.deepEqual(
-            attached.map((row) => row.clientId).sort(),
-            expected.map((row) => row.clientId).sort(),
+            developer
+              .filter(
+                (row) => decodeSpokenRowMetadata(row.metadata).delegation_id === delegation.id,
+              )
+              .map((row) => row.clientId)
+              .sort(),
+            expectedIds,
             `${delegation.id} owns the developer rows in its span`,
+          );
+          assert.deepEqual(
+            developer
+              .filter((row) => row.turnId === turnId)
+              .map((row) => row.clientId)
+              .sort(),
+            expectedIds,
+            `${delegation.id}'s turn holds the developer rows in its span`,
           );
           previousEndMs = Math.max(
             delegation.offsetMs,
