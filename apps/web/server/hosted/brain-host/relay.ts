@@ -1,4 +1,4 @@
-import { Cause, Effect, type Schema } from "effect";
+import { Cause, Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
@@ -34,7 +34,7 @@ import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
 import {
-  BRAIN_HOST,
+  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
@@ -198,13 +198,50 @@ function statusWordOf(output: UnparsedWireValue): string | undefined {
 }
 
 /**
- * Why eve failed the turn, as the row keeps it: eve's own code and the
- * message its harness summarized the error to, cut to the bound. The event's
- * `details` — the provider's error object, its ids, whatever it carried — are
- * never read, so no header or stack reaches the row.
+ * The keys of eve's failure details whose values are fixed words or numbers:
+ * the error's class name, eve's own catalog id for an error it recognized,
+ * and the status codes. Read in this order, and no other key is: `message`,
+ * `apiErrorMessage`, `upstreamMessage`, `responseBodySnippet`, and `detail`
+ * are the provider's or the stack's own words, which nothing here can vouch
+ * for holding no credential.
  */
-function failureDetailOf(data: { readonly code: string; readonly message: string }): string {
-  return `${data.code}: ${data.message}`.slice(0, BRAIN_HOST.FAILURE_DETAIL_CHARS);
+const FAILURE_DETAIL_FIELDS = [
+  "name",
+  "semanticErrorId",
+  "statusCode",
+  "upstreamStatusCode",
+] as const;
+
+const StatusCodeSchema = Schema.Union([Schema.String, Schema.Number]);
+
+const FailureDetailWordsSchema = Schema.Struct({
+  name: Schema.optionalKey(Schema.String),
+  semanticErrorId: Schema.optionalKey(Schema.String),
+  statusCode: Schema.optionalKey(StatusCodeSchema),
+  upstreamStatusCode: Schema.optionalKey(StatusCodeSchema),
+});
+
+const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSchema);
+
+const BRAIN_HOST_REFUSALS: ReadonlySet<string> = new Set(Object.values(BRAIN_HOST_REFUSAL));
+
+type TurnFailedData = Extract<MessageStreamEvent, { readonly type: "turn.failed" }>["data"];
+
+/**
+ * Why eve failed the turn, as the row keeps it: eve's own code, then the
+ * fixed words above where the details carry them. eve's `message` is kept
+ * only when it is one of the host's own refusal words, thrown from the
+ * model hook; otherwise it derives from the provider's error and is not read.
+ */
+function failureDetailOf(data: TurnFailedData): string {
+  const words = [data.code];
+  if (BRAIN_HOST_REFUSALS.has(data.message)) words.push(data.message);
+  const fixed = Option.getOrUndefined(readFailureDetailWords(data.details));
+  for (const field of FAILURE_DETAIL_FIELDS) {
+    const value = fixed?.[field];
+    if (value !== undefined) words.push(String(value));
+  }
+  return words.join(" ");
 }
 
 function withTurn(

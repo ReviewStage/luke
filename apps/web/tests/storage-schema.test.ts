@@ -106,7 +106,7 @@ test("the migrations end at the declared schema: every declared table stands, an
   assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
 });
 
-/** The indexes the children, agents, and completion-sweep reads run through, as Postgres reads them back. */
+/** The indexes the children, agents, completion-sweep, and abandoned-turn reads run through, as Postgres reads them back. */
 const READ_INDEXES = [
   {
     name: "conversations_undelivered_children",
@@ -124,9 +124,14 @@ const READ_INDEXES = [
     definition:
       "CREATE INDEX turns_conversation_queued ON public.turns USING btree (conversation_id, queued_at DESC, id DESC)",
   },
+  {
+    name: "turns_running_started",
+    definition:
+      "CREATE INDEX turns_running_started ON public.turns USING btree (started_at, id) WHERE (status = 'running'::text)",
+  },
 ];
 
-test("the latest-turn laterals and the completion sweep have their indexes, on the columns and in the order they read", async () => {
+test("the latest-turn laterals, the completion sweep, and the abandoned-turn sweep have their indexes, on the columns and in the order they read", async () => {
   const rows = await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;

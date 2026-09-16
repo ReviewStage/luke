@@ -640,7 +640,13 @@ it.effect(
               turnId: "turn_0",
               sequence: 0,
               code: "model_error",
-              message: "upstream failed",
+              message: "upstream failed: key sk-fixture refused",
+              details: {
+                name: "AI_APICallError",
+                statusCode: 429,
+                apiErrorMessage: "key sk-fixture refused",
+                detail: "Error: at fixture.ts:1",
+              },
             },
           }),
           failedStanding,
@@ -649,7 +655,8 @@ it.effect(
       const failedRows = await rows(failed);
       assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
       assert.equal(failedRows.turnRows[0]?.failure, "model");
-      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error: upstream failed");
+      // The row keeps eve's code and the fixed words of its details, and none of the provider's or the stack's own.
+      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error AI_APICallError 429");
       const failedJournal = failedRows.messageRows.find(
         (row) => row.role === MESSAGE_ROLE.ASSISTANT,
       );

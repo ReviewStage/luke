@@ -49,7 +49,11 @@ import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
-import { STORE_WRITE_REFUSAL, type StoreWriteResult } from "../server/hosted/store/writer";
+import {
+  STORE_WRITE_REFUSAL,
+  type StoreWriteResult,
+  TURN_FAILURE_DETAIL,
+} from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -803,14 +807,15 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
 });
 
-test("a turn that failed records its failure word and detail, and one that timed out without a word records the status it ended in", async () => {
+test("a turn that failed records its failure word and detail cut to the bound, and one that timed out without a word records the status it ended in", async () => {
   const target = await conversation();
   const failed = new Stream();
+  const detail = "MODEL_CALL_FAILED: fixture refusal";
   await feed(target, [
     failed.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
     failed.ended(BRAIN_REQUEST_STATUS.FAILED, {
       failure: MODEL_FAILURE,
-      failureDetail: "MODEL_CALL_FAILED: fixture refusal",
+      failureDetail: detail.padEnd(TURN_FAILURE_DETAIL.CHARS + 40, "."),
     }),
   ]);
   const timedOut = new Stream();
@@ -821,9 +826,11 @@ test("a turn that failed records its failure word and detail, and one that timed
   const failedTurn = await storedTurn(failed.turnId);
   const timedOutTurn = await storedTurn(timedOut.turnId);
   assert.deepEqual(
-    [failedTurn?.origin, failedTurn?.status, failedTurn?.failure, failedTurn?.failureDetail],
-    [TURN_ORIGIN.SPOKEN, TURN_STATUS.FAILED, MODEL_FAILURE, "MODEL_CALL_FAILED: fixture refusal"],
+    [failedTurn?.origin, failedTurn?.status, failedTurn?.failure],
+    [TURN_ORIGIN.SPOKEN, TURN_STATUS.FAILED, MODEL_FAILURE],
   );
+  assert.equal(failedTurn?.failureDetail?.length, TURN_FAILURE_DETAIL.CHARS);
+  assert.ok(failedTurn?.failureDetail?.startsWith(detail));
   assert.deepEqual(
     [
       timedOutTurn?.origin,
