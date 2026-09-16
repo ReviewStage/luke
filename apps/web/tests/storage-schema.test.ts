@@ -106,25 +106,38 @@ test("the migrations end at the declared schema: every declared table stands, an
   assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
 });
 
-/** The indexes the children, agents, and completion-sweep reads run through, by table. */
+/** The indexes the children, agents, and completion-sweep reads run through, as Postgres reads them back. */
 const READ_INDEXES = [
-  { table: "conversations", name: "conversations_undelivered_children" },
-  { table: "conversations", name: "conversations_user_kind" },
-  { table: "turns", name: "turns_conversation_queued" },
+  {
+    name: "conversations_undelivered_children",
+    definition:
+      "CREATE INDEX conversations_undelivered_children ON public.conversations USING btree (user_id) " +
+      "WHERE ((kind = 'child'::text) AND (completion_delivered_at IS NULL) AND (deleted_at IS NULL))",
+  },
+  {
+    name: "conversations_user_kind",
+    definition:
+      "CREATE INDEX conversations_user_kind ON public.conversations USING btree (user_id, kind)",
+  },
+  {
+    name: "turns_conversation_queued",
+    definition:
+      "CREATE INDEX turns_conversation_queued ON public.turns USING btree (conversation_id, queued_at DESC, id DESC)",
+  },
 ];
 
-test("the latest-turn laterals and the completion sweep have their indexes", async () => {
+test("the latest-turn laterals and the completion sweep have their indexes, on the columns and in the order they read", async () => {
   const rows = await database.run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       return yield* sql`
-        select tablename as "table", indexname as name from pg_indexes
+        select indexname as name, indexdef as definition from pg_indexes
         where schemaname = 'public' and indexname in ${sql.in(READ_INDEXES.map((index) => index.name))}
-        order by tablename, indexname
+        order by indexname
       `;
     }),
   );
-  const IndexRowSchema = Schema.Struct({ table: Schema.String, name: Schema.String });
+  const IndexRowSchema = Schema.Struct({ name: Schema.String, definition: Schema.String });
   assert.deepEqual(
     rows.map((row) => Schema.decodeUnknownSync(IndexRowSchema)(row)),
     READ_INDEXES,
