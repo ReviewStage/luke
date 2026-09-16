@@ -49,7 +49,17 @@ function delegation() {
               receipt: { childId: "child-2", childSessionKey: childSessionKey("child-2") },
             };
       }),
-    list: () => Effect.succeed([childRecord("child-1", "summary")]),
+    list: () =>
+      Effect.succeed([
+        childRecord("child-1", "summary"),
+        {
+          childId: "child-0",
+          status: CHILD_RUN_STATUS.FAILED,
+          acceptedAt: NOW - 1_000,
+          settledAt: NOW,
+          failureDetail: "model",
+        },
+      ]),
     cancel: (childId) =>
       Effect.sync(() => {
         if (childId !== "child-1") return undefined;
@@ -178,6 +188,13 @@ test("subagents lists as a read and cancels through the journal; a child not thi
         status: CHILD_RUN_STATUS.SETTLED,
         accepted_at: new Date(NOW).toISOString(),
         settled_at: new Date(NOW + 1_000).toISOString(),
+      },
+      {
+        child_id: "child-0",
+        status: CHILD_RUN_STATUS.FAILED,
+        accepted_at: new Date(NOW - 1_000).toISOString(),
+        settled_at: new Date(NOW).toISOString(),
+        failure: "model",
       },
     ],
   });

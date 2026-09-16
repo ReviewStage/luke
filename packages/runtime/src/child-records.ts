@@ -28,7 +28,7 @@ export const CHILD_RUN_STATUS = {
 
 type ChildRunStatus = (typeof CHILD_RUN_STATUS)[keyof typeof CHILD_RUN_STATUS];
 
-/** One child as its parent lists it: the id, the label the spawn gave it, and where it stands. */
+/** One child as its parent lists it: the id, the label the spawn gave it, where it stands, and why a failed one failed. */
 export interface ChildRunRecord {
   readonly childId: string;
   readonly label?: string;

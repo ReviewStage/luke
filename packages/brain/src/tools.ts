@@ -51,8 +51,9 @@ export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "
  * offered it, and neither is a child's task, whose final text is the result
  * its requester reviews; a child reaches the developer only through the
  * conversation that asked for it. And delegation's depth: a child's task is
- * not offered `sessions_spawn`, so a child opens no child of its own and
- * delegation stands one level deep.
+ * offered no session tool, so a child opens no child of its own and neither
+ * lists nor reads nor cancels its parent's, and delegation stands one level
+ * deep.
  */
 
 const BRAIN_TOOL_TYPE = "function";

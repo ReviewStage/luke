@@ -160,6 +160,7 @@ function childSummaryRecord(record: ChildRunRecord): WireRecord {
     ...(record.settledAt !== undefined
       ? { settled_at: new Date(record.settledAt).toISOString() }
       : undefined),
+    ...(record.failureDetail !== undefined ? { failure: record.failureDetail } : undefined),
   };
 }
 
@@ -226,8 +227,8 @@ const SESSIONS_SPAWN: SessionToolModule = {
 const SUBAGENTS: SessionToolModule = {
   name: BRAIN_TOOL.SUBAGENTS,
   description:
-    "List the children this conversation asked for — each with its id, label, status, and " +
-    "when it was accepted and settled — or cancel one by id. Check status only when " +
+    "List the children this conversation asked for — each with its id, label, status, when " +
+    "it was accepted and settled, and why a failed one failed — or cancel one by id. Check status only when " +
     "debugging; completions arrive on their own.",
   inputSchema: SUBAGENTS_INPUT,
   execute(input: WireRecord, context: SessionToolContext): Effect.Effect<WireRecord> {

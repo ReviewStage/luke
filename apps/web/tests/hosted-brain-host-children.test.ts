@@ -37,6 +37,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
+import { conversationDirectory } from "../server/hosted/store/standing-conversations";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, insertMessage, insertTurn, readTurnById } from "./support/store-rows";
 
@@ -557,6 +558,13 @@ test("the conversations are the account's main, observed, and child conversation
   assert.equal(byKey.get(childSessionKey(labelled.childId))?.kind, RECORD_CONVERSATION_KIND.CHILD);
   assert.equal(byKey.get(childSessionKey(labelled.childId))?.name, "fixture label");
   assert.equal(byKey.get(childSessionKey(unlabelled.childId))?.name, `Child ${unlabelled.childId}`);
+  // The directory read stops at its limit, newest activity first, the same order the access lists.
+  const whole = await database.run(
+    conversationDirectory(fixture.userId, HOSTED_CHILDREN.DIRECTORY_LIMIT),
+  );
+  const bounded = await database.run(conversationDirectory(fixture.userId, 2));
+  assert.equal(whole.length, 4);
+  assert.deepEqual(bounded, whole.slice(0, 2));
   // The access names its own conversation by the same key the listing does.
   assert.equal(
     await withAccess(seamsOf(fixture, fakeEve()), (access) => Effect.succeed(access.sessionKey)),
