@@ -39,7 +39,7 @@ const FIXTURE = {
   REPLY_WITH_TOOL_PART: "reply-with-tool-part.json",
   COMPACTION: "compaction.json",
   OBSERVATION_HOOK: "observation-hook.json",
-  OBSERVATION_ROSTER_LOOK: "observation-roster-look.json",
+  OBSERVATION_TRANSCRIPT_CHANGE: "observation-transcript-change.json",
   CHILD_TASK: "child-task.json",
   CHILD_COMPLETION: "child-completion.json",
   RECALLED_NOTES: "recalled-notes.json",
@@ -50,7 +50,7 @@ const FIXTURE = {
 /** The fixture that carries each source the brain writes a user row under, one per member of the set. */
 const BRAIN_SOURCE_FIXTURES = {
   [OBSERVATION_SOURCE.HOOK]: FIXTURE.OBSERVATION_HOOK,
-  [OBSERVATION_SOURCE.ROSTER_LOOK]: FIXTURE.OBSERVATION_ROSTER_LOOK,
+  [OBSERVATION_SOURCE.TRANSCRIPT_CHANGE]: FIXTURE.OBSERVATION_TRANSCRIPT_CHANGE,
   [OBSERVATION_SOURCE.CHILD]: FIXTURE.CHILD_TASK,
   [OBSERVATION_SOURCE.CHILD_COMPLETION]: FIXTURE.CHILD_COMPLETION,
   [OBSERVATION_SOURCE.RECALLED_NOTES]: FIXTURE.RECALLED_NOTES,
@@ -135,7 +135,7 @@ test("a brain-authored user row reads back under each source the vocabulary name
     assert.equal(stored?.role, MESSAGE_ROLE.USER);
     assert.deepEqual(stored?.metadata, { author: MESSAGE_AUTHOR.BRAIN, source });
   }
-  const unnamed = withMetadata(await fixture(FIXTURE.OBSERVATION_ROSTER_LOOK), {
+  const unnamed = withMetadata(await fixture(FIXTURE.OBSERVATION_TRANSCRIPT_CHANGE), {
     author: MESSAGE_AUTHOR.BRAIN,
     source: "bulletin",
   });

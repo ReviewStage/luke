@@ -397,15 +397,15 @@ export interface StoreWriter {
 
 /**
  * The plan's turn origin for each origin the brain's stream names. The one
- * fold is observation: the hosted tier opens observation turns from roster
- * diffs alone, having no provider hooks, so the brain's `observation` and the
- * plan's `roster_diff` are one event under two names. Every other origin is
+ * fold is observation: the hosted tier opens observation turns from a chat's
+ * transcript changing alone, having no provider hooks, so the brain's
+ * `observation` and the plan's `transcript_change` are one event under two names. Every other origin is
  * written as reported.
  */
 const TURN_ORIGIN_OF_BRAIN_ORIGIN = {
   [BRAIN_TURN_ORIGIN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_TURN_ORIGIN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [BRAIN_TURN_ORIGIN.OBSERVATION]: TURN_ORIGIN.ROSTER_DIFF,
+  [BRAIN_TURN_ORIGIN.OBSERVATION]: TURN_ORIGIN.TRANSCRIPT_CHANGE,
   [BRAIN_TURN_ORIGIN.CHILD]: TURN_ORIGIN.CHILD,
   [BRAIN_TURN_ORIGIN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
 } as const satisfies Record<BrainTurnOrigin, TurnOrigin>;

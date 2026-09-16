@@ -592,7 +592,7 @@ test("the gates each refuse on their own: method, bearer, body, the path's id, a
     await errorOf(
       await database.run(
         handleBrainAsk(
-          h.options(askRequest(userId, { ...ASK, origin: TURN_ORIGIN.ROSTER_DIFF }), userId),
+          h.options(askRequest(userId, { ...ASK, origin: TURN_ORIGIN.TRANSCRIPT_CHANGE }), userId),
         ),
       ),
     ),

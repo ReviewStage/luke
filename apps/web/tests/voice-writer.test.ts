@@ -129,7 +129,9 @@ async function claim(conversation: ConversationTarget, messageId: string): Promi
 
 /** An assistant message of the brain's, as the relay leaves one, offered to nobody yet. */
 async function announced(conversation: ConversationTarget): Promise<string> {
-  const enqueued = await database.run(store.enqueueTurn(conversation, { origin: "roster_diff" }));
+  const enqueued = await database.run(
+    store.enqueueTurn(conversation, { origin: "transcript_change" }),
+  );
   assert.ok(enqueued.ok);
   const standing = await readMessagesByConversationTyped(database.run, conversation.conversationId);
   return await insertMessage(database.run, {

@@ -123,9 +123,9 @@ const SESSION_FIELDS = {
 
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 const BRAIN_REPLY = { author: MESSAGE_AUTHOR.BRAIN } as const;
-const ROSTER_LOOK = {
+const TRANSCRIPT_CHANGE = {
   author: MESSAGE_AUTHOR.BRAIN,
-  source: OBSERVATION_SOURCE.ROSTER_LOOK,
+  source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
 } as const;
 
 type MessageParts = StoredUIMessage["parts"];
@@ -418,12 +418,12 @@ async function populate(userId: string) {
   });
   const typed = await insertTurn(userId, main, { queuedAt: new Date(NOW) });
   const roster = await insertTurn(userId, observed, {
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     queuedAt: new Date(NOW + 10_000),
   });
   const later = await insertTurn(userId, main, { queuedAt: new Date(NOW + 20_000) });
   const idle = await insertTurn(userId, observed, {
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     queuedAt: new Date(NOW + 30_000),
   });
 
@@ -443,7 +443,7 @@ async function populate(userId: string) {
   });
   const look = await insertMessage(userId, observed, 1, {
     turnId: roster,
-    metadata: ROSTER_LOOK,
+    metadata: TRANSCRIPT_CHANGE,
     createdAt: new Date(NOW + 11_000),
     parts: [{ type: "text", text: "Roster: the session moved to waiting." }],
   });
@@ -885,7 +885,7 @@ it.effect(
         announced.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED && announced.source.session,
         SESSION,
       );
-      assert.equal(announced.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+      assert.equal(announced.turn?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
       const crossing = announced.messages.get(2);
       assert.ok(crossing);
       const parts = crossing.message.parts;
@@ -1233,7 +1233,7 @@ it.effect(
       const clearedAt = NOW + 60_000;
       const { opened } = await database.run(database.store.main.clear(userId, new Date(clearedAt)));
       const laterTurn = await insertTurn(userId, observed, {
-        origin: TURN_ORIGIN.ROSTER_DIFF,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
         queuedAt: new Date(clearedAt + 10_000),
       });
       const laterAnnounce = await insertMessage(userId, observed, 4, {

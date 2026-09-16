@@ -50,9 +50,9 @@ afterAll(() => database.close());
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 const BRAIN_REPLY = { author: MESSAGE_AUTHOR.BRAIN } as const;
-const ROSTER_LOOK = {
+const TRANSCRIPT_CHANGE = {
   author: MESSAGE_AUTHOR.BRAIN,
-  source: OBSERVATION_SOURCE.ROSTER_LOOK,
+  source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
 } as const;
 const SESSION_FIELDS = {
   provider_id: "conductor",
@@ -168,7 +168,7 @@ async function delegated(userId: string, main: string) {
   return { child, taskLine, turn, reply };
 }
 
-/** An observed conversation with the two rows a roster-diff turn leaves: the wake's line and the reply the turn wrote, each at `offset` from NOW. */
+/** An observed conversation with the two rows a transcript-change turn leaves: the wake's line and the reply the turn wrote, each at `offset` from NOW. */
 async function observedAt(userId: string, offset: number) {
   const observed = await insertConversation(database.run, {
     userId,
@@ -181,7 +181,7 @@ async function observedAt(userId: string, offset: number) {
   const turn = await insertTurn(database.run, {
     userId,
     conversationId: observed,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: at(offset),
     startedAt: at(offset + 200),
@@ -195,7 +195,7 @@ async function observedAt(userId: string, offset: number) {
     clientId: `${turn}-wake`,
     role: MESSAGE_ROLE.USER,
     parts: [{ type: "text", text: "Roster: the session moved to waiting." }],
-    metadata: ROSTER_LOOK,
+    metadata: TRANSCRIPT_CHANGE,
     createdAt: at(offset),
     finishedAt: at(offset),
   });
@@ -285,7 +285,7 @@ test("a child that does not stand for the account is not found: an unknown id, a
   }
 });
 
-test("an observed conversation pages as a main's page over itself, whole: the wake's line and the reply under their roster-diff turn, from before the standing main opened, where the Conversation's read shows nothing of them", async () => {
+test("an observed conversation pages as a main's page over itself, whole: the wake's line and the reply under their transcript-change turn, from before the standing main opened, where the Conversation's read shows nothing of them", async () => {
   const userId = await database.createUser();
   // The observed conversation and its rows precede the main a Clear opened, so the view's window cuts them.
   const { observed, turn, wake, reply } = await observedAt(userId, -7_200_000);
@@ -303,7 +303,7 @@ test("an observed conversation pages as a main's page over itself, whole: the wa
       group.turn?.origin,
       group.messages.map((message) => message.message.id),
     ]),
-    [[turn, observed, CONVERSATION_VIEW_SOURCE.MAIN, TURN_ORIGIN.ROSTER_DIFF, [wake, reply]]],
+    [[turn, observed, CONVERSATION_VIEW_SOURCE.MAIN, TURN_ORIGIN.TRANSCRIPT_CHANGE, [wake, reply]]],
   );
   assert.deepEqual(
     page.groups[0]?.messages.map((message) => message.tools.map((tool) => tool.toolName)),

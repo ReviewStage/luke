@@ -13,7 +13,7 @@
             "role": "user",
             "metadata": {
               "author": "brain",
-              "source": "roster_look"
+              "source": "transcript_change"
             },
             "parts": [
               {
@@ -82,7 +82,7 @@
   "turns": [
     {
       "id": "1a000000-0000-4000-8000-000000000005",
-      "origin": "roster_diff",
+      "origin": "transcript_change",
       "status": "settled",
       "queuedAt": 1757505840000,
       "startedAt": 1757505840200,

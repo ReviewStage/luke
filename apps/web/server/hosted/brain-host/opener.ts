@@ -36,7 +36,7 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  * the session's first wake. The conversation is a row of kind `observed`,
  * opened on the first diff that names its session; the turn itself is eve's,
  * recorded under eve's own identity by the relay as eve starts it, with the
- * received message as the observation message and `roster_diff` as its
+ * received message as the observation message and `transcript_change` as its
  * origin. No queued `turns` row is written here: under eve a queued delivery
  * is the queue, and a row minted ahead of eve's turn could only ever fail to
  * be the turn eve folds it into.

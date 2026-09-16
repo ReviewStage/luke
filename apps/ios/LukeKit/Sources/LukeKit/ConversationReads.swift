@@ -25,7 +25,7 @@ public struct SessionIdentity: Hashable, Sendable, Codable {
 public enum TurnOrigin: String, Sendable {
     case typed
     case spoken
-    case rosterDiff = "roster_diff"
+    case transcriptChange = "transcript_change"
     case child
     case childCompletion = "child_completion"
 }

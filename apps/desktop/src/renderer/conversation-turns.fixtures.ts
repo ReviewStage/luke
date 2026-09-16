@@ -181,7 +181,7 @@ export const FIXTURE_TURN = {
   RUNNING: "1a000000-0000-4000-8000-000000000105",
   /** One action and nothing else: the row itself, no fold. */
   SINGLE: "1a000000-0000-4000-8000-000000000106",
-  /** A roster look in main: Luke's own judgment, with words and an action of his own. */
+  /** A transcript change in main: Luke's own judgment, with words and an action of his own. */
   OWN: "1a000000-0000-4000-8000-000000000107",
   /** The turn's working: the brain's own reads and writes beside two app actions, one write refused. */
   WORKING: "1a000000-0000-4000-8000-000000000108",
@@ -555,7 +555,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
     },
     {
       id: TURN.ANNOUNCED,
-      origin: TURN_ORIGIN.ROSTER_DIFF,
+      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
       status: TURN_STATUS.SETTLED,
       queuedAt: AT.ANNOUNCED,
     },
@@ -580,7 +580,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
     },
     {
       id: TURN.OWN,
-      origin: TURN_ORIGIN.ROSTER_DIFF,
+      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
       status: TURN_STATUS.SETTLED,
       queuedAt: AT.OWN,
     },

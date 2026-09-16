@@ -503,7 +503,7 @@ test("a developer turn leaves its ask, its journal closed as the answer told, an
   assert.equal(read.ok, true);
 });
 
-test("an observation turn on an observed conversation is a roster-diff turn whose words the brain wrote for itself", async () => {
+test("an observation turn on an observed conversation is a transcript-change turn whose words the brain wrote for itself", async () => {
   const target = await conversation(CONVERSATION_KIND.OBSERVED);
   const stream = new Stream();
   const lookId = randomUUID();
@@ -520,7 +520,7 @@ test("an observation turn on an observed conversation is a roster-diff turn whos
     stream.started(BRAIN_TURN_ORIGIN.OBSERVATION, BRAIN_TURN_TRIGGER.ROSTER),
     stream.words(lookId, "[roster look] One session finished.", {
       author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.ROSTER_LOOK,
+      source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
     }),
     stream.toolCall("call_a", "announce", ANNOUNCE_INPUT),
     stream.toolAnswered("call_a", "announce", { status: "accepted" }),
@@ -539,7 +539,7 @@ test("an observation turn on an observed conversation is a roster-diff turn whos
       [
         1,
         MESSAGE_ROLE.USER,
-        { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+        { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
       ],
       [2, MESSAGE_ROLE.ASSISTANT, { author: MESSAGE_AUTHOR.BRAIN }],
     ],
@@ -548,7 +548,7 @@ test("an observation turn on an observed conversation is a roster-diff turn whos
   const turn = await storedTurn(stream.turnId);
   assert.deepEqual(
     [turn?.origin, turn?.status, turn?.responseIds],
-    [TURN_ORIGIN.ROSTER_DIFF, TURN_STATUS.SETTLED, []],
+    [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.SETTLED, []],
   );
 });
 
@@ -838,7 +838,7 @@ test("a turn that failed records its failure word and detail cut to the bound, a
       timedOutTurn?.failure,
       timedOutTurn?.failureDetail,
     ],
-    [TURN_ORIGIN.ROSTER_DIFF, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
+    [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
   );
 });
 
@@ -880,11 +880,11 @@ test("a queued turn keeps the origin it was queued under through running to sett
   assert.equal((await storedTurn(stream.turnId))?.status, TURN_STATUS.SETTLED);
 
   const minted = await database.run(
-    writer.enqueueTurn(target, { origin: TURN_ORIGIN.ROSTER_DIFF }),
+    writer.enqueueTurn(target, { origin: TURN_ORIGIN.TRANSCRIPT_CHANGE }),
   );
   assert.equal(minted.ok, true);
   if (!minted.ok) return;
-  assert.equal((await storedTurn(minted.turnId))?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.equal((await storedTurn(minted.turnId))?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
   assert.equal((await storedTurn(minted.turnId))?.eveTurnId, null);
 });
 

@@ -75,9 +75,9 @@ test("a user row is a typed ask, a spoken ask, or an observation, each admitted 
   assert.deepEqual(
     parse(USER_MESSAGE_METADATA, {
       author: MESSAGE_AUTHOR.BRAIN,
-      source: OBSERVATION_SOURCE.ROSTER_LOOK,
+      source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
     }),
-    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
   );
 });
 
@@ -91,7 +91,7 @@ test("every way the brain writes a user row for itself is a source, and a source
     new Set(sources),
     new Set([
       OBSERVATION_SOURCE.HOOK,
-      OBSERVATION_SOURCE.ROSTER_LOOK,
+      OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
       OBSERVATION_SOURCE.CHILD,
       OBSERVATION_SOURCE.CHILD_COMPLETION,
       OBSERVATION_SOURCE.RECALLED_NOTES,
@@ -104,7 +104,7 @@ test("every way the brain writes a user row for itself is a source, and a source
     { author: MESSAGE_AUTHOR.BRAIN, source: "" },
     { author: MESSAGE_AUTHOR.BRAIN },
     { author: MESSAGE_AUTHOR.CHILD, source: OBSERVATION_SOURCE.CHILD },
-    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+    { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
   ];
   for (const value of refused) {
     assert.equal(refusalOf(USER_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);
@@ -117,7 +117,7 @@ test("the authors are bound to their shapes: a child never speaks as user, the b
     { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.TYPED },
     { author: MESSAGE_AUTHOR.BRAIN, channel: MESSAGE_CHANNEL.VOICE },
     { author: MESSAGE_AUTHOR.DEVELOPER, source: OBSERVATION_SOURCE.HOOK },
-    { author: MESSAGE_AUTHOR.VOICE_MODEL, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+    { author: MESSAGE_AUTHOR.VOICE_MODEL, source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE },
     { author: MESSAGE_AUTHOR.VOICE_MODEL, channel: MESSAGE_CHANNEL.TYPED },
     {
       author: MESSAGE_AUTHOR.BRAIN,

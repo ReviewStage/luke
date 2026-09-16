@@ -21,7 +21,7 @@
       "enum": [
         "typed",
         "spoken",
-        "roster_diff",
+        "transcript_change",
         "child",
         "child_completion"
       ]
