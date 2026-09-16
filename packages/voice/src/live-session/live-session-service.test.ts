@@ -25,6 +25,7 @@ import {
   SEED_ROLE,
   seedItemTokens,
   TRANSCRIPT_SPEAKER,
+  UTTERANCE_GAP_MS,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntry, SESSION_STATUS } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
@@ -47,7 +48,7 @@ import {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
-import type { DeveloperUtteranceRecord, LiveRecord, SpokenRowUpsert } from "./live-record.js";
+import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
   ANTICIPATION_FACTS_PREFIX,
   LiveSessionService,
@@ -233,8 +234,8 @@ class AnticipatingBrain extends FakeBrain {
 class FakeRecord implements LiveRecord {
   /** Every row write in the order the record was handed them: a row grows as repeats of its id, each over the span it then had. */
   readonly rows: SpokenRowUpsert[] = [];
-  /** The developer's utterances written under a delegation. */
-  readonly developer: DeveloperUtteranceRecord[] = [];
+  /** Every attach in the order the record was handed them: the rows a delegation is about, by the delegation. */
+  readonly attached: SpokenAskAttach[] = [];
   /** While set, the writes of the kinds named wait here for the test to answer them, oldest first. */
   #held: { rows: boolean; answers: ((written: boolean) => void)[] } | undefined;
 
@@ -254,8 +255,12 @@ class FakeRecord implements LiveRecord {
     return this.#write(this.#held?.rows === true, () => this.rows.push(row));
   }
 
-  writeDeveloperUtterance(record: DeveloperUtteranceRecord): Effect.Effect<boolean> {
-    return this.#write(this.#held !== undefined, () => this.developer.push(record));
+  /** The hosted record writes each row handed over before it attaches; the fake keeps the same account of the rows. */
+  attachSpokenAsk(attach: SpokenAskAttach): Effect.Effect<boolean> {
+    return this.#write(this.#held !== undefined, () => {
+      this.rows.push(...attach.rows);
+      this.attached.push(attach);
+    });
   }
 
   #write(held: boolean, land: () => void): Effect.Effect<boolean> {
@@ -283,6 +288,15 @@ class FakeRecord implements LiveRecord {
 /** The rows as the tests read them: whose, and over what span; the words are the record's to cut. */
 function spans(rows: readonly SpokenRowUpsert[]) {
   return rows.map((row) => [row.speaker, row.startMs, row.endMs]);
+}
+
+/** Each attach as a delegation and the ids of the rows it named, oldest first. */
+function attaches(record: FakeRecord) {
+  return record.attached.map((attach) => ({
+    delegationId: attach.delegationId,
+    voiceSessionId: attach.voiceSessionId,
+    rowIds: attach.rows.map((row) => row.rowId),
+  }));
 }
 
 /** The row the brain was handed to read ahead of, which is what its facts are matched against. */
@@ -563,7 +577,7 @@ it.effect("no source means no session and nothing announced", () =>
 );
 
 it.effect(
-  "a delegation is claimed once, composed from the transcript since the previous one, and written as the developer's line",
+  "a delegation is claimed once, composed from the transcript since the previous one, and attaches the developer's row, written as it stands",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -577,37 +591,26 @@ it.effect(
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
       assert.deepEqual(f.brain.asks[0]?.submissionId, "item_1");
-      assert.equal(f.record.developer.length, 1);
-      assert.deepEqual(
-        {
-          text: f.record.developer[0]?.text,
-          delegationId: f.record.developer[0]?.delegationId,
-          askContext: f.record.developer[0]?.askContext,
-          runId: f.record.developer[0]?.runId,
-          voiceSessionId: f.record.developer[0]?.voiceSessionId,
-        },
-        {
-          text: "What needs me right now?",
-          delegationId: "item_1",
-          askContext: { sinceMs: 0, untilMs: 2500 },
-          runId: "run-1",
-          voiceSessionId: "sess-1",
-        },
-      );
-      // The delegation flushed both rows as they stood before the ask was composed on them; the
-      // debounce after it writes nothing more, since the developer's row is the ask's now.
+      // The delegation flushed both rows as they stood before the ask was composed on them, and the
+      // ask's row was written once more as it stood at the attach, ahead of the attach itself.
       assert.deepEqual(spans(f.record.rows), [
         [TRANSCRIPT_SPEAKER.ASSISTANT, 0, 900],
         [TRANSCRIPT_SPEAKER.USER, 1000, 2400],
+        [TRANSCRIPT_SPEAKER.USER, 1000, 2400],
       ]);
+      assert.equal(f.record.rows[1]?.rowId, f.record.rows[2]?.rowId);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds: [f.record.rows[1]?.rowId] },
+      ]);
+      // Nothing was put off: the debounce after it writes nothing more.
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
-      assert.equal(f.record.developer.length, 1);
-      assert.equal(f.record.rows.length, 2);
+      assert.equal(f.record.attached.length, 1);
+      assert.equal(f.record.rows.length, 3);
     }),
 );
 
 it.effect(
-  "a fragment that lands on the ask's row while the brain is being asked is written under the delegation: the row goes on record as the ledger holds it at the write, not as it stood at the claim",
+  "a fragment that lands on the ask's row while the brain is being asked is on the row the delegation attaches, and the row keeps growing under its own id after the handover",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -619,26 +622,156 @@ it.effect(
       sideband.delegation("item_1", 2300);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
-      assert.equal(f.record.developer.length, 0);
+      assert.equal(f.record.attached.length, 0);
       sideband.input(" one.", 2400, 2600);
       yield* settle();
       yield* Deferred.succeed(f.brain.answerWhen, undefined);
       yield* settle();
-      assert.deepEqual(
-        f.record.developer.map((line) => [line.delegationId, line.text, line.startMs, line.endMs]),
-        [["item_1", "Open the failing one.", 1000, 2600]],
-      );
-      // The row's own write went out at the delegation, as the row then stood; the fragment that
-      // joined the claimed row grew it no further there, since the ask's write carries it.
-      assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 1000, 2200]]);
+      // The row's own write went out at the delegation, as the row then stood; the attach wrote it
+      // again as the ledger held it, the late word on it, and then named it to the delegation.
+      const [line] = f.record.rows;
+      assert.ok(line);
+      assert.deepEqual(spans(f.record.rows), [
+        [TRANSCRIPT_SPEAKER.USER, 1000, 2200],
+        [TRANSCRIPT_SPEAKER.USER, 1000, 2600],
+      ]);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds: [line.rowId] },
+      ]);
+      // The late fragment's own debounce grows the row too, and a word said after the handover
+      // grows it again, under the same id, with no second attach: the row is the ask's for life.
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
-      assert.equal(f.record.developer.length, 1);
-      assert.equal(f.record.rows.length, 1);
+      assert.deepEqual(spans(f.record.rows).at(-1), [TRANSCRIPT_SPEAKER.USER, 1000, 2600]);
+      sideband.input(" Please.", 2700, 3000);
+      yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
+      assert.deepEqual(spans(f.record.rows).at(-1), [TRANSCRIPT_SPEAKER.USER, 1000, 3000]);
+      assert.ok(f.record.rows.every((row) => row.rowId === line.rowId));
+      assert.equal(f.record.attached.length, 1);
+      assert.equal(f.brain.asks.length, 1);
     }),
 );
 
 it.effect(
-  "a delegation before any developer utterance is retained and composed on the next fragment, once",
+  "a delegation attaches every developer row since the previous ask that starts by its offset, oldest first, Luke's row between them left alone, and a row begun after the offset left for the next delegation and kept out of this one's question",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      // Three developer rows, each opened past the gap from the last, with Luke's word between the first two.
+      const second = 800 + UTTERANCE_GAP_MS + 200;
+      const third = second + 700 + UTTERANCE_GAP_MS + 200;
+      sideband.input("First thing.", 0, 800);
+      sideband.output("Mm-hmm.", 900, 1300);
+      sideband.input("Second thing.", second, second + 700);
+      sideband.input("Third thing.", third, third + 600);
+      // The offset falls after the second row and before the third.
+      sideband.delegation("item_1", second + 900);
+      yield* settle();
+      const developerRows = [
+        ...new Map(
+          f.record.rows
+            .filter((row) => row.speaker === TRANSCRIPT_SPEAKER.USER)
+            .map((row) => [row.rowId, row.startMs] as const),
+        ),
+      ].sort((left, right) => left[1] - right[1]);
+      assert.deepEqual(
+        developerRows.map(([, startMs]) => startMs),
+        [0, second, third],
+      );
+      const [first, next, last] = developerRows.map(([rowId]) => rowId);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds: [first, next] },
+      ]);
+      // The latest attached row is the ask the brain is told of, over the whole context since the previous one.
+      assert.equal(f.brain.asks.length, 1);
+      assert.ok(f.brain.asks[0]?.question.endsWith("Second thing."));
+      assert.ok(f.brain.asks[0]?.question.includes("Assistant: Mm-hmm."));
+      assert.equal(f.brain.asks[0]?.question.includes("Third thing."), false);
+      // The next delegation is about the third row alone.
+      sideband.delegation("item_2", third + 700);
+      yield* settle();
+      assert.deepEqual(attaches(f.record)[1], {
+        delegationId: "item_2",
+        voiceSessionId: "sess-1",
+        rowIds: [last],
+      });
+      assert.ok(f.brain.asks[1]?.question.endsWith("Third thing."));
+    }),
+);
+
+it.effect(
+  "a row the delegation is about that opens while the brain is being asked, from a delta the API delivered late, is attached with the rows claimed at the delegation",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      const offset = 800 + 2 * UTTERANCE_GAP_MS;
+      sideband.input("First thing.", 0, 800);
+      sideband.delegation("item_1", offset);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      // Spoken before the offset, past the gap from the first row, delivered while the brain is asked.
+      const late = 800 + UTTERANCE_GAP_MS + 200;
+      sideband.input("Second thing.", late, late + 600);
+      yield* settle();
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      yield* settle();
+      const rowIds = [...new Set(f.record.rows.map((row) => row.rowId))];
+      assert.equal(rowIds.length, 2);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds },
+      ]);
+      // The next delegation finds nothing of this one's left over.
+      sideband.input("Third thing.", offset + 1000, offset + 1500);
+      sideband.delegation("item_2", offset + 1600);
+      yield* settle();
+      assert.equal(attaches(f.record)[1]?.rowIds.length, 1);
+      assert.equal(attaches(f.record)[1]?.rowIds.includes(rowIds[0] ?? ""), false);
+    }),
+);
+
+it.effect(
+  "a row opened by a late delta that contains the first delegation's offset is the first delegation's, though a second delegation arrives while the first is still with the brain",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      const offset = 800 + 2 * UTTERANCE_GAP_MS;
+      sideband.input("First thing.", 0, 800);
+      sideband.delegation("item_1", offset);
+      yield* settle();
+      // Delivered late, past the gap from the first row, and running across the first offset.
+      sideband.input("Second thing.", offset - 500, offset + 500);
+      sideband.delegation("item_2", offset + 2000);
+      yield* settle();
+      // The second delegation found the row the first's claim had just taken and nothing else said
+      // since: it is retained for the next fragment rather than composed on nothing.
+      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      yield* settle();
+      const rowIds = [...new Set(f.record.rows.map((row) => row.rowId))];
+      assert.equal(rowIds.length, 2);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds },
+      ]);
+      // The next words compose the retained delegation; begun after its offset, their row is not
+      // its to attach, and is the next delegation's.
+      sideband.input("Third thing.", offset + 3000, offset + 3500);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 2);
+      assert.ok(f.brain.asks[1]?.question.endsWith("Third thing."));
+      assert.equal(attaches(f.record).length, 1);
+    }),
+);
+
+it.effect(
+  "a delegation before any developer utterance is retained and composed on the next fragment, once; a row begun after its offset is the next delegation's",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -651,17 +784,24 @@ it.effect(
       sideband.input("Open the failing one.", 500, 1400);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
-      // The row reached the record under the ledger's id ahead of the ask's write, as it
-      // does when the delegation follows the words rather than preceding them.
+      // The row reached the record under the ledger's id, as it does when the delegation follows
+      // the words. It began after the delegation's offset, so it is not this delegation's: the
+      // brain is asked about it all the same, since the model waits on the delegation, and nothing
+      // is attached; the row is the next delegation's.
       assert.deepEqual(spans(f.record.rows), [[TRANSCRIPT_SPEAKER.USER, 500, 1400]]);
-      assert.equal(f.record.developer[0]?.delegationId, "item_early");
-      assert.equal(f.record.developer[0]?.rowId, f.record.rows[0]?.rowId);
+      assert.ok(f.brain.asks[0]?.question.endsWith("Open the failing one."));
+      assert.deepEqual(attaches(f.record), []);
       sideband.input(" Please.", 1400, 1700);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
-      // The row is the ask's now: the late fragment grows it here no further.
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
-      assert.equal(f.record.rows.length, 1);
+      assert.deepEqual(spans(f.record.rows).at(-1), [TRANSCRIPT_SPEAKER.USER, 500, 1700]);
+      assert.equal(f.record.rows.at(-1)?.rowId, f.record.rows[0]?.rowId);
+      sideband.delegation("item_next", 1800);
+      yield* settle();
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_next", voiceSessionId: "sess-1", rowIds: [f.record.rows[0]?.rowId] },
+      ]);
     }),
 );
 
@@ -875,7 +1015,10 @@ it.effect("a refused submission is spoken as its refusal under the delegation", 
       commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
       "item_1",
     );
-    assert.equal(f.record.developer[0]?.runId, undefined);
+    assert.deepEqual(
+      f.record.attached.map((attach) => attach.delegationId),
+      ["item_1"],
+    );
   }),
 );
 
@@ -1389,7 +1532,7 @@ it.effect(
         [TRANSCRIPT_SPEAKER.ASSISTANT, 500, 900],
       ]);
       assert.notEqual(first[0]?.rowId, first[1]?.rowId);
-      assert.equal(f.record.developer.length, 0);
+      assert.equal(f.record.attached.length, 0);
       // The close does not wait out the debounce: the write put off is made at the release.
       sideband.input("Bye", 5000, 5300);
       sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 6);
@@ -1402,7 +1545,7 @@ it.effect(
 );
 
 it.effect(
-  "an utterance whose row is on record before its delegation is written again under the delegation, with its run, and the record decides what the second write means",
+  "an utterance whose row is on record before its delegation is attached to it under its own id, and nothing is spoken while the attach is out",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1412,7 +1555,7 @@ it.effect(
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
       const [line] = f.record.rows;
       assert.ok(line);
-      assert.equal(f.record.developer.length, 0);
+      assert.equal(f.record.attached.length, 0);
       f.record.hold();
       sideband.delegation("item_late", 5000);
       yield* settle();
@@ -1428,15 +1571,15 @@ it.effect(
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
       f.record.release(true);
       yield* settle();
-      assert.deepEqual(
-        f.record.developer.map((written) => [written.rowId, written.delegationId, written.runId]),
-        [[line.rowId, "item_late", "run-1"]],
-      );
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_late", voiceSessionId: "sess-1", rowIds: [line.rowId] },
+      ]);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 1);
-      // The row is the ask's now and its own write grows it no further.
+      // The attach wrote the row once more as it stood; nothing put off remains to write.
+      assert.ok(f.record.rows.every((row) => row.rowId === line.rowId));
       yield* advanceClock(ROW_WRITE_DEBOUNCE_MS);
-      assert.equal(f.record.developer.length, 1);
-      assert.equal(f.record.rows.length, 1);
+      assert.equal(f.record.attached.length, 1);
+      assert.equal(f.record.rows.length, 2);
     }),
 );
 
@@ -1722,11 +1865,11 @@ it.effect(
         sentence: "Green.",
       });
       yield* settle();
-      assert.equal(f.record.developer.length, 0);
+      assert.equal(f.record.attached.length, 0);
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
       f.record.release(true);
       yield* settle();
-      assert.equal(f.record.developer.length, 1);
+      assert.equal(f.record.attached.length, 1);
       const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(
         commentary.map((event) => ("content" in event ? event.content : undefined)),
@@ -1802,12 +1945,12 @@ it.effect(
         commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
         "item_1",
       );
-      assert.equal(f.record.developer.length, 0);
+      assert.equal(f.record.attached.length, 0);
     }),
 );
 
 it.effect(
-  "a follow-up delegated seconds after an ask, whose own write lands nothing, is spoken to as the sibling it is: no note, the exchange's reply said once",
+  "a follow-up delegated seconds after an ask, its words on the first ask's row, attaches nothing of its own and is spoken to as the sibling it is: no note, the exchange's reply said once",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -1817,7 +1960,9 @@ it.effect(
       sideband.input("Can we add captions?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      sideband.input("Is that possible?", 3000, 3800);
+      // Within the gap of the first words: the ledger grows the first ask's row rather than opening
+      // one, and the follow-up's offset falls inside the grown row.
+      sideband.input(" Is that possible?", 3000, 4200);
       sideband.delegation("item_2", 3900);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
@@ -1827,10 +1972,10 @@ it.effect(
         runId: "run-2",
         sentence: "Yes, the live route can carry captions.",
       });
-      f.record.release(true);
       yield* settle();
+      // Nothing is spoken while the first ask's attach is out; the follow-up has no row of its own.
       assert.equal(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).length, 0);
-      f.record.release(false);
+      f.record.release(true);
       yield* settle();
       const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
       assert.deepEqual(
@@ -1841,7 +1986,19 @@ it.effect(
         commentary[0] && "delegation_id" in commentary[0] && commentary[0].delegation_id,
         "item_2",
       );
-      assert.equal(f.record.developer.length, 1);
+      // One attach, the first ask's; the follow-up's words grew that row, which stays the first ask's.
+      assert.deepEqual(
+        f.record.attached.map((attach) => [attach.delegationId, attach.rows.length]),
+        [["item_1", 1]],
+      );
+      assert.ok(f.record.rows.some((row) => row.startMs === 0 && row.endMs === 4200));
+      assert.ok(f.record.rows.every((row) => row.rowId === f.record.attached[0]?.rows[0]?.rowId));
+      // The follow-up moved the session past the row it read: a delegation with nothing said since
+      // is retained rather than composed on that row a third time.
+      sideband.delegation("item_3", 5000);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 2);
+      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
     }),
 );
 

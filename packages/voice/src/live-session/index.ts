@@ -11,7 +11,7 @@ export {
   type LiveBrainRunEvent,
   type LiveBrainSubmission,
 } from "./live-brain.js";
-export type { LiveRecord } from "./live-record.js";
+export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
 export { LiveSessionHolder } from "./live-session-holder.js";
 export {
   type AdoptableSession,
