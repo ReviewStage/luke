@@ -1400,8 +1400,11 @@ answers. The change signal answers each resource's head as the cursor a
 caught-up device would hold — from the conversation rows' counters and one
 ordered look at the turns, never the rows themselves — beside the roster
 snapshot's instant; the `children` and `agents` heads are the instant each
-list last changed rather than a cursor, since those two reads take none, and
-each is absent while none stand. The same call is the device's heartbeat: its row
+list last changed rather than a cursor, since those two reads take none, a
+stamped row counted so a Clear that empties the list moves the head rather
+than removing it; the `children` head is absent while no child was ever
+opened and the `agents` head while no observed conversation ever held a
+turn. The same call is the device's heartbeat: its row
 takes the last-seen instant and the `activeUntil` and `quietUntil` it
 reported. The service records those two and decides nothing from them here.
 
@@ -1667,7 +1670,8 @@ ended children whose completion is not yet stamped, oldest run first, and
 delivers each the way the relay does at the turn's end — the stamp under the
 parent's lock first, then one `child-completion` turn into the parent's
 session as the deployment acting for the account — so a completion the relay's
-hook lost is delivered on a later tick and none is delivered twice; a child
+hook lost is tried again on a later tick and none is delivered twice, while
+one eve refuses after the stamp is counted and retried nowhere; a child
 whose spawn expected no completion is stamped and nothing is sent. The tick's
 answer sums what the sweeps did as `children.delivered`,
 `children.undelivered`, and `children.withheld`, and a deployment with no
