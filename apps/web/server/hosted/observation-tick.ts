@@ -48,7 +48,7 @@ type TickRead<A> = Effect.Effect<A, unknown, SqlClient.SqlClient>;
 interface ObservationTickReads {
   /** Accounts with a cloud key seen since `seenAfter`, least recently attempted first, never attempted first of all. */
   listAccounts: (limit: number, seenAfter: number) => TickRead<ObservedAccount[]>;
-  /** Drops the snapshot, diffs, and pass record of every account without a cloud key or not seen since `seenAfter`. */
+  /** Drops the snapshot, bookmark, and pass record of every account without a cloud key or not seen since `seenAfter`. */
   forgetIneligible: (seenAfter: number) => TickRead<void>;
   /**
    * Removes every conversation a Clear stamped past its retention window,

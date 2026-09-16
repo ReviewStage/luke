@@ -7,8 +7,6 @@ import {
   type ObservedRoster,
 } from "../server/hosted/observed-roster";
 import {
-  decodeRosterDiff,
-  encodeRosterDiff,
   rosterCarrying,
   rosterComparable,
   rosterDiff,
@@ -155,16 +153,11 @@ test("a workspace vanishes only when no chat of it stands, and a provider gone w
   assert.equal(gone.workspacesVanished.length, 2);
 });
 
-test("a diff and a roster round-trip through their stored encodings, and an unreadable body reads as nothing", () => {
-  const before = roster([observation("s-1")]);
+test("a roster round-trips through its stored encoding, and an unreadable body reads as nothing", () => {
   const after = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  const diff = rosterDiff(before, after);
 
-  assert.deepEqual(decodeRosterDiff(encodeRosterDiff(diff)), diff);
   assert.deepEqual(decodeObservedRoster(encodeObservedRoster(after)), after);
 
-  assert.equal(decodeRosterDiff("not json"), undefined);
-  assert.equal(decodeRosterDiff(JSON.stringify({ appeared: "no" })), undefined);
   assert.equal(decodeObservedRoster("not json"), undefined);
   assert.equal(decodeObservedRoster(JSON.stringify({ version: 2, providers: [] })), undefined);
   assert.equal(

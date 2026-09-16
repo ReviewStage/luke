@@ -255,7 +255,6 @@ test("deleting the user row cascades through every notebook and roster table and
 
   await deleteUser(database.run, userId);
 
-  // roster_diff stands unwritten and unread until its drop lands; nothing seeds it, so nothing here can prove it.
   for (const table of [
     "workspace_file",
     "workspace_embedding",
