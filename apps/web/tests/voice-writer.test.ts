@@ -26,8 +26,12 @@ import {
 } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { SPEECH_OFFER } from "../server/hosted/store/speech";
-import { type CommentaryAppend, VOICE_WRITE_REFUSAL } from "../server/hosted/store/voice-writer";
-import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../server/live";
+import {
+  type CommentaryAppend,
+  type SpokenRowWrite,
+  VOICE_WRITE_REFUSAL,
+} from "../server/hosted/store/voice-writer";
+import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
@@ -142,6 +146,19 @@ async function announced(conversation: ConversationTarget): Promise<string> {
     metadata: { author: MESSAGE_AUTHOR.BRAIN },
     finishedAt: new Date(NOW),
   });
+}
+
+/**
+ * A row as the service names it to the writer: the id its ledger minted and
+ * the span it holds the utterance at. The ids here read as the row's start so
+ * a test reads as its timeline; the writer reads nothing from the name.
+ */
+function developerRow(rowId: string, startMs: number, endMs: number): SpokenRowWrite {
+  return { rowId, speaker: TRANSCRIPT_SPEAKER.USER, startMs, endMs };
+}
+
+function lukeRow(rowId: string, startMs: number, endMs: number): SpokenRowWrite {
+  return { rowId, speaker: TRANSCRIPT_SPEAKER.ASSISTANT, startMs, endMs };
 }
 
 async function speechEvents(conversation: ConversationTarget) {
@@ -473,7 +490,7 @@ test("a delegation cuts the developer's words before it into a spoken ask naming
   // and then his own row, whether or not the ask before them was the brain's.
   assert.equal((await segments(live.liveSessionId)).length, 4);
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(live, { startMs: 5000, endMs: 7000 })),
+    await database.run(voice.upsertSpokenRow(live, lukeRow(`luke-5000`, 5000, 7000))),
     WRITTEN,
   );
   assert.deepEqual(
@@ -486,7 +503,7 @@ test("a delegation cuts the developer's words before it into a spoken ask naming
   );
 });
 
-test("an exchange the voice model answers itself leaves both settled utterances as finished rows cut from the segments, the developer's line first, once each", async () => {
+test("an exchange the voice model answers itself leaves both utterances as finished rows cut from the segments, the developer's line first, once each", async () => {
   const live = await target();
   const voice = writer();
   const voiceSessionId = await sessionRowId(live.liveSessionId);
@@ -496,21 +513,21 @@ test("an exchange the voice model answers itself leaves both settled utterances 
   await database.run(voice.consume(live, said(" on a permission prompt.", 6100, 7400)));
 
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 1200, endMs: 4800 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1200`, 1200, 4800))),
     WRITTEN,
   );
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(live, { startMs: 5000, endMs: 7400 })),
+    await database.run(voice.upsertSpokenRow(live, lukeRow(`luke-5000`, 5000, 7400))),
     WRITTEN,
   );
-  // Told again, from this writer or a fresh one, each settle is the same row.
+  // Told again, from this writer or a fresh one, each row is grown in place rather than doubled.
   assert.deepEqual(
-    await database.run(writer().recordSpokenLine(live, { startMs: 1200, endMs: 4800 })),
-    { ok: true, effect: STORE_WRITE_EFFECT.REPEATED },
+    await database.run(writer().upsertSpokenRow(live, developerRow(`developer-1200`, 1200, 4800))),
+    WRITTEN,
   );
   assert.deepEqual(
-    await database.run(writer().recordSpokenReply(live, { startMs: 5000, endMs: 7400 })),
-    { ok: true, effect: STORE_WRITE_EFFECT.REPEATED },
+    await database.run(writer().upsertSpokenRow(live, lukeRow(`luke-5000`, 5000, 7400))),
+    WRITTEN,
   );
 
   const rows = await readMessagesByConversationTyped(
@@ -551,7 +568,7 @@ test("an exchange the voice model answers itself leaves both settled utterances 
   assert.ok((rows[0]?.seq ?? 0) < (rows[1]?.seq ?? 0));
   // An utterance whose span holds no segment writes nothing: the words are not there to write.
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 9000, endMs: 9500 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-9000`, 9000, 9500))),
     { ok: true, effect: STORE_WRITE_EFFECT.IGNORED },
   );
   assert.equal((await segments(live.liveSessionId)).length, 4);
@@ -564,7 +581,7 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
   const voice = writer();
   await database.run(voice.consume(first, said("Good morning.", 100, 900)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(first, { startMs: 100, endMs: 900 })),
+    await database.run(voice.upsertSpokenRow(first, lukeRow(`luke-100`, 100, 900))),
     WRITTEN,
   );
   assert.deepEqual(
@@ -590,14 +607,14 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
   const messageId = await briefing(second.conversation);
   await database.run(voice.consume(second, heard("Anything new?", 100, 900)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(second, { startMs: 100, endMs: 900 })),
+    await database.run(voice.upsertSpokenRow(second, developerRow(`developer-100`, 100, 900))),
     WRITTEN,
   );
   voice.noteAppend(second, { clientEventId: "append-2", messageId });
   await database.run(voice.consume(second, appended("append-2", 1000, 2000)));
   await database.run(voice.consume(second, said("One agent finished.", 2000, 3200)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(second, { startMs: 2000, endMs: 3200 })),
+    await database.run(voice.upsertSpokenRow(second, lukeRow(`luke-2000`, 2000, 3200))),
     WRITTEN,
   );
   // The rows are the briefing the fixture announced, the developer's line, and the reading as Luke's
@@ -633,7 +650,7 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
   await database.run(voice.consume(third, said("Let me look.", 1500, 2300)));
   assert.deepEqual(await database.run(voice.consume(third, delegated("dl_pre", 1450))), WRITTEN);
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(third, { startMs: 1500, endMs: 2300 })),
+    await database.run(voice.upsertSpokenRow(third, lukeRow(`luke-1500`, 1500, 2300))),
     WRITTEN,
   );
   const thirdRows = await spokenAsks(third.conversation);
@@ -669,7 +686,7 @@ test("every settled utterance of Luke's is his row: before any line, a briefing 
   await database.run(voice.consume(third, appended("append-3", 4000, 5000)));
   await database.run(voice.consume(third, said("One agent finished.", 5000, 6200)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(third, { startMs: 5000, endMs: 6200 })),
+    await database.run(voice.upsertSpokenRow(third, lukeRow(`luke-5000`, 5000, 6200))),
     WRITTEN,
   );
   assert.deepEqual((await spokenAsks(third.conversation)).at(-1)?.metadata, {
@@ -689,7 +706,7 @@ test("a delegation arriving after the developer's line settled adopts that line 
   const voiceSessionId = await sessionRowId(live.liveSessionId);
   await database.run(voice.consume(live, heard("Open the failing one.", 1000, 2200)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2200 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1000`, 1000, 2200))),
     WRITTEN,
   );
   const before = await readMessagesByConversationTyped(
@@ -793,7 +810,7 @@ test("a delegation adopting a settled line gives it the ask's whole cut: a fragm
   const voiceSessionId = await sessionRowId(live.liveSessionId);
   await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2200 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1000`, 1000, 2200))),
     WRITTEN,
   );
   // A late fragment of the same utterance, beginning before the line's end, and a second thought after it.
@@ -836,18 +853,18 @@ test("Luke's later words are his rows too, and so is the brain's reply read alou
   await database.run(voice.consume(answered, heard("Which agent is waiting?", 1000, 2400)));
   await database.run(voice.consume(answered, said("The fixture agent.", 3000, 4000)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(answered, { startMs: 1000, endMs: 2400 })),
+    await database.run(voice.upsertSpokenRow(answered, developerRow(`developer-1000`, 1000, 2400))),
     WRITTEN,
   );
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(answered, { startMs: 3000, endMs: 4000 })),
+    await database.run(voice.upsertSpokenRow(answered, lukeRow(`luke-3000`, 3000, 4000))),
     WRITTEN,
   );
   await database.run(
     voice.consume(answered, said("By the way, one agent finished.", 20_000, 22_000)),
   );
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(answered, { startMs: 20_000, endMs: 22_000 })),
+    await database.run(voice.upsertSpokenRow(answered, lukeRow(`luke-20_000`, 20_000, 22_000))),
     WRITTEN,
   );
   assert.deepEqual(
@@ -871,12 +888,12 @@ test("Luke's later words are his rows too, and so is the brain's reply read alou
   await database.run(voice.consume(reading, appended("reply-1", 5000, 5100)));
   await database.run(voice.consume(reading, said("Opening it now.", 5200, 6400)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(reading, { startMs: 5200, endMs: 6400 })),
+    await database.run(voice.upsertSpokenRow(reading, lukeRow(`luke-5200`, 5200, 6400))),
     WRITTEN,
   );
   await database.run(voice.consume(reading, said("It is on the failing test.", 8000, 9500)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(reading, { startMs: 8000, endMs: 9500 })),
+    await database.run(voice.upsertSpokenRow(reading, lukeRow(`luke-8000`, 8000, 9500))),
     WRITTEN,
   );
   assert.deepEqual(
@@ -909,7 +926,7 @@ test("a delegation whose offset falls before the settled line's last fragment en
   await database.run(voice.consume(live, heard("Open the failing", 1000, 2200)));
   await database.run(voice.consume(live, heard(" one.", 2100, 2600)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2600 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1000`, 1000, 2600))),
     WRITTEN,
   );
   // The API places the delegation at an offset inside the utterance, before its last fragment ended.
@@ -947,11 +964,11 @@ test("a delegation delivered late, its offset inside a line Luke has already ans
   await database.run(voice.consume(live, heard("Which agent is waiting?", 1000, 2600)));
   await database.run(voice.consume(live, said("The fixture agent.", 3000, 4000)));
   assert.deepEqual(
-    await database.run(voice.recordSpokenLine(live, { startMs: 1000, endMs: 2600 })),
+    await database.run(voice.upsertSpokenRow(live, developerRow(`developer-1000`, 1000, 2600))),
     WRITTEN,
   );
   assert.deepEqual(
-    await database.run(voice.recordSpokenReply(live, { startMs: 3000, endMs: 4000 })),
+    await database.run(voice.upsertSpokenRow(live, lukeRow(`luke-3000`, 3000, 4000))),
     WRITTEN,
   );
   const before = await readMessagesByConversationTyped(

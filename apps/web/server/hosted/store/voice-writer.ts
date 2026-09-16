@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -6,10 +5,16 @@ import {
   type AssistantMessageMetadata,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
   type SpokenAskMetadata,
 } from "../../core.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
-import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../../live.js";
+import {
+  LIVE_SERVER_EVENT,
+  type LiveServerEvent,
+  TRANSCRIPT_SPEAKER,
+  type TranscriptSpeaker,
+} from "../../live.js";
 import { markSpeechSpoken, SPEECH_REFUSAL } from "./speech.js";
 import {
   type ConversationTarget,
@@ -42,27 +47,27 @@ import {
  * memory kept in the process is which message a commentary append carried,
  * which the same connection that sent the append learns the answer to.
  *
- * What is spoken becomes a message through the two utterance doors
- * (`recordSpokenLine`, `recordSpokenReply`), called by the live session
- * service when an utterance has settled by the ledger's own rule — no
- * fragment has joined it for the gap plus the margin — and each writes one
- * finished row cut from the segments already on record over the utterance's
- * span, or nothing: a row is never opened and amended, so a socket closing
- * mid-sentence leaves the words actually said or no row, never a row still
- * being written. The developer's settled utterance is a user row on the voice
- * channel naming the session and its span, with no delegation; a delegation
- * that arrives after the utterance settled adopts that row rather than
- * cutting a second (`adoptSpokenLine`), giving it the ask's own cut — the
- * line's words with any fragment that joined the utterance after it settled
- * and any said after it before the delegation — so an ask and its line share
- * one id and one text however the two writes were ordered. Every settled
- * utterance of Luke's is an assistant row authored by the voice model,
- * whatever prompted the words — an answer he gave himself, what he said
- * before handing an ask to the brain, a briefing or the brain's reply read
- * aloud, a greeting or a beat spoken from the build's script — so the
- * Conversation shows what the developer actually heard, and a reading stands
- * beside the message it was read from rather than in place of it. Segments
- * may overlap, because timed deltas do, and no audio is ever stored.
+ * What is spoken becomes a message through one door, `upsertSpokenRow`,
+ * called by the live session service for each utterance it writes: the row is named
+ * by the id the service's ledger minted when the utterance opened, which is
+ * its client id for life, and the span the ledger holds it at, and the write
+ * cuts the words from the segments already on record over that span. The
+ * first write inserts the row; each later one grows it in place — its parts,
+ * its span's end, its finish, its revision — so a socket closing mid-sentence
+ * leaves the words said so far on the row, and a row on a device grows rather
+ * than being drawn twice. The developer's utterance is a user row on the
+ * voice channel naming the session and its span, with no delegation; a
+ * delegation that arrives on it adopts that row rather than cutting a second
+ * (`adoptSpokenLine`), giving it the ask's own cut — the line's words with
+ * any said after them before the delegation — so an ask and its line share
+ * one id and one text however the two writes were ordered. Every utterance
+ * of Luke's is an assistant row authored by the voice model, whatever
+ * prompted the words — an answer he gave himself, what he said before handing
+ * an ask to the brain, a briefing or the brain's reply read aloud, a greeting
+ * or a beat spoken from the build's script — so the Conversation shows what
+ * the developer actually heard, and a reading stands beside the message it
+ * was read from rather than in place of it. Segments may overlap, because
+ * timed deltas do, and no audio is ever stored.
  *
  * Every statement here is an `Effect` over the ambient `SqlClient`, decoded
  * by a `Schema` rather than trusted, and answered as an effect to whoever
@@ -107,10 +112,16 @@ const WRITTEN: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN
 const REPEATED: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.REPEATED };
 const NO_SESSION: VoiceWriteResult = { ok: false, refusal: VOICE_WRITE_REFUSAL.NO_SESSION };
 
-/** The span one settled utterance covers on the session's own clock, as the ledger grouped it. */
+/** The span one utterance covers on the session's own clock, as the ledger grouped it. */
 interface SpokenUtteranceSpan {
   readonly startMs: number;
   readonly endMs: number;
+}
+
+/** One speaker's row as the service's ledger holds it now: the id it minted for the row, and the span the words are read over. */
+export interface SpokenRowWrite extends SpokenUtteranceSpan {
+  readonly rowId: string;
+  readonly speaker: TranscriptSpeaker;
 }
 
 export interface VoiceWriter {
@@ -133,15 +144,10 @@ export interface VoiceWriter {
     created: DelegationCreated,
     utterance?: SpokenUtteranceSpan,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
-  /** The developer's settled utterance, undelegated: a finished user row cut from the session's segments over its span. */
-  recordSpokenLine(
+  /** One speaker's utterance as it stands: inserted under the ledger's id on first sight, grown in place after, cut from the session's segments over its span each time. */
+  upsertSpokenRow(
     target: VoiceTarget,
-    utterance: SpokenUtteranceSpan,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
-  /** One of Luke's settled utterances: a finished assistant row cut from the session's segments over its span, whatever prompted the words. */
-  recordSpokenReply(
-    target: VoiceTarget,
-    utterance: SpokenUtteranceSpan,
+    row: SpokenRowWrite,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient>;
 }
 
@@ -183,12 +189,29 @@ const SEGMENT_ROLE_OF_DELTA = {
   [LIVE_SERVER_EVENT.OUTPUT_TRANSCRIPT_DELTA]: VOICE_SEGMENT_ROLE.ASSISTANT,
 } as const satisfies Record<SegmentDelta["type"], VoiceSegmentRole>;
 
+/** Whose segments a speaker's row is cut from. */
+const SEGMENT_ROLE_OF_SPEAKER = {
+  [TRANSCRIPT_SPEAKER.USER]: VOICE_SEGMENT_ROLE.USER,
+  [TRANSCRIPT_SPEAKER.ASSISTANT]: VOICE_SEGMENT_ROLE.ASSISTANT,
+} as const satisfies Record<TranscriptSpeaker, VoiceSegmentRole>;
+
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
 type VoiceWriteFailure = SqlError | Schema.SchemaError;
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
+
+/** The store's answer to a row write, as this writer reports it: written or grown is written, a refusal is the store's own. */
+const upserted = <E, R>(
+  write: Effect.Effect<
+    | { readonly ok: true; readonly effect: VoiceWriteEffect }
+    | { readonly ok: false; readonly refusal: VoiceWriteRefusal },
+    E,
+    R
+  >,
+): Effect.Effect<VoiceWriteResult, E, R> =>
+  Effect.map(write, (written) => (written.ok ? WRITTEN : { ok: false, refusal: written.refusal }));
 
 const VoiceSessionKeySchema = Schema.Struct({
   userId: Schema.String,
@@ -266,34 +289,7 @@ const insertSegment = SqlSchema.void({
     ),
 });
 
-/**
- * The client id of a spoken row the voice writer cuts itself: one per
- * session, speaker, and utterance start, derived rather than minted so a
- * settle told twice, or told again from a fresh function instance, writes the
- * same row. A name-based UUID of the same construction as the brain host's,
- * under a namespace of this writer's own.
- */
-const SPOKEN_ROW_NAMESPACE = "8f2d6c1a-5b3e-4a7f-9c0d-1e2f3a4b5c6d";
-const UUID_VERSION_8 = 0x80;
-const UUID_VARIANT_RFC_4122 = 0x80;
-
-function spokenRowClientId(
-  voiceSessionId: string,
-  role: VoiceSegmentRole,
-  startMs: number,
-): string {
-  const digest = createHash("sha256")
-    .update(Buffer.from(SPOKEN_ROW_NAMESPACE.replaceAll("-", ""), "hex"))
-    .update(JSON.stringify([voiceSessionId, role, startMs]), "utf8")
-    .digest()
-    .subarray(0, 16);
-  digest[6] = ((digest[6] ?? 0) & 0x0f) | UUID_VERSION_8;
-  digest[8] = ((digest[8] ?? 0) & 0x3f) | UUID_VARIANT_RFC_4122;
-  const hex = digest.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
-/** One speaker's segments of one session over a settled utterance's span, both ends included, in the order the deltas came. */
+/** One speaker's segments of one session over an utterance's span, both ends included, in the order the deltas came. */
 const findUtteranceSegments = SqlSchema.findAll({
   Request: Schema.Struct({
     voiceSessionId: Schema.String,
@@ -571,15 +567,21 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
   }
 
   /**
-   * The developer's settled utterance the voice model answered itself, as a
-   * finished user row: its own segments over the span, joined as the deltas
-   * came, on the voice channel naming the session and the span and no
-   * delegation. An utterance whose span holds no segment on record writes
-   * nothing, since the words are not there to write.
+   * One speaker's utterance as the service's ledger holds it: its own
+   * segments over the span, joined as the deltas came, on the voice channel
+   * naming the session and the span. The developer's is a user row with no
+   * delegation; Luke's is an assistant row authored by the voice model, whose
+   * metadata names the delegation the words followed where the developer's
+   * latest line before them was handed to the brain, so the store can read
+   * what the words were read from and the Conversation can fold that message
+   * behind the words actually said while the record keeps both. The row is
+   * inserted under the ledger's id on first sight and grown in place after;
+   * a span that holds no segment on record writes nothing, since the words
+   * are not there to write.
    */
-  function recordSpokenLine(
+  function upsertSpokenRow(
     target: VoiceTarget,
-    utterance: SpokenUtteranceSpan,
+    row: SpokenRowWrite,
   ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
     return Effect.gen(function* () {
       const voiceSession = yield* findVoiceSession({
@@ -590,92 +592,55 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
       const voiceSessionId = voiceSession.value.id;
       const spoken = yield* findUtteranceSegments({
         voiceSessionId,
-        role: VOICE_SEGMENT_ROLE.USER,
-        startMs: utterance.startMs,
-        endMs: utterance.endMs,
+        role: SEGMENT_ROLE_OF_SPEAKER[row.speaker],
+        startMs: row.startMs,
+        endMs: row.endMs,
       });
       const text = spoken.map((segment) => segment.text).join("");
       if (text.length === 0) return IGNORED;
-      const metadata: SpokenAskMetadata = {
-        author: MESSAGE_AUTHOR.DEVELOPER,
+      const span = {
         channel: MESSAGE_CHANNEL.VOICE,
         voice_session_id: voiceSessionId,
         from_ms: Math.min(...spoken.map((segment) => segment.startMs)),
-        to_ms: utterance.endMs,
-      };
-      const written = yield* store.recordUserMessage(target.conversation, {
-        clientId: spokenRowClientId(voiceSessionId, VOICE_SEGMENT_ROLE.USER, utterance.startMs),
-        text,
-        metadata,
-      });
-      if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
-      return { ok: false, refusal: written.refusal };
-    });
-  }
-
-  /**
-   * One of Luke's settled utterances, as a finished assistant row authored by
-   * the voice model, cut from the segments over its span, whatever prompted
-   * the words: an answer he gave himself, what he said around an ask handed
-   * to the brain, a briefing or the brain's reply read aloud, a greeting or a
-   * beat. The row names the session and span it was cut from and the
-   * delegation it followed; the store reads from those what the words were
-   * read from, so the Conversation can fold that message behind the words
-   * actually said while the record keeps both, since a device with no voice
-   * still reads the message.
-   */
-  function recordSpokenReply(
-    target: VoiceTarget,
-    utterance: SpokenUtteranceSpan,
-  ): Effect.Effect<VoiceWriteResult, VoiceWriteFailure, SqlClient.SqlClient> {
-    return Effect.gen(function* () {
-      const voiceSession = yield* findVoiceSession({
-        userId: target.userId,
-        liveSessionId: target.liveSessionId,
-      });
-      if (Option.isNone(voiceSession)) return NO_SESSION;
-      const voiceSessionId = voiceSession.value.id;
-      const spoken = yield* findUtteranceSegments({
-        voiceSessionId,
-        role: VOICE_SEGMENT_ROLE.ASSISTANT,
-        startMs: utterance.startMs,
-        endMs: utterance.endMs,
-      });
-      const text = spoken.map((segment) => segment.text).join("");
-      if (text.length === 0) return IGNORED;
+        to_ms: row.endMs,
+      } as const;
+      if (row.speaker === TRANSCRIPT_SPEAKER.USER) {
+        const metadata: SpokenAskMetadata = { author: MESSAGE_AUTHOR.DEVELOPER, ...span };
+        return yield* upserted(
+          store.upsertSpokenRow(target.conversation, {
+            clientId: row.rowId,
+            role: MESSAGE_ROLE.USER,
+            text,
+            metadata,
+          }),
+        );
+      }
       // The developer's latest line before the words, where one was handed to the brain, names the
       // delegation the words followed; the store reads from that what the words were read from.
       const latest = yield* store.latestSpokenLine(target.conversation, {
         voiceSessionId,
-        startingAtOrBeforeMs: utterance.startMs,
+        startingAtOrBeforeMs: row.startMs,
       });
       if (!latest.ok) return { ok: false, refusal: latest.refusal };
       const metadata: AssistantMessageMetadata = {
         author: MESSAGE_AUTHOR.VOICE_MODEL,
-        channel: MESSAGE_CHANNEL.VOICE,
-        voice_session_id: voiceSessionId,
-        from_ms: utterance.startMs,
-        to_ms: utterance.endMs,
+        ...span,
         ...(latest.line?.delegated ? { delegation_id: latest.line.clientId } : undefined),
       };
-      const written = yield* store.recordSpokenReply(target.conversation, {
-        clientId: spokenRowClientId(
-          voiceSessionId,
-          VOICE_SEGMENT_ROLE.ASSISTANT,
-          utterance.startMs,
-        ),
-        text,
-        metadata,
-      });
-      if (written.ok) return written.effect === STORE_WRITE_EFFECT.REPEATED ? REPEATED : WRITTEN;
-      return { ok: false, refusal: written.refusal };
+      return yield* upserted(
+        store.upsertSpokenRow(target.conversation, {
+          clientId: row.rowId,
+          role: MESSAGE_ROLE.ASSISTANT,
+          text,
+          metadata,
+        }),
+      );
     });
   }
 
   return {
     recordSpokenAsk,
-    recordSpokenLine,
-    recordSpokenReply,
+    upsertSpokenRow,
     noteAppend(target, append) {
       appendsOf(target.liveSessionId).set(append.clientEventId, {
         messageId: append.messageId,

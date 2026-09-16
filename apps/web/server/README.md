@@ -855,9 +855,11 @@ exactly as a typed ask meets them.
 What stands: `server/voice/live-record.ts` is the `LiveRecord` door over the
 voice writer (`server/hosted/store/voice-writer.ts`). Every server event is
 handed to `observe` in arrival order and the writer takes what it keeps —
-each transcript delta a segment, and, through the two utterance doors the
-service calls as an utterance settles, each speaker's settled utterance as a
-finished row cut from those segments: the developer's line, and every
+each transcript delta a segment, and, through the one row door
+(`upsertSpokenRow`) the service calls as an utterance settles, each speaker's
+utterance as a row under the id the service's ledger minted when it opened,
+inserted on first sight and grown in place when written again, its words cut
+from those segments over the span the service names: the developer's line, and every
 utterance of Luke's as an assistant row authored by the voice model, whatever
 prompted it — an answer it gave itself, what it said around an ask handed to
 the brain, a briefing or the brain's reply read aloud, a greeting or a beat
