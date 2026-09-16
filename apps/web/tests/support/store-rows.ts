@@ -795,5 +795,6 @@ export async function assertRefusedWithCode(
 }
 
 export const POSTGRES_ERROR = {
+  NOT_NULL_VIOLATION: "23502",
   UNIQUE_VIOLATION: "23505",
 } as const;

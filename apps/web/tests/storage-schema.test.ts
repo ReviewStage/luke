@@ -39,7 +39,10 @@ import {
  * neighbour, a fresh conversation numbers its messages and events from one,
  * one claim stands per briefing, a tool set is one row however often it is
  * written, an observed session keeps one cursor per account, and
- * the v1 conversation tables and the briefing table are gone. The migration
+ * the v1 conversation tables and the briefing table are gone, the
+ * per-conversation latest-turn laterals and the completion sweep have the
+ * indexes they read through, and a child says whether it expects a
+ * completion. The migration
  * runner's own bookkeeping table is not one of them: it records which of these
  * tables a database has, and is declared by no schema file.
  */
@@ -101,6 +104,49 @@ async function publicTableNames(): Promise<readonly string[]> {
 
 test("the migrations end at the declared schema: every declared table stands, and nothing undeclared, the v1 conversation tables and the briefing table included, remains", async () => {
   assert.deepEqual(await publicTableNames(), DECLARED_TABLES);
+});
+
+/** The indexes the children, agents, and completion-sweep reads run through, by table. */
+const READ_INDEXES = [
+  { table: "conversations", name: "conversations_undelivered_children" },
+  { table: "conversations", name: "conversations_user_kind" },
+  { table: "turns", name: "turns_conversation_queued" },
+];
+
+test("the latest-turn laterals and the completion sweep have their indexes", async () => {
+  const rows = await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      return yield* sql`
+        select tablename as "table", indexname as name from pg_indexes
+        where schemaname = 'public' and indexname in ${sql.in(READ_INDEXES.map((index) => index.name))}
+        order by tablename, indexname
+      `;
+    }),
+  );
+  const IndexRowSchema = Schema.Struct({ table: Schema.String, name: Schema.String });
+  assert.deepEqual(
+    rows.map((row) => Schema.decodeUnknownSync(IndexRowSchema)(row)),
+    READ_INDEXES,
+  );
+});
+
+test("a child says whether it expects a completion: the column refuses null", async () => {
+  const userId = await database.createUser();
+  const main = await insertTestConversation(userId);
+
+  await assertRefusedWithCode(
+    database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        yield* sql`
+          insert into conversations (user_id, kind, parent_conversation_id, expects_completion)
+          values (${userId}, ${CONVERSATION_KIND.CHILD}, ${main}, null)
+        `;
+      }),
+    ),
+    POSTGRES_ERROR.NOT_NULL_VIOLATION,
+  );
 });
 
 async function insertTestConversation(
