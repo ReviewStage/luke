@@ -44,12 +44,14 @@ export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "
  * for them. Which of the catalog a turn is offered is the effective tool
  * policy's decision, resolved from the configuration's layers and enforced
  * twice by the host: when the schemas are built and again at every dispatch.
- * The one rule fixed by the turn's kind rather than by configuration is the
+ * Two rules are fixed by the turn's kind rather than by configuration. The
  * briefing's: `announce` is the voice's channel out of a turn nobody is
  * listening to, so a developer's ask, whose reply is the speech, is not
  * offered it, and neither is a child's task, whose final text is the result
  * its requester reviews; a child reaches the developer only through the
- * conversation that asked for it.
+ * conversation that asked for it. And delegation's depth: a child's task is
+ * not offered `sessions_spawn`, so a child opens no child of its own and
+ * delegation stands one level deep.
  */
 
 const BRAIN_TOOL_TYPE = "function";
@@ -176,13 +178,19 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
 
 /**
  * The layer a turn's kind adds beneath the configured policy: the briefing
- * channel is offered only where the reply is not itself the speech. It is a
- * fact about the voice, not a permission decided from who opened the turn.
+ * channel is offered only where the reply is not itself the speech, and a
+ * child's task cannot spawn, so delegation is capped at one level. Each is a
+ * fact about the kind of turn, not a permission decided from who opened it.
  */
 export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
-  return trigger === BRAIN_TURN_TRIGGER.ASK || trigger === BRAIN_TURN_TRIGGER.CHILD_TASK
-    ? { deny: [BRAIN_TOOL.ANNOUNCE] }
-    : {};
+  switch (trigger) {
+    case BRAIN_TURN_TRIGGER.ASK:
+      return { deny: [BRAIN_TOOL.ANNOUNCE] };
+    case BRAIN_TURN_TRIGGER.CHILD_TASK:
+      return { deny: [BRAIN_TOOL.ANNOUNCE, BRAIN_TOOL.SESSIONS_SPAWN] };
+    default:
+      return {};
+  }
 }
 
 /**

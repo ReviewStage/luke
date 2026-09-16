@@ -137,9 +137,10 @@ test("announce takes the briefing alone and the hosted catalog carries every def
   assert.ok(!isBrainOnlyTool(ACTION_TOOL.SEND_SESSION_MESSAGE));
 });
 
-test("a child's task turn loses announce like an ask, and the session tools stand in the catalog under their group", () => {
+test("a child's task turn loses announce like an ask and sessions_spawn besides, and the session tools stand in the catalog under their group", () => {
   const childTask = turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
-  assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE]);
+  assert.deepEqual(childTask.deny, [BRAIN_TOOL.ANNOUNCE, BRAIN_TOOL.SESSIONS_SPAWN]);
+  assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.ASK), { deny: [BRAIN_TOOL.ANNOUNCE] });
   assert.deepEqual(turnToolPolicy(BRAIN_TURN_TRIGGER.CHILD_COMPLETION), {});
   const catalog = brainToolCatalog();
   for (const name of [

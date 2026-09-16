@@ -64,19 +64,18 @@ import type { HostedTranscriptReads } from "./transcript.js";
 /**
  * What the service cannot perform is not offered: the tools that reach a
  * machine — an open, an app setting, the panel, the feedback composer, the
- * updater — and two groups: skills, behind a seam the service does not
- * wire, and delegation, wired below to the children access but withheld
- * until the hosted brain is ready to offer it, so no model sees a session
- * tool yet. The notebook's two reads are offered, answered by
- * the in-process search over the account's workspace rows (`notebook.ts`).
- * The workspace tools stay, so `USER.md` is written the way every other
- * workspace file is. The turn's own layer still withholds `announce` from an
- * ask.
+ * updater — and one group, skills, behind a seam the service does not wire.
+ * Delegation is offered: the four session tools reach the children access
+ * below, and the turn's own layer (`turnToolPolicy`) caps it at one level
+ * by withholding `sessions_spawn` from a child's task, as it withholds
+ * `announce` from an ask and from a child's task. The notebook's two reads
+ * are offered, answered by the in-process search over the account's
+ * workspace rows (`notebook.ts`). The workspace tools stay, so `USER.md` is
+ * written the way every other workspace file is.
  */
 const HOSTED_TOOL_POLICY: ToolPolicyLayers = {
   agent: {
     deny: [
-      `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`,
       `${GROUP_PREFIX}${TOOL_GROUP.SKILLS}`,
       ACTION_TOOL.OPEN_SESSION,
       ACTION_TOOL.CHANGE_APP_SETTING,
@@ -107,7 +106,7 @@ interface HostedToolSeams {
   readonly workspace: BrainWorkspaceAccess;
   /** The notebook's search and read over the account's rows, for the two memory tools. */
   readonly notebook: NotebookMemoryAccess;
-  /** Delegation for the conversation, for the four session tools; absent, each refuses. The hosted policy offers none of them yet. */
+  /** Delegation for the conversation, for the four session tools; absent, each refuses. */
   readonly children: BrainChildAccess | undefined;
   readonly now: () => number;
 }

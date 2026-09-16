@@ -17,6 +17,7 @@ import {
   BRAIN_TOOL,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  type BrainChildAccess,
   CONVERSATION_EVENT_KIND,
   type ProviderSessionObservation,
   SESSION_STATUS,
@@ -183,11 +184,12 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
     ask,
   );
   assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
-  // A child's task is answered in words like an ask and is offered the ask's set; a child's
-  // completion is a note handed to the requester like an observation and is offered that set.
+  // A child's task is answered in words like an ask and is offered the ask's set less the
+  // spawn, so delegation stands one level deep; a child's completion is a note handed to the
+  // requester like an observation and is offered that set.
   assert.deepEqual(
     hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK).map((declared) => declared.name),
-    ask,
+    ask.filter((name) => name !== BRAIN_TOOL.SESSIONS_SPAWN),
   );
   assert.deepEqual(
     hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION).map((declared) => declared.name),
@@ -506,23 +508,46 @@ test("a briefing is offered as an event on the turn's own journal row, and refus
   );
 });
 
-test("a session tool is wired into the dispatch but not offered: the hosted policy refuses the call before the module runs", async () => {
+test("a spawn is offered to an ask and an observation and reaches the children access; a child's task is refused at the policy", async () => {
+  const spawns: Parameters<BrainChildAccess["spawn"]>[0][] = [];
+  const children: BrainChildAccess = {
+    sessionKey: sessionKey("c-1"),
+    spawn: (ask) =>
+      Effect.sync(() => {
+        spawns.push(ask);
+        return {
+          accepted: true,
+          receipt: { childId: "child-1", childSessionKey: sessionKey("child-1") },
+        };
+      }),
+    list: () => Effect.succeed([]),
+    cancel: () => Effect.succeed(undefined),
+    conversations: () => Effect.succeed([]),
+    lines: () => Effect.succeed(undefined),
+  };
   for (const turn of [ASK, OBSERVATION]) {
-    assert.equal(
-      hostedToolDeclarations(turn.trigger).some(
-        (declared) => declared.name === BRAIN_TOOL.SESSIONS_SPAWN,
-      ),
-      false,
-    );
-    const answered = await Effect.runPromise(
-      runHostedTool(
-        BRAIN_TOOL.SESSIONS_SPAWN,
-        { task: "fixture task" },
-        eveContext(),
-        fakes().seams,
-        turn,
-      ),
-    );
-    assert.deepEqual(answered, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
+    const seams: HostedToolSeams = { ...fakes().seams, children };
+    const answered = await call(seams, turn, BRAIN_TOOL.SESSIONS_SPAWN, { task: "fixture task" });
+    assert.equal(answered.status, ACTION_RESULT_STATUS.ACCEPTED);
+    assert.equal(answered.child_id, "child-1");
   }
+  assert.deepEqual(
+    spawns.map((ask) => ask.task),
+    ["fixture task", "fixture task"],
+  );
+  const childTask: HostedTurnStanding = {
+    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+    turnId: "t-3",
+    runId: "t-3",
+  };
+  const refused = await Effect.runPromise(
+    runHostedTool(
+      BRAIN_TOOL.SESSIONS_SPAWN,
+      { task: "fixture task" },
+      eveContext(),
+      fakes().seams,
+      childTask,
+    ),
+  );
+  assert.deepEqual(refused, { status: "rejected", reason: ACTION_REFUSAL.NO_TOOL });
 });
