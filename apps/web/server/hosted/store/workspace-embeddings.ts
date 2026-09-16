@@ -1,6 +1,10 @@
+import { and, eq, inArray, notInArray } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../../db/query.js";
+import { workspaceEmbedding } from "../../db/workspace-schema.js";
 
 /**
  * The embedding cache behind the notebook's search: one row per user per
@@ -14,17 +18,15 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
  * workspace rather than growing with its history.
  *
  * Every statement is an `Effect<A, SqlError | SchemaError, SqlClient>` over the
- * ambient client, the way `workspace-files.ts` reads. The vector travels as
- * JSON text cast to `jsonb` on the way in and is decoded as a number array on
- * the way out, because a `jsonb` column answers a parsed value on both
- * dialects the store's tests stand over.
+ * ambient client, the way `workspace-files.ts` reads: a Drizzle builder over
+ * the table `db/workspace-schema.ts` declares, yielded as the Effect the
+ * bridge made it. The vector is the `jsonb` column's own value — the builder
+ * renders it to JSON on the way in and answers a parsed value on both
+ * dialects the store's tests stand over — and is decoded as a number array
+ * rather than trusted.
  */
 
 type WorkspaceEmbeddingFailure = SqlError | Schema.SchemaError;
-
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
 
 export interface WorkspaceEmbeddingWrite {
   readonly hash: string;
@@ -46,8 +48,7 @@ const WriteEmbeddingSchema = Schema.Struct({
   userId: Schema.String,
   hash: Schema.String,
   model: Schema.String,
-  /** The vector as JSON text, cast to `jsonb` in the statement. */
-  embedding: Schema.String,
+  embedding: Schema.Array(Schema.Number),
   createdAt: Schema.Number,
 });
 
@@ -62,42 +63,61 @@ const findEmbeddings = SqlSchema.findAll({
   Request: ReadEmbeddingsSchema,
   Result: EmbeddingRowSchema,
   execute: (read) =>
-    statement(
-      (sql) => sql`
-        select hash, embedding
-        from workspace_embedding
-        where user_id = ${read.userId}
-          and model = ${read.model}
-          and ${sql.in("hash", read.hashes)}
-      `,
-    ),
+    db
+      .select({ hash: workspaceEmbedding.hash, embedding: workspaceEmbedding.embedding })
+      .from(workspaceEmbedding)
+      .where(
+        and(
+          eq(workspaceEmbedding.userId, read.userId),
+          eq(workspaceEmbedding.model, read.model),
+          inArray(workspaceEmbedding.hash, [...read.hashes]),
+        ),
+      ),
 });
 
+/**
+ * Note that the conflicting update sets the values the insert carried rather
+ * than reading them back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly those values.
+ */
 const upsertEmbedding = SqlSchema.void({
   Request: WriteEmbeddingSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into workspace_embedding (user_id, hash, model, embedding, created_at)
-        values (${write.userId}, ${write.hash}, ${write.model}, ${write.embedding}::jsonb, ${write.createdAt})
-        on conflict (user_id, hash) do update
-          set model = excluded.model, embedding = excluded.embedding, created_at = excluded.created_at
-      `,
-    ),
+    db
+      .insert(workspaceEmbedding)
+      .values({
+        userId: write.userId,
+        hash: write.hash,
+        model: write.model,
+        embedding: write.embedding,
+        createdAt: write.createdAt,
+      })
+      .onConflictDoUpdate({
+        target: [workspaceEmbedding.userId, workspaceEmbedding.hash],
+        set: {
+          model: write.model,
+          embedding: write.embedding,
+          createdAt: write.createdAt,
+        },
+      }),
 });
 
+/** An account whose passages are all gone keeps no vector, so no hash to spare is no predicate rather than an empty one. */
 const pruneEmbeddings = SqlSchema.findAll({
   Request: PruneSchema,
   Result: PrunedRowSchema,
   execute: (prune) =>
-    statement(
-      (sql) => sql`
-        delete from workspace_embedding
-        where user_id = ${prune.userId}
-          ${prune.hashes.length === 0 ? sql`` : sql`and hash not in ${sql.in(prune.hashes)}`}
-        returning hash
-      `,
-    ),
+    db
+      .delete(workspaceEmbedding)
+      .where(
+        and(
+          eq(workspaceEmbedding.userId, prune.userId),
+          prune.hashes.length === 0
+            ? undefined
+            : notInArray(workspaceEmbedding.hash, [...prune.hashes]),
+        ),
+      )
+      .returning({ hash: workspaceEmbedding.hash }),
 });
 
 /** The cached vectors among the hashes given, under the model named; a hash embedded under another model, or never, is absent. */
@@ -131,7 +151,7 @@ export function writeWorkspaceEmbeddings(
         userId,
         hash: write.hash,
         model,
-        embedding: JSON.stringify(write.vector),
+        embedding: write.vector,
         createdAt: now,
       }),
     { discard: true },

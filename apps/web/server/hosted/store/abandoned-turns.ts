@@ -1,5 +1,7 @@
+import { and, asc, eq, isNull, lt } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRAIN_REQUEST_FAILURE,
@@ -8,6 +10,8 @@ import {
   sessionKey,
   TURN_STATUS,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { conversations, turns } from "../../db/storage-schema.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
@@ -37,32 +41,30 @@ export const TURN_ABANDON = {
   LIMIT: 50,
 } as const;
 
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const AbandonedTurnRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   conversationId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id", conversationId: "conversation_id" }));
+});
 
 /** The running turns started before the instant, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
 const abandonedTurns = SqlSchema.findAll({
   Request: Schema.Struct({ startedBefore: Schema.Date, limit: Schema.Int }),
   Result: AbandonedTurnRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select turns.id, turns.user_id, turns.conversation_id
-        from turns
-        join conversations on conversations.id = turns.conversation_id
-        where turns.status = ${TURN_STATUS.RUNNING}
-          and turns.started_at < ${request.startedBefore}
-          and conversations.deleted_at is null
-        order by turns.started_at asc, turns.id asc
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({ id: turns.id, userId: turns.userId, conversationId: turns.conversationId })
+      .from(turns)
+      .innerJoin(conversations, eq(conversations.id, turns.conversationId))
+      .where(
+        and(
+          eq(turns.status, TURN_STATUS.RUNNING),
+          lt(turns.startedAt, request.startedBefore),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(asc(turns.startedAt), asc(turns.id))
+      .limit(request.limit),
 });
 
 export interface AbandonedTurnSweepStore {

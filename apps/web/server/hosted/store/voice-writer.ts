@@ -1,3 +1,4 @@
+import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -8,6 +9,8 @@ import {
   MESSAGE_ROLE,
   type SpokenAskMetadata,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { voiceSessions, voiceTranscriptSegments } from "../../db/voice-schema.js";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
 import {
   LIVE_SERVER_EVENT,
@@ -192,10 +195,6 @@ const SEGMENT_ROLE_OF_SPEAKER = {
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
 type VoiceWriteFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** The store's answer to a row write, as this writer reports it: written or grown is written, a refusal is the store's own. */
 const upserted = <E, R>(
   write: Effect.Effect<
@@ -216,7 +215,16 @@ const VoiceSessionKeySchema = Schema.Struct({
 const VoiceSessionRowSchema = Schema.Struct({
   id: Schema.String,
   deviceId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ deviceId: "device_id" }));
+});
+
+/** The `voice_sessions` row read by its account and the Live API's own id for it, locked or not. */
+const voiceSessionOf = (key: { userId: string; liveSessionId: string }) =>
+  db
+    .select({ id: voiceSessions.id, deviceId: voiceSessions.deviceId })
+    .from(voiceSessions)
+    .where(
+      and(eq(voiceSessions.userId, key.userId), eq(voiceSessions.liveSessionId, key.liveSessionId)),
+    );
 
 type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 
@@ -225,42 +233,27 @@ const VoiceSegmentRoleSchema = Schema.Literals(Object.values(VOICE_SEGMENT_ROLE)
 const findVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
-  execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id, device_id
-        from voice_sessions
-        where user_id = ${key.userId} and live_session_id = ${key.liveSessionId}
-      `,
-    ),
+  execute: (key) => voiceSessionOf(key),
 });
 
 /** The same row, locked, where the caller is about to take a position in the session's sequence. */
 const lockVoiceSession = SqlSchema.findOneOption({
   Request: VoiceSessionKeySchema,
   Result: VoiceSessionRowSchema,
-  execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id, device_id
-        from voice_sessions
-        where user_id = ${key.userId} and live_session_id = ${key.liveSessionId}
-        for update
-      `,
-    ),
+  execute: (key) => voiceSessionOf(key).for("update"),
 });
+
+/** The session's last position, zero where it holds no segment yet; the builder has no spelling for that fallback, so it is a fragment. */
+const LAST_SEGMENT_SEQ = sql<number>`coalesce(max(${voiceTranscriptSegments.seq}), 0)::int`;
 
 const findLastSegmentSeq = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: Schema.Struct({ seq: Schema.Number }),
   execute: (voiceSessionId) =>
-    statement(
-      (sql) => sql`
-        select coalesce(max(seq), 0)::int as seq
-        from voice_transcript_segments
-        where voice_session_id = ${voiceSessionId}
-      `,
-    ),
+    db
+      .select({ seq: LAST_SEGMENT_SEQ })
+      .from(voiceTranscriptSegments)
+      .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId)),
 });
 
 const insertSegment = SqlSchema.void({
@@ -273,14 +266,14 @@ const insertSegment = SqlSchema.void({
     endMs: Schema.Int,
   }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into voice_transcript_segments (voice_session_id, seq, role, text, start_ms, end_ms)
-        values (
-          ${row.voiceSessionId}, ${row.seq}, ${row.role}, ${row.text}, ${row.startMs}, ${row.endMs}
-        )
-      `,
-    ),
+    db.insert(voiceTranscriptSegments).values({
+      voiceSessionId: row.voiceSessionId,
+      seq: row.seq,
+      role: row.role,
+      text: row.text,
+      startMs: row.startMs,
+      endMs: row.endMs,
+    }),
 });
 
 /** One speaker's segments of one session over an utterance's span, both ends included, in the order the deltas came. */
@@ -294,19 +287,20 @@ const findUtteranceSegments = SqlSchema.findAll({
   Result: Schema.Struct({
     text: Schema.String,
     startMs: Schema.Number,
-  }).pipe(Schema.encodeKeys({ startMs: "start_ms" })),
+  }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select text, start_ms
-        from voice_transcript_segments
-        where voice_session_id = ${request.voiceSessionId}
-          and role = ${request.role}
-          and start_ms >= ${request.startMs}
-          and start_ms <= ${request.endMs}
-        order by seq asc
-      `,
-    ),
+    db
+      .select({ text: voiceTranscriptSegments.text, startMs: voiceTranscriptSegments.startMs })
+      .from(voiceTranscriptSegments)
+      .where(
+        and(
+          eq(voiceTranscriptSegments.voiceSessionId, request.voiceSessionId),
+          eq(voiceTranscriptSegments.role, request.role),
+          gte(voiceTranscriptSegments.startMs, request.startMs),
+          lte(voiceTranscriptSegments.startMs, request.endMs),
+        ),
+      )
+      .orderBy(asc(voiceTranscriptSegments.seq)),
 });
 
 export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
@@ -325,8 +319,8 @@ export function voiceWriter({ store }: VoiceWriterOptions): VoiceWriter {
     target: VoiceTarget,
     delta: SegmentDelta,
   ): Effect.Effect<Option.Option<VoiceSessionRow>, VoiceWriteFailure, SqlClient.SqlClient> {
-    return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      sql.withTransaction(
+    return Effect.flatMap(SqlClient.SqlClient, (client) =>
+      client.withTransaction(
         Effect.gen(function* () {
           const voiceSession = yield* lockVoiceSession({
             userId: target.userId,

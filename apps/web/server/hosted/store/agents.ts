@@ -1,7 +1,11 @@
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { Effect, type Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CHILD_STATUS, type ChildStatus, TURN_STATUS, type TurnStatus } from "../../core.js";
+import { db } from "../../db/query.js";
+import { conversations, turns } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./database.js";
 
@@ -47,10 +51,6 @@ export interface AgentsHeadPosition {
   readonly id: string;
 }
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const AgentRowSchema = Schema.Struct({
   id: Schema.String,
   providerId: Schema.String,
@@ -63,98 +63,95 @@ const AgentRowSchema = Schema.Struct({
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    providerId: "provider_id",
-    providerSessionId: "provider_session_id",
-    createdAt: "created_at",
-    turnStatus: "turn_status",
-    queuedAt: "queued_at",
-    startedAt: "started_at",
-    settledAt: "settled_at",
-  }),
-);
+});
 
 type AgentRow = typeof AgentRowSchema.Type;
 
 /**
- * The rows both reads select from: the account's observed conversations,
- * each joined to the latest of its turns by the instant it was queued, the
- * id breaking a tie, so a conversation with no turn is not among them, and
- * nor is a row without its session identity, since the wire carries both. The
- * join holds to the agent's own account, so a turn written under another
- * lends it nothing. Whether a stamped row is among them is the caller's
- * condition: the list reads what stands, the head counts the stamping as
- * the change it is.
+ * The latest of an agent's turns by the instant it was queued, the id
+ * breaking a tie: the lateral both reads join to, which is what leaves a
+ * conversation with no turn out of them. The correlation is the agent's own
+ * row and account, so a turn written under another account lends it nothing.
  */
-const agentsFrom = (sql: SqlClient.SqlClient, userId: string, standing: boolean) =>
-  sql`
-    from conversations agent
-    join lateral (
-      select status, queued_at, started_at, settled_at, failure
-      from turns
-      where turns.conversation_id = agent.id and turns.user_id = agent.user_id
-      order by turns.queued_at desc, turns.id desc
-      limit 1
-    ) latest on true
-    where ${sql.and([
-      sql`agent.user_id = ${userId}`,
-      sql`agent.kind = ${CONVERSATION_KIND.OBSERVED}`,
-      // An observed row without its session is a row no observation wrote, and it is no agent a device could name.
-      sql`agent.provider_id is not null`,
-      sql`agent.provider_session_id is not null`,
-      ...(standing ? [sql`agent.deleted_at is null`] : []),
-    ])}
-  `;
+const latestTurn = db
+  .select({
+    status: turns.status,
+    queuedAt: turns.queuedAt,
+    startedAt: turns.startedAt,
+    settledAt: turns.settledAt,
+    failure: turns.failure,
+  })
+  .from(turns)
+  .where(and(eq(turns.conversationId, conversations.id), eq(turns.userId, conversations.userId)))
+  .orderBy(desc(turns.queuedAt), desc(turns.id))
+  .limit(1)
+  .as("latest");
+
+/**
+ * The agents both reads select from: the account's observed conversations,
+ * and not a row without its session identity, since the wire carries both.
+ * Whether a stamped row is among them is the caller's condition: the list
+ * reads what stands, the head counts the stamping as the change it is.
+ */
+const observedAgents = (userId: string, standing: boolean) =>
+  and(
+    eq(conversations.userId, userId),
+    eq(conversations.kind, CONVERSATION_KIND.OBSERVED),
+    // An observed row without its session is a row no observation wrote, and it is no agent a device could name.
+    isNotNull(conversations.providerId),
+    isNotNull(conversations.providerSessionId),
+    standing ? isNull(conversations.deletedAt) : undefined,
+  );
 
 /**
  * The instant an agent last changed: its latest turn queued, started, or
  * settled, or its row stamped, whichever is latest. Each stamp not reached
- * falls back to the queuing, so the expression is never null.
+ * falls back to the queuing, so the expression is never null. There is no
+ * builder spelling for `greatest`, so it is a fragment.
  */
-const AGENT_CHANGED_AT_SQL =
-  "greatest(latest.queued_at, coalesce(latest.started_at, latest.queued_at), " +
-  "coalesce(latest.settled_at, latest.queued_at), coalesce(agent.deleted_at, latest.queued_at))";
+const AGENT_CHANGED_AT = sql`greatest(${latestTurn.queuedAt}, coalesce(${latestTurn.startedAt}, ${latestTurn.queuedAt}), coalesce(${latestTurn.settledAt}, ${latestTurn.queuedAt}), coalesce(${conversations.deletedAt}, ${latestTurn.queuedAt}))`;
 
-const agentChangedAt = (sql: SqlClient.SqlClient) => sql.literal(AGENT_CHANGED_AT_SQL);
+// Rendered as the turn cursor's instant is: the UTC wall clock with the zone
+// spelled here, so the text is a property of the query rather than of the
+// connection's TimeZone.
+const AGENT_CHANGED_AT_TEXT = sql<string>`((${AGENT_CHANGED_AT}) at time zone 'UTC')::text || '+00'`;
 
 const findAgents = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
   Result: AgentRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select agent.id, agent.provider_id, agent.provider_session_id, agent.created_at,
-               agent.title, agent.workspace,
-               latest.status as turn_status, latest.queued_at, latest.started_at,
-               latest.settled_at, latest.failure
-        ${agentsFrom(sql, request.userId, true)}
-        order by ${agentChangedAt(sql)} desc, agent.id desc
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({
+        id: conversations.id,
+        providerId: conversations.providerId,
+        providerSessionId: conversations.providerSessionId,
+        createdAt: conversations.createdAt,
+        title: conversations.title,
+        workspace: conversations.workspace,
+        turnStatus: latestTurn.status,
+        queuedAt: latestTurn.queuedAt,
+        startedAt: latestTurn.startedAt,
+        settledAt: latestTurn.settledAt,
+        failure: latestTurn.failure,
+      })
+      .from(conversations)
+      .innerJoinLateral(latestTurn, sql`true`)
+      .where(observedAgents(request.userId, true))
+      .orderBy(desc(AGENT_CHANGED_AT), desc(conversations.id))
+      .limit(request.limit),
 });
-
-// Rendered as the turn cursor's instant is: the UTC wall clock with the zone
-// spelled here, so the text is a property of the query rather than of the
-// connection's TimeZone.
-const AGENT_CHANGED_AT_TEXT_SQL = `((${AGENT_CHANGED_AT_SQL}) at time zone 'UTC')::text || '+00'`;
-const agentChangedAtText = (sql: SqlClient.SqlClient) => sql.literal(AGENT_CHANGED_AT_TEXT_SQL);
 
 const findAgentsHead = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }).pipe(
-    Schema.encodeKeys({ changedAt: "changed_at" }),
-  ),
+  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select agent.id, ${agentChangedAtText(sql)} as changed_at
-        ${agentsFrom(sql, request.userId, false)}
-        order by ${agentChangedAt(sql)} desc, agent.id desc
-        limit 1
-      `,
-    ),
+    db
+      .select({ id: conversations.id, changedAt: AGENT_CHANGED_AT_TEXT })
+      .from(conversations)
+      .innerJoinLateral(latestTurn, sql`true`)
+      .where(observedAgents(request.userId, false))
+      .orderBy(desc(AGENT_CHANGED_AT), desc(conversations.id))
+      .limit(1),
 });
 
 function agentStatus(turnStatus: TurnStatus): ChildStatus {
