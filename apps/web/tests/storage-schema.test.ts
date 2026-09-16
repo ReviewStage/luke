@@ -225,7 +225,6 @@ async function populateAccount(userId: string): Promise<{ main: string; child: s
     kind: CONVERSATION_KIND.CHILD,
     parentConversationId: main,
     spawnedByMessageId: spawnedBy,
-    forkOfSeq: 1,
   });
   await insertTestTurn(userId, child);
   await insertTestMessage(userId, child, { role: MESSAGE_ROLE.ASSISTANT, metadata: undefined });

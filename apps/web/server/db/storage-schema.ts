@@ -85,8 +85,6 @@ export const conversations = pgTable(
     spawnedByMessageId: uuid("spawned_by_message_id").references((): AnyPgColumn => messages.id, {
       onDelete: "cascade",
     }),
-    /** The parent's message sequence a forked child's history was adopted up to; null for a child that started isolated. */
-    forkOfSeq: bigint("fork_of_seq", { mode: "number" }),
     /** The runtime's own session id for this conversation: ours now, eve's later. */
     runtimeSessionId: text("runtime_session_id"),
     createdAt: instant("created_at").notNull().defaultNow(),
