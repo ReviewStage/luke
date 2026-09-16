@@ -217,6 +217,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 1,
       turnId: TURN.ASK,
       createdAt: AT.ASK,
+      placedAt: AT.ASK,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000202", [
@@ -235,6 +236,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 2,
       turnId: TURN.ASK,
       createdAt: AT.ASK + 1500,
+      placedAt: AT.ASK + 1500,
     },
     {
       message: ask(
@@ -244,6 +246,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 3,
       turnId: TURN.EVERY_KIND,
       createdAt: AT.EVERY_KIND,
+      placedAt: AT.EVERY_KIND,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000204", [
@@ -330,12 +333,14 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 4,
       turnId: TURN.EVERY_KIND,
       createdAt: AT.EVERY_KIND + 4000,
+      placedAt: AT.EVERY_KIND + 4000,
     },
     {
       message: ask("2b000000-0000-4000-8000-000000000205", "Approve it and delete the other one."),
       seq: 5,
       turnId: TURN.REFUSED,
       createdAt: AT.REFUSED,
+      placedAt: AT.REFUSED,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000206", [
@@ -377,12 +382,14 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 6,
       turnId: TURN.REFUSED,
       createdAt: AT.REFUSED + 2000,
+      placedAt: AT.REFUSED + 2000,
     },
     {
       message: ask("2b000000-0000-4000-8000-000000000207", "Nudge both fixtures along."),
       seq: 7,
       turnId: TURN.RUNNING,
       createdAt: AT.RUNNING,
+      placedAt: AT.RUNNING,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000208", [
@@ -405,12 +412,14 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 8,
       turnId: TURN.RUNNING,
       createdAt: AT.RUNNING + 900,
+      placedAt: AT.RUNNING + 900,
     },
     {
       message: ask("2b000000-0000-4000-8000-000000000209", "Stop the fixture session."),
       seq: 9,
       turnId: TURN.SINGLE,
       createdAt: AT.SINGLE,
+      placedAt: AT.SINGLE,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000210", [
@@ -432,6 +441,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 10,
       turnId: TURN.SINGLE,
       createdAt: AT.SINGLE + 800,
+      placedAt: AT.SINGLE + 800,
     },
     {
       message: ask(
@@ -441,6 +451,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 11,
       turnId: TURN.WORKING,
       createdAt: AT.WORKING,
+      placedAt: AT.WORKING,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000213", [
@@ -479,6 +490,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 12,
       turnId: TURN.WORKING,
       createdAt: AT.WORKING + 3000,
+      placedAt: AT.WORKING + 3000,
     },
     {
       message: reply("2b000000-0000-4000-8000-000000000211", [
@@ -497,6 +509,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
       seq: 13,
       turnId: TURN.OWN,
       createdAt: AT.OWN,
+      placedAt: AT.OWN,
     },
   ],
   observed: [
@@ -521,6 +534,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
           seq: 1,
           turnId: TURN.ANNOUNCED,
           createdAt: AT.ANNOUNCED,
+          placedAt: AT.ANNOUNCED,
         },
       ],
     },
@@ -632,6 +646,7 @@ export function fixtureChildCompletionTurns(
         seq: 1,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION,
+        placedAt: AT.COMPLETION,
       },
       {
         message: reply("2b000000-0000-4000-8000-000000000292", [
@@ -641,6 +656,7 @@ export function fixtureChildCompletionTurns(
         seq: 2,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION + 2_000,
+        placedAt: AT.COMPLETION + 2_000,
       },
       {
         message: reply("2b000000-0000-4000-8000-000000000293", [
@@ -654,6 +670,7 @@ export function fixtureChildCompletionTurns(
         seq: 3,
         turnId: TURN.COMPLETION,
         createdAt: AT.COMPLETION + 5_000,
+        placedAt: AT.COMPLETION + 5_000,
       },
     ],
     observed: [],

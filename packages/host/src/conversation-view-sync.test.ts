@@ -51,6 +51,7 @@ function ask(id: number, seq: number, text: string, createdAt: number): Conversa
     },
     seq,
     createdAt,
+    placedAt: createdAt,
     tools: [],
   };
 }
@@ -73,6 +74,7 @@ function announcement(id: number, seq: number, createdAt: number): ConversationV
     },
     seq,
     createdAt,
+    placedAt: createdAt,
     tools: [
       {
         toolCallId: `call_${id}`,
@@ -568,6 +570,7 @@ function reply(id: number, seq: number, createdAt: number): ConversationViewMess
     },
     seq,
     createdAt,
+    placedAt: createdAt,
     tools: [],
   };
 }

@@ -24,7 +24,9 @@ import {
   isSettledToolPartState,
   isStoredToolPart,
   isWireString,
+  isWireUuid,
   MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   readStoredUIMessages,
   type SchemaPath,
@@ -549,6 +551,7 @@ const MessageInsertSchema = Schema.Struct({
   parts: Schema.fromJsonString(StoredPartsColumnSchema),
   metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
   createdAt: Schema.Date,
+  placedAt: Schema.Date,
   finishedAt: Schema.NullOr(Schema.Date),
 });
 
@@ -690,6 +693,27 @@ const findMessageByClientId = SqlSchema.findOneOption({
     ),
 });
 
+/**
+ * The instant a voice session's clock counts from, so a spoken row's
+ * `from_ms` can be placed on the Conversation's. The session is read under
+ * the row's owner, so metadata naming another account's session finds no
+ * clock rather than placing the row on it.
+ */
+const findVoiceSessionStart = SqlSchema.findOneOption({
+  Request: Schema.Struct({ id: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ startedAt: InstantColumnSchema }).pipe(
+    Schema.encodeKeys({ startedAt: "started_at" }),
+  ),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select started_at
+        from voice_sessions
+        where id = ${request.id} and user_id = ${request.userId}
+      `,
+    ),
+});
+
 const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
   Result: RowIdSchema,
@@ -697,11 +721,13 @@ const insertMessageRow = SqlSchema.findOneOption({
     statement(
       (sql) => sql`
         insert into messages (
-          user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata, created_at, finished_at
+          user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
+          created_at, placed_at, finished_at
         )
         values (
           ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.turnId}, ${row.clientId},
-          ${row.role}, ${row.parts}::jsonb, ${row.metadata}::jsonb, ${row.createdAt}, ${row.finishedAt}
+          ${row.role}, ${row.parts}::jsonb, ${row.metadata}::jsonb,
+          ${row.createdAt}, ${row.placedAt}, ${row.finishedAt}
         )
         returning id
       `,
@@ -1176,6 +1202,31 @@ interface InsertedMessage {
   readonly seq: number;
 }
 
+/**
+ * Where a row stands in the Conversation, the one key the view orders by: a
+ * spoken row at the instant its words began, its session's start plus the
+ * span's `from_ms`, so a sentence written at settle stands where it was said
+ * rather than after whatever was written while it was being spoken; any other
+ * row where it was written. A spoken row naming a session the store does not
+ * hold under the row's owner has no clock to stand on and is placed where it
+ * was written, which is where every row stood before the column existed.
+ */
+const placedInstant = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  metadata: StoredMessageMetadata | undefined,
+  createdAt: Date,
+): Effect.fn.Return<Date, WriteFailure, SqlClient.SqlClient> {
+  if (metadata === undefined || !("channel" in metadata)) return createdAt;
+  if (metadata.channel !== MESSAGE_CHANNEL.VOICE) return createdAt;
+  const { voice_session_id: sessionId, from_ms: fromMs } = metadata;
+  if (sessionId === undefined || fromMs === undefined || !isWireUuid(sessionId)) return createdAt;
+  const session = yield* findVoiceSessionStart({ id: sessionId, userId: context.target.userId });
+  return Option.match(session, {
+    onNone: () => createdAt,
+    onSome: (row) => new Date(row.startedAt.getTime() + fromMs),
+  });
+});
+
 const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   context: WriterContext,
   row: {
@@ -1188,6 +1239,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
   const seq = yield* allocateMessageSeq(context);
   const metadata: StoredMessageMetadata | undefined =
     row.message.role === MESSAGE_ROLE.SYSTEM ? undefined : row.message.metadata;
+  const createdAt = context.now();
+  const placedAt = yield* placedInstant(context, metadata, createdAt);
   const inserted = yield* insertMessageRow({
     userId: context.target.userId,
     conversationId: context.target.conversationId,
@@ -1197,7 +1250,8 @@ const insertMessage = /* @__PURE__ */ Effect.fnUntraced(function* (
     role: row.message.role,
     parts: row.message.parts,
     metadata: nullable(metadata),
-    createdAt: context.now(),
+    createdAt,
+    placedAt,
     finishedAt: nullable(row.finishedAt),
   });
   const written = yield* required(inserted, "the message insert answered no row");

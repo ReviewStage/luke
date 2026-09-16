@@ -437,8 +437,10 @@ const wireValueSchema = declareReader<WireValue>(
 export interface ConversationReadMessage {
   readonly message: WireRecord;
   readonly seq: number;
-  /** Epoch milliseconds the row was written at; the order across conversations. */
+  /** Epoch milliseconds the row was written at. */
   readonly createdAt: number;
+  /** Epoch milliseconds where the row stands in the Conversation; the order across conversations. */
+  readonly placedAt: number;
   readonly tools: readonly ConversationViewToolPart[];
   readonly rating?: StandingRating;
 }
@@ -447,6 +449,7 @@ const conversationReadMessageSchema = EffectSchema.Struct({
   message: storedMessageRecordSchema,
   seq: wholeNumber(1),
   createdAt: countedNumber,
+  placedAt: countedNumber,
   tools: EffectSchema.Array(conversationViewToolPartSchema),
   rating: EffectSchema.optionalKey(STANDING_RATING),
 });
@@ -457,8 +460,8 @@ const conversationReadMessageSchema = EffectSchema.Struct({
  * page — a turn still running writes rows after a page was cut — so a device
  * merges groups by `turnId`, holds each message once by its id at the `seq`
  * and in the group its latest delivery gave it, and orders groups by their
- * earliest message, then the turn's queue instant, then the id, the order
- * the view itself keeps. The sequence is the store's order and the device's
+ * earliest placed message, then the turn's queue instant, then the id, the
+ * order the view itself keeps. The sequence is the store's order and the device's
  * cursor both, so a row the store moves — a spoken ask's line taken into
  * the turn that ran it, a turn's own rows placed behind the line that
  * arrived after them — takes a fresh sequence and is answered again past

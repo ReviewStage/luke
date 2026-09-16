@@ -123,6 +123,7 @@ async function readPage(answer: ConversationMessagesAnswer): Promise<ReadMessage
       return {
         message: stored,
         seq: message.seq,
+        placedAt: message.placedAt,
         createdAt: message.createdAt,
         tools: message.tools,
         ...(message.rating !== undefined ? { rating: message.rating } : undefined),

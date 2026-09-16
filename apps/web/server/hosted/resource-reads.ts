@@ -337,6 +337,7 @@ function viewRow(record: StoredMessageRecord): ConversationViewStoredMessage {
     seq: record.seq,
     turnId: record.turnId ?? record.id,
     createdAt: record.createdAt.getTime(),
+    placedAt: record.placedAt.getTime(),
   };
 }
 
@@ -480,6 +481,7 @@ const messagesPage = /* @__PURE__ */ Effect.fnUntraced(function* (
           message: clientUIMessage(message.message),
           seq: message.seq,
           createdAt: message.createdAt,
+          placedAt: message.placedAt,
           tools: message.tools,
           ...(message.rating === undefined ? undefined : { rating: message.rating }),
         })),

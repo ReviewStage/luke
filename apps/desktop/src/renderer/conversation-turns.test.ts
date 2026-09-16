@@ -410,6 +410,7 @@ test("a reasoning fold keeps paragraph breaks as separate blocks inside the expa
         },
         seq: 1,
         createdAt: at,
+        placedAt: at,
         tools: [],
       },
     ],
@@ -454,6 +455,7 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
         seq: 1,
         turnId: "1a000000-0000-4000-8000-000000000901",
         createdAt: 1757505600000,
+        placedAt: 1757505600000,
       },
     ],
   });
@@ -481,6 +483,7 @@ test("a turn that followed a long silence is dated over it, and the caller's row
           messages: group.messages.map((message) => ({
             ...message,
             createdAt: message.createdAt + index * 60 * 60_000,
+            placedAt: message.placedAt + index * 60 * 60_000,
           })),
         },
   );
@@ -669,6 +672,7 @@ test("in a spoken turn the brain's words fold as Luke's thinking, a row apart fr
       },
       seq,
       createdAt: at + fromMs,
+      placedAt: at + fromMs,
       tools: [],
     }) satisfies ConversationViewMessage;
   const ask: ConversationViewMessage = {
@@ -687,6 +691,7 @@ test("in a spoken turn the brain's words fold as Luke's thinking, a row apart fr
     },
     seq: 1,
     createdAt: at,
+    placedAt: at,
     tools: [],
   };
   const checking = spoken("1c000000-0000-4000-8000-000000000404", "Checking now.", 2, 1_500);
@@ -706,6 +711,7 @@ test("in a spoken turn the brain's words fold as Luke's thinking, a row apart fr
     },
     seq: 4,
     createdAt: at + 2_000,
+    placedAt: at + 2_000,
     tools: [],
   };
   const reading = spoken(READING, "It's on the failing test!", 5, 7_000, JOURNAL);
@@ -782,6 +788,7 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
     },
     seq: 1,
     createdAt: at,
+    placedAt: at,
     tools: [
       {
         toolCallId: "call-announce",
@@ -808,6 +815,7 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
     },
     seq: 2,
     createdAt: at + 5_000,
+    placedAt: at + 5_000,
     tools: [],
   };
   const readingGroup: ConversationViewTurnGroup = {

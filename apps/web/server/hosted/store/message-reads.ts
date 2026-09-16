@@ -97,6 +97,8 @@ export interface StoredMessageRecord {
   readonly turnId?: string;
   readonly clientId: string;
   readonly createdAt: Date;
+  /** Where the row stands in the Conversation: a spoken row at the instant its words began, any other where it was written. */
+  readonly placedAt: Date;
   /** Absent while the message is still in flight and mutable. */
   readonly finishedAt?: Date;
   /** The conversation's journal revision at the row's last write in place; absent for a row never written in place. */
@@ -125,6 +127,7 @@ type MessageRow = {
   readonly turnId: string | null;
   readonly clientId: string;
   readonly createdAt: Date;
+  readonly placedAt: Date;
   readonly finishedAt: Date | null;
   readonly revision: number | null;
   /** The row's message as it was written, held to the vocabulary by the read and by nothing before it. */
@@ -169,6 +172,7 @@ const SelectedMessageRowSchema = Schema.Struct({
   parts: Schema.Any,
   metadata: Schema.NullOr(Schema.Any),
   createdAt: InstantColumnSchema,
+  placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
 }).pipe(
@@ -176,6 +180,7 @@ const SelectedMessageRowSchema = Schema.Struct({
     turnId: "turn_id",
     clientId: "client_id",
     createdAt: "created_at",
+    placedAt: "placed_at",
     finishedAt: "finished_at",
   }),
 );
@@ -185,7 +190,8 @@ type SelectedMessage = typeof SelectedMessageRowSchema.Type;
 /** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
 const MESSAGE_COLUMNS =
   "messages.id, messages.seq, messages.turn_id, messages.client_id, messages.role, " +
-  "messages.parts, messages.metadata, messages.created_at, messages.finished_at, messages.revision";
+  "messages.parts, messages.metadata, messages.created_at, messages.placed_at, messages.finished_at, " +
+  "messages.revision";
 
 /** The join every read here makes to its conversation row: a Clear-stamped conversation is read by nothing. */
 const standingJoin = (sql: SqlClient.SqlClient, conversationColumn: string) =>
@@ -221,6 +227,7 @@ async function readSelected(
         ...optionalField("turnId", row.turnId),
         clientId: row.clientId,
         createdAt: row.createdAt,
+        placedAt: row.placedAt,
         ...optionalField("finishedAt", row.finishedAt),
         ...optionalField("revision", row.revision),
         message,

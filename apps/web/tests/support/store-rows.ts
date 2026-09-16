@@ -121,22 +121,27 @@ export interface MessageRow {
   readonly parts: unknown;
   readonly metadata?: unknown;
   readonly createdAt?: Date;
+  /** Where the row stands in the Conversation; where it was written unless the test places it elsewhere. */
+  readonly placedAt?: Date;
   readonly finishedAt?: Date | null;
 }
 
 export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise<string> {
   const parts = JSON.stringify(row.parts);
   const metadata = row.metadata === undefined ? null : JSON.stringify(row.metadata);
+  const createdAt = row.createdAt ?? new Date();
   return run(
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
       insert into messages (
-        user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata, created_at, finished_at
+        user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
+        created_at, placed_at, finished_at
       )
       values (
         ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.turnId ?? null}, ${row.clientId},
-        ${row.role}, ${parts}::jsonb, ${metadata}::jsonb, ${row.createdAt ?? new Date()}, ${row.finishedAt ?? null}
+        ${row.role}, ${parts}::jsonb, ${metadata}::jsonb,
+        ${createdAt}, ${row.placedAt ?? createdAt}, ${row.finishedAt ?? null}
       )
       returning id
     `;
@@ -269,6 +274,7 @@ const MessageRowFullSchema = Schema.Struct({
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(Schema.Unknown),
   createdAt: InstantColumnSchema,
+  placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
 }).pipe(
@@ -278,6 +284,7 @@ const MessageRowFullSchema = Schema.Struct({
     turnId: "turn_id",
     clientId: "client_id",
     createdAt: "created_at",
+    placedAt: "placed_at",
     finishedAt: "finished_at",
   }),
 );

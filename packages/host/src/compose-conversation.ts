@@ -284,6 +284,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
           message: stored,
           seq: message.seq,
           createdAt: message.createdAt,
+          placedAt: message.placedAt,
           tools: message.tools,
           ...(message.rating !== undefined ? { rating: message.rating } : undefined),
         };

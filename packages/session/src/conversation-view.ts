@@ -81,8 +81,15 @@ export interface ConversationViewStoredMessage {
   /** The row's place in its own conversation's sequence; the order within a turn. */
   readonly seq: number;
   readonly turnId: string;
-  /** Epoch milliseconds; the order across conversations. */
+  /** Epoch milliseconds the row was written at. */
   readonly createdAt: number;
+  /**
+   * Epoch milliseconds; where the row stands in the Conversation, and the one
+   * key groups are ordered by across conversations. A spoken row stands at
+   * the instant its words began, which is earlier than its write; every other
+   * row stands where it was written.
+   */
+  readonly placedAt: number;
 }
 
 /** The columns of a turn row the view reads. */
@@ -192,6 +199,7 @@ export interface ConversationViewMessage {
   readonly message: StoredUIMessage;
   readonly seq: number;
   readonly createdAt: number;
+  readonly placedAt: number;
   /** The message's tool calls in part order, each as the view decided it. */
   readonly tools: readonly ConversationViewToolPart[];
   /**
@@ -342,6 +350,7 @@ function viewMessage(
     message,
     seq: row.seq,
     createdAt: row.createdAt,
+    placedAt: row.placedAt,
     tools,
     ...(rating === undefined ? undefined : { rating }),
   };
@@ -349,7 +358,7 @@ function viewMessage(
 
 type GroupedRows = { readonly source: ConversationViewSource; readonly rows: SourcedRow[] };
 
-/** A group's place in time: its earliest message, then its turn's queue instant, then its id, so every device orders alike. */
+/** A group's place in time: its earliest placed message, then its turn's queue instant, then its id, so every device orders alike. */
 type PlacedGroup = { readonly group: ConversationViewTurnGroup; readonly instant: number };
 
 function queuedInstant(group: ConversationViewTurnGroup): number {
@@ -375,8 +384,8 @@ function comparePlaced(a: PlacedGroup, b: PlacedGroup): number {
  * observed conversation the assistant messages carrying an announcement or an
  * action, cut to those parts. Messages are grouped by the turn that wrote
  * them, in their conversation's sequence within a group, and the groups are
- * ordered by the time of their earliest message. A turn with nothing selected
- * is not shown.
+ * ordered by where their earliest message is placed. A turn with nothing
+ * selected is not shown.
  */
 export function selectConversationView(
   input: ConversationViewInput,
@@ -417,7 +426,7 @@ export function selectConversationView(
         .sort((a, b) => a.seq - b.seq)
         .map((row) => viewMessage(row, input.toolKinds, speech, ratings)),
     },
-    instant: Math.min(...rows.map((row) => row.createdAt)),
+    instant: Math.min(...rows.map((row) => row.placedAt)),
   }));
   return placed.sort(comparePlaced).map(({ group }) => group);
 }

@@ -47,6 +47,7 @@
           },
           "seq": 1,
           "createdAt": 1757505600000,
+          "placedAt": 1757505600000,
           "tools": []
         },
         {
@@ -87,6 +88,7 @@
           },
           "seq": 2,
           "createdAt": 1757505602000,
+          "placedAt": 1757505602000,
           "tools": [
             {
               "toolCallId": "call_1a0000000000000001",
@@ -139,6 +141,7 @@
           },
           "seq": 32,
           "createdAt": 1757505722000,
+          "placedAt": 1757505722000,
           "tools": [
             {
               "toolCallId": "call_3a0000000000000002",

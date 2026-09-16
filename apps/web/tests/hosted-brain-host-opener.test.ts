@@ -1159,11 +1159,12 @@ async function releasedConversation(
         const sql = yield* SqlClient.SqlClient;
         const rows = yield* sql`
           insert into messages (
-            user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata, created_at, finished_at
+            user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
+            created_at, placed_at, finished_at
           )
           values (
             ${userId}, ${conversationId}, ${index + 1}, ${turnId}, ${turnId}, ${MESSAGE_ROLE.ASSISTANT},
-            ${parts}::jsonb, ${metadata}::jsonb, ${at}, ${at}
+            ${parts}::jsonb, ${metadata}::jsonb, ${at}, ${at}, ${at}
           )
           returning id
         `;
@@ -1397,11 +1398,13 @@ test("a re-decision carries every release no hold-release message has named, how
       const sql = yield* SqlClient.SqlClient;
       const rows = yield* sql`
         insert into messages (
-          user_id, conversation_id, seq, client_id, role, parts, metadata, created_at, finished_at
+          user_id, conversation_id, seq, client_id, role, parts, metadata,
+          created_at, placed_at, finished_at
         )
         values (
           ${userId}, ${released.conversationId}, ${40}, ${"earlier-announcement"}, ${MESSAGE_ROLE.ASSISTANT},
-          ${earlierParts}::jsonb, ${earlierMetadata}::jsonb, ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}
+          ${earlierParts}::jsonb, ${earlierMetadata}::jsonb,
+          ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}, ${new Date(NOW - 120_000)}
         )
         returning id
       `;
