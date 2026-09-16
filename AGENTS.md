@@ -98,7 +98,9 @@ in for the missing job before the first release.
   or a transcript the provider would not answer, ends the visit with nothing
   committed and the next tick reads the same changes again. The mark stops
   strictly before the first chat the bound held back, so a chat is never
-  jumped; a first visit adopts the newest instant the providers answer and
+  jumped, and the bound counts turns and not chats read (at most 32 a
+  visit), so a chat read again to no new message holds nothing behind it
+  back; a first visit adopts the newest instant the providers answer and
   wakes nothing, since what stood before is history the roster shows and not
   news. Those two reads are the only places a scheduled turn touches a
   transcript, and neither is the pass's. Widening what the pass reads, who it
