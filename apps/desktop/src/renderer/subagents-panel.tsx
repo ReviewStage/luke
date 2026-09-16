@@ -1,3 +1,4 @@
+import { BRAIN_INPUT_MARKER } from "@sidecar/brain/input-items";
 import { CHILD_STATUS, type ChildRead, type ChildStatus } from "@sidecar/hosted/reads-wire";
 import { lastActivityLabel } from "@sidecar/panel";
 import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
@@ -27,17 +28,15 @@ const SUBAGENT_STATUS_WORD = {
   [CHILD_STATUS.CANCELLED]: "Cancelled",
 } as const satisfies Record<ChildStatus, string>;
 
-/** The framing the brain leads a delegated task with; a row names the task, never the framing. */
-const SUBAGENT_TASK_MARKER = "[subagent task]";
-
 /** How much of a child's id stands in for a name when it was handed neither a label nor a task. */
 const CHILD_ID_EXCERPT_CHARS = 8;
 
 /** What a row calls the child: its label, else its task without the marker, else a slice of its id. */
 function subagentTitle(child: ChildRead): string {
   if (child.label) return child.label;
-  const task = child.task?.startsWith(SUBAGENT_TASK_MARKER)
-    ? child.task.slice(SUBAGENT_TASK_MARKER.length).trim()
+  // The brain leads a delegated task with its own marker; the row names the task, never the framing.
+  const task = child.task?.startsWith(BRAIN_INPUT_MARKER.SUBAGENT_TASK)
+    ? child.task.slice(BRAIN_INPUT_MARKER.SUBAGENT_TASK.length).trim()
     : child.task;
   if (task) return task;
   return `Child ${child.id.slice(0, CHILD_ID_EXCERPT_CHARS)}`;
