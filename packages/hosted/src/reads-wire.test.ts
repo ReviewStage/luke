@@ -368,6 +368,24 @@ test("the turns answer fixture reads each turn with its own cursor, and the answ
   });
 });
 
+test("a turn on the wire carries its failure word and never the row's failure detail, on the turns answer and under a messages group alike", async () => {
+  const turns = await fixture(FIXTURE.TURNS);
+  assert.ok(isRecord(turns) && Array.isArray(turns.turns) && isRecord(turns.turns[0]));
+  const detailed = { ...turns, turns: [{ ...turns.turns[0], failureDetail: "MODEL_CALL_FAILED" }] };
+  assert.notEqual(parse(brainTurnsAnswerSchema, turns), undefined);
+  assert.equal(parse(brainTurnsAnswerSchema, detailed), undefined);
+  const messages = await fixture(FIXTURE.MESSAGES);
+  assert.ok(isRecord(messages) && Array.isArray(messages.groups) && isRecord(messages.groups[0]));
+  const [group, ...groups] = messages.groups;
+  assert.ok(isRecord(group) && isRecord(group.turn));
+  const detailedGroup = { ...group, turn: { ...group.turn, failureDetail: "MODEL_CALL_FAILED" } };
+  assert.notEqual(parse(conversationMessagesAnswerSchema, messages), undefined);
+  assert.equal(
+    parse(conversationMessagesAnswerSchema, { ...messages, groups: [detailedGroup, ...groups] }),
+    undefined,
+  );
+});
+
 test("the children answer fixture reads each child where its latest turn leaves it, with the stamps it reached and the words it was handed", async () => {
   const answer = expectReadAnswer(childrenAnswerSchema, await fixture(FIXTURE.CHILDREN));
   assert.deepEqual(

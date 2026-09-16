@@ -34,7 +34,6 @@ import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
 import {
-  BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
@@ -199,7 +198,7 @@ function statusWordOf(output: UnparsedWireValue): string | undefined {
 /**
  * The keys of eve's failure details whose values are fixed words or numbers:
  * the error's class name, eve's own catalog id for an error it recognized,
- * and the status codes. Read in this order, and no other key is: `message`,
+ * and the status codes. Read in this order, and no other key's value is:
  * `apiErrorMessage`, `upstreamMessage`, `responseBodySnippet`, and `detail`
  * are the provider's or the stack's own words, which nothing here can vouch
  * for holding no credential. The two words are held to the shape a class
@@ -230,24 +229,56 @@ const FailureDetailWordsSchema = Schema.Struct({
 
 const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSchema);
 
-const BRAIN_HOST_REFUSALS: ReadonlySet<string> = new Set(Object.values(BRAIN_HOST_REFUSAL));
+/** How much of eve's failure message the row keeps, and how much of its details' key list, inside the writer's own 500. */
+export const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
+
+/**
+ * Anything shaped like a credential, each replaced whole: an `sk-` key, a
+ * bearer token, a JWT from its header onward, an AWS access key id, the
+ * value a `key`, `token`, or `secret` name is assigned by `=` or `:` in a
+ * query string or JSON whatever prefixes the name, and a run of 32 or more
+ * hex or base64 characters, url-safe alphabet included. The named forms
+ * stand before the bare run, because the run would otherwise take a value's
+ * head up to its first `-` or `_` and leave the tail; a value ends at a
+ * space, an `&`, or a quote, so the parameter after it is still read.
+ */
+const CREDENTIAL_PATTERN =
+  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|(?:AKIA|ASIA)[0-9A-Z]{16}|\w*(?:key|token|secret)"?\s*[=:]\s*"?[^\s&"']+|[A-Za-z0-9+/=_-]{32,}/gi;
+
+const REDACTED = "[redacted]";
+
+/** eve's failure message as the row may keep it: every credential-shaped run replaced, the rest word for word. */
+export function redactCredentials(message: string): string {
+  return message.replace(CREDENTIAL_PATTERN, REDACTED);
+}
 
 type TurnFailedData = Extract<MessageStreamEvent, { readonly type: "turn.failed" }>["data"];
 
 /**
- * Why eve failed the turn, as the row keeps it: eve's own code, then the
- * fixed words above where the details carry them. eve's `message` is kept
- * only when it is one of the host's own refusal words, thrown from the
- * model hook; otherwise it derives from the provider's error and is not read.
+ * Why eve failed the turn, as the row keeps it: eve's own code, the sorted
+ * key names of its details so the next reader knows what eve offers, the
+ * fixed words above where the details carry them, and eve's `message`
+ * redacted and cut, which is where a bare `MODEL_CALL_FAILED` gets its
+ * diagnosis, the host's own refusal word included. eve's `step.failed`
+ * carries the same code, message, and details as the `turn.failed` it
+ * precedes, so nothing is kept from it.
  */
 function failureDetailOf(data: TurnFailedData): string {
   const words = [data.code];
-  if (BRAIN_HOST_REFUSALS.has(data.message)) words.push(data.message);
+  const keys = Object.keys(data.details ?? {})
+    .sort()
+    .join(",");
+  if (keys) words.push(`[${keys.slice(0, FAILURE_DETAIL_BOUNDS.KEYS_CHARS)}]`);
   const fixed = Option.getOrUndefined(readFailureDetailWords(data.details));
   for (const field of FAILURE_DETAIL_FIELDS) {
     const value = fixed?.[field];
     if (value !== undefined) words.push(String(value));
   }
+  // Redacted before the cut, so a cut never leaves the head of a credential standing.
+  const message = redactCredentials(data.message)
+    .slice(0, FAILURE_DETAIL_BOUNDS.MESSAGE_CHARS)
+    .trim();
+  if (message) words.push(message);
   return words.join(" ");
 }
 

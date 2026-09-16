@@ -26,8 +26,10 @@ import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
 import {
+  FAILURE_DETAIL_BOUNDS,
   memoryRelayState,
   type RelayStanding,
+  redactCredentials,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -640,11 +642,11 @@ it.effect(
               turnId: "turn_0",
               sequence: 0,
               code: "model_error",
-              message: "upstream failed: key sk-fixture refused",
+              message: "upstream failed: key sk-fixture0001 refused",
               details: {
                 name: "AI_APICallError",
                 statusCode: 429,
-                apiErrorMessage: "key sk-fixture refused",
+                apiErrorMessage: "key sk-fixture0001 refused",
                 detail: "Error: at fixture.ts:1",
               },
             },
@@ -655,10 +657,13 @@ it.effect(
       const failedRows = await rows(failed);
       assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
       assert.equal(failedRows.turnRows[0]?.failure, "model");
-      // The row keeps eve's code and the fixed words of its details, and none of the provider's or the stack's own.
-      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error AI_APICallError 429");
+      // The row keeps eve's code, the details' key names, their fixed words, and the message with its key redacted; no other value of the details.
+      assert.equal(
+        failedRows.turnRows[0]?.failureDetail,
+        "model_error [apiErrorMessage,detail,name,statusCode] AI_APICallError 429 upstream failed: key [redacted] refused",
+      );
 
-      // A name not shaped like an error's class name is an unrecognized error's own, and no word of those details is kept.
+      // A name not shaped like an error's class name is an unrecognized error's own, and no value of those details is kept.
       const unshaped = await conversation();
       const unshapedStanding = standingFor(unshaped, BRAIN_HOST_TURN.TYPED);
       await play(events.slice(0, requested + 1), unshapedStanding);
@@ -677,7 +682,40 @@ it.effect(
           unshapedStanding,
         ),
       );
-      assert.equal((await rows(unshaped)).turnRows[0]?.failureDetail, "model_error");
+      assert.equal(
+        (await rows(unshaped)).turnRows[0]?.failureDetail,
+        "model_error [name,statusCode] refused",
+      );
+
+      // The message is redacted before it is cut, so a key the cut would have split leaves nothing of itself; the key list is bounded on its own.
+      const bounded = await conversation();
+      const boundedStanding = standingFor(bounded, BRAIN_HOST_TURN.TYPED);
+      await play(events.slice(0, requested + 1), boundedStanding);
+      const prose = "word ".repeat(39).trimEnd();
+      const details = Object.fromEntries(
+        Array.from({ length: 30 }, (_, index) => [`field${String(index).padStart(2, "0")}`, index]),
+      );
+      await database.run(
+        relay.handle(
+          stamped({
+            type: "turn.failed",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              code: "model_error",
+              message: `${prose} sk-${"k".repeat(24)}`,
+              details,
+            },
+          }),
+          boundedStanding,
+        ),
+      );
+      const keys = Object.keys(details).sort().join(",");
+      assert.ok(keys.length > FAILURE_DETAIL_BOUNDS.KEYS_CHARS);
+      assert.equal(
+        (await rows(bounded)).turnRows[0]?.failureDetail,
+        `model_error [${keys.slice(0, FAILURE_DETAIL_BOUNDS.KEYS_CHARS)}] ${`${prose} [redacted]`.slice(0, FAILURE_DETAIL_BOUNDS.MESSAGE_CHARS)}`,
+      );
       const failedJournal = failedRows.messageRows.find(
         (row) => row.role === MESSAGE_ROLE.ASSISTANT,
       );
@@ -1188,3 +1226,42 @@ it.effect(
       }
     }),
 );
+
+it("a failure message keeps its words and loses every run shaped like a credential", () => {
+  assert.equal(
+    redactCredentials("Rate limit reached for gpt-5 in organization org-fixture on tokens per min"),
+    "Rate limit reached for gpt-5 in organization org-fixture on tokens per min",
+  );
+  assert.equal(redactCredentials("key sk-fixture0001 refused"), "key [redacted] refused");
+  assert.equal(
+    redactCredentials("Authorization: Bearer abc.def refused"),
+    "Authorization: [redacted] refused",
+  );
+  assert.equal(
+    redactCredentials(`token eyJ${"a".repeat(16)}.payload expired`),
+    "token [redacted] expired",
+  );
+  assert.equal(
+    redactCredentials(`digest ${"0f".repeat(16)} mismatched`),
+    "digest [redacted] mismatched",
+  );
+  assert.equal(
+    redactCredentials(`blob ${"Ab+/".repeat(8)}= mismatched`),
+    "blob [redacted] mismatched",
+  );
+  assert.equal(
+    redactCredentials("url ?api_key=fixture&token=fixture&error=model_not_found secret=fixture"),
+    "url ?[redacted]&[redacted]&error=model_not_found [redacted]",
+  );
+  // A named value is taken whole before the bare run can take its head and leave its tail.
+  assert.equal(redactCredentials(`token=${"A".repeat(40)}-tail refused`), "[redacted] refused");
+  assert.equal(
+    redactCredentials(`{"api_key": "short-mixed_secret", "model": "gpt-5"}`),
+    `{"[redacted]", "model": "gpt-5"}`,
+  );
+  assert.equal(
+    redactCredentials(`id AKIA${"A".repeat(16)} and ${"a_b-".repeat(9)} refused`),
+    "id [redacted] and [redacted] refused",
+  );
+  assert.equal(redactCredentials("Invalid API key provided"), "Invalid API key provided");
+});

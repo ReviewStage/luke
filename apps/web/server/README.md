@@ -1227,11 +1227,11 @@ and events. A message is one AI SDK `UIMessage`, its parts and metadata as
 plain `jsonb`, unique on `(conversation_id, client_id)` as its idempotency
 key; a turn is one run's origin, status, model, prompt and tool-set hashes,
 response ids, usage, timings, and failure, with why the runtime failed one
-in `failure_detail`: eve's failure code, the host's own refusal word where
-that is what was thrown, and the error's class name, eve's catalog id, and
-status codes where eve's details carry them, never the provider's or the
-stack's own words, cut to 500 characters by the writer and read by nothing
-but a query. An event is one thing that
+in `failure_detail`: eve's failure code, the key names of its details, the
+error's class name, eve's catalog id, and status codes where eve's details
+carry them, and eve's message cut to 200 characters with every
+credential-shaped run replaced by `[redacted]`, no other value of the
+details, cut to 500 characters by the writer and read by nothing but a query. An event is one thing that
 happened to a message after it was written, numbered by the conversation's
 own event sequence, unique on `(conversation_id, seq)` like a message: a
 briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
