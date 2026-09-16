@@ -286,6 +286,24 @@ PR that finishes the callers it was for, not left as a name on an allowlist.
   strip's two clocks, armed from callbacks belonging to no fiber of their own,
   start on the services the orchestrator was constructed with; the standing
   call's lifecycle is a `forkDetach` and needs no door.
+- **`apps/web/server/db/drizzle.ts`** — the Drizzle bridge, ported from
+  `@effect/sql-drizzle` because that plugin peers the v3 line and a second
+  copy of `effect` in the tree would make a `Context.Service` minted in one
+  copy a different service in the other. Drizzle's proxy driver renders a
+  statement and awaits a promise for its rows, and the callback it awaits
+  takes the SQL and nothing else, so the door is `Effect.runPromiseExitWith`
+  on the context the yielding fiber was carrying, squashed to the `SqlError`
+  Drizzle re-wraps. Handing that run to an edge is what cannot be done: the
+  context is the point — an enclosing `sql.withTransaction`'s connection is a
+  service of the running fiber and of no runtime an edge built — so the run
+  has to happen where the fiber is, which is inside the callback Drizzle
+  calls. The handle the bridge hands out is no service and no layer, and
+  minting one would be a regression rather than a tidy-up: it carries no
+  capability, so a `Context.Service` over it would add a requirement to every
+  query module that answers `Effect<A, SqlError | Schema.SchemaError,
+  SqlClient>` today and buy nothing, and reading the client from the fiber
+  instead is the same thing that keeps a bridged query inside the transaction
+  around it.
 - **The test-support edges** — `apps/web/tests/support/sql-client.ts`,
   `apps/web/tests/support/no-database.ts`,
   `apps/web/tests/support/hosted-store-database.ts`,
