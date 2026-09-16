@@ -8,7 +8,7 @@ import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { AdapterFailure } from "../shared/adapter-failure.js";
 import type { CloudPass } from "../shared/cloud-pass.js";
-import { recordsFromPage, textFromRecord, timestampFromRecord } from "../shared/cloud-wire.js";
+import { recordsFromPage, textFromRecord } from "../shared/cloud-wire.js";
 import { type ReportedSessions, readRefusal } from "./conversation.js";
 import { CONDUCTOR_TIMESTAMP_LITERAL_PATTERN, UUID_PATTERN } from "./vocabulary.js";
 import { CONDUCTOR_READ_TRANSCRIPT_CHANGES, CONDUCTOR_ROUTE, CONDUCTOR_SQL_FIELD } from "./wire.js";
@@ -40,6 +40,23 @@ const NO_CHANGES: ProviderTranscriptChangesResult = {
 /** The instants `Date` can hold, past which `toISOString` throws rather than answers. */
 const MAXIMUM_INSTANT_MS = 8.64e15;
 
+/** The digits of an instant's fraction past the millisecond, which `Date` keeps none of. */
+const SUB_MILLISECOND_DIGITS = /\.\d{3}(\d+)/;
+
+/**
+ * The row's instant, rounded up to the millisecond where the provider keeps
+ * finer: the mark is written back as milliseconds and compared with `>`, so
+ * an instant cut short would name its own row as changed on every read.
+ */
+function changeInstant(row: WireRecord): number | undefined {
+  const value = textFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT);
+  if (!value) return undefined;
+  const instant = Date.parse(value);
+  if (!Number.isFinite(instant)) return undefined;
+  const finer = SUB_MILLISECOND_DIGITS.exec(value)?.[1];
+  return finer !== undefined && /[1-9]/.test(finer) ? instant + 1 : instant;
+}
+
 /** The instant as the document carries it, or nothing where the mark is not one this build would write. */
 function sinceLiteral(since: number): string | undefined {
   if (!Number.isSafeInteger(since) || since < 0 || since > MAXIMUM_INSTANT_MS) return undefined;
@@ -56,12 +73,12 @@ function changesDocument(ids: readonly string[], since: string | undefined): str
     : `${PREFIX}${list}${SINCE}${since}${SINCE_SUFFIX}`;
 }
 
-/** The rows as changes, oldest first; a row with no parseable instant, or naming a chat not asked about, is dropped. */
+/** The rows as changes, oldest first, each instant rounded up to the millisecond; a row with no parseable instant, or naming a chat not asked about, is dropped. */
 function changesFromRows(body: WireRecord, known: ReadonlySet<string>): ProviderTranscriptChange[] {
   const changes: ProviderTranscriptChange[] = [];
   for (const row of recordsFromPage(body, CONDUCTOR_SQL_FIELD.ROWS)) {
     const providerSessionId = textFromRecord(row, CONDUCTOR_SQL_FIELD.SESSION_ID);
-    const updatedAt = timestampFromRecord(row, CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT);
+    const updatedAt = changeInstant(row);
     if (providerSessionId === undefined || updatedAt === undefined) continue;
     if (!known.has(providerSessionId)) continue;
     changes.push({ providerSessionId, updatedAt });

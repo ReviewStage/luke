@@ -173,6 +173,35 @@ test("a row whose instant cannot be parsed is dropped, and the rest still answer
   });
 });
 
+test("an instant the provider keeps finer than a millisecond is rounded up, so a mark written from it passes its own row", async () => {
+  const api = changesApi([
+    chat(IDLE_SESSION_UUID, {
+      transcriptUpdatedAt: MARK + 10_000,
+      transcriptUpdatedAtRaw: `${new Date(MARK + 10_000).toISOString().slice(0, -1)}500Z`,
+    }),
+    chat(SECOND_IDLE_SESSION_UUID, {
+      transcriptUpdatedAt: MARK + 20_000,
+      transcriptUpdatedAtRaw: `${new Date(MARK + 20_000).toISOString().slice(0, -1)}000Z`,
+    }),
+  ]);
+  const plugin = pluginFor(api.layer);
+  await runTest(plugin.observe());
+
+  const read = await runTest(
+    dispatchTranscriptChanges(plugin, {
+      providerSessionIds: [IDLE_SESSION_UUID, SECOND_IDLE_SESSION_UUID],
+      since: MARK,
+    }),
+  );
+  assert.deepEqual(read, {
+    status: "accepted",
+    changes: [
+      { providerSessionId: IDLE_SESSION_UUID, updatedAt: MARK + 10_001 },
+      { providerSessionId: SECOND_IDLE_SESSION_UUID, updatedAt: MARK + 20_000 },
+    ],
+  });
+});
+
 test("a refused view read is a rejection that names Conductor and echoes nothing", async () => {
   const api = changesApi(THREE_CHATS, { sqlHttpStatus: 401 });
   const plugin = pluginFor(api.layer);
