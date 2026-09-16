@@ -1662,13 +1662,15 @@ and the door's ownership checks and the host's admission read that answer, so
 the deployment can open a turn only on a conversation the named account
 owns, and the account it names is only ever one the tick enumerated. Where
 eve answers is an origin of this deployment's own, whose rewrites carry
-`/eve/v1/*` into the eve service: the origin the tick was called on where a
-request is in hand, and for a caller holding none, the project's production
-domain in production and the deployment's own host otherwise — unless
-`LUKE_EVE_ORIGIN` names another. Production names the custom domain rather
-than the generated `*.vercel.app` host because that host carries the
-project's Vercel Authentication, which answers a server-to-server POST at the
-edge and never reaches eve.
+`/eve/v1/*` into the eve service: the project's production domain in
+production and the deployment's own host otherwise — unless `LUKE_EVE_ORIGIN`
+names another — and the tick's own request origin only on a local run that
+neither names. Production names the custom domain rather than the generated
+`*.vercel.app` host because that host carries the project's Vercel
+Authentication, which answers a server-to-server POST at the edge and never
+reaches eve; the tick in particular is invoked by Vercel's cron on that
+protected host, so the origin it was called on is the one origin it must not
+dial (LUKE-250).
 
 `server/routes/observe.ts` answers the stored snapshot, mapped onto the wire rows and
 dated with `observedAt`; a user with no snapshot yet is answered from a live

@@ -8,7 +8,7 @@ import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
 import { sweepChildCompletions } from "./hosted/brain-host/child-completion.js";
-import { eveOrigin as eveOriginFor } from "./hosted/brain-host/eve-origin.js";
+import { tickEveOrigin } from "./hosted/brain-host/eve-origin.js";
 import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import {
   NOTHING_OPENED,
@@ -274,7 +274,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
     : undefined;
   const cronSecret =
     environment.cronSecret === undefined ? undefined : Redacted.value(environment.cronSecret);
-  const eveOrigin = eveOriginFor(new URL(request.url).origin);
+  const eveOrigin = tickEveOrigin(request);
 
   const options: ObservationTickOptions = {
     request,

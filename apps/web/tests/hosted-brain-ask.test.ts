@@ -31,7 +31,11 @@ import {
   stopAsk,
 } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { deploymentEveOrigin, eveOrigin } from "../server/hosted/brain-host/eve-origin";
+import {
+  deploymentEveOrigin,
+  eveOrigin,
+  tickEveOrigin,
+} from "../server/hosted/brain-host/eve-origin";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_FIRST_TURN_ID,
@@ -529,6 +533,38 @@ test("a preview dials itself, and so does a production deployment naming no doma
 
 test("a machine that is neither configured nor deployed dials nothing", () => {
   withDeployment({}, () => assert.equal(deploymentEveOrigin(), undefined));
+});
+
+/** The tick as Vercel's cron invokes it: on the generated host the project's authentication protects. */
+const CRON_REQUEST = new Request("https://luke-abc123-luke.vercel.app/api/observation/tick");
+
+test("the tick dials the production domain, never the protected host its request arrived on", () => {
+  withDeployment(
+    {
+      ENVIRONMENT: "production",
+      URL: "luke-abc123-luke.vercel.app",
+      PRODUCTION_URL: "tryluke.dev",
+    },
+    () => assert.equal(tickEveOrigin(CRON_REQUEST), "https://tryluke.dev"),
+  );
+  withDeployment(
+    {
+      EVE_ORIGIN: "https://eve.luke.test",
+      ENVIRONMENT: "production",
+      URL: "luke-abc123-luke.vercel.app",
+      PRODUCTION_URL: "tryluke.dev",
+    },
+    () => assert.equal(tickEveOrigin(CRON_REQUEST), "https://eve.luke.test"),
+  );
+});
+
+test("a tick on a machine that is neither configured nor deployed dials the origin it was called on", () => {
+  withDeployment({}, () =>
+    assert.equal(
+      tickEveOrigin(new Request("http://localhost:3000/api/observation/tick")),
+      "http://localhost:3000",
+    ),
+  );
 });
 
 test("the gates each refuse on their own: method, bearer, body, the path's id, and the wait bound", async () => {

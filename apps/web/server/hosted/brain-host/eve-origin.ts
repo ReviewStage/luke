@@ -42,3 +42,15 @@ export function deploymentEveOrigin(): string | undefined {
   const own = production || process.env[VERCEL_ENVIRONMENT.URL]?.trim();
   return eveOrigin(own ? `https://${own}` : "") || undefined;
 }
+
+/**
+ * The origin eve answers on for the scheduled tick, which holds a request but
+ * cannot dial its origin: Vercel's cron invokes the function on the generated
+ * `*.vercel.app` host, whose authentication the cron call bypasses and the
+ * opener's own POST to `/eve/v1/session` does not. So the tick dials what a
+ * caller with no request in hand would, and the request's origin only on a
+ * machine that is neither configured nor deployed, which is a local run.
+ */
+export function tickEveOrigin(request: Request): string {
+  return deploymentEveOrigin() ?? new URL(request.url).origin;
+}
