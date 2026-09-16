@@ -845,18 +845,16 @@ test("within an account the bound takes the oldest changes first and holds the r
   // Every taken chat at the held-back instant: the mark cannot move, and the next tick reads them again.
   const stuck = await accountSeeing(three);
   const stuckEve = fakeEve();
+  const tiedChanges = [
+    change("s-1", NOW + 2_000),
+    change("s-2", NOW + 2_000),
+    change("s-3", NOW + 2_000),
+  ];
   await database.run(
     openObservationTurns(
       seams({
         eve: stuckEve.eve,
-        transcripts: fakeTranscripts({
-          changes: [
-            change("s-1", NOW + 2_000),
-            change("s-2", NOW + 2_000),
-            change("s-3", NOW + 2_000),
-          ],
-          deltas,
-        }),
+        transcripts: fakeTranscripts({ changes: tiedChanges, deltas }),
         roster: rosterNow,
       }),
       stuck,
@@ -866,6 +864,62 @@ test("within an account the bound takes the oldest changes first and holds the r
   assert.equal(stuckEve.handed.length, 2);
   assert.equal(await markOf(stuck), NOW);
   assert.equal(await cursorOf(stuck, identity("s-1")), "c-1");
+
+  // The next tick: the two chats already read gain nothing and cost no turn, so the third is
+  // reached under the same bound and the mark passes the tie.
+  const nextEve = fakeEve();
+  const nextTranscripts = fakeTranscripts({
+    changes: tiedChanges,
+    deltas: {
+      "s-1": { lines: [], cursor: "c-1", from: "c-1" },
+      "s-2": { lines: [], cursor: "c-2", from: "c-2" },
+      "s-3": deltas["s-3"],
+    },
+  });
+  const next = seams({ eve: nextEve.eve, transcripts: nextTranscripts, roster: rosterNow });
+  assert.deepEqual(await database.run(openObservationTurns(next, stuck, { limit: 2 })), {
+    observation: 1,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.deepEqual(nextTranscripts.asked, ["s-1", "s-2", "s-3"]);
+  assert.deepEqual(
+    nextEve.handed.map((turn) => linesOf(turn.message)[1]),
+    ["Developer: three"],
+  );
+  assert.equal(next.reports.length, 0);
+  assert.equal(await markOf(stuck), NOW + 2_000);
+});
+
+test("a change read to no turn does not count against the bound, and the reads themselves stop at their own bound with the rest held back", async () => {
+  const ids = Array.from({ length: 34 }, (_, index) => `s-${index + 1}`);
+  const many = roster(ids.map((id) => observation(id)));
+  const rosterNow = hostedRosterFrom(many, NOW);
+  const userId = await accountSeeing(many);
+  const { eve, handed } = fakeEve();
+  // Only the last chat has words; every earlier one was read already.
+  const transcripts = fakeTranscripts({
+    changes: ids.map((id, index) => change(id, NOW + (index + 1) * 1_000)),
+    deltas: Object.fromEntries(
+      ids.map((id, index) => [
+        id,
+        index === ids.length - 1
+          ? { lines: ["Developer: last"], cursor: "c-last" }
+          : { lines: [], cursor: `c-${id}`, from: `c-${id}` },
+      ]),
+    ),
+  });
+  const opener = seams({ eve, transcripts, roster: rosterNow });
+
+  assert.deepEqual(await database.run(openObservationTurns(opener, userId, { limit: 2 })), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.equal(handed.length, 0);
+  assert.equal(transcripts.asked.length, 32);
+  assert.equal(opener.reports.length, 1);
+  assert.equal(await markOf(userId), NOW + 32_000);
 });
 
 test("a chat the roster no longer holds is named by its id alone; one the transcript seam does not answer for is covered by the mark and read no words", async () => {

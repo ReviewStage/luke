@@ -87,12 +87,18 @@ import {
  * news, then the changed chats under what remains of the bound, oldest
  * change first; the chats past the bound are held back, and the mark stops
  * strictly before the first held-back instant so a tie is never jumped, and
- * the next minute reads them again.
+ * the next minute reads them again. The bound counts turns opened, not
+ * chats read: a change whose words an earlier visit already read — a chat
+ * taken at a tied instant the mark could not pass — costs a read and no
+ * turn, so the chats behind it are reached the next minute rather than held
+ * back behind it forever; the reads themselves stop at `CHANGED_CHATS_READ`.
  */
 
 const TURN_OPENER = {
   /** The most conversations one account is opened a turn for in one tick, hold releases and observations together. */
   TURNS_PER_ACCOUNT: 8,
+  /** The most changed chats one account's visit reads in one tick, turns or not, so a burst of changes already read stays under the deadline. */
+  CHANGED_CHATS_READ: 32,
   /** The most queued rows one account's inbox is read for in one tick; the rest wait, since their conversations would exceed the bound anyway. */
   QUEUED_ROWS_READ: 50,
   /**
@@ -311,18 +317,14 @@ export const openObservationTurns = /* @__PURE__ */ Effect.fn("openObservationTu
     return NOTHING_OPENED;
   }
   if (rows.length === 0 || limit <= 0) return NOTHING_OPENED;
-  const taken = rows.slice(0, limit);
-  const heldBack = rows.slice(limit);
-  if (heldBack.length > 0) {
-    seams.report(
-      `The transcripts of account ${userId} changed for ${heldBack.length} more chats than the opener wakes in one tick; the next tick reads them again.`,
-    );
-  }
-  const next = markAfter(taken, heldBack, from);
   const cursors: { identity: SessionIdentity; cursor: string; from: string | undefined }[] = [];
   let observation = 0;
   let failed = 0;
-  for (const chat of taken) {
+  let visited = 0;
+  // The bound is on turns, so a chat read to no turn does not hold the ones behind it back.
+  for (const chat of rows) {
+    if (observation >= limit || visited >= TURN_OPENER.CHANGED_CHATS_READ) break;
+    visited += 1;
     const conversationId = yield* seams.store.directory.observed(
       userId,
       chat.identity,
@@ -363,6 +365,13 @@ export const openObservationTurns = /* @__PURE__ */ Effect.fn("openObservationTu
     }
     observation += 1;
   }
+  const heldBack = rows.slice(visited);
+  if (heldBack.length > 0) {
+    seams.report(
+      `The transcripts of account ${userId} changed for ${heldBack.length} more chats than the opener reads in one tick; the next tick reads them again.`,
+    );
+  }
+  const next = markAfter(rows.slice(0, visited), heldBack, from);
   const now = new Date(seams.now());
   yield* Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
