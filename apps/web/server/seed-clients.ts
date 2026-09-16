@@ -1,7 +1,9 @@
 import { pathToFileURL } from "node:url";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { oauthClient as oauthClientTable } from "./db/auth-schema.js";
+import { db } from "./db/query.js";
 import {
   DESKTOP_OAUTH_CLIENT,
   MOBILE_OAUTH_CLIENT,
@@ -20,38 +22,32 @@ export function seedOAuthClient(
   now = new Date(),
 ): Effect.Effect<void, SqlError, SqlClient.SqlClient> {
   const record = oauthClientRecord(client, now);
+  // Note that the conflicting update sets the values the insert carried
+  // rather than reading them back out of `excluded`, because a single-row
+  // insert's `excluded` row is exactly those values and naming the columns in
+  // SQL text is what a renamed column would slip through. The id and the
+  // creation instant are the two the insert carries and the update leaves.
+  const written = {
+    clientId: record.clientId,
+    disabled: record.disabled,
+    skipConsent: record.skipConsent,
+    enableEndSession: record.enableEndSession,
+    scopes: [...record.scopes],
+    updatedAt: record.updatedAt,
+    name: record.name,
+    redirectUris: [...record.redirectUris],
+    tokenEndpointAuthMethod: record.tokenEndpointAuthMethod,
+    grantTypes: [...record.grantTypes],
+    responseTypes: [...record.responseTypes],
+    public: record.public,
+    type: record.type,
+    requirePKCE: record.requirePKCE,
+  };
   return Effect.asVoid(
-    Effect.flatMap(
-      SqlClient.SqlClient,
-      (sql) => sql`
-        insert into oauth_client (
-          id, client_id, disabled, skip_consent, enable_end_session, scopes,
-          created_at, updated_at, name, redirect_uris, token_endpoint_auth_method,
-          grant_types, response_types, public, type, require_pkce
-        )
-        values (
-          ${record.id}, ${record.clientId}, ${record.disabled}, ${record.skipConsent},
-          ${record.enableEndSession}, ${[...record.scopes]}, ${record.createdAt},
-          ${record.updatedAt}, ${record.name}, ${[...record.redirectUris]},
-          ${record.tokenEndpointAuthMethod}, ${[...record.grantTypes]},
-          ${[...record.responseTypes]}, ${record.public}, ${record.type}, ${record.requirePKCE}
-        )
-        on conflict (client_id) do update set
-          disabled = excluded.disabled,
-          skip_consent = excluded.skip_consent,
-          enable_end_session = excluded.enable_end_session,
-          scopes = excluded.scopes,
-          updated_at = excluded.updated_at,
-          name = excluded.name,
-          redirect_uris = excluded.redirect_uris,
-          token_endpoint_auth_method = excluded.token_endpoint_auth_method,
-          grant_types = excluded.grant_types,
-          response_types = excluded.response_types,
-          public = excluded.public,
-          type = excluded.type,
-          require_pkce = excluded.require_pkce
-      `,
-    ),
+    db
+      .insert(oauthClientTable)
+      .values({ id: record.id, createdAt: record.createdAt, ...written })
+      .onConflictDoUpdate({ target: oauthClientTable.clientId, set: written }),
   );
 }
 

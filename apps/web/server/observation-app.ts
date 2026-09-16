@@ -1,9 +1,15 @@
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { auth } from "./auth.js";
 import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
+import { user } from "./db/auth-schema.js";
+import { devices } from "./db/devices-schema.js";
+import { db } from "./db/query.js";
+import { observationPass } from "./db/roster-schema.js";
+import { providerKey } from "./db/vault-schema.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
@@ -69,17 +75,17 @@ const NOTHING_PUSHED: SpeechPushOutcome = {
 /** How a statement below fails: the driver's own refusal, or a row this build cannot decode. */
 type ObservationAppFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const PersonRowSchema = Schema.Struct({ name: Schema.String, email: Schema.String });
 
 const findPerson = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PersonRowSchema,
   execute: (userId) =>
-    statement((sql) => sql`select name, email from "user" where id = ${userId} limit 1`),
+    db
+      .select({ name: user.name, email: user.email })
+      .from(user)
+      .where(eq(user.id, userId))
+      .limit(1),
 });
 
 /** Reads the signed-in user's own name and email, for the events endpoint's PostHog person fields. */
@@ -94,27 +100,34 @@ const EligibleAccountRequestSchema = Schema.Struct({
   seenAfter: Schema.Date,
 });
 
-const EligibleAccountRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+const EligibleAccountRowSchema = Schema.Struct({ userId: Schema.String });
+
+/**
+ * Never attempted before every attempt there has been, which is what the
+ * left join's null has to mean here: Postgres orders an ascending null last
+ * by default, so the ordering says the opposite in as many words. There is
+ * no builder spelling for the modifier, so it is a fragment.
+ */
+const LEAST_RECENTLY_ATTEMPTED = sql`${observationPass.attemptedAt} asc nulls first`;
 
 const findEligibleAccounts = SqlSchema.findAll({
   Request: EligibleAccountRequestSchema,
   Result: EligibleAccountRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select provider_key.user_id as user_id
-        from provider_key
-        inner join devices on devices.user_id = provider_key.user_id
-        left join observation_pass on observation_pass.user_id = provider_key.user_id
-        where ${sql.in("provider_id", CLOUD_PROVIDER_IDS)}
-          and devices.last_seen_at >= ${request.seenAfter}
-        group by provider_key.user_id, observation_pass.attempted_at
-        order by observation_pass.attempted_at asc nulls first
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({ userId: providerKey.userId })
+      .from(providerKey)
+      .innerJoin(devices, eq(devices.userId, providerKey.userId))
+      .leftJoin(observationPass, eq(observationPass.userId, providerKey.userId))
+      .where(
+        and(
+          inArray(providerKey.providerId, CLOUD_PROVIDER_IDS),
+          gte(devices.lastSeenAt, request.seenAfter),
+        ),
+      )
+      .groupBy(providerKey.userId, observationPass.attemptedAt)
+      .orderBy(LEAST_RECENTLY_ATTEMPTED)
+      .limit(request.limit),
 });
 
 /**
