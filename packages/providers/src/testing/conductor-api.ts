@@ -61,10 +61,6 @@ export interface TestSession {
   storedMessages?: readonly JsonObject[];
   /** Misbehave: refuse the transcript read itself. */
   messagesHttpStatus?: number;
-  /** The instant the view says this chat's transcript last changed; absent, the changes read never names it. */
-  transcriptUpdatedAt?: number;
-  /** Misbehave: answer the changes read with this literal in place of the instant. */
-  transcriptUpdatedAtRaw?: string;
 }
 
 export interface TestApi {
@@ -140,32 +136,7 @@ export function fakeConductorApi(api: TestApi) {
         };
         const query = body.query ?? "";
         if (!query.startsWith("SELECT ")) return jsonResponse({}, HTTP_STATUS.SERVER_ERROR);
-        const since = /transcript_updated_at > '([^']*)'/.exec(query)?.[1];
-        const ids = [...query.matchAll(/'([^']*)'/g)]
-          .map((match) => match[1])
-          .filter((literal) => literal !== since);
-        // The opener's document: which chats changed since the instant, answered
-        // with the same decoy transcript column, since the view holds it either way.
-        if (query.includes("transcript_updated_at")) {
-          const sinceMs = since === undefined ? undefined : Date.parse(since);
-          const rows = api.sessions
-            .filter(
-              (session) =>
-                ids.includes(session.id) &&
-                session.transcriptUpdatedAt !== undefined &&
-                (sinceMs === undefined || session.transcriptUpdatedAt > sinceMs),
-            )
-            .sort(
-              (left, right) => (left.transcriptUpdatedAt ?? 0) - (right.transcriptUpdatedAt ?? 0),
-            )
-            .map((session) => ({
-              session_id: session.id,
-              transcript_updated_at:
-                session.transcriptUpdatedAtRaw ?? isoTimestamp(session.transcriptUpdatedAt ?? 0),
-              transcript: TEST_TRANSCRIPT_WORDS,
-            }));
-          return jsonResponse({ rows, rowCount: rows.length, truncated: false });
-        }
+        const ids = [...query.matchAll(/'([^']*)'/g)].map((match) => match[1]);
         const rows = api.sessions
           .filter((session) => ids.includes(session.id))
           .map((session) => ({

@@ -352,10 +352,10 @@ your Conductor sessions on its own schedule, about once a minute, the same
 read-only pass the iOS app used to ask for on demand: your open workspaces,
 their chats, each chat's status, the agent kind running it, and the error
 line it stopped on. It never reads a chat's messages. Beside that pass, and
-only for the chats it listed, our service asks Conductor which of those chats'
-transcripts changed since it last asked, through Conductor's documented
-read-only query of each chat's last-changed instant; that read carries no
-message either. A chat that gained messages wakes Luke's judgment for that
+only for the chats it listed, our service works out which of those chats
+changed since it last asked from the last-updated instant that same pass read
+of each chat's status; nothing further is asked of Conductor for it, and it
+carries no message either. A chat that gained messages wakes Luke's judgment for that
 chat, on our service; that turn reads what the chat's conversation gained
 since he last looked — your own messages and the agent's replies, not its
 tool activity, cut from the front to 20,000 characters — under the same
