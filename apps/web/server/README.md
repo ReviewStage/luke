@@ -1326,9 +1326,15 @@ position no row holds, so the unique `(conversation_id, seq)` constraint is
 the backstop for a writer outside the lock and nothing the writer retries.
 
 The per-resource reads are how a device reads those rows, and there is no
-feed: `server/routes/conversation/messages.ts`, `server/routes/conversation/events.ts`, and
+feed: `server/routes/conversation/messages.ts`, `server/routes/conversation/events.ts`,
+`server/routes/conversation/children/messages.ts` (one child's or observed
+conversation's messages, the conversation named in the query), and
 `server/routes/brain/turns.ts` each answer one resource behind a cursor of the
-device's own (`?after=`, `?limit=`), and `server/routes/changes.ts` is the one change
+device's own (`?after=`, `?limit=`); `server/routes/conversation/children.ts`
+and `server/routes/conversation/agents.ts` answer the account's children (the
+conversations a delegation opened) and its agents (the observed conversations
+holding a turn) as they stand, bounded and with no cursor; and
+`server/routes/changes.ts` is the one change
 signal a device polls between them. The handlers are
 `server/hosted/resource-reads.ts` and `server/hosted/change-signal.ts`, over
 the store alone and never a table, composed by `server/hosted/store-route.ts`
@@ -1393,7 +1399,9 @@ the record, one row per rating, and a re-rating is a newer row the fold then
 answers. The change signal answers each resource's head as the cursor a
 caught-up device would hold — from the conversation rows' counters and one
 ordered look at the turns, never the rows themselves — beside the roster
-snapshot's instant, and the same call is the device's heartbeat: its row
+snapshot's instant; the `children` and `agents` heads are the instant each
+list last changed rather than a cursor, since those two reads take none, and
+each is absent while none stand. The same call is the device's heartbeat: its row
 takes the last-seen instant and the `activeUntil` and `quietUntil` it
 reported. The service records those two and decides nothing from them here.
 
@@ -1651,13 +1659,29 @@ the minute between the sweep's row and the opener's send reaches no device
 as a turn that then goes. Hold releases are opened first, being the older news, and count
 against the same per-account bound as the observations.
 
+The account's visit ends with the child-completion sweep
+(`server/hosted/brain-host/child-completion.ts`), run after its pass and its
+opening under the same deadline: it visits at most
+`CHILD_COMPLETION_SWEEP.LIMIT` (eight, the opener's own bound) of the account's
+ended children whose completion is not yet stamped, oldest run first, and
+delivers each the way the relay does at the turn's end — the stamp under the
+parent's lock first, then one `child-completion` turn into the parent's
+session as the deployment acting for the account — so a completion the relay's
+hook lost is delivered on a later tick and none is delivered twice; a child
+whose spawn expected no completion is stamped and nothing is sent. The tick's
+answer sums what the sweeps did as `children.delivered`,
+`children.undelivered`, and `children.withheld`, and a deployment with no
+secret or no origin for eve sweeps nothing.
+
 The opener reaches eve as the deployment acting for the one account the tick
 is passing over, since the tick holds no account's bearer. It calls eve's
 session routes under the tick's own `CRON_SECRET` as its bearer with the
 account in `x-luke-account`, and the eve door's first authenticator admits
 that pair as a principal of the deployment's own type — the deployment's one
 id, the account as its attribute — for a message naming a kind of turn its
-table admits (an observation or a hold's release) and nothing else: any other
+table, `DEPLOYMENT_TURNS` in `server/hosted/brain-host/channel.ts`, admits (a
+spoken turn, an observation, a hold's release, a child's task, or a child's
+completion) and nothing else: any other
 route or kind of turn carrying the secret is refused outright rather than
 passed to the account authenticator behind it.
 Which account a request acts for is one accessor over both principal types,
