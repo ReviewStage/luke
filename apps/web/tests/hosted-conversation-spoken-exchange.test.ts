@@ -31,6 +31,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  type SpokenAskMetadata,
   UI_PART_STATE,
   UI_PART_TYPE,
   type UnparsedWireValue,
@@ -44,7 +45,12 @@ import {
   handleConversationMessages,
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
-import { STORE_WRITE_EFFECT, storeWriter, voiceWriter } from "../server/hosted/store";
+import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  storeWriter,
+  voiceWriter,
+} from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
 import { TRANSCRIPT_SPEAKER } from "../server/live";
@@ -84,6 +90,32 @@ const writer = await database.run(
 );
 
 const VOICE_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE } as const;
+
+/**
+ * The developer's spoken line as the voice writer leaves it since the ledger
+ * mints row ids: a user row under an id of its own, attached to its
+ * delegation, which takes it into the ask's turn where the turn is known and
+ * leaves it for the received message otherwise. Answers the row as the old
+ * cut did, by id.
+ */
+async function spokenLine(
+  target: ConversationTarget,
+  delegationId: string,
+  text: string,
+  metadata: SpokenAskMetadata,
+): Promise<{ readonly ok: true; readonly id: string }> {
+  const rowId = `line-${delegationId}`;
+  const written = await database.run(
+    writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
+  );
+  assert.ok(written.ok);
+  const attached = await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
+  );
+  assert.ok(attached.ok);
+  assert.deepEqual(attached.attached, [written.id]);
+  return { ok: true, id: written.id };
+}
 const SESSION = {
   providerId: "conductor",
   providerSessionId: "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
@@ -354,14 +386,7 @@ it.effect(
         await holds(`${exchange}: ask recorded`, settled);
 
         tick();
-        const line = await database.run(
-          writer.recordUserMessage(target, {
-            clientId: delegationId,
-            turnOfAsk: true,
-            text: `fixture ask ${exchange}`,
-            metadata: VOICE_ASK,
-          }),
-        );
+        const line = await spokenLine(target, delegationId, `fixture ask ${exchange}`, VOICE_ASK);
         assert.ok(line.ok);
         await holds(`${exchange}: line written`, settled + 1);
 
@@ -438,14 +463,7 @@ it.effect(
       );
 
       tick();
-      const lateLine = await database.run(
-        writer.recordUserMessage(target, {
-          clientId: "dl_3",
-          turnOfAsk: true,
-          text: "fixture ask 3",
-          metadata: VOICE_ASK,
-        }),
-      );
+      const lateLine = await spokenLine(target, "dl_3", "fixture ask 3", VOICE_ASK);
       assert.ok(lateLine.ok);
       // The line stands ahead of the journal the store moved behind it, and the journal stands once.
       const reordered = await holds("3: line landed after the journal", 3);
