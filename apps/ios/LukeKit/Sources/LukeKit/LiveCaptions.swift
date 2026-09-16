@@ -12,7 +12,7 @@ public enum LiveTranscriptSpeaker: String, CaseIterable, Sendable {
 /// on what an utterance is.
 public enum LiveTranscriptBounds {
     /// `UTTERANCE_GAP_MS`: the silence between two of one speaker's fragments that starts a new utterance.
-    public static let utteranceGapMs = 1200
+    public static let utteranceGapMs = 4000
     /// `UTTERANCE_SETTLE_MARGIN_MS`: after the gap, how long a late fragment is still waited for before a row settles.
     public static let utteranceSettleMarginMs = 800
 }

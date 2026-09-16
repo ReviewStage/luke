@@ -29,7 +29,8 @@ test("fragments group into one row per utterance, verbatim and in arrival order,
   assert.equal(f.latest()[0]?.entry.words, "what needs me");
   assert.equal(f.latest()[0]?.settled, false);
   // A gap wider than the utterance gap opens a new row rather than growing the first.
-  f.captions.append(TRANSCRIPT_SPEAKER.USER, "and then?", 900 + UTTERANCE_GAP_MS + 1, 3_000);
+  const nextStartMs = 900 + UTTERANCE_GAP_MS + 1;
+  f.captions.append(TRANSCRIPT_SPEAKER.USER, "and then?", nextStartMs, nextStartMs + 1_000);
   assert.deepEqual(
     f.latest().map((row) => row.rowId),
     [1, 2],

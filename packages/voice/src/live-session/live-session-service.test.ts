@@ -2208,8 +2208,8 @@ it.effect(
         f.traces.filter((trace) => trace.decision === LIVE_TRACE_DECISION.FACTS_DROPPED).length,
         1,
       );
-      // The developer's next utterance is a new row and is anticipated as usual.
-      sideband.input("And def?", 5000, 5400);
+      // The developer's next utterance, after a pause well past the gap, is a new row and is anticipated as usual.
+      sideband.input("And def?", 7000, 7400);
       yield* advanceClock(PREFETCH_DEBOUNCE_MS);
       assert.equal(brain.anticipations.length, 2);
       assert.equal(brain.anticipations[1]?.rowId, 2);

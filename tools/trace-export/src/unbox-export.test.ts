@@ -166,13 +166,14 @@ test("two utterances a gap apart are two messages, and a late fragment joins the
     start_ms: 1_000,
     end_ms: 1_500,
   });
-  const second = serverLine("2026-09-01T10:00:05.000Z", {
+  // A pause well past the gap, so the second utterance is its own message and not the first grown.
+  const second = serverLine("2026-09-01T10:00:07.000Z", {
     type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
     delta: "Anything new?",
-    start_ms: 5_000,
-    end_ms: 5_800,
+    start_ms: 7_000,
+    end_ms: 7_800,
   });
-  const late = serverLine("2026-09-01T10:00:05.100Z", {
+  const late = serverLine("2026-09-01T10:00:07.100Z", {
     type: TRACE_LIVE_EVENT.INPUT_TRANSCRIPT_DELTA,
     delta: " Luke.",
     start_ms: 1_500,

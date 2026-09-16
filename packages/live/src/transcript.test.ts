@@ -34,7 +34,8 @@ test("fragments close together are one utterance, concatenated exactly as receiv
 test("a gap past the threshold starts a new utterance with the next row id", () => {
   const ledger = new TranscriptLedger();
   ledger.append(user("First.", 0, 500));
-  ledger.append(user("Second.", 500 + UTTERANCE_GAP_MS + 1, 3_000));
+  const secondStartMs = 500 + UTTERANCE_GAP_MS + 1;
+  ledger.append(user("Second.", secondStartMs, secondStartMs + 1_000));
 
   const rows = ledger.captionLines();
   assert.equal(rows.length, 2);
@@ -47,9 +48,12 @@ test("a gap past the threshold starts a new utterance with the next row id", () 
 test("a gap of exactly the threshold still joins", () => {
   const ledger = new TranscriptLedger();
   ledger.append(user("A", 0, 500));
-  ledger.append(user("B", 500 + UTTERANCE_GAP_MS, 3_000));
+  const secondStartMs = 500 + UTTERANCE_GAP_MS;
+  ledger.append(user("B", secondStartMs, secondStartMs + 1_000));
 
-  assert.equal(ledger.utterances(TRANSCRIPT_SPEAKER.USER).length, 1);
+  const utterances = ledger.utterances(TRANSCRIPT_SPEAKER.USER);
+  assert.equal(utterances.length, 1);
+  assert.equal(utterances[0]?.text, "AB");
 });
 
 test("the two speakers group independently and may overlap", () => {
@@ -108,7 +112,8 @@ test("utterances since an instant are those still ending after it, ordered by st
   const ledger = new TranscriptLedger();
   ledger.append(user("old", 0, 500));
   ledger.append(assistant("reply", 2_000, 3_000));
-  ledger.append(user("newer", 4_500, 5_000));
+  // A pause well past the gap, so "newer" is its own utterance and not "old" grown.
+  ledger.append(user("newer", 6_000, 6_500));
 
   const since = ledger.utterances(undefined, { sinceMs: 2_500 });
   assert.deepEqual(
@@ -124,8 +129,9 @@ test("the ask context is both speakers since the offset with the developer's lat
   const ledger = new TranscriptLedger();
   ledger.append(user("Anything waiting?", 0, 1_000));
   ledger.append(assistant("Let me look.", 1_200, 2_000));
-  ledger.append(user("Actually, only Codex.", 5_000, 6_500));
-  ledger.append(assistant("Sure.", 6_600, 7_000));
+  // A pause well past the gap, so the second ask is its own utterance and not the first grown.
+  ledger.append(user("Actually, only Codex.", 7_000, 8_500));
+  ledger.append(assistant("Sure.", 8_600, 9_000));
 
   const context = ledger.askContext(1_100);
   assert.deepEqual(
