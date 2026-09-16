@@ -253,6 +253,13 @@
       "when": 1789850000000,
       "tag": "0036_messages_placed_at",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0037_transcript_change_wake",
+      "breakpoints": true
     }
   ]
 }

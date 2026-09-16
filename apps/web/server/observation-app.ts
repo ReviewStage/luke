@@ -308,7 +308,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
             ),
           ),
     observe: (userId) => {
-      if (!store || !encryptionSecret) return Effect.succeed({ complete: false, changed: false });
+      if (!store || !encryptionSecret) return Effect.succeed({ complete: false });
       return Effect.gen(function* () {
         const rows = yield* readStoredVaultKeys(userId);
         const outcome = yield* observeAndSnapshot({
@@ -319,7 +319,7 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
           seams: {},
           now: Date.now(),
         });
-        return { complete: outcome.complete, changed: outcome.changed };
+        return { complete: outcome.complete };
       });
     },
     openTurns: (userId) => {

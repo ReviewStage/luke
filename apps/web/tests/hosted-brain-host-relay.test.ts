@@ -510,7 +510,7 @@ it.effect("a tool call's part stands on the journal before its result and settle
 );
 
 it.effect(
-  "an observation turn over a roster diff lands the same way, with the roster look as its source, and its briefing is offered once however often the result is re-emitted",
+  "an observation turn over a transcript change lands the same way, with the transcript change as its source, and its briefing is offered once however often the result is re-emitted",
   () =>
     Effect.promise(async () => {
       const target = await conversation(CONVERSATION_KIND.OBSERVED);
@@ -521,7 +521,7 @@ it.effect(
           stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
           stamped({
             type: "message.received",
-            data: { turnId, sequence: 0, message: "[observed events] ..." },
+            data: { turnId, sequence: 0, message: "[observed messages] ..." },
           }),
           stamped({
             type: "step.started",
@@ -596,14 +596,14 @@ it.effect(
       );
 
       const { turnRows, messageRows } = await rows(target);
-      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.ROSTER_DIFF);
+      assert.equal(turnRows[0]?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
       assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
       assert.equal(turnRows[0]?.usage, null);
       const [words, answer] = messageRows;
       assert.ok(words && answer);
       assert.deepEqual(words.metadata, {
         author: MESSAGE_AUTHOR.BRAIN,
-        source: OBSERVATION_SOURCE.ROSTER_LOOK,
+        source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
       });
       // The second step delivered nothing to announce, and stands as its boundary alone.
       assert.deepEqual(

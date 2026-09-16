@@ -51,11 +51,13 @@ test("names every action Conductor documents, and none it does not", () => {
   ]);
   // A cloud session's conversation lives with its provider, and every read of
   // it goes there: the developer's own conversation read, the brain's whole
-  // transcript read, and the brain's incremental read behind the cursor
-  // Conductor handed back; an observation pass reads none of them.
+  // transcript read, the opener's which-chats-changed read that carries no
+  // words, and the brain's incremental read behind the cursor Conductor
+  // handed back; an observation pass reads none of them.
   assert.deepEqual(Object.keys(plugin.reads ?? {}).sort(), [
     "conversation",
     "transcript",
+    "transcriptChanges",
     "transcriptSince",
   ]);
 });

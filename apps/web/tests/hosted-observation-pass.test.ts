@@ -109,7 +109,6 @@ test("a whole pass stores the roster with its projects, dated by the pass", asyn
   );
 
   assert.equal(outcome.complete, true);
-  assert.equal(outcome.changed, false);
   assert.equal(outcome.observedAt, TEST_TIME);
   const stored = await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET));
   assert.ok(stored?.roster);
@@ -125,7 +124,7 @@ test("a whole pass stores the roster with its projects, dated by the pass", asyn
   assert.deepEqual(store.passes.get("user-1"), { attemptedAt: TEST_TIME, observedAt: TEST_TIME });
 });
 
-test("a changed roster moves the snapshot and says so; an unchanged one moves only the snapshot and says nothing changed", async () => {
+test("every whole pass moves the snapshot, changed roster or not", async () => {
   const store = memoryObservationStore();
   const pass = (status: string, now: number) =>
     runWithoutDatabase(
@@ -140,12 +139,10 @@ test("a changed roster moves the snapshot and says so; an unchanged one moves on
     );
 
   await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME);
-  const same = await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 60_000);
-  assert.equal(same.changed, false);
+  await pass(TEST_CONDUCTOR_STATUS.WORKING, TEST_TIME + 60_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 60_000);
 
-  const changed = await pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 120_000);
-  assert.equal(changed.changed, true);
+  await pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 120_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 120_000);
   assert.deepEqual(
     store.advances.map((advance) => advance.observedAt),
@@ -331,12 +328,11 @@ test("two passes racing over one user record one transition once, and the later 
   });
   const slow = pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 1_000, held);
   const quick = await pass(TEST_CONDUCTOR_STATUS.ERROR, TEST_TIME + 2_000);
+  assert.equal(quick.complete, true);
   release();
   const late = await slow;
 
-  assert.equal(quick.changed, true);
   assert.equal(late.complete, true);
-  assert.equal(late.changed, false);
   assert.equal(late.observedAt, TEST_TIME + 2_000);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 2_000);
   // The losing pass leaves the winner's pass record standing rather than
@@ -385,7 +381,6 @@ test("when the earlier-started pass wins, the later one closes its own unfinishe
   const lost = await later.outcome;
 
   assert.equal(lost.complete, true);
-  assert.equal(lost.changed, false);
   assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME + 1_000);
   assert.deepEqual(store.passes.get("user-1"), {
     attemptedAt: TEST_TIME + 2_000,
@@ -442,7 +437,6 @@ test("a snapshot observed under a key since replaced is another key's roster: no
     }),
   );
   assert.equal(second.complete, true);
-  assert.equal(second.changed, false);
   assert.ok((await runWithoutDatabase(storedRoster(store, "user-1", replaced, SECRET)))?.roster);
 });
 
@@ -466,7 +460,6 @@ test("a snapshot this build cannot open or read is replaced by the next whole pa
     );
 
     assert.equal(outcome.complete, true, body);
-    assert.equal(outcome.changed, false, body);
     assert.equal(store.snapshots.get("user-1")?.observedAt, TEST_TIME, body);
     assert.equal(
       (await runWithoutDatabase(storedRoster(store, "user-1", KEY_ROWS, SECRET)))?.roster?.providers

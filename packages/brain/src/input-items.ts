@@ -1,35 +1,43 @@
-import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { maximumChildTaskLength } from "./tools/names.js";
-import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
- * and then the observed values as JSON behind it. The marker is the whole of
- * the instruction; everything after it is data the instructions tell the
- * model to read as data, however a title, a status, or a transcript is phrased.
- * These are text: the context engine decides what item a provider takes them
- * as, so the host composes them without knowing any provider's shapes.
+ * and then the observed values behind it, as JSON or as one line per message.
+ * The marker is the whole of the instruction; everything after it is data the
+ * instructions tell the model to read as data, however a title, a status, or
+ * a transcript is phrased. These are text: the context engine decides what
+ * item a provider takes them as, so the host composes them without knowing
+ * any provider's shapes.
  */
 
-/** The session fields an entry keeps: what the turn's opening renders, and never a transcript. */
-function sessionSummary(session: Session): WireRecord {
-  return {
-    provider_name: session.provider.displayName,
-    title: session.title,
-    status: session.status,
-    ...(session.holdingForDeveloper === true ? { holding_for_developer: true } : undefined),
-    ...(session.completionCause ? { completion_cause: session.completionCause } : undefined),
-    ...(session.workspace?.name ? { workspace: session.workspace.name } : undefined),
-    ...(session.detail.error ? { error: session.detail.error } : undefined),
-    ...(session.detail.activity ? { activity: session.detail.activity } : undefined),
-    ...(session.detail.branch ? { branch: session.detail.branch } : undefined),
-    updated_at: new Date(session.lastActivityAt).toISOString(),
-  };
+/** One briefing the brain already decided, as a hold-released turn carries it back. */
+export interface BrainDelivery {
+  briefing: string;
+  decidedAt: number;
 }
 
+/**
+ * What an observed-messages turn says about the chat before its lines: who
+ * runs it, where, what it is called, and when its transcript last changed.
+ * Every field is the roster's, so a chat the roster does not hold is named
+ * by its id alone.
+ */
+export interface ObservedMessagesEnvelope {
+  readonly providerName: string;
+  readonly workspace?: string;
+  readonly title?: string;
+  readonly providerSessionId: string;
+  readonly updatedAt: number;
+}
+
+/** The line that stands in for the front of a delta the bound cut. */
+export const OBSERVED_MESSAGES_CUT = "(earlier messages cut)";
+
+const ENVELOPE_SEPARATOR = " \u00b7 ";
+
 export const BRAIN_INPUT_MARKER = {
-  OBSERVED_EVENTS: "[observed events]",
+  OBSERVED_MESSAGES: "[observed messages]",
   DEVELOPER_ASK: "[developer ask]",
   HOLD_RELEASED: "[hold released]",
   STANDING_CONTEXT: "[standing context]",
@@ -47,29 +55,6 @@ function marked(marker: BrainInputMarker, now: number, body: string): string {
   return `${marker} ${new Date(now).toISOString()}\n${body}`;
 }
 
-function eventRecord(event: BrainWakeEvent): WireRecord {
-  return {
-    kind: event.kind,
-    at: new Date(event.atMs).toISOString(),
-    provider_id: event.identity.providerId,
-    provider_session_id: event.identity.providerSessionId,
-    ...(event.session
-      ? { session: sessionSummary(event.session) }
-      : event.sessionSummary
-        ? { session: event.sessionSummary }
-        : undefined),
-    ...(event.transcriptDelta
-      ? {
-          transcript_delta: {
-            status: event.transcriptDelta.status,
-            truncated: event.transcriptDelta.truncated,
-            text: event.transcriptDelta.text,
-          },
-        }
-      : undefined),
-  };
-}
-
 /**
  * The words a child's first turn opens with: the marker that tells the model
  * it is a child, then the task as its requester briefed it. No instant and
@@ -82,16 +67,29 @@ export function childTaskInputText(task: string): string {
 }
 
 /**
- * The words an observed-events turn opens with. The roster itself is not
- * repeated here: the same request carries it in the standing context, which
- * is rebuilt every turn and never remembered.
+ * The words an observed-messages turn opens with: the marker, the envelope
+ * naming the chat, the cut line where the front was dropped, and then the
+ * messages the chat gained, one line each, the way a room receives them. The
+ * roster itself is not repeated here: the same request carries it in the
+ * standing context, which is rebuilt every turn and never remembered.
  */
-export function wakeInputText(events: readonly BrainWakeEvent[], now: number): string {
-  return marked(
-    BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
-    now,
-    JSON.stringify({ events: events.map(eventRecord) }),
-  );
+export function observedMessagesText(
+  envelope: ObservedMessagesEnvelope,
+  lines: readonly string[],
+  truncated: boolean,
+  now: number,
+): string {
+  const name = envelope.title ?? `chat ${envelope.providerSessionId}`;
+  const header = [
+    envelope.providerName,
+    envelope.workspace,
+    name,
+    new Date(envelope.updatedAt).toISOString(),
+  ]
+    .filter((part) => part !== undefined)
+    .join(ENVELOPE_SEPARATOR);
+  const body = [`[${header}]`, ...(truncated ? [OBSERVED_MESSAGES_CUT] : []), ...lines];
+  return marked(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES, now, body.join("\n"));
 }
 
 function deliveryRecord(delivery: BrainDelivery): WireRecord {

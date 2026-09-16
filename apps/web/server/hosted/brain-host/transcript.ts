@@ -3,10 +3,12 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   ACTION_RESULT_STATUS,
-  type BrainTranscriptDelta,
+  type ActionResultStatus,
   type CloudAgentProviderId,
   dispatchRead,
+  dispatchTranscriptChanges,
   isCloudAgentProviderId,
+  type ProviderTranscriptChangesResult,
   type SessionIdentity,
   type SessionProviderPlugin,
   type WireRecord,
@@ -15,14 +17,16 @@ import { BRAIN_HOST } from "./bounds.js";
 import { type HostedRoster, observedSession } from "./roster.js";
 
 /**
- * The brain's two transcript reads of a cloud chat, through the provider's
- * own documented reader and never through a pass: the whole tail, at the
- * `read_transcript` tool's ask, and what a chat gained since the host last
- * looked, for an observation turn. Both answer only for a session the stored
- * roster holds, and only for a provider this build reads. The incremental
- * read keeps its bookmark in `provider_cursors`, one row per observed session
- * per account, advanced only past a cursor the provider itself handed back,
- * and only over the bookmark the read began from.
+ * The brain's three transcript reads of a cloud chat, through the provider's
+ * own documented readers and never through a pass: the whole tail, at the
+ * `read_transcript` tool's ask; which of the roster's chats gained
+ * transcript since an instant, for the opener to learn what to read without
+ * reading any; and what one chat gained since the host last looked, for an
+ * observation turn. Each answers only for sessions the stored roster holds,
+ * and only for a provider this build reads. The incremental read keeps its
+ * bookmark in `provider_cursors`, one row per observed session per account,
+ * advanced only past a cursor the provider itself handed back, and only over
+ * the bookmark the read began from.
  */
 
 interface TranscriptReadSeams {
@@ -36,9 +40,16 @@ interface TranscriptReadSeams {
   readonly now: () => number;
 }
 
+/** What one chat gained: one line per attributed message, whether the front was cut, and how the provider answered. */
+interface TranscriptDelta {
+  readonly lines: readonly string[];
+  readonly truncated: boolean;
+  readonly status: ActionResultStatus;
+}
+
 /** One incremental reading and the bookmark it reached, kept only once the turn that carries it is accepted. */
-interface TranscriptDeltaReading {
-  readonly delta: BrainTranscriptDelta;
+export interface TranscriptDeltaReading {
+  readonly delta: TranscriptDelta;
   /** The cursor the provider handed back, to keep once the words reached a turn; absent when the read moved nothing. */
   readonly cursor?: string;
   /** The bookmark the read began from, which a keep must still find standing; absent where none was kept yet. */
@@ -52,6 +63,33 @@ export interface HostedTranscriptReads {
   since(
     identity: SessionIdentity,
   ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | Schema.SchemaError>;
+  /** Which of the roster's chats under the provider gained transcript since the instant, as the provider answers it; no words. */
+  changedSince(
+    providerId: CloudAgentProviderId,
+    since: number | undefined,
+  ): Effect.Effect<ProviderTranscriptChangesResult>;
+}
+
+/**
+ * The delta cut to the bound from the front, whole lines at a time, so a
+ * turn is never handed half a message: the newest lines are the ones the
+ * turn is opened for. A single line past the bound on its own is kept whole
+ * rather than dropped, since a bound met by one message is still one message.
+ */
+/** What the bound left: the lines kept, and whether any were dropped from the front. */
+interface BoundedLines {
+  readonly lines: readonly string[];
+  readonly dropped: boolean;
+}
+
+function boundedLines(lines: readonly string[]): BoundedLines {
+  let kept = lines.reduce((total, line) => total + line.length + 1, 0);
+  let dropped = 0;
+  while (dropped < lines.length - 1 && kept > BRAIN_HOST.TRANSCRIPT_DELTA_CHARS) {
+    kept -= (lines[dropped]?.length ?? 0) + 1;
+    dropped += 1;
+  }
+  return { lines: lines.slice(dropped), dropped: dropped > 0 };
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -199,18 +237,34 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
           from,
         );
         if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
-          return { delta: { text: "", truncated: false, status: read.status } };
+          return { delta: { lines: [], truncated: false, status: read.status } };
         }
-        const overflow = Math.max(0, read.text.length - BRAIN_HOST.TRANSCRIPT_DELTA_CHARS);
+        const bounded = boundedLines(read.lines);
         return {
           delta: {
-            text: read.text.slice(overflow),
-            truncated: read.truncated || overflow > 0,
+            lines: bounded.lines,
+            truncated: read.truncated || bounded.dropped,
             status: read.status,
           },
           ...(read.cursor !== undefined ? { cursor: read.cursor } : undefined),
           ...(from !== undefined ? { from } : undefined),
         };
+      }),
+    changedSince: (providerId, since) =>
+      Effect.gen(function* () {
+        // The ids are the roster's own, so the provider is asked about the chats this account
+        // observes and no others; a provider with none in the roster is not asked at all.
+        const roster = yield* seams.roster();
+        const providerSessionIds = (roster.observations.get(providerId) ?? []).map(
+          (observation) => observation.providerSessionId,
+        );
+        if (providerSessionIds.length === 0) {
+          return { status: ACTION_RESULT_STATUS.ACCEPTED, changes: [] };
+        }
+        return yield* dispatchTranscriptChanges(seams.pluginFor(providerId), {
+          providerSessionIds,
+          ...(since !== undefined ? { since } : undefined),
+        });
       }),
   };
 }

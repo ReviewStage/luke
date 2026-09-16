@@ -13,6 +13,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  observedMessagesText,
   readStoredUIMessages,
   SPEECH_EXPIRY_REASON,
   type StoredUIMessage,
@@ -21,7 +22,6 @@ import {
   TURN_STATUS,
   unparsedWire,
   type WireRecord,
-  wakeInputText,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
@@ -106,7 +106,7 @@ function announcePart(callId: string, input: WireRecord): MessageParts[number] {
   } as unknown as MessageParts[number];
 }
 
-/** An observed conversation with one settled roster-diff turn whose answer announced a briefing, as the relay leaves them. */
+/** An observed conversation with one settled transcript-change turn whose answer announced a briefing, as the relay leaves them. */
 async function announced(userId?: string): Promise<Announced> {
   const owner = userId ?? (await database.createUser());
   const conversationId = await insertConversation(database.run, {
@@ -118,7 +118,7 @@ async function announced(userId?: string): Promise<Announced> {
   const turnId = await insertTurn(database.run, {
     userId: owner,
     conversationId,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: new Date(clock),
     settledAt: new Date(clock),
@@ -201,7 +201,7 @@ async function viewMarksUnspoken(row: Announced): Promise<boolean> {
     turns: [
       {
         id: row.turnId,
-        origin: TURN_ORIGIN.ROSTER_DIFF,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
         status: TURN_STATUS.SETTLED,
         queuedAt: NOW,
       },
@@ -877,14 +877,19 @@ test("the hold-release item the host writes reads back to exactly the briefings 
   assert.deepEqual(heldBriefingsNamed(item), named);
 
   // eve folds the deliveries waiting when a turn settles into one received message, a blank line between.
-  const folded = [wakeInputText([], NOW + 3_000), item, wakeInputText([], NOW + 4_000)].join(
-    "\n\n",
-  );
+  const observed = (now: number) =>
+    observedMessagesText(
+      { providerName: "Conductor", providerSessionId: "s-1", updatedAt: now },
+      ["Developer: go on"],
+      false,
+      now,
+    );
+  const folded = [observed(NOW + 3_000), item, observed(NOW + 4_000)].join("\n\n");
   assert.deepEqual(heldBriefingsNamed(folded), named);
   const twice = [item, holdReleasedInputText([plain], NOW + 5_000)].join("\n\n");
   assert.equal(heldBriefingsNamed(twice).length, 4);
 
-  assert.deepEqual(heldBriefingsNamed(wakeInputText([], NOW)), []);
+  assert.deepEqual(heldBriefingsNamed(observed(NOW)), []);
   assert.deepEqual(heldBriefingsNamed(`${item.split("\n")[0]}\nnot json`), []);
   assert.deepEqual(heldBriefingsNamed(""), []);
 });

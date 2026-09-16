@@ -25,7 +25,7 @@ public enum MessageChannel: String, Sendable {
 /// in `@sidecar/wire`.
 public enum ObservationSource: String, Sendable {
     case hook
-    case rosterLook = "roster_look"
+    case transcriptChange = "transcript_change"
     case holdRelease = "hold_release"
     case child
     case childCompletion = "child_completion"

@@ -39,7 +39,7 @@ const FIXTURE = {
   REPLY_WITH_TOOL_PART: "reply-with-tool-part.json",
   COMPACTION: "compaction.json",
   OBSERVATION_HOOK: "observation-hook.json",
-  OBSERVATION_ROSTER_LOOK: "observation-roster-look.json",
+  OBSERVATION_TRANSCRIPT_CHANGE: "observation-transcript-change.json",
   HOLD_RELEASE: "hold-release.json",
   CHILD_TASK: "child-task.json",
   CHILD_COMPLETION: "child-completion.json",
@@ -51,7 +51,7 @@ const FIXTURE = {
 /** The fixture that carries each source the brain writes a user row under, one per member of the set. */
 const BRAIN_SOURCE_FIXTURES = {
   [OBSERVATION_SOURCE.HOOK]: FIXTURE.OBSERVATION_HOOK,
-  [OBSERVATION_SOURCE.ROSTER_LOOK]: FIXTURE.OBSERVATION_ROSTER_LOOK,
+  [OBSERVATION_SOURCE.TRANSCRIPT_CHANGE]: FIXTURE.OBSERVATION_TRANSCRIPT_CHANGE,
   [OBSERVATION_SOURCE.HOLD_RELEASE]: FIXTURE.HOLD_RELEASE,
   [OBSERVATION_SOURCE.CHILD]: FIXTURE.CHILD_TASK,
   [OBSERVATION_SOURCE.CHILD_COMPLETION]: FIXTURE.CHILD_COMPLETION,

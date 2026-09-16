@@ -17,7 +17,6 @@ import {
   OBSERVED_ROSTER_VERSION,
   type ObservedRoster,
 } from "./observed-roster.js";
-import { rosterDiff, rosterDiffIsEmpty } from "./roster-diff.js";
 import type { HostedStore, RosterSnapshotRecord } from "./store/index.js";
 import type { VaultKeyEffect } from "./vault-key-store.js";
 import { readApiKeyFor } from "./vault-keys.js";
@@ -59,8 +58,6 @@ export interface ObservationPassOutcome {
   /** Whether every provider's roster was read whole and the snapshot moved. */
   complete: boolean;
   failure?: CloudObserveFailure;
-  /** Whether the pass found the roster changed against the snapshot it replaced. */
-  changed: boolean;
   /** The snapshot standing after the pass: the new one, or the previous one a failed pass left, or none. */
   roster?: ObservedRoster;
   observedAt?: number;
@@ -205,7 +202,7 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
   const failed = passes.find((pass) => pass.failure !== undefined);
   if (failed?.failure) {
     yield* store.roster.recordPass(userId, { attemptedAt: now, failure: failed.failure });
-    return { complete: false, failure: failed.failure, changed: false, ...standing };
+    return { complete: false, failure: failed.failure, ...standing };
   }
 
   const fingerprints = keyFingerprints(input.rows, input.secret);
@@ -218,8 +215,6 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
       projects: pass.projects,
     })),
   };
-  const diff = previous?.roster ? rosterDiff(previous.roster, roster) : undefined;
-  const changed = diff !== undefined && !rosterDiffIsEmpty(diff);
   // A roster read whole that could not be written down is a failed pass for
   // this user; the snapshot on record, if any, is whatever stood.
   const advanced = yield* optionally(
@@ -242,7 +237,6 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
     return {
       complete: false,
       failure: CLOUD_OBSERVE_FAILURE.PASS_FAILED,
-      changed: false,
       ...standing,
     };
   }
@@ -256,14 +250,14 @@ export const observeAndSnapshot = /* @__PURE__ */ Effect.fn("observeAndSnapshot"
     // one closes the unfinished attempt it opened above.
     yield* store.roster.recordPass(userId, { attemptedAt: now });
     const superseded = yield* storedRoster(store, userId, input.rows, input.secret);
-    const outcome: ObservationPassOutcome = { complete: true, changed: false };
+    const outcome: ObservationPassOutcome = { complete: true };
     if (superseded?.roster) {
       outcome.roster = superseded.roster;
       outcome.observedAt = superseded.observedAt;
     }
     return outcome;
   }
-  return { complete: true, changed, roster, observedAt: now };
+  return { complete: true, roster, observedAt: now };
 });
 
 /**

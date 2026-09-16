@@ -187,7 +187,7 @@ final class ConversationTurnRowsTests: XCTestCase {
         }
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.typed)), .ask)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.spoken)), .ask)
-        XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.rosterDiff)), .own)
+        XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.transcriptChange)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.holdRelease)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.child)), .own)
         XCTAssertEqual(ConversationTurnRows.judgment(of: turn(.childCompletion)), .own)
@@ -235,7 +235,7 @@ final class ConversationTurnRowsTests: XCTestCase {
     }
 
     func testAUserNoteTheBrainWroteIsNotTheDevelopersVoice() {
-        let note = UIMessage(id: "n", attribution: .user(.observation(.rosterLook)), parts: [.text("Two sessions are working.")])
+        let note = UIMessage(id: "n", attribution: .user(.observation(.transcriptChange)), parts: [.text("Two sessions are working.")])
         let group = ConversationReadTurnGroup(
             turnId: "t", conversationId: "c", source: .main, turn: nil,
             messages: [ConversationReadMessage(message: note, seq: 1, createdAt: Date(timeIntervalSince1970: 1), tools: [])]

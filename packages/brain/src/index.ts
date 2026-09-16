@@ -1,13 +1,16 @@
 export {
   BRAIN_INPUT_MARKER,
+  type BrainDelivery,
   CHILD_COMPLETION_STATUS,
   type ChildCompletion,
   type ChildCompletionStatus,
   childCompletionInputText,
   childTaskInputText,
   holdReleasedInputText,
+  OBSERVED_MESSAGES_CUT,
+  type ObservedMessagesEnvelope,
+  observedMessagesText,
   standingContextText,
-  wakeInputText,
 } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
 export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
@@ -92,10 +95,4 @@ export {
   userMessage,
   userMetadataOf,
 } from "./ui-messages.js";
-export {
-  BRAIN_WAKE_KIND,
-  type BrainDelivery,
-  type BrainTranscriptDelta,
-  type BrainWakeEvent,
-} from "./wake-events.js";
 export { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

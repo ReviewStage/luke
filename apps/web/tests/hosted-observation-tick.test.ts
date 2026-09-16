@@ -42,7 +42,6 @@ const NOTHING_OPENED: TurnOpeningOutcome = {
   observation: 0,
   holdRelease: 0,
   failed: 0,
-  reseeded: 0,
 };
 
 /** The scheduler's call; `null` sends no bearer at all. */
@@ -68,8 +67,7 @@ interface Recorded {
 function tickOptions(
   overrides: Partial<ObservationTickOptions> = {},
   accounts: string[] = ["user-a", "user-b"],
-  outcome: ObservationTickOptions["observe"] = () =>
-    Effect.succeed({ complete: true, changed: false }),
+  outcome: ObservationTickOptions["observe"] = () => Effect.succeed({ complete: true }),
   opening: (userId: string) => Effect.Effect<TurnOpeningOutcome> = () =>
     Effect.succeed(NOTHING_OPENED),
 ) {
@@ -170,9 +168,9 @@ test("the tick is off without CRON_SECRET or the encryption secret, and refuses 
 
 test("a tick forgets the ineligible, lists accounts seen within the week, and observes each, counting outcomes", async () => {
   const outcomes = new Map([
-    ["user-a", { complete: true, changed: true }],
-    ["user-b", { complete: false, changed: false }],
-    ["user-c", { complete: true, changed: false }],
+    ["user-a", { complete: true }],
+    ["user-b", { complete: false }],
+    ["user-c", { complete: true }],
   ]);
   const { options, recorded } = tickOptions({}, [...outcomes.keys()], (userId) =>
     Effect.sync(() => {
@@ -189,7 +187,6 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     accounts: 3,
     observed: 2,
     failed: 1,
-    changed: 1,
     exhausted: false,
     purged: 2,
     speech: SWEPT,
@@ -210,7 +207,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
   const { options } = tickOptions({}, ["user-a", "user-b"], (userId) =>
     Effect.sync(() => {
       if (userId === "user-a") throw new Error("the adapter had a bug");
-      return { complete: true, changed: false };
+      return { complete: true };
     }),
   );
 
@@ -220,7 +217,6 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     accounts: 2,
     observed: 1,
     failed: 1,
-    changed: 0,
     exhausted: false,
     purged: 2,
     speech: SWEPT,
@@ -239,7 +235,7 @@ test("a tick starts a batch only while a whole pass deadline still fits its budg
     () =>
       Effect.sync(() => {
         now += 3_000;
-        return { complete: true, changed: false };
+        return { complete: true };
       }),
   );
 
@@ -257,8 +253,7 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
     const { options } = tickOptions(
       { passDeadlineMs: 20 },
       ["user-slow", "user-quick"],
-      (userId) =>
-        userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true, changed: true }),
+      (userId) => (userId === "user-slow" ? Effect.never : Effect.succeed({ complete: true })),
     );
 
     const fiber = yield* Effect.forkChild(
@@ -272,21 +267,20 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
       accounts: 2,
       observed: 1,
       failed: 1,
-      changed: 1,
       exhausted: false,
       purged: 2,
       speech: SWEPT,
       push: PUSHED,
       children: completedFor(1),
-      turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+      turns: { observation: 0, holdRelease: 0, failed: 1 },
     });
   }),
 );
 
 test("each account's opening runs after its own pass, inside the same share of the tick, and its counts are summed; a pass that throws is still followed by its opening", async () => {
   const openings = new Map<string, TurnOpeningOutcome>([
-    ["user-a", { observation: 2, holdRelease: 0, failed: 0, reseeded: 0 }],
-    ["user-b", { observation: 0, holdRelease: 1, failed: 1, reseeded: 1 }],
+    ["user-a", { observation: 2, holdRelease: 0, failed: 0 }],
+    ["user-b", { observation: 0, holdRelease: 1, failed: 1 }],
   ]);
   const { options, recorded } = tickOptions(
     {},
@@ -294,7 +288,7 @@ test("each account's opening runs after its own pass, inside the same share of t
     (userId) =>
       Effect.sync(() => {
         if (userId === "user-a") throw new Error("the adapter had a bug");
-        return { complete: true, changed: true };
+        return { complete: true };
       }),
     (userId) =>
       Effect.sync(() => {
@@ -310,13 +304,12 @@ test("each account's opening runs after its own pass, inside the same share of t
     accounts: 2,
     observed: 1,
     failed: 1,
-    changed: 1,
     exhausted: false,
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
-    turns: { observation: 2, holdRelease: 1, failed: 1, reseeded: 1 },
+    turns: { observation: 2, holdRelease: 1, failed: 1 },
   });
   assert.deepEqual(recorded.ran, [
     "observe:user-a",
@@ -332,11 +325,11 @@ test("an opening that throws is one failed opening and nothing else of the tick 
   const { options } = tickOptions(
     {},
     ["user-a", "user-b"],
-    () => Effect.succeed({ complete: true, changed: false }),
+    () => Effect.succeed({ complete: true }),
     (userId) =>
       Effect.sync(() => {
         if (userId === "user-a") throw new Error("eve went away");
-        return { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 };
+        return { observation: 1, holdRelease: 0, failed: 0 };
       }),
   );
 
@@ -346,13 +339,12 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     accounts: 2,
     observed: 2,
     failed: 0,
-    changed: 0,
     exhausted: false,
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
-    turns: { observation: 1, holdRelease: 0, failed: 1, reseeded: 0 },
+    turns: { observation: 1, holdRelease: 0, failed: 1 },
   });
 });
 

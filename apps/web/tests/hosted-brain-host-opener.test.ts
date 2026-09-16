@@ -5,13 +5,17 @@ import { ConnectionError, SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
 import {
   ACTION_RESULT_STATUS,
+  BRAIN_INPUT_MARKER,
   BRAIN_TOOL,
   CONVERSATION_EVENT_KIND,
   holdReleasedInputText,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  OBSERVED_MESSAGES_CUT,
   type ProviderSessionObservation,
+  type ProviderTranscriptChange,
+  type ProviderTranscriptChangesResult,
   SESSION_STATUS,
   type SessionIdentity,
   SPEECH_EXPIRY_REASON,
@@ -39,27 +43,21 @@ import {
   keepTranscriptCursor,
 } from "../server/hosted/brain-host/transcript";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { payloadKeyRing } from "../server/hosted/encryption";
-import { OBSERVATION_TICK } from "../server/hosted/observation-bounds";
-import { decodeObservedRoster, type ObservedRoster } from "../server/hosted/observed-roster";
+import type { ObservedRoster } from "../server/hosted/observed-roster";
 import { releasedBriefings, storeWriter } from "../server/hosted/store";
-import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
-import {
-  CONSUMED_ROSTER,
-  keepConsumedRoster,
-  writeRosterSnapshot,
-} from "../server/hosted/store/roster-snapshot";
-import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
+import { EpochMillisColumnSchema } from "../server/hosted/store/database";
+import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
- * The opener over the real migrations on PGlite: what the pending roster
- * diffs of one account become in eve, and what they leave behind. Synthetic
- * fixtures throughout — no real title, branch, or transcript word. What is
- * held to is the acceptance the ticket names: several diffs about one
- * session in one pass become one turn, the cursor moves in the same
- * transaction as the diffs are consumed and only once eve has accepted, and
- * a turn eve refuses leaves both standing. Every account here is one the
- * test created, since the store suite shares one database on CI.
+ * The opener over the real migrations on PGlite: what the chats a provider
+ * says gained transcript since the account's mark become in eve, and what
+ * they leave behind. Synthetic fixtures throughout — no real title, branch,
+ * or transcript word. What is held to is the acceptance the ticket names:
+ * one message per changed chat carrying its envelope and its lines, the
+ * cursors and the mark moving in one transaction and only once eve has
+ * accepted, a turn eve refuses leaving all of it standing, and the mark
+ * never jumping a chat held back by the bound. Every account here is one
+ * the test created, since the store suite shares one database on CI.
  */
 
 const database = await openHostedStoreTestDatabase();
@@ -102,6 +100,10 @@ function identity(providerSessionId: string): SessionIdentity {
   return { providerId: PROVIDER, providerSessionId };
 }
 
+function change(providerSessionId: string, updatedAt: number): ProviderTranscriptChange {
+  return { providerSessionId, updatedAt };
+}
+
 /** One pass of the account's roster, written down as the pass writes it: the snapshot advanced over the one it read against. */
 async function passed(
   userId: string,
@@ -119,17 +121,11 @@ async function passed(
   assert.equal(landed, true);
 }
 
-/** An account whose first pass saw `first`, and whose opener has visited once since, so its bookmark stands at `first` and nothing is owed. */
+/** An account whose first pass saw `first`, and whose opener has visited once since, so its mark stands at `NOW` and nothing is owed. */
 async function accountSeeing(first: ObservedRoster): Promise<string> {
   const userId = await database.createUser();
   await passed(userId, first, NOW, undefined);
-  await database.run(
-    database.store.roster.keepConsumed(
-      userId,
-      { body: JSON.stringify(first), observedAt: NOW },
-      undefined,
-    ),
-  );
+  await database.run(database.store.roster.keepMark(userId, NOW, undefined, NOW));
   return userId;
 }
 
@@ -139,18 +135,11 @@ interface Handed {
   readonly message: EveMessage<ScheduledTurn>;
 }
 
-/** One event as the opening words carry it, in the two fields these tests read. */
-interface ObservedEventRecord {
-  readonly provider_session_id: string;
-  readonly transcript_delta?: { readonly text: string };
-}
-
-/** What one observation turn's opening words carry, read back as the data they are. */
-function eventsOf(message: EveMessage<ScheduledTurn>): readonly ObservedEventRecord[] {
-  const [, ...body] = message.message.split("\n");
-  // SAFETY: the words are the host's own JSON behind the marker, read here to assert on their shape.
-  const parsed = JSON.parse(body.join("\n")) as { events: ObservedEventRecord[] };
-  return parsed.events;
+/** What one observation turn's opening words carry after the marker line: the envelope, then the lines. */
+function linesOf(message: EveMessage<ScheduledTurn>): readonly string[] {
+  const [marker, ...body] = message.message.split("\n");
+  assert.ok(marker?.startsWith(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES));
+  return body;
 }
 
 type Answer = (handed: Handed) => Awaited<ReturnType<EveSessions<ScheduledTurn>["send"]>>;
@@ -186,23 +175,49 @@ function fakeEve(answer: Answer = ACCEPTING) {
 }
 
 interface TranscriptFixture {
+  /** What the provider says changed, or how it refused; absent, nothing changed. */
+  readonly changes?: readonly ProviderTranscriptChange[] | ProviderTranscriptChangesResult;
   /** The delta each session answers, by its id; a session not named answers no reading. */
-  readonly deltas?: Readonly<Record<string, { text: string; cursor?: string; from?: string }>>;
+  readonly deltas?: Readonly<
+    Record<
+      string,
+      { lines: readonly string[]; truncated?: boolean; cursor?: string; from?: string }
+    >
+  >;
 }
 
-function fakeTranscripts(fixture: TranscriptFixture = {}): Pick<HostedTranscriptReads, "since"> & {
-  asked: string[];
-} {
+interface FakeTranscripts extends Pick<HostedTranscriptReads, "since" | "changedSince"> {
+  /** The chats read, in order. */
+  readonly asked: string[];
+  /** The instants the changes were asked since, one per provider asked. */
+  readonly askedSince: (number | undefined)[];
+}
+
+function fakeTranscripts(fixture: TranscriptFixture = {}): FakeTranscripts {
   const asked: string[] = [];
+  const askedSince: (number | undefined)[] = [];
   return {
     asked,
+    askedSince,
+    changedSince(_providerId, since) {
+      return Effect.sync(() => {
+        askedSince.push(since);
+        const changes = fixture.changes ?? [];
+        if ("status" in changes) return changes;
+        return { status: ACTION_RESULT_STATUS.ACCEPTED, changes };
+      });
+    },
     since(who) {
       return Effect.sync(() => {
         asked.push(who.providerSessionId);
         const delta = fixture.deltas?.[who.providerSessionId];
         if (!delta) return undefined;
         return {
-          delta: { text: delta.text, truncated: false, status: ACTION_RESULT_STATUS.ACCEPTED },
+          delta: {
+            lines: delta.lines,
+            truncated: delta.truncated ?? false,
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+          },
           ...(delta.cursor !== undefined ? { cursor: delta.cursor } : undefined),
           ...(delta.from !== undefined ? { from: delta.from } : undefined),
         };
@@ -265,7 +280,7 @@ function insertSettledTurn(userId: string, conversationId: string, at: Date): Pr
       const rows = yield* sql`
         insert into turns (user_id, conversation_id, origin, status, queued_at, settled_at)
         values (
-          ${userId}, ${conversationId}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.SETTLED}, ${at}, ${at}
+          ${userId}, ${conversationId}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.SETTLED}, ${at}, ${at}
         )
         returning id
       `;
@@ -274,20 +289,9 @@ function insertSettledTurn(userId: string, conversationId: string, at: Date): Pr
   );
 }
 
-/** Where the opener's bookmark over the roster stands: the instant of the snapshot it last heard through, and the sessions it holds. */
-async function bookmarkOf(
-  userId: string,
-): Promise<{ observedAt: number; sessions: string[] } | undefined> {
-  const bookmark = await database.run(database.store.roster.consumed(userId));
-  if (bookmark.state !== CONSUMED_ROSTER.STANDING) return undefined;
-  const decoded = decodeObservedRoster(bookmark.roster.body);
-  assert.ok(decoded);
-  return {
-    observedAt: bookmark.roster.observedAt,
-    sessions: decoded.providers
-      .flatMap((provider) => provider.observations.map((one) => one.providerSessionId))
-      .sort(),
-  };
+/** Where the opener's mark stands for the account. */
+function markOf(userId: string): Promise<number | undefined> {
+  return database.run(database.store.roster.mark(userId));
 }
 
 const ObservedConversationRowSchema = Schema.Struct({
@@ -319,71 +323,188 @@ async function observedConversations(
   return rows.map((row) => Schema.decodeUnknownSync(ObservedConversationRowSchema)(row));
 }
 
-/** Three passes each moving one session since the opener last visited, so its bookmark stands three passes behind the snapshot. */
-async function threePassesAboutOneSession(): Promise<{ userId: string }> {
-  const working = roster([observation("s-1")]);
-  const waiting = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  const erroring = roster([
-    observation("s-1", {
-      status: SESSION_STATUS.WAITING,
-      detail: { repository: "repo", error: "boom" },
-    }),
-  ]);
-  const complete = roster([observation("s-1", { status: SESSION_STATUS.COMPLETE })]);
-  const userId = await accountSeeing(working);
-  await passed(userId, waiting, NOW + 1_000, NOW);
-  await passed(userId, erroring, NOW + 2_000, NOW + 1_000);
-  await passed(userId, complete, NOW + 3_000, NOW + 2_000);
-  return { userId };
+const ONE_CHAT = roster([observation("s-1")]);
+const ONE_CHAT_NOW = hostedRosterFrom(ONE_CHAT, NOW);
+const ONE_CHANGE = [change("s-1", NOW + 3_000)];
+
+/** An account whose one chat gained words since the opener's mark. */
+async function oneChatChanged(): Promise<{ userId: string }> {
+  return { userId: await accountSeeing(ONE_CHAT) };
 }
 
-test("three passes about one session before one visit become one turn: one eve message carrying the net change, the observed conversation opened, the cursor and the bookmark kept together", async () => {
-  const { userId } = await threePassesAboutOneSession();
+test("two chats that gained messages become two turns, each the envelope and one line per message, the observed conversations opened, the cursors and the mark kept together", async () => {
+  const two = roster([observation("s-1"), observation("s-2")]);
+  const userId = await accountSeeing(two);
   const { eve, handed } = fakeEve();
   const transcripts = fakeTranscripts({
-    deltas: { "s-1": { text: "Developer: go on", cursor: "cursor-1" } },
+    changes: [change("s-2", NOW + 1_000), change("s-1", NOW + 2_000)],
+    deltas: {
+      "s-1": { lines: ["Developer: go on", "Conductor: going"], cursor: "cursor-1" },
+      "s-2": { lines: ["Conductor: done"], cursor: "cursor-2", truncated: true },
+    },
   });
-  const opener = seams({
-    eve,
-    transcripts,
-    roster: hostedRosterFrom(
-      roster([observation("s-1", { status: SESSION_STATUS.COMPLETE })]),
-      NOW + 3_000,
-    ),
-  });
+  const opener = seams({ eve, transcripts, roster: hostedRosterFrom(two, NOW) });
 
   const outcome = await database.run(openObservationTurns(opener, userId));
 
   assert.deepEqual(outcome, {
-    observation: 1,
+    observation: 2,
     holdRelease: 0,
     failed: 0,
-    reseeded: 0,
   } satisfies TurnOpeningOutcome);
-  assert.equal(handed.length, 1);
-  const [turn] = handed;
-  assert.ok(turn);
-  assert.equal(turn.kind, "open");
-  assert.equal(turn.message.turn, BRAIN_HOST_TURN.OBSERVATION);
-  const events = eventsOf(turn.message);
-  // The net change since the bookmark, not the three passes' own: working to complete, the error line that came and went netting to nothing.
+  assert.deepEqual(transcripts.askedSince, [NOW]);
+  // Oldest change first, and every message an `open` of the chat's own conversation.
+  assert.deepEqual(transcripts.asked, ["s-2", "s-1"]);
   assert.deepEqual(
-    events.map((event) => event.provider_session_id),
-    ["s-1"],
+    handed.map((turn) => [turn.kind, turn.message.turn]),
+    [
+      ["open", BRAIN_HOST_TURN.OBSERVATION],
+      ["open", BRAIN_HOST_TURN.OBSERVATION],
+    ],
   );
-  assert.equal(events.filter((event) => event.transcript_delta !== undefined).length, 1);
-  assert.deepEqual(transcripts.asked, ["s-1"]);
+  assert.deepEqual(
+    handed.map((turn) => linesOf(turn.message)),
+    [
+      [
+        `[Conductor · workspace-a-name · Chat s-2 · ${new Date(NOW + 1_000).toISOString()}]`,
+        OBSERVED_MESSAGES_CUT,
+        "Conductor: done",
+      ],
+      [
+        `[Conductor · workspace-a-name · Chat s-1 · ${new Date(NOW + 2_000).toISOString()}]`,
+        "Developer: go on",
+        "Conductor: going",
+      ],
+    ],
+  );
 
   const opened = await observedConversations(userId);
-  assert.equal(opened.length, 1);
-  assert.equal(opened[0]?.providerSessionId, "s-1");
-  assert.equal(turn.message.conversationId, opened[0]?.id);
+  assert.deepEqual(
+    opened.map((row) => row.providerSessionId),
+    ["s-1", "s-2"],
+  );
+  assert.deepEqual(
+    handed.map((turn) => turn.message.conversationId),
+    [opened[1]?.id, opened[0]?.id],
+  );
   assert.equal(await cursorOf(userId, identity("s-1")), "cursor-1");
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW + 3_000, sessions: ["s-1"] });
+  assert.equal(await cursorOf(userId, identity("s-2")), "cursor-2");
+  assert.equal(await markOf(userId), NOW + 2_000);
 
-  const again = await database.run(openObservationTurns(opener, userId));
-  assert.deepEqual(again, { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.equal(handed.length, 1);
+  // Nothing changed since: nothing opened, the mark stands.
+  const again = await database.run(
+    openObservationTurns(seams({ eve, roster: opener.roster }), userId),
+  );
+  assert.deepEqual(again, { observation: 0, holdRelease: 0, failed: 0 });
+  assert.equal(handed.length, 2);
+  assert.equal(await markOf(userId), NOW + 2_000);
+});
+
+test("a delta with no attributed message opens no turn, and moves its cursor and the mark all the same", async () => {
+  const { userId } = await oneChatChanged();
+  const { eve, handed } = fakeEve();
+  const opener = seams({
+    eve,
+    transcripts: fakeTranscripts({
+      changes: ONE_CHANGE,
+      deltas: { "s-1": { lines: [], cursor: "cursor-tools" } },
+    }),
+    roster: ONE_CHAT_NOW,
+  });
+
+  const outcome = await database.run(openObservationTurns(opener, userId));
+
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0 });
+  assert.equal(handed.length, 0);
+  assert.equal(await cursorOf(userId, identity("s-1")), "cursor-tools");
+  assert.equal(await markOf(userId), NOW + 3_000);
+  assert.deepEqual(opener.reports, []);
+});
+
+test("a first visit adopts the newest instant the provider answers and wakes nothing; a first visit answered nothing keeps no mark, so the next visit adopts", async () => {
+  const userId = await database.createUser();
+  await passed(userId, ONE_CHAT, NOW, undefined);
+  const { eve, handed } = fakeEve();
+  const empty = fakeTranscripts({ changes: [] });
+  assert.deepEqual(
+    await database.run(
+      openObservationTurns(seams({ eve, transcripts: empty, roster: ONE_CHAT_NOW }), userId),
+    ),
+    { observation: 0, holdRelease: 0, failed: 0 },
+  );
+  assert.deepEqual(empty.askedSince, [undefined]);
+  assert.equal(await markOf(userId), undefined);
+
+  const transcripts = fakeTranscripts({
+    changes: [change("s-1", NOW - 60_000), change("s-1", NOW - 10_000)],
+    deltas: { "s-1": { lines: ["Developer: old words"], cursor: "cursor-1" } },
+  });
+  assert.deepEqual(
+    await database.run(
+      openObservationTurns(seams({ eve, transcripts, roster: ONE_CHAT_NOW }), userId),
+    ),
+    { observation: 0, holdRelease: 0, failed: 0 },
+  );
+  assert.equal(handed.length, 0);
+  assert.deepEqual(transcripts.asked, []);
+  assert.equal(await cursorOf(userId, identity("s-1")), undefined);
+  assert.equal(await markOf(userId), NOW - 10_000);
+
+  // The next change under the adopted mark wakes as usual.
+  const next = fakeTranscripts({
+    changes: [change("s-1", NOW + 1_000)],
+    deltas: { "s-1": { lines: ["Developer: new words"], cursor: "cursor-2" } },
+  });
+  assert.deepEqual(
+    await database.run(
+      openObservationTurns(seams({ eve, transcripts: next, roster: ONE_CHAT_NOW }), userId),
+    ),
+    { observation: 1, holdRelease: 0, failed: 0 },
+  );
+  assert.deepEqual(next.askedSince, [NOW - 10_000]);
+  assert.equal(await markOf(userId), NOW + 1_000);
+});
+
+test("a provider that would not say what changed wakes nothing and leaves the mark standing, said once", async () => {
+  const { userId } = await oneChatChanged();
+  const { eve, handed } = fakeEve();
+  const refused = seams({
+    eve,
+    transcripts: fakeTranscripts({
+      changes: {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason: "Conductor rejected the configured API key.",
+      },
+    }),
+    roster: ONE_CHAT_NOW,
+  });
+  assert.deepEqual(await database.run(openObservationTurns(refused, userId)), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.equal(handed.length, 0);
+  assert.equal(await markOf(userId), NOW);
+  assert.equal(refused.reports.length, 1);
+
+  const throwing = seams({
+    eve,
+    transcripts: {
+      ...fakeTranscripts(),
+      changedSince: () =>
+        Effect.sync(() => {
+          throw new Error("Conductor did not answer");
+        }),
+    },
+    roster: ONE_CHAT_NOW,
+  });
+  assert.deepEqual(await database.run(openObservationTurns(throwing, userId)), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.equal(await markOf(userId), NOW);
+  assert.equal(throwing.reports.length, 1);
 });
 
 /**
@@ -415,13 +536,19 @@ function sessionReadsRefused(sql: SqlClient.SqlClient): SqlClient.SqlClient {
   });
 }
 
-test("a handover the store refuses is one refused send, said and counted, rather than the end of the account's visit", async () => {
-  const { userId } = await threePassesAboutOneSession();
-  const { eve, handed } = fakeEve();
-  const opener = seams({
-    eve,
-    roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
+/** The fixture behind most single-chat tests: one change, one line, one cursor. */
+function oneChatTranscripts(overrides: Partial<TranscriptFixture> = {}) {
+  return fakeTranscripts({
+    changes: ONE_CHANGE,
+    deltas: { "s-1": { lines: ["Developer: go on"], cursor: "cursor-1" } },
+    ...overrides,
   });
+}
+
+test("a handover the store refuses is one refused send, said and counted, rather than the end of the account's visit", async () => {
+  const { userId } = await oneChatChanged();
+  const { eve, handed } = fakeEve();
+  const opener = seams({ eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW });
 
   const outcome = await database.run(
     Effect.flatMap(SqlClient.SqlClient, (sql) =>
@@ -437,28 +564,32 @@ test("a handover the store refuses is one refused send, said and counted, rather
     observation: 0,
     holdRelease: 0,
     failed: 1,
-    reseeded: 0,
   } satisfies TurnOpeningOutcome);
   assert.equal(handed.length, 0);
   assert.equal(opener.reports.length, 1);
+  assert.equal(await markOf(userId), NOW);
 });
 
 test("a conversation already running in an eve session is sent to, not reopened; one eve has retired is opened again", async () => {
-  const { userId } = await threePassesAboutOneSession();
+  const { userId } = await oneChatChanged();
   const conversationId = await database.run(
     database.store.directory.observed(userId, identity("s-1"), NOW),
   );
   assert.ok(conversationId);
   await setConversationRuntimeSessionId(conversationId, SESSION_ID);
   const current = fakeEve();
-  const rosterNow = hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000);
-  await database.run(openObservationTurns(seams({ eve: current.eve, roster: rosterNow }), userId));
+  await database.run(
+    openObservationTurns(
+      seams({ eve: current.eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW }),
+      userId,
+    ),
+  );
   assert.deepEqual(
     current.handed.map((turn) => [turn.kind, turn.sessionId]),
     [["send", SESSION_ID]],
   );
 
-  const { userId: retiredUser } = await threePassesAboutOneSession();
+  const { userId: retiredUser } = await oneChatChanged();
   const retiredConversation = await database.run(
     database.store.directory.observed(retiredUser, identity("s-1"), NOW),
   );
@@ -471,14 +602,17 @@ test("a conversation already running in an eve session is sent to, not reopened;
       : { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: reopened, deliveryId: "delivery-1" },
   );
   const outcome = await database.run(
-    openObservationTurns(seams({ eve: retired.eve, roster: rosterNow }), retiredUser),
+    openObservationTurns(
+      seams({ eve: retired.eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW }),
+      retiredUser,
+    ),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
   assert.deepEqual(
     retired.handed.map((turn) => turn.kind),
     ["send", "open"],
   );
-  assert.equal((await bookmarkOf(retiredUser))?.observedAt, NOW + 3_000);
+  assert.equal(await markOf(retiredUser), NOW + 3_000);
   // The session eve opened is the conversation's at once, forward-only, so a second handover
   // landing before eve's own start has claimed it sends into this session rather than opening another.
   assert.deepEqual(
@@ -487,31 +621,63 @@ test("a conversation already running in an eve session is sent to, not reopened;
   );
 });
 
-test("a turn eve refuses leaves the cursor and the bookmark standing, and nothing of the visit is recorded", async () => {
-  const { userId } = await threePassesAboutOneSession();
+test("a turn eve refuses leaves the cursor and the mark standing, and nothing of the visit is recorded", async () => {
+  const { userId } = await oneChatChanged();
   const refusing = fakeEve(() => ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
   const opener = seams({
     eve: refusing.eve,
-    transcripts: fakeTranscripts({ deltas: { "s-1": { text: "words", cursor: "cursor-1" } } }),
-    roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
+    transcripts: oneChatTranscripts(),
+    roster: ONE_CHAT_NOW,
   });
 
   const outcome = await database.run(openObservationTurns(opener, userId));
 
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 1 });
   assert.equal(refusing.handed.length, 1);
   assert.equal(await cursorOf(userId, identity("s-1")), undefined);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
+  assert.equal(await markOf(userId), NOW);
   assert.equal(opener.reports.length, 1);
 
   const throwing = fakeEve(() => {
     throw new Error("eve is unreachable");
   });
   const thrown = await database.run(
-    openObservationTurns(seams({ eve: throwing.eve, roster: opener.roster }), userId),
+    openObservationTurns(
+      seams({ eve: throwing.eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW }),
+      userId,
+    ),
   );
-  assert.deepEqual(thrown, { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 });
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
+  assert.deepEqual(thrown, { observation: 0, holdRelease: 0, failed: 1 });
+  assert.equal(await markOf(userId), NOW);
+});
+
+test("a refusal on the second chat ends the visit with nothing committed: the first chat's cursor and the mark stand, and the next tick reads both again", async () => {
+  const two = roster([observation("s-1"), observation("s-2")]);
+  const userId = await accountSeeing(two);
+  const refusingSecond = fakeEve((handed) =>
+    handed.message.message.includes("Chat s-2")
+      ? { outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }
+      : ACCEPTING(handed),
+  );
+  const opener = seams({
+    eve: refusingSecond.eve,
+    transcripts: fakeTranscripts({
+      changes: [change("s-1", NOW + 1_000), change("s-2", NOW + 2_000)],
+      deltas: {
+        "s-1": { lines: ["Developer: one"], cursor: "cursor-1" },
+        "s-2": { lines: ["Developer: two"], cursor: "cursor-2" },
+      },
+    }),
+    roster: hostedRosterFrom(two, NOW),
+  });
+
+  const outcome = await database.run(openObservationTurns(opener, userId));
+
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 1 });
+  assert.equal(refusingSecond.handed.length, 2);
+  assert.equal(await cursorOf(userId, identity("s-1")), undefined);
+  assert.equal(await cursorOf(userId, identity("s-2")), undefined);
+  assert.equal(await markOf(userId), NOW);
 });
 
 /**
@@ -537,8 +703,8 @@ function transactionsFailingAfter(sql: SqlClient.SqlClient): SqlClient.SqlClient
   });
 }
 
-test("the cursor and the bookmark move in one transaction: a write that fails after eve accepted leaves both standing for the next tick", async () => {
-  const { userId } = await threePassesAboutOneSession();
+test("the cursor and the mark move in one transaction: a write that fails after eve accepted leaves both standing for the next tick", async () => {
+  const { userId } = await oneChatChanged();
   const { eve } = fakeEve();
   // The real database, every transaction of which fails after its body ran:
   // a write made outside the transaction lands anyway, which is what this
@@ -549,474 +715,187 @@ test("the cursor and the bookmark move in one transaction: a write that fails af
         Effect.provideService(effect, SqlClient.SqlClient, transactionsFailingAfter(sql)),
       ),
     );
-  const opener = seams({
-    eve,
-    transcripts: fakeTranscripts({ deltas: { "s-1": { text: "words", cursor: "cursor-1" } } }),
-    roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
-  });
+  const opener = seams({ eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW });
 
   await assert.rejects(underFailingTransactions(openObservationTurns(opener, userId)));
 
   assert.equal(await cursorOf(userId, identity("s-1")), undefined);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
+  assert.equal(await markOf(userId), NOW);
 });
 
-test("a transcript read that throws costs the turn its delta and nothing else; the cursor it would have moved stands", async () => {
-  const { userId } = await threePassesAboutOneSession();
+test("a transcript the provider would not answer ends the visit with nothing committed, so the next tick reads the chat again with its words", async () => {
+  const { userId } = await oneChatChanged();
   const { eve, handed } = fakeEve();
-  const opener = seams({
+  const throwing = seams({
     eve,
     transcripts: {
+      ...fakeTranscripts({ changes: ONE_CHANGE }),
       since: () =>
         Effect.sync(() => {
           throw new Error("Conductor did not answer");
         }),
     },
-    roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000),
+    roster: ONE_CHAT_NOW,
   });
-  const outcome = await database.run(openObservationTurns(opener, userId));
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.equal(
-    eventsOf(
-      handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
-    ).some((event) => event.transcript_delta !== undefined),
-    false,
-  );
-  assert.equal(await cursorOf(userId, identity("s-1")), undefined);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 3_000);
-  assert.equal(opener.reports.length, 1);
+  assert.deepEqual(await database.run(openObservationTurns(throwing, userId)), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 1,
+  });
+  assert.equal(handed.length, 0);
+  assert.equal(await markOf(userId), NOW);
+  assert.equal(throwing.reports.length, 1);
+
+  const rejected = seams({
+    eve,
+    transcripts: {
+      ...fakeTranscripts({ changes: ONE_CHANGE }),
+      since: () =>
+        Effect.succeed({
+          delta: { lines: [], truncated: false, status: ACTION_RESULT_STATUS.REJECTED },
+        }),
+    },
+    roster: ONE_CHAT_NOW,
+  });
+  assert.deepEqual(await database.run(openObservationTurns(rejected, userId)), {
+    observation: 0,
+    holdRelease: 0,
+    failed: 1,
+  });
+  assert.equal(await markOf(userId), NOW);
+  assert.equal(rejected.reports.length, 1);
 });
 
 test("the bound is per account: two accounts under a bound of one each get their one turn, and neither waits on the other", async () => {
-  const before = roster([observation("s-1")]);
-  const after = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  const accounts = await Promise.all(
-    [0, 1].map(async () => {
-      const userId = await accountSeeing(before);
-      await passed(userId, after, NOW + 1_000, NOW);
-      return userId;
-    }),
-  );
-  const rosterNow = hostedRosterFrom(after, NOW + 1_000);
+  const accounts = await Promise.all([0, 1].map(() => accountSeeing(ONE_CHAT)));
   for (const userId of accounts) {
     const { eve, handed } = fakeEve();
     const outcome = await database.run(
-      openObservationTurns(seams({ eve, roster: rosterNow }), userId, {
-        limit: 1,
-      }),
+      openObservationTurns(
+        seams({ eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW }),
+        userId,
+        {
+          limit: 1,
+        },
+      ),
     );
-    assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+    assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
     assert.equal(handed.length, 1);
-    assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 1_000);
+    assert.equal(await markOf(userId), NOW + 3_000);
   }
 });
 
-test("within an account the bound wakes the oldest changes first and leaves the rest in the bookmark to derive again; a change wider than the bound is cut to it, reported, and finished on the next tick", async () => {
-  const one = roster([observation("s-1")]);
+test("within an account the bound takes the oldest changes first and holds the rest back, reported; the mark stops strictly before the first held-back instant, so a tie is never jumped", async () => {
   const three = roster([observation("s-1"), observation("s-2"), observation("s-3")]);
-  const userId = await accountSeeing(one);
-  await passed(userId, roster([observation("s-1"), observation("s-2")]), NOW + 1_000, NOW);
-  await passed(userId, three, NOW + 2_000, NOW + 1_000);
-  const rosterNow = hostedRosterFrom(three, NOW + 2_000);
+  const rosterNow = hostedRosterFrom(three, NOW);
+  const deltas = {
+    "s-1": { lines: ["Developer: one"], cursor: "c-1" },
+    "s-2": { lines: ["Developer: two"], cursor: "c-2" },
+    "s-3": { lines: ["Developer: three"], cursor: "c-3" },
+  };
 
+  // Distinct instants: the mark moves to the last taken.
+  const spaced = await accountSeeing(three);
   const bounded = fakeEve();
-  const cut = seams({ eve: bounded.eve, roster: rosterNow });
-  const outcome = await database.run(openObservationTurns(cut, userId, { limit: 1 }));
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
+  const cut = seams({
+    eve: bounded.eve,
+    transcripts: fakeTranscripts({
+      changes: [change("s-3", NOW + 1_000), change("s-1", NOW + 2_000), change("s-2", NOW + 3_000)],
+      deltas,
+    }),
+    roster: rosterNow,
+  });
+  assert.deepEqual(await database.run(openObservationTurns(cut, spaced, { limit: 2 })), {
+    observation: 2,
+    holdRelease: 0,
+    failed: 0,
+  });
   assert.deepEqual(
-    bounded.handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-2"]],
+    bounded.handed.map((turn) => linesOf(turn.message)[1]),
+    ["Developer: three", "Developer: one"],
   );
   assert.equal(cut.reports.length, 1);
-  // The bookmark carries s-2 and still lacks s-3, so s-3 derives again as appeared.
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW + 2_000, sessions: ["s-1", "s-2"] });
+  assert.equal(await markOf(spaced), NOW + 2_000);
+  assert.equal(await cursorOf(spaced, identity("s-2")), undefined);
 
-  const next = fakeEve();
+  // A tie between the last taken and the first held back: the mark stops before it.
+  const tied = await accountSeeing(three);
+  const tiedEve = fakeEve();
   await database.run(
-    openObservationTurns(seams({ eve: next.eve, roster: rosterNow }), userId, { limit: 1 }),
-  );
-  assert.deepEqual(
-    next.handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-3"]],
-  );
-  assert.deepEqual(await bookmarkOf(userId), {
-    observedAt: NOW + 2_000,
-    sessions: ["s-1", "s-2", "s-3"],
-  });
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve: fakeEve().eve, roster: rosterNow }), userId),
-    ),
-    {
-      observation: 0,
-      holdRelease: 0,
-      failed: 0,
-      reseeded: 0,
-    },
-  );
-
-  const wide = await accountSeeing(roster([]));
-  await passed(wide, three, NOW + 1_000, NOW);
-  const cutting = fakeEve();
-  const wideOutcome = await database.run(
-    openObservationTurns(seams({ eve: cutting.eve, roster: rosterNow }), wide, { limit: 2 }),
-  );
-  assert.deepEqual(wideOutcome, { observation: 2, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.equal(cutting.handed.length, 2);
-  assert.deepEqual(await bookmarkOf(wide), { observedAt: NOW + 1_000, sessions: ["s-1", "s-2"] });
-});
-
-test("a bookmark this build cannot open is replaced by the snapshot over its own instant, so wakes resume on the next change instead of stopping for good", async () => {
-  const userId = await database.createUser();
-  const before = roster([observation("s-1")]);
-  await passed(userId, before, NOW, undefined);
-  // A bookmark sealed under another account: it stands, and this account's seal cannot open it.
-  const other = await database.createUser();
-  await database.run(
-    keepConsumedRoster(
-      userSeal(payloadKeyRing(TEST_PAYLOAD_SECRET), other),
-      userId,
-      { body: JSON.stringify(roster([])), observedAt: NOW - 60_000 },
-      undefined,
-    ),
-  );
-  assert.equal(
-    (await database.run(database.store.roster.consumed(userId))).state,
-    CONSUMED_ROSTER.UNREADABLE,
-  );
-
-  const { eve, handed } = fakeEve();
-  const first = seams({ eve, roster: hostedRosterFrom(before, NOW) });
-  assert.deepEqual(await database.run(openObservationTurns(first, userId)), {
-    observation: 0,
-    holdRelease: 0,
-    failed: 0,
-    reseeded: 0,
-  });
-  assert.equal(handed.length, 0);
-  assert.equal(first.reports.length, 1);
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW, sessions: ["s-1"] });
-
-  const after = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  await passed(userId, after, NOW + 1_000, NOW);
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, NOW + 1_000) }), userId),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.equal(handed.length, 1);
-});
-
-test("a change no wake is derived from, a workspace coming or going, settles the bookmark on the visit that saw it rather than deriving again every tick", async () => {
-  const before = roster([observation("s-1")]);
-  const after = roster([
-    observation("s-1", { workspace: { providerWorkspaceId: "workspace-b", name: "b" } }),
-  ]);
-  const userId = await accountSeeing(before);
-  await passed(userId, after, NOW + 1_000, NOW);
-  const { eve, handed } = fakeEve();
-  const rosterNow = hostedRosterFrom(after, NOW + 1_000);
-  assert.deepEqual(
-    await database.run(openObservationTurns(seams({ eve, roster: rosterNow }), userId)),
-    {
-      observation: 0,
-      holdRelease: 0,
-      failed: 0,
-      reseeded: 0,
-    },
-  );
-  assert.equal(handed.length, 0);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 1_000);
-  // The bookmark now holds the change: the next visit derives nothing and writes nothing.
-  const bookmark = await database.run(database.store.roster.consumed(userId));
-  assert.equal(bookmark.state, CONSUMED_ROSTER.STANDING);
-  assert.deepEqual(
-    bookmark.state === CONSUMED_ROSTER.STANDING
-      ? decodeObservedRoster(bookmark.roster.body)
-      : undefined,
-    after,
-  );
-});
-
-test("a provider key replaced since the bookmark wakes nothing: the bookmark settles on the new key's roster, and the next change under it wakes as usual", async () => {
-  const userId = await accountSeeing(roster([observation("s-1"), observation("s-2")]));
-  const rekeyed: ObservedRoster = {
-    version: 1,
-    providers: [
-      {
-        providerId: PROVIDER,
-        keyFingerprint: "g",
-        observations: [observation("s-9")],
-        projects: [],
-      },
-    ],
-  };
-  await passed(userId, rekeyed, NOW + 1_000, NOW);
-  const { eve, handed } = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(rekeyed, NOW + 1_000) }), userId),
-    ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.equal(handed.length, 0);
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW + 1_000, sessions: ["s-9"] });
-
-  const moved: ObservedRoster = {
-    version: 1,
-    providers: [
-      {
-        providerId: PROVIDER,
-        keyFingerprint: "g",
-        observations: [observation("s-9", { status: SESSION_STATUS.WAITING })],
-        projects: [],
-      },
-    ],
-  };
-  await passed(userId, moved, NOW + 2_000, NOW + 1_000);
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(moved, NOW + 2_000) }), userId),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(
-    handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-9"]],
-  );
-});
-
-test("a snapshot this build cannot open wakes nothing and is said, rather than failing the account's opening until a pass replaces it", async () => {
-  const userId = await accountSeeing(roster([observation("s-1")]));
-  const other = await database.createUser();
-  await database.run(
-    writeRosterSnapshot(userSeal(payloadKeyRing(TEST_PAYLOAD_SECRET), other), userId, {
-      body: JSON.stringify(roster([observation("s-1")])),
-      observedAt: NOW + 1_000,
-    }),
-  );
-  const { eve, handed } = fakeEve();
-  const opener = seams({
-    eve,
-    roster: hostedRosterFrom(roster([observation("s-1")]), NOW + 1_000),
-  });
-  assert.deepEqual(await database.run(openObservationTurns(opener, userId)), {
-    observation: 0,
-    holdRelease: 0,
-    failed: 0,
-    reseeded: 0,
-  });
-  assert.equal(handed.length, 0);
-  assert.equal(opener.reports.length, 1);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
-});
-
-test("a bookmark first stands where the snapshot does: an account the opener has never visited is adopted whole and woken for nothing, and derived from on the next change", async () => {
-  const userId = await database.createUser();
-  const before = roster([observation("s-1"), observation("s-2")]);
-  await passed(userId, before, NOW, undefined);
-  const { eve, handed } = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(before, NOW) }), userId),
-    ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.equal(handed.length, 0);
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW, sessions: ["s-1", "s-2"] });
-
-  const after = roster([
-    observation("s-1", { status: SESSION_STATUS.WAITING }),
-    observation("s-2"),
-  ]);
-  await passed(userId, after, NOW + 1_000, NOW);
-  const outcome = await database.run(
-    openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, NOW + 1_000) }), userId),
-  );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.deepEqual(
-    handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-1"]],
-  );
-});
-
-/** The bookmark as it stands, decoded; undefined where none stands or this build cannot read it. */
-async function bookmarkRoster(userId: string): Promise<ObservedRoster | undefined> {
-  const bookmark = await database.run(database.store.roster.consumed(userId));
-  return bookmark.state === CONSUMED_ROSTER.STANDING
-    ? decodeObservedRoster(bookmark.roster.body)
-    : undefined;
-}
-
-test("a bookmark trailing the snapshot past the stale gap is reseeded from the snapshot and wakes nothing: the changes across the gap count as one reseed, not as news, and the next change under it wakes as usual", async () => {
-  const before = roster([observation("s-1"), observation("s-2")]);
-  const userId = await accountSeeing(before);
-  // The schedule was out for longer than the gap; in that time one session moved, one vanished, and one appeared.
-  const resumedAt = NOW + OBSERVATION_TICK.STALE_GAP_MS + 1;
-  const after = roster([
-    observation("s-1", { status: SESSION_STATUS.WAITING }),
-    observation("s-3"),
-  ]);
-  await passed(userId, after, resumedAt, NOW);
-  const { eve, handed } = fakeEve();
-  const visit = seams({ eve, roster: hostedRosterFrom(after, resumedAt) });
-  assert.deepEqual(await database.run(openAccountTurns(visit, userId)), {
-    observation: 0,
-    holdRelease: 0,
-    failed: 0,
-    reseeded: 1,
-  });
-  assert.equal(handed.length, 0);
-  assert.equal(visit.reports.length, 1);
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: resumedAt, sessions: ["s-1", "s-3"] });
-  assert.deepEqual(await bookmarkRoster(userId), after);
-  assert.deepEqual(await observedConversations(userId), []);
-
-  // A minute on, one more session moves: news again, and the reseed is not counted twice.
-  const later = roster([
-    observation("s-1", { status: SESSION_STATUS.WAITING }),
-    observation("s-3", { status: SESSION_STATUS.WAITING }),
-  ]);
-  await passed(userId, later, resumedAt + 60_000, resumedAt);
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(seams({ eve, roster: hostedRosterFrom(later, resumedAt + 60_000) }), userId),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(
-    handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-3"]],
-  );
-  assert.equal((await bookmarkOf(userId))?.observedAt, resumedAt + 60_000);
-});
-
-test("a roster unchanged for longer than the stale gap is idle, not an outage: each empty visit keeps the bookmark level with the snapshot, no reseed is counted, and the first change after the idle stretch wakes", async () => {
-  const idle = roster([observation("s-1"), observation("s-2")]);
-  const userId = await accountSeeing(idle);
-  const { eve, handed } = fakeEve();
-  // One pass a minute for longer than the gap, each reading the same roster.
-  const minutes = Math.ceil(OBSERVATION_TICK.STALE_GAP_MS / 60_000) + 1;
-  let previous = NOW;
-  for (let minute = 1; minute <= minutes; minute += 1) {
-    const at = NOW + minute * 60_000;
-    await passed(userId, idle, at, previous);
-    const visit = seams({ eve, roster: hostedRosterFrom(idle, at) });
-    assert.deepEqual(await database.run(openAccountTurns(visit, userId)), {
-      observation: 0,
-      holdRelease: 0,
-      failed: 0,
-      reseeded: 0,
-    });
-    assert.equal(visit.reports.length, 0);
-    assert.equal((await bookmarkOf(userId))?.observedAt, at);
-    previous = at;
-  }
-  assert.equal(handed.length, 0);
-
-  const changed = roster([
-    observation("s-1", { status: SESSION_STATUS.WAITING }),
-    observation("s-2"),
-  ]);
-  const at = previous + 60_000;
-  await passed(userId, changed, at, previous);
-  assert.deepEqual(
-    await database.run(
-      openAccountTurns(seams({ eve, roster: hostedRosterFrom(changed, at) }), userId),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.deepEqual(
-    handed.map((turn) => eventsOf(turn.message).map((event) => event.provider_session_id)),
-    [["s-1"]],
-  );
-});
-
-test("a visit whose pass left the snapshot standing, with the bookmark already level, writes nothing", async () => {
-  const idle = roster([observation("s-1")]);
-  const userId = await accountSeeing(idle);
-  const { eve } = fakeEve();
-  const visit = seams({ eve, roster: hostedRosterFrom(idle, NOW) });
-  assert.deepEqual(await database.run(openObservationTurns(visit, userId)), {
-    observation: 0,
-    holdRelease: 0,
-    failed: 0,
-    reseeded: 0,
-  });
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: NOW, sessions: ["s-1"] });
-});
-
-test("a bookmark trailing the snapshot by exactly the stale gap is still news: the change wakes and nothing is reseeded", async () => {
-  const userId = await accountSeeing(roster([observation("s-1")]));
-  const at = NOW + OBSERVATION_TICK.STALE_GAP_MS;
-  const after = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  await passed(userId, after, at, NOW);
-  const { eve, handed } = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(after, at) }), userId),
-    ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
-  );
-  assert.equal(handed.length, 1);
-  assert.equal((await bookmarkOf(userId))?.observedAt, at);
-});
-
-test("a change eve refused for longer than the stale gap is history too: once eve answers, the bookmark is reseeded from the snapshot and the change is not handed over", async () => {
-  const before = roster([observation("s-1")]);
-  const userId = await accountSeeing(before);
-  const changed = roster([observation("s-1", { status: SESSION_STATUS.WAITING })]);
-  await passed(userId, changed, NOW + 60_000, NOW);
-  const refusing = fakeEve(() => ({ outcome: EVE_SEND_OUTCOME.FAILED, status: 503 }));
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(
-        seams({ eve: refusing.eve, roster: hostedRosterFrom(changed, NOW + 60_000) }),
-        userId,
-      ),
-    ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
-  );
-  assert.equal(refusing.handed.length, 1);
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
-
-  // Passes kept running with nothing more changing; eve answers again only after the gap.
-  const resumedAt = NOW + OBSERVATION_TICK.STALE_GAP_MS + 60_000;
-  await passed(userId, changed, resumedAt, NOW + 60_000);
-  const { eve, handed } = fakeEve();
-  assert.deepEqual(
-    await database.run(
-      openObservationTurns(seams({ eve, roster: hostedRosterFrom(changed, resumedAt) }), userId),
-    ),
-    { observation: 0, holdRelease: 0, failed: 0, reseeded: 1 },
-  );
-  assert.equal(handed.length, 0);
-  assert.deepEqual(await bookmarkOf(userId), { observedAt: resumedAt, sessions: ["s-1"] });
-});
-
-test("a change about a session the snapshot no longer holds still wakes its conversation, with what the diff last knew of it and no transcript read", async () => {
-  const before = roster([observation("s-1")]);
-  const gone = roster([]);
-  const userId = await accountSeeing(before);
-  await passed(userId, gone, NOW + 1_000, NOW);
-  const { eve, handed } = fakeEve();
-  const transcripts = fakeTranscripts({ deltas: { "s-1": { text: "late words", cursor: "c" } } });
-  const outcome = await database.run(
     openObservationTurns(
-      seams({ eve, transcripts, roster: hostedRosterFrom(gone, NOW + 1_000) }),
-      userId,
+      seams({
+        eve: tiedEve.eve,
+        transcripts: fakeTranscripts({
+          changes: [
+            change("s-1", NOW + 1_000),
+            change("s-2", NOW + 2_000),
+            change("s-3", NOW + 2_000),
+          ],
+          deltas,
+        }),
+        roster: rosterNow,
+      }),
+      tied,
+      { limit: 2 },
     ),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
-  const events = eventsOf(
-    handed[0]?.message ?? { conversationId: "", turn: BRAIN_HOST_TURN.OBSERVATION, message: "" },
+  assert.equal(tiedEve.handed.length, 2);
+  assert.equal(await markOf(tied), NOW + 1_000);
+
+  // Every taken chat at the held-back instant: the mark cannot move, and the next tick reads them again.
+  const stuck = await accountSeeing(three);
+  const stuckEve = fakeEve();
+  await database.run(
+    openObservationTurns(
+      seams({
+        eve: stuckEve.eve,
+        transcripts: fakeTranscripts({
+          changes: [
+            change("s-1", NOW + 2_000),
+            change("s-2", NOW + 2_000),
+            change("s-3", NOW + 2_000),
+          ],
+          deltas,
+        }),
+        roster: rosterNow,
+      }),
+      stuck,
+      { limit: 2 },
+    ),
   );
-  assert.equal(events.length, 1);
-  assert.deepEqual(transcripts.asked, ["s-1"]);
+  assert.equal(stuckEve.handed.length, 2);
+  assert.equal(await markOf(stuck), NOW);
+  assert.equal(await cursorOf(stuck, identity("s-1")), "c-1");
 });
 
-/** An eve that, while taking the message, sees another pass keep the session's bookmark, as a pass that ran long into the next tick would. */
+test("a chat the roster no longer holds is named by its id alone; one the transcript seam does not answer for is covered by the mark and read no words", async () => {
+  const userId = await accountSeeing(ONE_CHAT);
+  const { eve, handed } = fakeEve();
+  const transcripts = fakeTranscripts({
+    changes: [change("s-gone", NOW + 1_000), change("s-silent", NOW + 2_000)],
+    deltas: { "s-gone": { lines: ["Developer: still here"], cursor: "c-gone" } },
+  });
+  const opener = seams({ eve, transcripts, roster: ONE_CHAT_NOW });
+
+  assert.deepEqual(await database.run(openObservationTurns(opener, userId)), {
+    observation: 1,
+    holdRelease: 0,
+    failed: 0,
+  });
+  assert.deepEqual(
+    handed.map((turn) => linesOf(turn.message)),
+    [
+      [
+        `[Conductor · chat s-gone · ${new Date(NOW + 1_000).toISOString()}]`,
+        "Developer: still here",
+      ],
+    ],
+  );
+  assert.deepEqual(transcripts.asked, ["s-gone", "s-silent"]);
+  assert.equal(await markOf(userId), NOW + 2_000);
+});
+
+/** An eve that, while taking the message, sees another visit keep a bookmark, as a visit that ran long into the next tick would. */
 function eveRacedBy(keep: () => Promise<void>) {
   return fakeEve((handed) => {
     void keep();
@@ -1024,42 +903,42 @@ function eveRacedBy(keep: () => Promise<void>) {
   });
 }
 
-test("a bookmark is kept only over the one the read began from, so a pass that ran long cannot put a later pass's bookmark back", async () => {
+test("a cursor is kept only over the one the read began from, so a visit that ran long cannot put a later visit's cursor back", async () => {
   const who = identity("s-1");
-  const rosterNow = hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000);
   const at = new Date(NOW);
   const keep = (userId: string, cursor: string, from: string | undefined) =>
     database.run(keepTranscriptCursor(userId, who, cursor, from, at));
 
-  // Read from no bookmark; another pass kept one before this pass's transaction.
-  const { userId: first } = await threePassesAboutOneSession();
+  // Read from no bookmark; another visit kept one before this visit's transaction.
+  const { userId: first } = await oneChatChanged();
   const raced = eveRacedBy(() => keep(first, "cursor-later", undefined));
   const slow = seams({
     eve: raced.eve,
-    transcripts: fakeTranscripts({ deltas: { "s-1": { text: "words", cursor: "cursor-slow" } } }),
-    roster: rosterNow,
+    transcripts: oneChatTranscripts({
+      deltas: { "s-1": { lines: ["words"], cursor: "cursor-slow" } },
+    }),
+    roster: ONE_CHAT_NOW,
   });
   assert.deepEqual(await database.run(openObservationTurns(slow, first)), {
     observation: 1,
     holdRelease: 0,
     failed: 0,
-    reseeded: 0,
   });
   assert.equal(await cursorOf(first, who), "cursor-later");
-  assert.equal((await bookmarkOf(first))?.observedAt, NOW + 3_000);
+  assert.equal(await markOf(first), NOW + 3_000);
 
-  // Read from a bookmark another pass then moved on.
-  const { userId: second } = await threePassesAboutOneSession();
+  // Read from a bookmark another visit then moved on.
+  const { userId: second } = await oneChatChanged();
   await keep(second, "cursor-later", undefined);
   const racedAgain = eveRacedBy(() => keep(second, "cursor-latest", "cursor-later"));
   await database.run(
     openObservationTurns(
       seams({
         eve: racedAgain.eve,
-        transcripts: fakeTranscripts({
-          deltas: { "s-1": { text: "words", cursor: "cursor-slow", from: "cursor-later" } },
+        transcripts: oneChatTranscripts({
+          deltas: { "s-1": { lines: ["words"], cursor: "cursor-slow", from: "cursor-later" } },
         }),
-        roster: rosterNow,
+        roster: ONE_CHAT_NOW,
       }),
       second,
     ),
@@ -1067,16 +946,16 @@ test("a bookmark is kept only over the one the read began from, so a pass that r
   assert.equal(await cursorOf(second, who), "cursor-latest");
 
   // Unraced, the bookmark moves over the one the read began from.
-  const { userId: third } = await threePassesAboutOneSession();
+  const { userId: third } = await oneChatChanged();
   await keep(third, "cursor-0", undefined);
   await database.run(
     openObservationTurns(
       seams({
         eve: fakeEve().eve,
-        transcripts: fakeTranscripts({
-          deltas: { "s-1": { text: "words", cursor: "cursor-1", from: "cursor-0" } },
+        transcripts: oneChatTranscripts({
+          deltas: { "s-1": { lines: ["words"], cursor: "cursor-1", from: "cursor-0" } },
         }),
-        roster: rosterNow,
+        roster: ONE_CHAT_NOW,
       }),
       third,
     ),
@@ -1084,21 +963,19 @@ test("a bookmark is kept only over the one the read began from, so a pass that r
   assert.equal(await cursorOf(third, who), "cursor-1");
 });
 
-test("the bookmark is kept only over the one the read began from, so a visit that ran long cannot put a later visit's bookmark back", async () => {
-  const rosterNow = hostedRosterFrom(roster([observation("s-1")]), NOW + 3_000);
-  const { userId } = await threePassesAboutOneSession();
-  const laterBookmark = {
-    body: JSON.stringify(roster([observation("s-1")])),
-    observedAt: NOW + 9_000,
-  };
+test("the mark is kept only over the one the visit read, so a visit that ran long cannot put a later visit's mark back", async () => {
+  const { userId } = await oneChatChanged();
   const raced = eveRacedBy(() =>
-    database.run(database.store.roster.keepConsumed(userId, laterBookmark, NOW)).then(() => {}),
+    database.run(database.store.roster.keepMark(userId, NOW + 9_000, NOW, NOW)).then(() => {}),
   );
   const outcome = await database.run(
-    openObservationTurns(seams({ eve: raced.eve, roster: rosterNow }), userId),
+    openObservationTurns(
+      seams({ eve: raced.eve, transcripts: oneChatTranscripts(), roster: ONE_CHAT_NOW }),
+      userId,
+    ),
   );
-  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 });
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW + 9_000);
+  assert.deepEqual(outcome, { observation: 1, holdRelease: 0, failed: 0 });
+  assert.equal(await markOf(userId), NOW + 9_000);
 });
 
 /** The hold-release drain. */
@@ -1229,7 +1106,7 @@ test("a conversation's queued hold releases become one hold_release message list
 
   const outcome = await database.run(openHoldReleaseTurns(opener, userId));
 
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0 });
   assert.equal(handed.length, 1);
   const [turn] = handed;
   assert.ok(turn);
@@ -1245,7 +1122,6 @@ test("a conversation's queued hold releases become one hold_release message list
     observation: 0,
     holdRelease: 0,
     failed: 0,
-    reseeded: 0,
   });
   assert.equal(handed.length, 1);
 });
@@ -1273,7 +1149,7 @@ test("a hold-release row the relay has moved to running is the run's record and 
     ),
   );
 
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 0, failed: 0 });
   assert.deepEqual(handed, []);
   const rows = await database.run(
     Effect.gen(function* () {
@@ -1293,7 +1169,7 @@ test("a hold release eve refuses leaves its rows queued; one whose briefings a h
     await database.run(
       openHoldReleaseTurns(seams({ eve: refusing.eve, roster: rosterNow }), userId),
     ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+    { observation: 0, holdRelease: 0, failed: 1 },
   );
   assert.deepEqual(await queuedRows(refused.conversationId), refused.queued);
 
@@ -1311,57 +1187,73 @@ test("a hold release eve refuses leaves its rows queued; one whose briefings a h
 });
 
 test("an account's opening takes the hold releases first and the observations under what remains of one bound", async () => {
-  const before = roster([observation("s-1"), observation("s-2")]);
-  const after = roster([
-    observation("s-1"),
-    observation("s-2", { status: SESSION_STATUS.WAITING }),
-  ]);
-  const userId = await accountSeeing(before);
-  await passed(userId, after, NOW + 1_000, NOW);
+  const userId = await accountSeeing(roster([observation("s-1"), observation("s-2")]));
   await releasedConversation(userId, "s-1", { rows: 1 });
-  const rosterNow = hostedRosterFrom(after, NOW + 1_000);
+  const rosterNow = hostedRosterFrom(roster([observation("s-1"), observation("s-2")]), NOW);
+  const transcripts = () =>
+    fakeTranscripts({
+      changes: [change("s-2", NOW + 1_000)],
+      deltas: { "s-2": { lines: ["Developer: go on"], cursor: "cursor-1" } },
+    });
 
   const bounded = fakeEve();
   assert.deepEqual(
     await database.run(
-      openAccountTurns(seams({ eve: bounded.eve, roster: rosterNow }), userId, { limit: 1 }),
+      openAccountTurns(
+        seams({ eve: bounded.eve, transcripts: transcripts(), roster: rosterNow }),
+        userId,
+        { limit: 1 },
+      ),
     ),
-    { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 },
+    { observation: 0, holdRelease: 1, failed: 0 },
   );
   assert.deepEqual(
     bounded.handed.map((turn) => turn.message.turn),
     [BRAIN_HOST_TURN.HOLD_RELEASE],
   );
-  assert.equal((await bookmarkOf(userId))?.observedAt, NOW);
+  assert.equal(await markOf(userId), NOW);
 
   const next = fakeEve();
   assert.deepEqual(
     await database.run(
-      openAccountTurns(seams({ eve: next.eve, roster: rosterNow }), userId, { limit: 1 }),
+      openAccountTurns(
+        seams({ eve: next.eve, transcripts: transcripts(), roster: rosterNow }),
+        userId,
+        { limit: 1 },
+      ),
     ),
-    { observation: 1, holdRelease: 0, failed: 0, reseeded: 0 },
+    { observation: 1, holdRelease: 0, failed: 0 },
   );
   assert.deepEqual(
     next.handed.map((turn) => turn.message.turn),
     [BRAIN_HOST_TURN.OBSERVATION],
   );
+  assert.equal(await markOf(userId), NOW + 1_000);
 });
 
-test("a first bookmark is adopted whatever the bound has left: a visit whose bound the hold releases used up, or whose hold release eve refused, still places it, so no later adoption swallows the changes in between", async () => {
+test("a first mark is adopted whatever the bound has left: a visit whose bound the hold releases used up, or whose hold release eve refused, still places it, so no later adoption swallows the changes in between", async () => {
   const before = roster([observation("s-1")]);
+  const transcripts = () =>
+    fakeTranscripts({
+      changes: [change("s-1", NOW - 5_000)],
+      deltas: { "s-1": { lines: ["Developer: earlier words"], cursor: "cursor-1" } },
+    });
   const filled = await database.createUser();
   await passed(filled, before, NOW, undefined);
   await releasedConversation(filled, "s-1", { rows: 1 });
-  const { eve } = fakeEve();
+  const { eve, handed } = fakeEve();
   assert.deepEqual(
     await database.run(
-      openAccountTurns(seams({ eve, roster: hostedRosterFrom(before, NOW) }), filled, {
-        limit: 1,
-      }),
+      openAccountTurns(
+        seams({ eve, transcripts: transcripts(), roster: hostedRosterFrom(before, NOW) }),
+        filled,
+        { limit: 1 },
+      ),
     ),
-    { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 },
+    { observation: 0, holdRelease: 1, failed: 0 },
   );
-  assert.deepEqual(await bookmarkOf(filled), { observedAt: NOW, sessions: ["s-1"] });
+  assert.equal(handed.length, 1);
+  assert.equal(await markOf(filled), NOW - 5_000);
 
   const refused = await database.createUser();
   await passed(refused, before, NOW, undefined);
@@ -1370,13 +1262,17 @@ test("a first bookmark is adopted whatever the bound has left: a visit whose bou
   assert.deepEqual(
     await database.run(
       openAccountTurns(
-        seams({ eve: refusing.eve, roster: hostedRosterFrom(before, NOW) }),
+        seams({
+          eve: refusing.eve,
+          transcripts: transcripts(),
+          roster: hostedRosterFrom(before, NOW),
+        }),
         refused,
       ),
     ),
-    { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
+    { observation: 0, holdRelease: 0, failed: 1 },
   );
-  assert.deepEqual(await bookmarkOf(refused), { observedAt: NOW, sessions: ["s-1"] });
+  assert.equal(await markOf(refused), NOW - 5_000);
 });
 
 test("a re-decision carries every release no hold-release message has named, however many, and none a message already names", async () => {
@@ -1476,7 +1372,7 @@ test("a re-decision carries every release no hold-release message has named, how
   const { eve, handed } = fakeEve();
   const opener = seams({ eve, roster: hostedRosterFrom(roster([observation("s-1")]), NOW) });
   const outcome = await database.run(openHoldReleaseTurns(opener, userId));
-  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0, reseeded: 0 });
+  assert.deepEqual(outcome, { observation: 0, holdRelease: 1, failed: 0 });
   // The read bound (64) is reported when met; thirteen rows sit well inside it, so a full page here would be a different failure and says so.
   assert.deepEqual(opener.reports, []);
   const listed = heldBriefingsOf(

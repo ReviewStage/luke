@@ -58,8 +58,8 @@ export const OBSERVATION_SOURCE = {
    * earlier build wrote carry it, and this build reads those rows.
    */
   HOOK: "hook",
-  /** The roster look on the observation pass. */
-  ROSTER_LOOK: "roster_look",
+  /** A chat whose transcript changed, handed to the observed conversation on the scheduled tick. */
+  TRANSCRIPT_CHANGE: "transcript_change",
   /** Briefings held through a meeting or a pause, handed back for one re-decision. */
   HOLD_RELEASE: "hold_release",
   /** A child's own turn: the task its requester delegated, as the child reads it. */

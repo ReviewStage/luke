@@ -7,7 +7,7 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 /**
  * The conversation the brain keeps for one observed session: a row of kind
  * `observed`, keyed by the provider and the session's id there, opened on
- * the first roster diff that names the session and standing for every later
+ * the first transcript change that names the session and standing for every later
  * one. The unique index over the three is what makes two openers landing at
  * once one row: the loser's insert does nothing and both read the same id
  * back. A row Clear stamped is not standing, and an observed conversation is

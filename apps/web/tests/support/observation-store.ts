@@ -1,21 +1,18 @@
 import { Effect } from "effect";
 import type { ObservationStore } from "../../server/hosted/observation-pass";
 import type { RosterSnapshotRecord } from "../../server/hosted/store";
-import {
-  CONSUMED_ROSTER,
-  type ObservationPassRecord,
-} from "../../server/hosted/store/roster-snapshot";
+import type { ObservationPassRecord } from "../../server/hosted/store/roster-snapshot";
 
 /**
  * The roster slice of the hosted store held in memory, for the handler tests
  * that exercise what a pass reads and writes without a database: the
- * snapshot, the opener's bookmark over it, and the pass record. The
+ * snapshot, the opener's transcript mark, and the pass record. The
  * store tests on PGlite are where the real tables are exercised.
  */
 export interface MemoryObservationStore extends ObservationStore {
   snapshots: Map<string, RosterSnapshotRecord>;
-  /** The opener's bookmark over the snapshot, as the store keeps it. */
-  consumed: Map<string, RosterSnapshotRecord>;
+  /** The opener's transcript mark, as the store keeps it. */
+  marks: Map<string, number>;
   passes: Map<string, ObservationPassRecord>;
   /** Every `advance` this store took, in order, so a test can see what a pass wrote. */
   advances: Array<{ userId: string; observedAt: number }>;
@@ -26,12 +23,12 @@ export const UNOPENABLE_BODY = "unopenable";
 
 export function memoryObservationStore(): MemoryObservationStore {
   const snapshots = new Map<string, RosterSnapshotRecord>();
-  const consumed = new Map<string, RosterSnapshotRecord>();
+  const marks = new Map<string, number>();
   const passes = new Map<string, ObservationPassRecord>();
   const advances: MemoryObservationStore["advances"] = [];
   return {
     snapshots,
-    consumed,
+    marks,
     passes,
     advances,
     roster: {
@@ -53,19 +50,11 @@ export function memoryObservationStore(): MemoryObservationStore {
           advances.push({ userId, observedAt: snapshot.observedAt });
           return true;
         }),
-      consumed: (userId) =>
+      mark: (userId) => Effect.sync(() => marks.get(userId)),
+      keepMark: (userId, mark, from) =>
         Effect.sync(() => {
-          const bookmark = consumed.get(userId);
-          if (bookmark === undefined) return { state: CONSUMED_ROSTER.ABSENT };
-          if (bookmark.body === UNOPENABLE_BODY) {
-            return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: bookmark.observedAt };
-          }
-          return { state: CONSUMED_ROSTER.STANDING, roster: bookmark };
-        }),
-      keepConsumed: (userId, roster, from) =>
-        Effect.sync(() => {
-          if (consumed.get(userId)?.observedAt !== from) return false;
-          consumed.set(userId, roster);
+          if (marks.get(userId) !== from) return false;
+          marks.set(userId, mark);
           return true;
         }),
       pass: (userId) => Effect.sync(() => passes.get(userId)),

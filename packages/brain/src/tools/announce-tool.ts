@@ -44,7 +44,7 @@ export const ANNOUNCE_TOOL: AnnounceToolModule = {
   name: BRAIN_TOOL.ANNOUNCE,
   description:
     "Hand the developer one spoken briefing about what changed. Call it at most once per " +
-    "observed-events turn, covering every agent worth mentioning in one breath, or not at all " +
+    "observed-messages turn, covering every agent worth mentioning in one breath, or not at all " +
     "when nothing is worth interrupting for. Never call it in a developer-ask turn: there your " +
     "final text is the reply.",
   inputSchema: ANNOUNCE_INPUT,

@@ -2,7 +2,7 @@ import Foundation
 
 /// Whose judgment a turn's rows record. A turn the developer opened — typed
 /// or spoken — is an ask, and everything Luke said and did in it answers it;
-/// a turn nobody opened — a roster diff, a hold's release, a child's end — is
+/// a turn nobody opened — a transcript change, a hold's release, a child's end — is
 /// Luke's own, and every row of it says so, so what he decided for himself is
 /// never read as something the developer asked. A turn with no row to say
 /// who opened it is drawn as an ask rather than claimed as Luke's own.

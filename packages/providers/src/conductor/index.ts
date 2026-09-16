@@ -10,6 +10,7 @@ import {
   readConductorTranscriptSince,
 } from "./conversation.js";
 import { type ConductorPassCache, conductorObservations } from "./observe.js";
+import { readConductorTranscriptChanges } from "./transcript-changes.js";
 import {
   CONDUCTOR_DEFAULT_API_URL,
   CONDUCTOR_ENVIRONMENT,
@@ -42,11 +43,13 @@ export interface ConductorPluginOptions {
  * thing a press opens and a write reaches, and a workspace holding two chats
  * in two states is two facts, not one.
  *
- * No observation pass reads a word of a conversation. Its three reads are
+ * No observation pass reads a word of a conversation. Its four reads are
  * the `conversation` handler, reached at a developer's own press on a chat's
  * screen, the `transcript` handler, reached by the brain's own read tool in a
- * turn, and the `transcriptSince` handler, reached by the brain's observation
- * turn for a chat the roster diff named, each behind the cursor Conductor's
+ * turn, the `transcriptChanges` handler, reached by the scheduled opener to
+ * learn which roster chats gained transcript since its mark and carrying no
+ * words, and the `transcriptSince` handler, reached by the brain's
+ * observation turn for a chat that read named, behind the cursor Conductor's
  * own last answer handed back; between them they keep nothing but where in
  * each transcript the last read got to. None takes anything from a pass: the
  * pass still judges a cloud chat from what Conductor reports about it, and
@@ -106,6 +109,7 @@ export function conductorPlugin(options: ConductorPluginOptions): CloudSessionPl
         readConductorTranscriptSince(pass, ends, reported, providerSessionId, cursor),
       conversation: ({ request, observation }) =>
         readConductorConversation(pass, ends, observation.providerSessionId, request),
+      transcriptChanges: (request) => readConductorTranscriptChanges(pass, reported, request),
     },
   };
 }

@@ -134,7 +134,7 @@ async function announced(userId: string, parts: MessageParts): Promise<Announced
   const turnId = await insertTurn(database.run, {
     userId,
     conversationId,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: new Date(clock),
     settledAt: new Date(clock),

@@ -25,19 +25,50 @@ export type ProviderTranscriptResult =
 
 /**
  * One incremental transcript reading: the lines gained since the cursor the
- * caller held, the cursor to continue from, and whether the read fell short
- * of everything gained. An empty `text` is an honest "nothing new". The
- * cursor is absent only when the provider handed back no position to resume
- * from, so the next read begins as this one did.
+ * caller held, one per attributed message, the cursor to continue from, and
+ * whether the read fell short of everything gained. Empty `lines` are an
+ * honest "nothing new". The cursor is absent only when the provider handed
+ * back no position to resume from, so the next read begins as this one did.
  */
 interface ProviderTranscriptSinceReading {
-  text: string;
+  lines: readonly string[];
   cursor?: string;
   truncated: boolean;
 }
 
 export type ProviderTranscriptSinceResult =
   | ({ status: typeof ACTION_RESULT_STATUS.ACCEPTED } & ProviderTranscriptSinceReading)
+  | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
+  | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string };
+
+/**
+ * The ask behind a transcript-changes read: which chats the caller may be told
+ * about, and the instant it was last told up to. The ids are the ones the
+ * caller's roster holds, so nothing outside it enters the read; the instant
+ * is epoch milliseconds, absent on a first look, which asks for the newest
+ * instant of every chat and nothing about what changed.
+ */
+export interface TranscriptChangesRequest {
+  readonly providerSessionIds: readonly string[];
+  readonly since?: number;
+}
+
+/** One chat whose transcript changed, and the instant the provider says it last did. */
+export interface ProviderTranscriptChange {
+  readonly providerSessionId: string;
+  readonly updatedAt: number;
+}
+
+/**
+ * The chats whose transcripts changed since the instant asked, oldest first,
+ * and not a word of any: the read names a chat and an instant, and the words
+ * are the incremental transcript read's to fetch under its own cursor.
+ */
+export type ProviderTranscriptChangesResult =
+  | {
+      status: typeof ACTION_RESULT_STATUS.ACCEPTED;
+      changes: readonly ProviderTranscriptChange[];
+    }
   | { status: typeof ACTION_RESULT_STATUS.REJECTED; reason: string }
   | { status: typeof ACTION_RESULT_STATUS.UNSUPPORTED; reason: string };
 

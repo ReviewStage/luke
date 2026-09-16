@@ -1,7 +1,7 @@
 /**
  * What a turn row says about the run it records: what opened it and where it
  * stands. Every trigger the brain answers to is a queued turn — a developer's
- * typed or spoken ask, a roster diff, a hold's release, a child's completion —
+ * typed or spoken ask, a chat's transcript change, a hold's release, a child's completion —
  * and the origin is the record of which, so a view can mark an action Luke
  * took on his own judgment apart from one the developer asked for. Declared
  * here so the store that writes the row, the service that answers it, and the
@@ -11,7 +11,7 @@
 export const TURN_ORIGIN = {
   TYPED: "typed",
   SPOKEN: "spoken",
-  ROSTER_DIFF: "roster_diff",
+  TRANSCRIPT_CHANGE: "transcript_change",
   HOLD_RELEASE: "hold_release",
   /** A child run's own turn, opened by the task it was delegated. */
   CHILD: "child",
