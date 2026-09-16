@@ -552,27 +552,17 @@
   font-size: 11.5px;
 }
 
-/* An agent's title is a chip, as an action row's is, and a long session title
-   ends at the row's edge rather than running past it. The line beneath it is
-   the transcript's press, the card's width, wearing the meta line in its own
-   quiet voice rather than a button's face. */
-.agent-title > .conversation-action-chip {
-  max-width: 100%;
-  overflow: hidden;
-}
-
-.agent-open {
-  width: 100%;
-  padding: 0;
-  background: none;
-  text-align: left;
-}
-
 .agent-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.agent-mark {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
 }
 
 .agent-meta {

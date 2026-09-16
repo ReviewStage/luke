@@ -4,7 +4,7 @@ import {
   type ChildRead,
   type ChildStatus,
 } from "@sidecar/hosted/reads-wire";
-import { lastActivityLabel } from "@sidecar/panel";
+import { lastActivityLabel, ProviderMark } from "@sidecar/panel";
 import {
   CONVERSATION_VIEW_SOURCE,
   type SessionIdentity,
@@ -15,8 +15,7 @@ import { useLayoutEffect, useRef } from "react";
 import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationUnreadableNotice } from "./conversation-panel";
-import type { ToolRowChip } from "./conversation-tool-row";
-import { ConversationTurns, SessionChip } from "./conversation-turns";
+import { ConversationTurns } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
 
@@ -39,16 +38,13 @@ export type ConversationPage = (typeof CONVERSATION_PAGE)[keyof typeof CONVERSAT
  * The row a transcript page is opened from: which conversation, of which
  * kind, and the words the page's header wears for it, taken from the row as
  * it stood when pressed rather than looked up again, so the header reads the
- * same whether the list still names the conversation or not. An agent's row
- * also carries its session's identity, so the header can wear the session's
- * chip in the title's place and keep it level with the roster.
+ * same whether the list still names the conversation or not.
  */
 export interface TranscriptRow {
   readonly conversationId: string;
   readonly kind: TranscriptKind;
   readonly title: string;
   readonly status: ChildStatus;
-  readonly session?: SessionIdentity;
 }
 
 /** Where a child or an agent stands, in the one word its row wears for it. */
@@ -106,35 +102,6 @@ export function transcriptListed(
   return rows.some((listed) => listed.id === row.conversationId);
 }
 
-/**
- * The chip an agent's row and its transcript's header wear for its session,
- * built as an action row's is: the roster's own title, mark, and identity
- * while it holds the session, pressable exactly when the session's own row
- * is; once the roster has let the session go, the title handed in under the
- * provider's mark, a name alone, since a press could reach nothing. Read from
- * the roster where it is drawn, so a session the roster lets go while its
- * page is open stops being a press there too.
- */
-function sessionChip(
-  identity: SessionIdentity,
-  title: string,
-  roster: readonly SessionView[],
-): ToolRowChip {
-  const session = agentSession(identity, roster);
-  if (session === undefined) return { text: title, markId: identity.providerId, openable: false };
-  return {
-    text: session.title,
-    markId: session.agentId ?? session.providerId,
-    identity,
-    openable: session.openable,
-  };
-}
-
-/** The identity the agents read named the agent's session under, and nothing else of the read. */
-function agentIdentity(agent: AgentRead): SessionIdentity {
-  return { providerId: agent.providerId, providerSessionId: agent.providerSessionId };
-}
-
 /** The row an agent's transcript is opened from, named from the roster by session identity. */
 function agentTranscriptRow(agent: AgentRead, roster: readonly SessionView[]): TranscriptRow {
   return {
@@ -142,7 +109,6 @@ function agentTranscriptRow(agent: AgentRead, roster: readonly SessionView[]): T
     kind: TRANSCRIPT_KIND.OBSERVED,
     title: agentTitle(agent, roster),
     status: agent.status,
-    session: agentIdentity(agent),
   };
 }
 
@@ -206,9 +172,7 @@ function AgentsSection({
  * lists its rows by the instant they last moved, newest first, the same
  * instant the row's age reads. Every row wears where it stands and how long
  * ago it last moved, and a row's press opens its transcript on the host and
- * turns the tab to the transcript page that draws it. An agent's title is
- * the chip an action row wears for the same session, and its press is that
- * session's own press by another hand, not the row's. Mounted under the
+ * turns the tab to the transcript page that draws it. Mounted under the
  * thread's own root, ids and blocked class alike, because a task's words are
  * the developer's and belong in no optional recording.
  */
@@ -218,7 +182,6 @@ export function AgentsPanel({
   roster,
   now,
   onOpenTranscript,
-  onOpenChat,
   onBack,
 }: {
   /** The account's children as the document holds them, and whether a read has landed. */
@@ -231,8 +194,6 @@ export function AgentsPanel({
   now: number;
   /** Opens the pressed row's transcript on the host and turns to its page. */
   onOpenTranscript: (row: TranscriptRow) => void;
-  /** A session row's own press by identity, for the chip an agent's row wears. */
-  onOpenChat: (identity: SessionIdentity) => void;
   /** Returns the tab to the thread. */
   onBack: () => void;
 }): React.JSX.Element {
@@ -266,32 +227,23 @@ export function AgentsPanel({
           empty="No per-workspace agents yet"
         >
           {listedAgents.map((agent) => {
-            const row = agentTranscriptRow(agent, roster);
+            const session = agentSession(agent, roster);
             return (
               <li key={agent.id}>
-                {/* The chip cannot sit inside a row button, so the card is two
-                    presses side by side: the title line is the session's, whether
-                    the chip there is a press or a name, and the line beneath it
-                    is the transcript's; neither travels into the other. */}
-                <div className="agent-row">
+                <button
+                  type="button"
+                  className="agent-row"
+                  onClick={() => onOpenTranscript(agentTranscriptRow(agent, roster))}
+                >
                   <span className="agent-title">
-                    <SessionChip
-                      chip={sessionChip(agentIdentity(agent), row.title, roster)}
-                      onOpenChat={onOpenChat}
+                    <ProviderMark
+                      providerId={session?.agentId ?? agent.providerId}
+                      className="agent-mark"
                     />
+                    <span className="agent-name">{agentTitle(agent, roster)}</span>
                   </span>
-                  <button
-                    type="button"
-                    className="agent-open"
-                    title="Open the transcript"
-                    onClick={() => onOpenTranscript(row)}
-                  >
-                    {/* The title stands beside the button rather than in it, so a reader
-                        hears whose transcript this is before the status and age it shows. */}
-                    <span className="visually-hidden">Transcript of {row.title}: </span>
-                    <span className="agent-meta">{meta(agent)}</span>
-                  </button>
-                </div>
+                  <span className="agent-meta">{meta(agent)}</span>
+                </button>
               </li>
             );
           })}
@@ -328,16 +280,13 @@ export function AgentsPanel({
  * same scroll scaffolding so the sideways pull and the scrollbars behave the
  * same. The header names the way back to the list, the conversation by the
  * title and status the row that opened it wore, and nothing is looked up
- * again but the chip an agent's header wears for its session, which stands
- * with the roster as the thread's chips do, so a session the roster lets go
- * or stops opening is no longer a press here either. Nothing else here is
- * live: the words arrive settled, as stored turns, so there is no streaming
- * row, no listening row, and no Stop. The page opens at its tail, as the
- * thread does, and jumps there again only when the transcript gains a turn or
- * another row is opened, so a re-read that adds nothing leaves a reader who
- * scrolled up where they stand. Mounted under the thread's own root, ids and
- * blocked class alike, because the words are the developer's and belong in no
- * optional recording.
+ * again. Nothing here is live: the words arrive settled, as stored turns, so
+ * there is no streaming row, no listening row, and no Stop. The page opens at
+ * its tail, as the thread does, and jumps there again only when the transcript
+ * gains a turn or another row is opened, so a re-read that adds nothing leaves
+ * a reader who scrolled up where they stand. Mounted under the thread's own
+ * root, ids and blocked class alike, because the words are the developer's and
+ * belong in no optional recording.
  */
 export function AgentTranscriptPanel({
   open,
@@ -395,18 +344,7 @@ export function AgentTranscriptPanel({
         <button type="button" className="agents-back" onClick={onBack}>
           ‹ Agents
         </button>
-        {/* The heading's own name is the title, so heading navigation hears the
-            conversation and not the chip's press. */}
-        <h2 className="agents-title agent-transcript-title" aria-label={open.title}>
-          {open.session === undefined ? (
-            open.title
-          ) : (
-            <SessionChip
-              chip={sessionChip(open.session, open.title, roster)}
-              onOpenChat={onOpenChat}
-            />
-          )}
-        </h2>
+        <h2 className="agents-title agent-transcript-title">{open.title}</h2>
         <span className="agent-status" data-status={open.status}>
           {STATUS_WORD[open.status]}
         </span>
