@@ -91,8 +91,7 @@ import { ThinkingDots } from "./thinking-dots";
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
  * that opens on its summary; an announcement is Luke's briefing in his own
- * bubble, marked when nobody heard it, and that bubble is the whole of what
- * the announce call draws. Every other stored tool call of one assistant
+ * bubble, and that bubble is the whole of what the announce call draws. Every other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -224,9 +223,6 @@ function rowGlyph(row: ToolRow): (() => React.JSX.Element) | undefined {
   return row.controlKind !== undefined ? CONTROL_GLYPH[row.controlKind] : ROW_GLYPH[row.kind];
 }
 
-/** What a reader is told of an announcement no device claimed before its offer lapsed. */
-const UNSPOKEN_LABEL = "Not spoken";
-
 /** What a reader is told of an action still under way. */
 const PENDING_LABEL = "Under way";
 
@@ -246,7 +242,6 @@ function BubbleRow({
   words,
   at,
   copy = true,
-  unspoken = false,
   reading = false,
   rating,
 }: {
@@ -254,7 +249,6 @@ function BubbleRow({
   words: string;
   at: number;
   copy?: boolean;
-  unspoken?: boolean;
   /** Whether the words are what Luke's voice said of a message folded above them. */
   reading?: boolean;
   /** The rating control, behind the ellipsis on the last words of one of Luke's messages and nowhere else. */
@@ -264,14 +258,12 @@ function BubbleRow({
     <li
       className="conversation-entry"
       data-speaker={voice.speaker}
-      data-unspoken={unspoken ? "true" : undefined}
       data-reading={reading ? "true" : undefined}
     >
       <small className="visually-hidden">{voice.label}</small>
       <div className="conversation-message">
         <span className="conversation-bubble">
           <MarkdownMessage words={words} className="conversation-words" />
-          {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
           {copy ? <ConversationCopyButton words={words} /> : null}
           {rating === undefined ? null : (
             <ConversationMessageMenu>{rating}</ConversationMessageMenu>
@@ -1133,7 +1125,6 @@ function messageRows(
             voice={VOICE.LUKE}
             words={words}
             at={view.placedAt}
-            unspoken={tool.unspoken}
             rating={placed}
           />,
         );
