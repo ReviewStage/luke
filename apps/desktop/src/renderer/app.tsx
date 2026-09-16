@@ -149,21 +149,45 @@ export function App(): React.JSX.Element {
   // tab change, unwound by Escape before the tab is left.
   const [conversationPage, setConversationPage, conversationPageNow] =
     useStateWithRef<ConversationPage>(CONVERSATION_PAGE.THREAD);
+  /** The child the transcript page is of, held exactly while that page shows. */
+  const [transcriptChildId, setTranscriptChildId] = useState<string | undefined>(undefined);
   /**
-   * The one way the page moves. A row on the list asks the host to hold a
-   * child's transcript open, so leaving the list, by the back control, the
-   * button, Escape, or a tab change, lets go of it: the host stops paging a
-   * transcript nobody is looking at, and the document drops it.
+   * The one way the page moves. The transcript page holds a child's transcript
+   * open on the host, so leaving it, by the back control, the button, Escape,
+   * or a tab change, lets go of it: the host stops paging a transcript nobody
+   * is looking at, and the document drops it.
    */
   const changeConversationPage = useCallback(
     (next: ConversationPage) => {
-      if (conversationPageNow() === CONVERSATION_PAGE.SUBAGENTS && next !== conversationPageNow()) {
+      if (
+        conversationPageNow() === CONVERSATION_PAGE.TRANSCRIPT &&
+        next !== CONVERSATION_PAGE.TRANSCRIPT
+      ) {
         tell(ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
+        setTranscriptChildId(undefined);
       }
       setConversationPage(next);
     },
     [conversationPageNow, setConversationPage, tell],
   );
+  /** A row's press on the list: the host holds the child's transcript open, and the page turns to it. */
+  const openSubagent = useCallback(
+    (childId: string) => {
+      setTranscriptChildId(childId);
+      tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId });
+      setConversationPage(CONVERSATION_PAGE.TRANSCRIPT);
+    },
+    [setConversationPage, tell],
+  );
+  // The host closes an open child the list no longer names, stamped by a
+  // Clear on any Mac or fallen past the list's bound; the page follows it
+  // back to the list rather than standing over a transcript nothing fills.
+  const subagents = state?.children;
+  useEffect(() => {
+    if (transcriptChildId === undefined || subagents === undefined || !subagents.settled) return;
+    if (subagents.children.some((child) => child.id === transcriptChildId)) return;
+    changeConversationPage(CONVERSATION_PAGE.SUBAGENTS);
+  }, [changeConversationPage, subagents, transcriptChildId]);
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
@@ -710,7 +734,13 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
-      else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
+      // A transcript unwinds to the list it was opened from, and the list to the thread.
+      else if (
+        tab === PANEL_TAB.CONVERSATION &&
+        conversationPage === CONVERSATION_PAGE.TRANSCRIPT
+      ) {
+        changeConversationPage(CONVERSATION_PAGE.SUBAGENTS);
+      } else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
         changeConversationPage(CONVERSATION_PAGE.THREAD);
       } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
@@ -948,9 +978,9 @@ export function App(): React.JSX.Element {
             conversationPage={conversationPage}
             onConversationPageChange={changeConversationPage}
             subagents={state.children}
-            onOpenSubagent={(childId) =>
-              tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId })
-            }
+            onOpenSubagent={openSubagent}
+            transcriptChildId={transcriptChildId}
+            childTranscript={state.childTranscript}
             onFieldEngaged={changeAskEngagement}
             offerOptions={sessions.offerOptions}
             optionsOpen={sessions.optionsOpen}

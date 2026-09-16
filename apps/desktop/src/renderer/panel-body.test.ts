@@ -2,6 +2,8 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
+import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -39,6 +41,7 @@ function bodyProps(
   tab: PanelTab,
   conversationPage: ConversationPage,
   onConversationPageChange: (page: ConversationPage) => void,
+  extra: Partial<BodyProps> = {},
 ): BodyProps {
   return {
     accountRequired: false,
@@ -65,6 +68,8 @@ function bodyProps(
     onConversationPageChange,
     subagents: { settled: true, children: [] },
     onOpenSubagent: () => undefined,
+    transcriptChildId: undefined,
+    childTranscript: undefined,
     onFieldEngaged: () => undefined,
     offerOptions: false,
     optionsOpen: false,
@@ -78,6 +83,7 @@ function bodyProps(
     tab,
     onTabChange: () => undefined,
     settings: SETTINGS,
+    ...extra,
   };
 }
 
@@ -159,6 +165,68 @@ test("pressing the button asks for the list, and the list page draws it in the t
   ]);
 
   mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, change));
+  assert.ok(mounted.container.textContent?.includes("No messages yet"));
+  assert.equal(mounted.container.querySelector(".subagents-header"), null);
+});
+
+const CHILD: ChildRead = {
+  id: "aaaaaaaa-1111-4000-8000-000000000001",
+  parentConversationId: "7a1b2c3d-0000-4000-8000-000000000001",
+  parentKind: CONVERSATION_VIEW_SOURCE.MAIN,
+  label: "Audit the release notes",
+  status: CHILD_STATUS.SETTLED,
+  acceptedAt: NOW - 60_000,
+  settledAt: NOW,
+};
+
+test("a row's press opens the child, and the transcript page draws in the thread's place with the way back to the list", () => {
+  const asked: ConversationPage[] = [];
+  const opened: string[] = [];
+  const change = (page: ConversationPage) => asked.push(page);
+  const extra: Partial<BodyProps> = {
+    subagents: { settled: true, children: [CHILD] },
+    onOpenSubagent: (childId) => opened.push(childId),
+  };
+  const mounted = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.SUBAGENTS, change, extra),
+  );
+  const row = mounted.container.querySelector(".subagent-row");
+  assert.ok(row instanceof HTMLButtonElement);
+  act(() => {
+    row.click();
+  });
+  // The press names the child to the app, which opens it on the host and turns the page itself.
+  assert.deepEqual(opened, [CHILD.id]);
+  assert.deepEqual(asked, []);
+
+  mounted.render(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, {
+      ...extra,
+      transcriptChildId: CHILD.id,
+      childTranscript: { childId: CHILD.id, settled: true, groups: [] },
+    }),
+  );
+  const panels = mounted.container.querySelectorAll('[role="tabpanel"]');
+  assert.equal(panels.length, 1);
+  assert.equal(panels[0]?.className, "conversation-view ph-no-capture");
+  assert.equal(panels[0]?.id, "panel-view-conversation");
+  assert.ok(mounted.container.textContent?.includes("Audit the release notes"));
+  assert.ok(mounted.container.textContent?.includes("Nothing said yet"));
+  assert.equal(mounted.container.querySelector(".subagents-list"), null);
+  // The button stays lit over a transcript, and Clear is not offered off the thread.
+  assert.equal(subagentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
+  assert.equal(mounted.container.querySelector(".conversation-clear"), null);
+
+  const back = mounted.container.querySelector(".subagents-back");
+  assert.ok(back instanceof HTMLButtonElement);
+  assert.equal(back.textContent, "‹ Sub-agents");
+  act(() => {
+    back.click();
+  });
+  assert.deepEqual(asked, [CONVERSATION_PAGE.SUBAGENTS]);
+
+  // A transcript page with no child to be of falls back to the thread.
+  mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, extra));
   assert.ok(mounted.container.textContent?.includes("No messages yet"));
   assert.equal(mounted.container.querySelector(".subagents-header"), null);
 });

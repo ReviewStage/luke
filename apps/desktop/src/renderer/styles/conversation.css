@@ -486,8 +486,7 @@
   text-align: left;
 }
 
-.subagent-row:hover,
-.subagent-row[aria-pressed="true"] {
+.subagent-row:hover {
   background: var(--raised);
 }
 
@@ -502,6 +501,23 @@
 .subagent-meta {
   display: flex;
   gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+/* The transcript page's header names one child, whose task may run long: the
+   title takes the line's slack and ends on an ellipsis, with the status word
+   held whole beside it in the row's own quiet voice. */
+.subagent-transcript-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.subagents-header > .subagent-status {
+  flex: 0 0 auto;
   color: var(--text-secondary);
   font-size: 10.5px;
 }
