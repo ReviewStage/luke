@@ -601,11 +601,9 @@ test("the brain's incremental read with no cursor answers the newest page, says 
   if (read.status !== "accepted") return;
   assert.equal(read.truncated, false);
   assert.equal(read.cursor, STORED_MESSAGE_UUIDS[7]);
-  assert.deepEqual(read.text.split("\n"), [
+  assert.deepEqual(read.lines, [
     "Developer: Fix the flaky roster test",
-    "Conductor: Looking at the test now.",
-    "",
-    "It races the clock.",
+    "Conductor: Looking at the test now.\n\nIt races the clock.",
     "Conductor: Fixed: the test now stubs the clock.",
   ]);
 });
@@ -622,7 +620,7 @@ test("the brain's incremental read behind a cursor answers only what is newer an
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
-  assert.deepEqual(read.text.split("\n"), ["Conductor: Fixed: the test now stubs the clock."]);
+  assert.deepEqual(read.lines, ["Conductor: Fixed: the test now stubs the clock."]);
   assert.equal(read.cursor, STORED_MESSAGE_UUIDS[7]);
   assert.equal(read.truncated, false);
   const polls = api.requests.slice(requestsBefore);
@@ -634,7 +632,7 @@ test("the brain's incremental read behind a cursor answers only what is newer an
   );
   assert.equal(again.status, "accepted");
   if (again.status !== "accepted") return;
-  assert.equal(again.text, "");
+  assert.deepEqual(again.lines, []);
   assert.equal(again.cursor, STORED_MESSAGE_UUIDS[7]);
 });
 
@@ -673,7 +671,7 @@ test("the brain's first incremental read of a long chat answers one page's worth
 
   assert.equal(read.status, "accepted");
   if (read.status !== "accepted") return;
-  const lines = read.text.split("\n");
+  const lines = read.lines;
   assert.equal(lines.length, 100);
   assert.equal(lines.at(-1), `Developer: message ${LONG_TRANSCRIPT_LENGTH - 1}`);
   assert.equal(read.truncated, true);

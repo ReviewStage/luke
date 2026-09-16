@@ -98,6 +98,13 @@ export function conductorArchiveWorkspaceAdvertisement(workspaceId: string): Adv
 
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * The one shape an instant takes inside the transcript-changes document:
+ * `Date#toISOString`'s own output, asserted before it is spliced so nothing
+ * but a fixed-width UTC literal this build wrote ever enters the query.
+ */
+export const CONDUCTOR_TIMESTAMP_LITERAL_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
 export const CONDUCTOR_SESSION_STATUS = {
   IDLE: "idle",
   WORKING: "working",
