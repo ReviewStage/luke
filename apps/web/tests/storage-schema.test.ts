@@ -72,7 +72,6 @@ const DECLARED_TABLES = [
   "provider_cursors",
   "provider_key",
   "roster_consumed",
-  "roster_diff",
   "roster_snapshot",
   "session",
   "turns",
