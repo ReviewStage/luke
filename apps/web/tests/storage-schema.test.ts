@@ -71,8 +71,6 @@ const DECLARED_TABLES = [
   "observation_pass",
   "provider_cursors",
   "provider_key",
-  "roster_consumed",
-  "roster_diff",
   "roster_snapshot",
   "session",
   "transcript_mark",

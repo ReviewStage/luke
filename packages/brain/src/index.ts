@@ -9,7 +9,6 @@ export {
   type ObservedMessagesEnvelope,
   observedMessagesText,
   standingContextText,
-  wakeInputText,
 } from "./input-items.js";
 export { brainToolNotes } from "./instructions.js";
 export { BRAIN_OPENAI_DEFAULTS } from "./model-defaults.js";
@@ -94,9 +93,4 @@ export {
   userMessage,
   userMetadataOf,
 } from "./ui-messages.js";
-export {
-  BRAIN_WAKE_KIND,
-  type BrainTranscriptDelta,
-  type BrainWakeEvent,
-} from "./wake-events.js";
 export { BRAIN_IDENTITY_LINE, BRAIN_PERSONA, BRAIN_WORKSPACE_SEEDS } from "./workspace-seeds.js";

@@ -142,8 +142,8 @@ const EXCHANGES: readonly Exchange[] = [
             }),
           sweepChildCompletions: () =>
             Effect.succeed({ delivered: 0, undelivered: 0, withheld: 0 }),
-          observe: () => Effect.succeed({ complete: false, changed: false }),
-          openTurns: () => Effect.succeed({ observation: 0, failed: 0, reseeded: 0 }),
+          observe: () => Effect.succeed({ complete: false }),
+          openTurns: () => Effect.succeed({ observation: 0, failed: 0 }),
         }),
       );
     },
