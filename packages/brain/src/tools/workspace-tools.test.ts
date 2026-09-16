@@ -11,8 +11,12 @@ import {
   type BrainWorkspaceAccess,
   WORKSPACE_TOOLS,
   type WorkspaceToolContext,
-  workspaceToolNamed,
+  type WorkspaceToolModule,
 } from "./workspace-tools.js";
+
+function workspaceToolNamed(name: string): WorkspaceToolModule | undefined {
+  return WORKSPACE_TOOLS.find((tool) => tool.name === name);
+}
 
 /** A turn's standing over the workspace given, none included, under a journal that counts what it was asked to record. */
 function context(access: { workspace: BrainWorkspaceAccess | undefined }) {
@@ -81,7 +85,6 @@ test("the five workspace tools are modules in catalog order, each naming the str
       BRAIN_TOOL.LOAD_SKILL,
     ],
   );
-  for (const tool of WORKSPACE_TOOLS) assert.equal(workspaceToolNamed(tool.name), tool);
   const required = WORKSPACE_TOOLS.map((tool) => {
     const node = emitJsonSchema(tool.inputSchema);
     return "required" in node ? [...node.required] : [];

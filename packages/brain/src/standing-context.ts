@@ -273,29 +273,6 @@ export function sessionContextText(sessions: readonly Session[], now: number = D
   ].join("\n");
 }
 
-/**
- * The kinds of context a remote call is told, each answering one standing
- * question. The desktop's call is told none of them: its roster, conversation, and
- * projects are the brain's, and the voice reaches them through its one tool.
- */
-export const CONTEXT_ITEM_KIND = {
-  SESSIONS: "sessions",
-  CONVERSATION: "conversation",
-  MEMORY: "memory",
-  WORKSPACE_PROJECTS: "workspace-projects",
-} as const;
-
-type ContextItemKind = (typeof CONTEXT_ITEM_KIND)[keyof typeof CONTEXT_ITEM_KIND];
-
-/**
- * Names the item one context update occupies on a call that still carries
- * context items — the remote call, until it too is given a brain. Nothing
- * indexes on the name; both halves are the build's own.
- */
-export function contextItemId(kind: ContextItemKind, sequence: number): string {
-  return `luke_ctx_${kind}_${sequence}`;
-}
-
 /** How many projects one context update may offer workspace creation in. */
 const maximumVoiceContextWorkspaceProjects = 10;
 

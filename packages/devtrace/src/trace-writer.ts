@@ -1,5 +1,4 @@
 import path from "node:path";
-import type { BrainPrefetchTraceRecord, BrainTurnTraceRecord } from "@sidecar/brain";
 import { Deferred, Effect, Queue, type Scope } from "effect";
 import * as FileSystem from "effect/FileSystem";
 import type { PlatformError } from "effect/PlatformError";
@@ -24,10 +23,6 @@ interface SpeechTraceRecord {
  */
 type PendingTraceEntry =
   | ({ kind: typeof TRACE_ENTRY_KIND.WIRE } & AgentWireTrace)
-  | ({ kind: typeof TRACE_ENTRY_KIND.BRAIN } & BrainTurnTraceRecord)
-  | ({
-      kind: typeof TRACE_ENTRY_KIND.BRAIN_PREFETCH;
-    } & BrainPrefetchTraceRecord)
   | { kind: typeof TRACE_ENTRY_KIND.SPEECH; speech: SpeechTraceRecord };
 
 /**

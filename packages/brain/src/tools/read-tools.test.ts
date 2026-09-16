@@ -6,10 +6,14 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { BRAIN_TOOL } from "./names.js";
-import { READ_TOOLS, type ReadToolContext, readToolNamed } from "./read-tools.js";
+import { READ_TOOLS, type ReadToolContext, type ReadToolModule } from "./read-tools.js";
 import { REFUSAL_REASON } from "./refusals.js";
 
 const ABC: SessionIdentity = { providerId: "claude-code", providerSessionId: "abc" };
+
+function readToolNamed(name: string): ReadToolModule | undefined {
+  return READ_TOOLS.find((tool) => tool.name === name);
+}
 
 /** A turn's standing over a roster of one session, whose transcript reads are recorded. */
 function context() {
@@ -36,8 +40,6 @@ test("the two reads are modules named as the catalog names them, each with the s
     READ_TOOLS.map((tool) => tool.name),
     [BRAIN_TOOL.LIST_SESSIONS, BRAIN_TOOL.READ_TRANSCRIPT],
   );
-  for (const tool of READ_TOOLS) assert.equal(readToolNamed(tool.name), tool);
-  assert.equal(readToolNamed(BRAIN_TOOL.ANNOUNCE), undefined);
   const readTranscript = readToolNamed(BRAIN_TOOL.READ_TRANSCRIPT);
   const identity = readTranscript && emitJsonSchema(readTranscript.inputSchema);
   assert.ok(identity && "required" in identity);

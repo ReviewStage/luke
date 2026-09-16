@@ -36,7 +36,6 @@ export {
   BRAIN_WORKSPACE_SEEDS,
   type BrainChildAccess,
   type BrainRequestFailure,
-  type BrainRequestRecord,
   type BrainRequestStatus,
   type BrainRoster,
   type BrainRunEvent,

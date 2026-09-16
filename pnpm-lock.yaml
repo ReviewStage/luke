@@ -544,9 +544,6 @@ importers:
 
   packages/devtrace:
     dependencies:
-      '@sidecar/brain':
-        specifier: workspace:*
-        version: link:../brain
       '@sidecar/live':
         specifier: workspace:*
         version: link:../live

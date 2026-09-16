@@ -9,7 +9,6 @@ import {
 import { unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import {
-  askInputText,
   BRAIN_INPUT_MARKER,
   childTaskInputText,
   holdReleasedInputText,
@@ -66,25 +65,6 @@ test("a wake item carries each event's observed fields and transcript delta as d
       },
     ],
   });
-});
-
-test("an ask item carries the question and the events that arrived since the last turn", () => {
-  const body = itemBody(
-    askInputText(
-      "what's running?",
-      [
-        {
-          kind: BRAIN_WAKE_KIND.ROSTER,
-          identity: { providerId: claude.id, providerSessionId: "abc" },
-          atMs: NOW,
-        },
-      ],
-      NOW,
-    ),
-  );
-  assert.equal(body.question, "what's running?");
-  assert.ok(Array.isArray(body.events_since_last_turn));
-  assert.equal(body.events_since_last_turn.length, 1);
 });
 
 test("a hold-released item lists the held briefings", () => {

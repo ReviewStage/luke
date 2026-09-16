@@ -202,11 +202,6 @@ export function resolveTurnToolPolicy(
   );
 }
 
-/** The schemas an effective policy leaves, in catalog order. */
-export function brainToolSchemas(policy: EffectiveToolPolicy): readonly ToolSchema[] {
-  return policy.allowed.map((tool) => tool.schema);
-}
-
 /**
  * A tool as a reader's registry holds it: its name, its words, and the wire
  * schema its input is declared in once. The catalog's descriptor carries that
