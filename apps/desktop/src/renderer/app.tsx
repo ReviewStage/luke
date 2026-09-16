@@ -147,8 +147,22 @@ export function App(): React.JSX.Element {
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
   // The Conversation tab's page, on the settings page's own terms: reset by a
   // tab change, unwound by Escape before the tab is left.
-  const [conversationPage, setConversationPage] = useState<ConversationPage>(
-    CONVERSATION_PAGE.THREAD,
+  const [conversationPage, setConversationPage, conversationPageNow] =
+    useStateWithRef<ConversationPage>(CONVERSATION_PAGE.THREAD);
+  /**
+   * The one way the page moves. A row on the list asks the host to hold a
+   * child's transcript open, so leaving the list, by the back control, the
+   * button, Escape, or a tab change, lets go of it: the host stops paging a
+   * transcript nobody is looking at, and the document drops it.
+   */
+  const changeConversationPage = useCallback(
+    (next: ConversationPage) => {
+      if (conversationPageNow() === CONVERSATION_PAGE.SUBAGENTS && next !== conversationPageNow()) {
+        tell(ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT);
+      }
+      setConversationPage(next);
+    },
+    [conversationPageNow, setConversationPage, tell],
   );
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
@@ -237,14 +251,14 @@ export function App(): React.JSX.Element {
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
-      setConversationPage(CONVERSATION_PAGE.THREAD);
+      changeConversationPage(CONVERSATION_PAGE.THREAD);
       // `PanelTab` and the counted tab are the same union: the vocabulary
       // derives its set from the guide's, which is what `PANEL_TAB` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
         panel_tab: next,
       });
     },
-    [sessions.closeOptions, setSettingsView, setTab],
+    [changeConversationPage, sessions.closeOptions, setSettingsView, setTab],
   );
 
   /**
@@ -697,13 +711,14 @@ export function App(): React.JSX.Element {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
       else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
-        setConversationPage(CONVERSATION_PAGE.THREAD);
+        changeConversationPage(CONVERSATION_PAGE.THREAD);
       } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
+    changeConversationPage,
     changeMode,
     changeTab,
     closeSettingsSearch,
@@ -931,7 +946,7 @@ export function App(): React.JSX.Element {
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
             conversationPage={conversationPage}
-            onConversationPageChange={setConversationPage}
+            onConversationPageChange={changeConversationPage}
             subagents={state.children}
             onOpenSubagent={(childId) =>
               tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId })
