@@ -5,7 +5,7 @@ import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { test } from "vitest";
-import { childrenSnapshotSchema, isChildTranscriptSnapshot } from "./children";
+import { childrenSnapshotSchema, childTranscriptSnapshotSchema } from "./children";
 
 const CHILD = {
   id: "5e000000-0000-4000-8000-000000000001",
@@ -30,8 +30,20 @@ test("a children snapshot reads under the wire's own child schema, and a child t
   assert.equal(Result.isFailure(read({ children: [] })), true);
 });
 
-test("a transcript is the child, its groups, and whether a read landed; an empty record is none", () => {
-  assert.equal(isChildTranscriptSnapshot({ childId: CHILD.id, groups: [], settled: false }), true);
-  assert.equal(isChildTranscriptSnapshot({}), false);
-  assert.equal(isChildTranscriptSnapshot({ childId: CHILD.id, settled: true }), false);
+test("a transcript is the child, whether a read landed, its groups as records, and the row it could not read", () => {
+  const read = readEither(childTranscriptSnapshotSchema, { excess: EXCESS_KEYS.DROP });
+  assert.ok(Result.isSuccess(read({ childId: CHILD.id, groups: [], settled: false })));
+  assert.ok(
+    Result.isSuccess(
+      read({
+        childId: CHILD.id,
+        groups: [{ turnId: "t", messages: [] }],
+        settled: true,
+        unreadable: { conversationId: CHILD.id, seq: 3 },
+      }),
+    ),
+  );
+  assert.equal(Result.isFailure(read({})), true);
+  assert.equal(Result.isFailure(read({ childId: CHILD.id, settled: true })), true);
+  assert.equal(Result.isFailure(read({ childId: CHILD.id, groups: ["row"], settled: true })), true);
 });

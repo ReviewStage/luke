@@ -964,6 +964,22 @@ test("an opened child's transcript is read to its end at once, read again from i
   // The same rows again moved nothing, and nobody was told.
   assert.equal(transcriptViews().length, 2);
 
+  // A walk cut short — a page landed, the read after it did not — is resumed
+  // on the next poll under an unchanged head, from where it stood.
+  client.changesAnswer = { ...client.changesAnswer, children: "children-3" };
+  client.childMessagesAnswers = [
+    ok(childPage("child-page-4", true)),
+    { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED },
+    ok(childPage("child-end-2", false)),
+  ];
+  await Effect.runPromise(composer.loop.refresh);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, `childMessages:${CHILD}:child-page-4`]);
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`]);
+
   // Closed: the clients are told none is open, and the next head does not read it.
   assert.deepEqual(
     await callMethod(composer, GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT),
@@ -971,7 +987,7 @@ test("an opened child's transcript is read to its end at once, read again from i
   );
   assert.deepEqual(transcriptViews().at(-1), {});
   assert.equal(composer.childTranscriptSnapshot(), undefined);
-  client.changesAnswer = { ...client.changesAnswer, children: "children-3" };
+  client.changesAnswer = { ...client.changesAnswer, children: "children-4" };
   client.calls.length = 0;
   await Effect.runPromise(composer.loop.refresh);
   assert.deepEqual(client.calls, [`changes:${DEVICE}`, "children"]);

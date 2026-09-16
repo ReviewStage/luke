@@ -57,7 +57,7 @@ import { Effect, Result } from "effect";
 import {
   type ChildrenSnapshot,
   childrenSnapshotSchema,
-  isChildTranscriptSnapshot,
+  childTranscriptSnapshotSchema,
 } from "#shared/messages/children";
 
 /**
@@ -611,9 +611,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
         (payload): HostChildTranscript | undefined => {
           if (!isRecord(payload)) return undefined;
-          // An empty record is the host saying none is open; anything else must be a transcript.
+          // An empty record is the host saying none is open; anything else must read as a transcript.
           if (Object.keys(payload).length === 0) return { transcript: undefined };
-          return isChildTranscriptSnapshot(payload)
+          const read = readEither(childTranscriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(
+            payload,
+          );
+          // The groups are the host's own composed rows, restored to the view's type as the Conversation snapshot's are.
+          return Result.isSuccess(read)
             ? { transcript: answered<ChildTranscriptSnapshot>(payload) }
             : undefined;
         },

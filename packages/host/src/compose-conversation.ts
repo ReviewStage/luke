@@ -188,6 +188,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   interface OpenChild {
     readonly childId: string;
     readonly sync: ConversationViewSync;
+    /** Whether the last walk reached the transcript's end; one cut short by the bound or a read that did not land is resumed next poll. */
+    caughtUp: boolean;
   }
   let openChild: OpenChild | undefined;
   /** What the clients were last told of the transcript: which child, at which revision; nothing while they were told none is open. */
@@ -335,7 +337,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * Pages one resource from the cursor held to its end, under the poll's
    * bound: each page is applied only while the poll still owns the loop, and
    * the one refusal a device acts on, an unreadable row, is written on the
-   * picture where the walk stops rather than passed over.
+   * picture where the walk stops rather than passed over. Answers whether the
+   * walk reached the end, so a caller whose head does not tell it can ask again.
    */
   const pageResource = /* @__PURE__ */ Effect.fnUntraced(function* <
     Answer extends { readonly hasMore: boolean },
@@ -347,11 +350,11 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     ) => Effect.Effect<ConversationReadResult<Answer>, never, HttpClient.HttpClient>,
     cursor: () => string | undefined,
     apply: (answer: Answer, epoch: number) => Effect.Effect<boolean>,
-  ): Effect.fn.Return<void, never, HttpClient.HttpClient> {
+  ): Effect.fn.Return<boolean, never, HttpClient.HttpClient> {
     for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
       const epoch = picture.clearEpoch;
       const result = yield* read(cursor());
-      if (!loop.isCurrent(generation)) return;
+      if (!loop.isCurrent(generation)) return false;
       if (!result.ok) {
         // A refusal names a row of the thread as it stood when the read went
         // out; a Clear taken meanwhile stamped that thread, and the notice is not written over the new one.
@@ -361,10 +364,12 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         ) {
           picture.markUnreadable(result.row);
         }
-        return;
+        return false;
       }
-      if (!(yield* apply(result.answer, epoch)) || !result.answer.hasMore) return;
+      if (!(yield* apply(result.answer, epoch))) return false;
+      if (!result.answer.hasMore) return true;
     }
+    return false;
   });
 
   const pageMessages = (generation: number) =>
@@ -479,10 +484,11 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     if (readTurns) yield* pageTurns(generation);
     if (readChildren) yield* readChildrenList(generation, signal?.children);
     // The open transcript follows the list, since a child's turns move the
-    // same head; one just opened has no page yet and is read whatever the head did.
+    // same head; one just opened, or one whose last walk was cut short, has
+    // more to read whatever the head did.
     const held = openChild;
-    if (held !== undefined && (readChildren || held.sync.cursors().messages === undefined)) {
-      yield* pageChild(generation, held);
+    if (held !== undefined && (readChildren || !held.caughtUp)) {
+      held.caughtUp = yield* pageChild(generation, held);
     }
     if (!loop.isCurrent(generation)) return;
     publish();
@@ -580,7 +586,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         if (!gate()) return { opened: false };
         const { childId } = read.success;
         if (openChild?.childId !== childId) {
-          openChild = { childId, sync: new ConversationViewSync() };
+          openChild = { childId, sync: new ConversationViewSync(), caughtUp: false };
           publishChildTranscript();
         }
         yield* loop.refresh;
