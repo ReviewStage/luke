@@ -45,7 +45,7 @@ function turnOf(
   return insertTurn(database.run, {
     userId,
     conversationId,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     ...row,
   });
 }

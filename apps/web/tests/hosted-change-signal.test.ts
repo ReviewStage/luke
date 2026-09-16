@@ -357,7 +357,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
       yield* sql`
         insert into turns (user_id, conversation_id, origin, status, queued_at)
         values (
-          ${userId}, ${observed}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.QUEUED},
+          ${userId}, ${observed}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.QUEUED},
           ${new Date(NOW + 500)}
         )
       `;

@@ -466,7 +466,7 @@ test("the child messages answer fixture is a main's page over the one child: its
   assert.equal(answer.hasMore, false);
 });
 
-test("the observed messages answer fixture is a main's page over the one observed conversation: the wake's line and Luke's reply under their roster-diff turn, whole, and a cursor positioned on it alone", async () => {
+test("the observed messages answer fixture is a main's page over the one observed conversation: the wake's line and Luke's reply under their transcript-change turn, whole, and a cursor positioned on it alone", async () => {
   const answer = expectReadAnswer(
     conversationMessagesAnswerSchema,
     await fixture(FIXTURE.OBSERVED_MESSAGES),
@@ -479,7 +479,7 @@ test("the observed messages answer fixture is a main's page over the one observe
   assert.ok(wake);
   assert.equal(answer.groups.length, 1);
   assert.equal(wake.turnId, TURN);
-  assert.equal(wake.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.equal(wake.turn?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
   assert.deepEqual(
     wake.messages.map((message) => [message.message.role, message.tools.length]),
     [
