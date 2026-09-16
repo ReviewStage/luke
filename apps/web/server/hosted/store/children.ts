@@ -443,8 +443,9 @@ export function abandonChildConversation(
   return Effect.map(abandonChild({ userId, childId, now }), Option.isSome);
 }
 
-const dropChild = SqlSchema.void({
+const dropChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
+  Result: ChildIdRowSchema,
   execute: (request) =>
     statement(
       (sql) => sql`
@@ -454,24 +455,31 @@ const dropChild = SqlSchema.void({
           and user_id = ${request.userId}
           and kind = ${CONVERSATION_KIND.CHILD}
           and deleted_at is null
+          and not exists (
+            select 1 from turns
+            where turns.conversation_id = conversations.id and turns.user_id = conversations.user_id
+          )
+        returning id
       `,
     ),
 });
 
 /**
- * Stamps a standing child whatever session it records, the same stamp
- * Clear sets: for a child accepted but never started, which eve took the
- * open of and ran no turn for, and which a cancel could otherwise end by
- * nothing eve names. A session that starts for it late finds a cleared
- * conversation and is refused at admission. A child already stamped is
- * left as it stands.
+ * Stamps a standing child no turn has run for, whatever session it records,
+ * the same stamp Clear sets: a child accepted but never started, which eve
+ * took the open of and ran nothing for, and which a cancel could otherwise
+ * end by nothing eve names. A session that starts for it late finds a
+ * cleared conversation and is refused at admission. Answers whether the row
+ * was stamped: the turn condition is the statement's own, so a turn that
+ * started between the caller's read and this write leaves the child
+ * standing, as a child that is running now, rather than dropped under it.
  */
 export function dropChildConversation(
   userId: string,
   childId: string,
   now: Date,
-): Effect.Effect<void, ChildReadFailure, SqlClient.SqlClient> {
-  return dropChild({ userId, childId, now });
+): Effect.Effect<boolean, ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(dropChild({ userId, childId, now }), Option.isSome);
 }
 
 /** One of the account's standing children by id, or none. */

@@ -548,7 +548,7 @@ test("the send into the parent's recorded session holds no row lock: a second co
   // A session eve retired that another handover replaced while this one's send was refused: the
   // open branch finds the newer session under the lock and sends into it, and opens none.
   const rotated = await childOf();
-  const ROTATED_SESSION = "wrun_01M000000000000000000ROTATE";
+  const ROTATED_SESSION = "wrun_01M000000000000000000MIDWAY";
   const rotating = fakeEve();
   const replacing: ChildCompletionSeams["eve"] = (options) => ({
     ...rotating.eve(options),
@@ -578,6 +578,46 @@ test("the send into the parent's recorded session holds no row lock: a second co
   );
   assert.equal(rotating.opened.length, 0);
   assert.deepEqual(r.reports, []);
+});
+
+test("a session recorded while the send was refused, and retired too before the turn reached it, is opened past under the lock", async () => {
+  const { child, parentId } = await childOf();
+  const ROTATED_SESSION = "wrun_01M000000000000000000MIDWAY";
+  const eve = fakeEve();
+  const retiring: ChildCompletionSeams["eve"] = (options) => ({
+    ...eve.eve(options),
+    send: async (sessionId, message) => {
+      await eve.eve(options).send(sessionId, message);
+      if (sessionId === PARENT_SESSION) {
+        await database.run(
+          Effect.flatMap(
+            SqlClient.SqlClient,
+            (sql) => sql`
+              update conversations set runtime_session_id = ${ROTATED_SESSION}
+              where id = ${parentId}
+            `,
+          ),
+        );
+      }
+      return { outcome: EVE_SEND_OUTCOME.RETIRED };
+    },
+  });
+  const s = seams({ eve: retiring });
+  assert.equal(
+    await database.run(deliverChildCompletion(s, child)),
+    CHILD_COMPLETION_DELIVERY.DELIVERED,
+  );
+  assert.deepEqual(
+    eve.sent.map((handed) => handed.sessionId),
+    [PARENT_SESSION, ROTATED_SESSION],
+  );
+  assert.equal(eve.opened.length, 1);
+  assert.equal(eve.opened[0]?.conversationId, parentId);
+  assert.deepEqual(s.reports, []);
+  // eve's ids sort by the instant they were minted, so the session opened last is the one the
+  // forward-only claim leaves recorded.
+  const parentRow = await readConversationById(database.run, parentId);
+  assert.equal(parentRow[0]?.runtime_session_id, OPENED_SESSION);
 });
 
 test("a parent cleared while eve was refusing the send no longer stands when a session would be opened for it: said, counted undelivered, and nothing is opened", async () => {

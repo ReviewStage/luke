@@ -249,14 +249,15 @@ export function hostedChildAccess(
           if (child === undefined) return undefined;
           // A child that has ended has nothing left to cancel, and answers as already done.
           if (!isActive(child)) return { ok: true, remaining: [] };
+          const notCancelled: ChildCancellation = { ok: false, remaining: [childId] };
           // No turn row yet is a child eve took the open of and ran nothing for, under no name this
           // build can cancel by; its row is stamped as Clear stamps one, so it counts against no
           // bound, and a session starting for it late meets a cleared conversation and is refused.
+          // A turn that started since the read leaves it standing, and the cancel is not done.
           if (child.turnId === null) {
-            yield* dropChildConversation(userId, childId, new Date(seams.now()));
-            return { ok: true, remaining: [] };
+            const dropped = yield* dropChildConversation(userId, childId, new Date(seams.now()));
+            return dropped ? { ok: true, remaining: [] } : notCancelled;
           }
-          const notCancelled: ChildCancellation = { ok: false, remaining: [childId] };
           if (child.eveTurnId !== null) {
             const secret = seams.opener.deploymentSecret();
             const origin = seams.opener.eveOrigin();

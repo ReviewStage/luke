@@ -49,6 +49,14 @@ export const SESSION_OPENING = {
 
 export type SessionOpening = (typeof SESSION_OPENING)[keyof typeof SESSION_OPENING];
 
+/**
+ * How many opens under the lock one handover makes before it gives the turn
+ * up: each is entered with the session eve last retired, so a session
+ * another handover recorded meanwhile and eve retired before this turn
+ * reached it is opened past on the next, rather than the turn lost to it.
+ */
+const OPEN_ATTEMPTS = 2;
+
 /** What the open under the lock came to. */
 const OPENING = {
   /** eve opened a session and the row records it: the turn is under way. */
@@ -141,29 +149,24 @@ export const handToEve = /* @__PURE__ */ Effect.fn("handToEve")(function* <
   opening: SessionOpening,
 ): Effect.fn.Return<boolean, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const message = { conversationId: target.conversationId, turn, message: words };
-  const recorded = yield* recordedRuntimeSession(target);
+  let recorded = yield* recordedRuntimeSession(target);
   if (recorded !== undefined) {
     const sent = yield* sendInto(seams, recorded, message);
     if (sent !== EVE_SEND_OUTCOME.RETIRED) return sent === EVE_SEND_OUTCOME.ACCEPTED;
   }
-  const opened = yield* opening === SESSION_OPENING.LOCKED
-    ? openUnderLock(seams, target, message, recorded)
-    : openSession(seams, target, message);
-  switch (opened.outcome) {
-    case OPENING.OPENED:
-      return true;
-    case OPENING.NOTHING:
-      return false;
-    case OPENING.RECORDED: {
-      // The session another handover opened is sent into once the lock is let go; one eve has
-      // retired already before a turn reached it is said, and nothing is opened a second time.
-      const sent = yield* sendInto(seams, opened.sessionId, message);
-      if (sent === EVE_SEND_OUTCOME.RETIRED) {
-        seams.report(
-          `eve retired session ${opened.sessionId} of conversation ${target.conversationId} before a ${turn} turn reached it.`,
-        );
-      }
-      return sent === EVE_SEND_OUTCOME.ACCEPTED;
-    }
+  for (let attempt = 0; attempt < OPEN_ATTEMPTS; attempt += 1) {
+    const opened = yield* opening === SESSION_OPENING.LOCKED
+      ? openUnderLock(seams, target, message, recorded)
+      : openSession(seams, target, message);
+    if (opened.outcome !== OPENING.RECORDED) return opened.outcome === OPENING.OPENED;
+    // The session another handover opened is sent into once the lock is let go; one eve has
+    // retired before this turn reached it is what the next open is entered with.
+    const sent = yield* sendInto(seams, opened.sessionId, message);
+    if (sent !== EVE_SEND_OUTCOME.RETIRED) return sent === EVE_SEND_OUTCOME.ACCEPTED;
+    recorded = opened.sessionId;
   }
+  seams.report(
+    `eve retired every session recorded for conversation ${target.conversationId} before a ${turn} turn reached it.`,
+  );
+  return false;
 });

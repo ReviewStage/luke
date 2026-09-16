@@ -37,6 +37,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
+import { dropChildConversation } from "../server/hosted/store/children";
 import { conversationDirectory } from "../server/hosted/store/standing-conversations";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
@@ -535,6 +536,13 @@ test("a cancel eve refuses is answered as remaining; an ended child as done; a c
     (await withAccess(seams, (access) => access.list())).map((child) => child.childId),
     [running.childId],
   );
+  // The drop's condition is the statement's own: a child whose turn started since the read that
+  // found none is left standing, so a cancel racing a start never drops a running child.
+  assert.equal(
+    await database.run(dropChildConversation(fixture.userId, running.childId, at(0))),
+    false,
+  );
+  assert.equal((await readConversationById(database.run, running.childId))[0]?.deleted_at, null);
 
   const ended = await childOf(fixture, {
     createdAt: at(30),
