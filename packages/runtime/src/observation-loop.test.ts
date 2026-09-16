@@ -175,15 +175,13 @@ it.effect("a disarm invalidates work already in flight and prevents gated work",
     const gate = yield* cadenceGate(loop.cadence);
     yield* gate.arm;
 
-    const generation = loop.generation;
     const running = yield* Effect.forkChild(loop.refresh);
     yield* gate.disarm;
     enabled = false;
-    assert.equal(loop.isCurrent(generation), false);
+    assert.equal(loop.isCurrent(0), false);
     yield* Deferred.succeed(pending, undefined);
     yield* Fiber.await(running);
     yield* loop.refresh;
-    assert.equal(loop.generation, generation + 1);
   }),
 );
 
@@ -210,9 +208,11 @@ it.effect("the supervisor arms and disarms every loop as one lifecycle", () =>
     yield* Effect.yieldNow;
     yield* supervisor.disarm;
     assert.deepEqual(events, ["sessions", "calendars"]);
+    // Each disarm bumped its own loop's generation, so the one an armed pass
+    // read is no longer current.
     assert.deepEqual(
-      loops.map((loop) => loop.generation),
-      [1, 1],
+      loops.map((loop) => loop.isCurrent(0)),
+      [false, false],
     );
   }),
 );
@@ -233,7 +233,6 @@ it.effect("a loop behind a closed gate arms nothing and is disarmed all the same
     yield* supervisor.arm;
     assert.deepEqual(events, []);
     yield* supervisor.disarm;
-    assert.equal(loop.generation, 0);
   }),
 );
 

@@ -3,7 +3,6 @@ import { it } from "@effect/vitest";
 import { TOOL_EFFECT } from "@sidecar/runtime";
 import {
   MEMORY_CAPTURE_OUTCOME,
-  MEMORY_CAPTURE_PHASE,
   MEMORY_SCOPE_KIND,
   type MemoryCaptureTurn,
   type MemoryScope,
@@ -175,7 +174,6 @@ it.effect("a provider answers only for the scope it was built over", () =>
     assert.ok(provider.capture);
     const turn: MemoryCaptureTurn = {
       scope: OTHER,
-      phase: MEMORY_CAPTURE_PHASE.COMPACTION_REQUESTED,
       operation: { generationId: "gen-1", compactionCount: 0 },
       items: [],
       signal: NEVER,

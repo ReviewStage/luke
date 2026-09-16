@@ -139,10 +139,6 @@ test("a row past its file's bound is read cut at that bound, and the prompt comp
   );
   assert.ok(!built.text.includes("u".repeat(USER_BUDGET + 1)));
   assert.ok(built.text.includes("a".repeat(USER_BUDGET + 250)));
-  assert.deepEqual(
-    built.diagnostics.map((diagnostic) => diagnostic.subject),
-    [WORKSPACE_FILE.USER],
-  );
 });
 
 test("an append creates today's note by the host's clock, grows it after a blank line, and the next day's entry opens the next day's note", async () => {

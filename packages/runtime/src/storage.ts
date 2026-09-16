@@ -1,11 +1,4 @@
-import {
-  isInstant,
-  isRecord,
-  isWireString,
-  type UnparsedWireValue,
-  type WireRecord,
-} from "@sidecar/wire";
-import { type ConversationKind, isConversationKind, type SessionKey } from "./identifiers.js";
+import type { ConversationKind, SessionKey } from "./identifiers.js";
 
 /**
  * The vocabulary of conversation state as the host and the brain speak it:
@@ -38,7 +31,7 @@ export type CompactionSource = (typeof COMPACTION_SOURCE)[keyof typeof COMPACTIO
  * its own shorter one, and the cap on unarchived conversations. Only the cap's
  * victims are ever eligible for the disk budget's permanent deletion.
  */
-export const ARCHIVE_REASON = {
+const ARCHIVE_REASON = {
   USER: "user",
   AGE_RETENTION: "age-retention",
   IDLE_THREAD: "idle-thread",
@@ -46,13 +39,6 @@ export const ARCHIVE_REASON = {
 } as const;
 
 type ArchiveReason = (typeof ARCHIVE_REASON)[keyof typeof ARCHIVE_REASON];
-
-const ARCHIVE_REASON_LIST: readonly ArchiveReason[] = Object.values(ARCHIVE_REASON);
-
-function isArchiveReason(value: UnparsedWireValue): value is ArchiveReason {
-  // SAFETY: value is a string; list membership is the vocabulary check.
-  return isWireString(value) && ARCHIVE_REASON_LIST.includes(value as ArchiveReason);
-}
 
 /** One conversation as the directory lists it: its address, its kind, and where it stands in its lifecycle. */
 export interface ConversationRecord {
@@ -69,118 +55,4 @@ export interface ConversationRecord {
   readonly sessionId?: string;
   /** A thread held in memory alone, gone at the next launch; never stored, so never true on a stored record. */
   readonly temporary?: boolean;
-}
-
-export function conversationRecordFromWire(
-  value: UnparsedWireValue,
-): ConversationRecord | undefined {
-  if (!isRecord(value)) return undefined;
-  if (!isWireString(value.sessionKey) || value.sessionKey.length === 0) return undefined;
-  if (!isConversationKind(value.kind) || !isWireString(value.name)) return undefined;
-  if (!isInstant(value.createdAt) || !isInstant(value.lastActivityAt)) return undefined;
-  if (value.archivedAt !== undefined && !isInstant(value.archivedAt)) return undefined;
-  if (value.archiveReason !== undefined && !isArchiveReason(value.archiveReason)) return undefined;
-  if (value.pinnedAt !== undefined && !isInstant(value.pinnedAt)) return undefined;
-  if (value.sessionId !== undefined && !isWireString(value.sessionId)) return undefined;
-  if (value.temporary !== undefined && value.temporary !== true) return undefined;
-  // SAFETY: the session key is a non-empty string; the constructor's check is the one made above.
-  const record: ConversationRecord = {
-    sessionKey: value.sessionKey as SessionKey,
-    kind: value.kind,
-    name: value.name,
-    createdAt: value.createdAt,
-    lastActivityAt: value.lastActivityAt,
-    ...(value.archivedAt !== undefined ? { archivedAt: value.archivedAt } : undefined),
-    ...(value.archiveReason !== undefined ? { archiveReason: value.archiveReason } : undefined),
-    ...(value.pinnedAt !== undefined ? { pinnedAt: value.pinnedAt } : undefined),
-    ...(value.sessionId !== undefined ? { sessionId: value.sessionId } : undefined),
-    ...(value.temporary === true ? { temporary: true } : undefined),
-  };
-  return record;
-}
-
-/** The record as the protocol carries it; `conversationRecordFromWire` reads it back whole. */
-export function conversationRecordToWire(record: ConversationRecord): WireRecord {
-  return {
-    sessionKey: record.sessionKey,
-    kind: record.kind,
-    name: record.name,
-    createdAt: record.createdAt,
-    lastActivityAt: record.lastActivityAt,
-    ...(record.archivedAt !== undefined ? { archivedAt: record.archivedAt } : undefined),
-    ...(record.archiveReason !== undefined ? { archiveReason: record.archiveReason } : undefined),
-    ...(record.pinnedAt !== undefined ? { pinnedAt: record.pinnedAt } : undefined),
-    ...(record.sessionId !== undefined ? { sessionId: record.sessionId } : undefined),
-    ...(record.temporary !== undefined ? { temporary: record.temporary } : undefined),
-  };
-}
-
-/**
- * How an archive's bytes are encoded on disk: zstd through `node:zlib` where
- * the runtime has it, the plain JSONL otherwise. A reader that finds a zstd
- * archive on a runtime without zstd refuses honestly rather than guessing.
- */
-export const ARCHIVE_ENCODING = {
-  IDENTITY: "identity",
-  ZSTD: "zstd",
-} as const;
-
-type ArchiveEncoding = (typeof ARCHIVE_ENCODING)[keyof typeof ARCHIVE_ENCODING];
-
-function isArchiveEncoding(value: UnparsedWireValue): value is ArchiveEncoding {
-  return value === ARCHIVE_ENCODING.IDENTITY || value === ARCHIVE_ENCODING.ZSTD;
-}
-
-/**
- * One deleted conversation's recoverable archive as the registry lists it.
- * The payload was committed in the same transaction that removed the rows,
- * then published to a file named here and verified by hash; a registry row
- * with no publication yet is one a launch retries. Nothing reads the file
- * back: the record is what the store's own maintenance lists it by.
- */
-export interface ConversationArchiveRecord {
-  readonly archiveId: string;
-  readonly sessionKey: SessionKey;
-  readonly kind: ConversationKind;
-  readonly name: string;
-  readonly createdAt: number;
-  /** The moment the conversation's rows were removed, and the archive's timestamp. */
-  readonly deletedAt: number;
-  readonly encoding: ArchiveEncoding;
-  readonly sha256: string;
-  readonly byteLength: number;
-  readonly fileName: string;
-  readonly publishedAt?: number;
-  readonly conversationLines: number;
-  readonly transcriptEvents: number;
-}
-
-export function conversationArchiveRecordFromWire(
-  value: UnparsedWireValue,
-): ConversationArchiveRecord | undefined {
-  if (!isRecord(value)) return undefined;
-  if (!isWireString(value.archiveId) || value.archiveId.length === 0) return undefined;
-  if (!isWireString(value.sessionKey) || value.sessionKey.length === 0) return undefined;
-  if (!isConversationKind(value.kind) || !isWireString(value.name)) return undefined;
-  if (!isInstant(value.createdAt) || !isInstant(value.deletedAt)) return undefined;
-  if (!isArchiveEncoding(value.encoding) || !isWireString(value.sha256)) return undefined;
-  if (!isInstant(value.byteLength) || !isWireString(value.fileName)) return undefined;
-  if (value.publishedAt !== undefined && !isInstant(value.publishedAt)) return undefined;
-  if (!isInstant(value.conversationLines) || !isInstant(value.transcriptEvents)) return undefined;
-  return {
-    archiveId: value.archiveId,
-    // SAFETY: a non-empty string, checked above, is what the session key constructor admits.
-    sessionKey: value.sessionKey as SessionKey,
-    kind: value.kind,
-    name: value.name,
-    createdAt: value.createdAt,
-    deletedAt: value.deletedAt,
-    encoding: value.encoding,
-    sha256: value.sha256,
-    byteLength: value.byteLength,
-    fileName: value.fileName,
-    ...(value.publishedAt !== undefined ? { publishedAt: value.publishedAt } : undefined),
-    conversationLines: value.conversationLines,
-    transcriptEvents: value.transcriptEvents,
-  };
 }

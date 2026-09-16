@@ -55,13 +55,6 @@ export interface MemoryRecallHistory {
   readonly signal: AbortSignal;
 }
 
-export const MEMORY_CAPTURE_PHASE = {
-  /** The context is about to be compacted; the pre-compaction flush. */
-  COMPACTION_REQUESTED: "compaction.requested",
-} as const;
-
-type MemoryCapturePhase = (typeof MEMORY_CAPTURE_PHASE)[keyof typeof MEMORY_CAPTURE_PHASE];
-
 /**
  * How a capture ended. Only `completed` and `nothing-to-store` mean it ran
  * to its end; an interrupted or failed capture is not marked done, so the
@@ -93,7 +86,6 @@ interface MemoryCaptureOperation {
 /** What a capture is handed: a copy of the context, never the engine, and the standing it runs under. */
 export interface MemoryCaptureTurn {
   readonly scope: MemoryScope;
-  readonly phase: MemoryCapturePhase;
   readonly operation: MemoryCaptureOperation;
   readonly items: readonly WireRecord[];
   readonly signal: AbortSignal;

@@ -1,29 +1,16 @@
-import type { RunOrigin } from "./identifiers.js";
-import type { AgentConfiguration, ResolvedConfiguration, SkillDescriptor } from "./registry.js";
-import { discoverSkills, eligibleSkills } from "./skills.js";
-import type { ChildPolicyContext } from "./tool-policy.js";
-import {
-  BOOTSTRAP_FILE_ORDER,
-  type BootstrapFile,
-  CHILD_BOOTSTRAP_FILES,
-  readBootstrapFiles,
-  WORKSPACE_FILE,
-} from "./workspace.js";
+import type { SkillDescriptor } from "./registry.js";
+import { type BootstrapFile, CHILD_BOOTSTRAP_FILES } from "./workspace.js";
 
 /**
- * The last two of the three stages a prompt is composed in: gathering the
- * live facts under a configuration already resolved, and the pure builder
- * that turns facts into ordered sections. Only the gathering reads a file or
- * a skill root; the builder reads no file, no clock, and no configuration,
- * so the same builder answers the live run and the diagnostics view and what
- * a developer inspects is what the model was sent. Sections come out in a
- * fixed order, split
- * at a cache boundary: everything above it is stable across the turns of a
- * conversation and everything below it changes per turn, so a provider's
- * prefix cache sees the same bytes until a workspace file actually changes.
- * The persona is a section handed in like the identity line: the product owns
- * its words, this package owns where they sit. The order and the profiles
- * follow OpenClaw `b7528507` (`docs/concepts/system-prompt.md`).
+ * The last stage a prompt is composed in: the pure builder that turns facts
+ * already gathered into ordered sections. It reads no file, no clock, and no
+ * configuration, so what a developer inspects is what the model was sent.
+ * Sections come out in a fixed order whose stable ones lead and whose
+ * per-turn one trails, so a provider's prefix cache sees the same bytes until
+ * a workspace file actually changes. The persona is a section handed in like
+ * the identity line: the product owns its words, this package owns where they
+ * sit. The order and the profiles follow OpenClaw `b7528507`
+ * (`docs/concepts/system-prompt.md`).
  */
 
 export const PROMPT_PROFILE = {
@@ -33,7 +20,7 @@ export const PROMPT_PROFILE = {
 
 export type PromptProfile = (typeof PROMPT_PROFILE)[keyof typeof PROMPT_PROFILE];
 
-export const PROMPT_SECTION = {
+const PROMPT_SECTION = {
   IDENTITY: "identity",
   PERSONA: "persona",
   TOOLING: "tooling",
@@ -48,10 +35,10 @@ export const PROMPT_SECTION = {
   RUNTIME: "runtime",
 } as const;
 
-export type PromptSectionId = (typeof PROMPT_SECTION)[keyof typeof PROMPT_SECTION];
+type PromptSectionId = (typeof PROMPT_SECTION)[keyof typeof PROMPT_SECTION];
 
-/** The sections in the order they are emitted; the boundary sits after the last stable one. */
-export const PROMPT_SECTION_ORDER: readonly PromptSectionId[] = [
+/** The sections in the order they are emitted; the per-turn one trails the stable ones. */
+const PROMPT_SECTION_ORDER: readonly PromptSectionId[] = [
   PROMPT_SECTION.IDENTITY,
   PROMPT_SECTION.PERSONA,
   PROMPT_SECTION.TOOLING,
@@ -80,41 +67,15 @@ const MINIMAL_SECTIONS: ReadonlySet<PromptSectionId> = new Set([
   PROMPT_SECTION.RUNTIME,
 ]);
 
-/** Where the stable prefix ends: the first dynamic section and everything after it is the suffix. */
-const FIRST_DYNAMIC_SECTION: PromptSectionId = PROMPT_SECTION.RUNTIME;
-
-export interface PromptSection {
+interface PromptSection {
   readonly id: PromptSectionId;
   readonly heading: string;
   readonly text: string;
-  readonly stable: boolean;
-}
-
-export const PROMPT_DIAGNOSTIC = {
-  FILE_TRUNCATED: "file-truncated",
-  FILE_MISSING: "file-missing",
-  SECTION_OMITTED: "section-omitted",
-  SKILL_LISTED: "skill-listed",
-} as const;
-
-export type PromptDiagnosticKind = (typeof PROMPT_DIAGNOSTIC)[keyof typeof PROMPT_DIAGNOSTIC];
-
-export interface PromptDiagnostic {
-  readonly kind: PromptDiagnosticKind;
-  readonly subject: string;
-  readonly detail: string;
 }
 
 export interface BuiltPrompt {
-  readonly profile: PromptProfile;
-  readonly sections: readonly PromptSection[];
-  /** The stable sections joined: identical across turns until a workspace file changes. */
-  readonly stablePrefix: string;
-  /** The per-turn sections joined: the runtime line. */
-  readonly dynamicSuffix: string;
-  /** The prompt as sent: prefix, then suffix. */
+  /** The prompt as sent: the sections it kept, in order. */
   readonly text: string;
-  readonly diagnostics: readonly PromptDiagnostic[];
   readonly chars: number;
 }
 
@@ -309,121 +270,14 @@ function sectionText(id: PromptSectionId, facts: PromptFacts, files: readonly Bo
 
 /** Builds the prompt from gathered facts alone. */
 export function buildSystemPrompt(facts: PromptFacts): BuiltPrompt {
-  const diagnostics: PromptDiagnostic[] = [];
   const files = bootstrapFilesForProfile(facts.bootstrapFiles, facts.profile);
-  for (const file of files) {
-    if (file.truncated) {
-      diagnostics.push({
-        kind: PROMPT_DIAGNOSTIC.FILE_TRUNCATED,
-        subject: file.name,
-        detail: `${file.content.length} of ${file.originalChars} characters injected`,
-      });
-    }
-    if (file.missing && file.name !== WORKSPACE_FILE.BOOTSTRAP) {
-      diagnostics.push({
-        kind: PROMPT_DIAGNOSTIC.FILE_MISSING,
-        subject: file.name,
-        detail: `${file.path} is absent`,
-      });
-    }
-  }
-  for (const skill of facts.skills) {
-    diagnostics.push({
-      kind: PROMPT_DIAGNOSTIC.SKILL_LISTED,
-      subject: skill.name,
-      detail: skill.location,
-    });
-  }
   const sections: PromptSection[] = [];
-  let stable = true;
   for (const id of PROMPT_SECTION_ORDER) {
-    if (id === FIRST_DYNAMIC_SECTION) stable = false;
-    if (facts.profile === PROMPT_PROFILE.MINIMAL && !MINIMAL_SECTIONS.has(id)) {
-      diagnostics.push({
-        kind: PROMPT_DIAGNOSTIC.SECTION_OMITTED,
-        subject: id,
-        detail: "omitted by the minimal profile",
-      });
-      continue;
-    }
+    if (facts.profile === PROMPT_PROFILE.MINIMAL && !MINIMAL_SECTIONS.has(id)) continue;
     const text = sectionText(id, facts, files);
     if (!text) continue;
-    sections.push({ id, heading: HEADINGS[id], text, stable });
+    sections.push({ id, heading: HEADINGS[id], text });
   }
-  const render = (section: PromptSection) => `# ${section.heading}\n\n${section.text}`;
-  const stablePrefix = sections
-    .filter((section) => section.stable)
-    .map(render)
-    .join("\n\n");
-  const dynamicSuffix = sections
-    .filter((section) => !section.stable)
-    .map(render)
-    .join("\n\n");
-  const text = [stablePrefix, dynamicSuffix].filter((part) => part.length > 0).join("\n\n");
-  return {
-    profile: facts.profile,
-    sections,
-    stablePrefix,
-    dynamicSuffix,
-    text,
-    diagnostics,
-    chars: text.length,
-  };
-}
-
-/** Which run is being prepared, as the profile and the files depend on it. */
-export interface RunDescription {
-  readonly origin: RunOrigin;
-  /** Set for a child run; the profile drops to minimal and the bootstrap to AGENTS.md alone. */
-  readonly child?: ChildPolicyContext;
-}
-
-export interface GatherOptions {
-  readonly configuration: ResolvedConfiguration;
-  readonly run: RunDescription;
-  /** The identity line the prompt opens with: the product's words, handed in rather than known here. */
-  readonly identity: string;
-  /** The persona section, handed in like the identity line; a profile that carries none omits it. */
-  readonly persona?: string;
-  readonly tools: readonly PromptToolFacts[];
-  readonly toolNotes: readonly string[];
-  readonly runtimeContextMarker: string;
-  readonly runtimeId: string;
-  readonly model?: string;
-  /** Skills already discovered under this configuration's roots, when the caller discovered them itself. */
-  readonly skills?: readonly SkillDescriptor[];
-}
-
-/**
- * Gathers the live facts a prompt is built from: the workspace's bootstrap
- * files and the eligible skills under the configuration's roots. A child run
- * gets the minimal profile and reads AGENTS.md alone; every other run gets
- * the full profile and the whole bootstrap order.
- */
-export async function gatherPromptFacts(options: GatherOptions): Promise<PromptFacts> {
-  const configuration: AgentConfiguration = options.configuration.configuration;
-  const child = options.run.child !== undefined;
-  const profile = child ? PROMPT_PROFILE.MINIMAL : PROMPT_PROFILE.FULL;
-  const bootstrapFiles: readonly BootstrapFile[] = await readBootstrapFiles(
-    configuration.workspaceDirectory,
-    child ? CHILD_BOOTSTRAP_FILES : BOOTSTRAP_FILE_ORDER,
-  );
-  const discovered = options.skills ?? (await discoverSkills(configuration.skillRoots));
-  const skills = eligibleSkills(discovered, configuration.agentId);
-  return {
-    profile,
-    identity: options.identity,
-    ...(options.persona !== undefined ? { persona: options.persona } : undefined),
-    tools: options.tools,
-    toolNotes: options.toolNotes,
-    runtimeContextMarker: options.runtimeContextMarker,
-    skills,
-    workspaceDirectory: configuration.workspaceDirectory,
-    bootstrapFiles,
-    runtime: {
-      agentId: configuration.agentId,
-      runtimeId: options.runtimeId,
-      ...(options.model ? { model: options.model } : undefined),
-    },
-  };
+  const text = sections.map((section) => `# ${section.heading}\n\n${section.text}`).join("\n\n");
+  return { text, chars: text.length };
 }

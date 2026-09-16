@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { MAIN_SESSION_KEY, threadSessionKey } from "@sidecar/runtime/vocabulary";
+import { MAIN_SESSION_KEY } from "@sidecar/runtime/vocabulary";
 import { test } from "vitest";
 import { isMaintenanceEligibleConversation } from "./eligibility.js";
 import {
@@ -12,7 +12,9 @@ import {
 } from "./flush.js";
 
 test("maintenance eligibility: main and a durable private thread, never a temporary thread, an observed session, a child, or a cron conversation", () => {
-  const thread = threadSessionKey("11111111-1111-1111-1111-111111111111");
+  // SAFETY: test keys are shaped by hand to exercise the classifier.
+  const thread =
+    "agent:main:thread:11111111-1111-1111-1111-111111111111" as typeof MAIN_SESSION_KEY;
   assert.equal(isMaintenanceEligibleConversation(MAIN_SESSION_KEY, false), true);
   assert.equal(isMaintenanceEligibleConversation(thread, false), true);
   assert.equal(isMaintenanceEligibleConversation(thread, true), false);

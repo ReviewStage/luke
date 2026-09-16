@@ -1,5 +1,4 @@
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
-import { Schema } from "effect";
 
 /**
  * The identities the runtime keeps apart, each a string with one meaning.
@@ -46,15 +45,13 @@ const MAIN_CONVERSATION_NAME = "main";
 const SESSION_KEY_PREFIX = "agent";
 const SESSION_KEY_SEPARATOR = ":";
 
-/** The stable address of an agent's ordinary conversation: `agent:<agentId>:main`. */
-export function mainSessionKey(agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
-  return sessionKey(
-    [SESSION_KEY_PREFIX, agent, MAIN_CONVERSATION_NAME].join(SESSION_KEY_SEPARATOR),
-  );
-}
-
-/** The default agent's ordinary conversation, the one every launch has and the talk key defaults to. */
-export const MAIN_SESSION_KEY: SessionKey = mainSessionKey();
+/**
+ * The default agent's ordinary conversation, the one every launch has and the
+ * talk key defaults to: `agent:<agentId>:main`.
+ */
+export const MAIN_SESSION_KEY: SessionKey = sessionKey(
+  [SESSION_KEY_PREFIX, DEFAULT_AGENT_ID, MAIN_CONVERSATION_NAME].join(SESSION_KEY_SEPARATOR),
+);
 
 /**
  * What kind of conversation a session key addresses. Main is the agent's
@@ -74,32 +71,9 @@ export const CONVERSATION_KIND = {
 
 export type ConversationKind = (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 
-export const ConversationKindSchema = Schema.Literals(Object.values(CONVERSATION_KIND));
-
-const readsConversationKind = Schema.is(ConversationKindSchema);
-
-export function isConversationKind(value: UnparsedWireValue): value is ConversationKind {
-  return readsConversationKind(value);
-}
-
 const THREAD_SEGMENT = "thread";
 const OBSERVED_SEGMENT = "observed";
 const SUBAGENT_SEGMENT = "subagent";
-
-/**
- * A private thread's stable address: `agent:<agentId>:thread:<threadId>`.
- * The thread id is minted by the host as a UUID, so nothing untrusted enters
- * the key; an observed conversation's provider ids go through the encoder
- * below instead.
- */
-export function threadSessionKey(threadId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
-  if (!isIdentifier(threadId) || threadId.includes(SESSION_KEY_SEPARATOR)) {
-    throw new TypeError("thread identifier must be a non-empty string without separators");
-  }
-  return sessionKey(
-    [SESSION_KEY_PREFIX, agent, THREAD_SEGMENT, threadId].join(SESSION_KEY_SEPARATOR),
-  );
-}
 
 /** A child's conversation: `agent:<agentId>:subagent:<childId>`, the id being that conversation's uuid. */
 export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_ID): SessionKey {
@@ -120,7 +94,7 @@ export function childSessionKey(childId: string, agent: AgentId = DEFAULT_AGENT_
  * with no ambiguity. Encoding twice never collides with encoding once: the
  * percent sign is itself encoded.
  */
-export function encodeKeyComponent(value: string): string {
+function encodeKeyComponent(value: string): string {
   return encodeURIComponent(value).replace(
     /[!'()*]/g,
     (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
@@ -128,7 +102,7 @@ export function encodeKeyComponent(value: string): string {
 }
 
 /** The component as it was before encoding, or nothing for text the encoder never produced. */
-export function decodeKeyComponent(encoded: string): string | undefined {
+function decodeKeyComponent(encoded: string): string | undefined {
   if (encoded.length === 0 || /[^A-Za-z0-9._~%-]/.test(encoded)) return undefined;
   try {
     const decoded = decodeURIComponent(encoded);
@@ -138,32 +112,8 @@ export function decodeKeyComponent(encoded: string): string | undefined {
   }
 }
 
-/**
- * An observed coding session's conversation:
- * `agent:<agentId>:observed:<encoded-provider-id>:<encoded-session-id>`. The
- * two provider components go through the encoder, never straight into the
- * key, and come back out of it through `observedSessionRefOf`.
- */
-export function observedSessionKey(
-  source: SourceSessionRef,
-  agent: AgentId = DEFAULT_AGENT_ID,
-): SessionKey {
-  if (!isIdentifier(source.providerId) || !isIdentifier(source.providerSessionId)) {
-    throw new TypeError("an observed session needs a provider id and a provider session id");
-  }
-  return sessionKey(
-    [
-      SESSION_KEY_PREFIX,
-      agent,
-      OBSERVED_SEGMENT,
-      encodeKeyComponent(source.providerId),
-      encodeKeyComponent(source.providerSessionId),
-    ].join(SESSION_KEY_SEPARATOR),
-  );
-}
-
 /** The observed session a key addresses, or nothing for a key of any other shape. */
-export function observedSessionRefOf(key: SessionKey | string): SourceSessionRef | undefined {
+function observedSessionRefOf(key: SessionKey | string): SourceSessionRef | undefined {
   const parsed = parsedSessionKey(key);
   if (parsed?.rest.length !== 3 || parsed.rest[0] !== OBSERVED_SEGMENT) return undefined;
   const providerId = decodeKeyComponent(parsed.rest[1] ?? "");
@@ -208,11 +158,3 @@ export const RUN_ORIGIN = {
 } as const;
 
 export type RunOrigin = (typeof RUN_ORIGIN)[keyof typeof RUN_ORIGIN];
-
-export const RunOriginSchema = Schema.Literals(Object.values(RUN_ORIGIN));
-
-const readsRunOrigin = Schema.is(RunOriginSchema);
-
-export function isRunOrigin(value: UnparsedWireValue): value is RunOrigin {
-  return readsRunOrigin(value);
-}

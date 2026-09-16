@@ -40,7 +40,7 @@ export type ToolPolicyLayer = (typeof TOOL_POLICY_LAYER)[keyof typeof TOOL_POLIC
 export const TOOL_POLICY_ORDER: readonly ToolPolicyLayer[] = Object.values(TOOL_POLICY_LAYER);
 
 /** The configured layers: everything but the turn's own, which the host supplies per turn. */
-export type ConfiguredToolPolicyLayer = Exclude<ToolPolicyLayer, typeof TOOL_POLICY_LAYER.TURN>;
+type ConfiguredToolPolicyLayer = Exclude<ToolPolicyLayer, typeof TOOL_POLICY_LAYER.TURN>;
 
 export type ToolPolicyLayers = Partial<Record<ConfiguredToolPolicyLayer, ToolPolicy>>;
 
@@ -61,7 +61,7 @@ function expand(entry: string, catalog: readonly ToolDescriptor[]): readonly str
   return catalog.filter((tool) => matches(entry, tool.schema.name)).map((tool) => tool.schema.name);
 }
 
-export interface ToolDenial {
+interface ToolDenial {
   readonly tool: string;
   readonly layer: ToolPolicyLayer;
 }
@@ -74,11 +74,6 @@ export interface EffectiveToolPolicy {
   allows(name: string): boolean;
   /** The layer that removed the tool named, or nothing when it stands or was never in the catalog. */
   deniedBy(name: string): ToolPolicyLayer | undefined;
-}
-
-export interface ChildPolicyContext {
-  readonly depth: number;
-  readonly depthCap?: number;
 }
 
 function applyLayer(
