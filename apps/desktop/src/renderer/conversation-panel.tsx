@@ -1,4 +1,4 @@
-import type { ChildRead } from "@sidecar/hosted/reads-wire";
+import type { AgentRead, ChildRead } from "@sidecar/hosted/reads-wire";
 import { ChevronIcon } from "@sidecar/panel";
 import type { ConversationViewSnapshot, SessionIdentity } from "@sidecar/session";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -118,8 +118,10 @@ export function ConversationPanel({
   view,
   roster = [],
   subagents = [],
+  agents = [],
   onOpenChat,
   onOpenChild,
+  onOpenAgent,
   onOfferRatingFeedback,
   live = [],
   spokenAskPending = false,
@@ -135,6 +137,10 @@ export function ConversationPanel({
   onOpenChat?: (identity: SessionIdentity) => void;
   /** The list row's own press by child id, for the chip on a completion; absent where the thread opens no transcript. */
   onOpenChild?: (childId: string) => void;
+  /** The account's per-workspace agents as the document holds them, so an observed group's source chip leads to the agent the list names. */
+  agents?: readonly AgentRead[];
+  /** The list row's own press for an agent, for the chip heading an observed group; absent where the thread opens no transcript. */
+  onOpenAgent?: (agent: AgentRead) => void;
   /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
   onOfferRatingFeedback?: (draft: string) => void;
   /**
@@ -205,9 +211,11 @@ export function ConversationPanel({
                 groups={view.groups}
                 roster={roster}
                 subagents={subagents}
+                agents={agents}
                 now={now}
                 {...(onOpenChat ? { onOpenChat } : undefined)}
                 {...(onOpenChild ? { onOpenChild } : undefined)}
+                {...(onOpenAgent ? { onOpenAgent } : undefined)}
                 {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
                 live={live}
               >

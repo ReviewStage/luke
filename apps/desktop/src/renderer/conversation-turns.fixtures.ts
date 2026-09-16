@@ -1,5 +1,6 @@
 import { ACTION_OUTPUT_STATUS, type ActionOutputEnvelope } from "@sidecar/actions";
 import { CHILD_COMPLETION_STATUS, childCompletionInputText } from "@sidecar/brain/input-items";
+import { type AgentRead, CHILD_STATUS } from "@sidecar/hosted/reads-wire";
 import {
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewInput,
@@ -81,6 +82,23 @@ export const FIXTURE_ROSTER: readonly SessionView[] = [
   rosterSession(FIXTURE_SESSION.UNOPENABLE, FIXTURE_TITLE.UNOPENABLE, false),
   rosterSession(FIXTURE_SESSION.CREATED, FIXTURE_TITLE.CREATED, true),
 ];
+
+/**
+ * The agents list as it stands when the scenarios are drawn: Luke follows the
+ * held session, so an observed group's source chip leads to its transcript.
+ * The title the service kept for it is not the roster's, so a test can tell
+ * which of the two named the chip.
+ */
+export const FIXTURE_AGENT: AgentRead = {
+  id: "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+  providerId: PROVIDER,
+  providerSessionId: FIXTURE_SESSION.HELD,
+  title: FIXTURE_TITLE.HELD_THEN,
+  status: CHILD_STATUS.RUNNING,
+  acceptedAt: 1757505000000,
+  queuedAt: 1757505600000,
+  startedAt: 1757505660000,
+};
 
 const FIXTURE_TOOL_KINDS: ConversationViewToolKinds = new Map([
   ["announce", CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE],

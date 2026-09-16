@@ -10,12 +10,18 @@ import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import {
+  agentTranscriptRow,
   CONVERSATION_PAGE,
   type ConversationPage,
   childTranscriptRow,
   type TranscriptRow,
 } from "./agents-panel";
-import { fixtureChildCompletionTurns } from "./conversation-turns.fixtures";
+import {
+  FIXTURE_AGENT,
+  FIXTURE_ROSTER,
+  fixtureChildCompletionTurns,
+  fixtureConversationTurns,
+} from "./conversation-turns.fixtures";
 import { PanelBody } from "./panel-body";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { SESSION_SORT } from "./session-model";
@@ -213,6 +219,28 @@ test("a completion's chip in the thread opens the child exactly as the list's ro
     chip.click();
   });
   assert.deepEqual(opened, [childTranscriptRow(CHILD)]);
+});
+
+test("an observed group's source chip in the thread opens the agent exactly as the list's row does, and never the provider", () => {
+  const opened: TranscriptRow[] = [];
+  const chats: unknown[] = [];
+  const mounted = mount(
+    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => undefined, {
+      conversation: { groups: fixtureConversationTurns(), settled: true },
+      roster: FIXTURE_ROSTER,
+      agents: { settled: true, agents: [FIXTURE_AGENT] },
+      onOpenTranscript: (row) => opened.push(row),
+      onOpenChat: (identity) => chats.push(identity),
+    }),
+  );
+  const chip = mounted.container.querySelector(".conversation-source-chip");
+  assert.ok(chip instanceof HTMLButtonElement);
+  act(() => {
+    chip.click();
+  });
+  assert.deepEqual(opened, [agentTranscriptRow(FIXTURE_AGENT, FIXTURE_ROSTER)]);
+  assert.equal(opened[0]?.kind, TRANSCRIPT_KIND.OBSERVED);
+  assert.deepEqual(chats, []);
 });
 
 test("a row's press opens the child or the agent, and the transcript page draws in the thread's place with the way back to the list", () => {

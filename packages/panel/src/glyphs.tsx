@@ -261,6 +261,26 @@ export function ExternalIcon(): React.JSX.Element {
   );
 }
 
+/**
+ * A robot's head: a coding agent Luke follows, drawn where the chip naming
+ * one leads to its transcript here rather than to the provider that runs it,
+ * so the mark says whose words the row records and not which app to open.
+ */
+export function RobotIcon({ className }: { className?: string } = {}): React.JSX.Element {
+  return (
+    <Glyph {...(className === undefined ? undefined : { className })}>
+      <rect x="4.6" y="8.4" width="14.8" height="11" rx="2.6" />
+      <path d="M12 8.4V5.2" />
+      <circle cx="12" cy="3.9" r="1.3" />
+      <path d="M4.6 13H2.6" />
+      <path d="M19.4 13h2" />
+      <circle cx="9.2" cy="13.4" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="14.8" cy="13.4" r="1.1" fill="currentColor" stroke="none" />
+      <path d="M9.4 16.6h5.2" />
+    </Glyph>
+  );
+}
+
 /** A person: the account the app is signed in as. */
 export function UserIcon(): React.JSX.Element {
   return (

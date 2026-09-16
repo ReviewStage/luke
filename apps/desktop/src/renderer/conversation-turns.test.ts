@@ -7,7 +7,7 @@ import {
   observedMessagesText,
 } from "@sidecar/brain/input-items";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
-import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
+import { type AgentRead, CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
@@ -45,6 +45,7 @@ import { CONVERSATION_ENTRY_SPEAKER } from "./conversation-rows";
 import { detailToolLabel, TOOL_ROW_STATUS, toolRow } from "./conversation-tool-row";
 import { ConversationTurns, foldOpen } from "./conversation-turns";
 import {
+  FIXTURE_AGENT,
   FIXTURE_INPUT,
   FIXTURE_NOW,
   FIXTURE_RATED_MESSAGE,
@@ -58,9 +59,12 @@ import {
 
 const OPEN = (identity: SessionIdentity) => void identity;
 
+type TurnsProps = Parameters<typeof ConversationTurns>[0];
+
 function render(
   groups: readonly ConversationViewTurnGroup[],
   onOpenChat?: (identity: SessionIdentity) => void,
+  extra: Partial<TurnsProps> = {},
 ) {
   return renderToStaticMarkup(
     createElement(ConversationTurns, {
@@ -68,6 +72,7 @@ function render(
       roster: FIXTURE_ROSTER,
       now: FIXTURE_NOW,
       ...(onOpenChat ? { onOpenChat } : undefined),
+      ...extra,
     }),
   );
 }
@@ -373,28 +378,48 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("a turn of an observed session's own conversation heads on one chip naming the session, pressed as its row is, and main's turns wear none", () => {
+const SOURCE_CHIP_NAME = '<span class="conversation-action-chip conversation-source-chip">';
+
+/** The head row alone: the group's first entry, which is the source chip's line. */
+function sourceHead(markup: string): string {
+  const [head] = markup.split('<li class="conversation-entry"').slice(1);
+  assert.ok(head !== undefined);
+  return head;
+}
+
+test("a turn of an observed session's own conversation heads on one chip naming the agent, pressed as the Agents list's row is, and main's turns wear none", () => {
   const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
   assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
-  const markup = render([observed], OPEN);
+  const OPEN_AGENT = (agent: AgentRead) => void agent;
+  const markup = render([observed], OPEN, {
+    agents: [FIXTURE_AGENT],
+    onOpenAgent: OPEN_AGENT,
+  });
   assert.equal(markup.split(SOURCE_CHIP_BUTTON).length - 1, 1);
+  // Named by the roster while it holds the session, not by the title the service kept.
   assert.ok(markup.includes(`aria-label="Open ${FIXTURE_TITLE.HELD}"`));
   assert.ok(markup.includes(`${FIXTURE_TITLE.HELD}</button>`));
+  assert.ok(!markup.includes(FIXTURE_TITLE.HELD_THEN));
   // The chip is the group's first row, a line of its own in the event voice,
   // and the rows below it are the turn's own, unchanged.
-  const [head, ...rows] = markup.split('<li class="conversation-entry"').slice(1);
-  assert.ok(head !== undefined);
+  const head = sourceHead(markup);
   assert.ok(
     head.startsWith(
       ` data-speaker="${CONVERSATION_ENTRY_SPEAKER.EVENT}" data-source-session="true"`,
     ),
   );
   assert.ok(!head.includes("conversation-bubble"));
+  // The mark is a robot, ours and in the text colour, never the provider's brand mark.
+  assert.ok(head.includes('<svg class="conversation-chip-mark"'));
+  assert.ok(!head.includes("provider-mark"));
   // The observed message crosses cut to its announcement, so one bubble of Luke's follows.
+  const rows = markup.split('<li class="conversation-entry"').slice(2);
   assert.equal(rows.length, 1);
   assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 1);
-  // Pressed, the chip opens the chat at the session the source names.
-  const opened: SessionIdentity[] = [];
+  // Pressed, the chip hands the list's agent to the transcript page, and
+  // never the session to the provider.
+  const openedAgents: AgentRead[] = [];
+  const openedChats: SessionIdentity[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   act(() => {
@@ -402,8 +427,10 @@ test("a turn of an observed session's own conversation heads on one chip naming 
       createElement(ConversationTurns, {
         groups: [observed],
         roster: FIXTURE_ROSTER,
+        agents: [FIXTURE_AGENT],
         now: FIXTURE_NOW,
-        onOpenChat: (identity) => void opened.push(identity),
+        onOpenChat: (identity) => void openedChats.push(identity),
+        onOpenAgent: (agent) => void openedAgents.push(agent),
       }),
     );
   });
@@ -412,7 +439,8 @@ test("a turn of an observed session's own conversation heads on one chip naming 
   act(() => {
     chip.click();
   });
-  assert.deepEqual(opened, [observed.source.session]);
+  assert.deepEqual(openedAgents, [FIXTURE_AGENT]);
+  assert.deepEqual(openedChats, []);
   // Main's own groups, the developer's and Luke's own alike, wear none; the
   // fixture thread wears exactly one per observed group.
   for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.OWN]) {
@@ -425,46 +453,40 @@ test("a turn of an observed session's own conversation heads on one chip naming 
   );
 });
 
-test("a source chip for a session the roster has let go names it from its id and is never a button", () => {
+test("a source chip is a name wherever the agents list cannot lead to the agent, and is never the provider's press", () => {
   const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
-  const gone = renderToStaticMarkup(
-    createElement(ConversationTurns, {
-      groups: [observed],
-      roster: [],
-      now: FIXTURE_NOW,
-      onOpenChat: OPEN,
-    }),
-  );
+  const OPEN_AGENT = (agent: AgentRead) => void agent;
+  // The roster has let the session go, but the list still names the agent:
+  // the chip is named by the title the service kept and still opens.
+  const departed = render([observed], OPEN, {
+    roster: [],
+    agents: [FIXTURE_AGENT],
+    onOpenAgent: OPEN_AGENT,
+  });
+  assert.equal(departed.split(SOURCE_CHIP_BUTTON).length - 1, 1);
+  assert.ok(departed.includes(`${FIXTURE_TITLE.HELD_THEN}</button>`));
+  // Neither the roster nor the list knows the session: a name from its id.
+  const gone = render([observed], OPEN, { roster: [], agents: [], onOpenAgent: OPEN_AGENT });
   assert.equal(gone.split(SOURCE_CHIP_BUTTON).length - 1, 0);
   assert.equal(count(gone, "data-source-session", "true"), 1);
-  assert.ok(gone.includes('<span class="conversation-action-chip conversation-source-chip">'));
+  assert.ok(gone.includes(SOURCE_CHIP_NAME));
   assert.ok(gone.includes(`Session ${FIXTURE_SESSION.HELD.slice(0, 8)}</span>`));
-  // With nothing to hand a press to, the chip is a name even while the roster holds the session.
-  const unpressed = render([observed]);
+  // The roster holds the session and its row would open in the provider,
+  // but the list does not name it as an agent: a name, since the chip leads
+  // to the agent here and nowhere else.
+  const unlisted = render([observed], OPEN, { agents: [], onOpenAgent: OPEN_AGENT });
+  assert.equal(unlisted.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.ok(unlisted.includes(`${FIXTURE_TITLE.HELD}</span>`));
+  // With nothing to hand a press to, the chip is a name even while the list names the agent.
+  const unpressed = render([observed], OPEN, { agents: [FIXTURE_AGENT] });
   assert.equal(unpressed.split(SOURCE_CHIP_BUTTON).length - 1, 0);
   assert.ok(unpressed.includes(`${FIXTURE_TITLE.HELD}</span>`));
-  // A session the roster holds but whose provider reported no address is
-  // named by the roster's title and is a name, as its own row would be.
-  assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
-  const quiet = render(
-    [
-      {
-        ...observed,
-        source: {
-          kind: CONVERSATION_VIEW_SOURCE.OBSERVED,
-          session: {
-            providerId: observed.source.session.providerId,
-            providerSessionId: FIXTURE_SESSION.UNOPENABLE,
-          },
-        },
-      },
-    ],
-    OPEN,
-  );
-  assert.equal(quiet.split(SOURCE_CHIP_BUTTON).length - 1, 0);
-  assert.equal(count(quiet, "data-source-session", "true"), 1);
-  assert.ok(quiet.includes(`${FIXTURE_TITLE.UNOPENABLE}</span>`));
-  assert.ok(!quiet.includes(FIXTURE_TITLE.HELD));
+  // Every one of them still wears the robot.
+  for (const markup of [departed, gone, unlisted, unpressed]) {
+    const head = sourceHead(markup);
+    assert.ok(head.includes('<svg class="conversation-chip-mark"'));
+    assert.ok(!head.includes("provider-mark"));
+  }
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {
