@@ -8,9 +8,11 @@ import { Effect } from "effect";
 import type {
   ProviderActionResult,
   ProviderConversationResult,
+  ProviderTranscriptChangesResult,
   ProviderTranscriptResult,
   ProviderTranscriptSinceResult,
   ProviderWorkspaceResult,
+  TranscriptChangesRequest,
 } from "./action-results.js";
 import {
   ACTION_KIND,
@@ -129,6 +131,9 @@ interface ReadHandlers {
     cursor?: string,
   ): Effect.Effect<ProviderTranscriptSinceResult>;
   conversation(input: ActionInput<ConversationPage>): Effect.Effect<ProviderConversationResult>;
+  transcriptChanges(
+    request: TranscriptChangesRequest,
+  ): Effect.Effect<ProviderTranscriptChangesResult>;
 }
 
 /**
@@ -145,6 +150,11 @@ const unsupportedByObservation = {
 const NO_TRANSCRIPT = {
   status: ACTION_RESULT_STATUS.UNSUPPORTED,
   reason: "This provider keeps no transcript this build can read.",
+} as const;
+
+const NO_TRANSCRIPT_CHANGES = {
+  status: ACTION_RESULT_STATUS.UNSUPPORTED,
+  reason: "This provider reports no transcript changes this build can read.",
 } as const;
 
 const NO_CONVERSATION_READ = {
@@ -367,6 +377,22 @@ export function dispatchRead(
       return handler ? handler(providerSessionId, cursor) : Effect.succeed(NO_TRANSCRIPT);
     },
   );
+}
+
+/**
+ * The transcript-changes read: which of the chats named changed since an
+ * instant. It names no single session, so it is not a `dispatchRead` kind;
+ * the caller hands in the ids its own roster holds and the provider answers
+ * for those and no others.
+ */
+export function dispatchTranscriptChanges(
+  plugin: SessionProviderPlugin,
+  request: TranscriptChangesRequest,
+): Effect.Effect<ProviderTranscriptChangesResult> {
+  return Effect.suspend(() => {
+    const handler = plugin.reads?.transcriptChanges;
+    return handler ? handler(request) : Effect.succeed(NO_TRANSCRIPT_CHANGES);
+  });
 }
 
 /**

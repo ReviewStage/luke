@@ -232,27 +232,41 @@ export const CONDUCTOR_SQL_FIELD = {
   ROWS: "rows",
   SESSION_ID: "session_id",
   AGENT_TYPE: "agent_type",
+  TRANSCRIPT_UPDATED_AT: "transcript_updated_at",
 } as const;
 
 /**
- * The one query document this adapter ever sends, fixed by this build. The
- * endpoint takes a read as a POSTed document rather than a GET, so the
- * separation a GET gives for free is held by construction: observation only
- * ever sends this SELECT, and nothing reaches its text but session ids the
- * same pass reported — each validated as a UUID first, so no name, title, or
- * message a provider controls can ever be spliced into the document.
+ * The two query documents this adapter ever sends, each fixed by this build.
+ * The endpoint takes a read as a POSTed document rather than a GET, so the
+ * separation a GET gives for free is held by construction: nothing reaches
+ * either document's text but session ids the same roster reported — each
+ * validated as a UUID first — and, in the second, an instant this build
+ * itself serialised, so no name, title, or message a provider controls can
+ * ever be spliced into a document.
  *
- * The columns ask for the agent kind and nothing else. The view also holds
- * each chat's transcript, and no column of it is named here: the
+ * The first, the observation pass's, asks for the agent kind and nothing
+ * else. The second, the scheduled opener's, asks for the instant each
+ * chat's transcript last changed and nothing else, which is how the opener
+ * learns which chats to read without reading any. The view also holds each
+ * chat's transcript, and no column of it is named in either: the
  * conversation is the documented messages endpoint's to read, at the
- * developer's own press or the brain's own read tool, never an observation
- * pass's.
+ * developer's own press or the brain's own reads, never a pass's.
  */
 export const CONDUCTOR_READ_AGENT_KINDS_PREFIX =
   `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.AGENT_TYPE} ` +
   `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN (`;
 
 export const CONDUCTOR_READ_AGENT_KINDS_SUFFIX = ")";
+
+/** The opener's document, in the pieces the ids and the instant are spliced between. */
+export const CONDUCTOR_READ_TRANSCRIPT_CHANGES = {
+  PREFIX:
+    `SELECT ${CONDUCTOR_SQL_FIELD.SESSION_ID}, ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT} ` +
+    `FROM session_transcripts_view WHERE ${CONDUCTOR_SQL_FIELD.SESSION_ID} IN (`,
+  SINCE: `) AND ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT} > '`,
+  SINCE_SUFFIX: `' ORDER BY ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT} ASC`,
+  SUFFIX: `) ORDER BY ${CONDUCTOR_SQL_FIELD.TRANSCRIPT_UPDATED_AT} ASC`,
+} as const;
 
 export interface ConductorReportedStatus {
   status: ConductorSessionStatus | undefined;

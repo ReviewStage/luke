@@ -282,7 +282,7 @@ function rememberEnd(
 const CONDUCTOR_SPEAKER_NAME = CONDUCTOR_PROVIDER_NAME;
 
 /** A read Conductor refused, named without echoing the provider's own words. */
-function readRefusal(failure: AdapterFailure, subject: string) {
+export function readRefusal(failure: AdapterFailure, subject: string) {
   return {
     status: ACTION_RESULT_STATUS.REJECTED,
     reason:
@@ -411,7 +411,7 @@ export const readConductorTranscriptSince = /* @__PURE__ */ Effect.fn(
         : page.messages;
     return {
       status: ACTION_RESULT_STATUS.ACCEPTED,
-      text: transcriptLines(observation, kept).join("\n"),
+      lines: transcriptLines(observation, kept),
       ...(next !== undefined ? { cursor: next } : undefined),
       truncated:
         cursor === undefined

@@ -6,7 +6,9 @@ import {
   type BrainTranscriptDelta,
   type CloudAgentProviderId,
   dispatchRead,
+  dispatchTranscriptChanges,
   isCloudAgentProviderId,
+  type ProviderTranscriptChangesResult,
   type SessionIdentity,
   type SessionProviderPlugin,
   type WireRecord,
@@ -52,6 +54,11 @@ export interface HostedTranscriptReads {
   since(
     identity: SessionIdentity,
   ): Effect.Effect<TranscriptDeltaReading | undefined, SqlError | Schema.SchemaError>;
+  /** Which of the roster's chats under the provider gained transcript since the instant, as the provider answers it; no words. */
+  changedSince(
+    providerId: CloudAgentProviderId,
+    since: number | undefined,
+  ): Effect.Effect<ProviderTranscriptChangesResult>;
 }
 
 /** A statement over the ambient client, so the query below reads as the query it is. */
@@ -201,16 +208,33 @@ export function hostedTranscriptReads(seams: TranscriptReadSeams): HostedTranscr
         if (read.status !== ACTION_RESULT_STATUS.ACCEPTED) {
           return { delta: { text: "", truncated: false, status: read.status } };
         }
-        const overflow = Math.max(0, read.text.length - BRAIN_HOST.TRANSCRIPT_DELTA_CHARS);
+        const text = read.lines.join("\n");
+        const overflow = Math.max(0, text.length - BRAIN_HOST.TRANSCRIPT_DELTA_CHARS);
         return {
           delta: {
-            text: read.text.slice(overflow),
+            text: text.slice(overflow),
             truncated: read.truncated || overflow > 0,
             status: read.status,
           },
           ...(read.cursor !== undefined ? { cursor: read.cursor } : undefined),
           ...(from !== undefined ? { from } : undefined),
         };
+      }),
+    changedSince: (providerId, since) =>
+      Effect.gen(function* () {
+        // The ids are the roster's own, so the provider is asked about the chats this account
+        // observes and no others; a provider with none in the roster is not asked at all.
+        const roster = yield* seams.roster();
+        const providerSessionIds = (roster.observations.get(providerId) ?? []).map(
+          (observation) => observation.providerSessionId,
+        );
+        if (providerSessionIds.length === 0) {
+          return { status: ACTION_RESULT_STATUS.ACCEPTED, changes: [] };
+        }
+        return yield* dispatchTranscriptChanges(seams.pluginFor(providerId), {
+          providerSessionIds,
+          ...(since !== undefined ? { since } : undefined),
+        });
       }),
   };
 }
