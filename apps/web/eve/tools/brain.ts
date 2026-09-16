@@ -26,8 +26,9 @@ export default defineDynamic({
           const turn = host.turnOf(ctx.session.auth, ctx.session.id, eveTurnId);
           if (!turn) return null;
           const binding: HostedToolBinding = { target: admitted.target, turn };
+          const declarations = yield* host.toolDeclarations(admitted.target, turn);
           return Object.fromEntries(
-            host.toolDeclarations(turn).map((declared) => {
+            declarations.map((declared) => {
               const name = declared.name;
               return [
                 name,

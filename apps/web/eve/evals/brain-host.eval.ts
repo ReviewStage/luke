@@ -173,7 +173,10 @@ export default defineEval({
       // set's, neither naming a row, since nothing of either is kept.
       assert.equal(turn.promptHash?.length, SHA256_HEX_LENGTH);
       assert.ok(turn.toolSetHash);
-      assert.equal(turn.toolSetHash, toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK)));
+      assert.equal(
+        turn.toolSetHash,
+        toolSetHashOf(hostedToolDeclarations(BRAIN_TURN_TRIGGER.ASK, { quiet: false })),
+      );
 
       const messageRows = await readMessagesByTurn(run, conversation.id, turnId);
       assert.deepEqual(

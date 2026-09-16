@@ -1260,8 +1260,12 @@ on the observation tick writes the one end left: `speech.expired` with the
 reason `due` on an offer past its own instant. A quiet instant a device
 reports (a meeting, or the pause switch restated as an instant) mutes the
 account and writes nothing: the push and the briefing look leave a quiet
-account's offers unread, and an offer made under the quiet expires due like
-any other, so nothing is saved for later or decided again. The Conversation view marks
+account's offers unread, an offer made under the quiet expires due like any
+other, and a turn that starts under the quiet is not offered `announce` at all
+(`hostedToolDeclarations` takes the account's quiet beside the trigger, read
+through the same query as each turn starts, and the turn's tool-set hash is
+taken from the same declarations), so nothing is saved for later or decided
+again. The Conversation view marks
 an announcement unspoken when the latest speech event on its message is
 `speech.expired`. A prompt and a tool set are
 content-addressed, the hash of the text or the schemas as the key, and the

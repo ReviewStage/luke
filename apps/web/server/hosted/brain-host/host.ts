@@ -26,7 +26,12 @@ import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import { cloudSessionPluginFor } from "../cloud-adapters.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
-import { type ConversationTarget, promptHashOf, type StoreWriter } from "../store/index.js";
+import {
+  type ConversationTarget,
+  promptHashOf,
+  quietUntilByAccount,
+  type StoreWriter,
+} from "../store/index.js";
 import { offerBriefing } from "./announce.js";
 import { turnKindOf } from "./auth.js";
 import {
@@ -150,8 +155,11 @@ export interface BrainHost {
   standingContext(admitted: AdmittedConversation): HostEffect<string>;
   /** The conversation so far, for a session opened over a conversation with words already said; nothing otherwise. */
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
-  /** The tools one turn is offered, as declarations; the eve project binds each to `runTool`. */
-  toolDeclarations(turn: HostedTurn): readonly HostedToolDeclaration[];
+  /** The tools one turn is offered, as declarations, read against the account's quiet as the turn starts; the eve project binds each to `runTool`. */
+  toolDeclarations(
+    target: ConversationTarget,
+    turn: HostedTurn,
+  ): HostEffect<readonly HostedToolDeclaration[]>;
   /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it; over the edge's `HttpClient` too, for the one embeddings call a notebook search makes. */
   runTool(
     name: string,
@@ -327,6 +335,21 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
     );
   };
 
+  /**
+   * The declarations one turn is offered, read against the account's quiet
+   * as the turn starts. The tools resolver and the relay's tool-set hash both
+   * read here, so the hash names what the model was offered and not a list
+   * kept beside it. The quiet is the same query the push pass and the
+   * briefing look read, so the three decide on one standing.
+   */
+  const declarationsFor = (
+    target: ConversationTarget,
+    trigger: BrainTurnTrigger,
+  ): HostEffect<readonly HostedToolDeclaration[]> =>
+    Effect.map(quietUntilByAccount(seams.now(), [target.userId]), (quiet) =>
+      hostedToolDeclarations(trigger, { quiet: quiet.has(target.userId) }),
+    );
+
   return {
     admit: (auth, sessionId) =>
       admitConversation(auth, { id: sessionId, standing: SESSION_STANDING.CURRENT }),
@@ -380,7 +403,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         (recent) => rotationSeedText(recent, seams.now()),
       ),
 
-    toolDeclarations: (turn) => hostedToolDeclarations(turn.trigger),
+    toolDeclarations: (target, turn) => declarationsFor(target, turn.trigger),
 
     runTool: (name, binding, input, context) =>
       Effect.gen(function* () {
@@ -524,7 +547,9 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // beside it.
         const toolSetHash =
           event.type === "turn.started" && turn !== undefined
-            ? toolSetHashOf(hostedToolDeclarations(BRAIN_HOST_TURN_KIND[turn].trigger))
+            ? toolSetHashOf(
+                yield* declarationsFor(admitted.target, BRAIN_HOST_TURN_KIND[turn].trigger),
+              )
             : undefined;
         const writer = yield* seams.writer();
         yield* relayOver(writer).handle(event, {

@@ -4,7 +4,7 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
-import { BRAIN_TURN_TRIGGER, WORKSPACE_FILE } from "../server/core";
+import { BRAIN_TOOL, BRAIN_TURN_TRIGGER, DEVICE_PLATFORM, WORKSPACE_FILE } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   BRAIN_HOST_ATTRIBUTE,
@@ -183,6 +183,21 @@ async function relayTurn(
 }
 
 /** The conversation's turn rows by id, since both turns of a test start on the one fixed clock. */
+/** One Mac of the account reporting its quiet instant, as the heartbeat writes it; null clears it. */
+async function reportQuiet(userId: string, quietUntil: number | null) {
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      const at = quietUntil === null ? null : new Date(quietUntil);
+      yield* sql`
+        insert into devices (id, user_id, installation_id, platform, quiet_until)
+        values (${`mac-${userId}`}, ${userId}, ${`install-${userId}`}, ${DEVICE_PLATFORM.MACOS}, ${at})
+        on conflict (id) do update set quiet_until = excluded.quiet_until
+      `;
+    }),
+  );
+}
+
 async function turnRows(target: ConversationTarget) {
   const rows = await readTurnsByConversation(database.run, target.conversationId);
   return [...rows]
@@ -272,11 +287,13 @@ test("two turns of one session record the session's prompt hash and one tool set
     rows.map((row) => row.promptHash),
     [prompt.hash, prompt.hash],
   );
-  const offered = host.toolDeclarations({
-    kind: BRAIN_HOST_TURN.TYPED,
-    trigger: BRAIN_TURN_TRIGGER.ASK,
-    turnId: firstTurn,
-  });
+  const offered = await database.run(
+    host.toolDeclarations(target, {
+      kind: BRAIN_HOST_TURN.TYPED,
+      trigger: BRAIN_TURN_TRIGGER.ASK,
+      turnId: firstTurn,
+    }),
+  );
   const expected = toolSetHashOf(offered);
   assert.deepEqual(
     rows.map((row) => row.toolSetHash),
@@ -287,11 +304,8 @@ test("two turns of one session record the session's prompt hash and one tool set
 test("an observation turn is offered another tool set and records another hash, and a session that composed no prompt records none", async () => {
   const host = brainHost(seams);
   const typed = await startSession(host, await ownedConversation(), BRAIN_HOST_TURN.TYPED);
-  const observed = await startSession(
-    host,
-    await ownedConversation(CONVERSATION_KIND.OBSERVED),
-    BRAIN_HOST_TURN.OBSERVATION,
-  );
+  const observedTarget = await ownedConversation(CONVERSATION_KIND.OBSERVED);
+  const observed = await startSession(host, observedTarget, BRAIN_HOST_TURN.OBSERVATION);
   const typedPrompt = await composePrompt(host, typed);
 
   const typedTurn = await relayTurn(host, typed, "turn_0", 0, { hash: typedPrompt.hash });
@@ -305,13 +319,51 @@ test("an observation turn is offered another tool set and records another hash, 
   assert.equal(
     observationRow.toolSetHash,
     toolSetHashOf(
-      host.toolDeclarations({
-        kind: BRAIN_HOST_TURN.OBSERVATION,
-        trigger: BRAIN_TURN_TRIGGER.ROSTER,
-        turnId: observationTurn,
-      }),
+      await database.run(
+        host.toolDeclarations(observedTarget, {
+          kind: BRAIN_HOST_TURN.OBSERVATION,
+          trigger: BRAIN_TURN_TRIGGER.ROSTER,
+          turnId: observationTurn,
+        }),
+      ),
     ),
   );
   assert.equal(observationRow.promptHash, null);
   assert.equal(typedRow.promptHash, typedPrompt.hash);
+});
+
+test("while a device of the account reports quiet ahead, an observation turn is offered no announce and records the hash of what it was offered; the quiet lifting offers it again", async () => {
+  const host = brainHost(seams);
+  const target = await ownedConversation(CONVERSATION_KIND.OBSERVED);
+  const session = await startSession(host, target, BRAIN_HOST_TURN.OBSERVATION);
+  const turn = { kind: BRAIN_HOST_TURN.OBSERVATION, trigger: BRAIN_TURN_TRIGGER.ROSTER } as const;
+
+  await reportQuiet(target.userId, NOW + 30 * 60_000);
+  const quietTurn = await relayTurn(host, session, "turn_0", 0, {});
+  const quietOffered = await database.run(
+    host.toolDeclarations(target, { ...turn, turnId: quietTurn }),
+  );
+  assert.equal(
+    quietOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),
+    false,
+  );
+  assert.equal(
+    (await readTurnById(database.run, quietTurn))?.toolSetHash,
+    toolSetHashOf(quietOffered),
+  );
+
+  await reportQuiet(target.userId, null);
+  const loudTurn = await relayTurn(host, session, "turn_1", 1, {});
+  const loudOffered = await database.run(
+    host.toolDeclarations(target, { ...turn, turnId: loudTurn }),
+  );
+  assert.equal(
+    loudOffered.some((declared) => declared.name === BRAIN_TOOL.ANNOUNCE),
+    true,
+  );
+  assert.equal(
+    (await readTurnById(database.run, loudTurn))?.toolSetHash,
+    toolSetHashOf(loudOffered),
+  );
+  assert.notEqual(toolSetHashOf(loudOffered), toolSetHashOf(quietOffered));
 });
