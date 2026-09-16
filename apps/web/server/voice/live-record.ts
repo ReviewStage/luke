@@ -8,12 +8,11 @@ import {
   type VoiceWriteResult,
   type VoiceWriter,
 } from "../hosted/store/index.js";
-import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
+import { type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../live.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
  * Postgres, which keeps the plan's split — every transcript delta a segment,
- * the developer's spoken ask a message cut where the delegation places it,
  * and each speaker's utterance a row of its own, the developer's a user row
  * and Luke's an assistant row, upserted under the id the service's ledger
  * minted and grown as its fragments arrive, its words read from the segments
@@ -25,20 +24,18 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
  * segments already on record and never from a grouping the service kept
  * beside them.
  *
- * A delegation is the one event not consumed as it arrives. The writer cuts
- * the ask from the developer's segments already on record, and the API may
- * deliver a delegation ahead of the transcript deltas it is about, and place
- * its offset before the utterance's last fragment; so the event is held, and
- * the ask cut only when the service asks for the developer's utterance to be
- * written under it, by which time every delta that arrived ahead of that ask
- * has taken its place in the sequence, and cut over the span the service's
- * ledger grouped the utterance as, so a last word the offset fell short of
- * is the ask's. The service makes that write for every delegated ask,
- * whether or not the utterance's own row was on record before, and awaits
- * it ahead of the reply, so the write answers true only
- * when the ask is on record and the service speaks no reply to an ask the
- * record refused. The writer's own idempotency on the delegation id makes a
- * repeated write the same message.
+ * A delegation cuts nothing. The stream's own delegation event is consumed
+ * like any other and the writer keeps nothing of it; what puts an ask on
+ * record is the service's write for the developer's utterance under the
+ * delegation, which the record answers by writing the row as the ledger
+ * holds it then — so a last fragment the API delivered after the delegation
+ * is on the row — and attaching that row to the delegation in place, its id
+ * the ledger's still. The service makes that write for every delegated ask
+ * and awaits it ahead of the reply, so the write answers true only when a
+ * row of the ask stands on record under the delegation, and the service
+ * speaks no reply to an ask the record refused. The store's own rule that a
+ * row already a delegation's is left as it is makes a repeated write the
+ * same rows.
  *
  * Every face here answers an effect and none of them runs one: the write
  * itself is made on the scoped fiber below, under the `SqlClient` the
@@ -46,10 +43,8 @@ import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
  * that write's own `Deferred`.
  */
 
-type DelegationCreated = Extract<
-  LiveServerEvent,
-  { type: typeof LIVE_SERVER_EVENT.DELEGATION_CREATED }
->;
+/** One row as the service names it to the record. */
+type SpokenRowUpsert = Parameters<LiveRecord["upsertSpokenRow"]>[0];
 
 interface HostedLiveRecordOptions {
   readonly writer: VoiceWriter;
@@ -62,9 +57,6 @@ interface HostedLiveRecord extends LiveRecord {
   /** Settles once every write started so far has landed or failed; a caller closing the session waits on it so no write is cut. */
   drained(): Effect.Effect<void>;
 }
-
-/** A delegation is held for the ask that names it, and the stream itself writes nothing for it yet. */
-const HELD: VoiceWriteResult = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED };
 
 type Write = Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
@@ -83,7 +75,6 @@ export function hostedLiveRecord({
   Scope.Scope | SqlClient.SqlClient
 > {
   return Effect.gen(function* () {
-    const held = new Map<string, DelegationCreated>();
     const waiting = yield* Queue.unbounded<PendingWrite>();
     let last: PendingWrite["landed"] | undefined;
 
@@ -109,8 +100,6 @@ export function hostedLiveRecord({
       return Deferred.await(landed);
     }
 
-    const consume = (event: LiveServerEvent) => enqueue(writer.consume(target, event));
-
     /** Whether the record took an utterance: landed, found standing, or owed nothing; a refusal or a failure is not taken. */
     const taken = (write: Effect.Effect<VoiceWriteResult, SqlError | Schema.SchemaError>) =>
       write.pipe(
@@ -119,43 +108,48 @@ export function hostedLiveRecord({
         Effect.catchDefect(() => Effect.succeed(false)),
       );
 
+    /** The row as the service names it, written or grown from the segments on record over its span. */
+    const upsert = (row: SpokenRowUpsert): Write =>
+      writer.upsertSpokenRow(target, {
+        rowId: row.rowId,
+        speaker: row.speaker,
+        startMs: row.startMs,
+        endMs: row.endMs,
+      });
+
     return {
-      observe(event) {
-        if (event.type === LIVE_SERVER_EVENT.DELEGATION_CREATED) {
-          held.set(event.delegation.id, event);
-          return Effect.succeed(HELD);
-        }
-        return consume(event);
-      },
-      upsertSpokenRow: (row) =>
-        taken(
-          enqueue(
-            writer.upsertSpokenRow(target, {
-              rowId: row.rowId,
-              speaker: row.speaker,
-              startMs: row.startMs,
-              endMs: row.endMs,
-            }),
-          ),
-        ),
+      observe: (event) => enqueue(writer.consume(target, event)),
+      upsertSpokenRow: (row) => taken(enqueue(upsert(row))),
       writeDeveloperUtterance: (record) =>
-        Effect.suspend(() => {
-          const delegation = held.get(record.delegationId);
-          if (delegation === undefined) return Effect.succeed(false);
-          // A write the store refused and one it died on are both an ask not
-          // on record, as they were when the promise rejected; an interruption
-          // is neither, and is the socket's scope closing under the wait.
-          return enqueue(
-            writer.recordSpokenAsk(target, delegation, {
+        // The row is written as the ledger holds it now and then given the
+        // delegation, as one turn at the writer: one entry on the queue, so
+        // the drain a closing session waits on covers the attach with the
+        // write, and a close between the two cannot leave the row written
+        // and never the delegation's. A write the store refused and one it
+        // died on are both an ask not on record; an interruption is neither,
+        // and is the socket's scope closing under the wait.
+        enqueue(
+          Effect.flatMap(
+            upsert({
+              rowId: record.rowId,
+              speaker: TRANSCRIPT_SPEAKER.USER,
+              voiceSessionId: record.voiceSessionId,
               startMs: record.startMs,
               endMs: record.endMs,
             }),
-          ).pipe(
-            Effect.map((written) => written.ok && written.effect !== STORE_WRITE_EFFECT.IGNORED),
-            Effect.catch(() => Effect.succeed(false)),
-            Effect.catchDefect(() => Effect.succeed(false)),
-          );
-        }),
+            (written) =>
+              written.ok
+                ? writer.attachSpokenAsk(target, {
+                    delegationId: record.delegationId,
+                    rowIds: [record.rowId],
+                  })
+                : Effect.succeed(written),
+          ),
+        ).pipe(
+          Effect.map((attached) => attached.ok && attached.effect !== STORE_WRITE_EFFECT.IGNORED),
+          Effect.catch(() => Effect.succeed(false)),
+          Effect.catchDefect(() => Effect.succeed(false)),
+        ),
       drained: () =>
         Effect.suspend(() =>
           last === undefined ? Effect.void : Effect.ignore(Deferred.await(last)),

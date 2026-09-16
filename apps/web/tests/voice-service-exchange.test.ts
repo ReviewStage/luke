@@ -11,7 +11,7 @@ import {
 } from "@sidecar/live";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
-import { Effect, Exit, Scope } from "effect";
+import { Effect, Exit, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import {
   CONVERSATION_EVENT_KIND,
@@ -107,6 +107,13 @@ const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
 
 const NOW = 1_800_000_000_000;
+
+const DelegatedMetadataSchema = Schema.Struct({ delegation_id: Schema.String });
+
+/** The delegation a row's metadata names, where it names one. */
+function delegationOf(row: { readonly metadata: unknown }): string | undefined {
+  return Schema.is(DelegatedMetadataSchema)(row.metadata) ? row.metadata.delegation_id : undefined;
+}
 const API_KEY = "sk-test-project-key";
 const BEARER = "Bearer account-token-1";
 const SDP_OFFER =
@@ -477,13 +484,13 @@ it.effect(
       assert.equal(kinds.includes(LIVE_CLIENT_EVENT.INSTRUCTIONS_APPEND), false);
 
       await hangUp(context, session);
-      // The record was drained before the session was reported ended: the developer's line stands under the delegation's id.
+      // The record was drained before the session was reported ended: the developer's line stands attached to the delegation.
       const rows = await readMessagesByConversationTyped(
         database.run,
         context.target.conversationId,
       );
       assert.deepEqual(
-        rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => row.clientId),
+        rows.filter((row) => row.role === MESSAGE_ROLE.USER).map((row) => delegationOf(row)),
         ["dl_1"],
       );
       await context.stop();
@@ -1213,7 +1220,9 @@ it.effect(
         context.target.conversationId,
       );
       assert.deepEqual(
-        messages.filter((message) => message.role === MESSAGE_ROLE.USER).map((m) => m.clientId),
+        messages
+          .filter((message) => message.role === MESSAGE_ROLE.USER)
+          .map((message) => delegationOf(message)),
         ["dl_1"],
       );
       const events = await readEventsByConversation(database.run, context.target.conversationId);

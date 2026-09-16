@@ -60,10 +60,10 @@ import {
  * session — driven through the service exactly as the voice service would
  * drive it, and the rows it leaves read back. What these tests hold to is the
  * plan's split and the service's own rule that the record precedes the
- * speech: the developer's spoken ask is the one message, cut from the
- * segments the deltas wrote, and a reply is spoken only once that ask is on
- * record; each speaker's utterance is a row of its own under the id the
- * service's ledger minted, on record behind the debounce and grown in place.
+ * speech: each speaker's utterance is a row of its own under the id the
+ * service's ledger minted, on record behind the debounce and grown in place;
+ * the developer's row a delegation is about takes the delegation in place,
+ * and a reply is spoken only once that row is on record under it.
  */
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
@@ -285,15 +285,24 @@ function shownRows(rows: Awaited<ReturnType<typeof messageRows>>) {
   return rows.map(({ revision: _revision, ...row }) => row);
 }
 
-/** The row a delegation owns, once the ask's write has landed under its id. */
+const DelegatedMetadataSchema = Schema.Struct({ delegation_id: Schema.String });
+
+/** The delegation a row's metadata names, where it names one. */
+function delegationOf(row: { metadata: unknown }): string | undefined {
+  return Schema.is(DelegatedMetadataSchema)(row.metadata) ? row.metadata.delegation_id : undefined;
+}
+
+/** The developer's row a delegation owns, once the ask's write has attached it. */
 async function askRow(conversation: ConversationTarget, delegationId = "dl_1") {
-  return (await messageRows(conversation)).find((row) => row.clientId === delegationId);
+  return (await messageRows(conversation)).find(
+    (row) => row.role === MESSAGE_ROLE.USER && delegationOf(row) === delegationId,
+  );
 }
 
 const IGNORED = { ok: true, effect: STORE_WRITE_EFFECT.IGNORED } as const;
 const WRITTEN = { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN } as const;
 
-test("a spoken ask is the one message, cut from the segments including a delta that arrived after the delegation, and the reply is spoken under the delegation once the ask is on record", async () => {
+test("a spoken ask is the developer's row attached to the delegation, its words including a delta that arrived after the delegation, and the reply is spoken under the delegation once that row is on record", async () => {
   const live = await target();
   const f = await stand(live);
   await f.open();
@@ -305,8 +314,8 @@ test("a spoken ask is the one message, cut from the segments including a delta t
   f.socket.receive(heard(" right now?", 1800, 2400));
   await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
   // The ask on record is what says the service has the exchange the run's
-  // events belong to: it composes the ask, hears the run's id, and writes the
-  // line under the delegation, in that order.
+  // events belong to: it composes the ask, hears the run's id, and attaches
+  // the row to the delegation, in that order.
   await until(async () => (await askRow(live.conversation)) !== undefined, "the ask on record");
   f.brain.reply("run-1", "Nothing yet.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
@@ -318,10 +327,10 @@ test("a spoken ask is the one message, cut from the segments including a delta t
     voice_session_id: voiceSessionId,
     delegation_id: "dl_1",
     from_ms: 1000,
-    to_ms: 2500,
+    to_ms: 2400,
   };
   // The delegation flushed both rows before the ask was composed: Luke's greeting stands as his own
-  // row, and the developer's row was adopted by the ask, its cut running past the flushed span.
+  // row, and the developer's row, its id the ledger's still, took the delegation with the late word on it.
   const rows = await messageRows(live.conversation);
   assert.deepEqual(
     rows.map((row) => [row.role, row.parts]),
@@ -330,9 +339,12 @@ test("a spoken ask is the one message, cut from the segments including a delta t
       [MESSAGE_ROLE.USER, [{ type: "text", text: "What needs me right now?", state: "done" }]],
     ],
   );
-  assert.deepEqual(shownRows(rows.slice(1)), [
+  const ask = rows[1];
+  assert.ok(ask);
+  assert.notEqual(ask.clientId, "dl_1");
+  assert.deepEqual(shownRows([ask]), [
     {
-      clientId: "dl_1",
+      clientId: ask.clientId,
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: "What needs me right now?", state: "done" }],
       metadata,
@@ -350,7 +362,7 @@ test("a spoken ask is the one message, cut from the segments including a delta t
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, WRITTEN, WRITTEN, IGNORED, WRITTEN]);
 });
 
-test("an utterance whose row is on record before its delegation arrives is still the delegation's ask on record before its reply is spoken", async () => {
+test("an utterance whose row is on record before its delegation arrives takes the delegation in place, under its own id, before its reply is spoken", async () => {
   const live = await target();
   const f = await stand(live);
   await f.open();
@@ -367,31 +379,28 @@ test("an utterance whose row is on record before its delegation arrives is still
   const undelegated = settled[0];
   assert.ok(undelegated);
   assert.notEqual(undelegated.clientId, "dl_late");
-  assert.equal(
-    Schema.is(Schema.Struct({ delegation_id: Schema.String }))(undelegated.metadata),
-    false,
-  );
+  assert.equal(delegationOf(undelegated), undefined);
 
   f.socket.receive(delegated("dl_late", 5000));
   await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
   // The ask on record is what says the service has the exchange the run's
-  // events belong to: it composes the ask, hears the run's id, and writes the
-  // line under the delegation, in that order.
+  // events belong to: it composes the ask, hears the run's id, and attaches
+  // the row to the delegation, in that order.
   await until(
-    async () => (await messageRows(live.conversation))[0]?.clientId === "dl_late",
+    async () => (await askRow(live.conversation, "dl_late")) !== undefined,
     "the ask on record",
   );
   f.brain.reply("run-1", "Opening it.");
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
-  // The delegation adopted the line rather than cutting a second: one row, now under the
-  // delegation's id and naming it, with the span the cut ran to.
+  // The delegation attached the row rather than cutting a second: one row, its id the ledger's
+  // still, naming the delegation, with its own span.
   const rows = await messageRows(live.conversation);
   assert.deepEqual(
     rows.map((row) => [row.clientId, row.role, row.parts]),
     [
       [
-        "dl_late",
+        undelegated.clientId,
         MESSAGE_ROLE.USER,
         [{ type: "text", text: "Open the failing one.", state: "done" }],
       ],
@@ -400,11 +409,7 @@ test("an utterance whose row is on record before its delegation arrives is still
   const settledMetadata = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(
     undelegated.metadata,
   );
-  assert.deepEqual(rows[0]?.metadata, {
-    ...settledMetadata,
-    delegation_id: "dl_late",
-    to_ms: 5000,
-  });
+  assert.deepEqual(rows[0]?.metadata, { ...settledMetadata, delegation_id: "dl_late" });
   assert.deepEqual(
     f.commentary().map((event) => [event.delegation_id, event.content]),
     [["dl_late", "Opening it."]],
@@ -448,7 +453,7 @@ test("a row is on record within the debounce of its first fragment and grows in 
   assert.deepEqual(await messageRows(live.conversation), rows);
 });
 
-test("a delegation delivered ahead of the words it is about is held, and is the ask on record once the service composes it on the words", async () => {
+test("a delegation delivered ahead of the words it is about is retained by the service, and its row is on record under it once the service composes it on the words", async () => {
   const live = await target();
   const f = await stand(live);
   await f.open();
@@ -465,7 +470,7 @@ test("a delegation delivered ahead of the words it is about is held, and is the 
   await until(() => f.commentary().length === 1, "the reply to be spoken");
 
   assert.deepEqual(
-    (await messageRows(live.conversation)).map((row) => [row.clientId, row.parts]),
+    (await messageRows(live.conversation)).map((row) => [delegationOf(row), row.parts]),
     [["dl_early", [{ type: "text", text: "What needs me?", state: "done" }]]],
   );
   assert.deepEqual(
@@ -495,7 +500,7 @@ test("an ask the record refuses is answered all the same: nothing is said of the
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
 });
 
-test("the record door answers from the stream: the developer's row and Luke's answer to it are rows cut from the segments, a delegation is held until its ask is written, a repeated write is the same message, and an unseen delegation is refused", async () => {
+test("the record door answers from the stream: the developer's row and Luke's answer to it are rows cut from the segments, the stream's delegation event writes nothing, the ask's write attaches its row once however often it is made, and a row with no words on record is refused", async () => {
   const live = await target();
   const scope = await database.run(Scope.make());
   const record = await database.run(
@@ -532,9 +537,17 @@ test("the record door answers from the stream: the developer's row and Luke's an
     ),
     true,
   );
+  // A row whose span holds no segment is not on record and cannot be the ask's.
   assert.equal(
     await database.run(
-      record.writeDeveloperUtterance({ ...utterance, text: "x", delegationId: "dl_unseen" }),
+      record.writeDeveloperUtterance({
+        ...utterance,
+        rowId: "row-nowhere",
+        startMs: 5000,
+        endMs: 5500,
+        text: "x",
+        delegationId: "dl_unseen",
+      }),
     ),
     false,
   );
@@ -546,7 +559,7 @@ test("the record door answers from the stream: the developer's row and Luke's an
     ],
   );
 
-  // A delegation on the next words is held until its ask is written, and cuts those words alone.
+  // The stream's delegation event writes nothing; the ask's own write attaches its row.
   assert.deepEqual(await database.run(record.observe(heard("Now run it.", 3000, 3800))), WRITTEN);
   assert.deepEqual(await database.run(record.observe(delegated("dl_3", 4000))), IGNORED);
   assert.equal((await messageRows(live.conversation)).length, 2);
@@ -558,7 +571,15 @@ test("the record door answers from the stream: the developer's row and Luke's an
     text: "Now run it.",
     delegationId: "dl_3",
   };
-  assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
+  // The drain a closing session waits on covers the attach with the row's write: once drained, the
+  // row is the delegation's, never written and left for an attach the close would cut.
+  const writing = database.run(record.writeDeveloperUtterance(ask));
+  await database.run(record.drained());
+  assert.equal(
+    delegationOf((await messageRows(live.conversation))[2] ?? { metadata: null }),
+    "dl_3",
+  );
+  assert.equal(await writing, true);
   assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
   assert.deepEqual(
     (await messageRows(live.conversation)).map((row) => [row.role, row.parts]),
@@ -568,7 +589,11 @@ test("the record door answers from the stream: the developer's row and Luke's an
       [MESSAGE_ROLE.USER, [{ type: "text", text: "Now run it.", state: "done" }]],
     ],
   );
-  assert.equal((await messageRows(live.conversation))[2]?.clientId, "dl_3");
+  const attached = (await messageRows(live.conversation))[2];
+  assert.deepEqual(
+    [attached?.clientId, delegationOf(attached ?? { metadata: null })],
+    ["row-3", "dl_3"],
+  );
   assert.deepEqual(await segments(live.liveSessionId), [
     [1, VOICE_SEGMENT_ROLE.USER, "Open the failing one.", 0, 900],
     [2, VOICE_SEGMENT_ROLE.ASSISTANT, "Opening it.", 1200, 2000],
@@ -603,9 +628,12 @@ test("a delegation placed ahead of the ask's last fragment, the fragment landing
     from_ms: 1000,
     to_ms: 2600,
   };
-  assert.deepEqual(shownRows(await messageRows(live.conversation)), [
+  const [ask] = await messageRows(live.conversation);
+  assert.ok(ask);
+  assert.notEqual(ask.clientId, "dl_1");
+  assert.deepEqual(shownRows([ask]), [
     {
-      clientId: "dl_1",
+      clientId: ask.clientId,
       role: MESSAGE_ROLE.USER,
       parts: [{ type: "text", text: "Open the failing one.", state: "done" }],
       metadata,
