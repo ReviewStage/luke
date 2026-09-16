@@ -323,6 +323,13 @@
       "when": 1790275000000,
       "tag": "0046_dead_hosted_usage_voice_seconds",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790300000000,
+      "tag": "0047_dead_asks_question",
+      "breakpoints": true
     }
   ]
 }
