@@ -454,7 +454,7 @@ test("the record door answers from the stream: an undelegated utterance and Luke
     WRITTEN,
   );
   assert.deepEqual(await database.run(record.observe(said("Opening it.", 1200, 2000))), WRITTEN);
-  // The developer's settled utterance, undelegated, is a row cut from its segments.
+  // The developer's settled utterance, undelegated, is a row cut from its segments under the ledger's id.
   assert.equal(
     await database.run(
       record.writeDeveloperUtterance({
@@ -465,11 +465,12 @@ test("the record door answers from the stream: an undelegated utterance and Luke
     ),
     true,
   );
-  // Luke's answer to it is a row too, over its own span.
+  // Luke's answer to it is a row too, under its own id and over its own span.
   assert.equal(
     await database.run(
       record.writeLukeUtterance({
         ...utterance,
+        rowId: "row-2",
         startMs: 1200,
         endMs: 2000,
         role: CONVERSATION_ENTRY_KIND.REPLY,
@@ -498,6 +499,7 @@ test("the record door answers from the stream: an undelegated utterance and Luke
   assert.equal((await messageRows(live.conversation)).length, 2);
   const ask = {
     ...utterance,
+    rowId: "row-3",
     startMs: 3000,
     endMs: 3800,
     text: "Now run it.",

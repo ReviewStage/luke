@@ -9,21 +9,21 @@ import {
   type VoiceWriteResult,
   type VoiceWriter,
 } from "../hosted/store/index.js";
-import { LIVE_SERVER_EVENT, type LiveServerEvent } from "../live.js";
+import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../live.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
  * Postgres, which keeps the plan's split — every transcript delta a segment,
  * the developer's spoken ask a message cut where the delegation places it,
- * and an exchange the voice model answered itself two messages of its own:
- * the developer's settled utterance as a user row and Luke's settled answer
- * as an assistant row, each cut from the segments over the span the service
- * settled, so the Conversation keeps what was said whether or not the brain
- * was consulted. The service hands every server event here in arrival order
- * and the writer takes what it keeps of each; the two utterance doors are
- * answered on the same queue, after every delta that arrived ahead of the
- * settle has taken its place, so a row is cut from segments already on
- * record and never from a grouping the service kept beside them.
+ * and each speaker's utterance a row of its own, the developer's a user row
+ * and Luke's an assistant row, upserted under the id the service's ledger
+ * minted and cut from the segments over the span the service names, so the
+ * Conversation keeps what was said whether or not the brain was consulted.
+ * The service hands every server event here in arrival order and the writer
+ * takes what it keeps of each; the two utterance doors are answered on the
+ * same queue, after every delta that arrived ahead of the write has taken
+ * its place, so a row is cut from segments already on record and never from
+ * a grouping the service kept beside them.
  *
  * A delegation is the one event not consumed as it arrives. The writer cuts
  * the ask from the developer's segments already on record, and the API may
@@ -132,7 +132,9 @@ export function hostedLiveRecord({
           if (record.delegationId === null) {
             return taken(
               enqueue(
-                writer.recordSpokenLine(target, {
+                writer.upsertSpokenRow(target, {
+                  rowId: record.rowId,
+                  speaker: TRANSCRIPT_SPEAKER.USER,
                   startMs: record.startMs,
                   endMs: record.endMs,
                 }),
@@ -159,7 +161,9 @@ export function hostedLiveRecord({
         record.role === CONVERSATION_ENTRY_KIND.REPLY
           ? taken(
               enqueue(
-                writer.recordSpokenReply(target, {
+                writer.upsertSpokenRow(target, {
+                  rowId: record.rowId,
+                  speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
                   startMs: record.startMs,
                   endMs: record.endMs,
                 }),

@@ -47,6 +47,7 @@ import {
 import { STORE_WRITE_EFFECT, storeWriter, voiceWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { standingObservedConversation } from "../server/hosted/store/observed-conversations";
+import { TRANSCRIPT_SPEAKER } from "../server/live";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { heard, said } from "./support/live-events";
@@ -489,7 +490,12 @@ it.effect(
       await holds("spoken: segments", 3);
       tick();
       const lineWritten = await database.run(
-        voice.recordSpokenLine(live, { startMs: 1000, endMs: 3400 }),
+        voice.upsertSpokenRow(live, {
+          rowId: "developer-row",
+          speaker: TRANSCRIPT_SPEAKER.USER,
+          startMs: 1000,
+          endMs: 3400,
+        }),
       );
       assert.deepEqual(lineWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
       const lineHeld = await holds("spoken: developer's line settled", 4);
@@ -513,7 +519,12 @@ it.effect(
       );
       tick();
       const replyWritten = await database.run(
-        voice.recordSpokenReply(live, { startMs: 3600, endMs: 6000 }),
+        voice.upsertSpokenRow(live, {
+          rowId: "luke-row",
+          speaker: TRANSCRIPT_SPEAKER.ASSISTANT,
+          startMs: 3600,
+          endMs: 6000,
+        }),
       );
       assert.deepEqual(replyWritten, { ok: true, effect: STORE_WRITE_EFFECT.WRITTEN });
       const replyHeld = await holds("spoken: Luke's answer settled", 5);
