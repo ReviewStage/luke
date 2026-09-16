@@ -1,5 +1,4 @@
 import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
-import type { WireRecord } from "@sidecar/wire";
 import { maximumChildTaskLength } from "./tools/names.js";
 
 /**
