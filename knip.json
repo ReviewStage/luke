@@ -8,7 +8,6 @@
     "tiffutil",
     "codesign",
     "xcrun",
-    "hdiutil",
     "swiftc",
     "electron"
   ],
@@ -16,13 +15,12 @@
   "workspaces": {
     ".": {
       "entry": [
-        "scripts/*.mjs",
-        "scripts/*.test.mjs",
-        "design/*.mjs",
-        "tools/**/*.ts",
-        "tools/**/*.mjs",
-        "apps/ios/*.test.mjs",
-        "scripts/**/*.ts"
+        "scripts/generate-provider-readme.ts",
+        "scripts/fixtures/discarded-effect/*.ts",
+        "design/check-design-contract.mjs",
+        "design/generate-brand-assets.mjs",
+        "design/generate-surface-shared.mjs",
+        "tools/oxlint/anti-slop/fixtures/*.ts"
       ],
       "project": ["scripts/**", "design/**", "tools/**"]
     },
@@ -31,7 +29,6 @@
         "src/main/index.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
-        "src/**/*.test.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],
@@ -44,36 +41,17 @@
         "src/entry-server.tsx",
         "server/db/migrate.ts",
         "scripts/*.ts",
-        "tests/**/*.test.ts",
         "server/feedback.mjs"
       ],
       "project": ["src/**", "server/**", "scripts/**", "tests/**"],
       "ignoreDependencies": ["@sidecar/providers"]
     },
     "packages/*": {
-      "entry": [
-        "src/**/*.test.ts",
-        "src/**/worker-entry.ts",
-        "src/ui-messages/index.ts",
-        "src/testing/index.ts",
-        "src/effect/index.ts"
-      ],
+      "entry": ["src/ui-messages/index.ts", "src/testing/index.ts", "src/effect/index.ts"],
       "project": ["src/**"]
-    },
-    "packages/gateway": {
-      "entry": ["src/**/*.test.ts", "src/rpc.ts"],
-      "project": ["src/**"]
-    },
-    "packages/brain": {
-      "entry": ["src/**/*.test.ts", "src/**/worker-entry.ts", "src/ui-messages/index.ts"],
-      "project": ["src/**"]
-    },
-    "tools/*": {
-      "entry": ["src/*.ts", "*.ts", "*.mjs", "**/*.test.*"],
-      "project": ["**/*.ts", "**/*.mjs"]
     },
     "apps/web/eve": {
-      "entry": ["**/*.ts"],
+      "entry": ["instructions/*.ts", "memory/*.ts", "evals/evals.config.ts", "evals/*.eval.ts"],
       "project": ["**/*.ts"]
     }
   },
