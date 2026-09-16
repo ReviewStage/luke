@@ -14,6 +14,7 @@ import {
   SESSION_STATUS,
   WORKSPACE_TASK_SUPPORT,
   type WorkspaceAgentModels,
+  workspaceAgentModels,
 } from "@sidecar/session";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
@@ -248,7 +249,15 @@ const OFFERED_PROJECT: ObservedWorkspaceProject = {
  * ids for the wire, efforts per agent.
  */
 const AGENT_TABLE: readonly WorkspaceAgentModels[] = [
-  { agent: "claude", models: [{ id: "fable-5", label: "Fable 5" }], efforts: ["low", "max"] },
+  {
+    agent: "claude",
+    models: [
+      { id: "fable-5", label: "Fable 5" },
+      { id: "fable-5-1", label: "Fable 5.1" },
+    ],
+    efforts: ["low", "max"],
+  },
+  { agent: "codex", models: [{ id: "gpt-5.4", label: "GPT-5.4" }], efforts: ["high"] },
   { agent: "cursor", models: [{ id: "auto", label: "Cursor Auto" }], efforts: [] },
 ];
 
@@ -309,6 +318,81 @@ test("a creation ask may name a model, by the name the guide lists it under", as
     ),
   ];
   for (const refusal of refusals) assert.equal(refusal.status, ACTION_RESULT_STATUS.REJECTED);
+});
+
+test("a creation's model is matched as it is said, and never re-decides the agent the ask named", async () => {
+  const projects = [OFFERED_PROJECT];
+  const identity = '"provider_id":"conductor","project_id":"proj-1"';
+  const created = {
+    kind: "create-workspace",
+    providerId: "conductor",
+    providerProjectId: "proj-1",
+  };
+
+  // The id with a dot for its hyphen, the label in any case, the id in
+  // capitals: one model, because the name is retold rather than copied.
+  for (const spoken of ["fable-5.1", "fable 5.1", "FABLE-5-1", "Fable 5.1"]) {
+    assert.deepEqual(
+      await sessionToolAction(
+        messageCall(`{${identity},"model":"${spoken}"}`, ACTION_TOOL.CREATE_WORKSPACE),
+        [],
+        projects,
+        conductorAgentModels,
+      ),
+      { ...created, agentSelection: { agent: "claude", model: "fable-5-1" } },
+      spoken,
+    );
+  }
+  // The folding never blurs two of the build's documented models into one:
+  // every id and every label in the real table still names its own model.
+  for (const entry of workspaceAgentModels("conductor")) {
+    for (const model of entry.models) {
+      for (const spoken of [model.id, model.label]) {
+        assert.deepEqual(
+          await sessionToolAction(
+            messageCall(`{${identity},"model":"${spoken}"}`, ACTION_TOOL.CREATE_WORKSPACE),
+            [],
+            projects,
+            workspaceAgentModels,
+          ),
+          { ...created, agentSelection: { agent: entry.agent, model: model.id } },
+          spoken,
+        );
+      }
+    }
+  }
+
+  // A claude agent asked for beside a codex model is a refusal that names
+  // the agent, not a Codex workspace: the model never swaps the agent.
+  const swapped = await sessionToolAction(
+    messageCall(
+      `{${identity},"agent":"claude","model":"gpt-5.4","effort":"high"}`,
+      ACTION_TOOL.CREATE_WORKSPACE,
+    ),
+    [],
+    projects,
+    conductorAgentModels,
+  );
+  assert.deepEqual(swapped, {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: "A claude agent runs no model by that name.",
+  });
+  // The same model beside its own agent, or beside no agent at all, rides.
+  for (const agentField of ['"agent":"codex",', '"agent":"Codex",', ""]) {
+    assert.deepEqual(
+      await sessionToolAction(
+        messageCall(
+          `{${identity},${agentField}"model":"gpt-5.4","effort":"high"}`,
+          ACTION_TOOL.CREATE_WORKSPACE,
+        ),
+        [],
+        projects,
+        conductorAgentModels,
+      ),
+      { ...created, agentSelection: { agent: "codex", model: "gpt-5.4", effort: "high" } },
+      agentField,
+    );
+  }
 });
 
 test("an added agent may carry a model, only of the asked-for kind", async () => {
