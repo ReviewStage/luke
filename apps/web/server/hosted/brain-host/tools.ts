@@ -195,13 +195,27 @@ function memoryScopeOf(seams: HostedToolSeams): MemoryScope {
   return { kind: MEMORY_SCOPE_KIND.ACCOUNT, key: seams.conversation.userId };
 }
 
-/** The tools one turn is offered, by name in catalog order: the policy's allowed set, as declarations. */
+/** What the account's standing takes from a turn's tool set, beyond what the policy fixes per kind of turn. */
+export interface HostedToolStanding {
+  /**
+   * Whether a device of the account reports a quiet instant still ahead — a
+   * meeting, or the announcements switch off. A quiet turn is not offered
+   * `announce`, so nothing is decided to be said into the meeting and nothing
+   * is saved for after it; the muted push and briefing look cover an offer
+   * already standing.
+   */
+  readonly quiet: boolean;
+}
+
+/** The tools one turn is offered, by name in catalog order: the policy's allowed set, less what the account's standing withholds, as declarations. */
 export function hostedToolDeclarations(
   trigger: BrainTurnTrigger,
+  standing: HostedToolStanding,
 ): readonly HostedToolDeclaration[] {
   return hostedTurnPolicy(trigger).allowed.flatMap((descriptor) => {
     const named = moduleNamed(descriptor.schema.name);
     if (!named) return [];
+    if (named.kind === "announce" && standing.quiet) return [];
     return [
       {
         name: named.module.name,

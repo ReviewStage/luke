@@ -390,8 +390,10 @@ for thirty seconds; neither observes a meeting, so neither reports a quiet
 instant. Each is an instant and nothing else — not what you typed, not which
 app you were in, not the meeting's title, which never reaches the Mac either
 — and the service records them and decides nothing from them beyond holding
-speech while a quiet instant stands and, for a Mac alone, waiting before it
-pushes a briefing, as described next: a phone or watch that is merely present
+speech while a quiet instant stands (a briefing already on offer is neither
+spoken nor pushed until it lapses, and a scheduled turn that starts under it
+is not given the tool that decides a briefing, so none is made to wait) and,
+for a Mac alone, waiting before it pushes a briefing, as described next: a phone or watch that is merely present
 is pushed to rather than waited on, since neither opens a call of its own for
 a briefing — though a call you have already placed on either says the
 briefings that arrive while it stands. The

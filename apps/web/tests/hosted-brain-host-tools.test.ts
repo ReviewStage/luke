@@ -160,6 +160,9 @@ const OBSERVATION: HostedTurnStanding = {
 };
 
 /** One call of one tool, as eve would carry it: the declared name, the model's arguments, the turn's standing. */
+/** No quiet instant stands on the account: the policy's own set. */
+const LOUD = { quiet: false } as const;
+
 function call(
   seams: HostedToolSeams,
   turn: HostedTurnStanding,
@@ -168,15 +171,17 @@ function call(
   context = eveContext(),
 ) {
   assert.ok(
-    hostedToolDeclarations(turn.trigger).some((declared) => declared.name === name),
+    hostedToolDeclarations(turn.trigger, LOUD).some((declared) => declared.name === name),
     `${name} is offered`,
   );
   return Effect.runPromise(runHostedTool(name, input, context, seams, turn));
 }
 
 test("an ask is offered the catalog under the hosted policy, an observation the same set plus announce", () => {
-  const ask = hostedToolDeclarations(ASK.trigger).map((declared) => declared.name);
-  const observation = hostedToolDeclarations(OBSERVATION.trigger).map((declared) => declared.name);
+  const ask = hostedToolDeclarations(ASK.trigger, LOUD).map((declared) => declared.name);
+  const observation = hostedToolDeclarations(OBSERVATION.trigger, LOUD).map(
+    (declared) => declared.name,
+  );
   assert.equal(ask.includes(BRAIN_TOOL.ANNOUNCE), false);
   assert.equal(observation.includes(BRAIN_TOOL.ANNOUNCE), true);
   assert.deepEqual(
@@ -194,12 +199,31 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
     BRAIN_TOOL.SESSIONS_HISTORY,
   ];
   assert.deepEqual(
-    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK).map((declared) => declared.name),
+    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK, LOUD).map((declared) => declared.name),
     ask.filter((name) => !sessionTools.includes(name)),
   );
   assert.deepEqual(
-    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION).map((declared) => declared.name),
+    hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION, LOUD).map(
+      (declared) => declared.name,
+    ),
     observation,
+  );
+});
+
+test("a quiet account's observation turn is offered the same set less announce; an ask's set does not change", () => {
+  const observation = hostedToolDeclarations(OBSERVATION.trigger, LOUD).map(
+    (declared) => declared.name,
+  );
+  const quiet = hostedToolDeclarations(OBSERVATION.trigger, { quiet: true }).map(
+    (declared) => declared.name,
+  );
+  assert.deepEqual(
+    quiet,
+    observation.filter((name) => name !== BRAIN_TOOL.ANNOUNCE),
+  );
+  assert.deepEqual(
+    hostedToolDeclarations(ASK.trigger, { quiet: true }).map((declared) => declared.name),
+    hostedToolDeclarations(ASK.trigger, LOUD).map((declared) => declared.name),
   );
 });
 
