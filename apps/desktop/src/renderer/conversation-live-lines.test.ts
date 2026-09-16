@@ -30,7 +30,7 @@ import {
 const OPENED = Date.parse("2026-09-14T09:00:00.000Z");
 
 function line(
-  rowId: number,
+  rowId: string,
   kind: typeof CONVERSATION_ENTRY_KIND.ASK | typeof CONVERSATION_ENTRY_KIND.REPLY,
   words: string,
   settled = false,
@@ -81,13 +81,13 @@ function view(...messages: ConversationViewMessage[]): ConversationViewSnapshot 
 const EMPTY = view();
 
 test("a reported line is drawn, settled or not, until the record shows it, and then not twice", () => {
-  const asked = line(1, CONVERSATION_ENTRY_KIND.ASK, "Which agent is waiting");
+  const asked = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Which agent is waiting");
   let hold = foldLiveLines(NO_LIVE_LINES, [asked], OPENED);
   assert.equal(hold.openedAt, OPENED);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [asked.entry]);
 
   // The row grows and settles: the same row, still drawn, since no row of it is on record yet.
-  const grown = line(1, CONVERSATION_ENTRY_KIND.ASK, "Which agent is waiting on me?", true);
+  const grown = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Which agent is waiting on me?", true);
   hold = foldLiveLines(hold, [grown], OPENED + 3_000);
   assert.deepEqual(hold.held, []);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [grown.entry]);
@@ -99,7 +99,7 @@ test("a reported line is drawn, settled or not, until the record shows it, and t
   assert.deepEqual(shownLiveEntries(hold, onRecord), []);
 
   // Luke's reply row appears beside it and is drawn until its own row lands.
-  const reply = line(2, CONVERSATION_ENTRY_KIND.REPLY, "The fixture agent is.", true);
+  const reply = line("row-2", CONVERSATION_ENTRY_KIND.REPLY, "The fixture agent is.", true);
   hold = foldLiveLines(hold, [grown, reply], OPENED + 6_000);
   assert.deepEqual(shownLiveEntries(hold, onRecord), [reply.entry]);
   assert.deepEqual(
@@ -115,17 +115,17 @@ test("a reported line is drawn, settled or not, until the record shows it, and t
 });
 
 test("a report that moved nothing answers the same hold, so nothing is redrawn for it", () => {
-  const lines = [line(1, CONVERSATION_ENTRY_KIND.ASK, "Hello")];
+  const lines = [line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Hello")];
   const hold = foldLiveLines(NO_LIVE_LINES, lines, OPENED);
   assert.equal(
-    foldLiveLines(hold, [line(1, CONVERSATION_ENTRY_KIND.ASK, "Hello")], OPENED + 1),
+    foldLiveLines(hold, [line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Hello")], OPENED + 1),
     hold,
   );
 });
 
 test("a line that left the report is held until the record shows it or the bound passes, and the clock is told when", () => {
-  const asked = line(1, CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
-  const said = line(2, CONVERSATION_ENTRY_KIND.REPLY, "Opening it.", true);
+  const asked = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
+  const said = line("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Opening it.", true);
   let hold = foldLiveLines(NO_LIVE_LINES, [asked, said], OPENED);
   // The call closes: the report empties, and both lines are held from now.
   hold = foldLiveLines(hold, [], OPENED + 10_000);
@@ -154,24 +154,24 @@ test("a line that left the report is held until the record shows it or the bound
 });
 
 test("the next call's row 1 is not the held row 1 of the last call unless it carries the same words on", () => {
-  const first = line(1, CONVERSATION_ENTRY_KIND.ASK, "What needs me?", true);
+  const first = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "What needs me?", true);
   let hold = foldLiveLines(NO_LIVE_LINES, [first], OPENED);
   hold = foldLiveLines(hold, [], OPENED + 5_000);
-  const next = line(1, CONVERSATION_ENTRY_KIND.ASK, "Anything new?");
+  const next = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Anything new?");
   hold = foldLiveLines(hold, [next], OPENED + 8_000);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [first.entry, next.entry]);
   // A held line the report carries again — a row that came back grown — is drawn once, as the reported one.
-  const returned = line(1, CONVERSATION_ENTRY_KIND.ASK, "What needs me? Anything.");
+  const returned = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "What needs me? Anything.");
   hold = foldLiveLines(hold, [returned], OPENED + 9_000);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [next.entry, returned.entry]);
 });
 
 test("the record covers a line by its words: an utterance inside a wider ask, a cut that ended inside the utterance, a reading beside its own spoken row, never a row of another speaker or of before the call", () => {
-  const firstHalf = line(1, CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
-  const secondHalf = line(2, CONVERSATION_ENTRY_KIND.ASK, "Please.", true);
-  const overrun = line(3, CONVERSATION_ENTRY_KIND.ASK, "And then run it. Thanks", true);
+  const firstHalf = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Open the failing one.", true);
+  const secondHalf = line("row-2", CONVERSATION_ENTRY_KIND.ASK, "Please.", true);
+  const overrun = line("row-3", CONVERSATION_ENTRY_KIND.ASK, "And then run it. Thanks", true);
   const reading = line(
-    4,
+    "row-4",
     CONVERSATION_ENTRY_KIND.REPLY,
     "Opening it now! It is on the failing test",
     true,
@@ -206,8 +206,8 @@ test("the record covers a line by its words: an utterance inside a wider ask, a 
 });
 
 test("a row covers each line inside it once: the same words said twice stand twice until the record holds the words twice", () => {
-  const once = line(1, CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
-  const twice = line(2, CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
+  const once = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
+  const twice = line("row-2", CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
   const hold = foldLiveLines(NO_LIVE_LINES, [once, twice], OPENED);
   const oneRow = view(recorded(MESSAGE_ROLE.USER, "Yes.", OPENED + 1_000));
   assert.deepEqual(shownLiveEntries(hold, oneRow), [twice.entry]);
@@ -222,7 +222,7 @@ test("a row covers each line inside it once: the same words said twice stand twi
 });
 
 test("a settled line the record never shows is let go after its bound, and the clock is told when; an unsettled one stands", () => {
-  const greeting = line(1, CONVERSATION_ENTRY_KIND.REPLY, "Hey, I'm here and ready to help.");
+  const greeting = line("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Hey, I'm here and ready to help.");
   let hold = foldLiveLines(NO_LIVE_LINES, [greeting], OPENED);
   assert.equal(liveLinesExpireAt(hold), undefined, "a line still being said stands on no clock");
   const settled = { ...greeting, settled: true };
@@ -237,17 +237,17 @@ test("a settled line the record never shows is let go after its bound, and the c
   assert.deepEqual(shownLiveEntries(hold, EMPTY), []);
   assert.equal(hold.lines.length, 1, "the report is still mirrored for the next diff");
   // A new row on the same call is drawn as before.
-  const asked = line(2, CONVERSATION_ENTRY_KIND.ASK, "Anything new?");
+  const asked = line("row-2", CONVERSATION_ENTRY_KIND.ASK, "Anything new?");
   hold = foldLiveLines(hold, [settled, asked], OPENED + 2_000 + LIVE_LINE_SETTLED_HOLD_MS + 500);
   assert.deepEqual(shownLiveEntries(hold, EMPTY), [asked.entry]);
 });
 
 test("the clock re-arms for the next settled line once the first has been let go", () => {
-  const first = line(1, CONVERSATION_ENTRY_KIND.REPLY, "Hey, I'm here.", true);
+  const first = line("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Hey, I'm here.", true);
   let hold = foldLiveLines(NO_LIVE_LINES, [first], OPENED);
   assert.equal(liveLinesExpireAt(hold), OPENED + LIVE_LINE_SETTLED_HOLD_MS);
   // The first is let go; a second settled later stands under its own bound, which is what the clock is told now.
-  const second = line(2, CONVERSATION_ENTRY_KIND.REPLY, "Anything else?", true);
+  const second = line("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Anything else?", true);
   hold = foldLiveLines(hold, [first, second], OPENED + 20_000);
   assert.equal(liveLinesExpireAt(hold), OPENED + LIVE_LINE_SETTLED_HOLD_MS);
   hold = foldLiveLines(hold, [first, second], OPENED + LIVE_LINE_SETTLED_HOLD_MS);
@@ -259,8 +259,8 @@ test("the clock re-arms for the next settled line once the first has been let go
 });
 
 test("a line is covered by whole words only: a short line is not found inside a longer word of an earlier row", () => {
-  const yes = line(1, CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
-  const no = line(2, CONVERSATION_ENTRY_KIND.ASK, "No", true);
+  const yes = line("row-1", CONVERSATION_ENTRY_KIND.ASK, "Yes.", true);
+  const no = line("row-2", CONVERSATION_ENTRY_KIND.ASK, "No", true);
   const hold = foldLiveLines(NO_LIVE_LINES, [yes, no], OPENED);
   const longer = view(
     recorded(MESSAGE_ROLE.USER, "Yesterday it passed, and nothing else.", OPENED + 1_000),
@@ -269,7 +269,7 @@ test("a line is covered by whole words only: a short line is not found inside a 
   const words = view(recorded(MESSAGE_ROLE.USER, "Yes, no.", OPENED + 1_000));
   assert.deepEqual(shownLiveEntries(hold, words), []);
   // A cut that ended inside the utterance covers it only at a word's end.
-  const cutShort = line(3, CONVERSATION_ENTRY_KIND.ASK, "Restart the fixture agent", true);
+  const cutShort = line("row-3", CONVERSATION_ENTRY_KIND.ASK, "Restart the fixture agent", true);
   const cut = foldLiveLines(NO_LIVE_LINES, [cutShort], OPENED);
   assert.deepEqual(
     shownLiveEntries(cut, view(recorded(MESSAGE_ROLE.USER, "Restart the fix", OPENED + 1_000))),

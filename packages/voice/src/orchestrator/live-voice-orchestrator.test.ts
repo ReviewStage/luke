@@ -184,7 +184,7 @@ async function settleFibers(ticks = 30): Promise<void> {
 }
 
 function row(
-  rowId: number,
+  rowId: string,
   kind: ConversationEntryKind,
   words: string,
   settled = false,
@@ -482,8 +482,8 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   assert.equal(f.views.at(-1)?.spokenAskPending, true);
   // Both speakers' rows still being spoken are the live lines; Luke's are the captions while he speaks.
   call.events.onCaptions([
-    row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me"),
-    row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions"),
+    row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me"),
+    row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions"),
   ]);
   call.settle(LIVE_STATUS.SPEAKING);
   await settleFibers();
@@ -498,8 +498,8 @@ test("the view reports each edge once, counts the exchange on its opening edge u
   // A settled row stays a live line, marked settled: the service is writing
   // it, and the panel keeps drawing it until the record shows it.
   call.events.onCaptions([
-    row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
-    row(2, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
+    row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me", true),
+    row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions finished"),
   ]);
   await settleFibers();
   assert.deepEqual(
@@ -520,7 +520,7 @@ test("captions are withheld when neither the preference nor a silent output asks
   const call = f.latest();
   assert.ok(call);
   call.started();
-  call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.REPLY, "Two sessions")]);
+  call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions")]);
   call.settle(LIVE_STATUS.SPEAKING);
   await settleFibers();
   assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
@@ -537,7 +537,7 @@ test("the developer's captions follow the captions preference alone, whatever th
   assert.ok(call);
   call.started();
   await pressed;
-  call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me")]);
+  call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me")]);
   await settleFibers();
   // A silent output is a reason to read Luke, not the developer, who said the words.
   assert.equal(f.views.at(-1)?.developerCaptions, undefined);
@@ -545,7 +545,7 @@ test("the developer's captions follow the captions preference alone, whatever th
   await settleFibers();
   assert.deepEqual(f.views.at(-1)?.developerCaptions, ["what needs me"]);
   // The row settling is what takes the words down, not the microphone closing.
-  call.events.onCaptions([row(1, CONVERSATION_ENTRY_KIND.ASK, "what needs me", true)]);
+  call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me", true)]);
   await settleFibers();
   assert.equal(f.views.at(-1)?.developerCaptions, undefined);
 });

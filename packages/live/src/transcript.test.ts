@@ -10,6 +10,17 @@ import {
   UTTERANCE_SETTLE_MARGIN_MS,
 } from "./transcript.js";
 
+/** A ledger minting ids a test can read back: `row-1`, `row-2`, in the order the rows opened. */
+function ledgerWithCountedIds(): TranscriptLedger {
+  let minted = 0;
+  return new TranscriptLedger({
+    mintRowId: () => {
+      minted += 1;
+      return `row-${minted}`;
+    },
+  });
+}
+
 function user(text: string, startMs: number, endMs: number) {
   return { speaker: TRANSCRIPT_SPEAKER.USER, text, startMs, endMs };
 }
@@ -19,7 +30,7 @@ function assistant(text: string, startMs: number, endMs: number) {
 }
 
 test("fragments close together are one utterance, concatenated exactly as received", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("What", 1_000, 1_200));
   ledger.append(user(" needs", 1_200, 1_500));
   ledger.append(user("  me?", 1_600, 1_900));
@@ -31,8 +42,8 @@ test("fragments close together are one utterance, concatenated exactly as receiv
   assert.equal(utterances[0]?.endMs, 1_900);
 });
 
-test("a gap past the threshold starts a new utterance with the next row id", () => {
-  const ledger = new TranscriptLedger();
+test("a gap past the threshold starts a new utterance under a freshly minted row id", () => {
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("First.", 0, 500));
   const secondStartMs = 500 + UTTERANCE_GAP_MS + 1;
   ledger.append(user("Second.", secondStartMs, secondStartMs + 1_000));
@@ -41,12 +52,21 @@ test("a gap past the threshold starts a new utterance with the next row id", () 
   assert.equal(rows.length, 2);
   assert.deepEqual(
     rows.map((row) => row.rowId),
-    [1, 2],
+    ["row-1", "row-2"],
   );
 });
 
+test("a row id is the factory's word and nothing of the fragment's: two ledgers over the same words mint what they are handed", () => {
+  const first = new TranscriptLedger({ mintRowId: () => "a" });
+  const second = new TranscriptLedger({ mintRowId: () => "b" });
+  assert.equal(first.append(user("Hello", 0, 400))?.rowId, "a");
+  assert.equal(second.append(user("Hello", 0, 400))?.rowId, "b");
+  assert.equal(first.row("a")?.text, "Hello");
+  assert.equal(first.row("b"), undefined);
+});
+
 test("a gap of exactly the threshold still joins", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("A", 0, 500));
   const secondStartMs = 500 + UTTERANCE_GAP_MS;
   ledger.append(user("B", secondStartMs, secondStartMs + 1_000));
@@ -57,7 +77,7 @@ test("a gap of exactly the threshold still joins", () => {
 });
 
 test("the two speakers group independently and may overlap", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(assistant("The tests passed", 0, 1_500));
   ledger.append(user("mm-hmm", 800, 1_100));
   ledger.append(assistant(" on checkout.", 1_500, 2_200));
@@ -67,31 +87,31 @@ test("the two speakers group independently and may overlap", () => {
   assert.deepEqual(
     rows.map((row) => [row.rowId, row.speaker]),
     [
-      [1, TRANSCRIPT_SPEAKER.ASSISTANT],
-      [2, TRANSCRIPT_SPEAKER.USER],
+      ["row-1", TRANSCRIPT_SPEAKER.ASSISTANT],
+      ["row-2", TRANSCRIPT_SPEAKER.USER],
     ],
   );
   assert.equal(rows[0]?.text, "The tests passed on checkout.");
 });
 
 test("a late fragment revises the earlier row it belongs to, and the row keeps its place", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("Hello", 0, 400));
   ledger.append(user("Second thought.", 10_000, 11_000));
   const revised = ledger.append(user(" there", 400, 700));
 
-  assert.equal(revised?.rowId, 1);
+  assert.equal(revised?.rowId, "row-1");
   const rows = ledger.captionLines();
   assert.deepEqual(
     rows.map((row) => row.rowId),
-    [1, 2],
+    ["row-1", "row-2"],
   );
   assert.equal(rows[0]?.text, "Hello there");
   assert.equal(rows[0]?.endMs, 700);
 });
 
 test("a fragment ending before it starts is refused and records nothing", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
 
   assert.equal(ledger.append(user("x", 500, 400)), undefined);
   assert.equal(ledger.append(user("x", Number.NaN, 400)), undefined);
@@ -100,7 +120,7 @@ test("a fragment ending before it starts is refused and records nothing", () => 
 });
 
 test("last activity is the latest end any fragment reached", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   assert.equal(ledger.lastActivityMs(), undefined);
   ledger.append(assistant("a", 0, 900));
   ledger.append(user("b", 200, 600));
@@ -109,7 +129,7 @@ test("last activity is the latest end any fragment reached", () => {
 });
 
 test("utterances since an instant are those still ending after it, ordered by start", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("old", 0, 500));
   ledger.append(assistant("reply", 2_000, 3_000));
   // A pause well past the gap, so "newer" is its own utterance and not "old" grown.
@@ -126,7 +146,7 @@ test("utterances since an instant are those still ending after it, ordered by st
 });
 
 test("the ask context is both speakers since the offset with the developer's latest as the ask", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(user("Anything waiting?", 0, 1_000));
   ledger.append(assistant("Let me look.", 1_200, 2_000));
   // A pause well past the gap, so the second ask is its own utterance and not the first grown.
@@ -136,9 +156,9 @@ test("the ask context is both speakers since the offset with the developer's lat
   const context = ledger.askContext(1_100);
   assert.deepEqual(
     context.turns.map((turn) => turn.rowId),
-    [2, 3, 4],
+    ["row-2", "row-3", "row-4"],
   );
-  assert.equal(context.ask?.rowId, 3);
+  assert.equal(context.ask?.rowId, "row-3");
   assert.equal(context.ask?.text, "Actually, only Codex.");
   assert.deepEqual(renderAskContext(context).split("\n"), [
     "Assistant: Let me look.",
@@ -148,7 +168,7 @@ test("the ask context is both speakers since the offset with the developer's lat
 });
 
 test("a span with no developer utterance yet has no ask", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   ledger.append(assistant("Anything else?", 0, 800));
 
   const context = ledger.askContext(0);
@@ -157,14 +177,14 @@ test("a span with no developer utterance yet has no ask", () => {
 });
 
 test("an anticipation stands only once the developer has said something in the span, and names the row and words the ask has so far", () => {
-  const ledger = new TranscriptLedger();
+  const ledger = ledgerWithCountedIds();
   assert.equal(anticipationOf(ledger.askContext(0)), undefined);
   ledger.append(assistant("Nukualofa finished.", 0, 1_000));
   assert.equal(anticipationOf(ledger.askContext(0)), undefined);
   ledger.append(user("What is", 2_000, 2_400));
   const first = anticipationOf(ledger.askContext(0));
   assert.ok(first);
-  assert.equal(first.rowId, 2);
+  assert.equal(first.rowId, "row-2");
   assert.equal(first.text, "What is");
   assert.equal(first.context.turns.length, 2);
   ledger.append(user(" Nukualofa doing", 2_400, 2_900));
