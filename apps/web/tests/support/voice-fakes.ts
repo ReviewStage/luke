@@ -343,6 +343,8 @@ interface RecordedClose {
 
 export interface FakeSessionRecord extends VoiceSessionRecord {
   registered: Array<{ userId: string; sessionId: string; deviceId?: string | undefined }>;
+  /** The store id the fake minted for each live session's row, by live session id, as `register` answered it. */
+  voiceSessionIds: Map<string, string>;
   /** The device rows the fake holds, by the account that holds each and the platform each names. */
   devices: Array<{ userId: string; deviceId: string; platform: DevicePlatform }>;
   /** Every usage snapshot, in order. */
@@ -360,13 +362,20 @@ export function fakeSessionRecord(): FakeSessionRecord {
   const owners = new Map<string, string>();
   const fake: FakeSessionRecord = {
     registered: [],
+    voiceSessionIds: new Map(),
     devices: [],
     usage: [],
     closes: [],
     register: (input) =>
       Effect.sync(() => {
         fake.registered.push(input);
-        if (!owners.has(input.sessionId)) owners.set(input.sessionId, input.userId);
+        if (!owners.has(input.sessionId)) {
+          owners.set(input.sessionId, input.userId);
+          fake.voiceSessionIds.set(input.sessionId, randomUUID());
+        }
+        return owners.get(input.sessionId) === input.userId
+          ? fake.voiceSessionIds.get(input.sessionId)
+          : undefined;
       }),
     heldDevice: (input) =>
       Effect.sync(() => {

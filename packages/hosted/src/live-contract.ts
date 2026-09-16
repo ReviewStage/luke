@@ -179,10 +179,18 @@ export const SESSION_CREATE_BOUNDS = {
   SDP_CHARS: 65_536,
 } as const;
 
-/** What the service answered with: the session's opaque id and the SDP answer to set as the remote description. */
+/**
+ * What the service answered with: the session's opaque id, the SDP answer to
+ * set as the remote description, and, for a session an account opened, the
+ * store's own id for the session's row, the one a stored spoken row names as
+ * its `voice_session_id`, so the device can tell its own rows on the
+ * Conversation from another session's. The introduction holds no account and
+ * so no row, and is answered none.
+ */
 export interface LiveSessionCreated {
   sessionId: string;
   sdpAnswer: string;
+  voiceSessionId?: string;
 }
 
 /** The desktop's opening frame. */
@@ -485,6 +493,7 @@ export const sessionAttachedFrameSchema = schemaAs<SessionAttachedFrame>(
 const CREATED_FIELDS = {
   sessionId,
   sdpAnswer: verbatimText(SESSION_CREATE_BOUNDS.SDP_CHARS),
+  voiceSessionId: Schema.optionalKey(sessionId),
 } as const;
 
 /**

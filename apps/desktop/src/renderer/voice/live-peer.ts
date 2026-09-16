@@ -1,3 +1,4 @@
+import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import { Duration, Effect, type Scope } from "effect";
 
 /**
@@ -83,13 +84,15 @@ export interface LivePeerSeams {
    */
   openMicrophone?: () => Promise<MediaStream>;
   /** The host: the peer's offer becomes the one session, answered with the SDP the peer sets. */
-  createSession: (sdp: string) => Promise<{ sessionId: string; sdpAnswer: string } | undefined>;
+  createSession: (sdp: string) => Promise<VoiceCreateLiveSessionResult | undefined>;
   onRemoteStream: (stream: MediaStream) => void;
 }
 
 export interface LivePeer {
   /** The session the host created for this peer's offer, so the host's word about a session can be matched to it. */
   sessionId: string;
+  /** The store's id for the session's row, which its stored spoken rows name; nothing for a session no account holds. */
+  voiceSessionId: string | undefined;
   connection: LivePeerConnection;
   channel: LiveDataChannel;
   /** The developer's track while the talk key holds the device open, disabled until the session is unmuted; absent otherwise. */
@@ -222,6 +225,7 @@ export const acquireLivePeer = /* @__PURE__ */ Effect.fn("acquireLivePeer")(
       outcome: LIVE_PEER_OUTCOME.OPENED,
       peer: {
         sessionId: created.sessionId,
+        voiceSessionId: created.voiceSessionId,
         connection,
         channel,
         microphone,

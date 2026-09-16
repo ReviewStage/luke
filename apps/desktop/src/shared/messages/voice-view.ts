@@ -158,6 +158,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
 
 function isLiveConversationLine(value: UnparsedWireValue): boolean {
   if (!isRecord(value) || !isWireString(value.rowId) || !isWireBoolean(value.settled)) return false;
+  if (!isOptionalWireString(value.voiceSessionId)) return false;
   const streaming = storedConversationEntry(value.entry, { strict: false });
   return streaming !== undefined && streaming.words.length > 0;
 }

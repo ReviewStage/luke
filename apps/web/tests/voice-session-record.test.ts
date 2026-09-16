@@ -35,6 +35,7 @@ const openUser = Effect.gen(function* () {
 
 /** The row as the suite reads it back, the instant column through the schema the two drivers agree on. */
 const VoiceSessionRowSchema = Schema.Struct({
+  id: Schema.String,
   user_id: Schema.String,
   device_id: Schema.NullOr(Schema.String),
   delegation_mode: Schema.String,
@@ -63,13 +64,16 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
         const owner = yield* openUser;
         const other = yield* openUser;
         const liveSessionId = `live_r_${randomUUID()}`;
-        yield* record.register({ userId: owner, sessionId: liveSessionId });
-        yield* record.register({ userId: other, sessionId: liveSessionId });
+        const registered = yield* record.register({ userId: owner, sessionId: liveSessionId });
+        const taken = yield* record.register({ userId: other, sessionId: liveSessionId });
 
+        // The owner is answered the store's id for the row, and another account nothing.
+        const rows = yield* readVoiceSession(liveSessionId);
+        assert.equal(registered, rows[0]?.id);
+        assert.equal(taken, undefined);
         assert.equal(yield* record.owned({ userId: owner, sessionId: liveSessionId }), true);
         assert.equal(yield* record.owned({ userId: other, sessionId: liveSessionId }), false);
         assert.equal(yield* record.owned({ userId: owner, sessionId: "live_never" }), false);
-        const rows = yield* readVoiceSession(liveSessionId);
         assert.deepEqual(
           rows.map((row) => ({
             userId: row.user_id,

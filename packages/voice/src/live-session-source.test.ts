@@ -100,6 +100,8 @@ it.live(
 
       assert.equal(opened?.sessionId, SESSION_ID);
       assert.equal(opened?.sdpAnswer, SDP_ANSWER);
+      // A frame naming no store row for the session hands on no key for one.
+      assert.equal(opened !== undefined && Object.hasOwn(opened, "voiceSessionId"), false);
       assert.equal(script.opens.length, 1);
       assert.equal(script.opens[0]?.url, `${SERVICE_ORIGIN}${VOICE_SERVICE_PATH.SESSIONS}`);
       assert.deepEqual(script.opens[0]?.headers, { authorization: "Bearer token-1" });
@@ -117,6 +119,18 @@ it.live(
     }),
 );
 
+it.live(
+  "the store's id for the session's row rides the created frame onto the opened session, where the service names one",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame({ voiceSessionId: "vs_1" }))]);
+      const source = hosted(script, { voice: LIVE_VOICE.MARIN });
+
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, input: INPUT });
+
+      assert.equal(opened?.voiceSessionId, "vs_1");
+    }),
+);
 it.live(
   "the hosted source's attach is the socket that answered, and the answer frame is not an event",
   () =>

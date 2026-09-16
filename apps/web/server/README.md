@@ -710,7 +710,10 @@ the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
 client delegation), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
-answer, and the quota. From then on the relay is a pipe: OpenAI frames to the
+answer, the quota, and the store's own id for the `voice_sessions` row
+(`voiceSessionId`), which is what a stored spoken row names as its
+`voice_session_id` and what lets the device tell its own rows on the
+Conversation from another session's. From then on the relay is a pipe: OpenAI frames to the
 device untouched except `session.input_audio.append` and
 `session.output_audio.delta`, dropped by type so on this route and the
 introduction's the developer's voice and Luke's never transit the service (the

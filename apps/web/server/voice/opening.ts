@@ -321,13 +321,16 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         return upstreamRefused(created, account?.platform);
       }
       const sessionId = created.answer.session.id;
-      if (account) {
-        yield* record.register({
-          userId: account.accountId,
-          sessionId,
-          deviceId: account.deviceId,
-        });
-      }
+      // The store's id for the session's row rides the answer, so the device
+      // can name its own rows on the Conversation; the introduction has no
+      // account and so no row, and is answered none.
+      const voiceSessionId = account
+        ? yield* record.register({
+            userId: account.accountId,
+            sessionId,
+            deviceId: account.deviceId,
+          })
+        : undefined;
       const sideband = yield* attach(upstream, sessionId);
       if (sideband === undefined) {
         return refused(HOSTED_API_ERROR.UPSTREAM_ERROR, account?.platform);
@@ -336,6 +339,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         type: VOICE_SERVICE_FRAME.SESSION_CREATED,
         sessionId,
         sdpAnswer: created.answer.transport.sdp,
+        ...(voiceSessionId === undefined ? undefined : { voiceSessionId }),
         ...(account?.quota === undefined ? undefined : { quota: account.quota }),
       };
       return {

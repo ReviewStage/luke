@@ -563,6 +563,7 @@ function sameLines(left: readonly LiveCaptionRow[], right: readonly LiveCaptionR
     return (
       other !== undefined &&
       line.rowId === other.rowId &&
+      line.voiceSessionId === other.voiceSessionId &&
       line.settled === other.settled &&
       line.entry.kind === other.entry.kind &&
       line.entry.words === other.entry.words

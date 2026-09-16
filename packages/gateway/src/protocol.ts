@@ -244,10 +244,16 @@ const sdpSchema = keptText(LIVE_SDP_MAX_CHARACTERS);
 /** `voice.createLiveSession`: the peer's SDP offer, and nothing else. */
 export const voiceCreateLiveSessionParamsSchema = Schema.Struct({ sdp: sdpSchema });
 
-/** What `voice.createLiveSession` answers: the session the provider named, and the SDP answer the peer sets. */
+/**
+ * What `voice.createLiveSession` answers: the session the provider named, the
+ * SDP answer the peer sets, and, where the account holds a row for the
+ * session, the store's own id for it, which is what a stored spoken row names
+ * as its `voice_session_id`.
+ */
 export const voiceCreateLiveSessionResultSchema = Schema.Struct({
   sessionId: text,
   sdpAnswer: sdpSchema,
+  voiceSessionId: Schema.optionalKey(text),
 });
 
 export type VoiceCreateLiveSessionResult = typeof voiceCreateLiveSessionResultSchema.Type;

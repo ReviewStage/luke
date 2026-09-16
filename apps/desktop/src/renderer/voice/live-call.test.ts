@@ -182,7 +182,7 @@ class FakePeerConnection implements LivePeerConnection {
 
 function build(
   services: Context.Context<never>,
-  options: { microphone?: boolean; sessionCreated?: boolean },
+  options: { microphone?: boolean; sessionCreated?: boolean; voiceSessionId?: string },
 ) {
   let microphoneGranted = options.microphone !== false;
   const peer = new FakePeerConnection();
@@ -217,7 +217,13 @@ function build(
         offers.push(sdp);
         return options.sessionCreated === false
           ? undefined
-          : { sessionId: "sess_1", sdpAnswer: "v=0\r\nanswer\r\n" };
+          : {
+              sessionId: "sess_1",
+              sdpAnswer: "v=0\r\nanswer\r\n",
+              ...(options.voiceSessionId === undefined
+                ? undefined
+                : { voiceSessionId: options.voiceSessionId }),
+            };
       },
       endSession: () => {
         ends += 1;
@@ -308,7 +314,7 @@ function build(
 
 /** One call over its own fake peer, under the test's own services, so its bounds are this test's clock. */
 const fixture = (
-  options: { microphone?: boolean; sessionCreated?: boolean } = {},
+  options: { microphone?: boolean; sessionCreated?: boolean; voiceSessionId?: string } = {},
 ): Effect.Effect<ReturnType<typeof build>> =>
   Effect.map(Effect.context<never>(), (services) => build(services, options));
 
@@ -844,6 +850,11 @@ it.effect(
       const rowIds = f.captions.at(-1)?.map((row) => row.rowId) ?? [];
       assert.equal(rowIds.length, 2);
       assert.equal(new Set(rowIds).size, 2);
+      // A session the host named no store row for reports its rows under none.
+      assert.equal(
+        f.captions.at(-1)?.some((row) => Object.hasOwn(row, "voiceSessionId")),
+        false,
+      );
       // A pause in Luke's playback is held through; the status drops only after the hangover.
       f.call.reportRemoteAudioLevel(false);
       assert.equal(f.statuses.at(-1), LIVE_STATUS.SPEAKING);
@@ -865,6 +876,30 @@ it.effect(
     }),
 );
 
+it.effect(
+  "every caption row is reported under the store's id for the session, as the host's answer named it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture({ voiceSessionId: "vs_1" });
+      const opening = yield* Effect.forkChild(f.call.open({ byPress: true }));
+      yield* settle;
+      f.peer.gathered();
+      yield* settle;
+      f.started();
+      yield* Fiber.join(opening);
+      f.channel().receive({
+        type: LIVE_SERVER_EVENT.INPUT_TRANSCRIPT_DELTA,
+        event_id: "in-1",
+        delta: "what needs me",
+        start_ms: 0,
+        end_ms: 900,
+      });
+      assert.deepEqual(
+        f.captions.at(-1)?.map((row) => row.voiceSessionId),
+        ["vs_1"],
+      );
+    }),
+);
 it.effect(
   "the transport is reported as the peer connection moves, and a failed one ends the call",
   () =>

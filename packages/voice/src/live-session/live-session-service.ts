@@ -4,6 +4,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
+import type { LiveSessionCreated } from "@sidecar/hosted";
 import {
   anticipationOf,
   chunkForAppend,
@@ -55,7 +56,11 @@ import {
 } from "effect";
 import { LiveBrainTag } from "../effect/live-brain.js";
 import { LiveRecordTag } from "../effect/live-record.js";
-import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
+import {
+  createdOf,
+  type LiveSessionOpened,
+  type LiveSessionSource,
+} from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import { AppendChannel } from "./append-channel.js";
 import {
@@ -555,9 +560,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * before the answer is returned, so no transcript precedes attachment. A
    * session already standing is closed gracefully first: there is one.
    */
-  createSession(
-    sdpOffer: string,
-  ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
+  createSession(sdpOffer: string): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
       if (this.#standing) yield* this.endSession();
       const source = this.#options.source();
@@ -577,7 +580,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
           this.#standing.rosterTold = seeded?.told;
           this.#options.onSessionCreated?.();
           this.#trace(LIVE_TRACE_DECISION.CREATED);
-          return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+          return createdOf(opened);
         }),
       );
     });

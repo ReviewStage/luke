@@ -16,6 +16,11 @@
       "type": "string",
       "maxLength": 65536
     },
+    "voiceSessionId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
     "quota": {
       "type": "object",
       "properties": {

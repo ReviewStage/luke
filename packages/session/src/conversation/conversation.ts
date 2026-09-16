@@ -141,6 +141,12 @@ export function streamingConversationEntry(
 export interface LiveConversationLine {
   readonly rowId: string;
   readonly entry: ConversationEntry;
+  /**
+   * The store's id for the voice session the line is said on, the one its
+   * row on record names as its `voice_session_id`; absent for a session no
+   * account holds, which writes no row.
+   */
+  readonly voiceSessionId?: string;
   readonly settled: boolean;
 }
 

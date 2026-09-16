@@ -82,7 +82,13 @@ interface VoiceSessionClose extends VoiceSessionUsage {
 }
 
 export interface VoiceSessionRecord {
-  register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<void>;
+  /**
+   * Writes the session down and answers the store's own id for its row, the
+   * one a stored spoken row names as its `voice_session_id`, so the device
+   * can tell its own rows from another session's; nothing where the live
+   * session is already another account's, since the first owner keeps it.
+   */
+  register(input: VoiceSessionRegistration): VoiceSessionRecordEffect<string | undefined>;
   /** The device row the account holds under the id named, or nothing: the check the door makes before a session is spent on the claim. */
   heldDevice(input: VoiceSessionDeviceClaim): VoiceSessionRecordEffect<HeldVoiceDevice | undefined>;
   /** Whether the account created the live session named: one lookup over the indexed pair. */
@@ -180,12 +186,18 @@ export function voiceSessionRecord(now: () => number = Date.now): VoiceSessionRe
   const usage = (seconds: number, confirmed: boolean) => ({ seconds, confirmed });
   return {
     register: (input) =>
-      registerSession({
-        userId: input.userId,
-        liveSessionId: input.sessionId,
-        delegationMode: VOICE_DELEGATION_MODE.CLIENT,
-        deviceId: input.deviceId ?? null,
-      }),
+      Effect.andThen(
+        registerSession({
+          userId: input.userId,
+          liveSessionId: input.sessionId,
+          delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+          deviceId: input.deviceId ?? null,
+        }),
+        Effect.map(
+          findOwnedSession({ userId: input.userId, liveSessionId: input.sessionId }),
+          Option.match({ onNone: () => undefined, onSome: (row) => row.id }),
+        ),
+      ),
     heldDevice: (input) =>
       Effect.map(
         findHeldDevice(input),
