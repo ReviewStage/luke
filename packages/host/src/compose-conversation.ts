@@ -422,13 +422,22 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * The children list, read whole: the read takes no cursor, so the head the
    * signal answered is kept beside the list and the next signal's is compared
    * to it. A read that did not land leaves the head where it was, so the next
-   * poll asks again; one that answered the same list moves nothing.
+   * poll asks again; one that answered the same list moves nothing. An open
+   * child the list no longer names — stamped by a Clear on any Mac, or fallen
+   * past the list's bound — is closed, since its transcript would read as
+   * not found on every poll from here and nothing could open it again.
    */
   const readChildrenList = (generation: number, head: string | undefined) =>
     Effect.map(client.children(), (result) => {
       if (!loop.isCurrent(generation) || !result.ok) return;
       childrenHead = head;
       const next: ChildrenSnapshot = { settled: true, children: result.answer.children };
+      if (
+        openChild !== undefined &&
+        !next.children.some((child) => child.id === openChild?.childId)
+      ) {
+        openChild = undefined;
+      }
       if (isDeepStrictEqual(children, next)) return;
       children = next;
       childrenRevision += 1;
@@ -564,10 +573,14 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         // picture drops the stamped main's groups and the observed rows from
         // before the new main opened, and every client is told, before any read
         // is waited on — a read that fails to land cannot leave the old thread
-        // standing behind an answer that said it was cleared. The pass that
-        // follows moves the cursors onto the new main.
+        // standing behind an answer that said it was cleared. The open
+        // transcript goes with it, since the Clear stamped the child it was
+        // of; the pass that follows moves the cursors onto the new main and
+        // reads the list the stamps moved the head of.
         sync.applyClear(answer.openedAt);
+        openChild = undefined;
         publish();
+        publishChildTranscript();
         yield* pollAfter;
         return { cleared: true };
       }),

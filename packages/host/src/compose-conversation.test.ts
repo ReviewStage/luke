@@ -1042,6 +1042,43 @@ test("opening another child replaces the one open, a page out for the replaced c
   assert.deepEqual(offline.composer.childrenSnapshot(), { settled: true, children: [] });
 });
 
+test("a Clear closes the open transcript at once, and a list that no longer names the open child closes it too", async () => {
+  const { composer, client, transcriptViews } = harness({ deviceId: DEVICE });
+  client.changesAnswer = {
+    seen: true,
+    messages: "messages-head",
+    events: "events-head",
+    children: "children-1",
+  };
+  client.childrenAnswer = ok({ children: [CHILD_ROW] });
+  await Effect.runPromise(composer.loop.refresh);
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    childId: CHILD,
+  });
+  assert.equal(composer.childTranscriptSnapshot()?.childId, CHILD);
+  // The Clear stamps the child; the transcript is dropped on the answer, before any read.
+  client.messagesAnswer = { ok: false, failure: CONVERSATION_READ_FAILURE.UNANSWERED };
+  assert.equal(await clear(composer), true);
+  assert.equal(composer.childTranscriptSnapshot(), undefined);
+  assert.deepEqual(transcriptViews().at(-1), {});
+
+  // Opened again, then stamped on another Mac: the list read that no longer
+  // names it closes it, and the next poll reads nothing of it.
+  client.messagesAnswer = ok(messagesAnswer("hello"));
+  client.childMessagesAnswers = [ok(childPage("child-end", false))];
+  await callMethod(composer, GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, {
+    childId: CHILD,
+  });
+  assert.equal(composer.childTranscriptSnapshot()?.childId, CHILD);
+  client.changesAnswer = { ...client.changesAnswer, children: "children-2" };
+  client.childrenAnswer = ok({ children: [] });
+  client.calls.length = 0;
+  await Effect.runPromise(composer.loop.refresh);
+  assert.deepEqual(client.calls, [`changes:${DEVICE}`, "children"]);
+  assert.equal(composer.childTranscriptSnapshot(), undefined);
+  assert.deepEqual(transcriptViews().at(-1), {});
+});
+
 test("a reset drops the children and the open transcript and tells every client", async () => {
   const { composer, client, childrenViews, transcriptViews } = harness({ deviceId: DEVICE });
   client.changesAnswer = {
