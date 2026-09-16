@@ -460,15 +460,40 @@
   font-weight: 620;
 }
 
-.subagents-list {
+/* The two sections share one scroller, so a long list of agents and a long
+   list of sub-agents read as one page rather than two rooms. */
+.subagents-sections {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-  gap: 6px;
-  margin: 0;
+  gap: 10px;
   padding: 4px 12px 12px;
   overflow-y: auto;
+}
+
+.subagents-section-title {
+  margin: 0 0 6px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.subagents-section-empty {
+  margin: 0;
+  padding: 2px 0;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+}
+
+.subagents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -491,11 +516,24 @@
 }
 
 .subagent-title {
-  overflow: hidden;
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 6px;
   font-size: 11.5px;
+}
+
+.subagent-name {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
+}
+
+.subagent-mark {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
 }
 
 .subagent-meta {

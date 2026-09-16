@@ -116,6 +116,7 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     voice: held.voice,
     conversation: boot.conversationView,
     children: boot.children,
+    agents: boot.agents,
     childTranscript: boot.childTranscript,
     announcements: { held: boot.announcementsHeld },
     onboarding: {
@@ -168,6 +169,7 @@ export function initialAppState(
     // A run that sends nothing reads no Conversation, so its empty thread and its empty children list are settled from the start.
     conversation: { groups: [], settled: !runMode.sendsNetwork },
     children: { settled: !runMode.sendsNetwork, children: [] },
+    agents: { settled: !runMode.sendsNetwork, agents: [] },
     childTranscript: undefined,
     announcements: { held: false },
     onboarding: { calendarOwed: false, conductorKeyOwed: false },

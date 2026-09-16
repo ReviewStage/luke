@@ -1,6 +1,7 @@
 import {
   isRecord,
   RatingWordSchema,
+  TRANSCRIPT_KIND,
   type UnparsedWireValue,
   type WireRecord,
   type WireValue,
@@ -58,7 +59,7 @@ const GATEWAY_METHODS = {
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
-  /** One child's transcript held open on this device: read to its end now and again whenever the children head moves, until closed. */
+  /** One transcript held open on this device, a child's or an observed session's: read to its end now and again whenever its list's head moves, until closed. */
   CONVERSATION_OPEN_CHILD_TRANSCRIPT: { name: "conversation.openChildTranscript", mutates: true },
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: { name: "conversation.closeChildTranscript", mutates: true },
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
@@ -319,9 +320,15 @@ export const conversationRateMessageResultSchema = Schema.Struct({
 
 export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
 
-/** `conversation.openChildTranscript`: which child, by the id the children read listed it under, admitted as written so it matches the row the service holds. */
+/**
+ * `conversation.openChildTranscript`: which conversation, by the id its list
+ * read it under, admitted as written so it matches the row the service
+ * holds, and which list that was, a child's or an observed session's, since
+ * the kind says whose head moving means the transcript has more to read.
+ */
 export const conversationOpenChildTranscriptParamsSchema = Schema.Struct({
-  childId: keptText(512),
+  conversationId: keptText(512),
+  kind: Schema.Literals(Object.values(TRANSCRIPT_KIND)),
 });
 
 /**
@@ -648,7 +655,9 @@ export const GATEWAY_EVENT = {
   CONVERSATION_VIEW_CHANGED: "conversationView.changed",
   /** The account's children as the service's read lists them, whole, whenever a poll moved the list. */
   CHILDREN_CHANGED: "children.changed",
-  /** The open child's transcript, whole, whenever a poll moved it; an empty payload says none is open. */
+  /** The account's agents as the service's read lists them, whole, whenever a poll moved the list. */
+  AGENTS_CHANGED: "agents.changed",
+  /** The open transcript, whole, whenever a poll moved it; an empty payload says none is open. */
   CHILD_TRANSCRIPT_CHANGED: "childTranscript.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",

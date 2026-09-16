@@ -2,8 +2,9 @@
 
 import assert from "node:assert/strict";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
+import { type AgentRead, CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import { CONVERSATION_VIEW_SOURCE } from "@sidecar/session";
+import { TRANSCRIPT_KIND } from "@sidecar/wire";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -13,7 +14,12 @@ import { PanelBody } from "./panel-body";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { SESSION_SORT } from "./session-model";
 import type { SettingsPanelProps } from "./settings/settings-panel";
-import { CONVERSATION_PAGE, type ConversationPage } from "./subagents-panel";
+import {
+  CONVERSATION_PAGE,
+  type ConversationPage,
+  childTranscriptRow,
+  type TranscriptRow,
+} from "./subagents-panel";
 
 type BodyProps = Parameters<typeof PanelBody>[0];
 
@@ -68,8 +74,9 @@ function bodyProps(
     conversationPage,
     onConversationPageChange,
     subagents: { settled: true, children: [] },
-    onOpenSubagent: () => undefined,
-    transcriptChildId: undefined,
+    agents: { settled: true, agents: [] },
+    onOpenTranscript: () => undefined,
+    transcriptOpen: undefined,
     childTranscript: undefined,
     onFieldEngaged: () => undefined,
     offerOptions: false,
@@ -180,13 +187,22 @@ const CHILD: ChildRead = {
   settledAt: NOW,
 };
 
+const AGENT: AgentRead = {
+  id: "6f000000-0000-4000-8000-000000000001",
+  providerId: "conductor",
+  providerSessionId: "9f4c5d47-2d3e-4f50-b162-3d4e5f6a7b83",
+  status: CHILD_STATUS.RUNNING,
+  acceptedAt: NOW - 120_000,
+  startedAt: NOW - 60_000,
+};
+
 test("a completion's chip in the thread opens the child exactly as the list's row does", () => {
-  const opened: string[] = [];
+  const opened: TranscriptRow[] = [];
   const mounted = mount(
     bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => undefined, {
       conversation: { groups: fixtureChildCompletionTurns(CHILD.id, CHILD.label), settled: true },
       subagents: { settled: true, children: [CHILD] },
-      onOpenSubagent: (childId) => opened.push(childId),
+      onOpenTranscript: (row) => opened.push(row),
     }),
   );
   const chip = mounted.container.querySelector(".conversation-subagent-chip");
@@ -195,34 +211,52 @@ test("a completion's chip in the thread opens the child exactly as the list's ro
   act(() => {
     chip.click();
   });
-  assert.deepEqual(opened, [CHILD.id]);
+  assert.deepEqual(opened, [childTranscriptRow(CHILD)]);
 });
 
-test("a row's press opens the child, and the transcript page draws in the thread's place with the way back to the list", () => {
+test("a row's press opens the child or the agent, and the transcript page draws in the thread's place with the way back to the list", () => {
   const asked: ConversationPage[] = [];
-  const opened: string[] = [];
+  const opened: TranscriptRow[] = [];
   const change = (page: ConversationPage) => asked.push(page);
   const extra: Partial<BodyProps> = {
     subagents: { settled: true, children: [CHILD] },
-    onOpenSubagent: (childId) => opened.push(childId),
+    agents: { settled: true, agents: [AGENT] },
+    onOpenTranscript: (row) => opened.push(row),
   };
   const mounted = mount(
     bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.SUBAGENTS, change, extra),
   );
-  const row = mounted.container.querySelector(".subagent-row");
-  assert.ok(row instanceof HTMLButtonElement);
-  act(() => {
-    row.click();
-  });
-  // The press names the child to the app, which opens it on the host and turns the page itself.
-  assert.deepEqual(opened, [CHILD.id]);
+  // The agents lead the page, then the sub-agents; either row's press names its row to the app.
+  const rows = mounted.container.querySelectorAll(".subagent-row");
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.ok(row instanceof HTMLButtonElement);
+    act(() => {
+      row.click();
+    });
+  }
+  // The press names the row to the app, which opens it on the host and turns the page itself.
+  assert.deepEqual(opened, [
+    {
+      conversationId: AGENT.id,
+      kind: TRANSCRIPT_KIND.OBSERVED,
+      title: "Session 9f4c5d47",
+      status: CHILD_STATUS.RUNNING,
+    },
+    childTranscriptRow(CHILD),
+  ]);
   assert.deepEqual(asked, []);
 
   mounted.render(
     bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, {
       ...extra,
-      transcriptChildId: CHILD.id,
-      childTranscript: { childId: CHILD.id, settled: true, groups: [] },
+      transcriptOpen: childTranscriptRow(CHILD),
+      childTranscript: {
+        conversationId: CHILD.id,
+        kind: TRANSCRIPT_KIND.CHILD,
+        settled: true,
+        groups: [],
+      },
     }),
   );
   const panels = mounted.container.querySelectorAll('[role="tabpanel"]');
@@ -244,7 +278,7 @@ test("a row's press opens the child, and the transcript page draws in the thread
   });
   assert.deepEqual(asked, [CONVERSATION_PAGE.SUBAGENTS]);
 
-  // A transcript page with no child to be of falls back to the thread.
+  // A transcript page with no row to be of falls back to the thread.
   mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, extra));
   assert.ok(mounted.container.textContent?.includes("No messages yet"));
   assert.equal(mounted.container.querySelector(".subagents-header"), null);

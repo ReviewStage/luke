@@ -69,6 +69,7 @@ export {
   type SchemaRead,
   type SchemaRefusal,
 } from "./schema-vocabulary.js";
+export { TRANSCRIPT_KIND, type TranscriptKind } from "./transcript.js";
 export {
   TURN_ORIGIN,
   TURN_STATUS,

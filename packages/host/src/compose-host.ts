@@ -263,6 +263,7 @@ export const hostAssemblyLayer: Layer.Layer<
             announcementsHeld: quiet,
             conversationView: carried(conversation.snapshot()),
             children: carried(conversation.childrenSnapshot()),
+            agents: carried(conversation.agentsSnapshot()),
             ...(childTranscript !== undefined
               ? { childTranscript: carried(childTranscript) }
               : undefined),
