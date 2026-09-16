@@ -245,6 +245,21 @@ function deferredLoad() {
   };
 }
 
+/** The first message row the list draws, which the panel keeps the reader's place by. */
+function firstRow(container: HTMLDivElement): Element {
+  const row = container.querySelector(".conversation-list > li:not(.conversation-break)");
+  if (row === null) throw new Error("Missing first message row.");
+  return row;
+}
+
+/** Lays a row out at `contentTop` within the scrolled content, since jsdom lays nothing out; the box's own rect stays at zero. */
+function placeRow(row: Element, scroll: HTMLDivElement, contentTop: () => number) {
+  Object.defineProperty(row, "getBoundingClientRect", {
+    configurable: true,
+    value: () => ({ top: contentTop() - scroll.scrollTop }),
+  });
+}
+
 test("reaching the top asks for older turns once while the view says they stand, and the rows that land above keep the reader's place", async () => {
   assert.ok(FULL_GROUPS.length >= 2);
   const newest = FULL_GROUPS.at(-1);
@@ -264,6 +279,9 @@ test("reaching the top asks for older turns once while the view says they stand,
     scrollHeight: 420,
     clientHeight: 120,
   });
+  const reading = firstRow(mounted.container);
+  let readingTop = 0;
+  placeRow(reading, mounted.scroll, () => readingTop);
   mounted.render({ ...BASE_PROPS, view: shortView, onLoadOlder: load.onLoadOlder });
   assert.equal(load.count, 0);
   // Scrolling up short of the top asks for nothing.
@@ -276,13 +294,22 @@ test("reaching the top asks for older turns once while the view says they stand,
   scrollElement(mounted.scroll, 0);
   assert.equal(load.count, 1);
 
-  // The page lands above the reader: the thread grows at the top, and the reader stays on the row they were reading.
-  metrics.set({ scrollHeight: 720 });
+  // The page lands above the reader while the tail grows too: the row they
+  // were reading moves down by what landed above it, and so does the reader.
+  readingTop = 300;
+  metrics.set({ scrollHeight: 780 });
   mounted.render({
     ...BASE_PROPS,
     view: { groups: FULL_GROUPS, settled: true },
     onLoadOlder: load.onLoadOlder,
+    live: [
+      {
+        entry: { kind: CONVERSATION_ENTRY_KIND.ANNOUNCEMENT, words: "Still working through it." },
+        at: undefined,
+      },
+    ],
   });
+  assert.notEqual(firstRow(mounted.container), reading);
   assert.equal(metrics.state.scrollTop, 300);
   await load.settle();
   assert.equal(mounted.container.querySelector(".conversation-loading-older"), null);
@@ -292,7 +319,7 @@ test("reaching the top asks for older turns once while the view says they stand,
   mounted.unmount();
 });
 
-test("a thread that fits its window whole asks for older turns as it lands, and asks again only once the view has moved", async () => {
+test("a thread that fits its window whole asks for older turns as it lands, again once the view has moved, and once more for a page that landed while an ask was out", async () => {
   const newest = FULL_GROUPS.at(-1);
   assert.ok(newest);
   const load = deferredLoad();
@@ -309,14 +336,24 @@ test("a thread that fits its window whole asks for older turns as it lands, and 
     { clamp: true },
   );
   assert.equal(load.count, 1);
-  // The view landing again while the ask is out asks nothing more.
+  // The same view carried again is not a page landing; nor is an ask that ended with nothing landing.
   mounted.render({ ...props, view: { ...props.view } });
   assert.equal(load.count, 1);
-  // The ask answered with nothing landing leaves the view as it was: no second ask until it moves.
   await load.settle();
   assert.equal(load.count, 1);
+  // The view moving asks again.
+  const grown = { groups: FULL_GROUPS.slice(-2), settled: true, hasOlder: true };
+  mounted.render({ ...props, view: grown });
+  assert.equal(load.count, 2);
+  // A page landing while that ask is out waits for it to settle, then asks for the next.
   mounted.render({ ...props, view: { groups: FULL_GROUPS, settled: true, hasOlder: true } });
   assert.equal(load.count, 2);
+  await load.settle();
+  assert.equal(load.count, 3);
+  // Once the view says nothing older stands, the settled ask asks for nothing.
+  mounted.render({ ...props, view: { groups: FULL_GROUPS, settled: true } });
+  await load.settle();
+  assert.equal(load.count, 3);
   mounted.unmount();
 });
 

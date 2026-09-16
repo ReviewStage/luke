@@ -39,6 +39,9 @@ const HISTORY_REACH_SLACK_PX = 48;
 /** What a reader is told while the page of older turns they reached for is on its way. */
 const LOADING_OLDER_NOTICE = "Loading earlier messages…";
 
+/** The first row of the thread's own: a message's, never a date break, which comes and goes with the group above it. */
+const ANCHOR_ROW_SELECTOR = ".conversation-list > li:not(.conversation-break)";
+
 /**
  * The thread's one control, seated beside the tab bar the way each tab's
  * search is, so every tab's control is opened from the same place. Clearing
@@ -114,6 +117,65 @@ function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
 
 function scrollToConversationTail(element: HTMLDivElement): void {
   element.scrollTop = element.scrollHeight;
+}
+
+/** Where a row stands in the scrolled content, whatever the offset is: the one number a prepend moves. */
+function rowTop(container: HTMLDivElement, row: Element): number {
+  return (
+    row.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop
+  );
+}
+
+/**
+ * Where the thread stood at its last paint: its first row and where that row
+ * stood, and the thread's whole height for when the row itself is gone.
+ * Older turns landing above the reader move the first row down by exactly
+ * their height, whatever grew at the tail in the same paint.
+ */
+interface ThreadAnchor {
+  readonly row: Element;
+  readonly top: number;
+  readonly height: number;
+}
+
+function threadAnchor(container: HTMLDivElement): ThreadAnchor | undefined {
+  const row = container.querySelector(ANCHOR_ROW_SELECTOR);
+  if (row === null) return undefined;
+  return { row, top: rowTop(container, row), height: container.scrollHeight };
+}
+
+/**
+ * How far the content above the reader moved since the anchor was taken:
+ * nothing while the same row still leads, since rows only ever land above
+ * the first one by changing which row is first; the row's own move where it
+ * still stands; and the thread's change of height where it was let go of,
+ * the one case a row cannot measure.
+ */
+function movedAbove(container: HTMLDivElement, anchor: ThreadAnchor): number {
+  if (container.querySelector(ANCHOR_ROW_SELECTOR) === anchor.row) return 0;
+  if (anchor.row.isConnected) return rowTop(container, anchor.row) - anchor.top;
+  return container.scrollHeight - anchor.height;
+}
+
+/** What of a view an ask was made over: enough to tell that a page has landed since, whichever object carries the view now. */
+interface ViewMark {
+  readonly groups: number;
+  readonly first: string | undefined;
+  readonly hasOlder: boolean;
+}
+
+function viewMark(view: ConversationViewSnapshot): ViewMark {
+  return {
+    groups: view.groups.length,
+    first: view.groups[0]?.turnId,
+    hasOlder: view.hasOlder === true,
+  };
+}
+
+function sameViewMark(a: ViewMark | undefined, b: ViewMark): boolean {
+  return (
+    a !== undefined && a.groups === b.groups && a.first === b.first && a.hasOlder === b.hasOlder
+  );
 }
 
 function ConversationJumpToBottomButton({ onClick }: { onClick: () => void }): React.JSX.Element {
@@ -193,16 +255,12 @@ export function ConversationPanel({
   const [loadingOlder, setLoadingOlder] = useState(false);
   const loadingOlderRef = useRef(loadingOlder);
   loadingOlderRef.current = loadingOlder;
-  /**
-   * Where the thread stood at the last paint: its first group and its full
-   * height. Older turns landing above the reader grow the thread at the top,
-   * and the browser keeps the offset rather than the content, so when the
-   * first group changes under a reader who is not following the tail the
-   * offset is moved by exactly what was added or let go of above them.
-   */
-  const anchor = useRef<
-    { readonly first: string | undefined; readonly height: number } | undefined
-  >(undefined);
+  /** The view the last ask was made over, so a page landing since is told from the same view carried again. */
+  const askedOver = useRef<ViewMark | undefined>(undefined);
+  // The browser keeps the offset rather than the content, so when rows land
+  // above a reader who is not following the tail, the offset is moved by
+  // exactly what landed above them.
+  const anchor = useRef<ThreadAnchor | undefined>(undefined);
   const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
   const olderStands = view.hasOlder === true && onLoadOlder !== undefined;
 
@@ -221,17 +279,18 @@ export function ConversationPanel({
   useLayoutEffect(() => {
     const element = list.current;
     if (!element) return;
-    const first = view.groups[0]?.turnId;
     const previous = anchor.current;
-    if (previous !== undefined && !followingRef.current && previous.first !== first) {
-      element.scrollTop += element.scrollHeight - previous.height;
+    if (previous !== undefined && !followingRef.current) {
+      const moved = movedAbove(element, previous);
+      if (moved !== 0) element.scrollTop += moved;
     }
-    anchor.current = { first, height: element.scrollHeight };
+    anchor.current = threadAnchor(element);
   }, [thread, view, live, spokenAskPending]);
 
   /** One ask at a time, and only while the view says there is something to ask for. */
   const askForOlder = () => {
     if (!olderStands || loadingOlderRef.current || onLoadOlder === undefined) return;
+    askedOver.current = viewMark(view);
     setLoadingOlder(true);
     loadingOlderRef.current = true;
     // However the ask ends, the next reach may ask again; what landed is on the view.
@@ -241,21 +300,21 @@ export function ConversationPanel({
 
   // A page that landed short of the reader's window, or a thread that fits it
   // whole, leaves them at the top with no scroll to make: the next page is
-  // asked for as the view lands, and not again until it moves, so a page the
-  // host would not read does not spin the ask.
+  // asked for once the view has moved since the last ask and no ask is out.
+  // The page lands on the view before the ask answers, so the look is made
+  // again as the ask settles; a view that did not move is not asked over
+  // twice, so a page the host would not read does not spin the ask.
   useEffect(() => {
+    if (loadingOlder || sameViewMark(askedOver.current, viewMark(view))) return;
     const element = list.current;
     if (!element || !thread || !reachesConversationHead(scrollMetrics(element))) return;
     askForOlder();
-  }, [view]);
+  }, [view, loadingOlder]);
 
   const syncFollowing = () => {
     const element = list.current;
     if (!element) return;
     const metrics = scrollMetrics(element);
-    if (anchor.current !== undefined) {
-      anchor.current = { ...anchor.current, height: metrics.scrollHeight };
-    }
     setFollowing((standing) => {
       const next = followsConversationTail(metrics);
       return standing === next ? standing : next;
