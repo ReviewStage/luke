@@ -356,7 +356,7 @@ function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligi
 /**
  * Drops everything the scheduled observation keeps for every user it no
  * longer runs for — no key to one of the named providers, or no device seen
- * since the instant: the snapshot, the bookmark, and the pass record go
+ * since the instant: the snapshot, the bookmark, the transcript mark, and the pass record go
  * together, so a user whose key or account went, or who has not been seen
  * within the window, stops being observed and keeps no roster on record.
  */
@@ -368,6 +368,7 @@ export function forgetObservationIneligible(
       Effect.gen(function* () {
         yield* sql`delete from roster_snapshot where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from roster_consumed where ${ineligibleWhere(sql, eligibility)}`;
+        yield* sql`delete from transcript_mark where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from observation_pass where ${ineligibleWhere(sql, eligibility)}`;
       }),
     ),
