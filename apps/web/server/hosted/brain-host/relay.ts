@@ -203,7 +203,9 @@ function statusWordOf(output: UnparsedWireValue): string | undefined {
  * and the status codes. Read in this order, and no other key is: `message`,
  * `apiErrorMessage`, `upstreamMessage`, `responseBodySnippet`, and `detail`
  * are the provider's or the stack's own words, which nothing here can vouch
- * for holding no credential.
+ * for holding no credential. The two words are held to the shape a class
+ * name and a catalog id have, since eve copies an unrecognized error's own
+ * `name` through, and a details object one of them does not fit yields none.
  */
 const FAILURE_DETAIL_FIELDS = [
   "name",
@@ -212,13 +214,19 @@ const FAILURE_DETAIL_FIELDS = [
   "upstreamStatusCode",
 ] as const;
 
-const StatusCodeSchema = Schema.Union([Schema.String, Schema.Number]);
+/** An error's class name as one is written: a capitalized identifier ending in `Error`, and nothing shaped like a token or a sentence. */
+const ERROR_NAME_PATTERN = /^[A-Z][A-Za-z0-9_]{0,62}Error$/;
+
+/** eve's catalog id for an error it recognized: a lower-case slug such as `gateway-rate-limited`. */
+const SEMANTIC_ERROR_ID_PATTERN = /^[a-z][a-z0-9_-]*(\.[a-z0-9_-]+)*$/;
 
 const FailureDetailWordsSchema = Schema.Struct({
-  name: Schema.optionalKey(Schema.String),
-  semanticErrorId: Schema.optionalKey(Schema.String),
-  statusCode: Schema.optionalKey(StatusCodeSchema),
-  upstreamStatusCode: Schema.optionalKey(StatusCodeSchema),
+  name: Schema.optionalKey(Schema.String.check(Schema.isPattern(ERROR_NAME_PATTERN))),
+  semanticErrorId: Schema.optionalKey(
+    Schema.String.check(Schema.isPattern(SEMANTIC_ERROR_ID_PATTERN)),
+  ),
+  statusCode: Schema.optionalKey(Schema.Number),
+  upstreamStatusCode: Schema.optionalKey(Schema.Number),
 });
 
 const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSchema);
