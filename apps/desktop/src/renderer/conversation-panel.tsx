@@ -1,3 +1,4 @@
+import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import { ChevronIcon } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
@@ -170,7 +171,9 @@ function ConversationJumpToBottomButton({ onClick }: { onClick: () => void }): R
 export function ConversationPanel({
   view,
   roster = [],
+  subagents = [],
   onOpenChat,
+  onOpenChild,
   onOfferRatingFeedback,
   live = [],
   spokenAskPending = false,
@@ -180,8 +183,12 @@ export function ConversationPanel({
   view: ConversationViewSnapshot;
   /** The sessions as the roster holds them now, so an action's chip names a session by its current title. */
   roster?: readonly SessionView[];
+  /** The account's children as the document holds them, so a completion's chip names the child by the list's own title. */
+  subagents?: readonly ChildRead[];
   /** A session row's own press by identity, for the chip naming the session an action reached. */
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** The list row's own press by child id, for the chip on a completion; absent where the thread opens no transcript. */
+  onOpenChild?: (childId: string) => void;
   /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
   onOfferRatingFeedback?: (draft: string) => void;
   /**
@@ -250,8 +257,10 @@ export function ConversationPanel({
               <ConversationTurns
                 groups={view.groups}
                 roster={roster}
+                subagents={subagents}
                 now={now}
                 {...(onOpenChat ? { onOpenChat } : undefined)}
+                {...(onOpenChild ? { onOpenChild } : undefined)}
                 {...(onOfferRatingFeedback ? { onOfferRatingFeedback } : undefined)}
               >
                 {/* A line still being said has no durable id, and its words change

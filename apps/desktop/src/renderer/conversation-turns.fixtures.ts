@@ -1,4 +1,5 @@
 import { ACTION_OUTPUT_STATUS, type ActionOutputEnvelope } from "@sidecar/actions";
+import { CHILD_COMPLETION_STATUS, childCompletionInputText } from "@sidecar/brain/input-items";
 import {
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationViewInput,
@@ -15,7 +16,13 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
-import { CONVERSATION_EVENT_KIND, MESSAGE_RATING, TURN_ORIGIN, TURN_STATUS } from "@sidecar/wire";
+import {
+  CONVERSATION_EVENT_KIND,
+  MESSAGE_RATING,
+  OBSERVATION_SOURCE,
+  TURN_ORIGIN,
+  TURN_STATUS,
+} from "@sidecar/wire";
 import type { SessionView } from "./session-model";
 
 /**
@@ -178,6 +185,8 @@ export const FIXTURE_TURN = {
   OWN: "1a000000-0000-4000-8000-000000000107",
   /** The turn's working: the brain's own reads and writes beside two app actions, one write refused. */
   WORKING: "1a000000-0000-4000-8000-000000000108",
+  /** A child's completion, kept out of the scenarios above so their counts stand: see `fixtureChildCompletionTurns`. */
+  COMPLETION: "1a000000-0000-4000-8000-000000000109",
 } as const;
 
 const TURN = FIXTURE_TURN;
@@ -191,6 +200,7 @@ const AT = {
   SINGLE: 1757506100000,
   WORKING: 1757506150000,
   OWN: 1757506200000,
+  COMPLETION: 1757506250000,
 } as const;
 
 /** The instant the fixtures are read against: the running turn has been going for a while. */
@@ -583,4 +593,69 @@ export const FIXTURE_INPUT: ConversationViewInput = {
 /** The scenarios as the renderer takes them: the view selection over the rows above. */
 export function fixtureConversationTurns(): readonly ConversationViewTurnGroup[] {
   return selectConversationView(FIXTURE_INPUT);
+}
+
+/**
+ * A child-completion turn on its own, as the view selects it: the note the
+ * service composes for a child's end under the brain's own marker, naming the
+ * child in its data, then Luke's words on his own judgment. Apart from the
+ * scenarios above, so the counts they assert stand.
+ */
+export function fixtureChildCompletionTurns(
+  childId: string,
+  label: string | undefined,
+): readonly ConversationViewTurnGroup[] {
+  return selectConversationView({
+    main: [
+      {
+        message: {
+          id: "2b000000-0000-4000-8000-000000000291",
+          role: MESSAGE_ROLE.USER,
+          metadata: { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD_COMPLETION },
+          parts: [
+            {
+              type: "text",
+              text: childCompletionInputText(
+                {
+                  childId,
+                  label,
+                  status: CHILD_COMPLETION_STATUS.COMPLETED,
+                  result: "Two of the notes are stale.",
+                  failure: undefined,
+                },
+                AT.COMPLETION,
+              ),
+            },
+          ],
+        },
+        seq: 1,
+        turnId: TURN.COMPLETION,
+        createdAt: AT.COMPLETION,
+      },
+      {
+        message: reply("2b000000-0000-4000-8000-000000000292", [
+          { type: "step-start" },
+          {
+            type: "text",
+            text: "The audit found two stale notes; nothing to say aloud.",
+            state: "done",
+          },
+        ]),
+        seq: 2,
+        turnId: TURN.COMPLETION,
+        createdAt: AT.COMPLETION + 5_000,
+      },
+    ],
+    observed: [],
+    turns: [
+      {
+        id: TURN.COMPLETION,
+        origin: TURN_ORIGIN.CHILD_COMPLETION,
+        status: TURN_STATUS.SETTLED,
+        queuedAt: AT.COMPLETION,
+      },
+    ],
+    events: [],
+    toolKinds: FIXTURE_TOOL_KINDS,
+  });
 }

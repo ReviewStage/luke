@@ -972,3 +972,9 @@ button.conversation-action-chip:focus-visible {
   font-size: 10.5px;
   line-height: 1.4;
 }
+
+/* The chip naming the sub-agent a completion answered stands before the
+   words on its own line, at its own width rather than the column's. */
+.conversation-subagent-chip {
+  align-self: flex-start;
+}

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
+import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
@@ -40,6 +41,7 @@ import {
   FIXTURE_RATED_MESSAGE,
   FIXTURE_ROSTER,
   FIXTURE_TURN,
+  fixtureChildCompletionTurns,
   fixtureConversationTurns,
 } from "./conversation-turns.fixtures";
 
@@ -284,6 +286,64 @@ test("a turn nobody opened is Luke's own judgment: his face leads every row, and
   // The observed session's own turn: its announcement stays his bubble, its action his judgment.
   const announced = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
   assert.equal(count(announced, "data-speaker", "luke"), 1);
+});
+
+const SUBAGENT_CHIP_BUTTON =
+  '<button type="button" class="conversation-action-chip conversation-subagent-chip"';
+
+const COMPLETED_CHILD: ChildRead = {
+  id: "aaaaaaaa-1111-4000-8000-000000000001",
+  parentConversationId: "7a1b2c3d-0000-4000-8000-000000000001",
+  parentKind: CONVERSATION_VIEW_SOURCE.MAIN,
+  label: "Audit the release notes",
+  status: CHILD_STATUS.SETTLED,
+  acceptedAt: FIXTURE_NOW - 120_000,
+  settledAt: FIXTURE_NOW - 60_000,
+};
+
+function renderCompletion(
+  groups: readonly ConversationViewTurnGroup[],
+  extra: Partial<Parameters<typeof ConversationTurns>[0]> = {},
+): string {
+  return renderToStaticMarkup(
+    createElement(ConversationTurns, {
+      groups,
+      roster: FIXTURE_ROSTER,
+      now: FIXTURE_NOW,
+      ...extra,
+    }),
+  );
+}
+
+test("a child's completion leads Luke's words with a chip naming the child, pressed as the list's row is, and no other turn wears one", () => {
+  const groups = fixtureChildCompletionTurns(COMPLETED_CHILD.id, COMPLETED_CHILD.label);
+  const open = (childId: string) => void childId;
+  const markup = renderCompletion(groups, { subagents: [COMPLETED_CHILD], onOpenChild: open });
+  // The turn is Luke's own judgment, and the chip stands before his words on it.
+  assert.equal(count(markup, "data-own-words", "true"), 1);
+  assert.equal(count(markup, "data-judgment", "own"), 1);
+  assert.equal(markup.split(SUBAGENT_CHIP_BUTTON).length - 1, 1);
+  assert.ok(markup.includes('aria-label="Open Sub-agent: Audit the release notes"'));
+  assert.ok(markup.includes(">Sub-agent: Audit the release notes</button>"));
+  assert.ok(markup.indexOf("conversation-subagent-chip") < markup.indexOf("The audit found"));
+  // A child the list no longer names is the bare word; a thread with no press to hand is a name.
+  const unlisted = renderCompletion(groups, { onOpenChild: open });
+  assert.ok(unlisted.includes(">Sub-agent</button>"));
+  const named = renderCompletion(groups, { subagents: [COMPLETED_CHILD] });
+  assert.equal(named.split(SUBAGENT_CHIP_BUTTON).length - 1, 0);
+  assert.ok(
+    named.includes(
+      '<span class="conversation-action-chip conversation-subagent-chip">Sub-agent: Audit the release notes</span>',
+    ),
+  );
+  // Every other turn, the developer's and Luke's own alike, wears none.
+  const others = renderCompletion(fixtureConversationTurns(), {
+    subagents: [COMPLETED_CHILD],
+    onOpenChild: open,
+    onOpenChat: OPEN,
+  });
+  assert.equal(count(others, "data-judgment", "own") > 0, true);
+  assert.equal(others.split("conversation-subagent-chip").length - 1, 0);
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {

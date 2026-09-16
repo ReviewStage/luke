@@ -1,3 +1,5 @@
+import { BRAIN_INPUT_MARKER } from "@sidecar/brain/input-items";
+import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   ArchiveIcon,
   BookIcon,
@@ -37,6 +39,8 @@ import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   isRecord,
   isWireString,
+  OBSERVATION_SOURCE,
+  recordFromJsonLine,
   TURN_ORIGIN,
   TURN_STATUS,
   type TurnOrigin,
@@ -66,6 +70,7 @@ import {
 } from "./conversation-tool-row";
 import { MarkdownMessage } from "./markdown-message";
 import type { SessionView } from "./session-model";
+import { subagentTitle } from "./subagent-title";
 import { ThinkingDots } from "./thinking-dots";
 
 /**
@@ -340,10 +345,13 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
 function OwnWordsRow({
   words,
   at,
+  lead,
   rating,
 }: {
   words: string;
   at: number;
+  /** What stands before the words: the chip naming the child whose completion the turn answered. */
+  lead?: React.ReactNode;
   /** The rating control, behind the ellipsis on the last words of the message and nowhere else. */
   rating?: React.ReactNode;
 }): React.JSX.Element {
@@ -361,6 +369,7 @@ function OwnWordsRow({
             <WingFace />
           </span>
           <span className="conversation-action-body">
+            {lead}
             <MarkdownMessage words={words} className="conversation-words" />
             {rating === undefined ? null : (
               <ConversationMessageMenu>{rating}</ConversationMessageMenu>
@@ -408,6 +417,67 @@ function SessionChip({
   ) : (
     <span className="conversation-action-chip">{face}</span>
   );
+}
+
+/** What the chip on a completion calls the child: the list's own title for it, or the bare word for a child the list no longer names. */
+const SUBAGENT_CHIP_LABEL = "Sub-agent";
+
+/**
+ * The chip naming the sub-agent whose completion a turn answered, styled as
+ * an action row's session chip and pressed the way the list's row is: the
+ * press opens the child's transcript by the same act. A thread with nothing
+ * to hand a press to draws the chip as a name.
+ */
+function SubagentChip({
+  childId,
+  subagents,
+  onOpenChild,
+}: {
+  childId: string;
+  subagents: readonly ChildRead[];
+  onOpenChild?: (childId: string) => void;
+}): React.JSX.Element {
+  const child = subagents.find((row) => row.id === childId);
+  const text =
+    child === undefined ? SUBAGENT_CHIP_LABEL : `${SUBAGENT_CHIP_LABEL}: ${subagentTitle(child)}`;
+  return onOpenChild === undefined ? (
+    <span className="conversation-action-chip conversation-subagent-chip">{text}</span>
+  ) : (
+    <button
+      type="button"
+      className="conversation-action-chip conversation-subagent-chip"
+      aria-label={`Open ${text}`}
+      onClick={() => onOpenChild(childId)}
+    >
+      {text}
+    </button>
+  );
+}
+
+/** The key the completion's data names the child under, as `childCompletionInputText` writes it. */
+const CHILD_COMPLETION_ID_KEY = "child_id";
+
+/**
+ * The child a completion turn answered, read from the turn's opening note:
+ * the brain writes a child's end as its marker, an instant, and the
+ * completion as JSON on the next line, and the row's metadata names the
+ * source but not the child, so the id is read from the data the brain
+ * composed. Nothing for any other turn, or for a note the reader cannot hold
+ * to that shape.
+ */
+function completedChildOf(group: ConversationViewTurnGroup): string | undefined {
+  if (group.turn?.origin !== TURN_ORIGIN.CHILD_COMPLETION) return undefined;
+  for (const { message } of group.messages) {
+    if (message.role !== MESSAGE_ROLE.USER) continue;
+    if (message.metadata.author !== MESSAGE_AUTHOR.BRAIN) continue;
+    if (message.metadata.source !== OBSERVATION_SOURCE.CHILD_COMPLETION) continue;
+    const text = userWords(message);
+    if (!text.startsWith(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) continue;
+    const data = recordFromJsonLine(text.slice(text.indexOf("\n") + 1));
+    const childId = data?.[CHILD_COMPLETION_ID_KEY];
+    if (isWireString(childId)) return childId;
+  }
+  return undefined;
 }
 
 /** A row's runs are one chip at most and text runs that never repeat, so each names itself. */
@@ -781,6 +851,7 @@ function messageRows(
   rating: RatingContext,
   readings: Readings,
   onOpenChat?: (identity: SessionIdentity) => void,
+  lead?: React.ReactNode,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -834,6 +905,8 @@ function messageRows(
     lastWordsAt === -1 || readAloud
       ? undefined
       : ratingControl(view, quotedWords(message, message.parts[lastWordsAt]), rating);
+  // The lead stands before the message's first words, and nowhere twice.
+  const leadAt = lead === undefined ? -1 : message.parts.findIndex(isTextPart);
   message.parts.forEach((part: StoredPart, index) => {
     const key = `${message.id}:${index}`;
     const placed = index === lastWordsAt ? control : undefined;
@@ -844,7 +917,13 @@ function messageRows(
       }
       rows.push(
         judgment === JUDGMENT.OWN ? (
-          <OwnWordsRow key={key} words={part.text} at={view.createdAt} rating={placed} />
+          <OwnWordsRow
+            key={key}
+            words={part.text}
+            at={view.createdAt}
+            lead={index === leadAt ? lead : undefined}
+            rating={placed}
+          />
         ) : (
           <BubbleRow
             key={key}
@@ -921,7 +1000,9 @@ function groupSpan(group: ConversationViewTurnGroup) {
 export function ConversationTurns({
   groups,
   roster = [],
+  subagents = [],
   onOpenChat,
+  onOpenChild,
   onOfferRatingFeedback,
   now,
   children,
@@ -934,8 +1015,12 @@ export function ConversationTurns({
    * from the envelope's snapshot instead.
    */
   roster?: readonly SessionView[];
+  /** The account's children as the document holds them, so a completion's chip names the child by the list's own title. */
+  subagents?: readonly ChildRead[];
   /** The row's own press by identity; absent where nothing can open a session, and every chip is a name. */
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** The list row's own press by child id, for the chip on a completion; absent where the thread opens no transcript. */
+  onOpenChild?: (childId: string) => void;
   /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
   onOfferRatingFeedback?: (draft: string) => void;
   /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
@@ -962,6 +1047,13 @@ export function ConversationTurns({
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
+        // A child's completion leads Luke's first words on it with the chip
+        // naming the child, on the first of his messages in the turn.
+        const completedChild = completedChildOf(group);
+        const led =
+          completedChild === undefined
+            ? undefined
+            : group.messages.find((message) => message.message.role === MESSAGE_ROLE.ASSISTANT);
         // The ask a rated reply answered is the developer's latest words in
         // the same turn before it; a turn Luke opened himself answered none.
         let ask: string | undefined;
@@ -978,6 +1070,13 @@ export function ConversationTurns({
             },
             readings,
             onOpenChat,
+            completedChild !== undefined && message === led ? (
+              <SubagentChip
+                childId={completedChild}
+                subagents={subagents}
+                {...(onOpenChild ? { onOpenChild } : undefined)}
+              />
+            ) : undefined,
           );
           if (
             judgment === JUDGMENT.ASK &&

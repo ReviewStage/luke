@@ -1,4 +1,3 @@
-import { BRAIN_INPUT_MARKER } from "@sidecar/brain/input-items";
 import { CHILD_STATUS, type ChildRead, type ChildStatus } from "@sidecar/hosted/reads-wire";
 import { lastActivityLabel } from "@sidecar/panel";
 import {
@@ -11,6 +10,7 @@ import { ConversationUnreadableNotice } from "./conversation-panel";
 import { ConversationTurns } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
+import { childIdTitle, subagentTitle } from "./subagent-title";
 
 /**
  * The three pages the Conversation tab draws: the thread itself, the list of
@@ -35,24 +35,6 @@ const SUBAGENT_STATUS_WORD = {
   [CHILD_STATUS.FAILED]: "Failed",
   [CHILD_STATUS.CANCELLED]: "Cancelled",
 } as const satisfies Record<ChildStatus, string>;
-
-/** How much of a child's id stands in for a name when it was handed neither a label nor a task. */
-const CHILD_ID_EXCERPT_CHARS = 8;
-
-/** The name a child falls back to: a slice of its id. */
-function childIdTitle(childId: string): string {
-  return `Child ${childId.slice(0, CHILD_ID_EXCERPT_CHARS)}`;
-}
-
-/** What a row calls the child: its label, else its task without the marker, else a slice of its id. */
-function subagentTitle(child: ChildRead): string {
-  if (child.label) return child.label;
-  // The brain leads a delegated task with its own marker; the row names the task, never the framing.
-  const task = child.task?.startsWith(BRAIN_INPUT_MARKER.SUBAGENT_TASK)
-    ? child.task.slice(BRAIN_INPUT_MARKER.SUBAGENT_TASK.length).trim()
-    : child.task;
-  return task || childIdTitle(child.id);
-}
 
 /** The child's latest instant: its turn's settle, else its start, else the child's own opening. */
 function subagentActivityAt(child: ChildRead): number {
