@@ -288,3 +288,49 @@ test("an observed conversation is opened on its session's first diff and stands 
   );
   assert.deepEqual(row, { kind: CONVERSATION_KIND.OBSERVED, providerSessionId: "s-observed-1" });
 });
+
+test("an observed conversation keeps the session's title and workspace as the roster last showed them: written on the open, refreshed on a wake that names them, left standing by one that does not", async () => {
+  const userId = await database.createUser();
+  const session = { providerId: "conductor", providerSessionId: "s-named-1" };
+  const namingOf = async (id: string) => {
+    const [row] = await database.run(
+      Effect.gen(function* () {
+        const sql = yield* SqlClient.SqlClient;
+        return yield* sql`select title, workspace from conversations where id = ${id}`;
+      }),
+    );
+    return row;
+  };
+  // A blank workspace is no name at all, and the title's own whitespace is not kept.
+  const opened = await database.run(
+    database.store.directory.observed(userId, session, NOW, {
+      title: "  Fix the checkout tests ",
+      workspace: " ",
+    }),
+  );
+  assert.ok(opened);
+  assert.deepEqual(await namingOf(opened), { title: "Fix the checkout tests", workspace: null });
+  // The next wake renames the session and names its workspace; the row follows.
+  assert.equal(
+    await database.run(
+      database.store.directory.observed(userId, session, NOW + 1, {
+        title: "Fix the checkout tests, again",
+        workspace: "power-vacation",
+      }),
+    ),
+    opened,
+  );
+  assert.deepEqual(await namingOf(opened), {
+    title: "Fix the checkout tests, again",
+    workspace: "power-vacation",
+  });
+  // A wake for a session the roster has let go carries no naming and leaves the row's standing.
+  assert.equal(
+    await database.run(database.store.directory.observed(userId, session, NOW + 2)),
+    opened,
+  );
+  assert.deepEqual(await namingOf(opened), {
+    title: "Fix the checkout tests, again",
+    workspace: "power-vacation",
+  });
+});

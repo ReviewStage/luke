@@ -29,7 +29,10 @@ import {
   type TurnCursorPosition,
   turnsNamed,
 } from "./message-reads.js";
-import { standingObservedConversation } from "./observed-conversations.js";
+import {
+  type ObservedSessionNaming,
+  standingObservedConversation,
+} from "./observed-conversations.js";
 import {
   advanceRosterSnapshot,
   forgetObservationIneligible,
@@ -145,11 +148,12 @@ export interface HostedStore {
   directory: {
     /** The view's conversations: the standing main and every standing observed conversation, with their counters. */
     standing(userId: string): HostedStoreEffect<readonly StandingConversation[]>;
-    /** The observed conversation for one session, opened on its first diff and standing after; nothing where a stamped row blocks it. */
+    /** The observed conversation for one session, opened on its first diff and standing after, its naming kept level with the roster's where one is handed; nothing where a stamped row blocks it. */
     observed(
       userId: string,
       identity: SessionIdentity,
       now: number,
+      naming?: ObservedSessionNaming,
     ): HostedStoreEffect<string | undefined>;
     /** The account's standing children, newest first and at most `limit` of them, each where its latest turn leaves it. */
     children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
@@ -277,8 +281,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
     },
     directory: {
       standing: (userId) => standingConversations(userId),
-      observed: (userId, identity, now) =>
-        standingObservedConversation(userId, identity, new Date(now)),
+      observed: (userId, identity, now, naming) =>
+        standingObservedConversation(userId, identity, new Date(now), naming),
       children: (userId, limit) => listChildren(userId, limit),
       paged: (userId, conversationId) =>
         Effect.map(pagedConversation(userId, conversationId), Option.getOrUndefined),

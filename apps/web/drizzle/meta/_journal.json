@@ -295,6 +295,13 @@
       "when": 1790125000000,
       "tag": "0042_roster_bookmark_dropped",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1790175000000,
+      "tag": "0043_observed_session_title",
+      "breakpoints": true
     }
   ]
 }
