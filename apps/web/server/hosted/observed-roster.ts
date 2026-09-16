@@ -80,10 +80,11 @@ function schemaAs<Value>(schema: EffectSchema.Top): EffectSchema.Codec<Value, Un
 const storedText = EffectSchema.String;
 const optionalText = EffectSchema.optionalKey(storedText);
 
-export const cloudProviderIdSchema: EffectSchema.Codec<CloudAgentProviderId, UnparsedWireValue> =
-  schemaAs(EffectSchema.Literals(Object.values(CLOUD_AGENT_PROVIDER_ID)));
+const cloudProviderIdSchema: EffectSchema.Codec<CloudAgentProviderId, UnparsedWireValue> = schemaAs(
+  EffectSchema.Literals(Object.values(CLOUD_AGENT_PROVIDER_ID)),
+);
 
-export const sessionStatusSchema = EffectSchema.Literals(Object.values(SESSION_STATUS));
+const sessionStatusSchema = EffectSchema.Literals(Object.values(SESSION_STATUS));
 
 const advertisedActionSchema: EffectSchema.Codec<AdvertisedAction, UnparsedWireValue> = schemaAs(
   EffectSchema.Union([
@@ -203,7 +204,7 @@ const observedRosterSchema: EffectSchema.Codec<ObservedRoster, UnparsedWireValue
 );
 
 /** A stored body as JSON, or nothing for text that is not JSON at all. */
-export function parseStoredJson(body: string): UnparsedWireValue {
+function parseStoredJson(body: string): UnparsedWireValue {
   try {
     // SAFETY: JSON.parse returns unknown; the schema the caller reads it with validates the shape.
     return JSON.parse(body) as UnparsedWireValue;

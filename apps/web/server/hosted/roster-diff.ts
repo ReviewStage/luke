@@ -1,18 +1,5 @@
-import { readEither } from "@sidecar/wire/effect";
-import { Schema as EffectSchema, Result } from "effect";
-import type {
-  CloudAgentProviderId,
-  ProviderSessionObservation,
-  SessionStatus,
-  UnparsedWireValue,
-} from "../core.js";
-import {
-  cloudProviderIdSchema,
-  type ObservedRoster,
-  parseStoredJson,
-  rosterProvider,
-  sessionStatusSchema,
-} from "./observed-roster.js";
+import type { CloudAgentProviderId, ProviderSessionObservation, SessionStatus } from "../core.js";
+import { type ObservedRoster, rosterProvider } from "./observed-roster.js";
 
 /**
  * What changed between two consecutive snapshots of one user's roster, as a
@@ -194,71 +181,6 @@ export function rosterDiffIsEmpty(diff: RosterDiff): boolean {
     diff.workspacesAppeared.length === 0 &&
     diff.workspacesVanished.length === 0
   );
-}
-
-export function encodeRosterDiff(diff: RosterDiff): string {
-  return JSON.stringify(diff);
-}
-
-/** A declaration handed the interface it decodes into, matching the assembled struct's shape. */
-function schemaAs<Value>(schema: EffectSchema.Top): EffectSchema.Codec<Value, UnparsedWireValue> {
-  return EffectSchema.make<EffectSchema.Codec<Value, UnparsedWireValue>>(schema.ast);
-}
-
-const storedText = EffectSchema.String;
-const optionalText = EffectSchema.optionalKey(storedText);
-
-const diffSessionSchema: EffectSchema.Codec<RosterDiffSession, UnparsedWireValue> = schemaAs(
-  EffectSchema.Struct({
-    providerId: cloudProviderIdSchema,
-    providerSessionId: storedText,
-    title: storedText,
-    status: sessionStatusSchema,
-    workspaceId: optionalText,
-    workspaceName: optionalText,
-  }),
-);
-
-const diffWorkspaceSchema: EffectSchema.Codec<RosterDiffWorkspace, UnparsedWireValue> = schemaAs(
-  EffectSchema.Struct({
-    providerId: cloudProviderIdSchema,
-    providerWorkspaceId: storedText,
-    name: optionalText,
-  }),
-);
-
-const statusTransitionSchema: EffectSchema.Codec<RosterStatusTransition, UnparsedWireValue> =
-  schemaAs(
-    EffectSchema.Struct({
-      session: diffSessionSchema,
-      from: sessionStatusSchema,
-      to: sessionStatusSchema,
-    }),
-  );
-
-const lineChangeSchema: EffectSchema.Codec<RosterLineChange, UnparsedWireValue> = schemaAs(
-  EffectSchema.Struct({
-    session: diffSessionSchema,
-    from: optionalText,
-    to: optionalText,
-  }),
-);
-
-const rosterDiffSchema: EffectSchema.Codec<RosterDiff, UnparsedWireValue> = schemaAs(
-  EffectSchema.Struct({
-    appeared: EffectSchema.Array(diffSessionSchema),
-    vanished: EffectSchema.Array(diffSessionSchema),
-    statusChanged: EffectSchema.Array(statusTransitionSchema),
-    errorChanged: EffectSchema.Array(lineChangeSchema),
-    activityChanged: EffectSchema.Array(lineChangeSchema),
-    workspacesAppeared: EffectSchema.Array(diffWorkspaceSchema),
-    workspacesVanished: EffectSchema.Array(diffWorkspaceSchema),
-  }),
-);
-
-/** Reads a stored diff, or nothing for a payload that is not one this build wrote. */
-export function decodeRosterDiff(payload: string): RosterDiff | undefined {
-  return Result.getOrUndefined(readEither(rosterDiffSchema)(parseStoredJson(payload)));
 }
 
 /**

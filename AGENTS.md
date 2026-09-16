@@ -55,9 +55,9 @@ in for the missing job before the first release.
   `apps/web/server/observation-app.ts`), at most 200 accounts a tick, least
   recently attempted first, four at a time inside a 50-second budget with a
   25-second deadline per account; and every tick begins by dropping the
-  snapshot, the waiting diffs, the brain's bookmark, and the pass record of
-  every account no longer eligible, so a deleted key or a week's silence ends
-  the observation and empties what it kept. One account's pass is the same
+  snapshot, the brain's bookmark, and the pass record of every account no
+  longer eligible, so a deleted key or a week's silence ends the observation
+  and empties what it kept. One account's pass is the same
   read-only fan-out the on-demand endpoint runs, on a plugin built for that
   pass alone under the account's decrypted key (`observation-pass.ts` over
   `cloud-observe.ts`): the workspaces, the chats, each chat's status, the agent

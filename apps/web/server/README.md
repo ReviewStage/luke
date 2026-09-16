@@ -1180,7 +1180,7 @@ The `conversations`/`messages`/`turns`/`events`/`tool_sets`/`provider_cursors`,
 conversation per account: the
 conversation rows the storage rework settled on, the identity workspace and
 daily notes, and the latest roster snapshot with its
-diffs and pass record. Every row is keyed by `user_id` and cascades with the
+bookmark and pass record. Every row is keyed by `user_id` and cascades with the
 user row, so `server/routes/account/delete.ts` erases them with the account.
 The roster tables are read and written by the scheduled observation below and
 the routes that serve it. `server/hosted/store/` is the store the brain host
@@ -1520,7 +1520,7 @@ needs `PROVIDER_KEY_ENCRYPTION_SECRET`, because a tick that cannot read a key
 must not run at all: a pass that read nothing would be written down as an
 account with nothing.
 
-Each tick first drops the snapshot, diffs, and pass record of every account
+Each tick first drops the snapshot, bookmark, and pass record of every account
 that no longer holds a cloud provider key or has not been seen within the
 last 7 days, then lists up to 200 accounts that hold one and were seen —
 seen meaning one of the account's `devices` rows has a `last_seen_at` inside
