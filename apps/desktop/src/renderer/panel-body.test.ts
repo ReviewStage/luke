@@ -117,11 +117,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-test("the Sub-agents button is offered on the Conversation tab, thread or not, and not on the Sessions tab", () => {
+test("the Agents button is offered on the Conversation tab, thread or not, and not on the Sessions tab", () => {
   const conversation = mount(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => {}));
   const button = subagentsButton(conversation.container);
   assert.ok(button);
-  assert.equal(button.textContent, "Sub-agents");
+  assert.equal(button.textContent, "Agents");
   assert.equal(button.getAttribute("aria-expanded"), "false");
   // Offered over an empty thread too: the empty list has its own words to say.
   assert.ok(conversation.container.querySelector(".conversation-empty"));
@@ -272,7 +272,7 @@ test("a row's press opens the child or the agent, and the transcript page draws 
 
   const back = mounted.container.querySelector(".subagents-back");
   assert.ok(back instanceof HTMLButtonElement);
-  assert.equal(back.textContent, "‹ Sub-agents");
+  assert.equal(back.textContent, "‹ Agents");
   act(() => {
     back.click();
   });
