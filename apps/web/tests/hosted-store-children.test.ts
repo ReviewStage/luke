@@ -182,7 +182,7 @@ test("a stamped child, another account's child, a row of another kind, and a chi
   const elsewhere = await childOf(other, await parentOf(other), { createdAt: at(4) });
   await insertConversation(database.run, {
     userId,
-    kind: CONVERSATION_KIND.THREAD,
+    kind: CONVERSATION_KIND.OBSERVED,
     parentConversationId: parent,
     createdAt: at(5),
   });
