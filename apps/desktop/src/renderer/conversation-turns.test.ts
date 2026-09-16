@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+
 import assert from "node:assert/strict";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
@@ -22,9 +24,10 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
-import { createElement } from "react";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
 import {
   DRAFT_QUOTE_MAX_LENGTH,
   DRAFT_SPEAKER,
@@ -40,6 +43,8 @@ import {
   FIXTURE_NOW,
   FIXTURE_RATED_MESSAGE,
   FIXTURE_ROSTER,
+  FIXTURE_SESSION,
+  FIXTURE_TITLE,
   FIXTURE_TURN,
   fixtureChildCompletionTurns,
   fixtureConversationTurns,
@@ -353,6 +358,107 @@ test("a child's completion leads Luke's words with a chip naming the child, pres
   });
   assert.equal(count(others, "data-judgment", "own") > 0, true);
   assert.equal(others.split("conversation-subagent-chip").length - 1, 0);
+});
+
+const SOURCE_CHIP_BUTTON =
+  '<button type="button" class="conversation-action-chip conversation-source-chip"';
+
+afterEach(() => {
+  document.body.innerHTML = "";
+});
+
+test("a turn of an observed session's own conversation heads on one chip naming the session, pressed as its row is, and main's turns wear none", () => {
+  const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
+  assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
+  const markup = render([observed], OPEN);
+  assert.equal(markup.split(SOURCE_CHIP_BUTTON).length - 1, 1);
+  assert.ok(markup.includes(`aria-label="Open ${FIXTURE_TITLE.HELD}"`));
+  assert.ok(markup.includes(`${FIXTURE_TITLE.HELD}</button>`));
+  // The chip is the group's first row, a line of its own in the event voice,
+  // and the rows below it are the turn's own, unchanged.
+  const [head, ...rows] = markup.split('<li class="conversation-entry"').slice(1);
+  assert.ok(head !== undefined);
+  assert.ok(
+    head.startsWith(
+      ` data-speaker="${CONVERSATION_ENTRY_SPEAKER.EVENT}" data-source-session="true"`,
+    ),
+  );
+  assert.ok(!head.includes("conversation-bubble"));
+  // The observed message crosses cut to its announcement, so one bubble of Luke's follows.
+  assert.equal(rows.length, 1);
+  assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 1);
+  // Pressed, the chip opens the chat at the session the source names.
+  const opened: SessionIdentity[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  act(() => {
+    createRoot(container).render(
+      createElement(ConversationTurns, {
+        groups: [observed],
+        roster: FIXTURE_ROSTER,
+        now: FIXTURE_NOW,
+        onOpenChat: (identity) => void opened.push(identity),
+      }),
+    );
+  });
+  const chip = container.querySelector(".conversation-source-chip");
+  assert.ok(chip instanceof HTMLButtonElement);
+  act(() => {
+    chip.click();
+  });
+  assert.deepEqual(opened, [observed.source.session]);
+  // Main's own groups, the developer's and Luke's own alike, wear none; the
+  // fixture thread wears exactly one per observed group.
+  for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.OWN]) {
+    assert.ok(!render([groupOf(turnId)], OPEN).includes("conversation-source-chip"));
+  }
+  const groups = fixtureConversationTurns();
+  assert.equal(
+    count(render(groups, OPEN), "data-source-session", "true"),
+    groups.filter((group) => group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED).length,
+  );
+});
+
+test("a source chip for a session the roster has let go names it from its id and is never a button", () => {
+  const observed = groupOf(FIXTURE_TURN.ANNOUNCED);
+  const gone = renderToStaticMarkup(
+    createElement(ConversationTurns, {
+      groups: [observed],
+      roster: [],
+      now: FIXTURE_NOW,
+      onOpenChat: OPEN,
+    }),
+  );
+  assert.equal(gone.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.equal(count(gone, "data-source-session", "true"), 1);
+  assert.ok(gone.includes('<span class="conversation-action-chip conversation-source-chip">'));
+  assert.ok(gone.includes(`Session ${FIXTURE_SESSION.HELD.slice(0, 8)}</span>`));
+  // With nothing to hand a press to, the chip is a name even while the roster holds the session.
+  const unpressed = render([observed]);
+  assert.equal(unpressed.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.ok(unpressed.includes(`${FIXTURE_TITLE.HELD}</span>`));
+  // A session the roster holds but whose provider reported no address is
+  // named by the roster's title and is a name, as its own row would be.
+  assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
+  const quiet = render(
+    [
+      {
+        ...observed,
+        source: {
+          kind: CONVERSATION_VIEW_SOURCE.OBSERVED,
+          session: {
+            providerId: observed.source.session.providerId,
+            providerSessionId: FIXTURE_SESSION.UNOPENABLE,
+          },
+        },
+      },
+    ],
+    OPEN,
+  );
+  assert.equal(quiet.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.equal(count(quiet, "data-source-session", "true"), 1);
+  assert.ok(quiet.includes(`${FIXTURE_TITLE.UNOPENABLE}</span>`));
+  assert.ok(!quiet.includes(FIXTURE_TITLE.HELD));
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {

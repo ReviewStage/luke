@@ -1,5 +1,6 @@
 import { BRAIN_INPUT_MARKER } from "@sidecar/brain/input-items";
-import type { AgentRead, ChildRead } from "@sidecar/hosted/reads-wire";
+import type { ChildRead } from "@sidecar/hosted/reads-wire";
+import type { SessionIdentity } from "@sidecar/session";
 import type { SessionView } from "./session-model";
 
 /**
@@ -7,8 +8,8 @@ import type { SessionView } from "./session-model";
  * transcript page's header, and the chip a completion in the thread wears.
  * One helper so the same child reads the same on every page. Beside it, what
  * the panel calls a per-workspace agent: the roster's own title for the
- * session, found by the identity the agents read named it under, the way the
- * thread's chips name a session.
+ * session, found by the identity the agents read or a turn group's source
+ * named it under, the way the thread's chips name a session.
  */
 
 /** How much of a child's id, or a session's, stands in for a name when nothing else does. */
@@ -16,7 +17,7 @@ const ID_EXCERPT_CHARS = 8;
 
 /** The roster's session for an agent, by session identity, while the roster still holds it. */
 export function agentSession(
-  agent: AgentRead,
+  agent: SessionIdentity,
   roster: readonly SessionView[],
 ): SessionView | undefined {
   return roster.find(
@@ -25,7 +26,7 @@ export function agentSession(
 }
 
 /** What a row calls a per-workspace agent: the roster's title for its session, or a slice of the session's id once the roster has let it go. */
-export function agentTitle(agent: AgentRead, roster: readonly SessionView[]): string {
+export function agentTitle(agent: SessionIdentity, roster: readonly SessionView[]): string {
   return (
     agentSession(agent, roster)?.title ??
     `Session ${agent.providerSessionId.slice(0, ID_EXCERPT_CHARS)}`

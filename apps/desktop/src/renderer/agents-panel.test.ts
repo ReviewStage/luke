@@ -363,7 +363,10 @@ test("the turns of either kind are drawn as the thread draws its own, under the 
     const list = markup.indexOf('<ol class="conversation-list">');
     assert.ok(scroll >= 0 && pull > scroll && list > pull);
     assert.ok(markup.includes("conversation-action-chip"));
-    // Nothing of the thread's own is copied: no line still being said, no place held.
+    // Nothing of the thread's own is copied: no line still being said, no
+    // place held, and no source chip heading a group, since the service pages
+    // a transcript's own conversation as main and the page's header names it.
+    assert.ok(!markup.includes("conversation-source-chip"));
     assert.ok(!markup.includes('data-streaming="true"'));
     assert.ok(!markup.includes("conversation-listening"));
     assert.ok(!markup.includes("Nothing said yet"));

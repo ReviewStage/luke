@@ -23,10 +23,12 @@ import {
 } from "@sidecar/panel";
 import {
   CONVERSATION_ENTRY_KIND,
+  CONVERSATION_VIEW_SOURCE,
   CONVERSATION_VIEW_TOOL_KIND,
   type ConversationEntry,
   type ConversationEntryKind,
   type ConversationViewMessage,
+  type ConversationViewSource,
   type ConversationViewToolPart,
   type ConversationViewTurn,
   type ConversationViewTurnGroup,
@@ -52,7 +54,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { useState } from "react";
-import { subagentTitle } from "./agent-title";
+import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationMessageMenu } from "./conversation-menu";
@@ -96,7 +98,10 @@ import { ThinkingDots } from "./thinking-dots";
  * did not open — a roster look, a child's end — is Luke's
  * own judgment, and everything it did leads with his face under that name and
  * never wears a reply's bubble, so what he decided for himself is never read
- * as something the developer asked. Each of Luke's messages — a reply, a
+ * as something the developer asked. A turn of an observed session's own
+ * conversation — a per-workspace agent's — opens on one chip naming that
+ * session, a header line of the group and no part of any bubble, so what he
+ * did there is never read as done in the main thread. Each of Luke's messages — a reply, a
  * briefing, words on his own judgment: the assistant rows the service takes a
  * verdict on — carries the rating control on its last words, behind the
  * ellipsis in that row's margin, so one message takes one control; the
@@ -122,6 +127,8 @@ const VOICE = {
   ACTION: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Action" },
   /** A turn nobody opened: what Luke did and said in it is his own judgment, and the label says so. */
   OWN: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "Luke, on his own judgment" },
+  /** The header line naming the observed session a turn group belongs to. */
+  SOURCE: { speaker: CONVERSATION_ENTRY_SPEAKER.EVENT, label: "In session" },
 } as const satisfies Record<string, RowVoice>;
 
 /** Whose judgment a turn's rows record, stamped on each so the two never look alike. */
@@ -386,6 +393,10 @@ function OwnWordsRow({
   );
 }
 
+/** The action chip's own class, and the one a group's source chip adds to stand on its own line. */
+const CHIP_CLASS = "conversation-action-chip";
+const SOURCE_CHIP_CLASS = `${CHIP_CLASS} conversation-source-chip`;
+
 /**
  * The chip naming the session an action reached. Where the session has an
  * identity to open by and its row would open, the chip is that row's own press
@@ -396,9 +407,12 @@ function OwnWordsRow({
 function SessionChip({
   chip,
   onOpenChat,
+  className = CHIP_CLASS,
 }: {
   chip: ToolRowChip;
   onOpenChat?: (identity: SessionIdentity) => void;
+  /** The chip's classes, for a chip that stands somewhere other than in a sentence. */
+  className?: string;
 }): React.JSX.Element {
   const face = (
     <>
@@ -412,14 +426,57 @@ function SessionChip({
   return identity !== undefined && chip.openable && onOpenChat !== undefined ? (
     <button
       type="button"
-      className="conversation-action-chip"
+      className={className}
       aria-label={`Open ${chip.text}`}
       onClick={() => onOpenChat(identity)}
     >
       {face}
     </button>
   ) : (
-    <span className="conversation-action-chip">{face}</span>
+    <span className={className}>{face}</span>
+  );
+}
+
+/**
+ * The header line of a turn group from an observed session's own
+ * conversation: one chip naming the session, worn by the group rather than
+ * by any of its rows, so a reader knows whose work the rows below record. The
+ * chip is the action rows' session chip on the same terms: named by the
+ * roster while it holds the session and pressed exactly when its own row
+ * would be, and a name alone once the roster has let the session go, since
+ * there is then nothing to open. Main's own groups wear none.
+ */
+function SourceRow({
+  source,
+  roster,
+  onOpenChat,
+}: {
+  source: Extract<ConversationViewSource, { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }>;
+  roster: readonly SessionView[];
+  onOpenChat?: (identity: SessionIdentity) => void;
+}): React.JSX.Element {
+  const session = agentSession(source.session, roster);
+  const chip: ToolRowChip = {
+    text: agentTitle(source.session, roster),
+    markId: session?.agentId ?? source.session.providerId,
+    identity: source.session,
+    openable: session?.openable ?? false,
+  };
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={VOICE.SOURCE.speaker}
+      data-source-session="true"
+    >
+      <small className="visually-hidden">{VOICE.SOURCE.label}</small>
+      <div className="conversation-message">
+        <SessionChip
+          chip={chip}
+          className={SOURCE_CHIP_CLASS}
+          {...(onOpenChat ? { onOpenChat } : undefined)}
+        />
+      </div>
+    </li>
   );
 }
 
@@ -1183,6 +1240,16 @@ export function ConversationTurns({
                   key={`${group.turnId}:break`}
                   recordedAt={span.first}
                   now={now}
+                />,
+              ]
+            : []),
+          ...(group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
+            ? [
+                <SourceRow
+                  key={group.turnId}
+                  source={group.source}
+                  roster={roster}
+                  {...(onOpenChat ? { onOpenChat } : undefined)}
                 />,
               ]
             : []),
