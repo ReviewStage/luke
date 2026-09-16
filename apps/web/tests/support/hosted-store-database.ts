@@ -37,6 +37,12 @@ interface HostedStoreTestDatabase {
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
   /** The runner a test answers the store's and the writers' effects through, over that client. */
   readonly run: HostedStoreTestRun;
+  /**
+   * A second connection to the same database, for a test of two transactions
+   * contending for one row; none on PGlite, which is one connection and runs
+   * two transactions one after the other whatever the test forks.
+   */
+  readonly anotherConnection: (() => Layer.Layer<SqlClient.SqlClient, SqlError>) | undefined;
   /** Inserts a user row for one test, answering the id every other row hangs from. */
   createUser(): Promise<string>;
   close(): Promise<void>;
@@ -53,6 +59,7 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
   return {
     sql: opened.sql,
     run,
+    anotherConnection: opened.anotherConnection,
     store: hostedStore({ keys }),
     createUser() {
       const id = `user-${randomUUID()}`;
@@ -75,6 +82,7 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
 
 interface OpenedDatabase {
   readonly sql: Layer.Layer<SqlClient.SqlClient, SqlError>;
+  readonly anotherConnection: HostedStoreTestDatabase["anotherConnection"];
   close(): Promise<void>;
 }
 
@@ -87,7 +95,7 @@ async function openPglite(): Promise<OpenedDatabase> {
   } finally {
     await migrationRuntime.dispose();
   }
-  return { sql, close: () => client.close() };
+  return { sql, anotherConnection: undefined, close: () => client.close() };
 }
 
 /** Migrates nothing: `db:migrate` is what applies the migrations to the Postgres this clones. */
@@ -95,8 +103,10 @@ async function openNodePostgres(connectionString: string): Promise<OpenedDatabas
   const clone = await cloneStoreTestPostgres(connectionString);
   return {
     sql: sqlClientOverUrl(clone.connectionString),
+    anotherConnection: () => sqlClientOverUrl(clone.connectionString),
     // The client's own pool goes with the runtime the caller disposes before
-    // this runs, so all that is left to end here is the clone itself.
+    // this runs, so all that is left to end here is the clone itself; a
+    // second connection a test opened is that test's to dispose.
     close: () => clone.drop(),
   };
 }

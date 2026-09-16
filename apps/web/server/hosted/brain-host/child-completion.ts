@@ -18,14 +18,14 @@
  * The words are the child's final reply read back from its journal, the
  * turn's one assistant row, after the claim has committed rather than inside
  * it: the run has ended, so the row is finished and reads the same on either
- * side of the commit, and the claim's transaction holds the parent's lock
- * for the stamp alone; a read that fails there is a completion not
- * delivered, said and counted like a send eve refused, never a stamp undone. The handover then takes the parent's lock again, in
- * a transaction of its own, for as long as eve is asked, the way an ask's
- * dispatch does: two children of one parent ending together would each open
- * a session for a parent with none recorded, and the one the forward-only
- * claim lost would run a turn nothing reads; under the lock the second
- * waits, reads the session the first opened, and sends into it. A
+ * side of the commit, and the claim's transaction holds the account's and
+ * the parent's locks for the stamp alone; a read that fails there is a
+ * completion not delivered, said and counted like a send eve refused, never
+ * a stamp undone. The handover itself holds no lock of this module's: the
+ * send into the parent's recorded session runs outside any transaction, and
+ * the handover takes the parent's lock only to open a session where none is
+ * recorded, so two children of one such parent ending together open one
+ * session between them and the second sends into it. A
  * deployment with no secret or no origin for eve claims nothing and sends
  * nothing, the kill switch every hosted door keeps, and the sweep visits the
  * child again once it has both.
@@ -33,7 +33,7 @@
 
 import { isTextUIPart, type ToolSet } from "ai";
 import { Cause, Effect, type Schema } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { childCompletionInputText, MESSAGE_ROLE } from "../../core.js";
 import { claimChildCompletion, undeliveredChildren } from "../store/children.js";
@@ -41,8 +41,7 @@ import type { ConversationTarget } from "../store/index.js";
 import { readMessageByClientId } from "../store/message-reads.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import { EVE_CALLER, type EveSessions, type EveSessionsOptions } from "./eve-sessions.js";
-import { handToEve } from "./handover.js";
-import { lockConversationRow } from "./recorded-session.js";
+import { handToEve, SESSION_OPENING } from "./handover.js";
 
 /** The one kind of turn the completion sends, which is what its eve client is admitted for and nothing wider. */
 export type CompletionTurn = typeof BRAIN_HOST_TURN.CHILD_COMPLETION;
@@ -128,22 +127,12 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
         },
         seams.now(),
       );
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql.withTransaction(
-        Effect.gen(function* () {
-          if (!(yield* lockConversationRow(claimed.parent))) {
-            seams.report(
-              `The completion of child ${child.conversationId} was not handed over: its parent no longer stands.`,
-            );
-            return false;
-          }
-          return yield* handToEve(
-            { eve, now: seams.now, report: seams.report },
-            claimed.parent,
-            BRAIN_HOST_TURN.CHILD_COMPLETION,
-            words,
-          );
-        }),
+      return yield* handToEve(
+        { eve, now: seams.now, report: seams.report },
+        claimed.parent,
+        BRAIN_HOST_TURN.CHILD_COMPLETION,
+        words,
+        SESSION_OPENING.LOCKED,
       );
     });
     const taken = yield* Effect.catchCause(handover, (cause) => {

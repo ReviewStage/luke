@@ -30,11 +30,18 @@ import {
   type EveSessions,
   type EveSessionsOptions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { lockConversationRow } from "../server/hosted/brain-host/recorded-session";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import type { ConversationTarget } from "../server/hosted/store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
+import { clearMainConversation } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage, insertTurn } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  insertTurn,
+  readConversationById,
+} from "./support/store-rows";
 
 /**
  * The child completion over the real migrations on PGlite, against a fake
@@ -116,6 +123,8 @@ interface ChildFixture {
   readonly completionDeliveredAt?: Date;
   readonly userId?: string;
   readonly settledAt?: Date;
+  /** The parent's kind; observed unless the test needs the account's one main, which a Clear stamps. */
+  readonly parentKind?: typeof CONVERSATION_KIND.MAIN;
 }
 
 /**
@@ -130,7 +139,7 @@ async function childOf(
   const userId = fixture.userId ?? (await database.createUser());
   const parentId = await insertConversation(database.run, {
     userId,
-    kind: CONVERSATION_KIND.OBSERVED,
+    kind: fixture.parentKind ?? CONVERSATION_KIND.OBSERVED,
     createdAt: new Date(NOW - 10_000),
     runtimeSessionId: fixture.parentSession === undefined ? PARENT_SESSION : fixture.parentSession,
   });
@@ -504,4 +513,167 @@ test("two children of one parent with no recorded session end together: the firs
     ),
   );
   assert.equal(parentRow[0]?.runtime_session_id, OPENED_SESSION);
+});
+
+test("the send into the parent's recorded session holds no row lock: a second connection takes the parent's lock while eve is asked, and a session recorded while the send was refused is sent into rather than doubled", async () => {
+  const { child, parentId } = await childOf();
+  const eve = fakeEve();
+  const parent = { userId: child.userId, conversationId: parentId };
+  // The fake stands in for eve's HTTP send, and takes the parent's lock in a transaction of its own
+  // before it answers, as an ask's dispatch would on another connection. Were the send under the
+  // handover's own lock, the fake would wait on the lock the handover holds (or the one PGlite
+  // connection's permit) until eve answered, which is never, and the test would time out.
+  const locking: ChildCompletionSeams["eve"] = (options) => ({
+    ...eve.eve(options),
+    send: async (sessionId, message) => {
+      assert.equal(
+        await database.run(
+          Effect.flatMap(SqlClient.SqlClient, (sql) =>
+            sql.withTransaction(lockConversationRow(parent)),
+          ),
+        ),
+        true,
+      );
+      return eve.eve(options).send(sessionId, message);
+    },
+  });
+  const s = seams({ eve: locking });
+  assert.equal(
+    await database.run(deliverChildCompletion(s, child)),
+    CHILD_COMPLETION_DELIVERY.DELIVERED,
+  );
+  assert.deepEqual(s.reports, []);
+  assert.equal(eve.sent.length, 1);
+
+  // A session eve retired that another handover replaced while this one's send was refused: the
+  // open branch finds the newer session under the lock and sends into it, and opens none.
+  const rotated = await childOf();
+  const ROTATED_SESSION = "wrun_01M000000000000000000MIDWAY";
+  const rotating = fakeEve();
+  const replacing: ChildCompletionSeams["eve"] = (options) => ({
+    ...rotating.eve(options),
+    send: async (sessionId, message) => {
+      const sent = await rotating.eve(options).send(sessionId, message);
+      if (sessionId !== PARENT_SESSION) return sent;
+      await database.run(
+        Effect.flatMap(
+          SqlClient.SqlClient,
+          (sql) => sql`
+            update conversations set runtime_session_id = ${ROTATED_SESSION}
+            where id = ${rotated.parentId}
+          `,
+        ),
+      );
+      return { outcome: EVE_SEND_OUTCOME.RETIRED };
+    },
+  });
+  const r = seams({ eve: replacing });
+  assert.equal(
+    await database.run(deliverChildCompletion(r, rotated.child)),
+    CHILD_COMPLETION_DELIVERY.DELIVERED,
+  );
+  assert.deepEqual(
+    rotating.sent.map((handed) => handed.sessionId),
+    [PARENT_SESSION, ROTATED_SESSION],
+  );
+  assert.equal(rotating.opened.length, 0);
+  assert.deepEqual(r.reports, []);
+});
+
+test("a session recorded while the send was refused, and retired too before the turn reached it, is opened past under the lock", async () => {
+  const { child, parentId } = await childOf();
+  const ROTATED_SESSION = "wrun_01M000000000000000000MIDWAY";
+  const eve = fakeEve();
+  const retiring: ChildCompletionSeams["eve"] = (options) => ({
+    ...eve.eve(options),
+    send: async (sessionId, message) => {
+      await eve.eve(options).send(sessionId, message);
+      if (sessionId === PARENT_SESSION) {
+        await database.run(
+          Effect.flatMap(
+            SqlClient.SqlClient,
+            (sql) => sql`
+              update conversations set runtime_session_id = ${ROTATED_SESSION}
+              where id = ${parentId}
+            `,
+          ),
+        );
+      }
+      return { outcome: EVE_SEND_OUTCOME.RETIRED };
+    },
+  });
+  const s = seams({ eve: retiring });
+  assert.equal(
+    await database.run(deliverChildCompletion(s, child)),
+    CHILD_COMPLETION_DELIVERY.DELIVERED,
+  );
+  assert.deepEqual(
+    eve.sent.map((handed) => handed.sessionId),
+    [PARENT_SESSION, ROTATED_SESSION],
+  );
+  assert.equal(eve.opened.length, 1);
+  assert.equal(eve.opened[0]?.conversationId, parentId);
+  assert.deepEqual(s.reports, []);
+  // eve's ids sort by the instant they were minted, so the session opened last is the one the
+  // forward-only claim leaves recorded.
+  const parentRow = await readConversationById(database.run, parentId);
+  assert.equal(parentRow[0]?.runtime_session_id, OPENED_SESSION);
+});
+
+test("a parent cleared while eve was refusing the send no longer stands when a session would be opened for it: said, counted undelivered, and nothing is opened", async () => {
+  const { child, parentId } = await childOf();
+  const eve = fakeEve();
+  // The parent goes between the send and the open, as a Clear landing during eve's retries would
+  // take it; the open branch finds no row to lock and opens nothing for a conversation that is gone.
+  const clearing: ChildCompletionSeams["eve"] = (options) => ({
+    ...eve.eve(options),
+    send: async (sessionId, message) => {
+      await eve.eve(options).send(sessionId, message);
+      await database.run(
+        Effect.flatMap(
+          SqlClient.SqlClient,
+          (sql) =>
+            sql`update conversations set deleted_at = ${new Date(NOW)} where id = ${parentId}`,
+        ),
+      );
+      return { outcome: EVE_SEND_OUTCOME.RETIRED };
+    },
+  });
+  const s = seams({ eve: clearing });
+  assert.equal(
+    await database.run(deliverChildCompletion(s, child)),
+    CHILD_COMPLETION_DELIVERY.UNDELIVERED,
+  );
+  assert.equal(await stampOf(child), NOW);
+  assert.equal(eve.sent.length, 1);
+  assert.equal(eve.opened.length, 0);
+  assert.equal(s.reports.length, 1);
+  assert.match(s.reports[0] ?? "", /the conversation no longer stands/);
+});
+
+test("a completion claimed beside the account's Clear takes its locks in the Clear's order, and the two agree on which came first", async () => {
+  const userId = await database.createUser();
+  const { child, parentId } = await childOf({ userId, parentKind: CONVERSATION_KIND.MAIN });
+  const eve = fakeEve();
+  const s = seams({ eve: eve.eve });
+  // The claim locks the user row and then the parent, as the Clear and the child open do, so on a
+  // Postgres with more than one connection neither waits on a lock the other holds while holding
+  // one the other wants. Whichever ran first, the Clear stamps the parent and the child, and the
+  // completion is either delivered before it or claimed against nothing after it.
+  const [delivery, cleared] = await database.run(
+    Effect.all([deliverChildCompletion(s, child), clearMainConversation(userId, new Date(NOW))], {
+      concurrency: "unbounded",
+    }),
+  );
+  assert.deepEqual([...cleared.cleared].sort(), [parentId, child.conversationId].sort());
+  if (delivery === CHILD_COMPLETION_DELIVERY.DELIVERED) {
+    assert.equal(await stampOf(child), NOW);
+    assert.equal(eve.sent.length, 1);
+  } else {
+    assert.equal(delivery, CHILD_COMPLETION_DELIVERY.NOTHING);
+    assert.equal(await stampOf(child), null);
+    assert.equal(eve.sent.length, 0);
+  }
+  const rows = await readConversationById(database.run, child.conversationId);
+  assert.notEqual(rows[0]?.deleted_at, null);
 });

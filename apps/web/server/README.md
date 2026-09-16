@@ -1678,8 +1678,9 @@ opening under the same deadline: it visits at most
 `CHILD_COMPLETION_SWEEP.LIMIT` (eight, the opener's own bound) of the account's
 ended children whose completion is not yet stamped, oldest run first, and
 delivers each the way the relay does at the turn's end — the stamp under the
-parent's lock first, then one `child-completion` turn into the parent's
-session as the deployment acting for the account — so a completion the relay's
+account's and the parent's locks first, then one `child-completion` turn into
+the parent's session as the deployment acting for the account, sent with no
+lock held and opened under the parent's alone — so a completion the relay's
 hook lost is tried again on a later tick and none is delivered twice, while
 one eve refuses after the stamp is counted and retried nowhere; a child
 whose spawn expected no completion is stamped and nothing is sent. The tick's

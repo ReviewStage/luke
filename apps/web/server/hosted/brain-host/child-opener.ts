@@ -4,14 +4,13 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { abandonChildConversation, openChildConversation } from "../store/children.js";
 import type { ConversationTarget } from "../store/index.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
-import { claimRuntimeSession } from "./conversation.js";
 import {
   EVE_CALLER,
   EVE_SEND_OUTCOME,
   type EveSessions,
   type EveSessionsOptions,
 } from "./eve-sessions.js";
-import { recordedRuntimeSession } from "./recorded-session.js";
+import { claimRuntimeSession, recordedRuntimeSession } from "./recorded-session.js";
 
 /**
  * The child opener: what a delegation becomes. A child is a conversation of

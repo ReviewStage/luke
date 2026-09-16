@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { Effect, Schema } from "effect";
+import { Deferred, Duration, Effect, Fiber, ManagedRuntime, Schedule, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_INPUT_MARKER,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
   CHILD_RUN_STATUS,
   CHILD_SPAWN_REFUSAL,
@@ -37,9 +40,18 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
+import { dropChildConversation } from "../server/hosted/store/children";
 import { conversationDirectory } from "../server/hosted/store/standing-conversations";
+import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage, insertTurn, readTurnById } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  insertTurn,
+  instantColumn,
+  readConversationById,
+  readTurnById,
+} from "./support/store-rows";
 
 /**
  * The hosted children access over the real migrations on PGlite, against a
@@ -495,7 +507,7 @@ test("a cancel reaches eve for the child's turn under way and stamps its row; a 
   assert.equal(eve.cancelled.length, 1);
 });
 
-test("a cancel eve refuses, or a child with no turn to name, is answered as remaining; an ended child as done", async () => {
+test("a cancel eve refuses is answered as remaining; an ended child as done; a child with no turn to name is dropped, so it is listed by nothing and counts against no bound", async () => {
   const fixture = await standing();
   const refusing = fakeEve({ cancel: { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 502 } });
   const seams = seamsOf(fixture, refusing);
@@ -511,11 +523,58 @@ test("a cancel eve refuses, or a child with no turn to name, is answered as rema
   assert.equal((await readTurnById(database.run, running.turnId))?.cancelRequestedAt, null);
   assert.equal(seams.reports.length, 1);
 
+  // Accepted and never started, with and without the session eve's start claimed for it: no turn
+  // names anything eve can cancel, so the row is stamped as Clear stamps one and the cancel is done.
   const accepted = await childOf(fixture, { createdAt: at(20) });
-  assert.deepEqual(await withAccess(seams, (access) => access.cancel(accepted.childId)), {
-    ok: false,
-    remaining: [accepted.childId],
-  });
+  const claimed = await childOf(fixture, { createdAt: at(21), runtimeSessionId: SESSION_ID });
+  for (const child of [accepted, claimed]) {
+    assert.deepEqual(await withAccess(seams, (access) => access.cancel(child.childId)), {
+      ok: true,
+      remaining: [],
+    });
+    const rows = await readConversationById(database.run, child.childId);
+    assert.deepEqual(instantColumn(rows[0]?.deleted_at), at(0));
+    assert.equal(await withAccess(seams, (access) => access.cancel(child.childId)), undefined);
+  }
+  assert.deepEqual(
+    (await withAccess(seams, (access) => access.list())).map((child) => child.childId),
+    [running.childId],
+  );
+  // A child whose turn started since the read that found none is left standing, so a cancel
+  // racing a start never drops a running child.
+  assert.equal(
+    await database.run(dropChildConversation(fixture.userId, running.childId, at(0))),
+    false,
+  );
+  assert.equal((await readConversationById(database.run, running.childId))[0]?.deleted_at, null);
+
+  // The drop and a turn's start race for one child: each takes the child's row lock for its
+  // transaction, so exactly one lands, whichever the lock admits first. The test database
+  // serialises the two on its one connection; what the lock imposes on a Postgres with more is the
+  // same order.
+  const racing = await childOf(fixture, { createdAt: at(22), runtimeSessionId: SESSION_ID });
+  const [dropped, started] = await database.run(
+    Effect.all(
+      [
+        dropChildConversation(fixture.userId, racing.childId, at(0)),
+        writer.consume(
+          { userId: fixture.userId, conversationId: racing.childId },
+          {
+            conversationId: childSessionKey(racing.childId),
+            turnId: randomUUID(),
+            sequence: 1,
+            kind: BRAIN_RUN_EVENT.TURN_STARTED,
+            origin: BRAIN_TURN_ORIGIN.CHILD,
+            trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+            at: NOW,
+          },
+        ),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
+  assert.equal(dropped, !started.ok);
+  if (!started.ok) assert.equal(started.refusal, STORE_WRITE_REFUSAL.NO_CONVERSATION);
 
   const ended = await childOf(fixture, {
     createdAt: at(30),
@@ -610,3 +669,72 @@ test("the lines are a child's own recent words, oldest first and bounded, and no
   });
   assert.equal(await withAccess(seams, (access) => access.lines(foreign.childId, 10)), undefined);
 });
+
+/** How long the turn's transaction waits for the drop to be seen waiting behind it before the test gives up. */
+const CONTENTION_WAIT = { INTERVAL: Duration.millis(20), ATTEMPTS: 250 } as const;
+
+const LockWaitersSchema = Schema.Struct({ waiting: Schema.Number });
+
+/**
+ * How many other backends wait on a lock now, read from `pg_locks`, which is
+ * live, and not from `pg_stat_activity`, which a transaction sees as it stood
+ * at its first look.
+ */
+const lockWaiters = (sql: SqlClient.SqlClient): Effect.Effect<number, SqlError> =>
+  Effect.map(
+    sql`select count(*)::int as waiting from pg_locks where not granted and pid <> pg_backend_pid()`,
+    (rows) => Schema.decodeUnknownSync(LockWaitersSchema)(rows[0]).waiting,
+  );
+
+test.skipIf(database.anotherConnection === undefined)(
+  "a turn committed while the drop waited on the child's row lock is seen by the drop, which leaves the child standing",
+  async () => {
+    assert.ok(database.anotherConnection);
+    const fixture = await standing();
+    const child = await childOf(fixture, { createdAt: at(20), runtimeSessionId: SESSION_ID });
+    // Two connections to one database: the turn's transaction on the harness's own, the drop on
+    // another, so the drop waits on the row lock the turn holds rather than on the harness. The
+    // turn's transaction takes the child's row as every turn write does, inserts the turn, and
+    // commits only once Postgres reports a backend waiting on a lock, which is the drop; the
+    // drop's check then runs under a snapshot of its own and finds the turn. A check folded into
+    // the waited update's own statement would not, since a lock waited on refreshes the update's
+    // row and not its subquery, and would stamp the running child.
+    const another = ManagedRuntime.make(database.anotherConnection());
+    try {
+      const held = await database.run(Deferred.make<void>());
+      const turn = await database.run(
+        Effect.forkDetach(
+          Effect.flatMap(SqlClient.SqlClient, (sql) =>
+            sql.withTransaction(
+              Effect.gen(function* () {
+                yield* sql`select id from conversations where id = ${child.childId} for update`;
+                yield* sql`
+                  insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
+                  values (${fixture.userId}, ${child.childId}, ${TURN_ORIGIN.CHILD},
+                          ${TURN_STATUS.RUNNING}, ${at(21)}, ${at(21)})
+                `;
+                yield* Deferred.succeed(held, undefined);
+                const waiting = yield* Effect.repeat(lockWaiters(sql), {
+                  schedule: Schedule.spaced(CONTENTION_WAIT.INTERVAL).pipe(
+                    Schedule.upTo({ times: CONTENTION_WAIT.ATTEMPTS }),
+                  ),
+                  until: (waiting: number): boolean => waiting > 0,
+                });
+                assert.ok(waiting > 0, "the drop never waited on the turn's lock");
+              }),
+            ),
+          ),
+        ),
+      );
+      await database.run(Deferred.await(held));
+      const dropped = await another.runPromise(
+        dropChildConversation(fixture.userId, child.childId, at(0)),
+      );
+      await database.run(Fiber.join(turn));
+      assert.equal(dropped, false);
+      assert.equal((await readConversationById(database.run, child.childId))[0]?.deleted_at, null);
+    } finally {
+      await another.dispose();
+    }
+  },
+);
