@@ -734,6 +734,43 @@ it.effect(
 );
 
 it.effect(
+  "a row opened by a late delta that contains the first delegation's offset is the first delegation's, though a second delegation arrives while the first is still with the brain",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      const offset = 800 + 2 * UTTERANCE_GAP_MS;
+      sideband.input("First thing.", 0, 800);
+      sideband.delegation("item_1", offset);
+      yield* settle();
+      // Delivered late, past the gap from the first row, and running across the first offset.
+      sideband.input("Second thing.", offset - 500, offset + 500);
+      sideband.delegation("item_2", offset + 2000);
+      yield* settle();
+      // The second delegation found the row the first's claim had just taken and nothing else said
+      // since: it is retained for the next fragment rather than composed on nothing.
+      assert.equal(f.brain.asks.length, 1);
+      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      yield* settle();
+      const rowIds = [...new Set(f.record.rows.map((row) => row.rowId))];
+      assert.equal(rowIds.length, 2);
+      assert.deepEqual(attaches(f.record), [
+        { delegationId: "item_1", voiceSessionId: "sess-1", rowIds },
+      ]);
+      // The next words compose the retained delegation; begun after its offset, their row is not
+      // its to attach, and is the next delegation's.
+      sideband.input("Third thing.", offset + 3000, offset + 3500);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 2);
+      assert.ok(f.brain.asks[1]?.question.endsWith("Third thing."));
+      assert.equal(attaches(f.record).length, 1);
+    }),
+);
+
+it.effect(
   "a delegation before any developer utterance is retained and composed on the next fragment, once; a row begun after its offset is the next delegation's",
   () =>
     Effect.gen(function* () {
@@ -1923,8 +1960,9 @@ it.effect(
       sideband.input("Can we add captions?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      // Within the gap of the first words: the ledger grows the first ask's row rather than opening one.
-      sideband.input(" Is that possible?", 3000, 3800);
+      // Within the gap of the first words: the ledger grows the first ask's row rather than opening
+      // one, and the follow-up's offset falls inside the grown row.
+      sideband.input(" Is that possible?", 3000, 4200);
       sideband.delegation("item_2", 3900);
       yield* settle();
       assert.equal(f.brain.asks.length, 2);
@@ -1953,8 +1991,14 @@ it.effect(
         f.record.attached.map((attach) => [attach.delegationId, attach.rows.length]),
         [["item_1", 1]],
       );
-      assert.ok(f.record.rows.some((row) => row.startMs === 0 && row.endMs === 3800));
+      assert.ok(f.record.rows.some((row) => row.startMs === 0 && row.endMs === 4200));
       assert.ok(f.record.rows.every((row) => row.rowId === f.record.attached[0]?.rows[0]?.rowId));
+      // The follow-up moved the session past the row it read: a delegation with nothing said since
+      // is retained rather than composed on that row a third time.
+      sideband.delegation("item_3", 5000);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 2);
+      assert.equal(f.traces.filter((t) => t.decision === LIVE_TRACE_DECISION.RETAINED).length, 1);
     }),
 );
 

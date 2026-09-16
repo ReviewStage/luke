@@ -279,6 +279,13 @@ interface StandingSession {
    */
   readonly askedRows: Set<string>;
   /**
+   * The asks whose brain call is still out, by delegation: each keeps the span
+   * it was composed over and the rows it has claimed, so a row a late delta
+   * opens by its offset is claimed for it, by the next delegation's compose or
+   * by its own attach, whichever comes first, and never by the next delegation.
+   */
+  readonly openAsks: Map<string, OpenAsk>;
+  /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
    * graceful close waits on this rather than listening beside the reader.
@@ -349,6 +356,13 @@ function newExchange(
 }
 
 type AskContext = ReturnType<TranscriptLedger["askContext"]>;
+
+/** One delegation between its compose and its attach: the span its rule runs over, and the rows it has claimed so far. */
+interface OpenAsk {
+  readonly sinceMs: number;
+  readonly offsetMs: number;
+  readonly rows: TranscriptUtterance[];
+}
 
 /**
  * The developer's rows a delegation is about: those since the previous ask's
@@ -942,6 +956,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         micLive: false,
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
+        openAsks: new Map(),
         retained: [],
         pendingRows: new Map(),
         idleReported: false,
@@ -1219,6 +1234,17 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
+  /** Whatever opened by an open ask's offset since its compose and is no ask's yet is that ask's. */
+  #claimLate(session: StandingSession, open: OpenAsk): void {
+    const late = askRowsOf(
+      session.ledger.askContext(open.sinceMs),
+      session.askedRows,
+      open.offsetMs,
+    );
+    this.#claim(session, late, open.offsetMs);
+    open.rows.push(...late);
+  }
+
   /** The rows are the delegation's from here: no later delegation is about them, and the session's span moves past them and the offset. */
   #claim(session: StandingSession, rows: readonly TranscriptUtterance[], offsetMs: number): void {
     for (const row of rows) session.askedRows.add(row.rowId);
@@ -1308,6 +1334,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * an ask was one row, over the whole context since the previous one.
    */
   #compose(session: StandingSession, delegationId: string, offsetMs: number): Effect.Effect<void> {
+    // An ask still with the brain claims first whatever opened by its offset since, so this
+    // delegation is about what is left and never about a row containing the earlier offset.
+    for (const open of session.openAsks.values()) this.#claimLate(session, open);
     const sinceMs = session.lastDelegationOffsetMs;
     const context = session.ledger.askContext(sinceMs);
     const rows = askRowsOf(context, session.askedRows, offsetMs);
@@ -1315,13 +1344,28 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // after the offset: the brain is asked about the latest all the same, since the model waits on
     // the delegation, and nothing is attached.
     const ask = rows[rows.length - 1] ?? context.ask;
-    if (!ask) return Effect.void;
+    if (!ask) {
+      // An open ask's claim took the only words since: this delegation is about nothing yet, and
+      // is retained for the next fragment as one before any developer utterance is.
+      session.retained.push({ id: delegationId, offsetMs });
+      this.#trace(LIVE_TRACE_DECISION.RETAINED);
+      return Effect.void;
+    }
     // The ask is here: a pause still pending would anticipate what the turn
     // is about to read for itself, and a late fragment on these rows must not
     // supersede the slot that turn is taking. A read already under way is
     // left to finish, since that turn is what waits for it.
     this.#cancelAnticipation(session);
-    this.#claim(session, rows, offsetMs);
+    // A follow-up with no row of its own, its words on a row already an ask's, moves the session
+    // past that row's end as the row's own delegation did, so the next delegation does not read
+    // the row again; one whose ask begins after the offset leaves the row the next delegation's.
+    const spanMs =
+      rows.length === 0 && session.askedRows.has(ask.rowId)
+        ? Math.max(offsetMs, ask.endMs)
+        : offsetMs;
+    this.#claim(session, rows, spanMs);
+    const open: OpenAsk = { sinceMs, offsetMs, rows: [...rows] };
+    session.openAsks.set(delegationId, open);
     this.#trace(LIVE_TRACE_DECISION.DELEGATED);
     const question = [
       renderAskContext(askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs)),
@@ -1338,9 +1382,9 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // API delivers a delegation ahead of the deltas it is about, and one that
       // landed while the brain was being asked may have opened a row of its own
       // that starts by the offset, which is this delegation's and no one else's.
-      const late = askRowsOf(session.ledger.askContext(sinceMs), session.askedRows, offsetMs);
-      this.#claim(session, late, offsetMs);
-      const rowIds = [...rows, ...late]
+      this.#claimLate(session, open);
+      session.openAsks.delete(delegationId);
+      const rowIds = [...open.rows]
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
