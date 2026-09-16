@@ -244,6 +244,22 @@ test("a transcript not yet read draws the empty scroller, and one read with noth
   assert.ok(!empty.includes('class="conversation-scroll"'));
 });
 
+test("a row the host could not read back is said under the transcript, as it is under the thread", () => {
+  const unreadable = { conversationId: "3c000000-0000-4000-8000-000000000001", seq: 4 };
+  const partial = renderTranscript({
+    transcript: { childId: CHILD_ID.LABELLED, settled: true, groups: SINGLE_TURN, unreadable },
+  });
+  assert.ok(partial.includes('<ol class="conversation-list">'));
+  assert.ok(partial.includes("Part of the conversation could not be read."));
+  // Read with nothing readable: the notice stands under the empty room, as it does under the thread's.
+  const nothing = renderTranscript({
+    transcript: { childId: CHILD_ID.LABELLED, settled: true, groups: [], unreadable },
+  });
+  assert.ok(nothing.includes("Nothing said yet"));
+  assert.ok(nothing.includes("Part of the conversation could not be read."));
+  assert.ok(!renderTranscript().includes("Part of the conversation could not be read."));
+});
+
 test("the transcript's back control returns to the list", () => {
   let backs = 0;
   const container = document.createElement("div");

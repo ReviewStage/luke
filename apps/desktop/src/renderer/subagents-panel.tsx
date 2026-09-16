@@ -7,6 +7,7 @@ import {
   type SessionIdentity,
 } from "@sidecar/session";
 import type { ChildrenSnapshot } from "#shared/messages/children";
+import { ConversationUnreadableNotice } from "./conversation-panel";
 import { ConversationTurns } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
@@ -237,6 +238,7 @@ export function SubagentTranscriptPanel({
           <div className="conversation-scroll" />
         </div>
       )}
+      {own?.unreadable ? <ConversationUnreadableNotice /> : null}
     </section>
   );
 }

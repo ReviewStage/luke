@@ -64,6 +64,15 @@ function ConversationStreamingRow({ entry }: { entry: ConversationEntry }): Reac
 /** What a reader is told when the service named a row this build could not read back; the thread stands as last read. */
 const UNREADABLE_NOTICE = "Part of the conversation could not be read.";
 
+/** The one thing said about a read the service refused, under the thread and under a sub-agent's transcript alike. */
+export function ConversationUnreadableNotice(): React.JSX.Element {
+  return (
+    <p className="conversation-notice" role="status">
+      {UNREADABLE_NOTICE}
+    </p>
+  );
+}
+
 /**
  * How close to the tail a reader still counts as following it. Words arriving
  * grow the list under the reader a little at a time, so the tail they were
@@ -281,11 +290,7 @@ export function ConversationPanel({
           <div className="conversation-scroll" ref={list} onScroll={syncFollowing} />
         </div>
       )}
-      {view.unreadable ? (
-        <p className="conversation-notice" role="status">
-          {UNREADABLE_NOTICE}
-        </p>
-      ) : null}
+      {view.unreadable ? <ConversationUnreadableNotice /> : null}
     </section>
   );
 }
