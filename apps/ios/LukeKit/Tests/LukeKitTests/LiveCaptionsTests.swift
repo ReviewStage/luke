@@ -64,10 +64,11 @@ final class LiveCaptionsTests: XCTestCase {
     func testARowSettlesOnceTheGapAndTheMarginHavePassedOnThePhonesClock() async {
         var now = Date(timeIntervalSince1970: 10)
         let captions = LiveCaptions(now: { now })
+        let settleSeconds = Double(LiveTranscriptBounds.utteranceGapMs + LiveTranscriptBounds.utteranceSettleMarginMs) / 1000
         captions.append(.assistant, Self.delta("Done.", 0, 400))
         XCTAssertTrue(captions.unsettled)
 
-        now = now.addingTimeInterval(1.999)
+        now = now.addingTimeInterval(settleSeconds - 0.001)
         XCTAssertTrue(captions.unsettled, "a fragment may still join for the gap plus the margin")
 
         now = now.addingTimeInterval(0.001)
