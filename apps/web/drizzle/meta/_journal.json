@@ -316,6 +316,13 @@
       "when": 1790250000000,
       "tag": "0045_dead_conversations_fork_of_seq",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1790275000000,
+      "tag": "0046_dead_hosted_usage_voice_seconds",
+      "breakpoints": true
     }
   ]
 }
