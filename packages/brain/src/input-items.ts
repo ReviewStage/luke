@@ -28,7 +28,8 @@ export interface ObservedMessagesEnvelope {
 /** The line that stands in for the front of a delta the bound cut. */
 export const OBSERVED_MESSAGES_CUT = "(earlier messages cut)";
 
-const ENVELOPE_SEPARATOR = " \u00b7 ";
+/** What stands between the envelope's parts; exported so a reader of the row splits on the same word. */
+export const ENVELOPE_SEPARATOR = " \u00b7 ";
 
 export const BRAIN_INPUT_MARKER = {
   OBSERVED_MESSAGES: "[observed messages]",

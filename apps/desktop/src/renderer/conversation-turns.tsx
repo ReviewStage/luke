@@ -1,4 +1,9 @@
-import { BRAIN_INPUT_MARKER, CHILD_COMPLETION_FIELD } from "@sidecar/brain/input-items";
+import {
+  BRAIN_INPUT_MARKER,
+  CHILD_COMPLETION_FIELD,
+  ENVELOPE_SEPARATOR,
+  OBSERVED_MESSAGES_CUT,
+} from "@sidecar/brain/input-items";
 import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   ArchiveIcon,
@@ -53,6 +58,8 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Result, Schema } from "effect";
 import { useState } from "react";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
@@ -772,6 +779,109 @@ function userVoice(
 }
 
 /**
+ * An observed-messages note as the renderer reads it. The brain writes the
+ * turn as its marker and an instant, then the envelope naming the chat —
+ * provider, workspace where the roster had one, title (or `chat <id>`, which
+ * the brain composes itself), and the instant its transcript last changed,
+ * between brackets and parted by one separator — then the cut line where the
+ * front was dropped, then one line per message (`observedMessagesText`). Both
+ * instants are read, so a note that merely opens on the marker's words is not
+ * mistaken for the turn. A note that does not hold to the shape is drawn as
+ * the words it is.
+ */
+interface ObservedMessages {
+  /** The chat as the envelope names it. */
+  readonly title: string;
+  /** The lines the chat gained, the cut line among them where the brain wrote one. */
+  readonly lines: readonly string[];
+  /** How many lines are the chat's own, the cut line not among them. Lines, not messages: a message may span several, and the row keeps no boundary between them. */
+  readonly count: number;
+}
+
+/** The parts an envelope holds: the provider, the chat's name, and its instant at the least; a workspace at the most. */
+const ENVELOPE_PARTS = { MINIMUM: 3, MAXIMUM: 4 } as const;
+
+function isInstant(text: string): boolean {
+  return Result.isSuccess(readEither(Schema.DateTimeUtcFromString)(unparsedWire(text)));
+}
+
+/** The chat's name from the bracketed envelope, or nothing when the line is not one. */
+function envelopeTitle(line: string): string | undefined {
+  if (!line.startsWith("[") || !line.endsWith("]")) return undefined;
+  const parts = line.slice(1, -1).split(ENVELOPE_SEPARATOR);
+  // The workspace is the one part the brain may leave out, so the name is read
+  // from the end. A title carrying the separator makes more parts than the
+  // brain writes, and the note is drawn as its words rather than misnamed.
+  if (parts.length < ENVELOPE_PARTS.MINIMUM || parts.length > ENVELOPE_PARTS.MAXIMUM) {
+    return undefined;
+  }
+  const instant = parts.at(-1);
+  const title = parts.at(-2);
+  if (instant === undefined || title === undefined || !isInstant(instant)) return undefined;
+  return title;
+}
+
+function observedMessagesOf(text: string): ObservedMessages | undefined {
+  if (!text.startsWith(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES)) return undefined;
+  const [marker, envelope, ...lines] = text.split("\n");
+  if (marker === undefined || envelope === undefined) return undefined;
+  // The marker line is the marker, one space, and the instant, and nothing else.
+  const after = marker.slice(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES.length);
+  if (!after.startsWith(" ") || !isInstant(after.slice(1))) return undefined;
+  const title = envelopeTitle(envelope);
+  if (title === undefined) return undefined;
+  const cut = lines[0] === OBSERVED_MESSAGES_CUT ? 1 : 0;
+  return { title, lines, count: lines.length - cut };
+}
+
+function linesCount(count: number): string {
+  return count === 1 ? "1 new line" : `${count} new lines`;
+}
+
+/**
+ * The messages a chat gained that opened one of Luke's own turns, drawn as a
+ * note rather than the lines they are: the chat's name and how many lines it
+ * gained, on the line of a fold drawn like the tool calls', closed until
+ * pressed, with the lines themselves preformatted behind it, so what woke
+ * him stays readable when the count is not enough. Lines rather than
+ * messages, because a message may span several and the row keeps no boundary
+ * between them. It carries no copy control, as no note of the brain's does.
+ */
+function ObservedMessagesRow({
+  observed,
+  at,
+}: {
+  observed: ObservedMessages;
+  at: number;
+}): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={VOICE.NOTE.speaker}
+      data-observed-messages={observed.count}
+    >
+      <small className="visually-hidden">{VOICE.NOTE.label}</small>
+      <div className="conversation-message">
+        <span className="conversation-bubble">
+          <details className="conversation-observed">
+            <summary className="conversation-turn-summary">
+              <ChevronIcon />
+              <span>{`${observed.title} — ${linesCount(observed.count)}`}</span>
+            </summary>
+            <div className="markdown">
+              <pre>
+                <code>{observed.lines.join("\n")}</code>
+              </pre>
+            </div>
+          </details>
+        </span>
+      </div>
+      <RowStamp at={at} />
+    </li>
+  );
+}
+
+/**
  * What the rating control on a message is handed beside the message itself:
  * the developer's ask the turn answered, where the turn had one, for the
  * draft a thumbs down offers, and the composer that offer opens.
@@ -916,11 +1026,19 @@ function messageRows(
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
+    const words = userWords(message);
+    // An observed-messages turn is the brain's alone: the developer's words and
+    // the voice model's are drawn as they are, whatever they open with.
+    const observed =
+      message.metadata.author === MESSAGE_AUTHOR.BRAIN ? observedMessagesOf(words) : undefined;
+    if (observed !== undefined) {
+      return [<ObservedMessagesRow key={message.id} observed={observed} at={view.placedAt} />];
+    }
     return [
       <BubbleRow
         key={message.id}
         voice={voice}
-        words={userWords(message)}
+        words={words}
         at={view.placedAt}
         copy={voice === VOICE.YOU}
       />,

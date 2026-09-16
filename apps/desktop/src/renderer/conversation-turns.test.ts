@@ -1,6 +1,11 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import {
+  BRAIN_INPUT_MARKER,
+  OBSERVED_MESSAGES_CUT,
+  observedMessagesText,
+} from "@sidecar/brain/input-items";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
@@ -20,6 +25,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_RATING,
+  OBSERVATION_SOURCE,
   RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -570,6 +576,125 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
   assert.equal(count(note, "data-speaker", "event"), 1);
   assert.equal(count(note, "class", "conversation-copy"), 0);
   assert.equal(count(note, "class", "conversation-more-button"), 0);
+});
+
+/** The metadata each author's user row carries: a typed ask, a spoken one, or the brain's note. */
+const USER_ROW_METADATA = {
+  [MESSAGE_AUTHOR.DEVELOPER]: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+  [MESSAGE_AUTHOR.VOICE_MODEL]: {
+    author: MESSAGE_AUTHOR.VOICE_MODEL,
+    channel: MESSAGE_CHANNEL.VOICE,
+  },
+  [MESSAGE_AUTHOR.BRAIN]: {
+    author: MESSAGE_AUTHOR.BRAIN,
+    source: OBSERVATION_SOURCE.TRANSCRIPT_CHANGE,
+  },
+} as const;
+
+/** One user row on its own, as the view selects it, under whichever author wrote it. */
+function userRowGroups(
+  author: keyof typeof USER_ROW_METADATA,
+  text: string,
+): readonly ConversationViewTurnGroup[] {
+  return selectConversationView({
+    ...FIXTURE_INPUT,
+    observed: [],
+    main: [
+      {
+        message: {
+          id: "2b000000-0000-4000-8000-000000000902",
+          role: MESSAGE_ROLE.USER,
+          metadata: USER_ROW_METADATA[author],
+          parts: [{ type: "text", text }],
+        },
+        seq: 1,
+        turnId: "1a000000-0000-4000-8000-000000000902",
+        createdAt: FIXTURE_NOW - 60_000,
+        placedAt: FIXTURE_NOW - 60_000,
+      },
+    ],
+  });
+}
+
+const OBSERVED_FOLD_OPENING = '<details class="conversation-observed"';
+
+const OBSERVED_TEXT = observedMessagesText(
+  {
+    providerName: "Conductor",
+    workspace: "luke",
+    title: "Fix the login redirect",
+    providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
+    updatedAt: FIXTURE_NOW - 90_000,
+  },
+  ["agent: The redirect now keeps\nthe query string.", "user: Ship it."],
+  true,
+  FIXTURE_NOW - 60_000,
+);
+
+test("an observed-messages note names the chat and counts its lines on a fold that holds them", () => {
+  const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, OBSERVED_TEXT));
+  assert.equal(count(markup, "data-speaker", "event"), 1);
+  // Lines, not messages: the first message spans two, and the row keeps no boundary.
+  assert.equal(count(markup, "data-observed-messages", "3"), 1);
+  assert.equal(markup.split(OBSERVED_FOLD_OPENING).length - 1, 1);
+  assert.ok(markup.includes("<span>Fix the login redirect — 3 new lines</span>"));
+  // The cut line stands first among the lines and is not counted.
+  assert.ok(
+    markup.includes(
+      `<pre><code>${OBSERVED_MESSAGES_CUT}\nagent: The redirect now keeps\nthe query string.\nuser: Ship it.</code></pre>`,
+    ),
+  );
+  // A chat the roster no longer holds is named as the brain named it, and one line is singular.
+  const unheld = render(
+    userRowGroups(
+      MESSAGE_AUTHOR.BRAIN,
+      observedMessagesText(
+        {
+          providerName: "Conductor",
+          providerSessionId: "a1b2c3d4-0000-4000-8000-000000000002",
+          updatedAt: FIXTURE_NOW - 90_000,
+        },
+        ["agent: Done."],
+        false,
+        FIXTURE_NOW - 60_000,
+      ),
+    ),
+  );
+  assert.ok(unheld.includes("<span>chat a1b2c3d4-0000-4000-8000-000000000002 — 1 new line</span>"));
+  assert.ok(unheld.includes("<pre><code>agent: Done.</code></pre>"));
+  // The note is the brain's, so it carries no copy control and no menu.
+  assert.equal(count(markup, "class", "conversation-copy"), 0);
+  assert.equal(count(markup, "class", "conversation-more-button"), 0);
+});
+
+test("an observed-messages note the reader cannot hold to the shape is drawn verbatim, and only the brain's words are read as one", () => {
+  const instant = new Date(FIXTURE_NOW).toISOString();
+  for (const malformed of [
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\nno envelope here\nagent: Done.`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\n[Conductor · Fix the login redirect · not an instant]\nagent: Done.`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} of old\n[Conductor · Fix the login redirect · ${instant}]`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES}X ${instant}\n[Conductor · Fix the login redirect · ${instant}]`,
+    `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${instant}\n[Conductor · luke · Fix · the login redirect · ${instant}]`,
+  ]) {
+    const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
+    assert.equal(count(fallen, "data-speaker", "event"), 1);
+    assert.equal(fallen.split(OBSERVED_FOLD_OPENING).length - 1, 0);
+    assert.ok(
+      fallen.includes("Fix the login redirect") ||
+        fallen.includes("no envelope here") ||
+        fallen.includes(instant),
+    );
+  }
+  const developer = render(userRowGroups(MESSAGE_AUTHOR.DEVELOPER, OBSERVED_TEXT));
+  assert.equal(count(developer, "data-speaker", "you"), 1);
+  assert.equal(count(developer, "data-speaker", "event"), 0);
+  assert.equal(developer.split(OBSERVED_FOLD_OPENING).length - 1, 0);
+  assert.equal(count(developer, "class", "conversation-copy"), 1);
+  // The voice model's row is a note too, but never an observed-messages turn.
+  const spoken = render(userRowGroups(MESSAGE_AUTHOR.VOICE_MODEL, OBSERVED_TEXT));
+  assert.equal(count(spoken, "data-speaker", "event"), 1);
+  assert.equal(spoken.split(OBSERVED_FOLD_OPENING).length - 1, 0);
 });
 
 test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {
