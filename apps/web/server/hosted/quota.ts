@@ -177,34 +177,13 @@ const insertVoiceSessionUsage = SqlSchema.findAll({
     ),
 });
 
-const HostedVoiceSecondsWriteSchema = Schema.Struct({
-  userId: Schema.String,
-  day: Schema.String,
-  seconds: Schema.Number,
-});
-
-const addHostedVoiceSeconds = SqlSchema.void({
-  Request: HostedVoiceSecondsWriteSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into hosted_usage (user_id, day, voice_seconds)
-        values (${write.userId}, ${write.day}, ${write.seconds})
-        on conflict (user_id, day) do update
-          set voice_seconds = hosted_usage.voice_seconds + excluded.voice_seconds
-      `,
-    ),
-});
-
 /**
  * Records the seconds OpenAI billed for one closed GPT Live session, once. The
- * session row is the ledger: its insert is the idempotent step, and only a
- * report that created the row moves the day's `voice_seconds`, so a report
- * repeated after a lost answer, or seen by two function connections, adds
- * nothing. Both writes share one transaction so a crash between them cannot
- * leave a session recorded and a day uncounted. The day is the report's, not
- * the session's start: the service reports at `session.closed`, and that is
- * the instant it knows.
+ * session row is the ledger: its insert is the idempotent step, so a report
+ * repeated after a lost answer, or seen by two function connections, records
+ * nothing and answers repeated. The lookup and the insert share one
+ * transaction, so an account deleted between them cannot leave a session
+ * recorded against nobody.
  */
 export function recordVoiceSeconds(input: {
   readonly userId: string;
@@ -226,11 +205,6 @@ export function recordVoiceSeconds(input: {
         });
         if (inserted.length === 0) return VOICE_SECONDS_OUTCOME.REPEATED;
 
-        yield* addHostedVoiceSeconds({
-          userId: input.userId,
-          day: utcDayKey(input.now),
-          seconds: input.seconds,
-        });
         return VOICE_SECONDS_OUTCOME.RECORDED;
       }),
     ),
