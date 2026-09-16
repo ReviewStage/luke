@@ -248,7 +248,7 @@ export interface ConversationViewSnapshot {
  * the latest read could not read back. At most one transcript is open on a
  * device at a time; a closed one is no snapshot at all.
  */
-export interface ChildTranscriptSnapshot extends ConversationViewSnapshot {
+export interface TranscriptSnapshot extends ConversationViewSnapshot {
   readonly conversationId: string;
   readonly kind: TranscriptKind;
 }

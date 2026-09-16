@@ -5,11 +5,7 @@ import { EXCESS_KEYS, TRANSCRIPT_KIND } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { test } from "vitest";
-import {
-  agentsSnapshotSchema,
-  childrenSnapshotSchema,
-  childTranscriptSnapshotSchema,
-} from "./children";
+import { agentsSnapshotSchema, childrenSnapshotSchema, transcriptSnapshotSchema } from "./agents";
 
 const CHILD = {
   id: "5e000000-0000-4000-8000-000000000001",
@@ -58,7 +54,7 @@ test("an agents snapshot reads under the wire's own agent schema, and an agent t
 });
 
 test("a transcript is the conversation and its kind, whether a read landed, its groups as records, and the row it could not read", () => {
-  const read = readEither(childTranscriptSnapshotSchema, { excess: EXCESS_KEYS.DROP });
+  const read = readEither(transcriptSnapshotSchema, { excess: EXCESS_KEYS.DROP });
   const child = { conversationId: CHILD.id, kind: TRANSCRIPT_KIND.CHILD };
   assert.ok(Result.isSuccess(read({ ...child, groups: [], settled: false })));
   assert.ok(

@@ -2,15 +2,15 @@ import type { ObservedAccountCalendars } from "@sidecar/calendar/observation";
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { LiveSessionPhase } from "@sidecar/gateway";
 import type {
-  ChildTranscriptSnapshot,
   ConversationViewSnapshot,
   ObservedWorkspaceProject,
+  TranscriptSnapshot,
 } from "@sidecar/session";
 import type { FixtureSnapshot } from "@sidecar/session/fixtures";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import type { AgentsSnapshot, ChildrenSnapshot } from "./agents";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
-import type { AgentsSnapshot, ChildrenSnapshot } from "./children";
 import {
   type DisplayDiagnostic,
   type SessionReplayBootstrap,
@@ -161,8 +161,8 @@ export interface AppState {
   children: ChildrenSnapshot;
   /** The account's agents, the observed sessions holding a turn, as the host's read lists them. */
   agents: AgentsSnapshot;
-  /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. */
-  childTranscript: ChildTranscriptSnapshot | undefined;
+  /** The one transcript the host holds open for this Mac, a child's or an observed session's; nothing while none is. Named `childTranscript` still, kept so the slice name stays put. */
+  childTranscript: TranscriptSnapshot | undefined;
   announcements: { held: boolean };
   /** The onboarding gates the host says stand: the key step ahead of the calendar's, both after the introduction. */
   onboarding: { calendarOwed: boolean; conductorKeyOwed: boolean };

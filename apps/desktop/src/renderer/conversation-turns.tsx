@@ -1,4 +1,4 @@
-import { BRAIN_INPUT_MARKER } from "@sidecar/brain/input-items";
+import { BRAIN_INPUT_MARKER, CHILD_COMPLETION_FIELD } from "@sidecar/brain/input-items";
 import type { ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   ArchiveIcon,
@@ -52,6 +52,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { useState } from "react";
+import { subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationMessageMenu } from "./conversation-menu";
@@ -74,7 +75,6 @@ import {
 } from "./conversation-tool-row";
 import { MarkdownMessage } from "./markdown-message";
 import type { SessionView } from "./session-model";
-import { subagentTitle } from "./subagent-title";
 import { ThinkingDots } from "./thinking-dots";
 
 /**
@@ -460,9 +460,6 @@ function SubagentChip({
   );
 }
 
-/** The key the completion's data names the child under, as `childCompletionInputText` writes it. */
-const CHILD_COMPLETION_ID_KEY = "child_id";
-
 /**
  * The child a completion turn answered, read from the turn's opening note:
  * the brain writes a child's end as its marker, an instant, and the
@@ -480,7 +477,7 @@ function completedChildOf(group: ConversationViewTurnGroup): string | undefined 
     const text = userWords(message);
     if (!text.startsWith(BRAIN_INPUT_MARKER.CHILD_COMPLETION)) continue;
     const data = recordFromJsonLine(text.slice(text.indexOf("\n") + 1));
-    const childId = data?.[CHILD_COMPLETION_ID_KEY];
+    const childId = data?.[CHILD_COMPLETION_FIELD.CHILD_ID];
     if (isWireString(childId)) return childId;
   }
   return undefined;

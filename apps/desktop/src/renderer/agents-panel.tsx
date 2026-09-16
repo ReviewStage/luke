@@ -6,17 +6,17 @@ import {
 } from "@sidecar/hosted/reads-wire";
 import { lastActivityLabel, ProviderMark } from "@sidecar/panel";
 import {
-  type ChildTranscriptSnapshot,
   CONVERSATION_VIEW_SOURCE,
   type SessionIdentity,
+  type TranscriptSnapshot,
 } from "@sidecar/session";
 import { TRANSCRIPT_KIND, type TranscriptKind } from "@sidecar/wire";
-import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/children";
+import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
+import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationUnreadableNotice } from "./conversation-panel";
 import { ConversationTurns } from "./conversation-turns";
 import { PANEL_TAB, panelPanelId, panelTabId } from "./panel-tabs";
 import type { SessionView } from "./session-model";
-import { agentSession, agentTitle, subagentTitle } from "./subagent-title";
 
 /**
  * The three pages the Conversation tab draws: the thread itself, the list of
@@ -27,7 +27,7 @@ import { agentSession, agentTitle, subagentTitle } from "./subagent-title";
  */
 export const CONVERSATION_PAGE = {
   THREAD: "thread",
-  SUBAGENTS: "subagents",
+  AGENTS: "agents",
   TRANSCRIPT: "transcript",
 } as const;
 
@@ -47,7 +47,7 @@ export interface TranscriptRow {
 }
 
 /** Where a child or an agent stands, in the one word its row wears for it. */
-const SUBAGENT_STATUS_WORD = {
+const STATUS_WORD = {
   [CHILD_STATUS.ACCEPTED]: "Waiting",
   [CHILD_STATUS.RUNNING]: "Running",
   [CHILD_STATUS.SETTLED]: "Done",
@@ -117,7 +117,7 @@ function agentTranscriptRow(agent: AgentRead, roster: readonly SessionView[]): T
  * on the search button's own terms, so the control and its effect cannot be
  * read apart.
  */
-export function SubagentsButton({
+export function AgentsButton({
   open,
   onToggle,
 }: {
@@ -127,7 +127,7 @@ export function SubagentsButton({
   return (
     <button
       type="button"
-      className="conversation-subagents"
+      className="conversation-agents"
       data-active={String(open)}
       aria-expanded={open}
       onClick={onToggle}
@@ -138,7 +138,7 @@ export function SubagentsButton({
 }
 
 /** One section of the list: its heading, its rows, and what it says when a read list holds none. */
-function SubagentsSection({
+function AgentsSection({
   heading,
   settled,
   empty,
@@ -150,14 +150,14 @@ function SubagentsSection({
   children: readonly React.JSX.Element[];
 }): React.JSX.Element {
   return (
-    <section className="subagents-section">
-      <h3 className="subagents-section-title">{heading}</h3>
+    <section className="agents-section">
+      <h3 className="agents-section-title">{heading}</h3>
       {children.length > 0 ? (
-        <ol className="subagents-list">{children}</ol>
+        <ol className="agents-list">{children}</ol>
       ) : settled ? (
         // Only a list actually read may say it is empty; before that the
         // room stands empty, as the thread's does before its first read.
-        <p className="subagents-section-empty">{empty}</p>
+        <p className="agents-section-empty">{empty}</p>
       ) : null}
     </section>
   );
@@ -175,7 +175,7 @@ function SubagentsSection({
  * thread's own root, ids and blocked class alike, because a task's words are
  * the developer's and belong in no optional recording.
  */
-export function SubagentsPanel({
+export function AgentsPanel({
   subagents,
   agents,
   roster,
@@ -200,10 +200,10 @@ export function SubagentsPanel({
   const children = [...subagents.children].sort(byLatestActivity);
   const meta = (row: ChildRead | AgentRead) => (
     <>
-      <span className="subagent-status" data-status={row.status}>
-        {SUBAGENT_STATUS_WORD[row.status]}
+      <span className="agent-status" data-status={row.status}>
+        {STATUS_WORD[row.status]}
       </span>
-      <span className="subagent-age">{lastActivityLabel(activityAt(row), now)}</span>
+      <span className="agent-age">{lastActivityLabel(activityAt(row), now)}</span>
     </>
   );
   return (
@@ -213,14 +213,14 @@ export function SubagentsPanel({
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
-      <header className="subagents-header">
-        <button type="button" className="subagents-back" onClick={onBack}>
+      <header className="agents-header">
+        <button type="button" className="agents-back" onClick={onBack}>
           ‹ Conversation
         </button>
-        <h2 className="subagents-title">Agents</h2>
+        <h2 className="agents-title">Agents</h2>
       </header>
-      <div className="subagents-sections">
-        <SubagentsSection
+      <div className="agents-sections">
+        <AgentsSection
           heading="Per-workspace agents"
           settled={agents.settled}
           empty="No per-workspace agents yet"
@@ -231,47 +231,43 @@ export function SubagentsPanel({
               <li key={agent.id}>
                 <button
                   type="button"
-                  className="subagent-row"
+                  className="agent-row"
                   onClick={() => onOpenTranscript(agentTranscriptRow(agent, roster))}
                 >
-                  <span className="subagent-title">
+                  <span className="agent-title">
                     <ProviderMark
                       providerId={session?.agentId ?? agent.providerId}
-                      className="subagent-mark"
+                      className="agent-mark"
                     />
-                    <span className="subagent-name">{agentTitle(agent, roster)}</span>
+                    <span className="agent-name">{agentTitle(agent, roster)}</span>
                   </span>
-                  <span className="subagent-meta">{meta(agent)}</span>
+                  <span className="agent-meta">{meta(agent)}</span>
                 </button>
               </li>
             );
           })}
-        </SubagentsSection>
-        <SubagentsSection
-          heading="Sub-agents"
-          settled={subagents.settled}
-          empty="No sub-agents yet"
-        >
+        </AgentsSection>
+        <AgentsSection heading="Sub-agents" settled={subagents.settled} empty="No sub-agents yet">
           {children.map((child) => (
             <li key={child.id}>
               <button
                 type="button"
-                className="subagent-row"
+                className="agent-row"
                 onClick={() => onOpenTranscript(childTranscriptRow(child))}
               >
-                <span className="subagent-title">
-                  <span className="subagent-name">{subagentTitle(child)}</span>
+                <span className="agent-title">
+                  <span className="agent-name">{subagentTitle(child)}</span>
                 </span>
-                <span className="subagent-meta">
+                <span className="agent-meta">
                   {meta(child)}
                   {child.parentKind === CONVERSATION_VIEW_SOURCE.OBSERVED ? (
-                    <span className="subagent-origin">from an observed session</span>
+                    <span className="agent-origin">from an observed session</span>
                   ) : null}
                 </span>
               </button>
             </li>
           ))}
-        </SubagentsSection>
+        </AgentsSection>
       </div>
     </section>
   );
@@ -288,7 +284,7 @@ export function SubagentsPanel({
  * thread's own root, ids and blocked class alike, because the words are the
  * developer's and belong in no optional recording.
  */
-export function SubagentTranscriptPanel({
+export function AgentTranscriptPanel({
   open,
   transcript,
   roster,
@@ -299,7 +295,7 @@ export function SubagentTranscriptPanel({
   /** The row the page was opened from: which conversation, and the header's words for it. */
   open: TranscriptRow;
   /** The transcript the host holds open, if any; drawn only while it is this conversation's. */
-  transcript: ChildTranscriptSnapshot | undefined;
+  transcript: TranscriptSnapshot | undefined;
   /** The sessions as the roster holds them now, so an action's chip names a session by its current title. */
   roster: readonly SessionView[];
   /** The instant a running turn's wait is read against, on the thread's own terms. */
@@ -323,13 +319,13 @@ export function SubagentTranscriptPanel({
       id={panelPanelId(PANEL_TAB.CONVERSATION)}
       aria-labelledby={panelTabId(PANEL_TAB.CONVERSATION)}
     >
-      <header className="subagents-header">
-        <button type="button" className="subagents-back" onClick={onBack}>
+      <header className="agents-header">
+        <button type="button" className="agents-back" onClick={onBack}>
           ‹ Agents
         </button>
-        <h2 className="subagents-title subagent-transcript-title">{open.title}</h2>
-        <span className="subagent-status" data-status={open.status}>
-          {SUBAGENT_STATUS_WORD[open.status]}
+        <h2 className="agents-title agent-transcript-title">{open.title}</h2>
+        <span className="agent-status" data-status={open.status}>
+          {STATUS_WORD[open.status]}
         </span>
       </header>
       {groups.length > 0 ? (

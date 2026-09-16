@@ -3,6 +3,12 @@ import { TRANSCRIPT_KIND, WireValueSchema } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
 
 /**
+ * What the Agents page is told from, for the document every window reads:
+ * the account's children, its agents, and the one transcript the host holds
+ * open, each under the schema the service's own answer is read through.
+ */
+
+/**
  * The account's children as the host's read of the service lists them, for
  * the document every window is told from: whether a read has landed, and
  * each child as the children read answers it, under the same schema the
@@ -33,7 +39,7 @@ export type AgentsSnapshot = typeof agentsSnapshotSchema.Type;
  * boundary, so they cross as the Conversation snapshot's do: admitted here as
  * wire records, and read where they are drawn.
  */
-export const childTranscriptSnapshotSchema = EffectSchema.Struct({
+export const transcriptSnapshotSchema = EffectSchema.Struct({
   conversationId: EffectSchema.NonEmptyString,
   kind: EffectSchema.Literals(Object.values(TRANSCRIPT_KIND)),
   settled: EffectSchema.Boolean,

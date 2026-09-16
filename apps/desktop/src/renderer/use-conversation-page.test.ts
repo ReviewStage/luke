@@ -7,7 +7,7 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind } from "#shared/messages/acts";
-import { CONVERSATION_PAGE, type TranscriptRow } from "./subagents-panel";
+import { CONVERSATION_PAGE, type TranscriptRow } from "./agents-panel";
 import { useConversationPage } from "./use-conversation-page";
 
 type Page = ReturnType<typeof useConversationPage>;
@@ -85,8 +85,8 @@ test("a transcript's open moves through the page door, so one transcript to anot
 
   // Back to the list lets go of it; a move that begins off the transcript page tells nothing.
   told.length = 0;
-  act(() => page().changeConversationPage(CONVERSATION_PAGE.SUBAGENTS));
-  assert.equal(page().conversationPage, CONVERSATION_PAGE.SUBAGENTS);
+  act(() => page().changeConversationPage(CONVERSATION_PAGE.AGENTS));
+  assert.equal(page().conversationPage, CONVERSATION_PAGE.AGENTS);
   assert.equal(page().transcriptOpen, undefined);
   assert.deepEqual(told, [{ kind: ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT }]);
   told.length = 0;

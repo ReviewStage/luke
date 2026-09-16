@@ -24,7 +24,6 @@ import {
 } from "@sidecar/gateway";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
-  type ChildTranscriptSnapshot,
   type ConversationViewSnapshot,
   isSessionWriteResult,
   type ObservedWorkspaceProject,
@@ -32,6 +31,7 @@ import {
   type SessionApplicationId,
   type SessionIdentity,
   type SessionWriteResult,
+  type TranscriptSnapshot,
 } from "@sidecar/session";
 import type {
   AppSettingField,
@@ -60,8 +60,8 @@ import {
   agentsSnapshotSchema,
   type ChildrenSnapshot,
   childrenSnapshotSchema,
-  childTranscriptSnapshotSchema,
-} from "#shared/messages/children";
+  transcriptSnapshotSchema,
+} from "#shared/messages/agents";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -85,7 +85,7 @@ export interface HostBootstrap {
   children: ChildrenSnapshot;
   agents: AgentsSnapshot;
   /** The one transcript the host holds open, a child's or an agent's, absent while none is. */
-  childTranscript?: ChildTranscriptSnapshot;
+  childTranscript?: TranscriptSnapshot;
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
@@ -110,8 +110,8 @@ interface HostSessionReplay {
 }
 
 /** The open transcript as the host last told it; no transcript says none is open any more. */
-interface HostChildTranscript {
-  transcript: ChildTranscriptSnapshot | undefined;
+interface HostTranscript {
+  transcript: TranscriptSnapshot | undefined;
 }
 
 export interface HostOperator {
@@ -194,7 +194,7 @@ export interface HostOperator {
   clearConversation(): Effect.Effect<boolean>;
   /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
   refreshConversation(): Effect.Effect<void>;
-  /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. */
+  /** One transcript held open on the host, read to its end and again as its list's head moves; answers whether the host took it. Named for the child's transcript still, kept so the Gateway method names stay put. */
   openChildTranscript(conversationId: string, kind: TranscriptKind): Effect.Effect<boolean>;
   closeChildTranscript(): Effect.Effect<void>;
   /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
@@ -233,7 +233,8 @@ export interface HostOperator {
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
   onChildrenChanged(listener: (children: ChildrenSnapshot) => void): () => void;
   onAgentsChanged(listener: (agents: AgentsSnapshot) => void): () => void;
-  onChildTranscriptChanged(listener: (change: HostChildTranscript) => void): () => void;
+  /** Named for the child's transcript still, kept so the Gateway event name stays put. */
+  onChildTranscriptChanged(listener: (change: HostTranscript) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onIntroductionChanged(listener: (owed: boolean) => void): () => void;
   onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
@@ -623,16 +624,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     onChildTranscriptChanged: (listener) =>
       on(
         GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
-        (payload): HostChildTranscript | undefined => {
+        (payload): HostTranscript | undefined => {
           if (!isRecord(payload)) return undefined;
           // An empty record is the host saying none is open; anything else must read as a transcript.
           if (Object.keys(payload).length === 0) return { transcript: undefined };
-          const read = readEither(childTranscriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(
-            payload,
-          );
+          const read = readEither(transcriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload);
           // The groups are the host's own composed rows, restored to the view's type as the Conversation snapshot's are.
           return Result.isSuccess(read)
-            ? { transcript: answered<ChildTranscriptSnapshot>(payload) }
+            ? { transcript: answered<TranscriptSnapshot>(payload) }
             : undefined;
         },
         listener,

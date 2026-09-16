@@ -9,17 +9,17 @@ import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { UPDATE_STATUS } from "#shared/messages/update";
-import { fixtureChildCompletionTurns } from "./conversation-turns.fixtures";
-import { PanelBody } from "./panel-body";
-import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { SESSION_SORT } from "./session-model";
-import type { SettingsPanelProps } from "./settings/settings-panel";
 import {
   CONVERSATION_PAGE,
   type ConversationPage,
   childTranscriptRow,
   type TranscriptRow,
-} from "./subagents-panel";
+} from "./agents-panel";
+import { fixtureChildCompletionTurns } from "./conversation-turns.fixtures";
+import { PanelBody } from "./panel-body";
+import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { SESSION_SORT } from "./session-model";
+import type { SettingsPanelProps } from "./settings/settings-panel";
 
 type BodyProps = Parameters<typeof PanelBody>[0];
 
@@ -108,8 +108,8 @@ function mount(props: BodyProps) {
   return { container, render };
 }
 
-function subagentsButton(container: ParentNode): HTMLButtonElement | null {
-  const button = container.querySelector(".conversation-subagents");
+function agentsButton(container: ParentNode): HTMLButtonElement | null {
+  const button = container.querySelector(".conversation-agents");
   return button instanceof HTMLButtonElement ? button : null;
 }
 
@@ -119,7 +119,7 @@ afterEach(() => {
 
 test("the Agents button is offered on the Conversation tab, thread or not, and not on the Sessions tab", () => {
   const conversation = mount(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, () => {}));
-  const button = subagentsButton(conversation.container);
+  const button = agentsButton(conversation.container);
   assert.ok(button);
   assert.equal(button.textContent, "Agents");
   assert.equal(button.getAttribute("aria-expanded"), "false");
@@ -128,7 +128,7 @@ test("the Agents button is offered on the Conversation tab, thread or not, and n
   // The Settings tab draws its whole panel, which these controls do not
   // fake; the Sessions tab stands for the tabs that are not the Conversation.
   const sessions = mount(bodyProps(PANEL_TAB.SESSIONS, CONVERSATION_PAGE.THREAD, () => {}));
-  assert.equal(subagentsButton(sessions.container), null);
+  assert.equal(agentsButton(sessions.container), null);
 });
 
 test("pressing the button asks for the list, and the list page draws it in the thread's place, with the way back", () => {
@@ -136,45 +136,45 @@ test("pressing the button asks for the list, and the list page draws it in the t
   const change = (page: ConversationPage) => asked.push(page);
   const mounted = mount(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, change));
   assert.ok(mounted.container.querySelector(".conversation-empty"));
-  assert.equal(mounted.container.querySelector(".subagents-list, .subagents-header"), null);
+  assert.equal(mounted.container.querySelector(".agents-list, .agents-header"), null);
 
-  const button = subagentsButton(mounted.container);
+  const button = agentsButton(mounted.container);
   assert.ok(button);
   act(() => {
     button.click();
   });
-  assert.deepEqual(asked, [CONVERSATION_PAGE.SUBAGENTS]);
+  assert.deepEqual(asked, [CONVERSATION_PAGE.AGENTS]);
 
-  mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.SUBAGENTS, change));
+  mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.AGENTS, change));
   // One tab panel, under the same root and ids the thread uses.
   const panels = mounted.container.querySelectorAll('[role="tabpanel"]');
   assert.equal(panels.length, 1);
   assert.equal(panels[0]?.className, "conversation-view ph-no-capture");
   assert.equal(panels[0]?.id, "panel-view-conversation");
-  assert.ok(mounted.container.querySelector(".subagents-header"));
+  assert.ok(mounted.container.querySelector(".agents-header"));
   assert.ok(mounted.container.textContent?.includes("No sub-agents yet"));
   assert.ok(!mounted.container.textContent?.includes("No messages yet"));
-  assert.equal(subagentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
+  assert.equal(agentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
 
-  const lit = subagentsButton(mounted.container);
+  const lit = agentsButton(mounted.container);
   assert.ok(lit);
   act(() => {
     lit.click();
   });
-  const back = mounted.container.querySelector(".subagents-back");
+  const back = mounted.container.querySelector(".agents-back");
   assert.ok(back instanceof HTMLButtonElement);
   act(() => {
     back.click();
   });
   assert.deepEqual(asked, [
-    CONVERSATION_PAGE.SUBAGENTS,
+    CONVERSATION_PAGE.AGENTS,
     CONVERSATION_PAGE.THREAD,
     CONVERSATION_PAGE.THREAD,
   ]);
 
   mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.THREAD, change));
   assert.ok(mounted.container.textContent?.includes("No messages yet"));
-  assert.equal(mounted.container.querySelector(".subagents-header"), null);
+  assert.equal(mounted.container.querySelector(".agents-header"), null);
 });
 
 const CHILD: ChildRead = {
@@ -224,11 +224,9 @@ test("a row's press opens the child or the agent, and the transcript page draws 
     agents: { settled: true, agents: [AGENT] },
     onOpenTranscript: (row) => opened.push(row),
   };
-  const mounted = mount(
-    bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.SUBAGENTS, change, extra),
-  );
+  const mounted = mount(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.AGENTS, change, extra));
   // The agents lead the page, then the sub-agents; either row's press names its row to the app.
-  const rows = mounted.container.querySelectorAll(".subagent-row");
+  const rows = mounted.container.querySelectorAll(".agent-row");
   assert.equal(rows.length, 2);
   for (const row of rows) {
     assert.ok(row instanceof HTMLButtonElement);
@@ -266,21 +264,21 @@ test("a row's press opens the child or the agent, and the transcript page draws 
   assert.equal(panels[0]?.id, "panel-view-conversation");
   assert.ok(mounted.container.textContent?.includes("Audit the release notes"));
   assert.ok(mounted.container.textContent?.includes("Nothing said yet"));
-  assert.equal(mounted.container.querySelector(".subagents-list"), null);
+  assert.equal(mounted.container.querySelector(".agents-list"), null);
   // The button stays lit over a transcript, and Clear is not offered off the thread.
-  assert.equal(subagentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
+  assert.equal(agentsButton(mounted.container)?.getAttribute("aria-expanded"), "true");
   assert.equal(mounted.container.querySelector(".conversation-clear"), null);
 
-  const back = mounted.container.querySelector(".subagents-back");
+  const back = mounted.container.querySelector(".agents-back");
   assert.ok(back instanceof HTMLButtonElement);
   assert.equal(back.textContent, "‹ Agents");
   act(() => {
     back.click();
   });
-  assert.deepEqual(asked, [CONVERSATION_PAGE.SUBAGENTS]);
+  assert.deepEqual(asked, [CONVERSATION_PAGE.AGENTS]);
 
   // A transcript page with no row to be of falls back to the thread.
   mounted.render(bodyProps(PANEL_TAB.CONVERSATION, CONVERSATION_PAGE.TRANSCRIPT, change, extra));
   assert.ok(mounted.container.textContent?.includes("No messages yet"));
-  assert.equal(mounted.container.querySelector(".subagents-header"), null);
+  assert.equal(mounted.container.querySelector(".agents-header"), null);
 });

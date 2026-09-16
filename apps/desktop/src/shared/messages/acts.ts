@@ -127,6 +127,7 @@ export const ACT_KIND = {
    * the transcript arrives on the document rather than as the answer; the
    * open answers whether the host took it.
    */
+  // Named for the child's transcript still, an agent's opening through the same act; kept so the protocol goldens stay put.
   CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
   CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /**

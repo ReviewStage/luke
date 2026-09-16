@@ -12,7 +12,7 @@ import type { SessionView } from "./session-model";
  */
 
 /** How much of a child's id, or a session's, stands in for a name when nothing else does. */
-const CHILD_ID_EXCERPT_CHARS = 8;
+const ID_EXCERPT_CHARS = 8;
 
 /** The roster's session for an agent, by session identity, while the roster still holds it. */
 export function agentSession(
@@ -28,13 +28,13 @@ export function agentSession(
 export function agentTitle(agent: AgentRead, roster: readonly SessionView[]): string {
   return (
     agentSession(agent, roster)?.title ??
-    `Session ${agent.providerSessionId.slice(0, CHILD_ID_EXCERPT_CHARS)}`
+    `Session ${agent.providerSessionId.slice(0, ID_EXCERPT_CHARS)}`
   );
 }
 
 /** The name a child falls back to: a slice of its id. */
 function childIdTitle(childId: string): string {
-  return `Child ${childId.slice(0, CHILD_ID_EXCERPT_CHARS)}`;
+  return `Child ${childId.slice(0, ID_EXCERPT_CHARS)}`;
 }
 
 /** What a row calls the child: its label, else its task without the marker, else a slice of its id. */

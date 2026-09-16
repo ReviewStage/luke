@@ -5,13 +5,22 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { ProviderMark } from "@sidecar/panel";
 import type {
-  ChildTranscriptSnapshot,
   ConversationViewSnapshot,
   SessionApplicationId,
   SessionIdentity,
+  TranscriptSnapshot,
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/children";
+import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
+import {
+  AgentsButton,
+  AgentsPanel,
+  AgentTranscriptPanel,
+  CONVERSATION_PAGE,
+  type ConversationPage,
+  childTranscriptRow,
+  type TranscriptRow,
+} from "./agents-panel";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
@@ -60,15 +69,6 @@ import { CalendarGateReview } from "./settings/calendar-gate-review";
 import { SettingsPanel, type SettingsPanelProps } from "./settings/settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
-import {
-  CONVERSATION_PAGE,
-  type ConversationPage,
-  childTranscriptRow,
-  SubagentsButton,
-  SubagentsPanel,
-  SubagentTranscriptPanel,
-  type TranscriptRow,
-} from "./subagents-panel";
 import { updateAvailable, updateRow } from "./update-row";
 import { useMeasuredHeight } from "./use-measured-height";
 
@@ -228,7 +228,7 @@ interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
-  /** Which of the Conversation tab's three pages is showing: the thread, the sub-agents list, or one transcript. */
+  /** Which of the Conversation tab's three pages is showing: the thread, the Agents list, or one transcript. */
   conversationPage: ConversationPage;
   onConversationPageChange: (page: ConversationPage) => void;
   /** The account's sub-agents as the document holds them, for the list page and the thread's completion chips. */
@@ -240,7 +240,7 @@ interface PanelBodyProps {
   /** The row the transcript page is of, held exactly while that page shows. */
   transcriptOpen: TranscriptRow | undefined;
   /** The one transcript the host holds open, a child's or an agent's, as the document carries it. */
-  childTranscript: ChildTranscriptSnapshot | undefined;
+  childTranscript: TranscriptSnapshot | undefined;
   /** Reports someone being part-way through the session search, so the panel holds for them. */
   onFieldEngaged: (engaged: boolean) => void;
   /**
@@ -382,13 +382,13 @@ export function PanelBody({
     ? updateRow(settings.updates.update).detail
     : undefined;
   const conversationTab = tab === PANEL_TAB.CONVERSATION;
-  const subagentsPage = conversationTab && conversationPage === CONVERSATION_PAGE.SUBAGENTS;
+  const agentsPage = conversationTab && conversationPage === CONVERSATION_PAGE.AGENTS;
   // The transcript page is of one row; a page with none to be of falls back to the thread.
   const transcriptRow =
     conversationTab && conversationPage === CONVERSATION_PAGE.TRANSCRIPT
       ? transcriptOpen
       : undefined;
-  const threadPage = conversationTab && !subagentsPage && transcriptRow === undefined;
+  const threadPage = conversationTab && !agentsPage && transcriptRow === undefined;
   // Clear retires recorded turns, so only a thread holding some, and showing, offers it.
   const offerConversationClear = threadPage && conversation.groups.length > 0;
   return (
@@ -419,16 +419,16 @@ export function PanelBody({
             {offerConversationClear ? (
               <ConversationClearButton onClear={onClearConversationConversation} />
             ) : null}
-            {/* The turn to the sub-agents list and back, offered whenever the
+            {/* The turn to the Agents list and back, offered whenever the
                 tab is showing: an empty list has its own words to say. Lit on
-                the list and on a transcript alike, since both are the
-                sub-agents' pages; either press returns to the thread. */}
+                the list and on a transcript alike, since both are the Agents
+                pages; either press returns to the thread. */}
             {conversationTab ? (
-              <SubagentsButton
+              <AgentsButton
                 open={!threadPage}
                 onToggle={() =>
                   onConversationPageChange(
-                    threadPage ? CONVERSATION_PAGE.SUBAGENTS : CONVERSATION_PAGE.THREAD,
+                    threadPage ? CONVERSATION_PAGE.AGENTS : CONVERSATION_PAGE.THREAD,
                   )
                 }
               />
@@ -446,8 +446,8 @@ export function PanelBody({
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
-      ) : subagentsPage ? (
-        <SubagentsPanel
+      ) : agentsPage ? (
+        <AgentsPanel
           subagents={subagents}
           agents={agents}
           roster={roster}
@@ -456,13 +456,13 @@ export function PanelBody({
           onBack={() => onConversationPageChange(CONVERSATION_PAGE.THREAD)}
         />
       ) : transcriptRow !== undefined ? (
-        <SubagentTranscriptPanel
+        <AgentTranscriptPanel
           open={transcriptRow}
           transcript={childTranscript}
           roster={roster}
           now={now}
           onOpenChat={onOpenChat}
-          onBack={() => onConversationPageChange(CONVERSATION_PAGE.SUBAGENTS)}
+          onBack={() => onConversationPageChange(CONVERSATION_PAGE.AGENTS)}
         />
       ) : conversationTab ? (
         <ConversationPanel

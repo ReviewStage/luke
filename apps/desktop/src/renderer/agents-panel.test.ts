@@ -9,6 +9,13 @@ import { createRoot } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import {
+  AgentsPanel,
+  AgentTranscriptPanel,
+  childTranscriptRow,
+  type TranscriptRow,
+  transcriptListed,
+} from "./agents-panel";
+import {
   FIXTURE_NOW,
   FIXTURE_ROSTER,
   FIXTURE_SESSION,
@@ -16,16 +23,9 @@ import {
   FIXTURE_TURN,
   fixtureConversationTurns,
 } from "./conversation-turns.fixtures";
-import {
-  childTranscriptRow,
-  SubagentsPanel,
-  SubagentTranscriptPanel,
-  type TranscriptRow,
-  transcriptListed,
-} from "./subagents-panel";
 
-type PanelProps = Parameters<typeof SubagentsPanel>[0];
-type TranscriptProps = Parameters<typeof SubagentTranscriptPanel>[0];
+type PanelProps = Parameters<typeof AgentsPanel>[0];
+type TranscriptProps = Parameters<typeof AgentTranscriptPanel>[0];
 
 const NOW = Date.UTC(2026, 8, 16, 12, 0, 0);
 const MINUTE_MS = 60_000;
@@ -131,7 +131,7 @@ function panelProps(extra: Partial<PanelProps> = {}): PanelProps {
 }
 
 function render(extra: Partial<PanelProps> = {}): string {
-  return renderToStaticMarkup(createElement(SubagentsPanel, panelProps(extra)));
+  return renderToStaticMarkup(createElement(AgentsPanel, panelProps(extra)));
 }
 
 function renderChildren(children: readonly ChildRead[], settled = true): string {
@@ -139,13 +139,13 @@ function renderChildren(children: readonly ChildRead[], settled = true): string 
 }
 
 function titles(container: ParentNode): string[] {
-  return [...container.querySelectorAll(".subagent-name")].map((node) => node.textContent ?? "");
+  return [...container.querySelectorAll(".agent-name")].map((node) => node.textContent ?? "");
 }
 
 function sections(markup: string): Element[] {
   const container = document.createElement("div");
   container.innerHTML = markup;
-  return [...container.querySelectorAll(".subagents-section")];
+  return [...container.querySelectorAll(".agents-section")];
 }
 
 function mount(props: PanelProps) {
@@ -153,7 +153,7 @@ function mount(props: PanelProps) {
   document.body.append(container);
   const root = createRoot(container);
   act(() => {
-    root.render(createElement(SubagentsPanel, props));
+    root.render(createElement(AgentsPanel, props));
   });
   return container;
 }
@@ -168,9 +168,9 @@ test("the list is mounted under the thread's own root, ids and blocked class ali
   assert.ok(markup.includes('id="panel-view-conversation"'));
   assert.ok(markup.includes('aria-labelledby="panel-tab-conversation"'));
   assert.ok(markup.includes("‹ Conversation"));
-  assert.ok(markup.includes('<h2 class="subagents-title">Agents</h2>'));
+  assert.ok(markup.includes('<h2 class="agents-title">Agents</h2>'));
   const headings = sections(markup).map(
-    (section) => section.querySelector(".subagents-section-title")?.textContent,
+    (section) => section.querySelector(".agents-section-title")?.textContent,
   );
   assert.deepEqual(headings, ["Per-workspace agents", "Sub-agents"]);
 });
@@ -187,7 +187,7 @@ test("sub-agent rows are ordered by the instant they last moved, newest first, a
     "Rename the roster helper.",
   ]);
   assert.deepEqual(
-    [...subagents.querySelectorAll(".subagent-age")].map((node) => node.textContent),
+    [...subagents.querySelectorAll(".agent-age")].map((node) => node.textContent),
     ["1m", "10m", "25m", "2h"],
   );
   assert.ok(!subagents.textContent?.includes("[subagent task]"));
@@ -196,15 +196,15 @@ test("sub-agent rows are ordered by the instant they last moved, newest first, a
 test("each sub-agent row wears its status word, its age, and where it was delegated from", () => {
   const [, subagents] = sections(renderChildren([LABELLED, TASKED, BARE, OBSERVED]));
   assert.ok(subagents);
-  const rows = [...subagents.querySelectorAll(".subagent-row")];
-  const words = rows.map((row) => row.querySelector(".subagent-status")?.textContent);
+  const rows = [...subagents.querySelectorAll(".agent-row")];
+  const words = rows.map((row) => row.querySelector(".agent-status")?.textContent);
   assert.deepEqual(words, ["Waiting", "Running", "Done", "Failed"]);
-  const ages = rows.map((row) => row.querySelector(".subagent-age")?.textContent);
+  const ages = rows.map((row) => row.querySelector(".agent-age")?.textContent);
   assert.deepEqual(ages, ["10m", "25m", "2h", "2d"]);
-  const origins = rows.map((row) => row.querySelector(".subagent-origin")?.textContent);
+  const origins = rows.map((row) => row.querySelector(".agent-origin")?.textContent);
   assert.deepEqual(origins, [undefined, undefined, undefined, "from an observed session"]);
   // No sub-agent row wears a provider mark: a child is the brain's own, not a session's.
-  assert.equal(subagents.querySelector(".subagent-mark"), null);
+  assert.equal(subagents.querySelector(".agent-mark"), null);
 });
 
 test("a cancelled child says so", () => {
@@ -224,17 +224,17 @@ test("a per-workspace agent row is named from the roster by session identity, ma
     FIXTURE_TITLE.HELD,
     "Session 8e3b4c36",
   ]);
-  const rows = [...agents.querySelectorAll(".subagent-row")];
+  const rows = [...agents.querySelectorAll(".agent-row")];
   assert.deepEqual(
-    rows.map((row) => row.querySelector(".subagent-status")?.textContent),
+    rows.map((row) => row.querySelector(".agent-status")?.textContent),
     ["Waiting", "Running", "Done"],
   );
   assert.deepEqual(
-    rows.map((row) => row.querySelector(".subagent-age")?.textContent),
+    rows.map((row) => row.querySelector(".agent-age")?.textContent),
     ["2m", "5m", "3h"],
   );
   // Every agent row leads with a mark: the roster's agent while it holds the session, the provider once it has let go.
-  assert.equal(agents.querySelectorAll(".subagent-mark").length, 3);
+  assert.equal(agents.querySelectorAll(".agent-mark").length, 3);
   // A roster that never held the session names it the same way.
   const [alone] = sections(render({ roster: [], agents: { settled: true, agents: [HELD_AGENT] } }));
   assert.deepEqual(titles(alone ?? document.createElement("div")), ["Session 6c1f2f14"]);
@@ -266,7 +266,7 @@ test("pressing a row of either kind opens its transcript, named as the row is", 
     }),
   );
   // The agent leads the page; the sub-agents follow newest first, so the bare child comes before the labelled one.
-  const rows = [...container.querySelectorAll(".subagent-row")];
+  const rows = [...container.querySelectorAll(".agent-row")];
   assert.equal(rows.length, 3);
   for (const row of rows) {
     assert.ok(row instanceof HTMLButtonElement);
@@ -301,7 +301,7 @@ test("the back control returns to the thread", () => {
       },
     }),
   );
-  const back = container.querySelector(".subagents-back");
+  const back = container.querySelector(".agents-back");
   assert.ok(back instanceof HTMLButtonElement);
   act(() => {
     back.click();
@@ -324,7 +324,7 @@ const OPEN_AGENT: TranscriptRow = {
 
 function renderTranscript(extra: Partial<TranscriptProps> = {}): string {
   return renderToStaticMarkup(
-    createElement(SubagentTranscriptPanel, {
+    createElement(AgentTranscriptPanel, {
       open: OPEN_CHILD,
       transcript: undefined,
       roster: FIXTURE_ROSTER,
@@ -438,7 +438,7 @@ test("the transcript's back control returns to the list", () => {
   const root = createRoot(container);
   act(() => {
     root.render(
-      createElement(SubagentTranscriptPanel, {
+      createElement(AgentTranscriptPanel, {
         open: OPEN_CHILD,
         transcript: undefined,
         roster: [],
@@ -450,7 +450,7 @@ test("the transcript's back control returns to the list", () => {
       }),
     );
   });
-  const back = container.querySelector(".subagents-back");
+  const back = container.querySelector(".agents-back");
   assert.ok(back instanceof HTMLButtonElement);
   act(() => {
     back.click();

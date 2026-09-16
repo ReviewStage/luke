@@ -166,7 +166,7 @@ export function initialAppState(
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
     voice: {},
-    // A run that sends nothing reads no Conversation, so its empty thread and its empty children list are settled from the start.
+    // A run that sends nothing reads no Conversation, so its empty thread and its empty children and agents lists are settled from the start.
     conversation: { groups: [], settled: !runMode.sendsNetwork },
     children: { settled: !runMode.sendsNetwork, children: [] },
     agents: { settled: !runMode.sendsNetwork, agents: [] },

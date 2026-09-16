@@ -121,6 +121,9 @@ export const CHILD_COMPLETION_STATUS = {
 export type ChildCompletionStatus =
   (typeof CHILD_COMPLETION_STATUS)[keyof typeof CHILD_COMPLETION_STATUS];
 
+/** The one field of a completion's data a reader of the thread needs by name: the child it answered for. */
+export const CHILD_COMPLETION_FIELD = { CHILD_ID: "child_id" } as const;
+
 /** What a child's end hands the conversation that delegated it: which child, how it ended, and its final words. */
 export interface ChildCompletion {
   readonly childId: string;
@@ -147,7 +150,7 @@ export function childCompletionInputText(completion: ChildCompletion, now: numbe
     BRAIN_INPUT_MARKER.CHILD_COMPLETION,
     now,
     JSON.stringify({
-      child_id: completion.childId,
+      [CHILD_COMPLETION_FIELD.CHILD_ID]: completion.childId,
       ...(completion.label !== undefined ? { label: completion.label } : undefined),
       status: completion.status,
       result: overflow > 0 ? completion.result.slice(overflow) : completion.result,
