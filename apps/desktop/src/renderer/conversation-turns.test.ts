@@ -437,6 +437,28 @@ test("a source chip for a session the roster has let go names it from its id and
   const unpressed = render([observed]);
   assert.equal(unpressed.split(SOURCE_CHIP_BUTTON).length - 1, 0);
   assert.ok(unpressed.includes(`${FIXTURE_TITLE.HELD}</span>`));
+  // A session the roster holds but whose provider reported no address is
+  // named by the roster's title and is a name, as its own row would be.
+  assert.ok(observed.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
+  const quiet = render(
+    [
+      {
+        ...observed,
+        source: {
+          kind: CONVERSATION_VIEW_SOURCE.OBSERVED,
+          session: {
+            providerId: observed.source.session.providerId,
+            providerSessionId: FIXTURE_SESSION.UNOPENABLE,
+          },
+        },
+      },
+    ],
+    OPEN,
+  );
+  assert.equal(quiet.split(SOURCE_CHIP_BUTTON).length - 1, 0);
+  assert.equal(count(quiet, "data-source-session", "true"), 1);
+  assert.ok(quiet.includes(`${FIXTURE_TITLE.UNOPENABLE}</span>`));
+  assert.ok(!quiet.includes(FIXTURE_TITLE.HELD));
 });
 
 test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {

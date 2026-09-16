@@ -1246,7 +1246,7 @@ export function ConversationTurns({
           ...(group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
             ? [
                 <SourceRow
-                  key={`${group.turnId}:source`}
+                  key={group.turnId}
                   source={group.source}
                   roster={roster}
                   {...(onOpenChat ? { onOpenChat } : undefined)}
