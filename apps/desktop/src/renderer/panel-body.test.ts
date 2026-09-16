@@ -77,6 +77,7 @@ function bodyProps(
     onOfferRatingFeedback: () => undefined,
     spokenAskPending: false,
     onClearConversationConversation: () => undefined,
+    onLoadOlderConversation: () => Promise.resolve(false),
     conversationPage,
     onConversationPageChange,
     subagents: { settled: true, children: [] },

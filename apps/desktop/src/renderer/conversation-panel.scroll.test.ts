@@ -117,14 +117,26 @@ function renderPanel(props: PanelProps) {
   };
 }
 
-function controlMetrics(element: HTMLDivElement, initial: MutableScrollMetrics) {
+/**
+ * Fakes the scroll box's geometry, since jsdom lays nothing out. A browser
+ * clamps the offset to what the thread can scroll, which only the case of a
+ * thread that fits its window whole depends on; the other cases read the
+ * offset a scroll asked for as it was asked, so the tail's pin shows plainly.
+ */
+function controlMetrics(
+  element: HTMLDivElement,
+  initial: MutableScrollMetrics,
+  { clamp = false }: { clamp?: boolean } = {},
+) {
   const state = { ...initial };
   Object.defineProperties(element, {
     scrollTop: {
       configurable: true,
       get: () => state.scrollTop,
       set: (value: number) => {
-        state.scrollTop = value;
+        state.scrollTop = clamp
+          ? Math.min(Math.max(value, 0), Math.max(state.scrollHeight - state.clientHeight, 0))
+          : value;
       },
     },
     scrollHeight: {
@@ -204,5 +216,135 @@ test("scrolling up pauses automatic scrolling until the jump-to-bottom control i
   });
   assert.equal(metrics.state.scrollTop, 480);
   assert.equal(jumpButton(mounted.container), null);
+  mounted.unmount();
+});
+
+/** The whole fixture thread as one view: several turns, so an older group can be prepended to a shorter one. */
+const FULL_GROUPS = selectConversationView({ ...FIXTURE_INPUT, observed: [], events: [] });
+
+/** A deferred answer to the load-older ask, so a test settles it when it means to; `count` is every ask made. */
+function deferredLoad() {
+  const pending: (() => void)[] = [];
+  let count = 0;
+  const onLoadOlder = () =>
+    new Promise<boolean>((resolve) => {
+      count += 1;
+      pending.push(() => resolve(true));
+    });
+  return {
+    onLoadOlder,
+    get count() {
+      return count;
+    },
+    async settle() {
+      for (const resolve of pending.splice(0)) resolve();
+      await act(async () => {
+        await Promise.resolve();
+      });
+    },
+  };
+}
+
+test("reaching the top asks for older turns once while the view says they stand, and the rows that land above keep the reader's place", async () => {
+  assert.ok(FULL_GROUPS.length >= 2);
+  const newest = FULL_GROUPS.at(-1);
+  assert.ok(newest);
+  const load = deferredLoad();
+  const shortView: ConversationViewSnapshot = { groups: [newest], settled: true, hasOlder: true };
+  // Mounted over a thread with nothing older, then told older turns stand once
+  // it has a size: jsdom lays nothing out, so a thread with no height reads as
+  // fitting its window whole, which is the other test's case.
+  const mounted = renderPanel({
+    ...BASE_PROPS,
+    view: { ...shortView, hasOlder: false },
+    onLoadOlder: load.onLoadOlder,
+  });
+  const metrics = controlMetrics(mounted.scroll, {
+    scrollTop: 300,
+    scrollHeight: 420,
+    clientHeight: 120,
+  });
+  mounted.render({ ...BASE_PROPS, view: shortView, onLoadOlder: load.onLoadOlder });
+  assert.equal(load.count, 0);
+  // Scrolling up short of the top asks for nothing.
+  scrollElement(mounted.scroll, 160);
+  assert.equal(load.count, 0);
+  // Reaching it asks once; a second reach while the ask is out asks nothing more.
+  scrollElement(mounted.scroll, 20);
+  assert.equal(load.count, 1);
+  assert.ok(mounted.container.querySelector(".conversation-loading-older"));
+  scrollElement(mounted.scroll, 0);
+  assert.equal(load.count, 1);
+
+  // The page lands above the reader: the thread grows at the top, and the reader stays on the row they were reading.
+  metrics.set({ scrollHeight: 720 });
+  mounted.render({
+    ...BASE_PROPS,
+    view: { groups: FULL_GROUPS, settled: true },
+    onLoadOlder: load.onLoadOlder,
+  });
+  assert.equal(metrics.state.scrollTop, 300);
+  await load.settle();
+  assert.equal(mounted.container.querySelector(".conversation-loading-older"), null);
+  // The beginning was reached, so reaching the top again asks for nothing.
+  scrollElement(mounted.scroll, 0);
+  assert.equal(load.count, 1);
+  mounted.unmount();
+});
+
+test("a thread that fits its window whole asks for older turns as it lands, and asks again only once the view has moved", async () => {
+  const newest = FULL_GROUPS.at(-1);
+  assert.ok(newest);
+  const load = deferredLoad();
+  const props: PanelProps = {
+    ...BASE_PROPS,
+    view: { groups: [newest], settled: true, hasOlder: true },
+    onLoadOlder: load.onLoadOlder,
+  };
+  // Nothing to scroll: the whole thread shows, and the top is where the reader already is.
+  const mounted = renderPanel(props);
+  controlMetrics(
+    mounted.scroll,
+    { scrollTop: 0, scrollHeight: 100, clientHeight: 120 },
+    { clamp: true },
+  );
+  assert.equal(load.count, 1);
+  // The view landing again while the ask is out asks nothing more.
+  mounted.render({ ...props, view: { ...props.view } });
+  assert.equal(load.count, 1);
+  // The ask answered with nothing landing leaves the view as it was: no second ask until it moves.
+  await load.settle();
+  assert.equal(load.count, 1);
+  mounted.render({ ...props, view: { groups: FULL_GROUPS, settled: true, hasOlder: true } });
+  assert.equal(load.count, 2);
+  mounted.unmount();
+});
+
+test("without older turns to read, or without a way to ask, reaching the top asks for nothing", () => {
+  const load = deferredLoad();
+  const mounted = renderPanel({ ...BASE_PROPS, onLoadOlder: load.onLoadOlder });
+  controlMetrics(mounted.scroll, { scrollTop: 300, scrollHeight: 420, clientHeight: 120 });
+  scrollElement(mounted.scroll, 0);
+  assert.equal(load.count, 0);
+  mounted.unmount();
+  const bare = renderPanel({ ...BASE_PROPS, view: { ...BASE_PROPS.view, hasOlder: true } });
+  controlMetrics(bare.scroll, { scrollTop: 300, scrollHeight: 420, clientHeight: 120 });
+  scrollElement(bare.scroll, 0);
+  assert.equal(bare.container.querySelector(".conversation-loading-older"), null);
+  bare.unmount();
+});
+
+test("older turns landing while the reader follows the tail leave them pinned to it", () => {
+  const newest = FULL_GROUPS.at(-1);
+  assert.ok(newest);
+  const mounted = renderPanel({ ...BASE_PROPS, view: { groups: [newest], settled: true } });
+  const metrics = controlMetrics(mounted.scroll, {
+    scrollTop: 300,
+    scrollHeight: 420,
+    clientHeight: 120,
+  });
+  metrics.set({ scrollHeight: 720 });
+  mounted.render({ ...BASE_PROPS, view: { groups: FULL_GROUPS, settled: true } });
+  assert.equal(metrics.state.scrollTop, 720);
   mounted.unmount();
 });

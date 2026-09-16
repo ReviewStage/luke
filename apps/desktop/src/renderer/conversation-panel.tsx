@@ -29,6 +29,17 @@ export function ConversationUnreadableNotice(): React.JSX.Element {
 const STREAM_FOLLOW_SLACK_PX = 48;
 
 /**
+ * How close to the top a reader has to be for the thread to ask for older
+ * turns: near enough that they meant to reach it, so a reread of the last few
+ * turns fetches nothing, and far enough that the page is on its way before
+ * the scroll stops dead against the edge.
+ */
+const HISTORY_REACH_SLACK_PX = 48;
+
+/** What a reader is told while the page of older turns they reached for is on its way. */
+const LOADING_OLDER_NOTICE = "Loading earlier messages…";
+
+/**
  * The thread's one control, seated beside the tab bar the way each tab's
  * search is, so every tab's control is opened from the same place. Clearing
  * is the service's soft delete of the account's conversation, kept thirty
@@ -88,6 +99,11 @@ export function followsConversationTail(metrics: ConversationScrollMetrics): boo
   return conversationDistanceFromTail(metrics) <= STREAM_FOLLOW_SLACK_PX;
 }
 
+/** Whether a reader has reached the top of what the thread holds, or the thread fits whole and there is no top to reach. */
+function reachesConversationHead({ scrollTop }: ConversationScrollMetrics): boolean {
+  return scrollTop <= HISTORY_REACH_SLACK_PX;
+}
+
 function scrollMetrics(element: HTMLDivElement): ConversationScrollMetrics {
   return {
     scrollTop: element.scrollTop,
@@ -123,6 +139,7 @@ export function ConversationPanel({
   onOpenChild,
   onOpenAgent,
   onOfferRatingFeedback,
+  onLoadOlder,
   live = [],
   spokenAskPending = false,
   now,
@@ -143,6 +160,13 @@ export function ConversationPanel({
   onOpenAgent?: (agent: AgentRead) => void;
   /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
   onOfferRatingFeedback?: (draft: string) => void;
+  /**
+   * Asks the host for one page of older turns, which lands on the view rather
+   * than as the answer; the answer says whether one landed. Asked once per
+   * reach for the top while the view says older turns stand, and never while
+   * an ask is out. Absent where the thread pages nothing back.
+   */
+  onLoadOlder?: () => Promise<boolean>;
   /**
    * The instant the thread's dates are read against, so a line from earlier
    * today says Today and one from last week says which day. Passed down like
@@ -166,7 +190,21 @@ export function ConversationPanel({
   const [following, setFollowing] = useState(true);
   const followingRef = useRef(following);
   followingRef.current = following;
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const loadingOlderRef = useRef(loadingOlder);
+  loadingOlderRef.current = loadingOlder;
+  /**
+   * Where the thread stood at the last paint: its first group and its full
+   * height. Older turns landing above the reader grow the thread at the top,
+   * and the browser keeps the offset rather than the content, so when the
+   * first group changes under a reader who is not following the tail the
+   * offset is moved by exactly what was added or let go of above them.
+   */
+  const anchor = useRef<
+    { readonly first: string | undefined; readonly height: number } | undefined
+  >(undefined);
   const thread = view.groups.length > 0 || live.length > 0 || spokenAskPending;
+  const olderStands = view.hasOlder === true && onLoadOlder !== undefined;
 
   useEffect(() => {
     if (thread) return;
@@ -179,13 +217,50 @@ export function ConversationPanel({
     if (element) scrollToConversationTail(element);
   }, [thread, view, live, spokenAskPending]);
 
+  // After the tail is pinned, so a following reader is never moved twice.
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const first = view.groups[0]?.turnId;
+    const previous = anchor.current;
+    if (previous !== undefined && !followingRef.current && previous.first !== first) {
+      element.scrollTop += element.scrollHeight - previous.height;
+    }
+    anchor.current = { first, height: element.scrollHeight };
+  }, [thread, view, live, spokenAskPending]);
+
+  /** One ask at a time, and only while the view says there is something to ask for. */
+  const askForOlder = () => {
+    if (!olderStands || loadingOlderRef.current || onLoadOlder === undefined) return;
+    setLoadingOlder(true);
+    loadingOlderRef.current = true;
+    // However the ask ends, the next reach may ask again; what landed is on the view.
+    const settled = () => setLoadingOlder(false);
+    void onLoadOlder().then(settled, settled);
+  };
+
+  // A page that landed short of the reader's window, or a thread that fits it
+  // whole, leaves them at the top with no scroll to make: the next page is
+  // asked for as the view lands, and not again until it moves, so a page the
+  // host would not read does not spin the ask.
+  useEffect(() => {
+    const element = list.current;
+    if (!element || !thread || !reachesConversationHead(scrollMetrics(element))) return;
+    askForOlder();
+  }, [view]);
+
   const syncFollowing = () => {
     const element = list.current;
     if (!element) return;
+    const metrics = scrollMetrics(element);
+    if (anchor.current !== undefined) {
+      anchor.current = { ...anchor.current, height: metrics.scrollHeight };
+    }
     setFollowing((standing) => {
-      const next = followsConversationTail(scrollMetrics(element));
+      const next = followsConversationTail(metrics);
       return standing === next ? standing : next;
     });
+    if (reachesConversationHead(metrics)) askForOlder();
   };
 
   return (
@@ -226,6 +301,11 @@ export function ConversationPanel({
               </ConversationTurns>
             </div>
           </div>
+          {loadingOlder ? (
+            <p className="conversation-notice conversation-loading-older" role="status">
+              {LOADING_OLDER_NOTICE}
+            </p>
+          ) : null}
           {following ? null : (
             <ConversationJumpToBottomButton
               onClick={() => {

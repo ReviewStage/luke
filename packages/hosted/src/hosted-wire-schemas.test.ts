@@ -104,6 +104,8 @@ const EFFECT_MODULE_SCHEMAS = {
     turnReadCursorSchema: readsWire.turnReadCursorSchema,
     readLimitSchema: readsWire.readLimitSchema,
     conversationMessagesAnswerSchema: readsWire.conversationMessagesAnswerSchema,
+    historyReadCursorSchema: readsWire.historyReadCursorSchema,
+    conversationHistoryAnswerSchema: readsWire.conversationHistoryAnswerSchema,
     conversationEventsAnswerSchema: readsWire.conversationEventsAnswerSchema,
     brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
     childrenHeadSchema: readsWire.childrenHeadSchema,

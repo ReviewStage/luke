@@ -117,6 +117,10 @@
           "dest": "/api/default.js?route=conversation/events"
         },
         {
+          "src": "/api/conversation/history",
+          "dest": "/api/default.js?route=conversation/history"
+        },
+        {
           "src": "/api/conversation/messages",
           "dest": "/api/default.js?route=conversation/messages"
         },
