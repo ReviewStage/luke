@@ -11,6 +11,7 @@ import {
   type TranscriptSnapshot,
 } from "@sidecar/session";
 import { TRANSCRIPT_KIND, type TranscriptKind } from "@sidecar/wire";
+import { useLayoutEffect, useRef } from "react";
 import type { AgentsSnapshot, ChildrenSnapshot } from "#shared/messages/agents";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationUnreadableNotice } from "./conversation-panel";
@@ -280,9 +281,12 @@ export function AgentsPanel({
  * same. The header names the way back to the list, the conversation by the
  * title and status the row that opened it wore, and nothing is looked up
  * again. Nothing here is live: the words arrive settled, as stored turns, so
- * there is no streaming row, no listening row, and no Stop. Mounted under the
- * thread's own root, ids and blocked class alike, because the words are the
- * developer's and belong in no optional recording.
+ * there is no streaming row, no listening row, and no Stop. The page opens at
+ * its tail, as the thread does, and jumps there again only when the transcript
+ * gains a turn or another row is opened, so a re-read that adds nothing leaves
+ * a reader who scrolled up where they stand. Mounted under the thread's own
+ * root, ids and blocked class alike, because the words are the developer's and
+ * belong in no optional recording.
  */
 export function AgentTranscriptPanel({
   open,
@@ -312,6 +316,23 @@ export function AgentTranscriptPanel({
       ? transcript
       : undefined;
   const groups = own?.groups ?? [];
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const shown = useRef<{ row: TranscriptRow; count: number } | undefined>(undefined);
+
+  // Keyed on the row and the count rather than the snapshot: a re-read that
+  // hands back the same turns as a new array must not move a reader who
+  // scrolled up, nor may one that hands back fewer, while another row opened
+  // with as many turns jumps anew.
+  useLayoutEffect(() => {
+    const last = shown.current;
+    shown.current = { row: open, count: groups.length };
+    const sameRow = last?.row.conversationId === open.conversationId && last.row.kind === open.kind;
+    if (sameRow && groups.length <= last.count) return;
+    const element = scroller.current;
+    if (!element || groups.length === 0) return;
+    element.scrollTop = element.scrollHeight;
+  }, [open, groups.length]);
+
   return (
     <section
       className="conversation-view ph-no-capture"
@@ -328,28 +349,30 @@ export function AgentTranscriptPanel({
           {STATUS_WORD[open.status]}
         </span>
       </header>
-      {groups.length > 0 ? (
-        <div className="conversation-thread">
-          <div className="conversation-scroll">
-            <div className="conversation-pull">
-              <ConversationTurns
-                groups={groups}
-                roster={roster}
-                now={now}
-                onOpenChat={onOpenChat}
-              />
-            </div>
-          </div>
-        </div>
-      ) : own?.settled ? (
+      {groups.length === 0 && own?.settled ? (
         <div className="conversation-empty">
           <strong>Nothing said yet</strong>
         </div>
       ) : (
-        // Nothing read yet says neither "nothing said" nor a thread: the room
-        // stands empty until the first read lands, as the thread's does.
         <div className="conversation-thread">
-          <div className="conversation-scroll" />
+          <div className="conversation-scroll" ref={scroller}>
+            {groups.length > 0 ? (
+              <div className="conversation-pull">
+                <ConversationTurns
+                  groups={groups}
+                  roster={roster}
+                  now={now}
+                  onOpenChat={onOpenChat}
+                />
+              </div>
+            ) : (
+              // Nothing read yet says neither "nothing said" nor a thread: the
+              // room says it is still reading until the first read lands.
+              <div className="conversation-empty" role="status">
+                Loading…
+              </div>
+            )}
+          </div>
         </div>
       )}
       {own?.unreadable ? <ConversationUnreadableNotice /> : null}
