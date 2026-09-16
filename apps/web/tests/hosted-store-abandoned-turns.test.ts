@@ -20,6 +20,7 @@ import {
   readMessagesByConversationTyped,
   readTurnById,
   setConversationDeletedAt,
+  type TurnInsertRow,
 } from "./support/store-rows";
 
 /**
@@ -39,7 +40,7 @@ const writer = await database.run(
 );
 
 interface TurnFixture {
-  readonly status?: string;
+  readonly status?: TurnInsertRow["status"];
   readonly startedAgoMs: number;
   readonly userId?: string;
 }

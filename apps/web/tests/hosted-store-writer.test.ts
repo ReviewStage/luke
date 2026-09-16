@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { type ToolSet, tool, type UIMessage } from "ai";
-import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { eq } from "drizzle-orm";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
 import {
@@ -44,6 +44,8 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
@@ -283,13 +285,10 @@ const CountersRowSchema = Schema.Struct({
 
 async function counters(target: ConversationTarget) {
   const [row] = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select next_message_seq as message, next_event_seq as event
-        from conversations where id = ${target.conversationId}
-      `;
-    }),
+    db
+      .select({ message: conversations.nextMessageSeq, event: conversations.nextEventSeq })
+      .from(conversations)
+      .where(eq(conversations.id, target.conversationId)),
   );
   return row === undefined ? undefined : Schema.decodeUnknownSync(CountersRowSchema)(row);
 }
@@ -359,12 +358,10 @@ const RevisionRowSchema = Schema.Struct({ revision: EpochMillisColumnSchema });
 /** The conversation's journal revision as the row holds it. */
 async function journalRevision(target: ConversationTarget): Promise<number | undefined> {
   const [row] = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select journal_revision as revision from conversations where id = ${target.conversationId}
-      `;
-    }),
+    db
+      .select({ revision: conversations.journalRevision })
+      .from(conversations)
+      .where(eq(conversations.id, target.conversationId)),
   );
   return row === undefined ? undefined : Schema.decodeUnknownSync(RevisionRowSchema)(row).revision;
 }
@@ -1217,11 +1214,11 @@ test("events about a message are numbered by the conversation's own event sequen
   assert.equal(offered.ok && offered.seq, 1);
   assert.equal(claimed.ok && claimed.seq, 2);
   const stored = (await readEventsByConversation(database.run, target.conversationId))
-    .filter((row) => row.message_id === reply.id)
+    .filter((row) => row.messageId === reply.id)
     .map((row) => ({
       seq: Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq),
       kind: row.kind,
-      deviceId: row.device_id,
+      deviceId: row.deviceId,
       payload: row.payload,
     }));
   assert.deepEqual(stored, [

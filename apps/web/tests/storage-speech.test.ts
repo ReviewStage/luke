@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_TOOL,
@@ -20,6 +19,8 @@ import {
   unparsedWire,
   type WireRecord,
 } from "../server/core";
+import { devices } from "../server/db/devices-schema";
+import { db } from "../server/db/query";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
@@ -141,23 +142,30 @@ async function offered(userId?: string): Promise<Announced> {
 
 async function speechEvents(messageId: string) {
   const rows = await readEventsByMessage(database.run, messageId);
-  return rows.map((row) => ({ kind: row.kind, deviceId: row.device_id, payload: row.payload }));
+  return rows.map((row) => ({ kind: row.kind, deviceId: row.deviceId, payload: row.payload }));
 }
 
 async function reportQuiet(userId: string, deviceId: string, quietUntil: number | null) {
   await database.run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
       const at = quietUntil === null ? null : new Date(quietUntil);
       const installationId = `install-${deviceId}-${userId}`;
-      yield* sql`
-        insert into devices (id, user_id, installation_id, platform, quiet_until)
-        values (${deviceId}, ${userId}, ${installationId}, ${DEVICE_PLATFORM.MACOS}, ${at})
-        on conflict (id) do update
-          set user_id = excluded.user_id,
-              installation_id = excluded.installation_id,
-              quiet_until = excluded.quiet_until
-      `;
+      // Note that the conflicting update sets the values the insert carried
+      // rather than reading them back out of `excluded`, because a single-row
+      // insert's `excluded` row is exactly those values.
+      yield* db
+        .insert(devices)
+        .values({
+          id: deviceId,
+          userId,
+          installationId,
+          platform: DEVICE_PLATFORM.MACOS,
+          quietUntil: at,
+        })
+        .onConflictDoUpdate({
+          target: devices.id,
+          set: { userId, installationId, quietUntil: at },
+        });
     }),
   );
 }

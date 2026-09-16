@@ -18,6 +18,8 @@ import {
   readVoiceSessionByIdTyped,
   readVoiceSessionsByUserTyped,
   readVoiceTranscriptSegmentsBySession,
+  type VoiceSegmentInsertRow,
+  type VoiceSessionInsertRow,
 } from "./support/store-rows";
 
 /**
@@ -47,7 +49,7 @@ interface SessionOverrides {
   readonly liveSessionId?: string;
   readonly deviceId?: string | null;
   readonly closedAt?: Date | null;
-  readonly closeReason?: string | null;
+  readonly closeReason?: VoiceSessionInsertRow["closeReason"];
   readonly usage?: VoiceSessionUsage | null;
 }
 
@@ -66,7 +68,7 @@ async function insertSession(userId: string, row: SessionOverrides = {}): Promis
 
 interface SegmentOverrides {
   readonly seq?: number;
-  readonly role?: string;
+  readonly role?: VoiceSegmentInsertRow["role"];
   readonly startMs?: number;
   readonly endMs?: number;
 }

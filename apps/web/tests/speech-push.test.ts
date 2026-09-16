@@ -229,7 +229,7 @@ function fakeSender(answer: ApnsDelivery = APNS_DELIVERY.DELIVERED) {
 
 async function speechEvents(messageId: string) {
   const rows = await readEventsByMessage(database.run, messageId);
-  return rows.map((row) => ({ kind: row.kind, deviceId: row.device_id }));
+  return rows.map((row) => ({ kind: row.kind, deviceId: row.deviceId }));
 }
 
 async function deviceIds(userId: string): Promise<string[]> {

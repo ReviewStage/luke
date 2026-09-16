@@ -617,7 +617,7 @@ test("a session recorded while the send was refused, and retired too before the 
   // eve's ids sort by the instant they were minted, so the session opened last is the one the
   // forward-only claim leaves recorded.
   const parentRow = await readConversationById(database.run, parentId);
-  assert.equal(parentRow[0]?.runtime_session_id, OPENED_SESSION);
+  assert.equal(parentRow[0]?.runtimeSessionId, OPENED_SESSION);
 });
 
 test("a parent cleared while eve was refusing the send no longer stands when a session would be opened for it: said, counted undelivered, and nothing is opened", async () => {
@@ -675,5 +675,5 @@ test("a completion claimed beside the account's Clear takes its locks in the Cle
     assert.equal(eve.sent.length, 0);
   }
   const rows = await readConversationById(database.run, child.conversationId);
-  assert.notEqual(rows[0]?.deleted_at, null);
+  assert.notEqual(rows[0]?.deletedAt, null);
 });

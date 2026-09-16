@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { CHILD_STATUS, TURN_ORIGIN, TURN_STATUS } from "../server/core";
+import { db } from "../server/db/query";
+import { turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import type { AgentRecord } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertTurn, setConversationDeletedAt } from "./support/store-rows";
+import {
+  insertConversation,
+  insertTurn,
+  setConversationDeletedAt,
+  type TurnInsertRow,
+} from "./support/store-rows";
 
 /**
  * The agents directory over the real migrations on PGlite: the account's
@@ -45,7 +52,13 @@ async function agentOf(
 function turnOf(
   userId: string,
   conversationId: string,
-  row: { status: string; queuedAt: Date; startedAt?: Date; settledAt?: Date; failure?: string },
+  row: {
+    status: TurnInsertRow["status"];
+    queuedAt: Date;
+    startedAt?: Date;
+    settledAt?: Date;
+    failure?: string;
+  },
 ): Promise<string> {
   return insertTurn(database.run, {
     userId,
@@ -131,10 +144,12 @@ test("agents are listed by the instant they last changed, latest first, bounded 
 
   // The order is the head's: a turn queued first but settled last moves its agent to the front.
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update turns set settled_at = ${at(50)} where id = ${earlyTurn}`;
-    }),
+    Effect.asVoid(
+      db
+        .update(turns)
+        .set({ settledAt: at(50) })
+        .where(eq(turns.id, earlyTurn)),
+    ),
   );
   assert.deepEqual(ids(await database.run(database.store.directory.agents(userId, 10))), [
     early,
@@ -219,21 +234,21 @@ test("the agents head is the latest stamp any agent's latest turn reached, a sta
   const turn = await turnOf(userId, first, { status: TURN_STATUS.QUEUED, queuedAt: at(10) });
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(10)) });
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${at(20)} where id = ${turn}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.RUNNING, startedAt: at(20) })
+        .where(eq(turns.id, turn)),
+    ),
   );
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(20)) });
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${at(30)} where id = ${turn}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.SETTLED, settledAt: at(30) })
+        .where(eq(turns.id, turn)),
+    ),
   );
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(30)) });
 

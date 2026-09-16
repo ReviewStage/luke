@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { Effect, Option } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import {
   CHILD_STATUS,
@@ -10,6 +10,8 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
+import { db } from "../server/db/query";
+import { conversations, messages, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import type { ChildRecord } from "../server/hosted/store";
 import { openChildConversation, readChild } from "../server/hosted/store/children";
@@ -18,7 +20,9 @@ import {
   insertConversation,
   insertMessage,
   insertTurn,
+  type MessageRow,
   setConversationDeletedAt,
+  type TurnInsertRow,
 } from "./support/store-rows";
 
 /**
@@ -103,7 +107,7 @@ test("a child's status is its latest turn's: accepted before one runs, then runn
   const parent = await parentOf(userId, CONVERSATION_KIND.OBSERVED);
   const tracked = await childOf(userId, parent, { createdAt: at(1) });
   const turn = (row: {
-    status: string;
+    status: TurnInsertRow["status"];
     queuedAt: Date;
     startedAt?: Date;
     settledAt?: Date;
@@ -255,7 +259,7 @@ test("a child's task is the text of its first user line, cut to the wire's bound
   const userId = await database.createUser();
   const parent = await parentOf(userId);
   const tasked = await childOf(userId, parent, { createdAt: at(1) });
-  const line = (seq: number, role: string, parts: readonly unknown[]) =>
+  const line = (seq: number, role: MessageRow["role"], parts: readonly unknown[]) =>
     insertMessage(database.run, {
       userId,
       conversationId: tasked,
@@ -274,10 +278,9 @@ test("a child's task is the text of its first user line, cut to the wire's bound
   assert.equal(await task(), null);
 
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from messages where conversation_id = ${tasked} and seq = 2`;
-    }),
+    Effect.asVoid(
+      db.delete(messages).where(and(eq(messages.conversationId, tasked), eq(messages.seq, 2))),
+    ),
   );
   await line(2, MESSAGE_ROLE.USER, [
     { type: "text", text: "Draft the notes." },
@@ -325,12 +328,12 @@ test("the children head is the latest stamp any child reached, a Clear's stamp i
   });
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(10)) });
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.RUNNING}, started_at = ${at(20)} where id = ${turn}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.RUNNING, startedAt: at(20) })
+        .where(eq(turns.id, turn)),
+    ),
   );
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(20)) });
 
@@ -360,10 +363,12 @@ test("the children head is the latest stamp any child reached, a Clear's stamp i
   assert.deepEqual(await head(), { id: second, changedAt: instantText(at(35)) });
 
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update conversations set completion_delivered_at = ${at(40)} where id = ${first}`;
-    }),
+    Effect.asVoid(
+      db
+        .update(conversations)
+        .set({ completionDeliveredAt: at(40) })
+        .where(eq(conversations.id, first)),
+    ),
   );
   assert.deepEqual(await head(), { id: first, changedAt: instantText(at(40)) });
 

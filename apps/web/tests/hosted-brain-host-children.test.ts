@@ -49,8 +49,10 @@ import {
   insertMessage,
   insertTurn,
   instantColumn,
+  type MessageRow,
   readConversationById,
   readTurnById,
+  type TurnInsertRow,
 } from "./support/store-rows";
 
 /**
@@ -206,7 +208,7 @@ async function childOf(
     readonly createdAt?: Date;
     readonly runtimeSessionId?: string;
     readonly turn?: {
-      readonly status: string;
+      readonly status: TurnInsertRow["status"];
       readonly eveTurnId?: string;
       readonly startedAt?: Date;
       readonly settledAt?: Date;
@@ -533,7 +535,7 @@ test("a cancel eve refuses is answered as remaining; an ended child as done; a c
       remaining: [],
     });
     const rows = await readConversationById(database.run, child.childId);
-    assert.deepEqual(instantColumn(rows[0]?.deleted_at), at(0));
+    assert.deepEqual(instantColumn(rows[0]?.deletedAt), at(0));
     assert.equal(await withAccess(seams, (access) => access.cancel(child.childId)), undefined);
   }
   assert.deepEqual(
@@ -546,7 +548,7 @@ test("a cancel eve refuses is answered as remaining; an ended child as done; a c
     await database.run(dropChildConversation(fixture.userId, running.childId, at(0))),
     false,
   );
-  assert.equal((await readConversationById(database.run, running.childId))[0]?.deleted_at, null);
+  assert.equal((await readConversationById(database.run, running.childId))[0]?.deletedAt, null);
 
   // The drop and a turn's start race for one child: each takes the child's row lock for its
   // transaction, so exactly one lands, whichever the lock admits first. The test database
@@ -634,7 +636,7 @@ test("the conversations are the account's main, observed, and child conversation
 test("the lines are a child's own recent words, oldest first and bounded, and nothing for a child not this conversation's", async () => {
   const fixture = await standing();
   const child = await childOf(fixture, { task: "fixture one" });
-  const line = (seq: number, role: string, text: string | undefined, author: string) =>
+  const line = (seq: number, role: MessageRow["role"], text: string | undefined, author: string) =>
     insertMessage(database.run, {
       userId: fixture.userId,
       conversationId: child.childId,
@@ -732,7 +734,7 @@ test.skipIf(database.anotherConnection === undefined)(
       );
       await database.run(Fiber.join(turn));
       assert.equal(dropped, false);
-      assert.equal((await readConversationById(database.run, child.childId))[0]?.deleted_at, null);
+      assert.equal((await readConversationById(database.run, child.childId))[0]?.deletedAt, null);
     } finally {
       await another.dispose();
     }

@@ -233,12 +233,12 @@ const SegmentRowSchema = Schema.Struct({
   seq: Schema.Number,
   role: Schema.String,
   text: Schema.String,
-  start_ms: Schema.Number,
-  end_ms: Schema.Number,
+  startMs: Schema.Number,
+  endMs: Schema.Number,
 });
 
 const MessageRowSchema = Schema.Struct({
-  client_id: Schema.String,
+  clientId: Schema.String,
   role: Schema.String,
   parts: Schema.Unknown,
   metadata: Schema.Unknown,
@@ -258,7 +258,7 @@ async function segments(liveSessionId: string) {
   );
   return rows
     .map((row) => Schema.decodeUnknownSync(SegmentRowSchema)(row))
-    .map((row) => [row.seq, row.role, row.text, row.start_ms, row.end_ms]);
+    .map((row) => [row.seq, row.role, row.text, row.startMs, row.endMs]);
 }
 
 async function messageRows(
@@ -270,7 +270,7 @@ async function messageRows(
   return rows.map((row) => {
     const decoded = Schema.decodeUnknownSync(MessageRowSchema)(row);
     return {
-      clientId: decoded.client_id,
+      clientId: decoded.clientId,
       role: decoded.role,
       parts: decoded.parts,
       metadata: decoded.metadata,

@@ -7,9 +7,10 @@ import {
   MESSAGE_ROLE,
   RATING_WORD,
 } from "@sidecar/wire";
-import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { Schema } from "effect";
 import { afterAll, test } from "vitest";
+import { db } from "../server/db/query";
+import { events } from "../server/db/storage-schema";
 import { rateMessage, storeWriter } from "../server/hosted/store";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { RATING_REFUSAL, type RatingStore } from "../server/hosted/store/ratings";
@@ -91,9 +92,9 @@ test("a rating is one event on Luke's message, carrying the verdict, the note, a
     rows.map((row) => [
       row.id,
       Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.seq),
-      row.message_id,
+      row.messageId,
       row.kind,
-      row.device_id,
+      row.deviceId,
       row.payload,
     ]),
     [
@@ -206,14 +207,9 @@ test("a message the account does not own is not found, whether another account's
     { ok: false, refusal: RATING_REFUSAL.NOT_FOUND },
   );
   assert.equal(await database.run(database.store.ratings.latest(userId, reply)), undefined);
-  const allEvents = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select message_id from events`;
-    }),
-  );
+  const allEvents = await database.run(db.select({ messageId: events.messageId }).from(events));
   assert.equal(
-    allEvents.some((row) => row.message_id === reply),
+    allEvents.some((row) => row.messageId === reply),
     false,
   );
 });
