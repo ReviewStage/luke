@@ -24,6 +24,7 @@ import {
 } from "@sidecar/gateway";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
+  type ChildTranscriptSnapshot,
   type ConversationViewSnapshot,
   isSessionWriteResult,
   type ObservedWorkspaceProject,
@@ -53,6 +54,11 @@ import {
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
+import {
+  type ChildrenSnapshot,
+  childrenSnapshotSchema,
+  childTranscriptSnapshotSchema,
+} from "#shared/messages/children";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -73,6 +79,9 @@ export interface HostBootstrap {
   sessionsSettled: boolean;
   announcementsHeld: boolean;
   conversationView: ConversationViewSnapshot;
+  children: ChildrenSnapshot;
+  /** The one child's transcript the host holds open, absent while none is. */
+  childTranscript?: ChildTranscriptSnapshot;
   workspaceProjects: readonly ObservedWorkspaceProject[];
   calendars: readonly ObservedAccountCalendars[];
   calendarOnboardingOwed: boolean;
@@ -94,6 +103,11 @@ interface HostSettingsChange {
 interface HostSessionReplay {
   permitted: boolean;
   accountId?: string;
+}
+
+/** The open child's transcript as the host last told it; no transcript says none is open any more. */
+interface HostChildTranscript {
+  transcript: ChildTranscriptSnapshot | undefined;
 }
 
 export interface HostOperator {
@@ -176,6 +190,9 @@ export interface HostOperator {
   clearConversation(): Effect.Effect<boolean>;
   /** A read of the Conversation now: a spoken line settled and the record is being written, so the poll should not wait its cadence out. */
   refreshConversation(): Effect.Effect<void>;
+  /** One child's transcript held open on the host, read to its end and again as the children head moves; answers whether the host took it. */
+  openChildTranscript(childId: string): Effect.Effect<boolean>;
+  closeChildTranscript(): Effect.Effect<void>;
   /** Luke's notebook as the service holds it, for the Settings page that shows what he has saved; nothing when the host could not read it. */
   readNotebook(): Effect.Effect<NotebookReadResult | undefined>;
   /** The developer's thumb on one of Luke's messages, written by the host as a rating event on the service; a host that cannot be reached answers unavailable. */
@@ -210,6 +227,8 @@ export interface HostOperator {
   ): () => void;
   onAnnouncementsHeldChanged(listener: (held: boolean) => void): () => void;
   onConversationViewChanged(listener: (view: ConversationViewSnapshot) => void): () => void;
+  onChildrenChanged(listener: (children: ChildrenSnapshot) => void): () => void;
+  onChildTranscriptChanged(listener: (change: HostChildTranscript) => void): () => void;
   onCalendarOnboardingChanged(listener: (owed: boolean) => void): () => void;
   onIntroductionChanged(listener: (owed: boolean) => void): () => void;
   onConductorKeyOnboardingChanged(listener: (owed: boolean) => void): () => void;
@@ -473,6 +492,13 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         (answer) => record(answer)?.cleared === true,
       ),
     refreshConversation: () => fire(client.call(GATEWAY_METHOD.CONVERSATION_REFRESH)),
+    openChildTranscript: (childId) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId }),
+        (answer) => record(answer)?.opened === true,
+      ),
+    closeChildTranscript: () =>
+      fire(client.call(GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT)),
     readNotebook: () =>
       Effect.map(client.call(GATEWAY_METHOD.NOTEBOOK_READ), (answer) =>
         answer.ok
@@ -569,6 +595,32 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           isRecord(payload) && Array.isArray(payload.groups) && isWireBoolean(payload.settled)
             ? answered<ConversationViewSnapshot>(payload)
             : undefined,
+        listener,
+      ),
+    onChildrenChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHILDREN_CHANGED,
+        (payload) =>
+          Result.getOrUndefined(
+            readEither(childrenSnapshotSchema, { excess: EXCESS_KEYS.DROP })(payload),
+          ),
+        listener,
+      ),
+    onChildTranscriptChanged: (listener) =>
+      on(
+        GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
+        (payload): HostChildTranscript | undefined => {
+          if (!isRecord(payload)) return undefined;
+          // An empty record is the host saying none is open; anything else must read as a transcript.
+          if (Object.keys(payload).length === 0) return { transcript: undefined };
+          const read = readEither(childTranscriptSnapshotSchema, { excess: EXCESS_KEYS.DROP })(
+            payload,
+          );
+          // The groups are the host's own composed rows, restored to the view's type as the Conversation snapshot's are.
+          return Result.isSuccess(read)
+            ? { transcript: answered<ChildTranscriptSnapshot>(payload) }
+            : undefined;
+        },
         listener,
       ),
     onCalendarOnboardingChanged: (listener) =>

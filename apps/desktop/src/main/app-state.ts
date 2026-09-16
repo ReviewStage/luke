@@ -115,6 +115,8 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
     calendars: boot.calendars,
     voice: held.voice,
     conversation: boot.conversationView,
+    children: boot.children,
+    childTranscript: boot.childTranscript,
     announcements: { held: boot.announcementsHeld },
     onboarding: {
       calendarOwed: boot.calendarOnboardingOwed,
@@ -163,8 +165,10 @@ export function initialAppState(
     audio: { microphoneStatus: MICROPHONE_STATUS.NOT_DETERMINED },
     hotkeys: { talkHeld: true },
     voice: {},
-    // A run that sends nothing reads no Conversation, so its empty thread is settled from the start.
+    // A run that sends nothing reads no Conversation, so its empty thread and its empty children list are settled from the start.
     conversation: { groups: [], settled: !runMode.sendsNetwork },
+    children: { settled: !runMode.sendsNetwork, children: [] },
+    childTranscript: undefined,
     announcements: { held: false },
     onboarding: { calendarOwed: false, conductorKeyOwed: false },
     // Nothing plays until the launch's own gate says so; the window service

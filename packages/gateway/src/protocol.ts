@@ -58,6 +58,9 @@ const GATEWAY_METHODS = {
   CONVERSATION_RATE_MESSAGE: { name: "conversation.rateMessage", mutates: true },
   /** A read of the Conversation asked for now rather than at the poll's cadence: a spoken line settled, so the record is being written. */
   CONVERSATION_REFRESH: { name: "conversation.refresh", mutates: false },
+  /** One child's transcript held open on this device: read to its end now and again whenever the children head moves, until closed. */
+  CONVERSATION_OPEN_CHILD_TRANSCRIPT: { name: "conversation.openChildTranscript", mutates: true },
+  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: { name: "conversation.closeChildTranscript", mutates: true },
   /** Luke's notebook as the service holds it, read whole and bounded for the Settings page that shows what he has saved. */
   NOTEBOOK_READ: { name: "notebook.read", mutates: false },
   NODE_REGISTER: { name: "node.register", mutates: true },
@@ -309,6 +312,11 @@ export const conversationRateMessageResultSchema = Schema.Struct({
 });
 
 export type ConversationRateMessageResult = typeof conversationRateMessageResultSchema.Type;
+
+/** `conversation.openChildTranscript`: which child, by the id the children read listed it under, admitted as written so it matches the row the service holds. */
+export const conversationOpenChildTranscriptParamsSchema = Schema.Struct({
+  childId: keptText(512),
+});
 
 /**
  * One file of Luke's notebook as `notebook.read` carries it: where it stands
@@ -632,6 +640,10 @@ export type GatewayResponse = typeof GatewayResponseSchema.Type;
 export const GATEWAY_EVENT = {
   /** The Conversation as the service's reads compose it, whole, whenever a poll moved it. */
   CONVERSATION_VIEW_CHANGED: "conversationView.changed",
+  /** The account's children as the service's read lists them, whole, whenever a poll moved the list. */
+  CHILDREN_CHANGED: "children.changed",
+  /** The open child's transcript, whole, whenever a poll moved it; an empty payload says none is open. */
+  CHILD_TRANSCRIPT_CHANGED: "childTranscript.changed",
   NODE_CHANGED: "node.changed",
   SETTINGS_CHANGED: "settings.changed",
   ACCOUNT_CHANGED: "account.changed",

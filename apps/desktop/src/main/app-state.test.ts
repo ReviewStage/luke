@@ -190,6 +190,8 @@ const BOOT: HostBootstrap = {
   sessionsSettled: false,
   announcementsHeld: false,
   conversationView: { groups: [], settled: true },
+  children: { settled: true, children: [] },
+  childTranscript: { childId: "5e000000-0000-4000-8000-000000000001", groups: [], settled: true },
   workspaceProjects: [],
   calendars: [],
   calendarOnboardingOwed: false,
@@ -207,6 +209,12 @@ test("a host bootstrap lands in the document as the host answered it", () => {
   assert.equal(held.run.agentTraceEnabled, true);
   assert.equal(held.sessions.settled, false);
   assert.deepEqual(held.conversation, { groups: [], settled: true });
+  assert.deepEqual(held.children, { settled: true, children: [] });
+  assert.equal(held.childTranscript?.childId, "5e000000-0000-4000-8000-000000000001");
+  // A later bootstrap with no transcript open is the host having let it go.
+  const { childTranscript: _open, ...closed } = BOOT;
+  app.update(bootstrapPatch(app.snapshot(), closed));
+  assert.equal(app.snapshot().childTranscript, undefined);
   assert.deepEqual(held.sessionReplay, { permitted: true, accountId: "person", halted: false });
 });
 

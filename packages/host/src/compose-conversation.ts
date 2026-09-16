@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { ACTION_OUTPUT, ACTION_OUTPUT_STATUS, ACTIONS } from "@sidecar/actions";
 import { PRODUCT_EVENT, PRODUCT_RATED_MESSAGE_KIND } from "@sidecar/analytics";
 import { catalogToolSet } from "@sidecar/brain/tool-set";
@@ -6,6 +7,7 @@ import {
   type ConversationRateMessageResult,
   type ConversationRateStatus,
   carried,
+  conversationOpenChildTranscriptParamsSchema,
   conversationRateMessageParamsSchema,
   GATEWAY_EVENT,
   GATEWAY_METHOD,
@@ -14,6 +16,7 @@ import {
   type NotebookReadResult,
 } from "@sidecar/gateway";
 import {
+  type ChildRead,
   CONVERSATION_RATE_REFUSAL,
   CONVERSATION_READ_FAILURE,
   type ConversationMessagesAnswer,
@@ -24,6 +27,7 @@ import {
 } from "@sidecar/hosted";
 import { ObservationLoop } from "@sidecar/runtime";
 import type {
+  ChildTranscriptSnapshot,
   ConversationViewMessage,
   ConversationViewSnapshot,
   StoredToolPart,
@@ -64,11 +68,26 @@ const CONVERSATION_POLL_INTERVAL_MS = 5_000;
  */
 const MAX_PAGES_PER_POLL = 25;
 
+/**
+ * The account's children as this device holds them: the list the children
+ * read last answered, whole and newest first, and whether a read has landed
+ * at all, so an empty list says "not read yet" rather than "no children"
+ * until one has.
+ */
+export interface ChildrenSnapshot {
+  readonly settled: boolean;
+  readonly children: readonly ChildRead[];
+}
+
 export interface ConversationComposer extends Composer {
   /** The loop the merge's supervisor enables; the composer never enables it itself. */
   readonly loop: ObservationLoop;
   /** The Conversation as this device holds it now, for the bootstrap. */
   snapshot: () => ConversationViewSnapshot;
+  /** The children as this device holds them now, for the bootstrap. */
+  childrenSnapshot: () => ChildrenSnapshot;
+  /** The open child's transcript as this device holds it now, for the bootstrap; nothing while no child is open. */
+  childTranscriptSnapshot: () => ChildTranscriptSnapshot | undefined;
   /** Drops everything held, for a sign-out, and tells every client the thread is gone. */
   reset: () => void;
 }
@@ -76,7 +95,7 @@ export interface ConversationComposer extends Composer {
 /** The service's side of the reads, Clear, and the rating write, as the composer asks it: the client's calls and nothing of its construction. */
 export type ConversationReadsClient = Pick<
   HostedConversationClient,
-  "messages" | "events" | "turns" | "clear" | "rate" | "notebook"
+  "messages" | "childMessages" | "events" | "turns" | "children" | "clear" | "rate" | "notebook"
 >;
 
 /** The change signal's one call, the same client the devices composer restates presence through. */
@@ -139,6 +158,14 @@ function rateAnswer(status: ConversationRateStatus) {
  * reads it back. The count that follows names the verdict and whether the
  * message was a briefing or a reply, read from the held message rather than
  * from the caller, and never the message or its id.
+ *
+ * Beside the Conversation stand the account's children, the conversations a
+ * delegation opened: the list is read whole whenever the signal's children
+ * head moves, and told to every client as its own snapshot. One child's
+ * transcript may be held open at a time, on a picture of its own kept the
+ * way the Conversation's is and paged from the child's messages read; it is
+ * read when opened and again whenever the children head moves, and a close
+ * stops the reads and tells every client none is open.
  */
 export function composeConversation(dependencies: ConversationDependencies): ConversationComposer {
   const { kernel, settings, account, devices, refreshRoster, heads, client, onOpenOffers } =
@@ -148,6 +175,25 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const registry = catalogToolSet();
   const sync = new ConversationViewSync();
   let published = sync.revision;
+
+  // The children list as last read, and the head the signal answered for the
+  // poll that read it; the list takes no cursor, so the head kept is what the
+  // next signal's is compared to.
+  let children: ChildrenSnapshot = { settled: false, children: [] };
+  let childrenHead: string | undefined;
+  let childrenRevision = 0;
+  let publishedChildren = childrenRevision;
+
+  /** The one child open on this device, with a picture of its own kept the way the Conversation's is. */
+  interface OpenChild {
+    readonly childId: string;
+    readonly sync: ConversationViewSync;
+    /** Whether the last walk reached the transcript's end; one cut short by the bound or a read that did not land is resumed next poll. */
+    caughtUp: boolean;
+  }
+  let openChild: OpenChild | undefined;
+  /** What the clients were last told of the transcript: which child, at which revision; nothing while they were told none is open. */
+  let publishedTranscript: { readonly childId: string; readonly revision: number } | undefined;
 
   const gate = () => runMode.sendsNetwork && account.capabilitiesActive();
 
@@ -162,6 +208,36 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     published = sync.revision;
     kernel.emit(GATEWAY_EVENT.CONVERSATION_VIEW_CHANGED, carried(snapshot()));
     onOpenOffers?.(sync.openOffers(kernel.now()));
+  }
+
+  function childrenSnapshot(): ChildrenSnapshot {
+    return runMode.sendsNetwork ? children : { ...children, settled: true };
+  }
+
+  function publishChildren(): void {
+    if (childrenRevision === publishedChildren) return;
+    publishedChildren = childrenRevision;
+    kernel.emit(GATEWAY_EVENT.CHILDREN_CHANGED, carried(childrenSnapshot()));
+  }
+
+  function childTranscriptSnapshot(): ChildTranscriptSnapshot | undefined {
+    if (openChild === undefined) return undefined;
+    return { childId: openChild.childId, ...openChild.sync.snapshot() };
+  }
+
+  /** Tells every client the transcript as it stands, or that none is open, when either differs from what they were last told. */
+  function publishChildTranscript(): void {
+    const standing =
+      openChild === undefined
+        ? undefined
+        : { childId: openChild.childId, revision: openChild.sync.revision };
+    if (isDeepStrictEqual(standing, publishedTranscript)) return;
+    publishedTranscript = standing;
+    const transcript = childTranscriptSnapshot();
+    kernel.emit(
+      GATEWAY_EVENT.CHILD_TRANSCRIPT_CHANGED,
+      carried(transcript === undefined ? {} : transcript),
+    );
   }
 
   /**
@@ -261,40 +337,45 @@ export function composeConversation(dependencies: ConversationDependencies): Con
    * Pages one resource from the cursor held to its end, under the poll's
    * bound: each page is applied only while the poll still owns the loop, and
    * the one refusal a device acts on, an unreadable row, is written on the
-   * picture where the walk stops rather than passed over.
+   * picture where the walk stops rather than passed over. Answers whether the
+   * walk reached the end, so a caller whose head does not tell it can ask again.
    */
   const pageResource = /* @__PURE__ */ Effect.fnUntraced(function* <
     Answer extends { readonly hasMore: boolean },
   >(
     generation: number,
+    picture: ConversationViewSync,
     read: (
       after: string | undefined,
     ) => Effect.Effect<ConversationReadResult<Answer>, never, HttpClient.HttpClient>,
     cursor: () => string | undefined,
     apply: (answer: Answer, epoch: number) => Effect.Effect<boolean>,
-  ): Effect.fn.Return<void, never, HttpClient.HttpClient> {
+  ): Effect.fn.Return<boolean, never, HttpClient.HttpClient> {
     for (let pages = 0; pages < MAX_PAGES_PER_POLL; pages += 1) {
-      const epoch = sync.clearEpoch;
+      const epoch = picture.clearEpoch;
       const result = yield* read(cursor());
-      if (!loop.isCurrent(generation)) return;
+      if (!loop.isCurrent(generation)) return false;
       if (!result.ok) {
         // A refusal names a row of the thread as it stood when the read went
         // out; a Clear taken meanwhile stamped that thread, and the notice is not written over the new one.
         if (
           result.failure === CONVERSATION_READ_FAILURE.UNREADABLE_ROW &&
-          sync.clearEpoch === epoch
+          picture.clearEpoch === epoch
         ) {
-          sync.markUnreadable(result.row);
+          picture.markUnreadable(result.row);
         }
-        return;
+        return false;
       }
-      if (!(yield* apply(result.answer, epoch)) || !result.answer.hasMore) return;
+      if (!(yield* apply(result.answer, epoch))) return false;
+      if (!result.answer.hasMore) return true;
     }
+    return false;
   });
 
   const pageMessages = (generation: number) =>
     pageResource(
       generation,
+      sync,
       (after) => client.messages({ after }),
       () => sync.cursors().messages,
       (answer, epoch) =>
@@ -314,6 +395,7 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const pageEvents = (generation: number) =>
     pageResource(
       generation,
+      sync,
       (after) => client.events({ after }),
       () => sync.cursors().events,
       (answer) =>
@@ -326,11 +408,62 @@ export function composeConversation(dependencies: ConversationDependencies): Con
   const pageTurns = (generation: number) =>
     pageResource(
       generation,
+      sync,
       (after) => client.turns({ after }),
       () => sync.cursors().turns,
       (answer) =>
         Effect.sync(() => {
           sync.applyTurns(answer.turns, answer.next);
+          return true;
+        }),
+    );
+
+  /**
+   * The children list, read whole: the read takes no cursor, so the head the
+   * signal answered is kept beside the list and the next signal's is compared
+   * to it. A read that did not land leaves the head where it was, so the next
+   * poll asks again; one that answered the same list moves nothing. An open
+   * child the list no longer names — stamped by a Clear on any Mac, or fallen
+   * past the list's bound — is closed, since its transcript would read as
+   * not found on every poll from here and nothing could open it again.
+   */
+  const readChildrenList = (generation: number, head: string | undefined) =>
+    Effect.map(client.children(), (result) => {
+      if (!loop.isCurrent(generation) || !result.ok) return;
+      childrenHead = head;
+      const next: ChildrenSnapshot = { settled: true, children: result.answer.children };
+      if (
+        openChild !== undefined &&
+        !next.children.some((child) => child.id === openChild?.childId)
+      ) {
+        openChild = undefined;
+      }
+      if (isDeepStrictEqual(children, next)) return;
+      children = next;
+      childrenRevision += 1;
+    });
+
+  /**
+   * The open child's transcript, paged from its own cursor to its end the way
+   * the Conversation's messages are, onto the picture the open kept for it. A
+   * page landing after the child was closed, or another opened in its place,
+   * is dropped: the picture it was for is nobody's to publish.
+   */
+  const pageChild = (generation: number, held: OpenChild) =>
+    pageResource(
+      generation,
+      held.sync,
+      (after) => client.childMessages(held.childId, { after }),
+      () => held.sync.cursors().messages,
+      (answer, epoch) =>
+        Effect.gen(function* () {
+          const read = yield* readPage(answer);
+          if (!loop.isCurrent(generation) || openChild !== held) return false;
+          if ("unreadable" in read) {
+            if (held.sync.clearEpoch === epoch) held.sync.markUnreadable(read.unreadable);
+            return false;
+          }
+          held.sync.applyMessages(read.page);
           return true;
         }),
     );
@@ -349,12 +482,27 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     const readMessages = signal === undefined || signal.messages !== cursors.messages;
     const readEvents = signal === undefined || signal.events !== cursors.events;
     const readTurns = signal === undefined || signal.turns !== cursors.turns;
+    // The list is read once before any head is held, so a signal naming no
+    // child still settles it; after that, only when the head moves.
+    const readChildren =
+      signal === undefined || signal.children !== childrenHead || !children.settled;
     // Messages before turns within a poll, so the turn a group carries is never
     // older than the row the turns resource answered a moment before it.
     if (readMessages) yield* pageMessages(generation);
     if (readEvents) yield* pageEvents(generation);
     if (readTurns) yield* pageTurns(generation);
-    if (loop.isCurrent(generation)) publish();
+    if (readChildren) yield* readChildrenList(generation, signal?.children);
+    // The open transcript follows the list, since a child's turns move the
+    // same head; one just opened, or one whose last walk was cut short, has
+    // more to read whatever the head did.
+    const held = openChild;
+    if (held !== undefined && (readChildren || !held.caughtUp)) {
+      held.caughtUp = yield* pageChild(generation, held);
+    }
+    if (!loop.isCurrent(generation)) return;
+    publish();
+    publishChildren();
+    publishChildTranscript();
   });
 
   /**
@@ -399,7 +547,13 @@ export function composeConversation(dependencies: ConversationDependencies): Con
 
   function reset(): void {
     sync.reset();
+    children = { settled: false, children: [] };
+    childrenHead = undefined;
+    childrenRevision += 1;
+    openChild = undefined;
     publish();
+    publishChildren();
+    publishChildTranscript();
   }
 
   const methods: GatewayMethodTable = {
@@ -419,12 +573,43 @@ export function composeConversation(dependencies: ConversationDependencies): Con
         // picture drops the stamped main's groups and the observed rows from
         // before the new main opened, and every client is told, before any read
         // is waited on — a read that fails to land cannot leave the old thread
-        // standing behind an answer that said it was cleared. The pass that
-        // follows moves the cursors onto the new main.
+        // standing behind an answer that said it was cleared. The open
+        // transcript goes with it, since the Clear stamped the child it was
+        // of; the pass that follows moves the cursors onto the new main and
+        // reads the list the stamps moved the head of.
         sync.applyClear(answer.openedAt);
+        openChild = undefined;
         publish();
+        publishChildTranscript();
         yield* pollAfter;
         return { cleared: true };
+      }),
+    // One child's transcript, held open on this device and read to its end
+    // now and again whenever the children head moves, until closed. One
+    // child at a time: opening another replaces the one open, and a page still
+    // out for the replaced child is dropped when it lands. The clients are
+    // told at once that it is open and empty, and the pass asked for here
+    // fills it; behind a closed gate nothing could be read, so nothing is held.
+    [GATEWAY_METHOD.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(conversationOpenChildTranscriptParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("opening a child transcript names one child");
+        }
+        if (!gate()) return { opened: false };
+        const { childId } = read.success;
+        if (openChild?.childId !== childId) {
+          openChild = { childId, sync: new ConversationViewSync(), caughtUp: false };
+          publishChildTranscript();
+        }
+        yield* loop.refresh;
+        return { opened: true };
+      }),
+    [GATEWAY_METHOD.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: () =>
+      Effect.sync(() => {
+        openChild = undefined;
+        publishChildTranscript();
+        return {};
       }),
     // The notebook read for the Settings page: the same gate as Clear, since a
     // run that sends nothing or an account whose capabilities are down has
@@ -471,6 +656,8 @@ export function composeConversation(dependencies: ConversationDependencies): Con
     methods,
     loop,
     snapshot,
+    childrenSnapshot,
+    childTranscriptSnapshot,
     reset,
     // The supervisor the account gate arms owns this loop's cadence, and its
     // disarm runs before any composer stops, so this concern holds nothing of

@@ -231,6 +231,17 @@ export interface ConversationViewSnapshot {
   readonly unreadable?: UnreadableRow;
 }
 
+/**
+ * One child's transcript as a device holds it while the child is open: the
+ * child by its id, its turn groups in the same shape the Conversation's are,
+ * so whatever draws the Conversation draws this unchanged, whether a read
+ * has landed, and the row the latest read could not read back. At most one
+ * child is open on a device at a time; a closed one is no snapshot at all.
+ */
+export interface ChildTranscriptSnapshot extends ConversationViewSnapshot {
+  readonly childId: string;
+}
+
 function toolKindOf(
   part: StoredToolPart,
   toolKinds: ConversationViewToolKinds,

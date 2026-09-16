@@ -9,6 +9,7 @@ import {
 } from "@sidecar/feedback";
 import {
   type ConversationRateMessageResult,
+  conversationOpenChildTranscriptParamsSchema,
   conversationRateMessageParamsSchema,
   conversationRateMessageResultSchema,
   LIVE_SDP_MAX_CHARACTERS,
@@ -46,6 +47,7 @@ import type { WindowMode } from "@sidecar/surface";
 import {
   EXCESS_KEYS,
   isRecord,
+  isWireBoolean,
   isWireString,
   SCHEMA_REFUSAL,
   type SchemaPath,
@@ -118,6 +120,15 @@ export const ACT_KIND = {
    * The one write the tab makes about a message, and the panel's alone.
    */
   CONVERSATION_RATE_MESSAGE: "conversation.rateMessage",
+  /**
+   * One child's transcript held open on this Mac: the panel asks the host to
+   * read it to its end and again whenever the children head moves, and to
+   * stop when it lets go of it. One at a time, and the transcript arrives on
+   * the document rather than as the answer; the open answers whether the
+   * host took it.
+   */
+  CONVERSATION_OPEN_CHILD_TRANSCRIPT: "conversation.openChildTranscript",
+  CONVERSATION_CLOSE_CHILD_TRANSCRIPT: "conversation.closeChildTranscript",
   /**
    * The Settings tab's Memory page asking what Luke has saved: his notebook
    * as the service holds it, carried through the host's one read of it and
@@ -546,6 +557,14 @@ export const ACT = {
     ),
     refusal: "Could not record that rating on this system.",
   },
+  [ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT]: {
+    payload: actSchema(conversationOpenChildTranscriptParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not open that transcript on this system.",
+  },
+  [ACT_KIND.CONVERSATION_CLOSE_CHILD_TRANSCRIPT]: press(
+    "Could not close that transcript on this system.",
+  ),
   [ACT_KIND.NOTEBOOK_READ]: {
     payload: noPayload,
     result: wireResult<NotebookReadResult | undefined>(
