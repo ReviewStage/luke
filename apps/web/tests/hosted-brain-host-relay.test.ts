@@ -640,7 +640,13 @@ it.effect(
               turnId: "turn_0",
               sequence: 0,
               code: "model_error",
-              message: "upstream failed",
+              message: "upstream failed: key sk-fixture refused",
+              details: {
+                name: "AI_APICallError",
+                statusCode: 429,
+                apiErrorMessage: "key sk-fixture refused",
+                detail: "Error: at fixture.ts:1",
+              },
             },
           }),
           failedStanding,
@@ -649,6 +655,29 @@ it.effect(
       const failedRows = await rows(failed);
       assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
       assert.equal(failedRows.turnRows[0]?.failure, "model");
+      // The row keeps eve's code and the fixed words of its details, and none of the provider's or the stack's own.
+      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error AI_APICallError 429");
+
+      // A name not shaped like an error's class name is an unrecognized error's own, and no word of those details is kept.
+      const unshaped = await conversation();
+      const unshapedStanding = standingFor(unshaped, BRAIN_HOST_TURN.TYPED);
+      await play(events.slice(0, requested + 1), unshapedStanding);
+      await database.run(
+        relay.handle(
+          stamped({
+            type: "turn.failed",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              code: "model_error",
+              message: "refused",
+              details: { name: "token sk-fixture", statusCode: 401 },
+            },
+          }),
+          unshapedStanding,
+        ),
+      );
+      assert.equal((await rows(unshaped)).turnRows[0]?.failureDetail, "model_error");
       const failedJournal = failedRows.messageRows.find(
         (row) => row.role === MESSAGE_ROLE.ASSISTANT,
       );

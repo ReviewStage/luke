@@ -227,6 +227,8 @@ export type BrainRunEventBody =
       readonly kind: typeof BRAIN_RUN_EVENT.TURN_ENDED;
       readonly status: BrainRequestStatus;
       readonly failure?: BrainRequestFailure;
+      /** Why the run failed in the runtime's own words, bounded, for the record's diagnosis; never worded to the developer. */
+      readonly failureDetail?: string;
       /** What the turn's inferences cost, split four ways, as the run kept them; absent when no inference answered. */
       readonly usage?: BrainRunUsage;
       /** The id of every response the turn was answered with, in order. */

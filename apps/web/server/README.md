@@ -1227,7 +1227,12 @@ id, its soft-delete instant, and the two counters that number its messages
 and events. A message is one AI SDK `UIMessage`, its parts and metadata as
 plain `jsonb`, unique on `(conversation_id, client_id)` as its idempotency
 key; a turn is one run's origin, status, model, prompt and tool-set hashes,
-response ids, usage, timings, and failure. An event is one thing that
+response ids, usage, timings, and failure, with why the runtime failed one
+in `failure_detail`: eve's failure code, the host's own refusal word where
+that is what was thrown, and the error's class name, eve's catalog id, and
+status codes where eve's details carry them, never the provider's or the
+stack's own words, cut to 500 characters by the writer and read by nothing
+but a query. An event is one thing that
 happened to a message after it was written, numbered by the conversation's
 own event sequence, unique on `(conversation_id, seq)` like a message: a
 briefing's `speech.offered`, `speech.claimed`, `speech.spoken`,
@@ -1523,11 +1528,16 @@ logic lives in `server/hosted/observation-tick.ts` and
 `server/hosted/observation-pass.ts`; the route hands them the deployment's
 seams and the account query. Vercel crons run only on production deployments.
 
-Two things ride on the tick because it is the one schedule the service runs,
-and neither observes anything: the purge of conversations a Clear stamped
-past their retention window, and the sweep over the briefings still on offer
-described under the hosted store above, which reads the offers' events and
-the devices' quiet instants and never a word.
+Three things ride on the tick because it is the one schedule the service
+runs, and none observes anything: the purge of conversations a Clear stamped
+past their retention window; the sweep over turns still running an hour
+after they started (`server/hosted/store/abandoned-turns.ts`,
+`TURN_ABANDON.AFTER_MS`), whose end the relay never heard and which are
+settled as failed for `abandoned` through the same write the relay's own end
+takes, at most fifty a tick and counted as `abandoned` in the tick's answer;
+and the sweep over the briefings still on offer described under the hosted
+store above, which reads the offers' events and the devices' quiet instants
+and never a word.
 
 The tick needs `CRON_SECRET`, which Vercel sends as the bearer on every
 scheduled call once it is set in the project. Without it the route answers
@@ -1571,7 +1581,7 @@ them.
 The opener (`server/hosted/brain-host/opener.ts`) is what the snapshot is
 kept for. It runs for each account right after that account's pass, inside
 the same 25-second share of the tick, so the tick's order is: forget the
-ineligible, purge, sweep the briefings on offer, then per batch of four
+ineligible, purge, settle the abandoned turns, sweep the briefings on offer, then per batch of four
 accounts the pass and then the opening, each account under one deadline, and
 a batch started only while a whole deadline still fits the budget; an
 opening that outruns it is counted failed and what it did not carry waits

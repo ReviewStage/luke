@@ -51,6 +51,12 @@ export const BRAIN_REQUEST_FAILURE = {
    * the ask can be made again once the model or the network is back.
    */
   COMPACTION: "compaction",
+  /**
+   * The run's end was never heard: the turn stood running past the abandon
+   * bound and the scheduled sweep settled it, so its record says the run
+   * was lost rather than that it is still going.
+   */
+  ABANDONED: "abandoned",
 } as const;
 
 export type BrainRequestFailure =

@@ -31,6 +31,7 @@ import { handleObserve } from "./hosted/observe.js";
 import type { PosthogPerson } from "./hosted/posthog.js";
 import { handleProjects } from "./hosted/projects.js";
 import { pushSpeech, type SpeechPushOutcome } from "./hosted/speech-push.js";
+import { sweepAbandonedTurns } from "./hosted/store/abandoned-turns.js";
 import {
   hostedStore,
   type SpeechSweepOutcome,
@@ -287,6 +288,12 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
         : Effect.void,
     purgeCleared: (now) =>
       store ? store.retention.purgeCleared(new Date(now)) : Effect.succeed(0),
+    sweepAbandonedTurns: (now) =>
+      store === undefined
+        ? Effect.succeed(0)
+        : Effect.flatMap(storeWriter({ tools: CATALOG_TOOL_SET }), (writer) =>
+            sweepAbandonedTurns({ writer }, { now }),
+          ),
     sweepSpeech: (now) =>
       store === undefined
         ? Effect.succeed(NOTHING_SWEPT)

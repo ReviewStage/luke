@@ -214,6 +214,7 @@ const TurnRowSchema = Schema.Struct({
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
+  failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
 }).pipe(
   Schema.encodeKeys({
@@ -227,6 +228,7 @@ const TurnRowSchema = Schema.Struct({
     queuedAt: "queued_at",
     startedAt: "started_at",
     settledAt: "settled_at",
+    failureDetail: "failure_detail",
     cancelRequestedAt: "cancel_requested_at",
   }),
 );

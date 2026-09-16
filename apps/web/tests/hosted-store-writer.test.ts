@@ -49,7 +49,11 @@ import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
-import { STORE_WRITE_REFUSAL, type StoreWriteResult } from "../server/hosted/store/writer";
+import {
+  STORE_WRITE_REFUSAL,
+  type StoreWriteResult,
+  TURN_FAILURE_DETAIL,
+} from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -232,6 +236,7 @@ class Stream {
     status: (typeof BRAIN_REQUEST_STATUS)[keyof typeof BRAIN_REQUEST_STATUS],
     options: {
       failure?: TurnFailure;
+      failureDetail?: string;
       responseIds?: readonly string[];
       at?: number;
     } = {},
@@ -240,6 +245,9 @@ class Stream {
       kind: BRAIN_RUN_EVENT.TURN_ENDED,
       status,
       ...(options.failure !== undefined ? { failure: options.failure } : undefined),
+      ...(options.failureDetail !== undefined
+        ? { failureDetail: options.failureDetail }
+        : undefined),
       usage: { inputTokens: 120, outputTokens: 30, cachedInputTokens: 40, reasoningTokens: 10 },
       responseIds: options.responseIds ?? [],
       at: options.at ?? NOW + 1_000,
@@ -799,12 +807,16 @@ test("a turn that ends with a call unanswered settles the call as an answer whos
   assert.deepEqual(again, { ok: true, effect: STORE_WRITE_EFFECT.REPEATED });
 });
 
-test("a turn that failed records its failure word, and one that timed out without a word records the status it ended in", async () => {
+test("a turn that failed records its failure word and detail cut to the bound, and one that timed out without a word records the status it ended in", async () => {
   const target = await conversation();
   const failed = new Stream();
+  const detail = "MODEL_CALL_FAILED: fixture refusal";
   await feed(target, [
     failed.started(BRAIN_TURN_ORIGIN.SPOKEN, BRAIN_TURN_TRIGGER.ASK),
-    failed.ended(BRAIN_REQUEST_STATUS.FAILED, { failure: MODEL_FAILURE }),
+    failed.ended(BRAIN_REQUEST_STATUS.FAILED, {
+      failure: MODEL_FAILURE,
+      failureDetail: detail.padEnd(TURN_FAILURE_DETAIL.CHARS + 40, "."),
+    }),
   ]);
   const timedOut = new Stream();
   await feed(target, [
@@ -817,9 +829,16 @@ test("a turn that failed records its failure word, and one that timed out withou
     [failedTurn?.origin, failedTurn?.status, failedTurn?.failure],
     [TURN_ORIGIN.SPOKEN, TURN_STATUS.FAILED, MODEL_FAILURE],
   );
+  assert.equal(failedTurn?.failureDetail?.length, TURN_FAILURE_DETAIL.CHARS);
+  assert.ok(failedTurn?.failureDetail?.startsWith(detail));
   assert.deepEqual(
-    [timedOutTurn?.origin, timedOutTurn?.status, timedOutTurn?.failure],
-    [TURN_ORIGIN.HOLD_RELEASE, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT],
+    [
+      timedOutTurn?.origin,
+      timedOutTurn?.status,
+      timedOutTurn?.failure,
+      timedOutTurn?.failureDetail,
+    ],
+    [TURN_ORIGIN.HOLD_RELEASE, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
   );
 });
 

@@ -428,6 +428,9 @@ function turnStatusOf(status: BrainRequestStatus): TurnStatus {
   }
 }
 
+/** The longest a failed turn's detail is kept, in characters, cut from the end here whatever its teller sent. */
+export const TURN_FAILURE_DETAIL = { CHARS: 500 } as const;
+
 const TERMINAL_TURN_STATUSES: ReadonlySet<TurnStatus> = new Set([
   TURN_STATUS.SETTLED,
   TURN_STATUS.CANCELLED,
@@ -898,6 +901,7 @@ const settleTurn = SqlSchema.void({
     status: TurnStatusSchema,
     settledAt: Schema.Date,
     failure: Schema.NullOr(Schema.String),
+    failureDetail: Schema.NullOr(Schema.String),
     usage: Schema.NullOr(Schema.fromJsonString(TurnUsageColumnSchema)),
     responseIds: Schema.Array(Schema.String),
   }),
@@ -908,6 +912,7 @@ const settleTurn = SqlSchema.void({
         set status = ${row.status},
             settled_at = ${row.settledAt},
             failure = ${row.failure},
+            failure_detail = ${row.failureDetail},
             usage = ${row.usage}::jsonb,
             response_ids = ${emptyTextArray(sql, row.responseIds)}
         where id = ${row.turnId}
@@ -1309,6 +1314,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     status,
     settledAt,
     failure: nullable(failure),
+    failureDetail: nullable(event.failureDetail?.slice(0, TURN_FAILURE_DETAIL.CHARS)),
     usage: nullable(event.usage),
     responseIds: event.responseIds,
   });
