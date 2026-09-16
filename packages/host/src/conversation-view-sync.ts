@@ -50,8 +50,9 @@ import { Result } from "effect";
  * announcement's unspoken mark, the developer's latest rating — are amended
  * by the newer events read since, a second rating being a second event and
  * never an edit. Every device that reads to the end holds the same rows in
- * the same order, because the order is the view's own — earliest message,
- * then the turn's queue instant, then the id — and never the order of arrival.
+ * the same order, because the order is the view's own — earliest placed
+ * message, then the turn's queue instant, then the id — and never the order
+ * of arrival.
  */
 
 /** How much of the Conversation one device keeps in memory and hands its windows: the newest turns, whole. */
@@ -467,7 +468,7 @@ export class ConversationViewSync {
           source: held.source,
           messages: messages.map((message) => this.#withRating(this.#withSpeech(message))),
         },
-        instant: Math.min(...messages.map((message) => message.createdAt)),
+        instant: Math.min(...messages.map((message) => message.placedAt)),
         queuedAt: turn?.queuedAt ?? Number.MAX_SAFE_INTEGER,
       };
     });

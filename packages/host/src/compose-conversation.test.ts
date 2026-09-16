@@ -98,6 +98,7 @@ function messagesAnswer(text: string, next = "messages-head"): ConversationMessa
             },
             seq: 1,
             createdAt: NOW,
+            placedAt: NOW,
             tools: [],
           },
           {
@@ -109,6 +110,7 @@ function messagesAnswer(text: string, next = "messages-head"): ConversationMessa
             },
             seq: 2,
             createdAt: NOW,
+            placedAt: NOW,
             tools: [],
             rating: { rating: MESSAGE_RATING.UP },
           },
@@ -491,6 +493,7 @@ function withThirdRow(parts: WireValue[]): ConversationMessagesAnswer {
             },
             seq: 3,
             createdAt: NOW + 1,
+            placedAt: NOW + 1,
             tools: [],
           },
         ],

@@ -31,6 +31,7 @@
           },
           "seq": 1,
           "createdAt": 1757505600000,
+          "placedAt": 1757505600000,
           "tools": []
         }
       ]
@@ -80,6 +81,7 @@
           },
           "seq": 2,
           "createdAt": 1757505690000,
+          "placedAt": 1757505690000,
           "tools": [
             {
               "toolCallId": "call_1a0000000000000011",

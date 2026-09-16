@@ -195,7 +195,7 @@ async function viewMarksUnspoken(row: Announced): Promise<boolean> {
     observed: [
       {
         session: SESSION,
-        messages: [{ message, seq: 1, turnId: row.turnId, createdAt: NOW }],
+        messages: [{ message, seq: 1, turnId: row.turnId, createdAt: NOW, placedAt: NOW }],
       },
     ],
     turns: [

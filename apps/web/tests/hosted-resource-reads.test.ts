@@ -365,7 +365,7 @@ class Device {
         turnId,
         group,
         messages,
-        instant: Math.min(...messages.map((message) => message.createdAt)),
+        instant: Math.min(...messages.map((message) => message.placedAt)),
       };
     });
     placed.sort(
@@ -527,6 +527,54 @@ it.effect(
         [
           [spoken, spoken, [transcript, reply]],
           [unowned, undefined, [unowned]],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "the page carries where each row is placed, and a spoken row placed before a typed turn's rows were written is answered ahead of them",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const main = await insertConversation(userId);
+      const typed = await insertTurn(userId, main, { queuedAt: new Date(NOW) });
+      const spoken = await insertTurn(userId, main, {
+        origin: TURN_ORIGIN.SPOKEN,
+        queuedAt: new Date(NOW + 20_000),
+      });
+      const ask = await insertMessage(userId, main, 1, { turnId: typed });
+      // Written at settle, twenty seconds after the typed ask, but its words began five seconds before it.
+      const line = await insertMessage(userId, main, 2, {
+        clientId: "dl_placed",
+        turnId: spoken,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: "vs_1",
+          delegation_id: "dl_placed",
+          from_ms: 0,
+          to_ms: 2_500,
+        },
+        parts: [{ type: "text", text: "Before the typing." }],
+        createdAt: new Date(NOW + 21_000),
+        placedAt: new Date(NOW - 4_000),
+      });
+
+      const device = new Device(userId, 10);
+      const answer = await device.poll();
+      assert.deepEqual(device.ordered(), [
+        [spoken, line],
+        [typed, ask],
+      ]);
+      // The page itself comes in the view's order, each row saying where it was written and where it stands.
+      assert.deepEqual(
+        answer.groups.flatMap((group) =>
+          group.messages.map((row) => [row.createdAt, row.placedAt] as const),
+        ),
+        [
+          [NOW + 21_000, NOW - 4_000],
+          [NOW + 1_000, NOW + 1_000],
         ],
       );
     }),

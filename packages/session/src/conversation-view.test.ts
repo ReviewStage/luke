@@ -131,7 +131,13 @@ async function readRows(rows: readonly FixtureRow[]): Promise<ConversationViewSt
   return read.map((message, index) => {
     const row = rows[index];
     if (row === undefined) throw new Error("unreachable");
-    return { message, seq: row.seq, turnId: row.turnId, createdAt: row.createdAt };
+    return {
+      message,
+      seq: row.seq,
+      turnId: row.turnId,
+      createdAt: row.createdAt,
+      placedAt: row.placedAt,
+    };
   });
 }
 
@@ -569,9 +575,9 @@ test("groups are ordered by time across main and the observed conversations, wha
 test("groups whose earliest messages share an instant fall back to the queue order, then the turn id", async () => {
   const typed = await loadView(FIXTURE.TYPED_ASK);
   const child = await loadView(FIXTURE.CHILD_COMPLETION);
-  const instant = typed.main[0]?.createdAt ?? 0;
+  const instant = typed.main[0]?.placedAt ?? 0;
   const sameInstant = (rows: readonly ConversationViewStoredMessage[]) =>
-    rows.map((row, index) => ({ ...row, createdAt: instant + index }));
+    rows.map((row, index) => ({ ...row, placedAt: instant + index }));
   const main = [...sameInstant(typed.main), ...sameInstant(child.main)];
   const [typedTurn] = typed.turns;
   const [childTurn] = child.turns;
@@ -583,6 +589,34 @@ test("groups whose earliest messages share an instant fall back to the queue ord
   assert.deepEqual(order([typedTurn, childTurn]), [TURN.TYPED, TURN.CHILD]);
   assert.deepEqual(order([childTurn]), [TURN.CHILD, TURN.TYPED]);
   assert.deepEqual(order([]), [TURN.TYPED, TURN.CHILD]);
+});
+
+test("groups are ordered by where their earliest row is placed, not by when it was written: a spoken row whose words began before a typed ask was written comes first", async () => {
+  const typed = await loadView(FIXTURE.TYPED_ASK);
+  const spoken = await loadView(FIXTURE.SPOKEN_ASK);
+  const typedInstant = typed.main[0]?.placedAt ?? 0;
+  // The spoken rows were written after the typed turn's rows, at settle, but
+  // their words began before the typed ask was written; the spoken turn was
+  // also queued later, so nothing but the placed instant puts it first.
+  const spokenRows = spoken.main.map((row, index) => ({
+    ...row,
+    createdAt: typedInstant + 10_000 + index,
+    placedAt: typedInstant - 5_000 + index,
+  }));
+  const spokenTurns = spoken.turns.map((turn) => ({ ...turn, queuedAt: typedInstant + 10_000 }));
+  const groups = selectConversationView({
+    ...typed,
+    main: [...typed.main, ...spokenRows],
+    turns: [...typed.turns, ...spokenTurns],
+  });
+  assert.deepEqual(
+    groups.map((group) => group.turnId),
+    [TURN.SPOKEN, TURN.TYPED],
+  );
+  assert.deepEqual(
+    groups[0]?.messages.map((message) => [message.placedAt, message.createdAt]),
+    spokenRows.map((row) => [row.placedAt, row.createdAt]),
+  );
 });
 
 test("a compaction row of main's is not shown, since the rows it folded still are", async () => {
@@ -597,6 +631,7 @@ test("a compaction row of main's is not shown, since the rows it folded still ar
     seq: last.seq + 1,
     turnId: last.turnId,
     createdAt: last.createdAt + 100,
+    placedAt: last.placedAt + 100,
   };
   const groups = selectConversationView({ ...input, main: [...input.main, folded] });
   assert.deepEqual(

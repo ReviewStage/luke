@@ -63,7 +63,7 @@ function recorded(role: MessageRole, text: string, createdAt: number): Conversat
           parts: [{ type: "text", text, state: "done" }],
           metadata: { author: MESSAGE_AUTHOR.VOICE_MODEL },
         };
-  return { message, seq: ids, createdAt, tools: [] };
+  return { message, seq: ids, createdAt, placedAt: createdAt, tools: [] };
 }
 
 function view(...messages: ConversationViewMessage[]): ConversationViewSnapshot {

@@ -863,7 +863,7 @@ function messageRows(
         key={message.id}
         voice={voice}
         words={userWords(message)}
-        at={view.createdAt}
+        at={view.placedAt}
         copy={voice === VOICE.YOU}
       />,
     ];
@@ -883,7 +883,7 @@ function messageRows(
         key={message.id}
         voice={VOICE.LUKE}
         words={words}
-        at={view.createdAt}
+        at={view.placedAt}
         reading={true}
         rating={last ? ratingControl(source, words, rating) : undefined}
       />,
@@ -922,7 +922,7 @@ function messageRows(
           <OwnWordsRow
             key={key}
             words={part.text}
-            at={view.createdAt}
+            at={view.placedAt}
             lead={index === leadAt ? lead : undefined}
             rating={placed}
           />
@@ -931,7 +931,7 @@ function messageRows(
             key={key}
             voice={VOICE.LUKE}
             words={part.text}
-            at={view.createdAt}
+            at={view.placedAt}
             rating={placed}
           />
         ),
@@ -956,7 +956,7 @@ function messageRows(
             key={key}
             voice={VOICE.LUKE}
             words={words}
-            at={view.createdAt}
+            at={view.placedAt}
             unspoken={tool.unspoken}
             rating={placed}
           />,
@@ -969,7 +969,7 @@ function messageRows(
   const [only] = toolCalls;
   if (only === undefined) return rows;
   if (toolCalls.length < FOLD_FROM_CALLS) {
-    return [toolCallRow(only, judgment, view.createdAt, onOpenChat), ...rows];
+    return [toolCallRow(only, judgment, view.placedAt, onOpenChat), ...rows];
   }
   return [
     <ToolCallsFold
@@ -977,15 +977,15 @@ function messageRows(
       rows={toolCalls.map((call) => toolCallRow(call, judgment, undefined, onOpenChat))}
       pending={pending}
       judgment={judgment}
-      at={view.createdAt}
+      at={view.placedAt}
     />,
     ...rows,
   ];
 }
 
-/** When a turn's rows begin and end: its earliest and latest message, which is what dates the silence around it. */
+/** When a turn's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
 function groupSpan(group: ConversationViewTurnGroup) {
-  const instants = group.messages.map((message) => message.createdAt);
+  const instants = group.messages.map((message) => message.placedAt);
   return { first: Math.min(...instants), last: Math.max(...instants) };
 }
 

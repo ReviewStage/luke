@@ -45,6 +45,7 @@ import {
   type WireBoundaryInput,
 } from "../server/core";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
@@ -53,9 +54,11 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
   insertMessage,
+  insertVoiceSession,
   readEventsByConversation,
   readMessagesByConversationTyped,
   readTurnById,
+  readVoiceSessionByIdTyped,
   setConversationDeletedAt,
 } from "./support/store-rows";
 
@@ -1405,6 +1408,54 @@ test("a spoken reply is a finished assistant row under no turn, once per client 
   );
   assert.ok(otherSession.ok);
   assert.equal(otherSession.line, undefined);
+});
+
+test("a row is placed where it stands in the Conversation: a spoken row at its session's start plus its span's start, any other row where it was written", async () => {
+  const target = await conversation();
+  const voiceSessionId = await insertVoiceSession(database.run, {
+    userId: target.userId,
+    liveSessionId: `live_${randomUUID()}`,
+    delegationMode: VOICE_DELEGATION_MODE.CLIENT,
+  });
+  const session = await readVoiceSessionByIdTyped(database.run, voiceSessionId);
+  assert.ok(session);
+  const spokenLine = (clientId: string, sessionId: string, fromMs: number) =>
+    database.run(
+      writer.recordUserMessage(target, {
+        clientId,
+        text: `line ${fromMs}`,
+        metadata: {
+          author: MESSAGE_AUTHOR.DEVELOPER,
+          channel: MESSAGE_CHANNEL.VOICE,
+          voice_session_id: sessionId,
+          from_ms: fromMs,
+          to_ms: fromMs + 1_000,
+        },
+      }),
+    );
+  assert.ok(
+    (
+      await database.run(
+        writer.recordUserMessage(target, {
+          clientId: "typed-placed",
+          text: "typed",
+          metadata: TYPED_ASK,
+        }),
+      )
+    ).ok,
+  );
+  assert.ok((await spokenLine("spoken-placed", voiceSessionId, 4_000)).ok);
+  // A spoken row naming a session the store does not hold has no clock to stand on.
+  assert.ok((await spokenLine("spoken-unheld", randomUUID(), 4_000)).ok);
+  const rows = await storedMessages(target);
+  const placedAt = (clientId: string) => rows.find((row) => row.clientId === clientId)?.placedAt;
+  assert.equal(placedAt("typed-placed")?.getTime(), NOW);
+  assert.equal(placedAt("spoken-placed")?.getTime(), session.startedAt.getTime() + 4_000);
+  assert.equal(placedAt("spoken-unheld")?.getTime(), NOW);
+  for (const row of rows) {
+    if (row.clientId === "spoken-placed") continue;
+    assert.equal(row.placedAt.getTime(), row.createdAt.getTime());
+  }
 });
 
 test("a spoken reply under a delegation joins the delegation's turn, and is read from the turn's journal where the turn had just settled; one under no known turn, or long after the settle, is read from nothing", async () => {

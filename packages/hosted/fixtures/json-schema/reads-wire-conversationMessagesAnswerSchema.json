@@ -212,6 +212,10 @@
                   "type": "number",
                   "minimum": 0
                 },
+                "placedAt": {
+                  "type": "number",
+                  "minimum": 0
+                },
                 "tools": {
                   "type": "array",
                   "items": {
@@ -370,6 +374,7 @@
                 "message",
                 "seq",
                 "createdAt",
+                "placedAt",
                 "tools"
               ],
               "additionalProperties": false
