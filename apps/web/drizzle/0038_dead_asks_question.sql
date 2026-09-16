@@ -1,1 +1,0 @@
-ALTER TABLE "asks" DROP COLUMN IF EXISTS "question";
