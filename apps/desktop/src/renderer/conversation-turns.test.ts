@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { BRAIN_WAKE_KIND } from "@sidecar/brain";
+import { BRAIN_INPUT_MARKER, wakeInputText } from "@sidecar/brain/input-items";
 import { FEEDBACK_LIMITS } from "@sidecar/feedback";
 import { CHILD_STATUS, type ChildRead } from "@sidecar/hosted/reads-wire";
 import {
@@ -16,10 +18,12 @@ import {
   TOOL_PART_STATE,
 } from "@sidecar/session";
 import {
+  ACTION_RESULT_STATUS,
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_RATING,
+  OBSERVATION_SOURCE,
   RATING_WORD,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -570,6 +574,118 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
   assert.equal(count(note, "data-speaker", "event"), 1);
   assert.equal(count(note, "class", "conversation-copy"), 0);
   assert.equal(count(note, "class", "conversation-more-button"), 0);
+});
+
+/** One user row on its own, as the view selects it, under whichever author wrote it. */
+function userRowGroups(
+  author: typeof MESSAGE_AUTHOR.DEVELOPER | typeof MESSAGE_AUTHOR.BRAIN,
+  text: string,
+): readonly ConversationViewTurnGroup[] {
+  return selectConversationView({
+    ...FIXTURE_INPUT,
+    observed: [],
+    main: [
+      {
+        message: {
+          id: "2b000000-0000-4000-8000-000000000902",
+          role: MESSAGE_ROLE.USER,
+          metadata:
+            author === MESSAGE_AUTHOR.DEVELOPER
+              ? { author, channel: MESSAGE_CHANNEL.TYPED }
+              : { author, source: OBSERVATION_SOURCE.ROSTER_LOOK },
+          parts: [{ type: "text", text }],
+        },
+        seq: 1,
+        turnId: "1a000000-0000-4000-8000-000000000902",
+        createdAt: FIXTURE_NOW - 60_000,
+        placedAt: FIXTURE_NOW - 60_000,
+      },
+    ],
+  });
+}
+
+const WAKE_FOLD_OPENING = '<details class="conversation-wake-fold"';
+
+const WAKE_TEXT = wakeInputText(
+  [
+    {
+      kind: BRAIN_WAKE_KIND.ROSTER,
+      identity: {
+        providerId: "conductor",
+        providerSessionId: "c1d2e3f4-0000-4000-8000-000000000001",
+      },
+      atMs: FIXTURE_NOW - 60_000,
+      sessionSummary: {
+        title: "Fix the login redirect",
+        status: "working",
+        changes: ["appeared", "status: waiting → working"],
+      },
+      transcriptDelta: {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        truncated: false,
+        text: "x".repeat(1_234),
+      },
+    },
+    {
+      kind: BRAIN_WAKE_KIND.ROSTER,
+      identity: {
+        providerId: "conductor",
+        providerSessionId: "a1b2c3d4-0000-4000-8000-000000000002",
+      },
+      atMs: FIXTURE_NOW - 60_000,
+      sessionSummary: { status: "completed", changes: ["vanished"] },
+      transcriptDelta: {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        truncated: false,
+        text: "  Done: the redirect now\nkeeps the query string.  ",
+      },
+    },
+  ],
+  FIXTURE_NOW - 60_000,
+);
+
+test("an observed-events note draws one line per event, and the wake's JSON stands pretty-printed behind a fold", () => {
+  const markup = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, WAKE_TEXT));
+  assert.equal(count(markup, "data-speaker", "event"), 1);
+  assert.equal(count(markup, "data-observed-events", "2"), 1);
+  assert.ok(
+    markup.includes(
+      "<li>Fix the login redirect · appeared, status: waiting → working · +1.2k chars of transcript</li>",
+    ),
+  );
+  assert.ok(
+    markup.includes(
+      "<li>Session a1b2c3d4 · vanished · Done: the redirect now keeps the query string.</li>",
+    ),
+  );
+  assert.equal(markup.split(WAKE_FOLD_OPENING).length - 1, 1);
+  assert.ok(
+    markup.includes(
+      "<pre><code>{\n  &quot;events&quot;: [\n    {\n      &quot;kind&quot;: &quot;roster&quot;,",
+    ),
+  );
+  assert.ok(
+    markup.includes(
+      "&quot;provider_session_id&quot;: &quot;c1d2e3f4-0000-4000-8000-000000000001&quot;",
+    ),
+  );
+  // The note is the brain's, so it carries no copy control and no menu.
+  assert.equal(count(markup, "class", "conversation-copy"), 0);
+  assert.equal(count(markup, "class", "conversation-more-button"), 0);
+});
+
+test("a wake note the reader cannot hold to the shape is drawn verbatim, and the developer's words never fold", () => {
+  const malformed = `${BRAIN_INPUT_MARKER.OBSERVED_EVENTS} ${new Date(FIXTURE_NOW).toISOString()}\n{"events": "none"}`;
+  const fallen = render(userRowGroups(MESSAGE_AUTHOR.BRAIN, malformed));
+  assert.equal(count(fallen, "data-speaker", "event"), 1);
+  assert.equal(fallen.split(WAKE_FOLD_OPENING).length - 1, 0);
+  assert.equal(count(fallen, "data-observed-events", "0"), 0);
+  assert.ok(fallen.includes("&quot;events&quot;: &quot;none&quot;"));
+  const developer = render(userRowGroups(MESSAGE_AUTHOR.DEVELOPER, WAKE_TEXT));
+  assert.equal(count(developer, "data-speaker", "you"), 1);
+  assert.equal(count(developer, "data-speaker", "event"), 0);
+  assert.equal(developer.split(WAKE_FOLD_OPENING).length - 1, 0);
+  assert.equal(count(developer, "class", "conversation-copy"), 1);
 });
 
 test("a turn that followed a long silence is dated over it, and the caller's rows close the one list", () => {

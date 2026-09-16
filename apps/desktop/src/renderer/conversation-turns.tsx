@@ -42,6 +42,7 @@ import {
 } from "@sidecar/session";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
+  EXCESS_KEYS,
   isRecord,
   isWireString,
   OBSERVATION_SOURCE,
@@ -53,6 +54,8 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Result, Schema } from "effect";
 import { useState } from "react";
 import { agentSession, agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
@@ -772,6 +775,133 @@ function userVoice(
 }
 
 /**
+ * An observed-events note as the renderer reads it. The brain writes a wake
+ * as its marker, an instant, and the events as JSON on the next line
+ * (`wakeInputText`); only the fields a summary line names are read from each
+ * event, and every other key rides in the record the fold prints whole. The
+ * instant is read too, so a note that merely opens on the marker's words is
+ * not mistaken for a wake. A note that does not hold to the shape is drawn as
+ * the words it is.
+ */
+const OBSERVED_EVENT = Schema.Struct({
+  provider_session_id: Schema.String,
+  session: Schema.optionalKey(
+    Schema.Struct({
+      title: Schema.optionalKey(Schema.String),
+      changes: Schema.optionalKey(Schema.Array(Schema.String)),
+    }),
+  ),
+  transcript_delta: Schema.optionalKey(Schema.Struct({ text: Schema.String })),
+});
+
+const OBSERVED_WAKE = Schema.Struct({
+  at: Schema.DateTimeUtcFromString,
+  events: Schema.Array(OBSERVED_EVENT),
+});
+
+type ObservedEvent = typeof OBSERVED_EVENT.Type;
+
+interface ObservedWake {
+  readonly events: readonly ObservedEvent[];
+  /** The wake as the brain wrote it, pretty-printed for the fold. */
+  readonly json: string;
+}
+
+function observedWakeOf(text: string): ObservedWake | undefined {
+  if (!text.startsWith(BRAIN_INPUT_MARKER.OBSERVED_EVENTS)) return undefined;
+  const newline = text.indexOf("\n");
+  if (newline === -1) return undefined;
+  const record = recordFromJsonLine(text.slice(newline + 1));
+  if (record === undefined) return undefined;
+  const at = text.slice(BRAIN_INPUT_MARKER.OBSERVED_EVENTS.length + 1, newline);
+  const read = readEither(OBSERVED_WAKE, { excess: EXCESS_KEYS.DROP })(
+    unparsedWire({ at, events: record.events }),
+  );
+  return Result.match(read, {
+    onSuccess: ({ events }) => ({ events, json: JSON.stringify(record, null, 2) }),
+    onFailure: () => undefined,
+  });
+}
+
+/** The most transcript a summary line quotes; past it the line counts the characters instead. */
+const QUOTED_DELTA_CHARS = 80;
+
+/** How many characters of transcript before the count reads in thousands. */
+const THOUSAND = 1000;
+
+function transcriptSummary(text: string): string | undefined {
+  const words = text.trim().replace(/\s+/gu, " ");
+  if (words.length === 0) return undefined;
+  if (words.length <= QUOTED_DELTA_CHARS) return words;
+  const count =
+    text.length < THOUSAND ? `${text.length}` : `${(text.length / THOUSAND).toFixed(1)}k`;
+  return `+${count} chars of transcript`;
+}
+
+/** How many characters of a session's id name it when the wake carries no title. */
+const SESSION_ID_CHARS = 8;
+
+/** One event's line: the session, what changed about it, and what its transcript gained. */
+function observedEventLine(event: ObservedEvent): string {
+  const title =
+    event.session?.title ?? `Session ${event.provider_session_id.slice(0, SESSION_ID_CHARS)}`;
+  const changes = event.session?.changes ?? [];
+  const delta =
+    event.transcript_delta === undefined
+      ? undefined
+      : transcriptSummary(event.transcript_delta.text);
+  return [
+    title,
+    ...(changes.length > 0 ? [changes.join(", ")] : []),
+    ...(delta ? [delta] : []),
+  ].join(" · ");
+}
+
+/** The line the wake's fold opens on. */
+const WAKE_FOLD_LABEL = "Raw wake";
+
+/**
+ * The wake that opened one of Luke's own turns, drawn as a note rather than
+ * the JSON it is: one line per session the wake named, in the event row's
+ * quiet voice, and under them the wake as the brain wrote it, behind a fold
+ * drawn like the tool calls', closed until pressed, so what woke him stays
+ * readable when the lines are not enough. It carries no copy control, as no
+ * note of the brain's does.
+ */
+function ObservedEventsRow({ wake, at }: { wake: ObservedWake; at: number }): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={VOICE.NOTE.speaker}
+      data-observed-events={wake.events.length}
+    >
+      <small className="visually-hidden">{VOICE.NOTE.label}</small>
+      <div className="conversation-message">
+        <span className="conversation-bubble">
+          <ol className="conversation-words conversation-observed">
+            {wake.events.map((event, index) => (
+              <li key={`${event.provider_session_id}:${index}`}>{observedEventLine(event)}</li>
+            ))}
+          </ol>
+          <details className="conversation-wake-fold">
+            <summary className="conversation-turn-summary">
+              <ChevronIcon />
+              <span>{WAKE_FOLD_LABEL}</span>
+            </summary>
+            <div className="markdown">
+              <pre>
+                <code>{wake.json}</code>
+              </pre>
+            </div>
+          </details>
+        </span>
+      </div>
+      <RowStamp at={at} />
+    </li>
+  );
+}
+
+/**
  * What the rating control on a message is handed beside the message itself:
  * the developer's ask the turn answered, where the turn had one, for the
  * draft a thumbs down offers, and the composer that offer opens.
@@ -916,11 +1046,17 @@ function messageRows(
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
     const voice = userVoice(message);
+    const words = userWords(message);
+    // The brain's own wake note is drawn structured; the developer's words never are.
+    const wake = voice === VOICE.NOTE ? observedWakeOf(words) : undefined;
+    if (wake !== undefined) {
+      return [<ObservedEventsRow key={message.id} wake={wake} at={view.placedAt} />];
+    }
     return [
       <BubbleRow
         key={message.id}
         voice={voice}
-        words={userWords(message)}
+        words={words}
         at={view.placedAt}
         copy={voice === VOICE.YOU}
       />,

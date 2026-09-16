@@ -367,6 +367,37 @@
   line-height: 1.4;
 }
 
+/* The wake that opened one of Luke's own turns, drawn as a note: one line per
+   session in the event row's quiet voice, then the wake as the brain wrote
+   it under a fold drawn like the tool calls' — the chevron, one word, turning
+   while it stands open. The JSON is a code block set as a message's would be,
+   at the note's size, and left-aligned inside the centred note because
+   indentation is part of what it says. */
+.conversation-observed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversation-wake-fold {
+  width: 100%;
+  min-width: 0;
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 1.4;
+}
+
+.conversation-wake-fold[open] > .conversation-turn-summary .settings-chevron {
+  transform: rotate(90deg);
+}
+
+.conversation-wake-fold .markdown {
+  margin-top: 4px;
+  font-size: 10px;
+  text-align: left;
+}
+
 /* The date over a line that followed a long silence, in the quiet voice the
    requested actions use, with the day set apart from the time the way iMessage
    sets it. It stands still under the pull as Luke's rows do, in the room the
