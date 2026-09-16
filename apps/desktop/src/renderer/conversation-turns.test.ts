@@ -299,9 +299,10 @@ test("a turn nobody opened is Luke's own judgment: his face leads every row, and
   assert.equal(count(asked, "data-judgment", "own"), 0);
   assert.equal((asked.match(/class="luke-face"/g) ?? []).length, 0);
 
-  // The observed session's own turn: its announcement stays his bubble, its action his judgment.
+  // The observed session's own turn keeps the proposed announcement in its source disclosure.
   const announced = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
-  assert.equal(count(announced, "data-speaker", "luke"), 1);
+  assert.equal(count(announced, "data-speaker", "luke"), 0);
+  assert.equal(count(announced, "data-observation-announcement", "true"), 1);
 });
 
 const SUBAGENT_CHIP_BUTTON =
@@ -412,10 +413,13 @@ test("a turn of an observed session's own conversation heads on one chip naming 
   // The mark is a robot, ours and in the text colour, never the provider's brand mark.
   assert.ok(head.includes('<svg class="conversation-chip-mark"'));
   assert.ok(!head.includes("provider-mark"));
-  // The observed message crosses cut to its announcement, so one bubble of Luke's follows.
+  // The observed message crosses cut to a disclosure naming its source; only
+  // the disclosure is the one row that follows it.
   const rows = markup.split('<li class="conversation-entry"').slice(2);
   assert.equal(rows.length, 1);
-  assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 1);
+  assert.equal(count(markup, "data-observation-announcement", "true"), 1);
+  assert.ok(markup.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
+  assert.equal(count(markup, "data-speaker", CONVERSATION_ENTRY_SPEAKER.LUKE), 0);
   // Pressed, the chip hands the list's agent to the transcript page, and
   // never the session to the provider.
   const openedAgents: AgentRead[] = [];
@@ -489,7 +493,7 @@ test("a source chip is a name wherever the agents list cannot lead to the agent,
   }
 });
 
-test("a reasoning part folds to a line on Luke's side, and an announcement is his bubble marked when unheard", () => {
+test("a reasoning part folds to a line on Luke's side, and an observation announcement folds under its chat when unheard", () => {
   const groups = fixtureConversationTurns();
   const markup = render(groups, OPEN);
   // Main's turn carries its thought; the observed turn's crosses cut to its announcement.
@@ -511,7 +515,9 @@ test("a reasoning part folds to a line on Luke's side, and an announcement is hi
   });
   const unheard = render(expired, OPEN);
   assert.equal(count(unheard, "data-unspoken", "true"), 1);
-  assert.equal(count(unheard, "data-speaker", "luke"), 1);
+  assert.equal(count(unheard, "data-speaker", "luke"), 0);
+  assert.equal(count(unheard, "data-observation-announcement", "true"), 1);
+  assert.ok(unheard.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
   assert.equal(count(unheard, "data-reasoning", "true"), 0);
 });
 
@@ -561,11 +567,12 @@ test("a reasoning fold keeps paragraph breaks as separate blocks inside the expa
   );
 });
 
-test("an announce call is a bubble and nothing else, and a detail's label is its tool's name", () => {
+test("an observation announce call is a source-named disclosure and nothing else, and a detail's label is its tool's name", () => {
   assert.equal(detailToolLabel("read_transcript"), "read transcript");
-  // The announce call is its bubble and nothing else: no tool call row, no fold, for a message that only announced.
+  // The announce call is its disclosure and nothing else: no tool call row, no generic call fold.
   const markup = render([groupOf(FIXTURE_TURN.ANNOUNCED)], OPEN);
-  assert.equal(count(markup, "data-speaker", "luke"), 1);
+  assert.equal(count(markup, "data-speaker", "luke"), 0);
+  assert.equal(count(markup, "data-observation-announcement", "true"), 1);
   assert.equal((markup.match(/data-tool-calls-fold=/g) ?? []).length, 0);
   assert.equal((markup.match(/data-tool-kind="/g) ?? []).length, 0);
 });
@@ -1117,4 +1124,52 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
   const alone = render([readingGroup]);
   assert.equal(count(alone, "data-reading", "true"), 0);
   assert.equal(ratingControls(alone), 1);
+
+  // An observation keeps the agent's proposed briefing behind a source-named
+  // disclosure; the row below remains the text the voice actually said.
+  const observedGroup = groupOf(FIXTURE_TURN.ANNOUNCED);
+  const observedMessage = observedGroup.messages[0];
+  assert.ok(observedMessage);
+  assert.ok(observedGroup.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED);
+  const observedReading: ConversationViewMessage = {
+    ...reading,
+    message: {
+      id: "1d000000-0000-4000-8000-000000000503",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "text",
+          text: "The fixture session needs permission before it can continue.",
+          state: "done",
+        },
+      ],
+      metadata: {
+        author: MESSAGE_AUTHOR.VOICE_MODEL,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_1",
+        from_ms: 1_000,
+        to_ms: 4_000,
+        read_from: observedMessage.message.id,
+      },
+    },
+    seq: 2,
+    createdAt: observedMessage.createdAt + 5_000,
+    placedAt: observedMessage.placedAt + 5_000,
+  };
+  const observedMarkup = render([
+    observedGroup,
+    {
+      turnId: "observed-reading-only",
+      turn: undefined,
+      source: observedGroup.source,
+      messages: [observedReading],
+    },
+  ]);
+  assert.equal(count(observedMarkup, "data-observation-announcement", "true"), 1);
+  assert.equal(count(observedMarkup, "data-reading", "true"), 1);
+  assert.ok(observedMarkup.includes(`Announcement from ${FIXTURE_TITLE.HELD}`));
+  assert.ok(
+    observedMarkup.indexOf("The fixture session is waiting on a permission prompt.") <
+      observedMarkup.indexOf("The fixture session needs permission before it can continue."),
+  );
 });

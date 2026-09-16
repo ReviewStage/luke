@@ -91,9 +91,9 @@ import { ThinkingDots } from "./thinking-dots";
  * The Conversation drawn from its stored shape: the turn groups the view
  * selection answers, each a run of `UIMessage` rows. A text part is a bubble
  * on its author's side; a reasoning part is Luke's thought, folded to a line
- * that opens on its summary; an announcement is Luke's briefing in his own
- * bubble, marked when nobody heard it, and that bubble is the whole of what
- * the announce call draws. Every other stored tool call of one assistant
+ * that opens on its summary; an announcement is Luke's briefing, marked when
+ * nobody heard it. Observation briefings fold under the chat that proposed
+ * them, while the recorded spoken text stays below. Every other stored tool call of one assistant
  * message — reads, actions, even one whose tool failed — draws ahead of that
  * message's words, in the call order the message stored them: one call as
  * the row it is, stamped like any other, and two or more inside one fold
@@ -297,7 +297,13 @@ const THINKING_LABEL = "Thinking";
  * rows below share it and nothing else, so the record's two kinds of
  * thinking stay two kinds in the markup while reading as one on the surface.
  */
-function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.Element {
+function ThinkingFold({
+  label = THINKING_LABEL,
+  children,
+}: {
+  label?: string;
+  children: React.ReactNode;
+}): React.JSX.Element {
   return (
     <details className="conversation-thinking-fold">
       <summary className="conversation-turn-summary">
@@ -305,7 +311,7 @@ function ThinkingFold({ children }: { children: React.ReactNode }): React.JSX.El
         <span className="conversation-action-mark" aria-hidden="true">
           <BrainIcon />
         </span>
-        <span>{THINKING_LABEL}</span>
+        <span>{label}</span>
       </summary>
       {children}
     </details>
@@ -351,6 +357,45 @@ function WrittenRow({ words }: { words: string }): React.JSX.Element {
       <div className="conversation-message">
         <ThinkingFold>
           <MarkdownMessage words={words} className="conversation-thinking-fold-words" />
+        </ThinkingFold>
+      </div>
+    </li>
+  );
+}
+
+/**
+ * The briefing an observation agent handed the voice, kept under its source
+ * chat rather than looking like words Luke actually said. The voice model's
+ * recorded utterance follows as its own bubble, so the visible spoken text is
+ * always what the developer heard.
+ */
+function ObservationAnnouncementRow({
+  chat,
+  words,
+  unspoken,
+  rating,
+}: {
+  chat: string;
+  words: string;
+  unspoken: boolean;
+  rating: React.ReactNode;
+}): React.JSX.Element {
+  return (
+    <li
+      className="conversation-entry"
+      data-speaker={VOICE.NOTE.speaker}
+      data-thinking-fold="true"
+      data-observation-announcement="true"
+      data-unspoken={unspoken ? "true" : undefined}
+    >
+      <small className="visually-hidden">{VOICE.NOTE.label}</small>
+      <div className="conversation-message">
+        <ThinkingFold label={`Announcement from ${chat}`}>
+          <MarkdownMessage words={words} className="conversation-thinking-fold-words" />
+          {unspoken ? <span className="conversation-unspoken">{UNSPOKEN_LABEL}</span> : null}
+          {rating === undefined ? null : (
+            <ConversationMessageMenu>{rating}</ConversationMessageMenu>
+          )}
         </ThinkingFold>
       </div>
     </li>
@@ -474,6 +519,15 @@ function listedAgent(
   );
 }
 
+/** What an observed group calls its chat everywhere it needs to name its source. */
+function sourceTitle(
+  source: Extract<ConversationViewSource, { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }>,
+  roster: readonly SessionView[],
+  agents: readonly AgentRead[],
+): string {
+  return agentTitle(listedAgent(source.session, agents) ?? source.session, roster);
+}
+
 /**
  * The header line of a turn group from an observed session's own
  * conversation: one chip naming the agent, worn by the group rather than by
@@ -500,7 +554,7 @@ function SourceRow({
   onOpenAgent?: (agent: AgentRead) => void;
 }): React.JSX.Element {
   const agent = listedAgent(source.session, agents);
-  const text = agentTitle(agent ?? source.session, roster);
+  const text = sourceTitle(source, roster, agents);
   const press =
     agent !== undefined && onOpenAgent !== undefined ? () => onOpenAgent(agent) : undefined;
   return (
@@ -1041,8 +1095,9 @@ function toolCallRow(
  * more inside one fold — then its visible parts in order, with the rating
  * control on its last words. Which tool calls are announcements is the view's
  * decision, read back by call id; an announce call carrying its briefing is
- * drawn as that bubble and as no tool call row, and every other call is a row
- * composed from its own part. In a turn whose answer the voice said, the
+ * drawn as a bubble or a source-named observation fold, never as a tool call
+ * row; every other call is a row composed from its own part. In a turn whose
+ * answer the voice said, the
  * brain's text is his thinking and folds as his written working, whatever
  * the voice made of it; the rating of the brain's judgment then stands on the
  * voice's reading of it, where the record ties one to the journal, and on no
@@ -1058,6 +1113,7 @@ function messageRows(
   readings: Readings,
   onOpenChat?: (identity: SessionIdentity) => void,
   lead?: React.ReactNode,
+  observationChat?: string,
 ): readonly React.JSX.Element[] {
   const { message } = view;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -1158,6 +1214,18 @@ function messageRows(
     const tool = described.get(part.toolCallId);
     if (tool?.kind === CONVERSATION_VIEW_TOOL_KIND.ANNOUNCE) {
       const words = announcedWords(part);
+      if (words !== undefined && observationChat !== undefined) {
+        rows.push(
+          <ObservationAnnouncementRow
+            key={key}
+            chat={observationChat}
+            words={words}
+            unspoken={tool.unspoken}
+            rating={placed}
+          />,
+        );
+        return;
+      }
       if (words !== undefined && readAloud) {
         rows.push(<WrittenRow key={key} words={words} />);
         return;
@@ -1347,6 +1415,10 @@ export function ConversationTurns({
         const judgment = judgmentOf(group.turn);
         const pending = turnPending(group.turn);
         const aloud = answeredAloud(group.turn);
+        const observationChat =
+          group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
+            ? sourceTitle(group.source, roster, agents)
+            : undefined;
         // A child's completion leads Luke's first words on it with the chip
         // naming the child: the first of his messages in the turn with words,
         // since one that only called tools has no words to lead.
@@ -1382,6 +1454,7 @@ export function ConversationTurns({
                 {...(onOpenChild ? { onOpenChild } : undefined)}
               />
             ) : undefined,
+            observationChat,
           );
           if (
             judgment === JUDGMENT.ASK &&

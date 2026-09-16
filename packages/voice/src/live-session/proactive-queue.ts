@@ -139,15 +139,27 @@ export class ProactiveQueue<Delivery extends { briefing: string; decidedAt: numb
     return briefings;
   }
 
-  /** Takes every pending request still worth saying, in order; the stale are dropped on the way. */
-  take(): readonly ProactiveRequest<Delivery>[] {
+  /**
+   * Takes pending requests still worth saying. At most one briefing leaves at
+   * once, so another briefing cannot join it in the voice model's turn; beats
+   * still follow their ordinary delivery path.
+   */
+  take(briefingInFlight: boolean): readonly ProactiveRequest<Delivery>[] {
+    const pending = this.#pending;
+    this.#pending = [];
     const taken: ProactiveRequest<Delivery>[] = [];
-    for (const request of this.#pending.splice(0)) {
+    let briefingTaken = briefingInFlight;
+    for (const request of pending) {
       if (this.#stale(request)) {
         this.release(request);
         this.#options.trace(LIVE_TRACE_DECISION.DROPPED);
         continue;
       }
+      if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING && briefingTaken) {
+        this.#pending.push(request);
+        continue;
+      }
+      if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) briefingTaken = true;
       taken.push(request);
     }
     return taken;

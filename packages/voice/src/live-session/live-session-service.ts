@@ -410,6 +410,8 @@ function isClientDelegation(
 export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDelivery> {
   readonly #options: LiveSessionServiceOptions<Delivery>;
   readonly #queue: ProactiveQueue<Delivery>;
+  /** A briefing waits for its spoken mark before another briefing may begin. */
+  #briefingInFlight = false;
   #standing: StandingSession | undefined;
   readonly #exchanges = new Map<string, Exchange>();
   /** Exchanges whose reply outlived their session, or never had one, waiting for the next to open. */
@@ -1575,7 +1577,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return { eventId: this.#options.createId(), delegationId, content };
   }
 
-  /** Speaks the pending proactive turns in order into the standing session, or asks for one. */
+  /** Speaks pending proactive turns into the standing session, or asks for one. */
   #drain(): void {
     if (!this.#queue.hasPending) return;
     const session = this.#speakable();
@@ -1583,7 +1585,11 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       this.#wantSession();
       return;
     }
-    for (const request of this.#queue.take()) this.#speakProactive(session, request);
+    const requests = this.#queue.take(this.#briefingInFlight);
+    for (const request of requests) {
+      if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) this.#briefingInFlight = true;
+      this.#speakProactive(session, request);
+    }
   }
 
   #speakProactive(session: StandingSession, request: ProactiveRequest<Delivery>): void {
@@ -1607,11 +1613,21 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
                   onSpoken: () => {
                     this.#queue.spoken(request);
                     this.#options.onProactiveSpoken?.(request.kind);
+                    if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+                      this.#briefingInFlight = false;
+                      this.#drain();
+                    }
                   },
                 }
               : undefined),
           });
-          if (!taken && last) this.#queue.release(request);
+          if (!taken && last) {
+            this.#queue.release(request);
+            if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+              this.#briefingInFlight = false;
+              this.#drain();
+            }
+          }
         }),
       );
     });
@@ -1636,15 +1652,29 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         );
         if (!instructed) {
           this.#queue.release(request);
+          if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+            this.#briefingInFlight = false;
+            this.#drain();
+          }
           return;
         }
         const cued = yield* session.channel.send(commentaryAppend(this.#input(null, opening.cue)), {
           onSpoken: () => {
             this.#queue.spoken(request);
             this.#options.onProactiveSpoken?.(request.kind);
+            if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+              this.#briefingInFlight = false;
+              this.#drain();
+            }
           },
         });
-        if (!cued) this.#queue.release(request);
+        if (!cued) {
+          this.#queue.release(request);
+          if (request.kind === PROACTIVE_SPEECH_KIND.BRIEFING) {
+            this.#briefingInFlight = false;
+            this.#drain();
+          }
+        }
       }),
     );
   }
@@ -1715,7 +1745,10 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     for (const exchange of this.#exchanges.values()) {
       if (exchange.sessionId === session.sessionId) exchange.sessionId = undefined;
     }
-    if (this.#standing === session) this.#standing = undefined;
+    if (this.#standing === session) {
+      this.#standing = undefined;
+      this.#briefingInFlight = false;
+    }
     this.#releasing = session.released;
     Deferred.doneUnsafe(session.torn, Exit.void);
     this.#setPhase({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.CLOSED, reason });
