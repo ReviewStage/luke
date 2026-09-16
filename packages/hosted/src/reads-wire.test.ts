@@ -12,6 +12,7 @@ import {
   EXCESS_KEYS,
   isRecord,
   MESSAGE_RATING,
+  MESSAGE_ROLE,
   SCHEMA_REFUSAL,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -51,6 +52,7 @@ const FIXTURE = {
   TURNS: "brain-turns-answer.json",
   CHILDREN: "children-answer.json",
   CHILD_MESSAGES: "child-messages-answer.json",
+  OBSERVED_MESSAGES: "observed-messages-answer.json",
   CHANGES_REQUEST: "changes-request.json",
   CHANGES_ANSWER: "changes-answer.json",
 } as const;
@@ -454,6 +456,33 @@ test("the child messages answer fixture is a main's page over the one child: its
   );
   assert.deepEqual(parse(sequenceReadCursorSchema, answer.next), {
     positions: [{ conversationId: SETTLED_CHILD, seq: 2 }],
+  });
+  assert.equal(answer.hasMore, false);
+});
+
+test("the observed messages answer fixture is a main's page over the one observed conversation: the wake's line and Luke's reply under their roster-diff turn, whole, and a cursor positioned on it alone", async () => {
+  const answer = expectReadAnswer(
+    conversationMessagesAnswerSchema,
+    await fixture(FIXTURE.OBSERVED_MESSAGES),
+  );
+  assert.deepEqual(
+    answer.conversations.map((conversation) => [conversation.id, conversation.kind]),
+    [[OBSERVED, CONVERSATION_VIEW_SOURCE.MAIN]],
+  );
+  const [wake] = answer.groups;
+  assert.ok(wake);
+  assert.equal(answer.groups.length, 1);
+  assert.equal(wake.turnId, TURN);
+  assert.equal(wake.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.deepEqual(
+    wake.messages.map((message) => [message.message.role, message.tools.length]),
+    [
+      [MESSAGE_ROLE.USER, 0],
+      [MESSAGE_ROLE.ASSISTANT, 1],
+    ],
+  );
+  assert.deepEqual(parse(sequenceReadCursorSchema, answer.next), {
+    positions: [{ conversationId: OBSERVED, seq: 32 }],
   });
   assert.equal(answer.hasMore, false);
 });

@@ -1,0 +1,90 @@
+{
+  "conversations": [
+    {
+      "id": "3c000000-0000-4000-8000-000000000002",
+      "kind": "main",
+      "openedAt": 1757504400000
+    }
+  ],
+  "groups": [
+    {
+      "turnId": "1a000000-0000-4000-8000-000000000003",
+      "conversationId": "3c000000-0000-4000-8000-000000000002",
+      "source": {
+        "kind": "main"
+      },
+      "turn": {
+        "id": "1a000000-0000-4000-8000-000000000003",
+        "origin": "roster_diff",
+        "status": "settled",
+        "queuedAt": 1757505720000,
+        "startedAt": 1757505720200,
+        "settledAt": 1757505722400
+      },
+      "messages": [
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000031",
+            "role": "user",
+            "metadata": {
+              "author": "brain",
+              "source": "roster_look"
+            },
+            "parts": [
+              {
+                "type": "text",
+                "text": "Roster: the fixture session moved to waiting."
+              }
+            ]
+          },
+          "seq": 31,
+          "createdAt": 1757505720000,
+          "placedAt": 1757505720000,
+          "tools": []
+        },
+        {
+          "message": {
+            "id": "2b000000-0000-4000-8000-000000000032",
+            "role": "assistant",
+            "metadata": {
+              "author": "brain"
+            },
+            "parts": [
+              {
+                "type": "step-start"
+              },
+              {
+                "type": "tool-announce",
+                "toolCallId": "call_3a0000000000000002",
+                "state": "output-available",
+                "input": {
+                  "briefing": "The fixture session is waiting on a permission prompt."
+                },
+                "output": {}
+              },
+              {
+                "type": "text",
+                "text": "Announced.",
+                "state": "done"
+              }
+            ]
+          },
+          "seq": 32,
+          "createdAt": 1757505722000,
+          "placedAt": 1757505722000,
+          "tools": [
+            {
+              "toolCallId": "call_3a0000000000000002",
+              "toolName": "announce",
+              "state": "output-available",
+              "kind": "announce",
+              "unspoken": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "next": "eyJwb3NpdGlvbnMiOlt7ImNvbnZlcnNhdGlvbklkIjoiM2MwMDAwMDAtMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIiwic2VxIjozMn1dfQ",
+  "hasMore": false
+}

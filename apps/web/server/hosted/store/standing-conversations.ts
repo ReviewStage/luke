@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, type Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
@@ -113,6 +113,64 @@ export function standingConversations(
     }
     return standing;
   });
+}
+
+/**
+ * A conversation a device pages on its own, apart from the view: one of the
+ * account's standing children or observed conversations, with the instant it
+ * was opened and the counters its page is read against. A main is never
+ * paged this way, since the view already is its page, and a stamped row is
+ * standing for nothing.
+ */
+export interface PagedConversation {
+  readonly id: string;
+  readonly createdAt: Date;
+  readonly nextMessageSeq: number;
+  readonly nextEventSeq: number;
+  readonly journalRevision: number;
+}
+
+const PagedConversationRowSchema = Schema.Struct({
+  id: Schema.String,
+  createdAt: InstantColumnSchema,
+  nextMessageSeq: EpochMillisColumnSchema,
+  nextEventSeq: EpochMillisColumnSchema,
+  journalRevision: EpochMillisColumnSchema,
+}).pipe(
+  Schema.encodeKeys({
+    createdAt: "created_at",
+    nextMessageSeq: "next_message_seq",
+    nextEventSeq: "next_event_seq",
+    journalRevision: "journal_revision",
+  }),
+);
+
+const findPagedConversation = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: PagedConversationRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select id, created_at, next_message_seq, next_event_seq, journal_revision
+        from conversations
+        where user_id = ${request.userId}
+          and id = ${request.conversationId}
+          and kind in (${CONVERSATION_KIND.CHILD}, ${CONVERSATION_KIND.OBSERVED})
+          and deleted_at is null
+      `,
+    ),
+});
+
+/** One of the account's standing child or observed conversations by id, or none: a main's id, a stamped row's, or another account's finds nothing. */
+export function pagedConversation(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<
+  Option.Option<PagedConversation>,
+  StandingConversationFailure,
+  SqlClient.SqlClient
+> {
+  return findPagedConversation({ userId, conversationId });
 }
 
 /**

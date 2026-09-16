@@ -678,11 +678,14 @@ export const childrenAnswerSchema = EffectSchema.Struct({
 });
 
 /**
- * The query a child's messages read takes: the child by its id, read as
- * `wireUuidSchema` reads one, and the two parameters every per-resource read
- * takes. The answer is `conversationMessagesAnswerSchema` over one
- * conversation, the child standing where the main does in a main's page: its
- * rows are the brain's own work, drawn whole as a main's are.
+ * The query a child's messages read takes: the conversation by its id, read
+ * as `wireUuidSchema` reads one, and the two parameters every per-resource
+ * read takes. The key is spelled `child` for the child it was declared for,
+ * and names an observed conversation (a per-workspace agent) on the same
+ * terms; a main's id is not found. The answer is
+ * `conversationMessagesAnswerSchema` over one conversation, standing where
+ * the main does in a main's page: its rows are the brain's own work, drawn
+ * whole as a main's are.
  */
 export const CHILD_MESSAGES_QUERY = {
   CHILD: "child",

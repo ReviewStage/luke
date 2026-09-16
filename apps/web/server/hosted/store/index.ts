@@ -51,7 +51,12 @@ import {
   purgeClearedConversations,
 } from "./soft-delete.js";
 import { openSpeechOffers, type SpeechOffer } from "./speech.js";
-import { type StandingConversation, standingConversations } from "./standing-conversations.js";
+import {
+  type PagedConversation,
+  pagedConversation,
+  type StandingConversation,
+  standingConversations,
+} from "./standing-conversations.js";
 import {
   pruneWorkspaceEmbeddings,
   readWorkspaceEmbeddings,
@@ -152,6 +157,8 @@ export interface HostedStore {
     children(userId: string, limit: number): HostedStoreEffect<readonly ChildRecord[]>;
     /** One of the account's standing children by id, on the same terms; nothing where none stands. */
     child(userId: string, childId: string): HostedStoreEffect<ChildRecord | undefined>;
+    /** One of the account's standing child or observed conversations by id, as a page of its own is read against it; nothing for a main, a stamped row, or another account's. */
+    paged(userId: string, conversationId: string): HostedStoreEffect<PagedConversation | undefined>;
     /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
     childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
   };
@@ -273,6 +280,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
         standingObservedConversation(userId, identity, new Date(now)),
       children: (userId, limit) => listChildren(userId, limit),
       child: (userId, childId) => Effect.map(readChild(userId, childId), Option.getOrUndefined),
+      paged: (userId, conversationId) =>
+        Effect.map(pagedConversation(userId, conversationId), Option.getOrUndefined),
       childrenHead: (userId) => Effect.map(childrenHead(userId), Option.getOrUndefined),
     },
     main: {
@@ -342,7 +351,7 @@ export {
   type SpeechSweepOutcome,
   sweepSpeech,
 } from "./speech.js";
-export type { StandingConversation } from "./standing-conversations.js";
+export type { PagedConversation, StandingConversation } from "./standing-conversations.js";
 export {
   type VoiceTarget,
   type VoiceWriteResult,

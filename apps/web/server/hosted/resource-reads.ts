@@ -49,6 +49,7 @@ import { makeRateBrake } from "./rate-brake.js";
 import type {
   ChildRecord,
   HostedStore,
+  PagedConversation,
   StandingConversation,
   StoredEventRecord,
   StoredMessageRecord,
@@ -511,29 +512,32 @@ export const handleConversationMessages = /* @__PURE__ */ Effect.fn("handleConve
 );
 
 /**
- * A child as the one conversation of its own page: it stands where the main
- * does in a main's page, because its rows are the brain's own work and are
- * drawn whole as a main's are, and the answer's source vocabulary names how a
- * group is drawn rather than the row's kind. Its opening is the instant the
- * delegation opened it, and its counters are its own.
+ * A child or an observed conversation as the one conversation of its own
+ * page: it stands where the main does in a main's page, because its rows are
+ * the brain's own work and are drawn whole as a main's are, and the answer's
+ * source vocabulary names how a group is drawn rather than the row's kind.
+ * Its opening is the instant it was opened, and its counters are its own; an
+ * observed conversation standing alone is under no main's window, so the
+ * page shows it whole where the Conversation's read shows it cut.
  */
-function childAsPageMain(child: ChildRecord): StandingConversation {
+function asPageMain(conversation: PagedConversation): StandingConversation {
   return {
-    id: child.id,
+    id: conversation.id,
     kind: CONVERSATION_KIND.MAIN,
-    openedAt: child.createdAt,
-    nextMessageSeq: child.nextMessageSeq,
-    nextEventSeq: child.nextEventSeq,
-    journalRevision: child.journalRevision,
+    openedAt: conversation.createdAt,
+    nextMessageSeq: conversation.nextMessageSeq,
+    nextEventSeq: conversation.nextEventSeq,
+    journalRevision: conversation.journalRevision,
   };
 }
 
 /**
- * GET: one child's messages behind a device's own cursor, the same page the
- * Conversation's read answers, over the one child the query names. A child
- * that does not stand for the account — stamped, another account's, or a
- * conversation of another kind — is not found, the same answer every read
- * gives for a resource it does not hold.
+ * GET: one child's or observed conversation's messages behind a device's own
+ * cursor, the same page the Conversation's read answers, over the one
+ * conversation the query names. A conversation that does not stand for the
+ * account this way — stamped, another account's, or the main, whose page is
+ * the Conversation's read — is not found, the same answer every read gives
+ * for a resource it does not hold.
  */
 export const handleConversationChildMessages = /* @__PURE__ */ Effect.fn(
   "handleConversationChildMessages",
@@ -543,18 +547,18 @@ export const handleConversationChildMessages = /* @__PURE__ */ Effect.fn(
   const gate = yield* readGate(options);
   if (gate instanceof Response) return gate;
   const { userId, query } = gate;
-  const childId = Result.getOrUndefined(
+  const conversationId = Result.getOrUndefined(
     readEither(wireUuidSchema)(query.get(CHILD_MESSAGES_QUERY.CHILD) ?? undefined),
   );
   const page = readPage(query, sequenceReadCursorSchema);
-  if (childId === undefined || !page) return invalidRequest();
+  if (conversationId === undefined || !page) return invalidRequest();
   const { store } = options;
 
-  const child = yield* store.directory.child(userId, childId);
-  if (child === undefined) {
+  const conversation = yield* store.directory.paged(userId, conversationId);
+  if (conversation === undefined) {
     return errorResponse(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
   }
-  return yield* messagesPage(store, userId, [childAsPageMain(child)], page);
+  return yield* messagesPage(store, userId, [asPageMain(conversation)], page);
 });
 
 function readEvent(event: StoredEventRecord): ConversationReadEvent {

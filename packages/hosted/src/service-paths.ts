@@ -85,10 +85,10 @@ export const HOSTED_SERVICE_PATH = {
    */
   CONVERSATION_CHILDREN: "/api/conversation/children",
   /**
-   * One child's messages behind a device's own cursor (GET): the same
-   * projection the Conversation's read makes, over the one child conversation
-   * `CHILD_MESSAGES_QUERY.CHILD` names, grouped by turn; `after` and `limit`
-   * as on the Conversation's read.
+   * One child's or observed conversation's messages behind a device's own
+   * cursor (GET): the same projection the Conversation's read makes, over the
+   * one conversation `CHILD_MESSAGES_QUERY.CHILD` names, grouped by turn;
+   * `after` and `limit` as on the Conversation's read.
    */
   CONVERSATION_CHILD_MESSAGES: "/api/conversation/children/messages",
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */
