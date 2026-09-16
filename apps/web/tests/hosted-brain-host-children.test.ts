@@ -5,6 +5,8 @@ import { SqlClient } from "effect/unstable/sql";
 import { afterAll, test } from "vitest";
 import {
   BRAIN_INPUT_MARKER,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
   CHILD_RUN_STATUS,
   CHILD_SPAWN_REFUSAL,
@@ -39,6 +41,7 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
 import { dropChildConversation } from "../server/hosted/store/children";
 import { conversationDirectory } from "../server/hosted/store/standing-conversations";
+import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -536,13 +539,41 @@ test("a cancel eve refuses is answered as remaining; an ended child as done; a c
     (await withAccess(seams, (access) => access.list())).map((child) => child.childId),
     [running.childId],
   );
-  // The drop's condition is the statement's own: a child whose turn started since the read that
-  // found none is left standing, so a cancel racing a start never drops a running child.
+  // A child whose turn started since the read that found none is left standing, so a cancel
+  // racing a start never drops a running child.
   assert.equal(
     await database.run(dropChildConversation(fixture.userId, running.childId, at(0))),
     false,
   );
   assert.equal((await readConversationById(database.run, running.childId))[0]?.deleted_at, null);
+
+  // The drop and a turn's start race for one child: each takes the child's row lock for its
+  // transaction, so exactly one lands, whichever the lock admits first. The test database
+  // serialises the two on its one connection; what the lock imposes on a Postgres with more is the
+  // same order.
+  const racing = await childOf(fixture, { createdAt: at(22), runtimeSessionId: SESSION_ID });
+  const [dropped, started] = await database.run(
+    Effect.all(
+      [
+        dropChildConversation(fixture.userId, racing.childId, at(0)),
+        writer.consume(
+          { userId: fixture.userId, conversationId: racing.childId },
+          {
+            conversationId: childSessionKey(racing.childId),
+            turnId: randomUUID(),
+            sequence: 1,
+            kind: BRAIN_RUN_EVENT.TURN_STARTED,
+            origin: BRAIN_TURN_ORIGIN.CHILD,
+            trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+            at: NOW,
+          },
+        ),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
+  assert.equal(dropped, !started.ok);
+  if (!started.ok) assert.equal(started.refusal, STORE_WRITE_REFUSAL.NO_CONVERSATION);
 
   const ended = await childOf(fixture, {
     createdAt: at(30),

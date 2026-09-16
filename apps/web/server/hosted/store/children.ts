@@ -443,6 +443,23 @@ export function abandonChildConversation(
   return Effect.map(abandonChild({ userId, childId, now }), Option.isSome);
 }
 
+/** The child's own row lock, the one every turn write takes for its transaction; nothing where the child does not stand for the account. */
+const lockChild = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
+  Result: ChildIdRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select id from conversations
+        where id = ${request.childId}
+          and user_id = ${request.userId}
+          and kind = ${CONVERSATION_KIND.CHILD}
+          and deleted_at is null
+        for update
+      `,
+    ),
+});
+
 const dropChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
   Result: ChildIdRowSchema,
@@ -453,11 +470,9 @@ const dropChild = SqlSchema.findOneOption({
         set deleted_at = ${request.now}
         where id = ${request.childId}
           and user_id = ${request.userId}
-          and kind = ${CONVERSATION_KIND.CHILD}
-          and deleted_at is null
           and not exists (
             select 1 from turns
-            where turns.conversation_id = conversations.id and turns.user_id = conversations.user_id
+            where turns.conversation_id = ${request.childId} and turns.user_id = ${request.userId}
           )
         returning id
       `,
@@ -470,16 +485,28 @@ const dropChild = SqlSchema.findOneOption({
  * took the open of and ran nothing for, and which a cancel could otherwise
  * end by nothing eve names. A session that starts for it late finds a
  * cleared conversation and is refused at admission. Answers whether the row
- * was stamped: the turn condition is the statement's own, so a turn that
- * started between the caller's read and this write leaves the child
- * standing, as a child that is running now, rather than dropped under it.
+ * was stamped. The child's row lock is taken first, in its own statement,
+ * because every turn write holds that lock for its transaction: once it is
+ * held no turn is in flight, the check that follows reads under a snapshot
+ * of its own and sees any turn committed meanwhile (a lock waited on
+ * refreshes an update's own row but not its subquery), and a turn write
+ * waiting behind the stamp finds the child gone. A turn that started leaves
+ * the child standing, as the running child it is.
  */
 export function dropChildConversation(
   userId: string,
   childId: string,
   now: Date,
 ): Effect.Effect<boolean, ChildReadFailure, SqlClient.SqlClient> {
-  return Effect.map(dropChild({ userId, childId, now }), Option.isSome);
+  const request = { userId, childId };
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        if (Option.isNone(yield* lockChild(request))) return false;
+        return Option.isSome(yield* dropChild({ ...request, now }));
+      }),
+    ),
+  );
 }
 
 /** One of the account's standing children by id, or none. */
