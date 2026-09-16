@@ -260,19 +260,36 @@ test("the brain's own tools draw as rows of the turn's working, each led by a ma
   assert.equal(count(working, "data-tool-status", TOOL_ROW_STATUS.ACCEPTED), 7);
 });
 
-test("the wait is the thread's last object: once after the newest turn, and never above a later turn", () => {
+test("the wait is the thread's last object: once after the newest turn by queue instant, and never for a pending turn a later one was queued after", () => {
   const running = groupOf(FIXTURE_TURN.RUNNING);
   const settled = groupOf(FIXTURE_TURN.SINGLE);
-  // A pending row a later turn has passed is a record eve never finished, not a run: no wait.
+  assert.ok(running.turn !== undefined && settled.turn !== undefined);
+  // A pending turn a later turn was queued after is a record eve never finished, not a run: no
+  // wait, wherever its rows stand.
   assert.equal(count(render([running, settled], OPEN), "data-thinking", "true"), 0);
+  assert.equal(count(render([settled, running], OPEN), "data-thinking", "true"), 0);
   // The newest turn running: one wait, after every row of the thread, stamped by nothing.
-  const newest = render([settled, running], OPEN);
+  const newestRunning: ConversationViewTurnGroup = {
+    ...running,
+    turn: { ...running.turn, queuedAt: settled.turn.queuedAt + 1_000 },
+  };
+  const newest = render([settled, newestRunning], OPEN);
   assert.equal(count(newest, "data-thinking", "true"), 1);
   const [above, below] = newest.split('data-thinking="true"');
   assert.ok(above !== undefined && below !== undefined);
   assert.equal(count(below, "data-speaker", "you"), 0);
   assert.equal(count(below, "class", "conversation-time"), 0);
   assert.equal(count(above, "data-speaker", "you"), 2);
+  // An older turn's reply placed after the newer ask — read aloud while the developer was already
+  // asking again — stands last without being newer, so the wait for the running turn still draws.
+  const [settledAsk, ...settledWork] = settled.messages;
+  assert.ok(settledAsk !== undefined && settledWork.length > 0);
+  const interleaved = render(
+    [{ ...settled, messages: [settledAsk] }, newestRunning, { ...settled, messages: settledWork }],
+    OPEN,
+  );
+  assert.equal(count(interleaved, "data-thinking", "true"), 1);
+  assert.equal(interleaved.split('data-thinking="true"')[1]?.includes('data-speaker="you"'), false);
 });
 
 test("a row of no turn said while the newest turn runs stands above the wait, and the turn's rows around it read the turn: the ask is still the rating's, and the wait is still last", () => {

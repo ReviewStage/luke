@@ -1234,6 +1234,24 @@ function groupKey(group: ConversationViewTurnGroup): string {
   return group.messages[0]?.message.id ?? group.turnId;
 }
 
+/** The newest turn the thread holds a row of, by queue instant and then id: the one turn that can still be running. */
+function newestTurn(
+  groups: readonly ConversationViewTurnGroup[],
+): ConversationViewTurn | undefined {
+  let newest: ConversationViewTurn | undefined;
+  for (const { turn } of groups) {
+    if (turn === undefined) continue;
+    if (
+      newest === undefined ||
+      turn.queuedAt > newest.queuedAt ||
+      (turn.queuedAt === newest.queuedAt && turn.id > newest.id)
+    ) {
+      newest = turn;
+    }
+  }
+  return newest;
+}
+
 /** Every message of each turn in the thread's order, whole across the groups the turn stands as, for what is decided of a turn rather than of a group. */
 function messagesByTurn(
   groups: readonly ConversationViewTurnGroup[],
@@ -1314,15 +1332,15 @@ export function ConversationTurns({
   };
   // The wait is the thread's last object or nothing: a turn still running is
   // the newest one, since eve runs a conversation's turns one at a time and
-  // in order, so a pending row above a settled reply is a record eve never
-  // finished writing (an interrupted run), not a run still going. Drawing a
-  // wait there would tell the developer Luke is thinking about words he
-  // already answered, or never will. A row of no turn placed after the
-  // newest turn's rows — the voice's acknowledgment of the ask it is running,
-  // a line the voice answered alone — is not a later turn, so the newest turn
-  // is the last group that has a turn row.
-  const newest = groups.findLast((group) => group.turn !== undefined);
-  const waiting = turnPending(newest?.turn) ? newest?.turn : undefined;
+  // in order, so a pending turn queued before a settled one is a record eve
+  // never finished writing (an interrupted run), not a run still going.
+  // Drawing a wait there would tell the developer Luke is thinking about
+  // words he already answered, or never will. The newest turn is the newest
+  // by its queue instant, not by where its rows stand: a row of no turn after
+  // its rows is not a later turn, and an older turn's reply read aloud after
+  // a newer ask is placed later without being newer.
+  const newest = newestTurn(groups);
+  const waiting = turnPending(newest) ? newest : undefined;
   const byTurn = messagesByTurn(groups);
   // The ask a rated reply answered is the developer's latest words in the
   // same turn before it, wherever the turn's groups stand; a turn Luke opened
@@ -1406,9 +1424,9 @@ export function ConversationTurns({
           ...drawn,
         ];
       })}
-      {waiting !== undefined && newest !== undefined ? (
+      {waiting !== undefined ? (
         <ConversationThinkingRow
-          key={`${newest.turnId}:thinking`}
+          key={`${waiting.id}:thinking`}
           since={waiting.startedAt ?? waiting.queuedAt}
           now={now}
         />
