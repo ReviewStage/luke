@@ -869,13 +869,15 @@ developer actually heard, and a reading stands beside the message it was read
 from rather than in place of it. A delegation cuts nothing and re-keys
 nothing: the stream's `session.delegation.created` is consumed like any other
 event and leaves nothing, and what puts an ask on record is the service's
-write for the developer's utterance under the delegation, which the record
-answers by writing the row as the ledger holds it then, so a last fragment the
-API delivered after the delegation is on the row, and attaching that row to
-the delegation in place (`attachSpokenAsk`), its `client_id` the ledger's
-still and `metadata.delegation_id` naming the ask, which is where the
-received-message attach and Luke's rows already look for it, and which the
-store keeps on the row through any later write of it.
+attach: every developer row of its ledger since the previous ask's end that
+starts at or before the delegation's offset, the row containing the offset
+among them, each handed over as the ledger holds it then, so a last fragment
+the API delivered after the delegation is on the row, and each written and
+then given the delegation in one turn at the writer (`attachSpokenAsk`), its
+`client_id` the ledger's still and `metadata.delegation_id` naming the ask,
+which is where the received-message attach and Luke's rows already look for
+it. The ask's rows keep growing under their own ids after the handover, and
+the store keeps the delegation on a row through every later write of it.
 That order is a queue's:
 one fiber of the socket's scope makes every write, taking them from a queue
 each arrival puts one on, so where an event lands in the sequence is decided

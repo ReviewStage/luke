@@ -1,4 +1,4 @@
-import type { LiveRecord } from "@sidecar/voice/live-session";
+import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Queue, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -8,7 +8,7 @@ import {
   type VoiceWriteResult,
   type VoiceWriter,
 } from "../hosted/store/index.js";
-import { type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../live.js";
+import type { LiveServerEvent } from "../live.js";
 
 /**
  * The hosted implementation of the live record: the voice writer over
@@ -26,25 +26,22 @@ import { type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../live.js";
  *
  * A delegation cuts nothing. The stream's own delegation event is consumed
  * like any other and the writer keeps nothing of it; what puts an ask on
- * record is the service's write for the developer's utterance under the
- * delegation, which the record answers by writing the row as the ledger
- * holds it then — so a last fragment the API delivered after the delegation
- * is on the row — and attaching that row to the delegation in place, its id
- * the ledger's still. The service makes that write for every delegated ask
- * and awaits it ahead of the reply, so the write answers true only when a
- * row of the ask stands on record under the delegation, and the service
- * speaks no reply to an ask the record refused. The store's own rule that a
- * row already a delegation's is left as it is makes a repeated write the
- * same rows.
+ * record is the service's attach, handing over the developer's rows the
+ * delegation is about as its ledger holds them, each written as it stands
+ * and then given the delegation in one turn at the writer, so the attach
+ * finds every row with its last word on it and a closing session drains the
+ * two together. The rows take the delegation in place, their ids the
+ * ledger's still. The service makes that attach for every delegated ask and awaits it
+ * ahead of the reply, so it answers true only when a row of the ask stands on
+ * record under the delegation, and the service speaks no reply to an ask the
+ * record refused. The store's own rule that a row already a delegation's is
+ * left as it is makes a repeated attach the same rows.
  *
  * Every face here answers an effect and none of them runs one: the write
  * itself is made on the scoped fiber below, under the `SqlClient` the
  * socket's scope was built on, and what a caller is handed is the wait on
  * that write's own `Deferred`.
  */
-
-/** One row as the service names it to the record. */
-type SpokenRowUpsert = Parameters<LiveRecord["upsertSpokenRow"]>[0];
 
 interface HostedLiveRecordOptions {
   readonly writer: VoiceWriter;
@@ -109,7 +106,7 @@ export function hostedLiveRecord({
       );
 
     /** The row as the service names it, written or grown from the segments on record over its span. */
-    const upsert = (row: SpokenRowUpsert): Write =>
+    const upsert = (row: SpokenAskAttach["rows"][number]): Write =>
       writer.upsertSpokenRow(target, {
         rowId: row.rowId,
         speaker: row.speaker,
@@ -120,30 +117,19 @@ export function hostedLiveRecord({
     return {
       observe: (event) => enqueue(writer.consume(target, event)),
       upsertSpokenRow: (row) => taken(enqueue(upsert(row))),
-      writeDeveloperUtterance: (record) =>
-        // The row is written as the ledger holds it now and then given the
-        // delegation, as one turn at the writer: one entry on the queue, so
-        // the drain a closing session waits on covers the attach with the
-        // write, and a close between the two cannot leave the row written
-        // and never the delegation's. A write the store refused and one it
-        // died on are both an ask not on record; an interruption is neither,
-        // and is the socket's scope closing under the wait.
+      attachSpokenAsk: (attach) =>
+        // The rows are written as the service holds them and then given the
+        // delegation, as one turn at the writer on one queue entry, so the
+        // drain a closing session waits on covers the attach with the writes.
+        // An attach that found no row is an ask not on record, as are one the
+        // store refused and one it died on; an interruption is neither, and
+        // is the socket's scope closing under the wait.
         enqueue(
-          Effect.flatMap(
-            upsert({
-              rowId: record.rowId,
-              speaker: TRANSCRIPT_SPEAKER.USER,
-              voiceSessionId: record.voiceSessionId,
-              startMs: record.startMs,
-              endMs: record.endMs,
+          Effect.flatMap(Effect.forEach(attach.rows, upsert, { discard: true }), () =>
+            writer.attachSpokenAsk(target, {
+              delegationId: attach.delegationId,
+              rowIds: attach.rows.map((row) => row.rowId),
             }),
-            (written) =>
-              written.ok
-                ? writer.attachSpokenAsk(target, {
-                    delegationId: record.delegationId,
-                    rowIds: [record.rowId],
-                  })
-                : Effect.succeed(written),
           ),
         ).pipe(
           Effect.map((attached) => attached.ok && attached.effect !== STORE_WRITE_EFFECT.IGNORED),

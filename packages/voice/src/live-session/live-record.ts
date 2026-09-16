@@ -11,8 +11,9 @@ import type { Effect } from "effect";
  * the service names the row by the id the ledger minted and the span the
  * ledger holds it at, and the record reads the words from the segments over
  * that span, so the writer and not the ledger is the source of the words. A
- * developer utterance the voice model delegated on is also written under its
- * delegation, and what that second write means is the record's to decide.
+ * delegation cuts nothing: the service names the developer's rows the
+ * delegation is about, each already written as it stands, and the record
+ * gives them the delegation, which is where the ask's turn finds them.
  */
 
 /** One utterance as the ledger holds it now, for the record to write or grow the row of. */
@@ -26,26 +27,25 @@ export interface SpokenRowUpsert {
   endMs: number;
 }
 
-export interface DeveloperUtteranceRecord {
-  /** The ledger's row for the utterance, stable across its fragments, which a record that already holds the row tells this write apart by. */
-  rowId: string;
-  /** The grouped transcript of one developer utterance, exactly as the ledger concatenated it. */
-  text: string;
+/**
+ * The developer's rows a delegation is about, for the record to write as
+ * they stand and then give the delegation, as one turn at the record: a
+ * session closing between the two would otherwise leave a row written and
+ * never the delegation's, since a close waits out what the record has
+ * started and nothing retries an attach.
+ */
+export interface SpokenAskAttach {
+  /** The delegation the rows fed. */
+  delegationId: string;
   /** The session the words were spoken on, opaque, as the provider named it. */
   voiceSessionId: string;
-  /** The delegation the utterance fed. */
-  delegationId: string;
-  /** The span of the session timeline the ask context that fed the brain covered. */
-  askContext: { sinceMs: number; untilMs: number } | undefined;
-  startMs: number;
-  endMs: number;
-  /** The brain run the utterance opened, when one was accepted. */
-  runId?: string;
+  /** The ledger's rows, oldest first, each as the ledger holds it now. */
+  rows: readonly SpokenRowUpsert[];
 }
 
 export interface LiveRecord {
   /** Writes or grows one speaker's row as the ledger holds it; answers whether the record took it. */
   upsertSpokenRow(row: SpokenRowUpsert): Effect.Effect<boolean>;
-  /** Writes one developer utterance under the delegation it fed; answers whether the record took it. */
-  writeDeveloperUtterance(record: DeveloperUtteranceRecord): Effect.Effect<boolean>;
+  /** Writes the developer's rows a delegation is about as they stand and gives them the delegation; answers whether the record took them. */
+  attachSpokenAsk(attach: SpokenAskAttach): Effect.Effect<boolean>;
 }

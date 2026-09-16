@@ -6,7 +6,7 @@ import { LiveRecordTag, liveRecordLayer } from "./live-record.js";
 
 const fakeRecord: LiveRecord = {
   upsertSpokenRow: () => Effect.succeed(true),
-  writeDeveloperUtterance: () => Effect.succeed(true),
+  attachSpokenAsk: () => Effect.succeed(true),
 };
 
 describe("liveRecordLayer", () => {

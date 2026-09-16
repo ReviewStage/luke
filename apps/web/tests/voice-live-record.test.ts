@@ -500,7 +500,7 @@ test("an ask the record refuses is answered all the same: nothing is said of the
   assert.deepEqual(await Promise.all(f.observed), [IGNORED, refused, IGNORED]);
 });
 
-test("the record door answers from the stream: the developer's row and Luke's answer to it are rows cut from the segments, the stream's delegation event writes nothing, the ask's write attaches its row once however often it is made, and a row with no words on record is refused", async () => {
+test("the record door answers from the stream: the developer's row and Luke's answer to it are rows cut from the segments, the stream's delegation event writes nothing, an attach names the ask's rows once however often it is made, and a row not on record attaches nothing", async () => {
   const live = await target();
   const scope = await database.run(Scope.make());
   const record = await database.run(
@@ -509,7 +509,6 @@ test("the record door answers from the stream: the developer's row and Luke's an
   const utterance = {
     rowId: "row-1",
     voiceSessionId: live.liveSessionId,
-    askContext: undefined,
     startMs: 0,
     endMs: 900,
   };
@@ -537,16 +536,21 @@ test("the record door answers from the stream: the developer's row and Luke's an
     ),
     true,
   );
-  // A row whose span holds no segment is not on record and cannot be the ask's.
+  // A row whose span holds no segment is not on record, and nothing is attached.
   assert.equal(
     await database.run(
-      record.writeDeveloperUtterance({
-        ...utterance,
-        rowId: "row-nowhere",
-        startMs: 5000,
-        endMs: 5500,
-        text: "x",
+      record.attachSpokenAsk({
         delegationId: "dl_unseen",
+        voiceSessionId: live.liveSessionId,
+        rows: [
+          {
+            ...utterance,
+            rowId: "row-nowhere",
+            speaker: TRANSCRIPT_SPEAKER.USER,
+            startMs: 5000,
+            endMs: 5500,
+          },
+        ],
       }),
     ),
     false,
@@ -559,28 +563,33 @@ test("the record door answers from the stream: the developer's row and Luke's an
     ],
   );
 
-  // The stream's delegation event writes nothing; the ask's own write attaches its row.
+  // The stream's delegation event writes nothing; the service's attach hands over the ask's row.
   assert.deepEqual(await database.run(record.observe(heard("Now run it.", 3000, 3800))), WRITTEN);
   assert.deepEqual(await database.run(record.observe(delegated("dl_3", 4000))), IGNORED);
   assert.equal((await messageRows(live.conversation)).length, 2);
   const ask = {
-    ...utterance,
-    rowId: "row-3",
-    startMs: 3000,
-    endMs: 3800,
-    text: "Now run it.",
     delegationId: "dl_3",
+    voiceSessionId: live.liveSessionId,
+    rows: [
+      {
+        ...utterance,
+        rowId: "row-3",
+        speaker: TRANSCRIPT_SPEAKER.USER,
+        startMs: 3000,
+        endMs: 3800,
+      },
+    ],
   };
   // The drain a closing session waits on covers the attach with the row's write: once drained, the
   // row is the delegation's, never written and left for an attach the close would cut.
-  const writing = database.run(record.writeDeveloperUtterance(ask));
+  const attaching = database.run(record.attachSpokenAsk(ask));
   await database.run(record.drained());
   assert.equal(
     delegationOf((await messageRows(live.conversation))[2] ?? { metadata: null }),
     "dl_3",
   );
-  assert.equal(await writing, true);
-  assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
+  assert.equal(await attaching, true);
+  assert.equal(await database.run(record.attachSpokenAsk(ask)), true);
   assert.deepEqual(
     (await messageRows(live.conversation)).map((row) => [row.role, row.parts]),
     [
@@ -601,7 +610,7 @@ test("the record door answers from the stream: the developer's row and Luke's an
   ]);
 });
 
-test("a delegation placed ahead of the ask's last fragment, the fragment landing while the brain is asked, leaves the whole utterance on record as the ask, once", async () => {
+test("a delegation placed ahead of the ask's last fragment, the fragment landing while the brain is asked, leaves the whole utterance on record as the ask, once, and the row keeps growing under the delegation after the handover", async () => {
   const live = await target();
   const f = await stand(live);
   await f.open();
@@ -639,7 +648,89 @@ test("a delegation placed ahead of the ask's last fragment, the fragment landing
       metadata,
     },
   ]);
-  // The row is the ask's now and is grown no further by its own write: one row.
+  // The row is the ask's now and keeps growing: a word said after the handover lands on the same
+  // row, under the same id, with the delegation kept and the revision moved. One row throughout.
   await elapse(ROW_WRITE_DEBOUNCE_MS);
   assert.equal((await messageRows(live.conversation)).length, 1);
+  f.socket.receive(heard(" Please.", 2700, 3000));
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
+  const grown = await messageRows(live.conversation);
+  assert.deepEqual(shownRows(grown), [
+    {
+      clientId: ask.clientId,
+      role: MESSAGE_ROLE.USER,
+      parts: [{ type: "text", text: "Open the failing one. Please.", state: "done" }],
+      metadata: { ...metadata, to_ms: 3000 },
+    },
+  ]);
+  assert.ok((grown[0]?.revision ?? 0) > ask.revision);
+});
+
+/**
+ * The 2026-09-14 shape, with synthetic words: the developer speaks in bursts
+ * with Luke's acknowledgments between, and the delegation names an offset at
+ * the developer's last word, arriving two seconds later. However the gap
+ * constant groups the bursts, every developer word must be on a row the
+ * delegation attached, in the order said, and Luke's three rows must stand
+ * unattached: the assertions read the rows against the segments and never
+ * count them.
+ */
+test("the 2026-09-14 shape: every developer word is on a row attached to the delegation, in the order said, Luke's rows unattached, nothing dropped", async () => {
+  const live = await target();
+  const f = await stand(live);
+  await f.open();
+
+  const spoken = [
+    heard("alpha bravo charlie", 215_200, 217_200),
+    heard(" delta echo", 219_200, 220_800),
+    said("Mm-hmm.", 220_600, 221_000),
+    heard(" foxtrot golf hotel", 222_200, 224_600),
+    said("'Kay.", 225_000, 225_400),
+    heard(" india juliet kilo lima mike november oscar papa", 225_400, 237_600),
+    said("Okay. On it.", 237_000, 238_200),
+  ];
+  for (const event of spoken) f.socket.receive(event);
+  await Promise.all(f.observed);
+  await elapse(ROW_WRITE_DEBOUNCE_MS);
+  f.socket.receive(delegated("dl_shape", 237_600));
+  await until(() => f.brain.asks.length === 1, "the ask to reach the brain");
+  await until(
+    async () => (await askRow(live.conversation, "dl_shape")) !== undefined,
+    "the ask on record",
+  );
+
+  const rows = await messageRows(live.conversation);
+  const developer = rows.filter((row) => row.role === MESSAGE_ROLE.USER);
+  const luke = rows.filter((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+  // Every developer row is the delegation's, and no row of Luke's is.
+  assert.ok(developer.length > 0);
+  assert.ok(developer.every((row) => delegationOf(row) === "dl_shape"));
+  assert.ok(luke.length > 0);
+  assert.ok(luke.every((row) => delegationOf(row) === undefined));
+  // The segments-to-rows word invariant, for each speaker: the rows, read in the order they
+  // were spoken, carry exactly the speaker's segments in the order they arrived.
+  const words = (row: { parts: unknown }) =>
+    Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ text: Schema.String })))(row.parts)
+      .map((part) => part.text)
+      .join("");
+  const rowFrom = (row: { metadata: unknown }) =>
+    Schema.decodeUnknownSync(Schema.Struct({ from_ms: Schema.Number }))(row.metadata).from_ms;
+  const rowWords = (speaker: typeof rows) =>
+    [...speaker]
+      .sort((left, right) => rowFrom(left) - rowFrom(right))
+      .map((row) => words(row))
+      .join("");
+  const spokenSegments = await segments(live.liveSessionId);
+  const segmentWords = (role: string) =>
+    spokenSegments
+      .filter(([, segmentRole]) => segmentRole === role)
+      .map(([, , text]) => text)
+      .join("");
+  assert.equal(rowWords(developer), segmentWords(VOICE_SEGMENT_ROLE.USER));
+  assert.equal(
+    rowWords(developer),
+    "alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima mike november oscar papa",
+  );
+  assert.equal(rowWords(luke), segmentWords(VOICE_SEGMENT_ROLE.ASSISTANT));
+  assert.equal(rowWords(luke), "Mm-hmm.'Kay.Okay. On it.");
 });

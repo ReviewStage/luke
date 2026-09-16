@@ -274,8 +274,8 @@ interface StandingSession {
   /**
    * The rows already composed as a spoken ask: a late fragment on one
    * anticipates nothing more, a summary read ahead for one is not appended
-   * into the exchange it opened, and the row is grown here no further, since
-   * the ask's own write puts it on record under the delegation.
+   * into the exchange it opened, and a later delegation is not about it. The
+   * row itself keeps growing under its own id, on record and in the turn.
    */
   readonly askedRows: Set<string>;
   /**
@@ -327,14 +327,6 @@ interface Exchange {
   end: LiveBrainRunEnd | undefined;
 }
 
-interface UtteranceWrite {
-  session: StandingSession;
-  utterance: TranscriptUtterance;
-  delegationId: string;
-  askContext?: { sinceMs: number; untilMs: number };
-  runId?: string;
-}
-
 function newExchange(
   runId: string,
   delegationIds: string[],
@@ -354,6 +346,28 @@ function newExchange(
     finalize: undefined,
     end: undefined,
   };
+}
+
+/**
+ * The developer's rows a delegation is about: those since the previous ask's
+ * end that are no ask's yet and start at or before the delegation's offset,
+ * the row containing the offset among them, oldest first. Where none starts
+ * by the offset but the developer has spoken since, the latest such row is
+ * the ask: the API places the offset on its own clock, and a delegation is
+ * about what was said, never about nothing.
+ */
+function askRowsOf(
+  context: ReturnType<TranscriptLedger["askContext"]>,
+  asked: ReadonlySet<string>,
+  offsetMs: number,
+): readonly TranscriptUtterance[] {
+  const unclaimed = context.turns.filter(
+    (turn) => turn.speaker === TRANSCRIPT_SPEAKER.USER && !asked.has(turn.rowId),
+  );
+  const byOffset = unclaimed.filter((turn) => turn.startMs <= offsetMs);
+  if (byOffset.length > 0) return byOffset;
+  const latest = unclaimed[unclaimed.length - 1];
+  return latest === undefined ? [] : [latest];
 }
 
 function isClientDelegation(
@@ -1060,15 +1074,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   ): void {
     const utterance = session.ledger.append({ speaker, text: delta, startMs, endMs });
     if (!utterance) return;
-    if (session.askedRows.has(utterance.rowId)) return;
     this.#cancelDelay(session.pendingRows.get(utterance.rowId));
     session.pendingRows.set(
       utterance.rowId,
       this.#after(ROW_WRITE_DEBOUNCE_MS, () => {
         session.pendingRows.delete(utterance.rowId);
-        if (!session.askedRows.has(utterance.rowId)) {
-          this.#start(this.#upsertRow(session, utterance.rowId));
-        }
+        this.#start(this.#upsertRow(session, utterance.rowId));
       }),
     );
     if (speaker === TRANSCRIPT_SPEAKER.USER) this.#armAnticipation(session);
@@ -1083,7 +1094,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #flushRows(session: StandingSession): void {
     for (const [rowId, delay] of session.pendingRows) {
       this.#cancelDelay(delay);
-      if (!session.askedRows.has(rowId)) this.#start(this.#upsertRow(session, rowId));
+      this.#start(this.#upsertRow(session, rowId));
     }
     session.pendingRows.clear();
   }
@@ -1199,22 +1210,38 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
-  /** The developer's utterance under the delegation it fed. */
-  #write(write: UtteranceWrite): Effect.Effect<boolean> {
-    return Effect.gen({ self: this }, function* () {
-      const { session, utterance } = write;
-      const written = yield* this.#record.writeDeveloperUtterance({
-        rowId: utterance.rowId,
-        text: utterance.text,
-        voiceSessionId: session.sessionId,
-        delegationId: write.delegationId,
-        askContext: write.askContext,
-        startMs: utterance.startMs,
-        endMs: utterance.endMs,
-        ...(write.runId !== undefined ? { runId: write.runId } : undefined),
+  /**
+   * The ask's rows given their delegation, each handed over as the ledger
+   * holds it now, not as it stood when the delegation arrived: the API
+   * delivers a delegation ahead of the transcript deltas it is about, so the
+   * ask's last fragment may land while the brain is being asked, and the
+   * record writes each row as handed before it attaches. A row's own debounce
+   * may write it again after; the record grows it in place either way.
+   */
+  #attachAsk(
+    session: StandingSession,
+    delegationId: string,
+    rowIds: readonly string[],
+  ): Effect.Effect<boolean> {
+    return Effect.suspend(() => {
+      const rows = rowIds.flatMap((rowId) => {
+        const row = session.ledger.row(rowId);
+        return row === undefined
+          ? []
+          : [
+              {
+                rowId,
+                speaker: row.speaker,
+                voiceSessionId: session.sessionId,
+                startMs: row.startMs,
+                endMs: row.endMs,
+              },
+            ];
       });
-      if (!written) this.#reportUnwritten();
-      return written;
+      return Effect.tap(
+        this.#record.attachSpokenAsk({ delegationId, voiceSessionId: session.sessionId, rows }),
+        (attached) => (attached ? Effect.void : Effect.sync(() => this.#reportUnwritten())),
+      );
     });
   }
 
@@ -1253,53 +1280,45 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /**
    * The ask the delegation is about, claimed here and answered on the fiber
-   * that begins what this hands back: what the ask claims — the row, the span
-   * it moves the session past, the read it cancels — is decided the instant
-   * the delegation arrives, because a second delegation or a late fragment in
-   * the same tick must find the claim already made.
+   * that begins what this hands back: what the ask claims — the rows, the
+   * span it moves the session past, the read it cancels — is decided the
+   * instant the delegation arrives, because a second delegation or a late
+   * fragment in the same tick must find the claim already made. The rows are
+   * the ledger's, by the rule `askRowsOf` states; the question the brain is
+   * handed names the latest of them as the developer's ask, as it did when
+   * an ask was one row, over the whole context since the previous one.
    */
   #compose(session: StandingSession, delegationId: string, offsetMs: number): Effect.Effect<void> {
     const sinceMs = session.lastDelegationOffsetMs;
     const context = session.ledger.askContext(sinceMs);
-    const ask = context.ask;
+    const rows = askRowsOf(context, session.askedRows, offsetMs);
+    // Every developer row since is already an ask's where the rows are empty: the brain is asked
+    // about the latest all the same, since the model waits on the delegation, and nothing new is
+    // attached, the rows being another delegation's already.
+    const ask = rows[rows.length - 1] ?? context.ask;
     if (!ask) return Effect.void;
     // The ask is here: a pause still pending would anticipate what the turn
-    // is about to read for itself, and a late fragment on this row must not
+    // is about to read for itself, and a late fragment on these rows must not
     // supersede the slot that turn is taking. A read already under way is
     // left to finish, since that turn is what waits for it.
     this.#cancelAnticipation(session);
-    session.askedRows.add(ask.rowId);
-    session.lastDelegationOffsetMs = Math.max(offsetMs, ask.endMs);
+    for (const row of rows) session.askedRows.add(row.rowId);
+    session.lastDelegationOffsetMs = Math.max(offsetMs, ...rows.map((row) => row.endMs));
     this.#trace(LIVE_TRACE_DECISION.DELEGATED);
     const question = [
       renderAskContext(context),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
     return Effect.gen({ self: this }, function* () {
-      // The delegation's id is the submission's: the record writes the developer's
-      // utterance under it, so an ask and the line it leaves share one id and a
-      // record that learns the ask's turn can attach the line to it.
+      // The delegation's id is the submission's: the record gives the ask's rows
+      // that id, so a record that learns the ask's turn can attach the rows to it.
       const submission = yield* this.#brain.submitAsk({
         submissionId: delegationId,
         question,
       });
-      // The delegated write runs whether or not the row's own write put the
-      // utterance on record already: an ask is on record only under its
-      // delegation, and a record that holds the row tells the two writes apart
-      // by the row's id. The row is grown here no further once claimed. What is
-      // written is the row as the ledger holds it now, not as it stood when the
-      // delegation arrived: the API delivers a delegation ahead of the
-      // transcript deltas it is about, so the ask's last fragment may land
-      // while the brain is being asked, and a row written from the span claimed
-      // then would leave that word off the record for good.
-      const utterance = this.#rowNow(session, ask);
+      const rowIds = rows.map((row) => row.rowId);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
-        yield* this.#write({
-          session,
-          utterance,
-          delegationId,
-          askContext: { sinceMs, untilMs: offsetMs },
-        });
+        if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
         this.#speakInto(session, delegationId, submission.refusal);
         return;
       }
@@ -1310,31 +1329,22 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
       // acceptance itself is told nothing of: a note saying the ask is with
       // Luke is what the model reads as license to narrate waiting, and the
       // only thinking appends this exchange earns are the factual ones a slow
-      // step actually begun writes. A write that lands nothing (a follow-up
-      // whose words the previous ask's cut already holds, a repeat, or a
-      // store failure, which `#write` reports) changes nothing here: the ask
-      // is with the brain either way, and the developer is told nothing of
-      // the record.
+      // step actually begun writes. An attach that lands nothing (a follow-up
+      // with no row of its own, a repeat, or a store failure, which `#attachAsk`
+      // reports) changes nothing here: the ask is with the brain either way,
+      // and the developer is told nothing of the record.
       const exchange = this.#registerExchange(session, submission.runId, delegationId);
-      exchange.pendingRecords += 1;
-      yield* this.#write({
-        session,
-        utterance,
-        delegationId,
-        askContext: { sinceMs, untilMs: offsetMs },
-        runId: submission.runId,
-      });
-      exchange.pendingRecords -= 1;
-      // A sibling ask steered into this exchange may still have its own write
-      // out; the exchange is settled once, when the last of them is in.
+      if (rowIds.length > 0) {
+        exchange.pendingRecords += 1;
+        yield* this.#attachAsk(session, delegationId, rowIds);
+        exchange.pendingRecords -= 1;
+      }
+      // A sibling ask steered into this exchange may still have its own attach
+      // out; the exchange is settled once, when the last of them is in. A
+      // follow-up whose words joined the first ask's row has none of its own.
       if (exchange.pendingRecords > 0) return;
       for (const event of exchange.deferred.splice(0)) this.#onRunEvent(event);
     });
-  }
-
-  /** The utterance's row as the ledger holds it at this instant, with every fragment that joined it since it was claimed; the claim itself where the row is gone. */
-  #rowNow(session: StandingSession, claimed: TranscriptUtterance): TranscriptUtterance {
-    return session.ledger.row(claimed.rowId) ?? claimed;
   }
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */
@@ -1651,9 +1661,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     return Effect.andThen(
       Scope.close(session.scope, Exit.void),
       Effect.suspend(() => {
-        const rows = [...session.pendingRows.keys()].filter(
-          (rowId) => !session.askedRows.has(rowId),
-        );
+        const rows = [...session.pendingRows.keys()];
         session.pendingRows.clear();
         return Effect.all([this.#drop(), ...rows.map((rowId) => this.#upsertRow(session, rowId))], {
           concurrency: "unbounded",
