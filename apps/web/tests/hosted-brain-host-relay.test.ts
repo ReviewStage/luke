@@ -649,6 +649,7 @@ it.effect(
       const failedRows = await rows(failed);
       assert.equal(failedRows.turnRows[0]?.status, TURN_STATUS.FAILED);
       assert.equal(failedRows.turnRows[0]?.failure, "model");
+      assert.equal(failedRows.turnRows[0]?.failureDetail, "model_error: upstream failed");
       const failedJournal = failedRows.messageRows.find(
         (row) => row.role === MESSAGE_ROLE.ASSISTANT,
       );

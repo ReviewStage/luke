@@ -62,6 +62,13 @@ interface ObservationTickReads {
    */
   purgeCleared: (now: number) => TickRead<number>;
   /**
+   * Settles every turn still running an hour after it started as failed for
+   * abandonment, answering how many. Bounded per tick, and on the tick for
+   * the same reason the purge is: a run whose end the relay never heard has
+   * no other moment that would settle it.
+   */
+  sweepAbandonedTurns: (now: number) => TickRead<number>;
+  /**
    * The pass over every briefing still on offer, of any account: held while
    * a device of its account reports quiet ahead, released unspoken with a
    * turn queued for the brain to decide again once the quiet lifts, and
@@ -130,6 +137,8 @@ interface ObservationTickAnswer {
   exhausted: boolean;
   /** Cleared conversations the tick purged past their retention window. */
   purged: number;
+  /** Turns still running an hour after their start, settled as failed for abandonment. */
+  abandoned: number;
   /** What the sweep over the briefings on offer did. */
   speech: SpeechSweepOutcome;
   /** What the push over the briefings still on offer did. */
@@ -236,6 +245,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
 
   yield* options.forgetIneligible(seenAfter);
   const purged = yield* options.purgeCleared(startedAt);
+  const abandoned = yield* options.sweepAbandonedTurns(startedAt);
   const speech = yield* options.sweepSpeech(startedAt);
   const push = yield* options.pushSpeech(startedAt);
   const accounts = yield* options.listAccounts(OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter);
@@ -247,6 +257,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     changed: 0,
     exhausted: false,
     purged,
+    abandoned,
     speech,
     push,
     children: NOTHING_DELIVERED,

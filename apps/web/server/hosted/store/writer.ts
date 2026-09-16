@@ -898,6 +898,7 @@ const settleTurn = SqlSchema.void({
     status: TurnStatusSchema,
     settledAt: Schema.Date,
     failure: Schema.NullOr(Schema.String),
+    failureDetail: Schema.NullOr(Schema.String),
     usage: Schema.NullOr(Schema.fromJsonString(TurnUsageColumnSchema)),
     responseIds: Schema.Array(Schema.String),
   }),
@@ -908,6 +909,7 @@ const settleTurn = SqlSchema.void({
         set status = ${row.status},
             settled_at = ${row.settledAt},
             failure = ${row.failure},
+            failure_detail = ${row.failureDetail},
             usage = ${row.usage}::jsonb,
             response_ids = ${emptyTextArray(sql, row.responseIds)}
         where id = ${row.turnId}
@@ -1309,6 +1311,7 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     status,
     settledAt,
     failure: nullable(failure),
+    failureDetail: nullable(event.failureDetail),
     usage: nullable(event.usage),
     responseIds: event.responseIds,
   });

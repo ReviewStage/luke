@@ -34,6 +34,7 @@ import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget } from "../store/index.js";
 import type { StoreWriter } from "./announce.js";
 import {
+  BRAIN_HOST,
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
@@ -194,6 +195,16 @@ const EVE_ACTION_COMPLETED = "completed";
 /** The status word a tool's own output carries, when it is a record with one. */
 function statusWordOf(output: UnparsedWireValue): string | undefined {
   return isRecord(output) && isWireString(output.status) ? output.status : undefined;
+}
+
+/**
+ * Why eve failed the turn, as the row keeps it: eve's own code and the
+ * message its harness summarized the error to, cut to the bound. The event's
+ * `details` — the provider's error object, its ids, whatever it carried — are
+ * never read, so no header or stack reaches the row.
+ */
+function failureDetailOf(data: { readonly code: string; readonly message: string }): string {
+  return `${data.code}: ${data.message}`.slice(0, BRAIN_HOST.FAILURE_DETAIL_CHARS);
 }
 
 function withTurn(
@@ -370,7 +381,12 @@ export class StreamRelay {
       case "turn.completed":
         return this.#turnEnded(event.data.turnId, BRAIN_REQUEST_STATUS.SUCCEEDED, standing);
       case "turn.failed":
-        return this.#turnEnded(event.data.turnId, BRAIN_REQUEST_STATUS.FAILED, standing);
+        return this.#turnEnded(
+          event.data.turnId,
+          BRAIN_REQUEST_STATUS.FAILED,
+          standing,
+          failureDetailOf(event.data),
+        );
       case "turn.cancelled":
         return this.#turnEnded(event.data.turnId, BRAIN_REQUEST_STATUS.CANCELLED, standing);
       default:
@@ -634,6 +650,7 @@ export class StreamRelay {
     eveTurnId: string,
     ended: BrainRequestStatus,
     standing: RelayStanding,
+    failureDetail?: string,
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
@@ -687,6 +704,7 @@ export class StreamRelay {
         kind: BRAIN_RUN_EVENT.TURN_ENDED,
         status,
         ...(failure !== undefined ? { failure } : undefined),
+        ...(failureDetail !== undefined ? { failureDetail } : undefined),
         ...(usage !== undefined ? { usage } : undefined),
         responseIds: [],
         at: this.#seams.now(),

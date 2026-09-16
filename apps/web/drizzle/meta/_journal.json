@@ -260,6 +260,13 @@
       "when": 1789900000000,
       "tag": "0037_turn_and_child_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789950000000,
+      "tag": "0038_turn_failure_detail",
+      "breakpoints": true
     }
   ]
 }

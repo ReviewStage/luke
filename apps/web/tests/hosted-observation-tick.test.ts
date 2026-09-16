@@ -57,6 +57,7 @@ function tickRequest(authorization: string | null = `Bearer ${CRON_SECRET}`): Re
 interface Recorded {
   forgot: number[];
   purged: number[];
+  abandoned: number[];
   swept: number[];
   pushed: number[];
   listed: Array<{ limit: number; seenAfter: number }>;
@@ -76,6 +77,7 @@ function tickOptions(
   const recorded: Recorded = {
     forgot: [],
     purged: [],
+    abandoned: [],
     swept: [],
     pushed: [],
     listed: [],
@@ -99,6 +101,11 @@ function tickOptions(
       Effect.sync(() => {
         recorded.purged.push(now);
         return 2;
+      }),
+    sweepAbandonedTurns: (now) =>
+      Effect.sync(() => {
+        recorded.abandoned.push(now);
+        return 1;
       }),
     sweepSpeech: (now) =>
       Effect.sync(() => {
@@ -192,6 +199,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     changed: 1,
     exhausted: false,
     purged: 2,
+    abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(3),
@@ -200,6 +208,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
   assert.deepEqual(recorded.forgot, [seenAfter]);
   assert.deepEqual(recorded.purged, [TICK_TIME]);
+  assert.deepEqual(recorded.abandoned, [TICK_TIME]);
   assert.deepEqual(recorded.swept, [TICK_TIME]);
   assert.deepEqual(recorded.pushed, [TICK_TIME]);
   assert.deepEqual(recorded.listed, [{ limit: OBSERVATION_TICK.MAX_ACCOUNTS, seenAfter }]);
@@ -223,6 +232,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     changed: 0,
     exhausted: false,
     purged: 2,
+    abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
@@ -275,6 +285,7 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
       changed: 1,
       exhausted: false,
       purged: 2,
+      abandoned: 1,
       speech: SWEPT,
       push: PUSHED,
       children: completedFor(1),
@@ -313,6 +324,7 @@ test("each account's opening runs after its own pass, inside the same share of t
     changed: 1,
     exhausted: false,
     purged: 2,
+    abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),
@@ -349,6 +361,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     changed: 0,
     exhausted: false,
     purged: 2,
+    abandoned: 1,
     speech: SWEPT,
     push: PUSHED,
     children: completedFor(2),

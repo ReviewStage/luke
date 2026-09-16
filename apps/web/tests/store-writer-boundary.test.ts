@@ -37,6 +37,9 @@ const CHILDREN_READER = "server/hosted/store/children.ts";
 /** The agents module: derives where an observed session stands from the latest of its turns, and writes nothing. */
 const AGENTS_READER = "server/hosted/store/agents.ts";
 
+/** The abandoned-turns module: lists the turns still running past the bound and settles each through the writer. */
+const ABANDONED_TURNS_READER = "server/hosted/store/abandoned-turns.ts";
+
 /** The tables each module names at all. */
 const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [WRITER, WRITTEN_TABLES],
@@ -44,6 +47,7 @@ const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [SPEECH_READER, new Set(["messages", "events"])],
   [CHILDREN_READER, new Set(["messages", "turns"])],
   [AGENTS_READER, new Set(["turns"])],
+  [ABANDONED_TURNS_READER, new Set(["turns"])],
 ]);
 
 /** The modules that may write one of the three tables, which is the writer and nothing else. */
@@ -68,7 +72,7 @@ function matchedTables(source: string, pattern: RegExp): readonly string[] {
   );
 }
 
-test("the writer and the four readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the five readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
   const named = new Map<string, ReadonlySet<string>>();
   const writers = new Set<string>();

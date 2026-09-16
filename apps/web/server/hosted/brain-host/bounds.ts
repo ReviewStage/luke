@@ -22,6 +22,8 @@ export const BRAIN_HOST = {
   SEED_CHARS: 40_000,
   /** The most characters one observation turn's transcript delta carries per session. */
   TRANSCRIPT_DELTA_CHARS: 20_000,
+  /** The longest a failed turn's detail is kept, in characters, cut from the end: eve's code and message, never its details. */
+  FAILURE_DETAIL_CHARS: 500,
 } as const;
 
 /** A conversation id as the header carries it: a uuid, and nothing else names a row. */

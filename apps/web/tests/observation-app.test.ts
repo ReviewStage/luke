@@ -130,6 +130,7 @@ const EXCHANGES: readonly Exchange[] = [
           listAccounts: () => Effect.succeed([]),
           forgetIneligible: () => Effect.void,
           purgeCleared: () => Effect.succeed(0),
+          sweepAbandonedTurns: () => Effect.succeed(0),
           sweepSpeech: () => Effect.succeed({ held: 0, released: 0, expired: 0, turns: 0 }),
           pushSpeech: () =>
             Effect.succeed({
