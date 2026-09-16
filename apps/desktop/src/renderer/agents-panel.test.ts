@@ -445,7 +445,7 @@ test("the transcript page stands under the thread's own root and names the way b
   const agent = renderTranscript({ open: { ...OPEN_AGENT, status: CHILD_STATUS.SETTLED } });
   assert.ok(
     agent.includes(
-      `<h2 class="agents-title agent-transcript-title"><button type="button" class="conversation-action-chip" aria-label="Open ${FIXTURE_TITLE.HELD}">${chipMark("claude-code")}${FIXTURE_TITLE.HELD}</button></h2>`,
+      `<h2 class="agents-title agent-transcript-title" aria-label="${FIXTURE_TITLE.HELD}"><button type="button" class="conversation-action-chip" aria-label="Open ${FIXTURE_TITLE.HELD}">${chipMark("claude-code")}${FIXTURE_TITLE.HELD}</button></h2>`,
     ),
   );
   assert.ok(agent.includes(">Done</span>"));

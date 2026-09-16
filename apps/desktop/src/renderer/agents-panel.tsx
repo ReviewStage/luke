@@ -395,7 +395,9 @@ export function AgentTranscriptPanel({
         <button type="button" className="agents-back" onClick={onBack}>
           ‹ Agents
         </button>
-        <h2 className="agents-title agent-transcript-title">
+        {/* The heading's own name is the title, so heading navigation hears the
+            conversation and not the chip's press. */}
+        <h2 className="agents-title agent-transcript-title" aria-label={open.title}>
           {open.session === undefined ? (
             open.title
           ) : (
