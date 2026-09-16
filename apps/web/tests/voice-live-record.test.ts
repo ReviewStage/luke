@@ -571,7 +571,15 @@ test("the record door answers from the stream: the developer's row and Luke's an
     text: "Now run it.",
     delegationId: "dl_3",
   };
-  assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
+  // The drain a closing session waits on covers the attach with the row's write: once drained, the
+  // row is the delegation's, never written and left for an attach the close would cut.
+  const writing = database.run(record.writeDeveloperUtterance(ask));
+  await database.run(record.drained());
+  assert.equal(
+    delegationOf((await messageRows(live.conversation))[2] ?? { metadata: null }),
+    "dl_3",
+  );
+  assert.equal(await writing, true);
   assert.equal(await database.run(record.writeDeveloperUtterance(ask)), true);
   assert.deepEqual(
     (await messageRows(live.conversation)).map((row) => [row.role, row.parts]),

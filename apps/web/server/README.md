@@ -874,9 +874,8 @@ answers by writing the row as the ledger holds it then, so a last fragment the
 API delivered after the delegation is on the row, and attaching that row to
 the delegation in place (`attachSpokenAsk`), its `client_id` the ledger's
 still and `metadata.delegation_id` naming the ask, which is where the
-received-message attach and Luke's rows already look for it. The ask's row
-keeps growing under its own id after the handover, and the store keeps the
-delegation across those writes.
+received-message attach and Luke's rows already look for it, and which the
+store keeps on the row through any later write of it.
 That order is a queue's:
 one fiber of the socket's scope makes every write, taking them from a queue
 each arrival puts one on, so where an event lands in the sequence is decided

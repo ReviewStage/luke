@@ -109,40 +109,42 @@ export function hostedLiveRecord({
       );
 
     /** The row as the service names it, written or grown from the segments on record over its span. */
-    const upsert = (row: SpokenRowUpsert) =>
-      enqueue(
-        writer.upsertSpokenRow(target, {
-          rowId: row.rowId,
-          speaker: row.speaker,
-          startMs: row.startMs,
-          endMs: row.endMs,
-        }),
-      );
+    const upsert = (row: SpokenRowUpsert): Write =>
+      writer.upsertSpokenRow(target, {
+        rowId: row.rowId,
+        speaker: row.speaker,
+        startMs: row.startMs,
+        endMs: row.endMs,
+      });
 
     return {
       observe: (event) => enqueue(writer.consume(target, event)),
-      upsertSpokenRow: (row) => taken(upsert(row)),
+      upsertSpokenRow: (row) => taken(enqueue(upsert(row))),
       writeDeveloperUtterance: (record) =>
-        // The row is written as the ledger holds it now, then given the
-        // delegation; the attach is put on the queue only once the row's
-        // write has landed, so it finds the row. A write the store refused
-        // and one it died on are both an ask not on record; an interruption
-        // is neither, and is the socket's scope closing under the wait.
-        Effect.flatMap(
-          upsert({
-            rowId: record.rowId,
-            speaker: TRANSCRIPT_SPEAKER.USER,
-            voiceSessionId: record.voiceSessionId,
-            startMs: record.startMs,
-            endMs: record.endMs,
-          }),
-          () =>
-            enqueue(
-              writer.attachSpokenAsk(target, {
-                delegationId: record.delegationId,
-                rowIds: [record.rowId],
-              }),
-            ),
+        // The row is written as the ledger holds it now and then given the
+        // delegation, as one turn at the writer: one entry on the queue, so
+        // the drain a closing session waits on covers the attach with the
+        // write, and a close between the two cannot leave the row written
+        // and never the delegation's. A write the store refused and one it
+        // died on are both an ask not on record; an interruption is neither,
+        // and is the socket's scope closing under the wait.
+        enqueue(
+          Effect.flatMap(
+            upsert({
+              rowId: record.rowId,
+              speaker: TRANSCRIPT_SPEAKER.USER,
+              voiceSessionId: record.voiceSessionId,
+              startMs: record.startMs,
+              endMs: record.endMs,
+            }),
+            (written) =>
+              written.ok
+                ? writer.attachSpokenAsk(target, {
+                    delegationId: record.delegationId,
+                    rowIds: [record.rowId],
+                  })
+                : Effect.succeed(written),
+          ),
         ).pipe(
           Effect.map((attached) => attached.ok && attached.effect !== STORE_WRITE_EFFECT.IGNORED),
           Effect.catch(() => Effect.succeed(false)),
