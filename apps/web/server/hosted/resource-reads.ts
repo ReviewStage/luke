@@ -713,6 +713,7 @@ function readAgent(agent: AgentRecord): AgentRead {
     providerSessionId: agent.providerSessionId,
     status: agent.status,
     acceptedAt: agent.createdAt.getTime(),
+    queuedAt: agent.queuedAt.getTime(),
     ...(agent.startedAt ? { startedAt: agent.startedAt.getTime() } : undefined),
     ...(agent.settledAt ? { settledAt: agent.settledAt.getTime() } : undefined),
     ...(agent.failure !== null ? { failure: agent.failure } : undefined),
@@ -720,8 +721,8 @@ function readAgent(agent: AgentRecord): AgentRead {
 }
 
 /**
- * GET: the account's agents as they stand, the latest turn first and
- * bounded, on the children read's terms: no cursor, a query accepted and
+ * GET: the account's agents as they stand, the one that changed last first
+ * and bounded, on the children read's terms: no cursor, a query accepted and
  * ignored, and the change signal's `agents` head is what tells a device to
  * read again.
  */

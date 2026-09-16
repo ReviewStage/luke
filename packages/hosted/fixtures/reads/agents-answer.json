@@ -6,6 +6,7 @@
       "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50",
       "status": "running",
       "acceptedAt": 1757505600000,
+      "queuedAt": 1757505720000,
       "startedAt": 1757505722400
     },
     {
@@ -14,6 +15,7 @@
       "providerSessionId": "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e51",
       "status": "settled",
       "acceptedAt": 1757505000000,
+      "queuedAt": 1757505300000,
       "startedAt": 1757505310000,
       "settledAt": 1757505400000
     }

@@ -497,7 +497,7 @@ test("the observed messages answer fixture is a main's page over the one observe
   assert.equal(answer.hasMore, false);
 });
 
-test("the agents answer fixture reads each agent by its session identity where its latest turn leaves it, with the stamps it reached", async () => {
+test("the agents answer fixture reads each agent by its session identity where its latest turn leaves it, with its queuing and the stamps it reached", async () => {
   const answer = expectReadAnswer(agentsAnswerSchema, await fixture(FIXTURE.AGENTS));
   assert.deepEqual(
     answer.agents.map((agent) => [agent.id, agent.providerId, agent.status]),
@@ -512,8 +512,8 @@ test("the agents answer fixture reads each agent by its session identity where i
   assert.equal(running.settledAt, undefined);
   assert.equal(running.failure, undefined);
   assert.deepEqual(
-    [settled.acceptedAt, settled.startedAt, settled.settledAt],
-    [1757505000000, 1757505310000, 1757505400000],
+    [settled.acceptedAt, settled.queuedAt, settled.startedAt, settled.settledAt],
+    [1757505000000, 1757505300000, 1757505310000, 1757505400000],
   );
   assert.deepEqual(parseAnswer(agentsAnswerSchema, { agents: [] }), { agents: [] });
 
@@ -532,6 +532,9 @@ test("the agents answer fixture reads each agent by its session identity where i
   assert.equal(parseAnswer(agentsAnswerSchema, withFirst({ providerSessionId: " " })), undefined);
   const { providerId: _dropped, ...unnamed } = first;
   assert.equal(parseAnswer(agentsAnswerSchema, { agents: [unnamed, ...rest] }), undefined);
+  // Every agent holds a turn, so one without its queuing is refused too.
+  const { queuedAt: _unqueued, ...unqueued } = first;
+  assert.equal(parseAnswer(agentsAnswerSchema, { agents: [unqueued, ...rest] }), undefined);
   const crowded = Array.from({ length: AGENTS_READ_BOUNDS.MAX_AGENTS + 1 }, () => first);
   assert.equal(parseAnswer(agentsAnswerSchema, { agents: crowded }), undefined);
 });

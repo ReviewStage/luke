@@ -10,10 +10,10 @@ import { insertConversation, insertTurn, setConversationDeletedAt } from "./supp
 
 /**
  * The agents directory over the real migrations on PGlite: the account's
- * observed conversations holding a turn, the one whose turn was queued last
- * first, each where that turn leaves it; and the head that moves exactly
- * when the list would read differently. Synthetic session identities
- * throughout.
+ * observed conversations holding a turn, the one that changed last first on
+ * the head's own terms, each where its latest turn leaves it; and the head
+ * that moves exactly when the list would read differently. Synthetic session
+ * identities throughout.
  */
 
 const NOW = 1_800_000_000_000;
@@ -60,13 +60,13 @@ function instantText(date: Date): string {
     .replace(/\.?0*Z$/u, "")}+00`;
 }
 
-test("agents are listed by their latest turn's queuing, latest first, bounded by the limit, each where that turn leaves it", async () => {
+test("agents are listed by the instant they last changed, latest first, bounded by the limit, each where its latest turn leaves it", async () => {
   const userId = await database.createUser();
   const early = await agentOf(userId, at(1));
   const late = await agentOf(userId, at(2));
   const middle = await agentOf(userId, at(3));
 
-  await turnOf(userId, early, {
+  const earlyTurn = await turnOf(userId, early, {
     status: TURN_STATUS.SETTLED,
     queuedAt: at(10),
     startedAt: at(11),
@@ -96,11 +96,13 @@ test("agents are listed by their latest turn's queuing, latest first, bounded by
     providerSessionId: `fixture-session-${sessions - 1}`,
     createdAt: at(2),
     status: CHILD_STATUS.FAILED,
+    queuedAt: at(30),
     startedAt: at(31),
     settledAt: at(32),
     failure: "model",
   });
   assert.equal(listed[1]?.status, CHILD_STATUS.ACCEPTED);
+  assert.deepEqual(listed[1]?.queuedAt, at(20));
   assert.equal(listed[1]?.startedAt, null);
   assert.equal(listed[2]?.status, CHILD_STATUS.SETTLED);
   assert.deepEqual(listed[2]?.settledAt, at(12));
@@ -114,6 +116,19 @@ test("agents are listed by their latest turn's queuing, latest first, bounded by
   assert.deepEqual(ids(running), [middle, late, early]);
   assert.equal(running[0]?.status, CHILD_STATUS.RUNNING);
   assert.deepEqual(running[0]?.startedAt, at(41));
+
+  // The order is the head's: a turn queued first but settled last moves its agent to the front.
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`update turns set settled_at = ${at(50)} where id = ${earlyTurn}`;
+    }),
+  );
+  assert.deepEqual(ids(await database.run(database.store.directory.agents(userId, 10))), [
+    early,
+    middle,
+    late,
+  ]);
 });
 
 test("an observed conversation without a turn, a stamped one, a row of another kind, and another account's are listed by nothing", async () => {

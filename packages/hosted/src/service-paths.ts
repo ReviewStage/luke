@@ -93,9 +93,10 @@ export const HOSTED_SERVICE_PATH = {
   CONVERSATION_CHILD_MESSAGES: "/api/conversation/children/messages",
   /**
    * The account's agents (GET): the observed conversations holding a turn,
-   * one per coding-agent session Luke follows, the latest turn first and
-   * bounded, each where that turn leaves it. No cursor, on the children
-   * read's terms; the change signal's `agents` head says when to read again.
+   * one per coding-agent session Luke follows, the one that changed last
+   * first and bounded, each where its latest turn leaves it. No cursor, on
+   * the children read's terms; the change signal's `agents` head says when
+   * to read again.
    */
   CONVERSATION_AGENTS: "/api/conversation/agents",
   /** The account's turns in the order they last changed, behind a device's own cursor (GET). */

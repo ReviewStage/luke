@@ -87,6 +87,7 @@ const AGENT_ROW: AgentRead = {
   providerSessionId: "session-a",
   status: CHILD_STATUS.SETTLED,
   acceptedAt: NOW,
+  queuedAt: NOW,
   startedAt: NOW + 1,
   settledAt: NOW + 2,
 };

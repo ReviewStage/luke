@@ -55,10 +55,23 @@ const SUBAGENT_STATUS_WORD = {
   [CHILD_STATUS.CANCELLED]: "Cancelled",
 } as const satisfies Record<ChildStatus, string>;
 
-/** A row's latest instant: its turn's settle, else its start, else its own opening. */
+/**
+ * A row's latest instant: its turn's settle, else its start, else its
+ * queuing where the row carries one (an agent's), else its own opening.
+ * Both sections sort by it, newest first, so a row's place and its age
+ * label read the same instant.
+ */
 function activityAt(row: ChildRead | AgentRead): number {
-  return row.settledAt ?? row.startedAt ?? row.acceptedAt;
+  return (
+    row.settledAt ??
+    row.startedAt ??
+    ("queuedAt" in row ? row.queuedAt : undefined) ??
+    row.acceptedAt
+  );
 }
+
+const byLatestActivity = (a: ChildRead | AgentRead, b: ChildRead | AgentRead) =>
+  activityAt(b) - activityAt(a);
 
 /** The row a child's transcript is opened from, named as the list names the child. */
 export function childTranscriptRow(child: ChildRead): TranscriptRow {
@@ -154,12 +167,13 @@ function SubagentsSection({
  * The Conversation tab's second page, in two sections: the per-workspace
  * agents first, the coding-agent sessions Luke follows, each named from the
  * roster by session identity with its provider's mark, then the sub-agents
- * the brain delegated to, newest first, each named by its label or task.
- * Every row wears where it stands and how long ago it last moved, and a
- * row's press opens its transcript on the host and turns the tab to the
- * transcript page that draws it. Mounted under the thread's own root, ids and
- * blocked class alike, because a task's words are the developer's and belong
- * in no optional recording.
+ * the brain delegated to, each named by its label or task. Each section
+ * lists its rows by the instant they last moved, newest first, the same
+ * instant the row's age reads. Every row wears where it stands and how long
+ * ago it last moved, and a row's press opens its transcript on the host and
+ * turns the tab to the transcript page that draws it. Mounted under the
+ * thread's own root, ids and blocked class alike, because a task's words are
+ * the developer's and belong in no optional recording.
  */
 export function SubagentsPanel({
   subagents,
@@ -182,7 +196,8 @@ export function SubagentsPanel({
   /** Returns the tab to the thread. */
   onBack: () => void;
 }): React.JSX.Element {
-  const children = [...subagents.children].sort((a, b) => b.acceptedAt - a.acceptedAt);
+  const listedAgents = [...agents.agents].sort(byLatestActivity);
+  const children = [...subagents.children].sort(byLatestActivity);
   const meta = (row: ChildRead | AgentRead) => (
     <>
       <span className="subagent-status" data-status={row.status}>
@@ -210,7 +225,7 @@ export function SubagentsPanel({
           settled={agents.settled}
           empty="No per-workspace agents yet"
         >
-          {agents.agents.map((agent) => {
+          {listedAgents.map((agent) => {
             const session = agentSession(agent, roster);
             return (
               <li key={agent.id}>

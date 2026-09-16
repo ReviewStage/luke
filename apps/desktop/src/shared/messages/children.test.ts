@@ -40,6 +40,7 @@ const AGENT = {
   providerSessionId: "session-a",
   status: CHILD_STATUS.RUNNING,
   acceptedAt: 1_757_505_600_000,
+  queuedAt: 1_757_505_650_000,
   startedAt: 1_757_505_660_000,
 };
 

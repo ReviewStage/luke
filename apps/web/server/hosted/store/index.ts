@@ -159,7 +159,7 @@ export interface HostedStore {
     paged(userId: string, conversationId: string): HostedStoreEffect<PagedConversation | undefined>;
     /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
     childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
-    /** The account's agents: the standing observed conversations holding a turn, latest turn first and at most `limit` of them. */
+    /** The account's agents: the standing observed conversations holding a turn, the one that changed last first and at most `limit` of them. */
     agents(userId: string, limit: number): HostedStoreEffect<readonly AgentRecord[]>;
     /** Where the agents stand: the agent that changed last and the instant it did, rendered to the microsecond, a stamped row counted; nothing while no agent has a turn. */
     agentsHead(userId: string): HostedStoreEffect<AgentsHeadPosition | undefined>;

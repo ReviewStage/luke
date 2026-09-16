@@ -107,7 +107,7 @@ test("the gate order is method and bearer, and a cursor or a bound is accepted a
   }
 });
 
-test("agents are answered latest turn first, each by its session identity and where its latest turn leaves it; a session without a turn, a stamped one, and another account's by nothing", async () => {
+test("agents are answered the one that changed last first, each by its session identity, its latest turn's queuing, and where that turn leaves it; a session without a turn, a stamped one, and another account's by nothing", async () => {
   const userId = await database.createUser();
   const other = await database.createUser();
 
@@ -161,6 +161,7 @@ test("agents are answered latest turn first, each by its session identity and wh
       providerSessionId: SESSION.RUNNING,
       status: CHILD_STATUS.RUNNING,
       acceptedAt: NOW - 1_800_000,
+      queuedAt: NOW + 120_000,
       startedAt: NOW + 121_000,
     },
     {
@@ -169,6 +170,7 @@ test("agents are answered latest turn first, each by its session identity and wh
       providerSessionId: SESSION.SETTLED,
       status: CHILD_STATUS.SETTLED,
       acceptedAt: NOW - 3_600_000,
+      queuedAt: NOW + 1_000,
       startedAt: NOW + 2_000,
       settledAt: NOW + 60_000,
     },

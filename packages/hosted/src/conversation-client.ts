@@ -199,7 +199,7 @@ export class HostedConversationClient {
     );
   }
 
-  /** The account's agents as they stand, whole and latest turn first; the read takes no cursor, so there is no page to ask for. */
+  /** The account's agents as they stand, whole and the one that changed last first; the read takes no cursor, so there is no page to ask for. */
   agents(): Effect.Effect<ConversationReadResult<AgentsAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_AGENTS, (payload) =>
       Result.getOrUndefined(readEither(agentsAnswerSchema)(payload)),
