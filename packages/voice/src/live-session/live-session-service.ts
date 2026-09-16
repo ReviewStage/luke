@@ -251,9 +251,9 @@ interface StandingSession {
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
   /** Utterance rows the settle timer has nothing more to write: written undelegated already, or handed to a delegated write, which a record tells from the undelegated one by the row. */
-  readonly writtenRows: Set<number>;
+  readonly writtenRows: Set<string>;
   /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
-  readonly rowBeganAt: Map<number, number>;
+  readonly rowBeganAt: Map<string, number>;
   readonly settleTimers: Map<TranscriptSpeaker, SessionDelay>;
   idleReported: boolean;
   idleTimer: SessionDelay | undefined;
@@ -262,11 +262,11 @@ interface StandingSession {
   /** The debounce behind the developer's latest fragment, after which the words so far are anticipated. */
   anticipateTimer: SessionDelay | undefined;
   /** The utterance last handed to the brain to read ahead of, by row and by its words then, so the same words are not handed twice and a summary is matched to the words it was read for. */
-  anticipated: { rowId: number; text: string } | undefined;
+  anticipated: { rowId: string; text: string } | undefined;
   /** The row whose read-ahead summary was already appended; one per utterance. */
-  factsAppendedFor: number | undefined;
+  factsAppendedFor: string | undefined;
   /** The rows already composed as a spoken ask: a late fragment on one anticipates nothing more, and a summary read ahead for one is not appended into the exchange it opened. */
-  readonly askedRows: Set<number>;
+  readonly askedRows: Set<string>;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -901,7 +901,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         sideband,
         scope,
         channel,
-        ledger: new TranscriptLedger(),
+        ledger: new TranscriptLedger({ mintRowId: this.#options.createId }),
         started: false,
         ended: false,
         closing: undefined,
@@ -1127,7 +1127,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #anticipationFacts(facts: LiveBrainAnticipationFacts): void {
     const session = this.#speakable();
     const anticipated = session?.anticipated;
-    const row = session?.ledger.captionLines().find((line) => line.rowId === facts.rowId);
+    const row = session?.ledger.row(facts.rowId);
     if (
       !session ||
       !anticipated ||
@@ -1185,6 +1185,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
               recordedAt,
             })
           : yield* this.#record.writeLukeUtterance({
+              rowId: utterance.rowId,
               role: CONVERSATION_ENTRY_KIND.REPLY,
               text: utterance.text,
               voiceSessionId: session.sessionId,
@@ -1308,7 +1309,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
 
   /** The utterance's row as the ledger holds it at this instant, with every fragment that joined it since it was claimed; the claim itself where the row is gone. */
   #rowNow(session: StandingSession, claimed: TranscriptUtterance): TranscriptUtterance {
-    return session.ledger.captionLines().find((line) => line.rowId === claimed.rowId) ?? claimed;
+    return session.ledger.row(claimed.rowId) ?? claimed;
   }
 
   /** The run joins the exchange open on its session, or opens one; either way its events are read from now on. */

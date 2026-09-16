@@ -16,6 +16,8 @@ const ENTRY_KIND_OF = {
 export interface LiveCaptionsOptions {
   onRows(rows: readonly LiveCaptionRow[]): void;
   now?: () => number;
+  /** Mints each caption row's id as its utterance opens; the window's own UUID source. */
+  mintRowId: () => string;
 }
 
 /**
@@ -26,15 +28,18 @@ export interface LiveCaptionsOptions {
  * a late fragment grows a row in place rather than moving it. A row settles
  * once no fragment has joined it for the gap plus the margin, measured on
  * this window's clock rather than the session's, since a fragment's arrival
- * is what the drawing follows.
+ * is what the drawing follows. The row ids here are the window's own: the
+ * service mints the record's from its own ledger, and the two are matched by
+ * nothing.
  */
 export class LiveCaptions {
   readonly #options: LiveCaptionsOptions;
-  readonly #ledger = new TranscriptLedger();
-  readonly #lastArrivalByRow = new Map<number, number>();
+  readonly #ledger: TranscriptLedger;
+  readonly #lastArrivalByRow = new Map<string, number>();
 
   constructor(options: LiveCaptionsOptions) {
     this.#options = options;
+    this.#ledger = new TranscriptLedger({ mintRowId: options.mintRowId });
   }
 
   append(speaker: TranscriptSpeaker, delta: string, startMs: number, endMs: number): void {

@@ -17,12 +17,13 @@ import type { Effect } from "effect";
 
 export interface DeveloperUtteranceRecord {
   /**
-   * The ledger's row for the utterance, stable across its fragments. The same
-   * utterance may be written twice, once undelegated when it settles and once
-   * under the delegation that arrived after, and a record that keeps one line
-   * per utterance tells the second write from the first by this.
+   * The ledger's row for the utterance, an opaque id minted when the row
+   * opened and stable across its fragments. The same utterance may be written
+   * twice, once undelegated when it settles and once under the delegation
+   * that arrived after, and a record that keeps one line per utterance tells
+   * the second write from the first by this.
    */
-  rowId: number;
+  rowId: string;
   /** The grouped transcript of one developer utterance, exactly as the ledger concatenated it. */
   text: string;
   /** The session the words were spoken on, opaque, as the provider named it. */
@@ -39,6 +40,8 @@ export interface DeveloperUtteranceRecord {
 }
 
 export interface LukeUtteranceRecord {
+  /** The ledger's row for the utterance, minted when it opened, for a record that keeps one row per utterance. */
+  rowId: string;
   role: typeof CONVERSATION_ENTRY_KIND.REPLY | typeof CONVERSATION_ENTRY_KIND.ANNOUNCEMENT;
   text: string;
   voiceSessionId: string;

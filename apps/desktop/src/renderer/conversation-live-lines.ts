@@ -65,7 +65,7 @@ interface LiveLineHold {
   /** The lines that left the report and are still drawn, oldest first. */
   readonly held: readonly HeldLiveLine[];
   /** When each reported row was first seen settled, by row id, for the bound on a settled line the record never shows. */
-  readonly settledAt: ReadonlyMap<number, number>;
+  readonly settledAt: ReadonlyMap<string, number>;
   /**
    * The lines drawn ahead of the record as of the last fold: the held lines,
    * then the reported ones still inside their bound. What the record already
@@ -128,7 +128,7 @@ function sameEntries(left: readonly ConversationEntry[], right: readonly Convers
 /** Whether a settled line the report still carries is still inside its bound, by when it was first seen settled. */
 function settledLineDrawn(
   line: LiveConversationLine,
-  settledAt: ReadonlyMap<number, number>,
+  settledAt: ReadonlyMap<string, number>,
   now: number,
 ): boolean {
   const since = settledAt.get(line.rowId);
@@ -160,7 +160,7 @@ export function foldLiveLines(
     left.length === 0 && kept.length === hold.held.length ? hold.held : [...kept, ...left];
   const openedAt =
     lines.length > 0 ? (hold.openedAt ?? now) : held.length > 0 ? hold.openedAt : undefined;
-  const settledAt = new Map<number, number>();
+  const settledAt = new Map<string, number>();
   for (const line of lines) {
     if (!line.settled) continue;
     const previous = hold.lines.find((standing) => sameRow(standing, line));
