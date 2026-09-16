@@ -221,7 +221,7 @@ test("a settled child's completion is stamped, then sent once into the parent's 
   assert.deepEqual(bodyOf(handed.message), {
     child_id: child.conversationId,
     label: "fixture label",
-    status: CHILD_COMPLETION_STATUS.COMPLETED,
+    status: CHILD_COMPLETION_STATUS.SETTLED,
     result: "Two tests fixed.",
     truncated: false,
   });

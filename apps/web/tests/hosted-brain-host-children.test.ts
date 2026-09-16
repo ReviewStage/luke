@@ -10,7 +10,6 @@ import {
   CHILD_SPAWN_REFUSAL,
   type ChildRunRecord,
   childSessionKey,
-  DEFAULT_AGENT_ID,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   CONVERSATION_KIND as RECORD_CONVERSATION_KIND,
@@ -38,6 +37,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
+import { conversationDirectory } from "../server/hosted/store/standing-conversations";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation, insertMessage, insertTurn, readTurnById } from "./support/store-rows";
 
@@ -172,7 +172,7 @@ function withAccess<A>(
   );
 }
 
-const SPAWN = { task: "fixture task", requesterRunId: "run-1" };
+const SPAWN = { task: "fixture task" };
 
 /** Another standing conversation of the account, observed since an account has one main. */
 function elsewhereIn(userId: string): Promise<string> {
@@ -426,7 +426,7 @@ test("the list answers this conversation's children as run records, newest first
     task: "fixture running task",
     turn: { status: TURN_STATUS.RUNNING, eveTurnId: EVE_TURN_ID, startedAt: at(12) },
   });
-  const completed = await childOf(fixture, {
+  const settled = await childOf(fixture, {
     createdAt: at(20),
     turn: { status: TURN_STATUS.SETTLED, startedAt: at(21), settledAt: at(22) },
   });
@@ -441,39 +441,22 @@ test("the list answers this conversation's children as run records, newest first
   const expected: ChildRunRecord[] = [
     {
       childId: failed.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(failed.childId),
-      task: "",
-      expectsCompletion: true,
       status: CHILD_RUN_STATUS.FAILED,
       acceptedAt: NOW + 30,
       settledAt: NOW + 31,
       failureDetail: "fixture failure",
     },
     {
-      childId: completed.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(completed.childId),
-      task: "",
-      expectsCompletion: true,
-      status: CHILD_RUN_STATUS.COMPLETED,
+      childId: settled.childId,
+      status: CHILD_RUN_STATUS.SETTLED,
       acceptedAt: NOW + 20,
-      startedAt: NOW + 21,
       settledAt: NOW + 22,
     },
     {
       childId: running.childId,
-      agentId: DEFAULT_AGENT_ID,
-      requesterSessionKey: sessionKey(fixture.conversationId),
-      childSessionKey: childSessionKey(running.childId),
-      task: "fixture running task",
       label: "fixture running",
-      expectsCompletion: true,
       status: CHILD_RUN_STATUS.RUNNING,
       acceptedAt: NOW + 10,
-      startedAt: NOW + 12,
     },
   ];
   assert.deepEqual(listed, expected);
@@ -575,6 +558,13 @@ test("the conversations are the account's main, observed, and child conversation
   assert.equal(byKey.get(childSessionKey(labelled.childId))?.kind, RECORD_CONVERSATION_KIND.CHILD);
   assert.equal(byKey.get(childSessionKey(labelled.childId))?.name, "fixture label");
   assert.equal(byKey.get(childSessionKey(unlabelled.childId))?.name, `Child ${unlabelled.childId}`);
+  // The directory read stops at its limit, newest activity first, the same order the access lists.
+  const whole = await database.run(
+    conversationDirectory(fixture.userId, HOSTED_CHILDREN.DIRECTORY_LIMIT),
+  );
+  const bounded = await database.run(conversationDirectory(fixture.userId, 2));
+  assert.equal(whole.length, 4);
+  assert.deepEqual(bounded, whole.slice(0, 2));
   // The access names its own conversation by the same key the listing does.
   assert.equal(
     await withAccess(seamsOf(fixture, fakeEve()), (access) => Effect.succeed(access.sessionKey)),

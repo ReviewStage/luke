@@ -8,7 +8,6 @@ import type { ChildSpawnReceipt } from "./child-records.js";
  */
 
 export const CHILD_SPAWN_REFUSAL = {
-  EMPTY_TASK: "empty_task",
   DEPTH_CAP: "depth_cap",
   REQUESTER_LIMIT: "requester_limit",
   GLOBAL_LIMIT: "global_limit",

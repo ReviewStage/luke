@@ -35,18 +35,8 @@ import { isTextUIPart, type ToolSet } from "ai";
 import { Cause, Effect, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import {
-  CHILD_COMPLETION_STATUS,
-  type ChildCompletionStatus,
-  childCompletionInputText,
-  MESSAGE_ROLE,
-  TURN_STATUS,
-} from "../../core.js";
-import {
-  type ClaimedChildCompletion,
-  claimChildCompletion,
-  undeliveredChildren,
-} from "../store/children.js";
+import { childCompletionInputText, MESSAGE_ROLE } from "../../core.js";
+import { claimChildCompletion, undeliveredChildren } from "../store/children.js";
 import type { ConversationTarget } from "../store/index.js";
 import { readMessageByClientId } from "../store/message-reads.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
@@ -85,13 +75,6 @@ export const CHILD_COMPLETION_DELIVERY = {
 
 export type ChildCompletionDelivery =
   (typeof CHILD_COMPLETION_DELIVERY)[keyof typeof CHILD_COMPLETION_DELIVERY];
-
-/** How the run ended, in the completion's own words, from the turn's status. */
-const COMPLETION_STATUS_OF_TURN = {
-  [TURN_STATUS.SETTLED]: CHILD_COMPLETION_STATUS.COMPLETED,
-  [TURN_STATUS.FAILED]: CHILD_COMPLETION_STATUS.FAILED,
-  [TURN_STATUS.CANCELLED]: CHILD_COMPLETION_STATUS.CANCELLED,
-} as const satisfies Record<ClaimedChildCompletion["status"], ChildCompletionStatus>;
 
 /** The child's final reply: the text of its latest turn's journal, read back under the registry; empty where the row is missing or unreadable. */
 const finalReplyOf = /* @__PURE__ */ Effect.fn("finalReplyOf")(function* (
@@ -139,7 +122,7 @@ export const deliverChildCompletion = /* @__PURE__ */ Effect.fn("deliverChildCom
         {
           childId: child.conversationId,
           label: claimed.label ?? undefined,
-          status: COMPLETION_STATUS_OF_TURN[claimed.status],
+          status: claimed.status,
           result: yield* finalReplyOf(seams.tools, child, claimed.turnId),
           failure: claimed.failure ?? undefined,
         },

@@ -1,3 +1,4 @@
+import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { maximumChildTaskLength } from "./tools/names.js";
@@ -110,11 +111,11 @@ export function holdReleasedInputText(held: readonly BrainDelivery[], now: numbe
   );
 }
 
-/** How a child's run ended, as its completion says it: the three ends a turn can come to, in the words the parent reads. */
+/** How a child's run ended, as its completion says it: the three ends a turn can come to, in the words the run status uses for them. */
 export const CHILD_COMPLETION_STATUS = {
-  COMPLETED: "completed",
-  FAILED: "failed",
-  CANCELLED: "cancelled",
+  SETTLED: CHILD_RUN_STATUS.SETTLED,
+  FAILED: CHILD_RUN_STATUS.FAILED,
+  CANCELLED: CHILD_RUN_STATUS.CANCELLED,
 } as const;
 
 export type ChildCompletionStatus =

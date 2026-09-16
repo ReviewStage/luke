@@ -2,6 +2,7 @@ import type { ActionToolDefinition } from "@sidecar/actions";
 import { type NotebookMemoryToolShape, notebookMemoryToolShapes } from "@sidecar/memory";
 import {
   type EffectiveToolPolicy,
+  GROUP_PREFIX,
   resolveToolPolicy,
   TOOL_EFFECT,
   TOOL_EXECUTION,
@@ -50,8 +51,9 @@ export { BRAIN_TOOL, isBrainOnlyTool, maximumBriefingLength, TOOL_GROUP } from "
  * offered it, and neither is a child's task, whose final text is the result
  * its requester reviews; a child reaches the developer only through the
  * conversation that asked for it. And delegation's depth: a child's task is
- * not offered `sessions_spawn`, so a child opens no child of its own and
- * delegation stands one level deep.
+ * offered no session tool, so a child opens no child of its own and neither
+ * lists nor reads nor cancels its parent's, and delegation stands one level
+ * deep.
  */
 
 const BRAIN_TOOL_TYPE = "function";
@@ -179,15 +181,17 @@ export function brainToolCatalog(): readonly ToolDescriptor[] {
 /**
  * The layer a turn's kind adds beneath the configured policy: the briefing
  * channel is offered only where the reply is not itself the speech, and a
- * child's task cannot spawn, so delegation is capped at one level. Each is a
- * fact about the kind of turn, not a permission decided from who opened it.
+ * child's task has no session tools at all, so delegation is capped at one
+ * level and a child neither lists nor reads nor cancels its parent's other
+ * children. Each is a fact about the kind of turn, not a permission decided
+ * from who opened it.
  */
 export function turnToolPolicy(trigger: BrainTurnTrigger): ToolPolicy {
   switch (trigger) {
     case BRAIN_TURN_TRIGGER.ASK:
       return { deny: [BRAIN_TOOL.ANNOUNCE] };
     case BRAIN_TURN_TRIGGER.CHILD_TASK:
-      return { deny: [BRAIN_TOOL.ANNOUNCE, BRAIN_TOOL.SESSIONS_SPAWN] };
+      return { deny: [BRAIN_TOOL.ANNOUNCE, `${GROUP_PREFIX}${TOOL_GROUP.SESSIONS}`] };
     default:
       return {};
   }

@@ -213,28 +213,30 @@ const ConversationDirectoryRowSchema = Schema.Struct({
 );
 
 const findConversationDirectory = SqlSchema.findAll({
-  Request: Schema.String,
+  Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
   Result: ConversationDirectoryRowSchema,
-  execute: (userId) =>
+  execute: (request) =>
     statement(
       (sql) => sql`
         select id, kind, label, provider_session_id, created_at, last_activity_at
         from conversations
-        where user_id = ${userId}
+        where user_id = ${request.userId}
           and kind in (${CONVERSATION_KIND.MAIN}, ${CONVERSATION_KIND.OBSERVED}, ${CONVERSATION_KIND.CHILD})
           and deleted_at is null
         order by last_activity_at desc, id asc
+        limit ${request.limit}
       `,
     ),
 });
 
-/** The account's standing main, observed, and child conversations, most recently written to first. */
+/** The account's standing main, observed, and child conversations, most recently written to first and at most `limit` of them. */
 export function conversationDirectory(
   userId: string,
+  limit: number,
 ): Effect.Effect<
   readonly ConversationDirectoryEntry[],
   StandingConversationFailure,
   SqlClient.SqlClient
 > {
-  return findConversationDirectory(userId);
+  return findConversationDirectory({ userId, limit });
 }

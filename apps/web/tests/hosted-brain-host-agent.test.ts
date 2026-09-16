@@ -77,17 +77,24 @@ test("the hosted policy withholds the machine's tools and skills, keeps the note
   assert.equal(observationNames.includes(BRAIN_TOOL.ANNOUNCE), true);
 });
 
-test("a child's task is offered the ask's set less sessions_spawn: it cannot spawn or announce, and still lists, reads, and cancels", () => {
+test("a child's task is offered the ask's set less the session tools: it cannot spawn, announce, list, read, or cancel, and keeps the reads, actions, workspace, and memory", () => {
   const childTask = hostedTurnPolicy(BRAIN_TURN_TRIGGER.CHILD_TASK);
   const childTaskNames = childTask.allowed.map((tool) => tool.schema.name);
-  for (const denied of [BRAIN_TOOL.SESSIONS_SPAWN, BRAIN_TOOL.ANNOUNCE]) {
+  for (const denied of [
+    BRAIN_TOOL.ANNOUNCE,
+    BRAIN_TOOL.SESSIONS_SPAWN,
+    BRAIN_TOOL.SUBAGENTS,
+    BRAIN_TOOL.SESSIONS_LIST,
+    BRAIN_TOOL.SESSIONS_HISTORY,
+  ]) {
     assert.equal(childTaskNames.includes(denied), false);
     assert.equal(childTask.deniedBy(denied), TOOL_POLICY_LAYER.TURN);
   }
   for (const kept of [
-    BRAIN_TOOL.SUBAGENTS,
-    BRAIN_TOOL.SESSIONS_LIST,
-    BRAIN_TOOL.SESSIONS_HISTORY,
+    BRAIN_TOOL.LIST_SESSIONS,
+    BRAIN_TOOL.READ_WORKSPACE_FILE,
+    BRAIN_TOOL.WRITE_WORKSPACE_FILE,
+    NOTEBOOK_MEMORY_TOOL.SEARCH,
   ]) {
     assert.equal(childTaskNames.includes(kept), true);
   }

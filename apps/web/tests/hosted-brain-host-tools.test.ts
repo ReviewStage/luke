@@ -185,11 +185,17 @@ test("an ask is offered the catalog under the hosted policy, an observation the 
   );
   assert.equal(ask.includes(ACTION_TOOL.OPEN_SESSION), false);
   // A child's task is answered in words like an ask and is offered the ask's set less the
-  // spawn, so delegation stands one level deep; a child's completion is a note handed to the
-  // requester like an observation and is offered that set.
+  // session tools, so delegation stands one level deep; a child's completion is a note handed
+  // to the requester like an observation and is offered that set.
+  const sessionTools: readonly string[] = [
+    BRAIN_TOOL.SESSIONS_SPAWN,
+    BRAIN_TOOL.SUBAGENTS,
+    BRAIN_TOOL.SESSIONS_LIST,
+    BRAIN_TOOL.SESSIONS_HISTORY,
+  ];
   assert.deepEqual(
     hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_TASK).map((declared) => declared.name),
-    ask.filter((name) => name !== BRAIN_TOOL.SESSIONS_SPAWN),
+    ask.filter((name) => !sessionTools.includes(name)),
   );
   assert.deepEqual(
     hostedToolDeclarations(BRAIN_TURN_TRIGGER.CHILD_COMPLETION).map((declared) => declared.name),

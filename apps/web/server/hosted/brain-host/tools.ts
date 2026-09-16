@@ -67,8 +67,8 @@ import type { HostedTranscriptReads } from "./transcript.js";
  * updater — and one group, skills, behind a seam the service does not wire.
  * Delegation is offered: the four session tools reach the children access
  * below, and the turn's own layer (`turnToolPolicy`) caps it at one level
- * by withholding `sessions_spawn` from a child's task, as it withholds
- * `announce` from an ask and from a child's task. The notebook's two reads
+ * by withholding the whole sessions group from a child's task, as it
+ * withholds `announce` from an ask and from a child's task. The notebook's two reads
  * are offered, answered by the in-process search over the account's
  * workspace rows (`notebook.ts`). The workspace tools stay, so `USER.md` is
  * written the way every other workspace file is.
