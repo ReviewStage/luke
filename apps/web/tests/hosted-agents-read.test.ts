@@ -115,7 +115,7 @@ test("agents are answered the one that changed last first, each by its session i
   await insertTurn(database.run, {
     userId,
     conversationId: settled,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: at(1_000),
     startedAt: at(2_000),
@@ -125,7 +125,7 @@ test("agents are answered the one that changed last first, each by its session i
   await insertTurn(database.run, {
     userId,
     conversationId: running,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.RUNNING,
     queuedAt: at(120_000),
     startedAt: at(121_000),
@@ -135,7 +135,7 @@ test("agents are answered the one that changed last first, each by its session i
   await insertTurn(database.run, {
     userId,
     conversationId: stamped,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.FAILED,
     queuedAt: at(180_000),
     settledAt: at(181_000),
@@ -146,7 +146,7 @@ test("agents are answered the one that changed last first, each by its session i
   await insertTurn(database.run, {
     userId: other,
     conversationId: elsewhere,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.QUEUED,
     queuedAt: at(240_000),
   });
