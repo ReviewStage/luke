@@ -253,10 +253,9 @@ export const turns = pgTable(
  * `turn.started` names the delivery it was handed as. The id is what the
  * caller reads and stops the ask by; `turn_id` is `hostTurnId` once known,
  * the one turn-id scheme, so a read by either id resolves through one path.
- * The question is kept until eve has taken it, so a retry with the same
- * client id can dispatch again where the first dispatch never reached eve.
- * A Stop asked of a queued ask stamps `cancel_requested_at`, for the start
- * that names its delivery to honour. CLAUDE.md calls the local record of
+ * A retry with the same client id dispatches again where the first dispatch
+ * never reached eve. A Stop asked of a queued ask stamps
+ * `cancel_requested_at`, for the start that names its delivery to honour. CLAUDE.md calls the local record of
  * these "the requests"; this is the hosted tier's. An ask goes with its
  * conversation.
  */
@@ -273,14 +272,6 @@ export const asks = pgTable(
     /** The client's own id for the ask: the idempotency key, unique in its conversation. */
     clientId: text("client_id").notNull(),
     origin: text("origin").$type<TurnOrigin>().notNull(),
-    /**
-     * Dead: write-only from the day it was introduced, read by no statement
-     * and carried by no record a caller sees. Nothing writes it any more, and
-     * migration 0044 dropped its `NOT NULL` so the build that stopped naming
-     * it and the build that still did could both insert across one deploy; a
-     * later migration drops the column itself and this line with it.
-     */
-    question: text("question"),
     /** The eve session the ask was handed to, once eve accepted it. */
     sessionId: text("session_id"),
     /** The delivery eve named for a follow-up; an ask that opened its session has none, its turn is the session's first. */
