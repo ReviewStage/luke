@@ -93,7 +93,7 @@ export function announceTurn(
     stamped({ type: "turn.started", data: { turnId, sequence } }),
     stamped({
       type: "message.received",
-      data: { turnId, sequence, message: "[observed events] fixture" },
+      data: { turnId, sequence, message: "[observed messages] fixture" },
     }),
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
     stamped({

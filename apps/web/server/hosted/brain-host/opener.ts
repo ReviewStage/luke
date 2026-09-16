@@ -31,7 +31,7 @@ import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-e
  * own pass, it reads the diffs still pending, groups every change they name
  * by the session it happened to, and hands eve one message per observed
  * conversation carrying all of that session's news together — the same
- * `[observed events]` item the desktop's brain opens its observation turns
+ * `[observed messages]` item the desktop's brain opens its observation turns
  * with, each live chat's transcript delta read from its cursor and riding on
  * the session's first wake. The conversation is a row of kind `observed`,
  * opened on the first diff that names its session; the turn itself is eve's,

@@ -6,12 +6,32 @@ import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
- * and then the observed values as JSON behind it. The marker is the whole of
- * the instruction; everything after it is data the instructions tell the
- * model to read as data, however a title, a status, or a transcript is phrased.
- * These are text: the context engine decides what item a provider takes them
- * as, so the host composes them without knowing any provider's shapes.
+ * and then the observed values behind it, as JSON or as one line per message.
+ * The marker is the whole of the instruction; everything after it is data the
+ * instructions tell the model to read as data, however a title, a status, or
+ * a transcript is phrased. These are text: the context engine decides what
+ * item a provider takes them as, so the host composes them without knowing
+ * any provider's shapes.
  */
+
+/**
+ * What an observed-messages turn says about the chat before its lines: who
+ * runs it, where, what it is called, and when its transcript last changed.
+ * Every field is the roster's, so a chat the roster does not hold is named
+ * by its id alone.
+ */
+export interface ObservedMessagesEnvelope {
+  readonly providerName: string;
+  readonly workspace?: string;
+  readonly title?: string;
+  readonly providerSessionId: string;
+  readonly updatedAt: number;
+}
+
+/** The line that stands in for the front of a delta the bound cut. */
+export const OBSERVED_MESSAGES_CUT = "(earlier messages cut)";
+
+const ENVELOPE_SEPARATOR = " \u00b7 ";
 
 /** The session fields an entry keeps: what the turn's opening renders, and never a transcript. */
 function sessionSummary(session: Session): WireRecord {
@@ -30,7 +50,7 @@ function sessionSummary(session: Session): WireRecord {
 }
 
 export const BRAIN_INPUT_MARKER = {
-  OBSERVED_EVENTS: "[observed events]",
+  OBSERVED_MESSAGES: "[observed messages]",
   DEVELOPER_ASK: "[developer ask]",
   STANDING_CONTEXT: "[standing context]",
   /** What sibling conversations did since this one last ran, as the host's own counts. */
@@ -82,13 +102,35 @@ export function childTaskInputText(task: string): string {
 }
 
 /**
- * The words an observed-events turn opens with. The roster itself is not
- * repeated here: the same request carries it in the standing context, which
- * is rebuilt every turn and never remembered.
+ * The words an observed-messages turn opens with: the marker, the envelope
+ * naming the chat, the cut line where the front was dropped, and then the
+ * messages the chat gained, one line each, the way a room receives them. The
+ * roster itself is not repeated here: the same request carries it in the
+ * standing context, which is rebuilt every turn and never remembered.
  */
+export function observedMessagesText(
+  envelope: ObservedMessagesEnvelope,
+  lines: readonly string[],
+  truncated: boolean,
+  now: number,
+): string {
+  const name = envelope.title ?? `chat ${envelope.providerSessionId}`;
+  const header = [
+    envelope.providerName,
+    envelope.workspace,
+    name,
+    new Date(envelope.updatedAt).toISOString(),
+  ]
+    .filter((part) => part !== undefined)
+    .join(ENVELOPE_SEPARATOR);
+  const body = [`[${header}]`, ...(truncated ? [OBSERVED_MESSAGES_CUT] : []), ...lines];
+  return marked(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES, now, body.join("\n"));
+}
+
+/** The words the roster-diff opener's turn opens with, kept until that opener goes; the marker is the observed-messages one, since the instructions name one. */
 export function wakeInputText(events: readonly BrainWakeEvent[], now: number): string {
   return marked(
-    BRAIN_INPUT_MARKER.OBSERVED_EVENTS,
+    BRAIN_INPUT_MARKER.OBSERVED_MESSAGES,
     now,
     JSON.stringify({ events: events.map(eventRecord) }),
   );

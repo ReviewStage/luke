@@ -13,6 +13,8 @@ import {
   CHILD_COMPLETION_STATUS,
   childCompletionInputText,
   childTaskInputText,
+  OBSERVED_MESSAGES_CUT,
+  observedMessagesText,
   wakeInputText,
 } from "./input-items.js";
 import { maximumChildTaskLength } from "./tools/names.js";
@@ -38,6 +40,43 @@ function itemBody(text: string): WireRecord {
   assert.ok(parsed);
   return parsed;
 }
+
+test("an observed-messages item is the envelope, the cut line where the front was dropped, then one line per message", () => {
+  const envelope = {
+    providerName: "Conductor",
+    workspace: "luke",
+    title: "fix failing test",
+    providerSessionId: "abc",
+    updatedAt: NOW - 19_000,
+  };
+  const lines = [
+    "Developer: can you fix the failing test",
+    "Claude Code: The failure is in the clock.",
+  ];
+  assert.equal(
+    observedMessagesText(envelope, lines, true, NOW),
+    [
+      `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${new Date(NOW).toISOString()}`,
+      `[Conductor · luke · fix failing test · ${new Date(NOW - 19_000).toISOString()}]`,
+      OBSERVED_MESSAGES_CUT,
+      ...lines,
+    ].join("\n"),
+  );
+  // A chat the roster does not hold is named by its id alone, and a whole delta has no cut line.
+  assert.equal(
+    observedMessagesText(
+      { providerName: "Conductor", providerSessionId: "abc", updatedAt: NOW },
+      lines,
+      false,
+      NOW,
+    ),
+    [
+      `${BRAIN_INPUT_MARKER.OBSERVED_MESSAGES} ${new Date(NOW).toISOString()}`,
+      `[Conductor · chat abc · ${new Date(NOW).toISOString()}]`,
+      ...lines,
+    ].join("\n"),
+  );
+});
 
 test("a wake item carries each event's observed fields and transcript delta as data", () => {
   const event: BrainWakeEvent = {

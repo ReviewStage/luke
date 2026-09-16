@@ -521,7 +521,7 @@ it.effect(
           stamped({ type: "turn.started", data: { turnId, sequence: 0 } }),
           stamped({
             type: "message.received",
-            data: { turnId, sequence: 0, message: "[observed events] ..." },
+            data: { turnId, sequence: 0, message: "[observed messages] ..." },
           }),
           stamped({
             type: "step.started",
