@@ -9,6 +9,10 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 65536
+    },
+    "voiceSessionId": {
+      "type": "string",
+      "minLength": 1
     }
   },
   "required": [

@@ -4,7 +4,7 @@ import {
   type LiveTransportState,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import type { SessionBeatFrame } from "@sidecar/hosted";
+import type { LiveSessionCreated, SessionBeatFrame } from "@sidecar/hosted";
 import {
   conversationSeedItems,
   type InitialItem,
@@ -23,7 +23,11 @@ import {
 } from "@sidecar/live";
 import type { ConversationEntry } from "@sidecar/session";
 import { Clock, Deferred, Effect, Exit, Fiber, FiberSet, Queue, Scope, Stream } from "effect";
-import type { LiveSessionOpened, LiveSessionSource } from "../live-session-source.js";
+import {
+  createdOf,
+  type LiveSessionOpened,
+  type LiveSessionSource,
+} from "../live-session-source.js";
 import type { LiveSideband } from "../live-socket.js";
 import {
   closeGracefully,
@@ -191,9 +195,7 @@ export class LiveSessionHolder {
    * scope the session stands in is opened before anything is created into it
    * and closed again unless a session came to stand there.
    */
-  createSession(
-    sdpOffer: string,
-  ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
+  createSession(sdpOffer: string): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
       if (this.#held) yield* this.endSession();
       // The peer has answered the word, with this offer; whatever comes of it, the word is spent.
@@ -226,7 +228,7 @@ export class LiveSessionHolder {
     sdpOffer: string,
     seeded: RosterSummary | undefined,
     scope: Scope.Closeable,
-  ): Effect.Effect<{ sessionId: string; sdpAnswer: string } | undefined> {
+  ): Effect.Effect<LiveSessionCreated | undefined> {
     return Effect.gen({ self: this }, function* () {
       const opened = yield* Scope.provide(
         source.create({ sdpOffer, input: this.#seedInput(seeded) }),
@@ -256,7 +258,7 @@ export class LiveSessionHolder {
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
-      return { sessionId: opened.sessionId, sdpAnswer: opened.sdpAnswer };
+      return createdOf(opened);
     });
   }
 

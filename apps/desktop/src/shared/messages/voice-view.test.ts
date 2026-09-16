@@ -46,7 +46,7 @@ test("a view carrying a caption and its live lines, settled or not, is a voice v
         voiceStatus: LIVE_STATUS.SPEAKING,
         lukeCaptions: ["On my way."],
         liveConversationLines: [
-          { rowId: "row-1", entry: said, settled: true },
+          { rowId: "row-1", entry: said, voiceSessionId: "vs_1", settled: true },
           { rowId: "row-2", entry: line, settled: false },
         ],
       }),
@@ -70,7 +70,24 @@ test("a view carrying the developer's own caption is a voice view, and a malform
   assert.equal(isVoiceView(overWire(malformed)), false);
 });
 
-test("a live line refuses empty words, an unknown kind, or a row without its id and settle", () => {
+test("a live line refuses empty words, an unknown kind, a session id that is not a string, or a row without its id and settle", () => {
+  assert.equal(
+    isVoiceView(
+      overWire({
+        ...IDLE_VOICE_VIEW,
+        liveConversationLines: [
+          {
+            rowId: "row-1",
+            entry: { kind: CONVERSATION_ENTRY_KIND.REPLY, words: "words" },
+            // SAFETY: the test hands the guard a session id of the wrong type, which the line type cannot spell.
+            voiceSessionId: 7 as unknown as string,
+            settled: false,
+          },
+        ],
+      }),
+    ),
+    false,
+  );
   assert.equal(
     isVoiceView(
       overWire({

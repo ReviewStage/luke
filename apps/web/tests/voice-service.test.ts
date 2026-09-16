@@ -338,6 +338,9 @@ test("a session is authorized, created, registered to its account, attached, and
   assert.equal(attach.sessionId, created.sessionId);
   assert.equal(attach.authorization, `Bearer ${API_KEY}`);
   assert.equal(created.sdpAnswer, FAKE_SDP_ANSWER);
+  // The answer names the store's own row for the session, as register answered it.
+  assert.equal(created.voiceSessionId, context.record.voiceSessionIds.get(created.sessionId));
+  assert.ok(created.voiceSessionId);
   assert.deepEqual(created.quota, FAKE_QUOTA);
   assert.equal(await context.sessions(), 1);
 });

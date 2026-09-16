@@ -4,6 +4,7 @@ import {
   type LiveTransportState,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import type { VoiceCreateLiveSessionResult } from "@sidecar/gateway/protocol";
 import {
   closeEvent,
   decodeLivePayload,
@@ -61,7 +62,7 @@ const CAPTION_SETTLE_TICK_MS = 500;
 const SESSION_START_TIMEOUT_MESSAGE = "The voice session did not start.";
 
 interface LiveCallActs {
-  createSession: (sdp: string) => Promise<{ sessionId: string; sdpAnswer: string } | undefined>;
+  createSession: (sdp: string) => Promise<VoiceCreateLiveSessionResult | undefined>;
   endSession: () => void;
   reportTransport: (state: LiveTransportState) => void;
   reportActivity: (idle: boolean) => void;
@@ -538,7 +539,13 @@ export class LiveCall implements LiveVoiceCall {
   }
 
   #onRows(rows: readonly LiveCaptionRow[]): void {
-    this.#options.events.onCaptions(rows);
+    // Each row is reported under the store's id for this session, so the
+    // panel can tell the row on record that stands for it from another
+    // session's; a session no account holds names none.
+    const voiceSessionId = this.#peer?.voiceSessionId;
+    this.#options.events.onCaptions(
+      voiceSessionId === undefined ? rows : rows.map((row) => ({ ...row, voiceSessionId })),
+    );
     if (this.#captionTick !== undefined) this.#disarm(this.#captionTick);
     if (rows.every((row) => row.settled) || this.#ended) {
       this.#captionTick = undefined;

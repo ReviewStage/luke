@@ -92,6 +92,22 @@ export interface LiveSessionCreateInput {
   input: readonly InitialItem[];
 }
 
+/**
+ * What a session answers its creator with: the created fields alone, taken
+ * off whatever stands beside them, with the store's id present only where
+ * the service named one, so an answer for a session no account holds carries
+ * no key for it.
+ */
+export function createdOf(created: LiveSessionCreated): LiveSessionCreated {
+  return {
+    sessionId: created.sessionId,
+    sdpAnswer: created.sdpAnswer,
+    ...(created.voiceSessionId === undefined
+      ? undefined
+      : { voiceSessionId: created.voiceSessionId }),
+  };
+}
+
 /** A session that stands: the renderer's half, and the trusted half the host attaches. */
 export interface LiveSessionOpened extends LiveSessionCreated {
   /**
@@ -554,7 +570,7 @@ class ServiceLiveSessionSource {
     const created = sessionCreatedFrameFromWire(payload);
     if (created) {
       this.#quota = created.quota ?? this.#quota;
-      return { sessionId: created.sessionId, sdpAnswer: created.sdpAnswer };
+      return createdOf(created);
     }
     // The refusal frame names its reason beside whatever else the service said about it — the
     // quota it exhausted, and whatever a newer service adds — and v4 settles excess keys at the

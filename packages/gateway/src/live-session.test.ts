@@ -97,6 +97,18 @@ test("a create answer names the session and the SDP answer, tolerating what a ne
     sessionId: "sess_1",
     sdpAnswer: "v=0\r\n",
   });
+  // The store's id for the session's row rides the answer where the host has one, and is not owed.
+  assert.deepEqual(
+    parseAnswer(voiceCreateLiveSessionResultSchema, {
+      ...answer,
+      voiceSessionId: "vs_1",
+    }),
+    { sessionId: "sess_1", sdpAnswer: "v=0\r\n", voiceSessionId: "vs_1" },
+  );
+  assert.equal(
+    parseAnswer(voiceCreateLiveSessionResultSchema, { ...answer, voiceSessionId: "" }),
+    undefined,
+  );
   assert.equal(parseAnswer(voiceCreateLiveSessionResultSchema, { sessionId: "sess_1" }), undefined);
   assert.equal(
     parseAnswer(voiceCreateLiveSessionResultSchema, { sdpAnswer: "v=0\r\n" }),
