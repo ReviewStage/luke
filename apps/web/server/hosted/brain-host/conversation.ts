@@ -44,7 +44,15 @@ export type ConversationAdmission =
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type ConversationFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
+/**
+ * A statement over the ambient client, so the query below reads as the query
+ * it is. The one module of LUKE-258's sixth batch left on a raw statement:
+ * `admitConversation` runs before every eve event, and a bridged statement's
+ * promise door (`db/drizzle.ts`) leaves the hook's remaining steps in a
+ * different `AsyncLocalStorage` context than eve's own session container, so
+ * the relay's `defineState` accessors read and write the wrong one and no
+ * turn ever settles. A follow-up converts this file once that door is fixed.
+ */
 const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
   Effect.flatMap(SqlClient.SqlClient, build);
 

@@ -1,7 +1,11 @@
+import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { isListedWorkspaceAgentModel, type WorkspaceAgentSelection } from "../../core.js";
+import { accountPreference, accountWorkspacePreference } from "../../db/preferences-schema.js";
+import { db } from "../../db/query.js";
 
 /**
  * The developer's saved creation tie-breaks, as the projects context narrates
@@ -18,13 +22,9 @@ export interface HostedWorkspaceDefaults {
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type WorkspaceDefaultsFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const DefaultProviderSchema = Schema.Struct({
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ defaultWorkspaceProvider: "default_workspace_provider" }));
+});
 
 const WorkspacePreferenceSchema = Schema.Struct({
   providerId: Schema.String,
@@ -32,32 +32,32 @@ const WorkspacePreferenceSchema = Schema.Struct({
   agent: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ providerId: "provider_id", defaultProjectId: "default_project_id" }));
+});
 
 const findDefaultProvider = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: DefaultProviderSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select default_workspace_provider
-        from account_preference
-        where user_id = ${userId}
-      `,
-    ),
+    db
+      .select({ defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider })
+      .from(accountPreference)
+      .where(eq(accountPreference.userId, userId)),
 });
 
 const findWorkspacePreferences = SqlSchema.findAll({
   Request: Schema.String,
   Result: WorkspacePreferenceSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select provider_id, default_project_id, agent, model, effort
-        from account_workspace_preference
-        where user_id = ${userId}
-      `,
-    ),
+    db
+      .select({
+        providerId: accountWorkspacePreference.providerId,
+        defaultProjectId: accountWorkspacePreference.defaultProjectId,
+        agent: accountWorkspacePreference.agent,
+        model: accountWorkspacePreference.model,
+        effort: accountWorkspacePreference.effort,
+      })
+      .from(accountWorkspacePreference)
+      .where(eq(accountWorkspacePreference.userId, userId)),
 });
 
 /**

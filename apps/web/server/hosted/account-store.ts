@@ -1,7 +1,11 @@
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
+import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { user } from "../db/auth-schema.js";
+import { accountPreference, accountWorkspacePreference } from "../db/preferences-schema.js";
+import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -23,10 +27,6 @@ export interface AccountPreferencesRow {
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
 export type AccountSeamEffect<A> = Effect.Effect<A, AccountSeamFailure, SqlClient.SqlClient>;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E, R>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /**
  * The account's erasure is the one delete, and the row's own foreign keys are
  * what carry it: every table naming a user declares `on delete cascade`, so
@@ -37,7 +37,7 @@ const statement = <A, E, R = never>(build: (sql: SqlClient.SqlClient) => Effect.
  */
 const deleteUserRow = SqlSchema.void({
   Request: Schema.String,
-  execute: (userId) => statement((sql) => sql`delete from "user" where id = ${userId}`),
+  execute: (userId) => db.delete(user).where(eq(user.id, userId)),
 });
 
 /** Erases the user row; every dependent row cascades with it. */
@@ -51,12 +51,7 @@ const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
   defaultWorkspaceProvider: Schema.NullOr(Schema.String),
   updatedAt: InstantColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    defaultWorkspaceProvider: "default_workspace_provider",
-    updatedAt: "updated_at",
-  }),
-);
+});
 
 const WorkspacePreferenceRowSchema = Schema.Struct({
   providerId: Schema.String,
@@ -64,33 +59,37 @@ const WorkspacePreferenceRowSchema = Schema.Struct({
   agent: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
   effort: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ providerId: "provider_id", defaultProjectId: "default_project_id" }));
+});
 
 const findPreference = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PreferenceRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select voice, default_workspace_provider, updated_at
-        from account_preference
-        where user_id = ${userId}
-        limit 1
-      `,
-    ),
+    db
+      .select({
+        voice: accountPreference.voice,
+        defaultWorkspaceProvider: accountPreference.defaultWorkspaceProvider,
+        updatedAt: accountPreference.updatedAt,
+      })
+      .from(accountPreference)
+      .where(eq(accountPreference.userId, userId))
+      .limit(1),
 });
 
 const findWorkspacePreferences = SqlSchema.findAll({
   Request: Schema.String,
   Result: WorkspacePreferenceRowSchema,
   execute: (userId) =>
-    statement(
-      (sql) => sql`
-        select provider_id, default_project_id, agent, model, effort
-        from account_workspace_preference
-        where user_id = ${userId}
-      `,
-    ),
+    db
+      .select({
+        providerId: accountWorkspacePreference.providerId,
+        defaultProjectId: accountWorkspacePreference.defaultProjectId,
+        agent: accountWorkspacePreference.agent,
+        model: accountWorkspacePreference.model,
+        effort: accountWorkspacePreference.effort,
+      })
+      .from(accountWorkspacePreference)
+      .where(eq(accountWorkspacePreference.userId, userId)),
 });
 
 function rowPreferences(
@@ -145,8 +144,8 @@ function rowPreferences(
 export function readAccountPreferences(
   userId: string,
 ): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, SqlClient.SqlClient> {
-  return statement((sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         const preference = yield* findPreference(userId);
         if (Option.isNone(preference)) return undefined;
@@ -171,31 +170,36 @@ const PreferenceWriteSchema = Schema.Struct({
   updatedAt: Schema.Date,
 });
 
+/**
+ * Note that the conflicting update sets the values the insert carried rather
+ * than reading them back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly those values.
+ */
 const upsertPreference = SqlSchema.void({
   Request: PreferenceWriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into account_preference
-          (user_id, voice, default_workspace_provider, updated_at)
-        values (
-          ${write.userId},
-          ${write.voice},
-          ${write.defaultWorkspaceProvider},
-          ${write.updatedAt}
-        )
-        on conflict (user_id) do update set
-          voice = excluded.voice,
-          default_workspace_provider = excluded.default_workspace_provider,
-          updated_at = excluded.updated_at
-      `,
-    ),
+    db
+      .insert(accountPreference)
+      .values({
+        userId: write.userId,
+        voice: write.voice,
+        defaultWorkspaceProvider: write.defaultWorkspaceProvider,
+        updatedAt: write.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: accountPreference.userId,
+        set: {
+          voice: write.voice,
+          defaultWorkspaceProvider: write.defaultWorkspaceProvider,
+          updatedAt: write.updatedAt,
+        },
+      }),
 });
 
 const deleteWorkspacePreferences = SqlSchema.void({
   Request: Schema.String,
   execute: (userId) =>
-    statement((sql) => sql`delete from account_workspace_preference where user_id = ${userId}`),
+    db.delete(accountWorkspacePreference).where(eq(accountWorkspacePreference.userId, userId)),
 });
 
 const WorkspacePreferenceWriteSchema = Schema.Struct({
@@ -211,21 +215,15 @@ const WorkspacePreferenceWriteSchema = Schema.Struct({
 const insertWorkspacePreference = SqlSchema.void({
   Request: WorkspacePreferenceWriteSchema,
   execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into account_workspace_preference
-          (user_id, provider_id, default_project_id, agent, model, effort, updated_at)
-        values (
-          ${write.userId},
-          ${write.providerId},
-          ${write.defaultProjectId},
-          ${write.agent},
-          ${write.model},
-          ${write.effort},
-          ${write.updatedAt}
-        )
-      `,
-    ),
+    db.insert(accountWorkspacePreference).values({
+      userId: write.userId,
+      providerId: write.providerId,
+      defaultProjectId: write.defaultProjectId,
+      agent: write.agent,
+      model: write.model,
+      effort: write.effort,
+      updatedAt: write.updatedAt,
+    }),
 });
 
 interface WorkspacePreferenceWrite {
@@ -287,8 +285,8 @@ export function writeAccountPreferences(
   preferences: AccountPreferences,
 ): Effect.Effect<Date, AccountSeamFailure, SqlClient.SqlClient> {
   const updatedAt = new Date();
-  return statement((sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* upsertPreference({
           userId,

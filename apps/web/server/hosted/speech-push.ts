@@ -1,6 +1,8 @@
 import type { ToolSet } from "ai";
+import { asc, desc, inArray } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   BRIEFING_PUSH_PAYLOAD_KEY,
@@ -10,6 +12,8 @@ import {
   isPushEnvironment,
   type PushEnvironment,
 } from "../core.js";
+import { devices } from "../db/devices-schema.js";
+import { db } from "../db/query.js";
 import {
   APNS_DELIVERY,
   APNS_INTERRUPTION_LEVEL,
@@ -214,10 +218,6 @@ interface SpeechPushOptions {
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type DeviceReadFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -225,27 +225,25 @@ const DeviceRowSchema = Schema.Struct({
   activeUntil: Schema.NullOr(InstantColumnSchema),
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    activeUntil: "active_until",
-    pushToken: "push_token",
-    pushEnvironment: "push_environment",
-  }),
-);
+});
 
+/** The rows most recently seen first, which is the order the one device a push addresses is taken in. */
 const findDevicesByAccount = SqlSchema.findAll({
   Request: Schema.Array(Schema.String),
   Result: DeviceRowSchema,
   execute: (userIds) =>
-    statement(
-      (sql) => sql`
-        select id, user_id, platform, active_until, push_token, push_environment
-        from devices
-        where user_id in ${sql.in(userIds)}
-        order by last_seen_at desc, id
-      `,
-    ),
+    db
+      .select({
+        id: devices.id,
+        userId: devices.userId,
+        platform: devices.platform,
+        activeUntil: devices.activeUntil,
+        pushToken: devices.pushToken,
+        pushEnvironment: devices.pushEnvironment,
+      })
+      .from(devices)
+      .where(inArray(devices.userId, [...userIds]))
+      .orderBy(desc(devices.lastSeenAt), asc(devices.id)),
 });
 
 /** Whether a speaking device of the account reports itself active, and the one device a push would address, most recently seen first. */
