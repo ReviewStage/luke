@@ -230,16 +230,20 @@ const FailureDetailWordsSchema = Schema.Struct({
 const readFailureDetailWords = Schema.decodeUnknownOption(FailureDetailWordsSchema);
 
 /** How much of eve's failure message the row keeps, and how much of its details' key list, inside the writer's own 500. */
-const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
+export const FAILURE_DETAIL_BOUNDS = { MESSAGE_CHARS: 200, KEYS_CHARS: 120 } as const;
 
 /**
  * Anything shaped like a credential, each replaced whole: an `sk-` key, a
- * bearer token, a JWT from its header onward, a run of 32 or more hex or
- * base64 characters, and the value of a `key=`, `token=`, or `secret=` pair
- * whatever prefixes the name.
+ * bearer token, a JWT from its header onward, an AWS access key id, the
+ * value a `key`, `token`, or `secret` name is assigned by `=` or `:` in a
+ * query string or JSON whatever prefixes the name, and a run of 32 or more
+ * hex or base64 characters, url-safe alphabet included. The named forms
+ * stand before the bare run, because the run would otherwise take a value's
+ * head up to its first `-` or `_` and leave the tail; a value ends at a
+ * space, an `&`, or a quote, so the parameter after it is still read.
  */
 const CREDENTIAL_PATTERN =
-  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|[A-Za-z0-9+/=]{32,}|\w*(?:key|token|secret)=\S+/gi;
+  /sk-[A-Za-z0-9_-]{8,}|Bearer\s+\S+|eyJ[A-Za-z0-9_.-]{16,}|(?:AKIA|ASIA)[0-9A-Z]{16}|\w*(?:key|token|secret)"?\s*[=:]\s*"?[^\s&"']+|[A-Za-z0-9+/=_-]{32,}/gi;
 
 const REDACTED = "[redacted]";
 
