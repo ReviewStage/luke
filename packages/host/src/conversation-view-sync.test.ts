@@ -844,3 +844,32 @@ test("a message answered again at a fresh sequence stands once, where its latest
   );
   assert.equal(sync.revision, settled);
 });
+
+test("a row of no turn placed between a turn's rows stands between them in the snapshot, the turn as two groups under its one turn row", () => {
+  const sync = new ConversationViewSync();
+  sync.applyMessages(
+    page([
+      mainGroup(
+        turnId(1),
+        [ask(1, 3, "what needs me?", NOW), reply(2, 4, NOW + 2_000)],
+        turn(turnId(1), TURN_STATUS.RUNNING, NOW),
+      ),
+      // The voice's acknowledgment, written under no turn before the line moved past it.
+      mainGroup(messageId(5), [reply(5, 2, NOW + 1_000)]),
+    ]),
+  );
+  assert.deepEqual(
+    sync
+      .snapshot()
+      .groups.map((group) => [
+        group.turnId,
+        group.turn?.status,
+        group.messages.map((message) => message.message.id),
+      ]),
+    [
+      [turnId(1), TURN_STATUS.RUNNING, [messageId(1)]],
+      [messageId(5), undefined, [messageId(5)]],
+      [turnId(1), TURN_STATUS.RUNNING, [messageId(2)]],
+    ],
+  );
+});

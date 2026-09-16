@@ -14,6 +14,7 @@ import {
   type ConversationViewToolPart,
   type ConversationViewTurn,
   MESSAGE_ROLE,
+  threadRuns,
   type UnreadableRow,
 } from "@sidecar/session";
 import {
@@ -146,11 +147,6 @@ function mainOpenedAt(conversations: readonly ConversationReadConversation[]): n
     if (conversation.kind === CONVERSATION_VIEW_SOURCE.MAIN) return conversation.openedAt;
   }
   return undefined;
-}
-
-function compareCodePoints(a: string, b: string): number {
-  if (a === b) return 0;
-  return a < b ? -1 : 1;
 }
 
 function viewTurn(record: BrainTurnRecord): ConversationViewTurn {
@@ -453,43 +449,45 @@ export class ConversationViewSync {
   }
 
   /**
-   * The Conversation as this device holds it: the groups in the view's order,
-   * each turn as the latest row said, each announcement marked unspoken
-   * where the latest speech event on its message is the expiry, each
-   * message's rating as the newest word about it, and only the newest turns
-   * kept, the rest let go of so a long Conversation does not grow this
-   * picture without bound.
+   * The Conversation as this device holds it: the thread in its order, as
+   * `threadRuns` orders it, each turn as the latest row said, each
+   * announcement marked unspoken where the latest speech event on its
+   * message is the expiry, each message's rating as the newest word about
+   * it, and only the newest turns kept, the rest let go of so a long
+   * Conversation does not grow this picture without bound. The bound counts
+   * turns, and a turn's age is where its first row stands in the thread.
    */
   snapshot(): ConversationViewSnapshot {
-    const placed = [...this.#groups].map(([turnId, held]) => {
-      const messages = [...held.messages.values()].sort((a, b) => a.seq - b.seq);
-      const turn = this.#turns.get(turnId)?.turn ?? held.turn;
-      return {
+    const turns = [...this.#groups].map(([turnId, held]) => ({
+      turnId,
+      held,
+      group: {
         turnId,
-        held,
-        group: {
-          turnId,
-          turn,
-          source: held.source,
-          messages: messages.map((message) => this.#withRating(this.#withSpeech(message))),
-        },
-        instant: Math.min(...messages.map((message) => message.placedAt)),
-        queuedAt: turn?.queuedAt ?? Number.MAX_SAFE_INTEGER,
-      };
-    });
-    placed.sort(
-      (a, b) =>
-        a.instant - b.instant || a.queuedAt - b.queuedAt || compareCodePoints(a.turnId, b.turnId),
-    );
-    const excess = placed.length - CONVERSATION_VIEW_BOUNDS.MAX_GROUPS;
+        turn: this.#turns.get(turnId)?.turn ?? held.turn,
+        source: held.source,
+        messages: [...held.messages.values()].map((message) =>
+          this.#withRating(this.#withSpeech(message)),
+        ),
+      },
+    }));
+    let runs = threadRuns(turns.map(({ group }) => group));
+    const excess = turns.length - CONVERSATION_VIEW_BOUNDS.MAX_GROUPS;
     if (excess > 0) {
-      for (const { turnId, held } of placed.splice(0, excess)) {
+      const firstRun = new Map<string, number>();
+      runs.forEach((run, index) => {
+        if (!firstRun.has(run.turnId)) firstRun.set(run.turnId, index);
+      });
+      turns.sort((a, b) => (firstRun.get(a.turnId) ?? 0) - (firstRun.get(b.turnId) ?? 0));
+      const dropped = new Set<string>();
+      for (const { turnId, held } of turns.splice(0, excess)) {
+        dropped.add(turnId);
         this.#groups.delete(turnId);
         this.#forgetMarks([...held.messages.values()].map((message) => message.message.id));
       }
+      runs = runs.filter((run) => !dropped.has(run.turnId));
     }
     return {
-      groups: placed.map(({ group }) => group),
+      groups: runs,
       settled: this.#settled,
       ...(this.#unreadable !== undefined ? { unreadable: this.#unreadable } : undefined),
     };

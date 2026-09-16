@@ -6,6 +6,7 @@ import {
   CONVERSATION_EVENT_KIND,
   type ConversationEventKind,
   MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_RATING,
   MESSAGE_ROLE,
   RATING_WORD,
@@ -568,12 +569,12 @@ test("groups are ordered by time across main and the observed conversations, wha
   assert.deepEqual(selectConversationView(reversed), groups);
 });
 
-test("groups whose earliest messages share an instant fall back to the queue order, then the turn id", async () => {
+test("rows placed at one instant fall back to their turns' queue order, then the turn id, and a turn's own rows to their sequence", async () => {
   const typed = await loadView(FIXTURE.TYPED_ASK);
   const child = await loadView(FIXTURE.CHILD_COMPLETION);
   const instant = typed.main[0]?.placedAt ?? 0;
   const sameInstant = (rows: readonly ConversationViewStoredMessage[]) =>
-    rows.map((row, index) => ({ ...row, placedAt: instant + index }));
+    rows.map((row) => ({ ...row, placedAt: instant }));
   const main = [...sameInstant(typed.main), ...sameInstant(child.main)];
   const [typedTurn] = typed.turns;
   const [childTurn] = child.turns;
@@ -585,6 +586,54 @@ test("groups whose earliest messages share an instant fall back to the queue ord
   assert.deepEqual(order([typedTurn, childTurn]), [TURN.TYPED, TURN.CHILD]);
   assert.deepEqual(order([childTurn]), [TURN.CHILD, TURN.TYPED]);
   assert.deepEqual(order([]), [TURN.TYPED, TURN.CHILD]);
+  const [first] = selectConversationView({ ...typed, main, turns: [typedTurn, childTurn] });
+  assert.deepEqual(
+    first?.messages.map((message) => message.seq),
+    typed.main.map((row) => row.seq),
+  );
+});
+
+test("a row of no turn placed between an ask and its reply stands between them, and the turn stands as two groups under one turn row", async () => {
+  const spoken = await loadView(FIXTURE.SPOKEN_ASK);
+  const [line, journal] = spoken.main;
+  if (line === undefined || journal === undefined) throw new Error("unreachable");
+  assert.ok(line.placedAt < journal.placedAt);
+  // The voice's acknowledgment: said right after the ask and before the brain's turn opened, so it
+  // was written under no turn and at a sequence before the line the turn later took in.
+  const acknowledgment: ConversationViewStoredMessage = {
+    message: {
+      id: "2b000000-0000-4000-8000-000000000020",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [{ type: "text", text: "Sure. I'm on it.", state: "done" }],
+      metadata: {
+        author: MESSAGE_AUTHOR.VOICE_MODEL,
+        channel: MESSAGE_CHANNEL.VOICE,
+        voice_session_id: "vs_0f3a1c226f104d5e",
+        from_ms: 900,
+        to_ms: 1700,
+      },
+    },
+    seq: line.seq - 1,
+    turnId: "2b000000-0000-4000-8000-000000000020",
+    createdAt: journal.placedAt + 5_000,
+    placedAt: line.placedAt + 900,
+  };
+  const groups = selectConversationView({
+    ...spoken,
+    main: [journal, acknowledgment, line],
+  });
+  assert.deepEqual(
+    groups.map((group) => [group.turnId, group.messages.map((message) => message.message.id)]),
+    [
+      [TURN.SPOKEN, [line.message.id]],
+      [acknowledgment.turnId, [acknowledgment.message.id]],
+      [TURN.SPOKEN, [journal.message.id]],
+    ],
+  );
+  const [before, , after] = groups;
+  assert.deepEqual(before?.turn, spoken.turns[0]);
+  assert.deepEqual(after?.turn, spoken.turns[0]);
+  assert.deepEqual(before?.source, after?.source);
 });
 
 test("groups are ordered by where their earliest row is placed, not by when it was written: a spoken row whose words began before a typed ask was written comes first", async () => {

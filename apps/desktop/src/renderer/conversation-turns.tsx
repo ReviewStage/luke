@@ -532,9 +532,12 @@ function SubagentChip({
  * composed. Nothing for any other turn, or for a note the reader cannot hold
  * to that shape.
  */
-function completedChildOf(group: ConversationViewTurnGroup): string | undefined {
-  if (group.turn?.origin !== TURN_ORIGIN.CHILD_COMPLETION) return undefined;
-  for (const { message } of group.messages) {
+function completedChildOf(
+  turn: ConversationViewTurn | undefined,
+  messages: readonly ConversationViewMessage[],
+): string | undefined {
+  if (turn?.origin !== TURN_ORIGIN.CHILD_COMPLETION) return undefined;
+  for (const { message } of messages) {
     if (message.role !== MESSAGE_ROLE.USER) continue;
     if (message.metadata.author !== MESSAGE_AUTHOR.BRAIN) continue;
     if (message.metadata.source !== OBSERVATION_SOURCE.CHILD_COMPLETION) continue;
@@ -1220,14 +1223,35 @@ function placedLiveRows(
     });
 }
 
-/** When a turn's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
+/** When a group's rows begin and end: where its earliest and latest messages are placed, which is what dates the silence around it. */
 function groupSpan(group: ConversationViewTurnGroup) {
   const instants = group.messages.map((message) => message.placedAt);
   return { first: Math.min(...instants), last: Math.max(...instants) };
 }
 
+/** A group's key among the thread's elements: its first message's id, since a turn may stand as more than one group and its id alone would repeat. */
+function groupKey(group: ConversationViewTurnGroup): string {
+  return group.messages[0]?.message.id ?? group.turnId;
+}
+
+/** Every message of each turn in the thread's order, whole across the groups the turn stands as, for what is decided of a turn rather than of a group. */
+function messagesByTurn(
+  groups: readonly ConversationViewTurnGroup[],
+): ReadonlyMap<string, readonly ConversationViewMessage[]> {
+  const byTurn = new Map<string, ConversationViewMessage[]>();
+  for (const group of groups) {
+    const standing = byTurn.get(group.turnId);
+    if (standing === undefined) byTurn.set(group.turnId, [...group.messages]);
+    else standing.push(...group.messages);
+  }
+  return byTurn;
+}
+
 /**
- * The thread as turns. Each group's messages draw in sequence, and every
+ * The thread as the groups hand it: in their order, each the consecutive
+ * rows of one turn, a turn standing as more than one group where a row of
+ * another's is placed between its rows, so the turn is what a row's
+ * decorations are read from and never what orders it. Every
  * assistant message that carried tool calls opens with them — one as a row,
  * more as one fold — before the words that followed. A turn still running ends in Luke's wait,
  * driven by the turn row's own status and nothing else. A turn that followed
@@ -1293,9 +1317,17 @@ export function ConversationTurns({
   // in order, so a pending row above a settled reply is a record eve never
   // finished writing (an interrupted run), not a run still going. Drawing a
   // wait there would tell the developer Luke is thinking about words he
-  // already answered, or never will.
-  const last = groups.at(-1);
-  const waiting = turnPending(last?.turn) ? last?.turn : undefined;
+  // already answered, or never will. A row of no turn placed after the
+  // newest turn's rows — the voice's acknowledgment of the ask it is running,
+  // a line the voice answered alone — is not a later turn, so the newest turn
+  // is the last group that has a turn row.
+  const newest = groups.findLast((group) => group.turn !== undefined);
+  const waiting = turnPending(newest?.turn) ? newest?.turn : undefined;
+  const byTurn = messagesByTurn(groups);
+  // The ask a rated reply answered is the developer's latest words in the
+  // same turn before it, wherever the turn's groups stand; a turn Luke opened
+  // himself answered none.
+  const asks = new Map<string, string>();
   return (
     <ol className="conversation-list">
       {groups.flatMap((group) => {
@@ -1308,18 +1340,17 @@ export function ConversationTurns({
         // A child's completion leads Luke's first words on it with the chip
         // naming the child: the first of his messages in the turn with words,
         // since one that only called tools has no words to lead.
-        const completedChild = completedChildOf(group);
+        const turnMessages = byTurn.get(group.turnId) ?? group.messages;
+        const completedChild = completedChildOf(group.turn, turnMessages);
         const led =
           completedChild === undefined
             ? undefined
-            : group.messages.find(
+            : turnMessages.find(
                 (message) =>
                   message.message.role === MESSAGE_ROLE.ASSISTANT &&
                   message.message.parts.some(isTextPart),
               );
-        // The ask a rated reply answered is the developer's latest words in
-        // the same turn before it; a turn Luke opened himself answered none.
-        let ask: string | undefined;
+        let ask = asks.get(group.turnId);
         const drawn = group.messages.flatMap((message) => {
           const rows = messageRows(
             message,
@@ -1347,6 +1378,7 @@ export function ConversationTurns({
             message.message.metadata.author === MESSAGE_AUTHOR.DEVELOPER
           ) {
             ask = userWords(message.message);
+            asks.set(group.turnId, ask);
           }
           return rows;
         });
@@ -1355,7 +1387,7 @@ export function ConversationTurns({
           ...(dated
             ? [
                 <ConversationTimeBreak
-                  key={`${group.turnId}:break`}
+                  key={`${groupKey(group)}:break`}
                   recordedAt={span.first}
                   now={now}
                 />,
@@ -1364,7 +1396,7 @@ export function ConversationTurns({
           ...(group.source.kind === CONVERSATION_VIEW_SOURCE.OBSERVED
             ? [
                 <SourceRow
-                  key={group.turnId}
+                  key={groupKey(group)}
                   source={group.source}
                   roster={roster}
                   {...(onOpenChat ? { onOpenChat } : undefined)}
@@ -1374,9 +1406,9 @@ export function ConversationTurns({
           ...drawn,
         ];
       })}
-      {waiting !== undefined && last !== undefined ? (
+      {waiting !== undefined && newest !== undefined ? (
         <ConversationThinkingRow
-          key={`${last.turnId}:thinking`}
+          key={`${newest.turnId}:thinking`}
           since={waiting.startedAt ?? waiting.queuedAt}
           now={now}
         />

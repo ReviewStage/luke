@@ -479,13 +479,16 @@ const conversationReadMessageSchema = EffectSchema.Struct({
 });
 
 /**
- * The messages one turn wrote that the view selected, in sequence, under
- * the turn row where the store holds one. A group may continue on a later
- * page — a turn still running writes rows after a page was cut — so a device
- * merges groups by `turnId`, holds each message once by its id at the `seq`
- * and in the group its latest delivery gave it, and orders groups by their
- * earliest placed message, then the turn's queue instant, then the id, the
- * order the view itself keeps. The sequence is the store's order and the device's
+ * The messages one turn wrote that the view selected, under the turn row
+ * where the store holds one, in the thread's order. A group may continue on
+ * a later page — a turn still running writes rows after a page was cut — and
+ * a turn may stand as more than one group on one page, where a row of
+ * another turn's is placed between its rows, so a device merges groups by
+ * `turnId`, holds each message once by its id at the `seq` and in the turn
+ * its latest delivery gave it, and orders the thread as the view itself does:
+ * every row by where it is placed, then the turn's queue instant, then the
+ * turn id, then the sequence, cut into groups wherever the turn changes. The
+ * sequence is the store's order and the device's
  * cursor both, so a row the store moves — a spoken ask's line taken into
  * the turn that ran it, a turn's own rows placed behind the line that
  * arrived after them — takes a fresh sequence and is answered again past

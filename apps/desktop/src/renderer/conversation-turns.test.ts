@@ -275,6 +275,54 @@ test("the wait is the thread's last object: once after the newest turn, and neve
   assert.equal(count(above, "data-speaker", "you"), 2);
 });
 
+test("a row of no turn said while the newest turn runs stands above the wait, and the turn's rows around it read the turn: the ask is still the rating's, and the wait is still last", () => {
+  const running = groupOf(FIXTURE_TURN.RUNNING);
+  const [ask, ...work] = running.messages;
+  assert.ok(ask !== undefined && work.length > 0);
+  const ACKNOWLEDGMENT = "1e000000-0000-4000-8000-000000000601";
+  const acknowledgment: ConversationViewTurnGroup = {
+    turnId: ACKNOWLEDGMENT,
+    turn: undefined,
+    source: { kind: CONVERSATION_VIEW_SOURCE.MAIN },
+    messages: [
+      {
+        message: {
+          id: ACKNOWLEDGMENT,
+          role: MESSAGE_ROLE.ASSISTANT,
+          parts: [{ type: "text", text: "Sure. I'm on it.", state: "done" }],
+          metadata: {
+            author: MESSAGE_AUTHOR.VOICE_MODEL,
+            channel: MESSAGE_CHANNEL.VOICE,
+            voice_session_id: "vs_1",
+            from_ms: 600,
+            to_ms: 1_400,
+          },
+        },
+        seq: ask.seq - 1,
+        createdAt: ask.placedAt + 3_000,
+        placedAt: ask.placedAt + 600,
+        tools: [],
+      },
+    ],
+  };
+  const markup = render(
+    [{ ...running, messages: [ask] }, acknowledgment, { ...running, messages: work }],
+    OPEN,
+  );
+  // One wait, after every row: the acknowledgment is not a later turn.
+  assert.equal(count(markup, "data-thinking", "true"), 1);
+  const [above, below] = markup.split('data-thinking="true"');
+  assert.ok(above !== undefined && below !== undefined);
+  assert.equal(count(below, "data-speaker", "you"), 0);
+  assert.equal(count(below, "data-speaker", "luke"), 0);
+  assert.ok(above.includes("Sure. I&#x27;m on it."));
+  // The acknowledgment stands between the ask and the turn's work.
+  const askAt = markup.indexOf("Sure. I&#x27;m on it.");
+  const youAt = markup.indexOf('data-speaker="you"');
+  const workAt = markup.indexOf("conversation-actions-fold");
+  assert.ok(youAt < askAt && askAt < workAt);
+});
+
 test("a running turn ends in Luke's wait, driven by the turn row's status alone", () => {
   assert.equal(count(render([groupOf(FIXTURE_TURN.RUNNING)], OPEN), "data-thinking", "true"), 1);
   for (const turnId of [FIXTURE_TURN.SINGLE, FIXTURE_TURN.EVERY_KIND, FIXTURE_TURN.OWN]) {
