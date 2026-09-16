@@ -68,7 +68,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
 
         let briefing = answer.groups[1]
         XCTAssertEqual(briefing.source, .observed(Self.fixtureSession))
-        XCTAssertEqual(briefing.turn?.origin, .rosterDiff)
+        XCTAssertEqual(briefing.turn?.origin, .transcriptChange)
         XCTAssertEqual(briefing.messages.map(\.seq), [32])
         XCTAssertEqual(briefing.messages[0].rating, RatingEventPayload(rating: .up))
         XCTAssertEqual(
@@ -93,7 +93,7 @@ final class ConversationReadsFixtureTests: XCTestCase {
 
     func testTurnsAnswerDecodesEachTurn() throws {
         let answer = try fixture(Fixture.turns, as: BrainTurnsAnswer.self)
-        XCTAssertEqual(answer.turns.map(\.turn.origin), [.typed, .rosterDiff])
+        XCTAssertEqual(answer.turns.map(\.turn.origin), [.typed, .transcriptChange])
         XCTAssertFalse(answer.hasMore)
     }
 

@@ -445,7 +445,7 @@ test("a turn still running across a Clear keeps only the rows it wrote after the
           source: { kind: CONVERSATION_VIEW_SOURCE.OBSERVED, session: SESSION },
           turn: {
             id: turnId(21),
-            origin: TURN_ORIGIN.ROSTER_DIFF,
+            origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
             status: TURN_STATUS.RUNNING,
             queuedAt: NOW,
           },

@@ -236,7 +236,7 @@ test("an observation that announced crosses as its announce part alone, under th
   assert.equal(groups.length, 1);
   const [group] = groups;
   assert.equal(group?.turnId, TURN.ANNOUNCED);
-  assert.equal(group?.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.equal(group?.turn?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
   assert.deepEqual(group?.source, {
     kind: CONVERSATION_VIEW_SOURCE.OBSERVED,
     session: OBSERVED_SESSION,

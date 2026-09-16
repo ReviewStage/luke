@@ -63,7 +63,7 @@ final class UIMessageFixtureTests: XCTestCase {
     func testObservationSourcesAreTheirFixtures() throws {
         let sources: [String: ObservationSource] = [
             "observation-hook.json": .hook,
-            "observation-roster-look.json": .rosterLook,
+            "observation-transcript-change.json": .transcriptChange,
             "child-task.json": .child,
             "child-completion.json": .childCompletion,
             "recalled-notes.json": .recalledNotes,

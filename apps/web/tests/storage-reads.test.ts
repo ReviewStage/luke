@@ -277,7 +277,7 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
       const rows = yield* sql`
         insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
         values (
-          ${userId}, ${main}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.RUNNING},
+          ${userId}, ${main}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.RUNNING},
           '2026-09-10 12:00:00.000500+00'::timestamptz, '2026-09-10 12:00:00.000500+00'::timestamptz
         )
         returning id
@@ -526,7 +526,7 @@ test("the turn cursor's instant reads as one string whatever time zone the datab
       const rows = yield* sql`
         insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
         values (
-          ${userId}, ${main}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.RUNNING},
+          ${userId}, ${main}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.RUNNING},
           '2026-09-10 12:00:00.000500+00'::timestamptz, '2026-09-10 12:00:00.000500+00'::timestamptz
         )
         returning id

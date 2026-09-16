@@ -100,7 +100,7 @@ function announcePart(callId: string, input: WireRecord): MessageParts[number] {
   } as unknown as MessageParts[number];
 }
 
-/** An observed conversation with one settled roster-diff turn whose answer announced a briefing, as the relay leaves them. */
+/** An observed conversation with one settled transcript-change turn whose answer announced a briefing, as the relay leaves them. */
 async function announced(userId?: string): Promise<Announced> {
   const owner = userId ?? (await database.createUser());
   const conversationId = await insertConversation(database.run, {
@@ -112,7 +112,7 @@ async function announced(userId?: string): Promise<Announced> {
   const turnId = await insertTurn(database.run, {
     userId: owner,
     conversationId,
-    origin: TURN_ORIGIN.ROSTER_DIFF,
+    origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
     status: TURN_STATUS.SETTLED,
     queuedAt: new Date(clock),
     settledAt: new Date(clock),
@@ -188,7 +188,7 @@ async function viewMarksUnspoken(row: Announced): Promise<boolean> {
     turns: [
       {
         id: row.turnId,
-        origin: TURN_ORIGIN.ROSTER_DIFF,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
         status: TURN_STATUS.SETTLED,
         queuedAt: NOW,
       },

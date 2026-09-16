@@ -356,7 +356,7 @@ test("the turns answer fixture reads each turn with its own cursor, and the answ
     answer.turns.map((turn) => [turn.origin, turn.status, turn.conversationId]),
     [
       [TURN_ORIGIN.TYPED, TURN_STATUS.SETTLED, MAIN],
-      [TURN_ORIGIN.ROSTER_DIFF, TURN_STATUS.SETTLED, OBSERVED],
+      [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.SETTLED, OBSERVED],
     ],
   );
   assert.equal(answer.turns[0]?.model, "gpt-5");

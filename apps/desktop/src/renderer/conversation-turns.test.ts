@@ -449,7 +449,7 @@ test("a developer's row is a sent bubble with a copy control, and a note the bra
         message: {
           id: "2b000000-0000-4000-8000-000000000901",
           role: MESSAGE_ROLE.USER,
-          metadata: { author: "brain", source: "roster_look" },
+          metadata: { author: "brain", source: "transcript_change" },
           parts: [{ type: "text", text: "Roster: a session finished." }],
         },
         seq: 1,
@@ -829,7 +829,7 @@ test("a briefing a device read aloud folds as the brain's written words, the rea
       turnId: "1d000000-0000-4000-8000-000000000500",
       turn: {
         id: "1d000000-0000-4000-8000-000000000500",
-        origin: TURN_ORIGIN.ROSTER_DIFF,
+        origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
         status: TURN_STATUS.SETTLED,
         queuedAt: at,
         startedAt: at,

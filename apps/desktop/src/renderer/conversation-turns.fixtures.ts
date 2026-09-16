@@ -555,7 +555,7 @@ export const FIXTURE_INPUT: ConversationViewInput = {
     },
     {
       id: TURN.ANNOUNCED,
-      origin: TURN_ORIGIN.ROSTER_DIFF,
+      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
       status: TURN_STATUS.SETTLED,
       queuedAt: AT.ANNOUNCED,
     },

@@ -58,7 +58,7 @@ async function populate(userId: string) {
     clientId: "client-2",
     parts: [{ type: "text", text: "words 2" }],
     role: MESSAGE_ROLE.USER,
-    metadata: { author: MESSAGE_AUTHOR.BRAIN, source: "roster_look" },
+    metadata: { author: MESSAGE_AUTHOR.BRAIN, source: "transcript_change" },
   });
   const reply = await insertMessage(database.run, {
     userId,
