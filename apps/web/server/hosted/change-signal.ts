@@ -6,6 +6,7 @@ import {
   type ChangesAnswer,
   type ChangesRequest,
   changesRequestSchema,
+  encodeAgentsHead,
   encodeChildrenHead,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
@@ -26,7 +27,7 @@ import type { HostedStore } from "./store/index.js";
  * read stands now, as the cursor a device that read it to the end would
  * hold, so a device compares each against its own and reads only what moved.
  * The heads come from the counters on the conversation rows and one ordered
- * look each at the turns and the children, never from the rows themselves,
+ * look each at the turns, the children, and the agents, never from the rows themselves,
  * so a poll is one small read however long the Conversation has grown. The messages head is two
  * counters: the last sequence handed out and the journal revision, which
  * every write to a numbered row in place moves, so a caught-up device's
@@ -112,10 +113,11 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
     new Date(now()),
   );
 
-  const [standing, latestTurn, childrenHead, rosterObservedAt] = yield* Effect.all([
+  const [standing, latestTurn, childrenHead, agentsHead, rosterObservedAt] = yield* Effect.all([
     store.directory.standing(userId),
     store.turns.latest(userId),
     store.directory.childrenHead(userId),
+    store.directory.agentsHead(userId),
     store.roster.observedAt(userId),
   ]);
   const answer: ChangesAnswer = {
@@ -140,6 +142,7 @@ export const handleChanges = /* @__PURE__ */ Effect.fn("handleChanges")(function
     // The children read takes no cursor, so its head is the instant the
     // children last changed: a device compares it to the one it last saw.
     ...(childrenHead !== undefined ? { children: encodeChildrenHead(childrenHead) } : undefined),
+    ...(agentsHead !== undefined ? { agents: encodeAgentsHead(agentsHead) } : undefined),
     ...(rosterObservedAt !== undefined ? { rosterObservedAt } : undefined),
   };
   return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);

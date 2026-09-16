@@ -311,6 +311,30 @@ export function encodeChildrenHead(head: ChildrenHead): string {
   return encodeCursor(turnReadCursorRecord, { changedAt: head.changedAt, id: head.id });
 }
 
+/**
+ * Where the agents read stands: the instant the agent that last changed did,
+ * as the store renders it to the microsecond, and that agent's id to break a
+ * tie. An agent changes when its latest turn is queued, starts, or settles,
+ * and when a stamp takes it out of the list, so the head moves exactly when
+ * the list would read differently. The children head's shape and terms: the
+ * agents read takes no cursor, and a device compares the head to the one it
+ * last saw.
+ */
+export interface AgentsHead {
+  readonly changedAt: string;
+  readonly id: string;
+}
+
+export const agentsHeadSchema = encodedCursorSchema(turnReadCursorRecord);
+
+const encodedAgentsHeadSchema = trimmedText({
+  max: READ_CURSOR_BOUNDS.MAX_ENCODED_LENGTH,
+}).check(EffectSchema.makeFilter((encoded) => admitted(agentsHeadSchema, encoded) !== undefined));
+
+export function encodeAgentsHead(head: AgentsHead): string {
+  return encodeCursor(turnReadCursorRecord, { changedAt: head.changedAt, id: head.id });
+}
+
 /** The page bound a read may ask for: at least one row, at most the page's own maximum. */
 export const readLimitSchema = wholeNumber(1).check(
   EffectSchema.isLessThanOrEqualTo(READ_PAGE_BOUNDS.MAX_LIMIT),
@@ -677,6 +701,58 @@ export const childrenAnswerSchema = EffectSchema.Struct({
   ),
 });
 
+/** The bound of the agents read: the most agents one answer lists. */
+export const AGENTS_READ_BOUNDS = {
+  MAX_AGENTS: 100,
+} as const;
+
+/**
+ * One agent as the agents read answers it: a coding-agent session Luke
+ * follows, named by the provider and the session's id there, where the
+ * brain's latest turn about it leaves it, on the children's status terms.
+ * `acceptedAt` is the instant Luke began following the session; the stamps
+ * are the latest turn's, each absent until the turn reached it. No title,
+ * branch, or path travels: a device names the row from its own roster by the
+ * session identity. An agent is answered whole on every read, so a device
+ * replaces the agent it holds by id rather than appending.
+ */
+export interface AgentRead {
+  readonly id: string;
+  readonly providerId: string;
+  readonly providerSessionId: string;
+  readonly status: ChildStatus;
+  readonly acceptedAt: number;
+  readonly startedAt?: number;
+  readonly settledAt?: number;
+  readonly failure?: string;
+}
+
+const agentReadSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  ...sessionIdentitySchema.fields,
+  status: EffectSchema.Literals(CHILD_STATUS_NAMES),
+  acceptedAt: countedNumber,
+  startedAt: EffectSchema.optionalKey(countedNumber),
+  settledAt: EffectSchema.optionalKey(countedNumber),
+  failure: EffectSchema.optionalKey(trimmedText()),
+});
+
+/**
+ * The agents endpoint's answer: the account's standing agents that hold a
+ * turn, the one whose turn was queued last first, at most `MAX_AGENTS` of
+ * them and no cursor, since an agent's status changes in place and the list
+ * is short. The change signal's `agents` head says when to read it again.
+ */
+export interface AgentsAnswer {
+  readonly agents: readonly AgentRead[];
+}
+
+export const agentsAnswerSchema = EffectSchema.Struct({
+  agents: EffectSchema.Array(agentReadSchema).check(
+    EffectSchema.isMaxLength(AGENTS_READ_BOUNDS.MAX_AGENTS),
+  ),
+});
+
 /**
  * The query a child's messages read takes: the conversation by its id, read
  * as `wireUuidSchema` reads one, and the two parameters every per-resource
@@ -752,7 +828,8 @@ export const changesRequestSchema = EffectSchema.Struct({
  * and reads the resource whose head differs; `turns` is absent while the
  * account has no turn, `children` while no child was ever opened (a Clear
  * that stamped one moves the head rather than clearing it, since the list
- * reads differently after it), and `rosterObservedAt` while no roster
+ * reads differently after it), `agents` while no observed conversation holds
+ * a turn, and `rosterObservedAt` while no roster
  * snapshot stands. `seen` says whether
  * the device row the request named is the account's, exactly as the
  * heartbeat says it; `false` tells the device to register again, and the
@@ -765,6 +842,8 @@ export interface ChangesAnswer {
   readonly turns?: string;
   /** The children head: compared to the one last seen, since the children read takes no cursor. */
   readonly children?: string;
+  /** The agents head, on the same terms; absent while no agent has a turn. */
+  readonly agents?: string;
   /** Epoch milliseconds of the latest roster snapshot the scheduled observation wrote. */
   readonly rosterObservedAt?: number;
 }
@@ -775,5 +854,6 @@ export const changesAnswerSchema = EffectSchema.Struct({
   events: encodedSequenceReadCursorSchema,
   turns: EffectSchema.optionalKey(encodedTurnReadCursorSchema),
   children: EffectSchema.optionalKey(encodedChildrenHeadSchema),
+  agents: EffectSchema.optionalKey(encodedAgentsHeadSchema),
   rosterObservedAt: EffectSchema.optionalKey(countedNumber),
 });

@@ -23,6 +23,9 @@ import { readEither } from "@sidecar/wire/effect";
 import { type Schema as EffectSchema, Result } from "effect";
 import { test } from "vitest";
 import {
+  AGENTS_READ_BOUNDS,
+  agentsAnswerSchema,
+  agentsHeadSchema,
   brainTurnsAnswerSchema,
   CHILD_STATUS,
   CHILDREN_READ_BOUNDS,
@@ -32,6 +35,7 @@ import {
   childrenHeadSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
+  encodeAgentsHead,
   encodeChildrenHead,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,
@@ -53,12 +57,14 @@ const FIXTURE = {
   CHILDREN: "children-answer.json",
   CHILD_MESSAGES: "child-messages-answer.json",
   OBSERVED_MESSAGES: "observed-messages-answer.json",
+  AGENTS: "agents-answer.json",
   CHANGES_REQUEST: "changes-request.json",
   CHANGES_ANSWER: "changes-answer.json",
 } as const;
 
 const MAIN = "3c000000-0000-4000-8000-000000000001";
 const OBSERVED = "3c000000-0000-4000-8000-000000000002";
+const SETTLED_AGENT = "3c000000-0000-4000-8000-000000000003";
 const TURN = "1a000000-0000-4000-8000-000000000003";
 const SETTLED_CHILD = "3c000000-0000-4000-8000-000000000011";
 const RUNNING_CHILD = "3c000000-0000-4000-8000-000000000012";
@@ -487,6 +493,52 @@ test("the observed messages answer fixture is a main's page over the one observe
   assert.equal(answer.hasMore, false);
 });
 
+test("the agents answer fixture reads each agent by its session identity where its latest turn leaves it, with the stamps it reached", async () => {
+  const answer = expectReadAnswer(agentsAnswerSchema, await fixture(FIXTURE.AGENTS));
+  assert.deepEqual(
+    answer.agents.map((agent) => [agent.id, agent.providerId, agent.status]),
+    [
+      [OBSERVED, "conductor", CHILD_STATUS.RUNNING],
+      [SETTLED_AGENT, "conductor", CHILD_STATUS.SETTLED],
+    ],
+  );
+  const [running, settled] = answer.agents;
+  assert.ok(running && settled);
+  assert.equal(running.providerSessionId, "6c1f2f14-9a0b-4c2d-8e3f-0a1b2c3d4e50");
+  assert.equal(running.settledAt, undefined);
+  assert.equal(running.failure, undefined);
+  assert.deepEqual(
+    [settled.acceptedAt, settled.startedAt, settled.settledAt],
+    [1757505000000, 1757505310000, 1757505400000],
+  );
+  assert.deepEqual(parseAnswer(agentsAnswerSchema, { agents: [] }), { agents: [] });
+
+  // A status the store never derives, a missing session identity, and a crowd past the bound are each refused.
+  const raw = await fixture(FIXTURE.AGENTS);
+  assert.ok(isRecord(raw) && Array.isArray(raw.agents));
+  const [first, ...rest] = raw.agents;
+  assert.ok(isRecord(first));
+  const withFirst = (agent: Record<string, WireValue>) => ({
+    agents: [{ ...first, ...agent }, ...rest],
+  });
+  assert.equal(
+    parseAnswer(agentsAnswerSchema, withFirst({ status: TURN_STATUS.QUEUED })),
+    undefined,
+  );
+  assert.equal(parseAnswer(agentsAnswerSchema, withFirst({ providerSessionId: " " })), undefined);
+  const { providerId: _dropped, ...unnamed } = first;
+  assert.equal(parseAnswer(agentsAnswerSchema, { agents: [unnamed, ...rest] }), undefined);
+  const crowded = Array.from({ length: AGENTS_READ_BOUNDS.MAX_AGENTS + 1 }, () => first);
+  assert.equal(parseAnswer(agentsAnswerSchema, { agents: crowded }), undefined);
+});
+
+test("an agents head is the turn cursor's shape minted from the agents' own stamps, and refuses anything else", () => {
+  const head = { changedAt: "2026-09-10 12:02:02.4+00", id: OBSERVED };
+  assert.deepEqual(parse(agentsHeadSchema, encodeAgentsHead(head)), head);
+  assert.equal(parse(agentsHeadSchema, "not a head"), undefined);
+  assert.throws(() => encodeAgentsHead({ changedAt: "soon", id: OBSERVED }), TypeError);
+});
+
 test("a children head is the turn cursor's shape minted from the children's own stamps, and refuses anything else", () => {
   const head = { changedAt: "2026-09-10 12:03:00+00", id: RUNNING_CHILD };
   assert.deepEqual(parse(childrenHeadSchema, encodeChildrenHead(head)), head);
@@ -526,6 +578,10 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
     changedAt: "2026-09-10 12:03:00+00",
     id: RUNNING_CHILD,
   });
+  assert.deepEqual(parse(agentsHeadSchema, answer.agents ?? ""), {
+    changedAt: "2026-09-10 12:02:02.4+00",
+    id: OBSERVED,
+  });
   assert.equal(answer.rosterObservedAt, 1757505780000);
   assert.deepEqual(
     parseAnswer(changesAnswerSchema, {
@@ -535,16 +591,18 @@ test("the change-signal answer fixture reads every head as the cursor a caught-u
     }),
     { seen: false, messages: answer.messages, events: answer.events },
   );
-  // A children head that is not one this build mints refuses the answer, as any other head would.
-  assert.equal(
-    parseAnswer(changesAnswerSchema, {
-      seen: true,
-      messages: answer.messages,
-      events: answer.events,
-      children: "%%%",
-    }),
-    undefined,
-  );
+  // A children or agents head that is not one this build mints refuses the answer, as any other head would.
+  for (const head of [{ children: "%%%" }, { agents: "%%%" }]) {
+    assert.equal(
+      parseAnswer(changesAnswerSchema, {
+        seen: true,
+        messages: answer.messages,
+        events: answer.events,
+        ...head,
+      }),
+      undefined,
+    );
+  }
 });
 
 test("the unreadable-row refusal reads to the row it names and nothing else reads as one", () => {

@@ -108,6 +108,8 @@ const EFFECT_MODULE_SCHEMAS = {
     brainTurnsAnswerSchema: readsWire.brainTurnsAnswerSchema,
     childrenHeadSchema: readsWire.childrenHeadSchema,
     childrenAnswerSchema: readsWire.childrenAnswerSchema,
+    agentsHeadSchema: readsWire.agentsHeadSchema,
+    agentsAnswerSchema: readsWire.agentsAnswerSchema,
     changesRequestSchema: readsWire.changesRequestSchema,
     changesAnswerSchema: readsWire.changesAnswerSchema,
     unreadableRowRefusalSchema: readsWire.unreadableRowRefusalSchema,

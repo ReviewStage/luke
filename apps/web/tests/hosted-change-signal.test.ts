@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  agentsHeadSchema,
   changesAnswerSchema,
   childrenHeadSchema,
   DEVICE_PLATFORM,
@@ -218,6 +219,7 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.deepEqual(positionsOf(empty.events), []);
   assert.equal(empty.turns, undefined);
   assert.equal(empty.children, undefined);
+  assert.equal(empty.agents, undefined);
   assert.equal(empty.rosterObservedAt, undefined);
 
   const main = await insertConversation(database.run, {
@@ -297,6 +299,8 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
     changedAt: "2026-09-10 12:00:00.0005+00",
     id: turnId,
   });
+  // The observed conversation holds no turn yet, so it is no agent and the head is absent.
+  assert.equal(heads.agents, undefined);
   assert.equal(heads.rosterObservedAt, NOW - 30_000);
   // The children head names the child that changed last; here the one child, at its opening.
   assert.equal(parse(childrenHeadSchema, heads.children ?? "")?.id, child);
@@ -345,6 +349,27 @@ test("a poll answers every resource's head as the cursor a caught-up device hold
   assert.equal(written.events, heads.events);
   assert.equal(written.turns, heads.turns);
   assert.equal(written.children, heads.children);
+
+  // A turn about the observed session makes it an agent: the head names it at the turn's queuing.
+  await database.run(
+    Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`
+        insert into turns (user_id, conversation_id, origin, status, queued_at)
+        values (
+          ${userId}, ${observed}, ${TURN_ORIGIN.ROSTER_DIFF}, ${TURN_STATUS.QUEUED},
+          ${new Date(NOW + 500)}
+        )
+      `;
+    }),
+  );
+  const observing = await answered(
+    await database.run(handleChanges(options(userId, changesRequest({ deviceId: DEVICE_ID })))),
+  );
+  assert.deepEqual(parse(agentsHeadSchema, observing.agents ?? ""), {
+    changedAt: "2026-09-10 12:00:00.5+00",
+    id: observed,
+  });
 
   const { opened } = await database.run(database.store.main.clear(userId, new Date(NOW + 1000)));
   const cleared = await answered(
