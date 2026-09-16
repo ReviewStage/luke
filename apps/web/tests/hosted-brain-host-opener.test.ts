@@ -477,31 +477,60 @@ test("a provider that would not say what changed wakes nothing and leaves the ma
 });
 
 /**
+ * The read `recordedRuntimeSession` makes, as the Drizzle builder renders it:
+ * the one column of the conversations row, which is what tells it from the
+ * admission's own three-column read of the same table.
+ */
+const SESSION_READ = 'select "runtime_session_id" from "conversations"';
+
+/** The readings a statement can be taken for; a refused one fails every single one of them. */
+const STATEMENT_READINGS: ReadonlySet<string | symbol> = new Set([
+  "raw",
+  "unprepared",
+  "values",
+  "valuesUnprepared",
+  "withoutTransform",
+]);
+
+/**
  * The client with every read of a conversation's own eve session refused, and
  * nothing else changed: the same proxy shape as the transaction one below,
  * with the one statement `recordedRuntimeSession` makes failing and every
- * other statement the real client's.
+ * other statement the real client's. The statement is a Drizzle builder's,
+ * rendered and run through the client's own `unsafe`, so the refusal stands
+ * there; and it refuses every reading of that statement rather than one,
+ * because which reading is taken is the bridge's own choice.
  */
 function sessionReadsRefused(sql: SqlClient.SqlClient): SqlClient.SqlClient {
+  const refusal = Effect.fail(
+    new SqlError({
+      reason: new ConnectionError({
+        cause: new Error("the connection dropped"),
+        message: "the conversation's session could not be read",
+      }),
+    }),
+  );
+  const refusing = (<A extends object>(
+    statement: string,
+    params?: ReadonlyArray<unknown> | undefined,
+  ) => {
+    const made = sql.unsafe<A>(statement, params);
+    if (!statement.includes(SESSION_READ)) return made;
+    return new Proxy(made, {
+      get: (target, property, receiver) =>
+        // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a property the proxy does not interpret
+        STATEMENT_READINGS.has(property) ? refusal : Reflect.get(target, property, receiver),
+    });
+  }) satisfies SqlClient.SqlClient["unsafe"];
+  // The client is called as a template tag and read for its statements, so
+  // both traps forward to the real client untyped; the one property swapped
+  // is the unsafe statement, and everything else is the client's own.
   return new Proxy(sql, {
     // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a call the proxy does not interpret
-    apply: (target, receiver, args) => {
-      const [strings] = args;
-      if (Array.isArray(strings) && strings.join("?").includes("select runtime_session_id")) {
-        return Effect.fail(
-          new SqlError({
-            reason: new ConnectionError({
-              cause: new Error("the connection dropped"),
-              message: "the conversation's session could not be read",
-            }),
-          }),
-        );
-      }
-      // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a call the proxy does not interpret
-      return Reflect.apply(target, receiver, args);
-    },
-    // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a property the proxy does not interpret
-    get: (target, property, receiver) => Reflect.get(target, property, receiver),
+    apply: (target, receiver, args) => Reflect.apply(target, receiver, args),
+    get: (target, property, receiver) =>
+      // oxlint-disable-next-line anti-slop/no-reflect -- forwarding a property the proxy does not interpret
+      property === "unsafe" ? refusing : Reflect.get(target, property, receiver),
   });
 }
 
