@@ -610,7 +610,7 @@ it.effect(
         [STEP_START, `tool-${BRAIN_TOOL.ANNOUNCE}`, STEP_START],
       );
       const offered = (await readEventsByConversation(database.run, target.conversationId)).map(
-        (event) => ({ kind: event.kind, messageId: event.message_id, payload: event.payload }),
+        (event) => ({ kind: event.kind, messageId: event.messageId, payload: event.payload }),
       );
       assert.deepEqual(offered, [
         {

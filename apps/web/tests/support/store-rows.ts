@@ -1,30 +1,56 @@
 import assert from "node:assert/strict";
 import { MessageRoleSchema } from "@sidecar/wire";
+import { and, count, eq, isNull, sql } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { StoredUIMessage } from "../../server/core";
+import { user } from "../../server/db/auth-schema";
+import { devices } from "../../server/db/devices-schema";
+import { db } from "../../server/db/query";
+import {
+  conversations,
+  events,
+  messages,
+  providerCursors,
+  turns,
+} from "../../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
+import { voiceSessions, voiceTranscriptSegments } from "../../server/db/voice-schema";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
 /**
- * Raw rows over the ambient `SqlClient`, for the setup and assertions a test
+ * Rows over the ambient `SqlClient`, for the setup and assertions a test
  * still needs beneath the store's own effects: the same tables `writer.ts`
- * and its neighbors write, reached by name rather than by a Drizzle handle —
- * there is none left in this app. Every insert answers the row's minted id
- * where the table has one; every read answers the row (or rows) as the
- * driver hands them back, undecoded beyond what a caller's own assertion
- * needs.
+ * and its neighbors write, reached through the shared Drizzle handle over
+ * the tables their own `db/*-schema.ts` modules declare, so a column renamed
+ * under `db/` is a type error in this file rather than a statement that
+ * still parses. Every insert answers the row's minted id where the table has
+ * one; every read answers the row (or rows) as the builder maps them, which
+ * is the schema module's own field names and the column's own reading —
+ * undecoded beyond what a caller's own assertion needs, and Schema-decoded
+ * where a caller reads a whole row as the store's writers build it.
+ *
+ * A write's fields are the table's own insert type rather than loose strings,
+ * which is how a vocabulary the schema module pins (`$type<>()`) is pinned
+ * here too.
  */
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** A raw row's `timestamptz` column as the instant it holds, whichever of the two readings the dialect gave it. */
+/** A `timestamptz` column as the instant it holds, whichever of the two readings the dialect gave it. */
 export const instantColumn = Schema.decodeUnknownSync(InstantColumnSchema);
+
+type ConversationInsert = typeof conversations.$inferInsert;
+type MessageInsert = typeof messages.$inferInsert;
+type TurnInsert = typeof turns.$inferInsert;
+type EventInsert = typeof events.$inferInsert;
+type VoiceSessionInsert = typeof voiceSessions.$inferInsert;
+type VoiceSegmentInsert = typeof voiceTranscriptSegments.$inferInsert;
 
 export interface ConversationRow {
   readonly userId: string;
-  readonly kind?: string;
+  readonly kind?: ConversationInsert["kind"];
   readonly providerId?: string | null;
   readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
@@ -45,25 +71,27 @@ export interface ConversationRow {
 export function insertConversation(run: HostedStoreTestRun, row: ConversationRow): Promise<string> {
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      insert into conversations (
-        user_id, kind, provider_id, provider_session_id,
-        parent_conversation_id, spawned_by_message_id, runtime_session_id,
-        created_at, deleted_at, next_message_seq, next_event_seq, label, title, workspace,
-        completion_delivered_at, expects_completion
-      )
-      values (
-        ${row.userId}, ${row.kind ?? CONVERSATION_KIND.MAIN},
-        ${row.providerId ?? null}, ${row.providerSessionId ?? null},
-        ${row.parentConversationId ?? null}, ${row.spawnedByMessageId ?? null},
-        ${row.runtimeSessionId ?? null}, ${row.createdAt ?? new Date()}, ${row.deletedAt ?? null},
-        ${row.nextMessageSeq ?? 1}, ${row.nextEventSeq ?? 1},
-        ${row.label ?? null}, ${row.title ?? null}, ${row.workspace ?? null},
-        ${row.completionDeliveredAt ?? null}, ${row.expectsCompletion ?? true}
-      )
-      returning id
-    `;
+      const rows = yield* db
+        .insert(conversations)
+        .values({
+          userId: row.userId,
+          kind: row.kind ?? CONVERSATION_KIND.MAIN,
+          providerId: row.providerId ?? null,
+          providerSessionId: row.providerSessionId ?? null,
+          parentConversationId: row.parentConversationId ?? null,
+          spawnedByMessageId: row.spawnedByMessageId ?? null,
+          runtimeSessionId: row.runtimeSessionId ?? null,
+          createdAt: row.createdAt ?? new Date(),
+          deletedAt: row.deletedAt ?? null,
+          nextMessageSeq: row.nextMessageSeq ?? 1,
+          nextEventSeq: row.nextEventSeq ?? 1,
+          label: row.label ?? null,
+          title: row.title ?? null,
+          workspace: row.workspace ?? null,
+          completionDeliveredAt: row.completionDeliveredAt ?? null,
+          expectsCompletion: row.expectsCompletion ?? true,
+        })
+        .returning({ id: conversations.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
@@ -75,41 +103,37 @@ export function setConversationDeletedAt(
   deletedAt: Date | null,
 ): Promise<void> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update conversations set deleted_at = ${deletedAt} where id = ${conversationId}`;
-    }),
+    Effect.asVoid(
+      db.update(conversations).set({ deletedAt }).where(eq(conversations.id, conversationId)),
+    ),
   );
 }
 
 export function readConversationById(run: HostedStoreTestRun, id: string) {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from conversations where id = ${id}`;
-    }),
-  );
+  return run(db.select().from(conversations).where(eq(conversations.id, id)));
 }
 
-export function readStandingConversations(run: HostedStoreTestRun, userId: string, kind: string) {
+export function readStandingConversations(
+  run: HostedStoreTestRun,
+  userId: string,
+  kind: ConversationInsert["kind"],
+) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select id from conversations
-        where user_id = ${userId} and kind = ${kind} and deleted_at is null
-      `;
-    }),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.kind, kind),
+          isNull(conversations.deletedAt),
+        ),
+      ),
   );
 }
 
 export function deleteConversation(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from conversations where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.delete(conversations).where(eq(conversations.id, id))));
 }
 
 export interface MessageRow {
@@ -118,7 +142,16 @@ export interface MessageRow {
   readonly seq: number;
   readonly turnId?: string | null;
   readonly clientId: string;
-  readonly role: string;
+  readonly role: MessageInsert["role"];
+  /**
+   * The parts and the metadata stay `unknown` where every other field is the
+   * column's own type, because writing a row the column type forbids is one
+   * of the things this helper is for: `storage-reads.test.ts` writes the row
+   * a corrupt write would leave and asserts the page is refused as malformed.
+   * They are handed to the builder as the column's type on that account, and
+   * that is the whole of the trust — a column renamed under `db/` is still a
+   * type error here.
+   */
   readonly parts: unknown;
   readonly metadata?: unknown;
   readonly createdAt?: Date;
@@ -128,24 +161,31 @@ export interface MessageRow {
 }
 
 export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise<string> {
-  const parts = JSON.stringify(row.parts);
-  const metadata = row.metadata === undefined ? null : JSON.stringify(row.metadata);
   const createdAt = row.createdAt ?? new Date();
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      insert into messages (
-        user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
-        created_at, placed_at, finished_at
-      )
-      values (
-        ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.turnId ?? null}, ${row.clientId},
-        ${row.role}, ${parts}::jsonb, ${metadata}::jsonb,
-        ${createdAt}, ${row.placedAt ?? createdAt}, ${row.finishedAt ?? null}
-      )
-      returning id
-    `;
+      const rows = yield* db
+        .insert(messages)
+        .values({
+          userId: row.userId,
+          conversationId: row.conversationId,
+          seq: row.seq,
+          turnId: row.turnId ?? null,
+          clientId: row.clientId,
+          role: row.role,
+          // SAFETY: the column's own type is what a well-formed row carries,
+          // and writing a row that is not one is what this helper is for —
+          // `storage-reads.test.ts` writes the row a corrupt write would leave
+          // and asserts the page is refused as malformed. Nothing reads the
+          // value back through this type.
+          parts: row.parts as MessageInsert["parts"],
+          // SAFETY: the same, for the metadata beside them.
+          metadata: (row.metadata ?? null) as MessageInsert["metadata"],
+          createdAt,
+          placedAt: row.placedAt ?? createdAt,
+          finishedAt: row.finishedAt ?? null,
+        })
+        .returning({ id: messages.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
@@ -153,51 +193,53 @@ export function insertMessage(run: HostedStoreTestRun, row: MessageRow): Promise
 
 export function readMessagesByConversation(run: HostedStoreTestRun, conversationId: string) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from messages where conversation_id = ${conversationId} order by seq`;
-    }),
+    db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(messages.seq),
   );
 }
 
 export interface TurnInsertRow {
   readonly userId: string;
   readonly conversationId: string;
-  readonly origin: string;
-  readonly status: string;
+  readonly origin: TurnInsert["origin"];
+  readonly status: TurnInsert["status"];
   readonly eveTurnId?: string | null;
   readonly queuedAt?: Date;
   readonly startedAt?: Date | null;
   readonly settledAt?: Date | null;
   readonly responseIds?: readonly string[] | null;
-  readonly usage?: unknown;
+  readonly usage?: TurnInsert["usage"];
   readonly failure?: string | null;
 }
 
 export function insertTurn(run: HostedStoreTestRun, row: TurnInsertRow): Promise<string> {
-  const responseIds = row.responseIds ?? null;
-  const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      insert into turns (
-        user_id, conversation_id, origin, status, eve_turn_id, queued_at, started_at, settled_at,
-        response_ids, usage, failure
-      )
-      values (
-        ${row.userId}, ${row.conversationId}, ${row.origin}, ${row.status}, ${row.eveTurnId ?? null},
-        ${row.queuedAt ?? new Date()}, ${row.startedAt ?? null}, ${row.settledAt ?? null},
-        ${responseIds}, ${usage}::jsonb, ${row.failure ?? null}
-      )
-      returning id
-    `;
+      const rows = yield* db
+        .insert(turns)
+        .values({
+          userId: row.userId,
+          conversationId: row.conversationId,
+          origin: row.origin,
+          status: row.status,
+          eveTurnId: row.eveTurnId ?? null,
+          queuedAt: row.queuedAt ?? new Date(),
+          startedAt: row.startedAt ?? null,
+          settledAt: row.settledAt ?? null,
+          responseIds: row.responseIds ? [...row.responseIds] : null,
+          usage: row.usage ?? null,
+          failure: row.failure ?? null,
+        })
+        .returning({ id: turns.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
 }
 
-/** A turn row, decoded to the same camelCase shape the store's own writer builds it under. */
+/** A turn row, decoded to the same shape the store's own writer builds it under. */
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -217,22 +259,7 @@ const TurnRowSchema = Schema.Struct({
   failure: Schema.NullOr(Schema.String),
   failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    conversationId: "conversation_id",
-    eveTurnId: "eve_turn_id",
-    reasoningEffort: "reasoning_effort",
-    promptHash: "prompt_hash",
-    toolSetHash: "tool_set_hash",
-    responseIds: "response_ids",
-    queuedAt: "queued_at",
-    startedAt: "started_at",
-    settledAt: "settled_at",
-    failureDetail: "failure_detail",
-    cancelRequestedAt: "cancel_requested_at",
-  }),
-);
+});
 export type TurnRow = Schema.Schema.Type<typeof TurnRowSchema>;
 const decodeTurnRow = Schema.decodeUnknownSync(TurnRowSchema);
 
@@ -241,21 +268,17 @@ export function readTurnsByConversation(
   conversationId: string,
 ): Promise<readonly TurnRow[]> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from turns where conversation_id = ${conversationId}`;
-      return rows.map((row) => decodeTurnRow(row));
-    }),
+    Effect.map(db.select().from(turns).where(eq(turns.conversationId, conversationId)), (rows) =>
+      rows.map((row) => decodeTurnRow(row)),
+    ),
   );
 }
 
 export function readTurnById(run: HostedStoreTestRun, id: string): Promise<TurnRow | undefined> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from turns where id = ${id}`;
-      return rows[0] === undefined ? undefined : decodeTurnRow(rows[0]);
-    }),
+    Effect.map(db.select().from(turns).where(eq(turns.id, id)), (rows) =>
+      rows[0] === undefined ? undefined : decodeTurnRow(rows[0]),
+    ),
   );
 }
 
@@ -265,7 +288,7 @@ const StoredPartsColumnSchema: Schema.Codec<StoredUIMessage["parts"]> = Schema.d
   (input): input is StoredUIMessage["parts"] => readsPartsShape(input),
 );
 
-/** A message row, decoded to the same camelCase shape the store's own writer builds it under. */
+/** A message row, decoded to the same shape the store's own writer builds it under. */
 const MessageRowFullSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -280,17 +303,7 @@ const MessageRowFullSchema = Schema.Struct({
   placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    conversationId: "conversation_id",
-    turnId: "turn_id",
-    clientId: "client_id",
-    createdAt: "created_at",
-    placedAt: "placed_at",
-    finishedAt: "finished_at",
-  }),
-);
+});
 export type MessageRowFull = Schema.Schema.Type<typeof MessageRowFullSchema>;
 const decodeMessageRow = Schema.decodeUnknownSync(MessageRowFullSchema);
 
@@ -299,13 +312,14 @@ export function readMessagesByConversationTyped(
   conversationId: string,
 ): Promise<readonly MessageRowFull[]> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        select * from messages where conversation_id = ${conversationId} order by seq
-      `;
-      return rows.map((row) => decodeMessageRow(row));
-    }),
+    Effect.map(
+      db
+        .select()
+        .from(messages)
+        .where(eq(messages.conversationId, conversationId))
+        .orderBy(messages.seq),
+      (rows) => rows.map((row) => decodeMessageRow(row)),
+    ),
   );
 }
 
@@ -314,6 +328,10 @@ export function readMessagesByConversationTyped(
  * journal revision moves and the row takes it, in one statement, so a test
  * that streams or finishes a journal beneath the writer moves the head as the
  * writer would.
+ *
+ * Note that the bump is a data-modifying CTE rather than a second statement,
+ * because what this stands for is the writer's own single statement; the
+ * builder spells one as a `$with` over an update that returns its new value.
  */
 export function amendMessageInPlace(
   run: HostedStoreTestRun,
@@ -324,24 +342,28 @@ export function amendMessageInPlace(
     readonly finishedAt?: Date;
   },
 ): Promise<void> {
-  const parts = JSON.stringify(row.parts);
+  const bumped = db.$with("bumped").as(
+    db
+      .update(conversations)
+      .set({ journalRevision: sql`${conversations.journalRevision} + 1` })
+      .where(eq(conversations.id, row.conversationId))
+      .returning({ journalRevision: conversations.journalRevision }),
+  );
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        with bumped as (
-          update conversations
-          set journal_revision = journal_revision + 1
-          where id = ${row.conversationId}
-          returning journal_revision
-        )
-        update messages
-        set parts = ${parts}::jsonb,
-            finished_at = coalesce(${row.finishedAt ?? null}, finished_at),
-            revision = (select journal_revision from bumped)
-        where id = ${row.id}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .with(bumped)
+        .update(messages)
+        .set({
+          // SAFETY: as in `insertMessage` above — a row the column type forbids
+          // is one of the rows this helper exists to write.
+          parts: row.parts as MessageInsert["parts"],
+          revision: sql`(select ${bumped.journalRevision} from ${bumped})`,
+          // A finish the caller did not name leaves the column as it stands.
+          finishedAt: sql`coalesce(${row.finishedAt ?? null}, ${messages.finishedAt})`,
+        })
+        .where(eq(messages.id, row.id)),
+    ),
   );
 }
 
@@ -350,11 +372,9 @@ export function readMessageById(
   id: string,
 ): Promise<MessageRowFull | undefined> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from messages where id = ${id}`;
-      return rows[0] === undefined ? undefined : decodeMessageRow(rows[0]);
-    }),
+    Effect.map(db.select().from(messages).where(eq(messages.id, id)), (rows) =>
+      rows[0] === undefined ? undefined : decodeMessageRow(rows[0]),
+    ),
   );
 }
 
@@ -363,25 +383,28 @@ export interface EventInsertRow {
   readonly conversationId: string;
   readonly seq: number;
   readonly messageId: string;
-  readonly kind: string;
+  readonly kind: EventInsert["kind"];
   readonly deviceId?: string | null;
   readonly payload?: unknown;
   readonly createdAt?: Date;
 }
 
 export function insertEvent(run: HostedStoreTestRun, row: EventInsertRow): Promise<string> {
-  const payload = row.payload === undefined ? null : JSON.stringify(row.payload);
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      insert into events (user_id, conversation_id, seq, message_id, kind, device_id, payload, created_at)
-      values (
-        ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.messageId}, ${row.kind},
-        ${row.deviceId ?? null}, ${payload}::jsonb, ${row.createdAt ?? new Date()}
-      )
-      returning id
-    `;
+      const rows = yield* db
+        .insert(events)
+        .values({
+          userId: row.userId,
+          conversationId: row.conversationId,
+          seq: row.seq,
+          messageId: row.messageId,
+          kind: row.kind,
+          deviceId: row.deviceId ?? null,
+          payload: row.payload ?? null,
+          createdAt: row.createdAt ?? new Date(),
+        })
+        .returning({ id: events.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
@@ -389,10 +412,7 @@ export function insertEvent(run: HostedStoreTestRun, row: EventInsertRow): Promi
 
 export function readEventsByConversation(run: HostedStoreTestRun, conversationId: string) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from events where conversation_id = ${conversationId} order by seq`;
-    }),
+    db.select().from(events).where(eq(events.conversationId, conversationId)).orderBy(events.seq),
   );
 }
 
@@ -410,32 +430,29 @@ export interface DeviceInsertRow {
 
 export function insertDevice(run: HostedStoreTestRun, row: DeviceInsertRow): Promise<void> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      insert into devices (
-        id, user_id, installation_id, platform, last_seen_at, active_until, quiet_until,
-        push_token, push_environment
-      )
-      values (
-        ${row.id}, ${row.userId}, ${row.installationId}, ${row.platform}, ${row.lastSeenAt ?? new Date()},
-        ${row.activeUntil ?? null}, ${row.quietUntil ?? null}, ${row.pushToken ?? null}, ${row.pushEnvironment ?? null}
-      )
-    `;
-    }),
+    Effect.asVoid(
+      db.insert(devices).values({
+        id: row.id,
+        userId: row.userId,
+        installationId: row.installationId,
+        platform: row.platform,
+        lastSeenAt: row.lastSeenAt ?? new Date(),
+        activeUntil: row.activeUntil ?? null,
+        quietUntil: row.quietUntil ?? null,
+        pushToken: row.pushToken ?? null,
+        pushEnvironment: row.pushEnvironment ?? null,
+      }),
+    ),
   );
 }
 
 export function readDevicesByUser(run: HostedStoreTestRun, userId: string) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from devices where user_id = ${userId} order by last_seen_at`;
-    }),
+    db.select().from(devices).where(eq(devices.userId, userId)).orderBy(devices.lastSeenAt),
   );
 }
 
-/** A device row, decoded to the same camelCase shape the store's own device seams build it under. */
+/** A device row, decoded to the same shape the store's own device seams build it under. */
 export const DeviceRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
@@ -446,30 +463,31 @@ export const DeviceRowSchema = Schema.Struct({
   quietUntil: Schema.NullOr(InstantColumnSchema),
   pushToken: Schema.NullOr(Schema.String),
   pushEnvironment: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    installationId: "installation_id",
-    lastSeenAt: "last_seen_at",
-    activeUntil: "active_until",
-    quietUntil: "quiet_until",
-    pushToken: "push_token",
-    pushEnvironment: "push_environment",
-  }),
-);
+});
 export type DeviceRow = Schema.Schema.Type<typeof DeviceRowSchema>;
 const decodeDeviceRow = Schema.decodeUnknownSync(DeviceRowSchema);
+
+/** The device columns the decoded row names, which is every column but the two a test never reads. */
+const DEVICE_FIELDS = {
+  id: devices.id,
+  userId: devices.userId,
+  installationId: devices.installationId,
+  platform: devices.platform,
+  lastSeenAt: devices.lastSeenAt,
+  activeUntil: devices.activeUntil,
+  quietUntil: devices.quietUntil,
+  pushToken: devices.pushToken,
+  pushEnvironment: devices.pushEnvironment,
+};
 
 export function readDeviceById(
   run: HostedStoreTestRun,
   id: string,
 ): Promise<DeviceRow | undefined> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from devices where id = ${id}`;
-      return rows[0] === undefined ? undefined : decodeDeviceRow(rows[0]);
-    }),
+    Effect.map(db.select(DEVICE_FIELDS).from(devices).where(eq(devices.id, id)), (rows) =>
+      rows[0] === undefined ? undefined : decodeDeviceRow(rows[0]),
+    ),
   );
 }
 
@@ -479,12 +497,12 @@ export function setVoiceSessionDeviceId(
   deviceId: string | null,
 ): Promise<void> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      update voice_sessions set device_id = ${deviceId} where live_session_id = ${liveSessionId}
-    `;
-    }),
+    Effect.asVoid(
+      db
+        .update(voiceSessions)
+        .set({ deviceId })
+        .where(eq(voiceSessions.liveSessionId, liveSessionId)),
+    ),
   );
 }
 
@@ -493,12 +511,7 @@ export function setDeviceQuietUntil(
   id: string,
   quietUntil: Date | null,
 ): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update devices set quiet_until = ${quietUntil} where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.update(devices).set({ quietUntil }).where(eq(devices.id, id))));
 }
 
 export function setDeviceActiveUntil(
@@ -506,51 +519,41 @@ export function setDeviceActiveUntil(
   id: string,
   activeUntil: Date | null,
 ): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`update devices set active_until = ${activeUntil} where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.update(devices).set({ activeUntil }).where(eq(devices.id, id))));
 }
 
 export function readEventsByMessage(run: HostedStoreTestRun, messageId: string) {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from events where message_id = ${messageId} order by seq`;
-    }),
-  );
+  return run(db.select().from(events).where(eq(events.messageId, messageId)).orderBy(events.seq));
 }
 
 export interface VoiceSessionInsertRow {
   readonly userId: string;
   readonly liveSessionId: string;
-  readonly delegationMode: string;
+  readonly delegationMode: VoiceSessionInsert["delegationMode"];
   readonly deviceId?: string | null | undefined;
   readonly closedAt?: Date | null | undefined;
-  readonly closeReason?: string | null | undefined;
-  readonly usage?: unknown;
+  readonly closeReason?: VoiceSessionInsert["closeReason"];
+  readonly usage?: VoiceSessionInsert["usage"];
 }
 
 export function insertVoiceSession(
   run: HostedStoreTestRun,
   row: VoiceSessionInsertRow,
 ): Promise<string> {
-  const usage = row.usage === undefined ? null : JSON.stringify(row.usage);
   return run(
     Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      insert into voice_sessions (
-        user_id, device_id, live_session_id, delegation_mode, closed_at, close_reason, usage
-      )
-      values (
-        ${row.userId}, ${row.deviceId ?? null}, ${row.liveSessionId}, ${row.delegationMode},
-        ${row.closedAt ?? null}, ${row.closeReason ?? null}, ${usage}::jsonb
-      )
-      returning id
-    `;
+      const rows = yield* db
+        .insert(voiceSessions)
+        .values({
+          userId: row.userId,
+          deviceId: row.deviceId ?? null,
+          liveSessionId: row.liveSessionId,
+          delegationMode: row.delegationMode,
+          closedAt: row.closedAt ?? null,
+          closeReason: row.closeReason ?? null,
+          usage: row.usage ?? null,
+        })
+        .returning({ id: voiceSessions.id });
       return Schema.decodeUnknownSync(IdRowSchema)(rows[0]).id;
     }),
   );
@@ -566,17 +569,7 @@ const VoiceSessionRowSchema = Schema.Struct({
   closedAt: Schema.NullOr(InstantColumnSchema),
   closeReason: Schema.NullOr(Schema.String),
   usage: Schema.NullOr(Schema.Unknown),
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    deviceId: "device_id",
-    liveSessionId: "live_session_id",
-    delegationMode: "delegation_mode",
-    startedAt: "started_at",
-    closedAt: "closed_at",
-    closeReason: "close_reason",
-  }),
-);
+});
 export type VoiceSessionRow = Schema.Schema.Type<typeof VoiceSessionRowSchema>;
 const decodeVoiceSessionRow = Schema.decodeUnknownSync(VoiceSessionRowSchema);
 
@@ -585,11 +578,9 @@ export function readVoiceSessionByIdTyped(
   id: string,
 ): Promise<VoiceSessionRow | undefined> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from voice_sessions where id = ${id}`;
-      return rows[0] === undefined ? undefined : decodeVoiceSessionRow(rows[0]);
-    }),
+    Effect.map(db.select().from(voiceSessions).where(eq(voiceSessions.id, id)), (rows) =>
+      rows[0] === undefined ? undefined : decodeVoiceSessionRow(rows[0]),
+    ),
   );
 }
 
@@ -598,18 +589,16 @@ export function readVoiceSessionsByUserTyped(
   userId: string,
 ): Promise<readonly VoiceSessionRow[]> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`select * from voice_sessions where user_id = ${userId}`;
-      return rows.map((row) => decodeVoiceSessionRow(row));
-    }),
+    Effect.map(db.select().from(voiceSessions).where(eq(voiceSessions.userId, userId)), (rows) =>
+      rows.map((row) => decodeVoiceSessionRow(row)),
+    ),
   );
 }
 
 export interface VoiceSegmentInsertRow {
   readonly voiceSessionId: string;
   readonly seq: number;
-  readonly role: string;
+  readonly role: VoiceSegmentInsert["role"];
   readonly text: string;
   readonly startMs: number;
   readonly endMs: number;
@@ -620,41 +609,29 @@ export function insertVoiceTranscriptSegment(
   row: VoiceSegmentInsertRow,
 ): Promise<void> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      insert into voice_transcript_segments (voice_session_id, seq, role, text, start_ms, end_ms)
-      values (${row.voiceSessionId}, ${row.seq}, ${row.role}, ${row.text}, ${row.startMs}, ${row.endMs})
-    `;
-    }),
+    Effect.asVoid(
+      db.insert(voiceTranscriptSegments).values({
+        voiceSessionId: row.voiceSessionId,
+        seq: row.seq,
+        role: row.role,
+        text: row.text,
+        startMs: row.startMs,
+        endMs: row.endMs,
+      }),
+    ),
   );
 }
 
 export function deleteVoiceSession(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from voice_sessions where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.delete(voiceSessions).where(eq(voiceSessions.id, id))));
 }
 
 export function deleteDevice(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from devices where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.delete(devices).where(eq(devices.id, id))));
 }
 
 export function readVoiceSessionByLiveSessionId(run: HostedStoreTestRun, liveSessionId: string) {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select * from voice_sessions where live_session_id = ${liveSessionId}`;
-    }),
-  );
+  return run(db.select().from(voiceSessions).where(eq(voiceSessions.liveSessionId, liveSessionId)));
 }
 
 export function readVoiceTranscriptSegmentsBySession(
@@ -662,56 +639,34 @@ export function readVoiceTranscriptSegmentsBySession(
   voiceSessionId: string,
 ) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-      select * from voice_transcript_segments where voice_session_id = ${voiceSessionId} order by seq
-    `;
-    }),
+    db
+      .select()
+      .from(voiceTranscriptSegments)
+      .where(eq(voiceTranscriptSegments.voiceSessionId, voiceSessionId))
+      .orderBy(voiceTranscriptSegments.seq),
   );
 }
 
 export function deleteUser(run: HostedStoreTestRun, id: string): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from "user" where id = ${id}`;
-    }),
-  );
+  return run(Effect.asVoid(db.delete(user).where(eq(user.id, id))));
 }
 
-/** A count of a table's rows for one user, by the table's own name; every table this reaches keys its rows by `user_id`. */
-export function countRowsForUser(
-  run: HostedStoreTestRun,
-  table: string,
-  userId: string,
-): Promise<number> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      select count(*)::int as count from ${sql(table)} where user_id = ${userId}
-    `;
-      return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
-    }),
-  );
-}
-
-/** A count of a table's rows matching one column's equality, by the table and column's own names. */
+/**
+ * A count of the rows one column equals a value on, by the column itself
+ * rather than by its name and its table's: a column carries the table it
+ * belongs to, so one argument names both, and a column renamed under `db/`
+ * is a type error at the call site rather than a count that reads zero.
+ */
 export function countRowsWhere(
   run: HostedStoreTestRun,
-  table: string,
-  column: string,
+  column: PgColumn,
   value: string,
 ): Promise<number> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-      select count(*)::int as count from ${sql(table)} where ${sql(column)} = ${value}
-    `;
-      return Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count;
-    }),
+    Effect.map(
+      db.select({ count: count() }).from(column.table).where(eq(column, value)),
+      (rows) => Schema.decodeUnknownSync(Schema.Struct({ count: Schema.Number }))(rows[0]).count,
+    ),
   );
 }
 
@@ -726,42 +681,45 @@ export function insertProviderCursor(
   run: HostedStoreTestRun,
   row: ProviderCursorRow,
 ): Promise<void> {
-  return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
-      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
-    `;
-    }),
-  );
+  return run(Effect.asVoid(db.insert(providerCursors).values(row)));
 }
 
+/**
+ * Note that the conflicting update sets the cursor the insert carried rather
+ * than reading it back out of `excluded`, because a single-row insert's
+ * `excluded` row is exactly that value.
+ */
 export function upsertProviderCursor(
   run: HostedStoreTestRun,
   row: ProviderCursorRow,
 ): Promise<void> {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-      insert into provider_cursors (user_id, provider_id, provider_session_id, cursor)
-      values (${row.userId}, ${row.providerId}, ${row.providerSessionId}, ${row.cursor})
-      on conflict (user_id, provider_id, provider_session_id) do update set cursor = excluded.cursor
-    `;
-    }),
+    Effect.asVoid(
+      db
+        .insert(providerCursors)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [
+            providerCursors.userId,
+            providerCursors.providerId,
+            providerCursors.providerSessionId,
+          ],
+          set: { cursor: row.cursor },
+        }),
+    ),
   );
 }
 
 export function readProviderCursorsByUser(run: HostedStoreTestRun, userId: string) {
   return run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-      select provider_session_id, cursor from provider_cursors
-      where user_id = ${userId} order by provider_session_id
-    `;
-    }),
+    db
+      .select({
+        providerSessionId: providerCursors.providerSessionId,
+        cursor: providerCursors.cursor,
+      })
+      .from(providerCursors)
+      .where(eq(providerCursors.userId, userId))
+      .orderBy(providerCursors.providerSessionId),
   );
 }
 

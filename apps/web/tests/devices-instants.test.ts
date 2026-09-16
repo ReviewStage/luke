@@ -141,9 +141,9 @@ test("the migration keeps every recorded instant, whatever zone the migrating se
 
 const DeviceInstantsRowSchema = Schema.Struct({
   id: Schema.String,
-  last_seen_at: InstantColumnSchema,
-  active_until: Schema.NullOr(InstantColumnSchema),
-  quiet_until: Schema.NullOr(InstantColumnSchema),
+  lastSeenAt: InstantColumnSchema,
+  activeUntil: Schema.NullOr(InstantColumnSchema),
+  quietUntil: Schema.NullOr(InstantColumnSchema),
 });
 
 test("a device's instants round-trip through the schema as points on the timeline, and a hold or an eligibility is compared against now by the instant under any session zone", async () => {
@@ -186,9 +186,9 @@ test("a device's instants round-trip through the schema as points on the timelin
   assert.deepEqual(
     rows.map((row) => [
       row.id,
-      row.last_seen_at.getTime(),
-      row.active_until?.getTime() ?? null,
-      row.quiet_until?.getTime() ?? null,
+      row.lastSeenAt.getTime(),
+      row.activeUntil?.getTime() ?? null,
+      row.quietUntil?.getTime() ?? null,
     ]),
     [
       [releasedId, released.getTime(), null, released.getTime()],

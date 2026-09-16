@@ -1,7 +1,8 @@
 import { Effect, ManagedRuntime } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { expect, test } from "vitest";
-import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
+import { openHostedStoreTestDatabase, TEST_USER_NAME } from "./support/hosted-store-database";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -14,29 +15,14 @@ import { testSqlClient } from "./support/sql-client";
  * what a shared Postgres never did.
  */
 
-interface UserRow {
-  readonly id: string;
-}
+const deleteEveryUser = Effect.asVoid(db.delete(user));
 
-const deleteEveryUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  yield* sql`delete from "user"`;
-});
-
-const userIds = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
-  const rows = yield* sql<UserRow>`select id from "user" order by id`;
-  return rows.map((row) => row.id);
-});
+const userIds = Effect.map(db.select({ id: user.id }).from(user).orderBy(user.id), (rows) =>
+  rows.map((row) => row.id),
+);
 
 const insertUser = (id: string) =>
-  Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    yield* sql`
-      insert into "user" (id, name, email)
-      values (${id}, ${"Test User"}, ${`${id}@luke.test`})
-    `;
-  });
+  Effect.asVoid(db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }));
 
 test("an unscoped delete through one store harness leaves a sibling harness's rows standing", async () => {
   const deleter = await openHostedStoreTestDatabase();

@@ -137,13 +137,13 @@ async function ownedConversation(userId: string): Promise<ConversationTarget> {
 }
 
 const RuntimeSessionRowSchema = Schema.Struct({
-  runtime_session_id: Schema.NullOr(Schema.String),
+  runtimeSessionId: Schema.NullOr(Schema.String),
 });
 
 async function recordedSession(conversationId: string): Promise<string | null> {
   const [row] = await readConversationById(database.run, conversationId);
   assert.ok(row);
-  return Schema.decodeUnknownSync(RuntimeSessionRowSchema)(row).runtime_session_id;
+  return Schema.decodeUnknownSync(RuntimeSessionRowSchema)(row).runtimeSessionId;
 }
 
 /** A session's start as the store hook runs it: admitted while claiming, then the claim; answers whether the record is now this session's. */

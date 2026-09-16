@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { afterAll, test } from "vitest";
+import { workspaceEmbedding } from "../server/db/workspace-schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { countRowsForUser, deleteUser } from "./support/store-rows";
+import { countRowsWhere, deleteUser } from "./support/store-rows";
 
 /**
  * The notebook search's embedding cache as the store holds it: a vector per
@@ -57,7 +58,7 @@ test("vectors are cached under their hash and model, read back only under that m
     await database.run(embeddings.read(userId, MODEL, ["h-1", "h-2"])),
     new Map([["h-2", [1, 0, 0]]]),
   );
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 2);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 2);
 });
 
 test("pruning keeps the hashes named and drops the rest, an empty list dropping every row, and touches no other account", async () => {
@@ -80,11 +81,11 @@ test("pruning keeps the hashes named and drops the rest, an empty list dropping 
       ["h-3", [3]],
     ]),
   );
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", other), 3);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, other), 3);
 
   assert.equal(await database.run(embeddings.prune(userId, [])), 2);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 0);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", other), 3);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 0);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, other), 3);
 });
 
 test("the cache goes with the account", async () => {
@@ -92,7 +93,7 @@ test("the cache goes with the account", async () => {
   await database.run(
     database.store.embeddings.write(userId, MODEL, [{ hash: "h-1", vector: [1, 2] }], NOW),
   );
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 1);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 1);
   await deleteUser(database.run, userId);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 0);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 0);
 });

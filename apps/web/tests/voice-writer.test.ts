@@ -105,8 +105,8 @@ async function segments(liveSessionId: string) {
     seq: row.seq,
     role: row.role,
     text: row.text,
-    startMs: row.start_ms,
-    endMs: row.end_ms,
+    startMs: row.startMs,
+    endMs: row.endMs,
   }));
 }
 
@@ -163,7 +163,7 @@ function lukeRow(rowId: string, startMs: number, endMs: number): SpokenRowWrite 
 
 async function speechEvents(conversation: ConversationTarget) {
   const rows = await readEventsByConversation(database.run, conversation.conversationId);
-  return rows.map((row) => ({ kind: row.kind, messageId: row.message_id, payload: row.payload }));
+  return rows.map((row) => ({ kind: row.kind, messageId: row.messageId, payload: row.payload }));
 }
 
 test("transcript deltas become segments with their timings and roles, in the order they arrived, overlap included", async () => {
@@ -217,7 +217,7 @@ test("segments after a gap land on the same open row, from a fresh writer, with 
   );
 
   const rows = (await readVoiceSessionByLiveSessionId(database.run, live.liveSessionId)).map(
-    (row) => ({ closedAt: row.closed_at, usage: row.usage }),
+    (row) => ({ closedAt: row.closedAt, usage: row.usage }),
   );
   assert.deepEqual(rows, [{ closedAt: null, usage: { seconds: 12, confirmed: false } }]);
   assert.deepEqual(

@@ -7,10 +7,19 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "@sidecar/wire";
+import { eq, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
+import { db } from "../server/db/query";
+import {
+  conversations,
+  events,
+  messages,
+  providerCursors,
+  turns,
+} from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -153,6 +162,10 @@ test("a child says whether it expects a completion: the column refuses null", as
 
   await assertRefusedWithCode(
     database.run(
+      // The one statement here the query builder is deliberately not used
+      // for: what is under test is the database refusing a null the column's
+      // own Drizzle type already forbids, so a builder could not spell it and
+      // a statement that compiled would be testing nothing.
       Effect.gen(function* () {
         const sql = yield* SqlClient.SqlClient;
         yield* sql`
@@ -246,14 +259,21 @@ test("every conversation row cascades with its account and no other account's", 
 
   await deleteUser(database.run, userId);
 
-  for (const table of ["conversations", "messages", "turns", "events", "provider_cursors"]) {
+  for (const column of [
+    conversations.userId,
+    messages.userId,
+    turns.userId,
+    events.userId,
+    providerCursors.userId,
+  ]) {
+    const table = getTableName(column.table);
     assert.equal(
-      await countRowsWhere(database.run, table, "user_id", userId),
+      await countRowsWhere(database.run, column, userId),
       0,
       `${table} still holds rows for the deleted user`,
     );
     assert.ok(
-      (await countRowsWhere(database.run, table, "user_id", other)) > 0,
+      (await countRowsWhere(database.run, column, other)) > 0,
       `${table} lost the other user's rows`,
     );
   }
@@ -269,22 +289,17 @@ test("deleting a parent conversation takes its descendants, their turns, and the
   const bystander = await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   await insertTestMessage(userId, bystander, { turnId: await insertTestTurn(userId, bystander) });
 
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from conversations where id = ${main}`;
-    }),
-  );
+  await database.run(Effect.asVoid(db.delete(conversations).where(eq(conversations.id, main))));
 
   for (const gone of [main, child, grandchild]) {
-    assert.equal(await countRowsWhere(database.run, "conversations", "id", gone), 0);
-    assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", gone), 0);
-    assert.equal(await countRowsWhere(database.run, "turns", "conversation_id", gone), 0);
-    assert.equal(await countRowsWhere(database.run, "events", "conversation_id", gone), 0);
+    assert.equal(await countRowsWhere(database.run, conversations.id, gone), 0);
+    assert.equal(await countRowsWhere(database.run, messages.conversationId, gone), 0);
+    assert.equal(await countRowsWhere(database.run, turns.conversationId, gone), 0);
+    assert.equal(await countRowsWhere(database.run, events.conversationId, gone), 0);
   }
-  assert.equal(await countRowsWhere(database.run, "conversations", "id", bystander), 1);
-  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", bystander), 1);
-  assert.equal(await countRowsWhere(database.run, "turns", "conversation_id", bystander), 1);
+  assert.equal(await countRowsWhere(database.run, conversations.id, bystander), 1);
+  assert.equal(await countRowsWhere(database.run, messages.conversationId, bystander), 1);
+  assert.equal(await countRowsWhere(database.run, turns.conversationId, bystander), 1);
 });
 
 test("a message's client id is unique within its conversation and free in another", async () => {
@@ -299,8 +314,8 @@ test("a message's client id is unique within its conversation and free in anothe
   );
   await insertTestMessage(userId, second, { clientId: "ask-1" });
 
-  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", first), 1);
-  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", second), 1);
+  assert.equal(await countRowsWhere(database.run, messages.conversationId, first), 1);
+  assert.equal(await countRowsWhere(database.run, messages.conversationId, second), 1);
 });
 
 test("a message's sequence is unique within its conversation and free in another", async () => {
@@ -315,8 +330,8 @@ test("a message's sequence is unique within its conversation and free in another
   );
   await insertTestMessage(userId, second, { clientId: "ask-2", seq: 7 });
 
-  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", first), 1);
-  assert.equal(await countRowsWhere(database.run, "messages", "conversation_id", second), 1);
+  assert.equal(await countRowsWhere(database.run, messages.conversationId, first), 1);
+  assert.equal(await countRowsWhere(database.run, messages.conversationId, second), 1);
 });
 
 test("an observed session has one conversation per account, and unobserved kinds never collide", async () => {
@@ -338,8 +353,8 @@ test("an observed session has one conversation per account, and unobserved kinds
   await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
   await insertTestConversation(userId, { kind: CONVERSATION_KIND.CHILD });
 
-  assert.equal(await countRowsWhere(database.run, "conversations", "user_id", userId), 4);
-  assert.equal(await countRowsWhere(database.run, "conversations", "user_id", other), 1);
+  assert.equal(await countRowsWhere(database.run, conversations.userId, userId), 4);
+  assert.equal(await countRowsWhere(database.run, conversations.userId, other), 1);
 });
 
 test("a new conversation numbers its messages and events from one and stands undeleted", async () => {
@@ -350,17 +365,17 @@ test("a new conversation numbers its messages and events from one and stands und
   assert.ok(row);
   const decoded = Schema.decodeUnknownSync(
     Schema.Struct({
-      next_message_seq: EpochMillisColumnSchema,
-      next_event_seq: EpochMillisColumnSchema,
-      deleted_at: Schema.Null,
-      parent_conversation_id: Schema.Null,
-      spawned_by_message_id: Schema.Null,
-      created_at: InstantColumnSchema,
-      last_activity_at: InstantColumnSchema,
+      nextMessageSeq: EpochMillisColumnSchema,
+      nextEventSeq: EpochMillisColumnSchema,
+      deletedAt: Schema.Null,
+      parentConversationId: Schema.Null,
+      spawnedByMessageId: Schema.Null,
+      createdAt: InstantColumnSchema,
+      lastActivityAt: InstantColumnSchema,
     }),
   )(row);
-  assert.equal(decoded.next_message_seq, 1);
-  assert.equal(decoded.next_event_seq, 1);
+  assert.equal(decoded.nextMessageSeq, 1);
+  assert.equal(decoded.nextEventSeq, 1);
 });
 
 test("a turn keeps its response ids in order and its usage as the four counts", async () => {
@@ -411,7 +426,7 @@ test("a message takes one speech.claimed event, and the claim refuses every seco
   const events = await readEventsByMessage(database.run, briefing);
   const claims = events
     .filter((event) => event.kind === CONVERSATION_EVENT_KIND.SPEECH_CLAIMED)
-    .map((event) => ({ deviceId: event.device_id }));
+    .map((event) => ({ deviceId: event.deviceId }));
   assert.deepEqual(claims, [{ deviceId: "mac-1" }]);
 });
 
@@ -447,8 +462,8 @@ test("the claim binds one message alone: other kinds on it and claims on other m
     kind: CONVERSATION_EVENT_KIND.SPEECH_CLAIMED,
   });
 
-  assert.equal(await countRowsWhere(database.run, "events", "message_id", first), 3);
-  assert.equal(await countRowsWhere(database.run, "events", "message_id", second), 1);
+  assert.equal(await countRowsWhere(database.run, events.messageId, first), 3);
+  assert.equal(await countRowsWhere(database.run, events.messageId, second), 1);
 });
 
 test("an event's sequence is unique within its conversation and free in another", async () => {
@@ -465,8 +480,8 @@ test("an event's sequence is unique within its conversation and free in another"
   );
   await insertTestEvent(userId, second, secondMessage, { seq: 7 });
 
-  assert.equal(await countRowsWhere(database.run, "events", "conversation_id", first), 1);
-  assert.equal(await countRowsWhere(database.run, "events", "conversation_id", second), 1);
+  assert.equal(await countRowsWhere(database.run, events.conversationId, first), 1);
+  assert.equal(await countRowsWhere(database.run, events.conversationId, second), 1);
 });
 
 test("deleting a message takes its events and leaves its neighbour's", async () => {
@@ -481,15 +496,10 @@ test("deleting a message takes its events and leaves its neighbour's", async () 
   });
   await insertTestEvent(userId, conversationId, kept, { seq: 3 });
 
-  await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`delete from messages where id = ${gone}`;
-    }),
-  );
+  await database.run(Effect.asVoid(db.delete(messages).where(eq(messages.id, gone))));
 
-  assert.equal(await countRowsWhere(database.run, "events", "message_id", gone), 0);
-  assert.equal(await countRowsWhere(database.run, "events", "message_id", kept), 1);
+  assert.equal(await countRowsWhere(database.run, events.messageId, gone), 0);
+  assert.equal(await countRowsWhere(database.run, events.messageId, kept), 1);
 });
 
 test("an event keeps its kind, device, and payload as written", async () => {
@@ -506,10 +516,10 @@ test("an event keeps its kind, device, and payload as written", async () => {
   const row = events.find((event) => event.id === id);
   assert.ok(row);
   assert.equal(row.kind, CONVERSATION_EVENT_KIND.SPEECH_EXPIRED);
-  assert.equal(row.device_id, "mac-1");
+  assert.equal(row.deviceId, "mac-1");
   assert.deepEqual(row.payload, { reason: "due" });
   assert.equal(Number(row.seq), 1);
-  assert.ok(instantColumn(row.created_at) instanceof Date);
+  assert.ok(instantColumn(row.createdAt) instanceof Date);
 });
 
 test("an observed session keeps one cursor per account, advanced in place", async () => {
@@ -533,7 +543,7 @@ test("an observed session keeps one cursor per account, advanced in place", asyn
 
   const rows = await readProviderCursorsByUser(database.run, userId);
   assert.deepEqual(
-    rows.map((row) => ({ providerSessionId: row.provider_session_id, cursor: row.cursor })),
+    rows.map((row) => ({ providerSessionId: row.providerSessionId, cursor: row.cursor })),
     [
       { providerSessionId: "session-1", cursor: "after-2" },
       { providerSessionId: "session-2", cursor: "after-3" },

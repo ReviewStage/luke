@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
+import { eq, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
+import { db } from "../server/db/query";
+import { observationPass, rosterSnapshot, transcriptMark } from "../server/db/roster-schema";
+import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
+import { providerKey } from "../server/db/vault-schema";
+import { workspaceEmbedding, workspaceFile } from "../server/db/workspace-schema";
 import { payloadKeyRing } from "../server/hosted/encryption";
 import { EpochMillisColumnSchema, userSeal } from "../server/hosted/store/database";
 import { readRosterSnapshot } from "../server/hosted/store/roster-snapshot";
 import { openHostedStoreTestDatabase, TEST_PAYLOAD_SECRET } from "./support/hosted-store-database";
-import { countRowsForUser, deleteUser, insertDevice } from "./support/store-rows";
+import { countRowsWhere, deleteUser, insertDevice } from "./support/store-rows";
 
 /** Synthetic fixtures: no real title, branch, or transcript anywhere. */
+
+const NOT_AN_ENVELOPE = "1:not-an-envelope";
 
 const NOW = 1_800_000_000_000;
 
@@ -41,7 +48,7 @@ test("workspace files are read and written whole per user and path, seeded once,
     await assert.rejects(database.run(workspace.write(userId, path, "x", NOW)), /workspace path/);
     await assert.rejects(database.run(workspace.read(userId, path)), /workspace path/);
   }
-  assert.equal(await countRowsForUser(database.run, "workspace_file", userId), 2);
+  assert.equal(await countRowsWhere(database.run, workspaceFile.userId, userId), 2);
 
   const other = await database.createUser();
   assert.equal(await database.run(workspace.read(other, "AGENTS.md")), undefined);
@@ -67,14 +74,14 @@ test("the roster snapshot is one sealed row per user, replaced whole, and its in
     body: JSON.stringify({ sessions: ["b"] }),
     observedAt: NOW + 1,
   });
-  assert.equal(await countRowsForUser(database.run, "roster_snapshot", userId), 1);
+  assert.equal(await countRowsWhere(database.run, rosterSnapshot.userId, userId), 1);
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update roster_snapshot set sealed_body = '1:not-an-envelope' where user_id = ${userId}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(rosterSnapshot)
+        .set({ sealedBody: NOT_AN_ENVELOPE })
+        .where(eq(rosterSnapshot.userId, userId)),
+    ),
   );
   await assert.rejects(database.run(database.store.roster.read(userId)));
   assert.equal(await database.run(database.store.roster.observedAt(userId)), NOW + 1);
@@ -121,10 +128,10 @@ test("a pass advances the snapshot only over the one it read against, and the op
   assert.equal(await database.run(roster.mark(userId)), NOW + 5);
 
   const [row] = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`select mark, updated_at from transcript_mark where user_id = ${userId}`;
-    }),
+    db
+      .select({ mark: transcriptMark.mark, updatedAt: transcriptMark.updatedAt })
+      .from(transcriptMark)
+      .where(eq(transcriptMark.userId, userId)),
   );
   assert.ok(row);
   assert.equal(Schema.decodeUnknownSync(EpochMillisColumnSchema)(row.mark), NOW + 5);
@@ -159,13 +166,11 @@ test("a pass record moves the attempt every time, the whole read only on success
   const unseen = await database.createUser();
   for (const id of [keyed, unseen]) {
     await database.run(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        yield* sql`
-          insert into provider_key (user_id, provider_id, ciphertext)
-          values (${id}, ${"conductor"}, ${"sealed"})
-        `;
-      }),
+      Effect.asVoid(
+        db
+          .insert(providerKey)
+          .values({ userId: id, providerId: "conductor", ciphertext: "sealed" }),
+      ),
     );
   }
   await insertDevice(database.run, {
@@ -215,20 +220,21 @@ test("deleting the user row cascades through every notebook and roster table and
 
   await deleteUser(database.run, userId);
 
-  for (const table of [
-    "workspace_file",
-    "workspace_embedding",
-    "roster_snapshot",
-    "transcript_mark",
-    "observation_pass",
+  for (const column of [
+    workspaceFile.userId,
+    workspaceEmbedding.userId,
+    rosterSnapshot.userId,
+    transcriptMark.userId,
+    observationPass.userId,
   ]) {
+    const table = getTableName(column.table);
     assert.equal(
-      await countRowsForUser(database.run, table, userId),
+      await countRowsWhere(database.run, column, userId),
       0,
       `${table} still holds rows for the deleted user`,
     );
     assert.ok(
-      (await countRowsForUser(database.run, table, other)) > 0,
+      (await countRowsWhere(database.run, column, other)) > 0,
       `${table} lost the other user's rows`,
     );
   }
@@ -279,12 +285,10 @@ test("an observed conversation is opened on its session's first diff and stands 
     [opened, another].sort(),
   );
   const [row] = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      return yield* sql`
-        select kind, provider_session_id as "providerSessionId" from conversations where id = ${opened}
-      `;
-    }),
+    db
+      .select({ kind: conversations.kind, providerSessionId: conversations.providerSessionId })
+      .from(conversations)
+      .where(eq(conversations.id, opened)),
   );
   assert.deepEqual(row, { kind: CONVERSATION_KIND.OBSERVED, providerSessionId: "s-observed-1" });
 });
@@ -294,10 +298,10 @@ test("an observed conversation keeps the session's title and workspace as the ro
   const session = { providerId: "conductor", providerSessionId: "s-named-1" };
   const namingOf = async (id: string) => {
     const [row] = await database.run(
-      Effect.gen(function* () {
-        const sql = yield* SqlClient.SqlClient;
-        return yield* sql`select title, workspace from conversations where id = ${id}`;
-      }),
+      db
+        .select({ title: conversations.title, workspace: conversations.workspace })
+        .from(conversations)
+        .where(eq(conversations.id, id)),
     );
     return row;
   };

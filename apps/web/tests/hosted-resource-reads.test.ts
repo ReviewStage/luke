@@ -1279,7 +1279,7 @@ it.effect(
         messages: await readMessagesByConversation(database.run, observed),
         cursors: await readProviderCursorRows(userId),
       };
-      assert.equal(after.conversation[0]?.deleted_at, null);
+      assert.equal(after.conversation[0]?.deletedAt, null);
       assert.deepEqual(after.cursors, before.cursors);
       assert.deepEqual(
         after.messages.filter((row) => Number(row.seq) <= 3),
@@ -1288,7 +1288,7 @@ it.effect(
       assert.equal(after.messages.length, 4);
       assert.equal(
         EffectSchema.decodeUnknownSync(EpochMillisColumnSchema)(
-          after.conversation[0]?.next_message_seq,
+          after.conversation[0]?.nextMessageSeq,
         ),
         5,
       );

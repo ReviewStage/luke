@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { Effect, Exit, Option } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { user } from "../server/db/auth-schema";
+import { db } from "../server/db/query";
 import {
   listDailyNotes,
   listWorkspaceFiles,
@@ -30,15 +32,14 @@ const NOW = 1_800_000_000_000;
 
 const NOTE_PATH = "memory/2026-09-09.md";
 
+/** What every test user is called; the column is not null and no test reads it. */
+const TEST_USER_NAME = "Test User";
+
 const OUTSIDE_PATHS = ["/etc/passwd", "../SOUL.md", "memory/../../x", "", "a//b", "a\\b"];
 
 const openUser = Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
-  yield* sql`
-    insert into "user" (id, name, email)
-    values (${userId}, ${"Test User"}, ${`${userId}@luke.test`})
-  `;
+  yield* db.insert(user).values({ id: userId, name: TEST_USER_NAME, email: `${userId}@luke.test` });
   return userId;
 });
 

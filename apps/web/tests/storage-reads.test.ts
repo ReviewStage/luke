@@ -9,16 +9,20 @@ import {
   TURN_STATUS,
 } from "@sidecar/wire";
 import { type ToolSet, tool } from "ai";
+import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
+import { db } from "../server/db/query";
+import { turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import type { StoredMessageRecord } from "../server/hosted/store";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,
+  type ConversationRow,
   deleteUser,
   insertConversation as insertConversationRow,
   insertEvent as insertEventRow,
@@ -32,7 +36,32 @@ import {
   readMessagesByConversation,
   readStandingConversations,
   readTurnsByConversation,
+  type TurnInsertRow,
 } from "./support/store-rows";
+
+/**
+ * A turn's instants to the microsecond, which a JS `Date` cannot carry and
+ * so the builder has no value for: a literal Postgres reads at the column's
+ * own precision, named here and bound inside one Drizzle-rendered statement.
+ * It is what makes the cursor's own precision, finer than a `Date`, the thing
+ * the tests below compare.
+ */
+const QUEUED_AT_MICROSECONDS = sql`'2026-09-10 12:00:00.000500+00'::timestamptz`;
+const SETTLED_AT_MICROSECONDS = sql`'2026-09-10 12:00:00.000900+00'::timestamptz`;
+
+/** A running turn standing at that instant, answering the id it was minted under. */
+const insertPreciseTurn = (userId: string, conversationId: string) =>
+  db
+    .insert(turns)
+    .values({
+      userId,
+      conversationId,
+      origin: TURN_ORIGIN.TRANSCRIPT_CHANGE,
+      status: TURN_STATUS.RUNNING,
+      queuedAt: QUEUED_AT_MICROSECONDS,
+      startedAt: QUEUED_AT_MICROSECONDS,
+    })
+    .returning({ id: turns.id });
 
 /**
  * The v2 reads and the Clear, against the real migrations: a device's cursor
@@ -61,7 +90,7 @@ const TOOLS: ToolSet = {
 const TYPED_ASK = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED } as const;
 
 interface ConversationOverrides {
-  readonly kind?: string;
+  readonly kind?: NonNullable<ConversationRow["kind"]>;
   readonly providerId?: string | null;
   readonly providerSessionId?: string | null;
   readonly parentConversationId?: string | null;
@@ -75,7 +104,7 @@ async function insertConversation(
 }
 
 interface TurnOverrides {
-  readonly status?: string;
+  readonly status?: TurnInsertRow["status"];
   readonly queuedAt?: Date;
   readonly startedAt?: Date | null;
 }
@@ -250,13 +279,9 @@ test("events read back in sequence after the cursor, and turns in the order they
 
   const settledAt = new Date(NOW.getTime() + 5000);
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.SETTLED}, settled_at = ${settledAt}
-        where id = ${turn}
-      `;
-    }),
+    Effect.asVoid(
+      db.update(turns).set({ status: TURN_STATUS.SETTLED, settledAt }).where(eq(turns.id, turn)),
+    ),
   );
   const changed = await database.run(database.store.turns.list(userId, { after: later.cursor }));
   assert.deepEqual(
@@ -271,20 +296,8 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
   const userId = await database.createUser();
   const main = await insertConversation(userId);
   // A sub-millisecond instant, so the cursor's own precision (finer than a JS `Date`) is what the test compares.
-  const preciseId = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
-        values (
-          ${userId}, ${main}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.RUNNING},
-          '2026-09-10 12:00:00.000500+00'::timestamptz, '2026-09-10 12:00:00.000500+00'::timestamptz
-        )
-        returning id
-      `;
-      return rows[0]?.id;
-    }),
-  );
+  const [precise] = await database.run(insertPreciseTurn(userId, main));
+  const preciseId = precise?.id;
   assert.ok(preciseId);
   const [answered] = await database.run(database.store.turns.list(userId));
   assert.equal(answered?.id, preciseId);
@@ -295,14 +308,12 @@ test("the turn cursor is exact to the microsecond: a stamp in the same milliseco
   );
 
   await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      yield* sql`
-        update turns set status = ${TURN_STATUS.SETTLED},
-          settled_at = '2026-09-10 12:00:00.000900+00'::timestamptz
-        where id = ${preciseId}
-      `;
-    }),
+    Effect.asVoid(
+      db
+        .update(turns)
+        .set({ status: TURN_STATUS.SETTLED, settledAt: SETTLED_AT_MICROSECONDS })
+        .where(eq(turns.id, preciseId)),
+    ),
   );
   const started = await database.run(database.store.turns.list(userId, { after: answered.cursor }));
   assert.deepEqual(
@@ -389,10 +400,10 @@ test("a cleared conversation disappears from every read on the next call, and a 
 
   const [opened] = await readConversationById(database.run, outcome.opened);
   assert.equal(opened?.kind, CONVERSATION_KIND.MAIN);
-  assert.equal(opened?.deleted_at, null);
-  assert.deepEqual(instantColumn(opened?.created_at), NOW);
+  assert.equal(opened?.deletedAt, null);
+  assert.deepEqual(instantColumn(opened?.createdAt), NOW);
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(instantColumn(stamped?.deleted_at), NOW);
+  assert.deepEqual(instantColumn(stamped?.deletedAt), NOW);
   assert.equal(await countConversations(main), 1);
   assert.equal((await readMessagesByConversation(database.run, main)).length, 3);
 });
@@ -520,20 +531,8 @@ test("a row whose parts are not a message's refuses the page as malformed", asyn
 test("the turn cursor's instant reads as one string whatever time zone the database session keeps", async () => {
   const userId = await database.createUser();
   const main = await insertConversation(userId);
-  const preciseId = await database.run(
-    Effect.gen(function* () {
-      const sql = yield* SqlClient.SqlClient;
-      const rows = yield* sql`
-        insert into turns (user_id, conversation_id, origin, status, queued_at, started_at)
-        values (
-          ${userId}, ${main}, ${TURN_ORIGIN.TRANSCRIPT_CHANGE}, ${TURN_STATUS.RUNNING},
-          '2026-09-10 12:00:00.000500+00'::timestamptz, '2026-09-10 12:00:00.000500+00'::timestamptz
-        )
-        returning id
-      `;
-      return rows[0]?.id;
-    }),
-  );
+  const [precise] = await database.run(insertPreciseTurn(userId, main));
+  const preciseId = precise?.id;
   assert.ok(preciseId);
   const sessionZone = (zone: string) =>
     database.run(

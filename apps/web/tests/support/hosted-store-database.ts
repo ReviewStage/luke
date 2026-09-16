@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
 import { Effect, Layer, ManagedRuntime } from "effect";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { user } from "../../server/db/auth-schema";
 import { runWebMigrations } from "../../server/db/effect-migrator";
+import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { payloadKeyRing } from "../../server/hosted/encryption";
 import { type HostedStore, hostedStore } from "../../server/hosted/store";
@@ -50,6 +52,9 @@ interface HostedStoreTestDatabase {
 
 export const TEST_PAYLOAD_SECRET = "c".repeat(64);
 
+/** What every test user is called; the column is not null and no test reads it. */
+export const TEST_USER_NAME = "Test User";
+
 export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestDatabase> {
   const connectionString = process.env[STORE_TEST_DATABASE_ENVIRONMENT.URL];
   const opened = connectionString ? await openNodePostgres(connectionString) : await openPglite();
@@ -64,13 +69,9 @@ export async function openHostedStoreTestDatabase(): Promise<HostedStoreTestData
     createUser() {
       const id = `user-${randomUUID()}`;
       return run(
-        Effect.gen(function* () {
-          const sql = yield* SqlClient.SqlClient;
-          yield* sql`
-            insert into "user" (id, name, email)
-            values (${id}, ${"Test User"}, ${`${id}@luke.test`})
-          `;
-        }),
+        Effect.asVoid(
+          db.insert(user).values({ id, name: TEST_USER_NAME, email: `${id}@luke.test` }),
+        ),
       ).then(() => id);
     },
     async close() {

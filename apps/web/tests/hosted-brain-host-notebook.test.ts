@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
 import { ACTION_RESULT_STATUS, isRecord, isWireString, type WireRecord } from "../server/core";
+import { workspaceEmbedding } from "../server/db/workspace-schema";
 import type { HostedEmbedder } from "../server/hosted/brain-host/embedding";
 import {
   HOSTED_NOTEBOOK_REFUSAL,
@@ -15,7 +16,7 @@ import {
   notebookPath,
 } from "../server/hosted/brain-host/notebook";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { countRowsForUser } from "./support/store-rows";
+import { countRowsWhere } from "./support/store-rows";
 
 /**
  * The notebook's two reads over the account's real rows on the real
@@ -116,7 +117,7 @@ test("a hybrid search embeds the query and every uncached passage once, caches t
   assert.equal(seen[0]?.[0], "espresso");
   const passages = (seen[0]?.length ?? 0) - 1;
   assert.equal(passages, 4, "one passage per notebook file, each short");
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), passages);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), passages);
 
   const second = await Effect.runPromise(notebook.search({ query: "notch", signal: NEVER }));
   assert.equal(second.mode, RETRIEVAL_MODE.HYBRID);
@@ -134,7 +135,7 @@ test("a hybrid search embeds the query and every uncached passage once, caches t
   const third = await Effect.runPromise(notebook.search({ query: "tea", signal: NEVER }));
   assert.equal(third.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.deepEqual(seen[2], ["tea", "- Prefers tea now."]);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), passages);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), passages);
 });
 
 test("a result names the path and the range memory_get takes back, a snippet, and a score in (0, 1], at most the ceiling of them", async () => {
@@ -173,7 +174,7 @@ test("without an embedder, or with one that does not answer, or once the turn is
   );
   assert.equal(unanswered.mode, RETRIEVAL_MODE.KEYWORD);
   assert.equal(unanswered.note, NOTEBOOK_SEARCH_NOTE.NOT_ANSWERED);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 0);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 0);
 
   const over = new AbortController();
   over.abort();
@@ -195,13 +196,13 @@ test("the backfill is bounded: a search embeds at most the batch of uncached pas
   assert.equal(first.mode, RETRIEVAL_MODE.HYBRID);
   assert.equal(seen[0]?.length, 2, "the query and one passage");
   assert.match(String(first.note), /^3 passages await embedding/);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 1);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 1);
 
   await Effect.runPromise(notebook.search({ query: "desk", signal: NEVER }));
   await Effect.runPromise(notebook.search({ query: "desk", signal: NEVER }));
   const fourth = await Effect.runPromise(notebook.search({ query: "desk", signal: NEVER }));
   assert.equal(fourth.note, undefined);
-  assert.equal(await countRowsForUser(database.run, "workspace_embedding", userId), 4);
+  assert.equal(await countRowsWhere(database.run, workspaceEmbedding.userId, userId), 4);
   assert.equal(NOTEBOOK_SEARCH.EMBED_BATCH, 64);
 });
 

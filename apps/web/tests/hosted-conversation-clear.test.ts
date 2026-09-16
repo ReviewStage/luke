@@ -115,7 +115,7 @@ test("Clear stamps the standing main, answers the one it opened, and the next me
   assert.equal(answer.openedAt, NOW);
 
   const [stamped] = await readConversationById(database.run, main);
-  assert.deepEqual(instantColumn(stamped?.deleted_at), new Date(NOW));
+  assert.deepEqual(instantColumn(stamped?.deletedAt), new Date(NOW));
 
   const after = parse(
     conversationMessagesAnswerSchema,
