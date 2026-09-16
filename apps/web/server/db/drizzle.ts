@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { ColumnsSelection, DrizzleConfig, Relations } from "drizzle-orm";
 import { DrizzleQueryError } from "drizzle-orm/errors";
 import { PgSelectBase, type PgTable } from "drizzle-orm/pg-core";
@@ -97,8 +98,39 @@ type BridgedQuery = Effect.Effect<unknown, SqlError, SqlClient.SqlClient> & Driz
 type DrizzleSchema = Record<string, PgTable | Relations>;
 
 /**
- * The context the fiber that yielded a Drizzle query is running in, standing
- * for exactly as long as that query's own `execute()` runs.
+ * How a caller is put back where the statement's own run left it: what
+ * `AsyncLocalStorage.snapshot()` hands back, which is the one way to enter an
+ * async context a callback did not itself create.
+ */
+type StandingAsyncContext = <A>(resume: () => A) => A;
+
+/** Where a query whose statement has not run yet stands, which is where it already is. */
+const whereItStands: StandingAsyncContext = (resume) => resume();
+
+/**
+ * One bridged query's passage through the proxy driver: the Effect context
+ * the fiber that yielded it is running in, and the async context that query's
+ * own run left standing, written back by the door below.
+ *
+ * Why the second half is here at all: a `SqlClient` statement is a wait for
+ * the pool's connection, and Effect resumes whoever was waiting inside the
+ * stack of whoever released it, so the async context a statement leaves its
+ * caller in is the releasing caller's and not the asking caller's. That is
+ * what a raw `sql` tagged template does to the fiber that yields it, and a
+ * bridged statement has to do the same thing: the bridge renders the
+ * statement and nothing else, and every statement converted onto it that a
+ * hook or an authored file reaches — eve reads its own session container out
+ * of such a context — stands on the context the raw one left. Without this
+ * the door's own root fiber absorbs the handoff and the asking fiber resumes
+ * in the context it registered its `then` in.
+ */
+interface StandingQuery {
+  readonly context: Context.Context<SqlClient.SqlClient>;
+  leftStanding: StandingAsyncContext;
+}
+
+/**
+ * The query standing for exactly as long as its own `execute()` runs.
  *
  * A module-level cell is the only channel there is: `drizzle`'s remote
  * callback takes the rendered SQL and nothing else, so the asking fiber
@@ -108,11 +140,10 @@ type DrizzleSchema = Record<string, PgTable | Relations>;
  * tick it was written on and no second query can be between them. It is a
  * `MutableRef` rather than a `let` because that is the fence: it is up before
  * the `execute()` on the next line, and down before the effect around it
- * yields.
+ * yields. The record it holds outlives the fence, because the door writes
+ * the context it left standing back into the one record its caller kept.
  */
-const standingContext = MutableRef.make<Context.Context<SqlClient.SqlClient> | undefined>(
-  undefined,
-);
+const standingQuery = MutableRef.make<StandingQuery | undefined>(undefined);
 
 /** A query that reached no client at all, which is a query awaited as the promise it also is. */
 const AWAITED_OUTSIDE = "A Drizzle query was executed outside the Effect that yielded it";
@@ -171,20 +202,33 @@ export function bridgedRows(
  * and a failure leaves as `Cause.squash` of what the run ended with, so what
  * Drizzle catches and re-wraps is the `SqlError` itself rather than a fiber's
  * own representation of a cause.
+ *
+ * The snapshot is taken inside the run rather than after its promise, because
+ * a `then` callback is restored to the async context it was registered in and
+ * the context wanted is the one the statement's own completion left standing.
+ * A finalizer is where that instant is: it runs in the fiber's own loop on
+ * the tick the statement settled, before the exit reaches an observer, and it
+ * runs whether the statement answered rows or refused.
  */
 function throughStandingContext(
   rows: Effect.Effect<BridgedRows, SqlError, SqlClient.SqlClient>,
 ): Promise<BridgedRows> {
-  const context = MutableRef.get(standingContext);
-  // Guard: only the patched `evaluate` below puts a context up.
-  if (context === undefined) {
+  const standing = MutableRef.get(standingQuery);
+  // Guard: only the patched `evaluate` below puts a query up.
+  if (standing === undefined) {
     return Promise.reject(
       new SqlError({
         reason: new UnknownError({ cause: new Error(AWAITED_OUTSIDE), message: AWAITED_OUTSIDE }),
       }),
     );
   }
-  return Effect.runPromiseExitWith(context)(rows).then((exit) =>
+  const leaving = Effect.ensuring(
+    rows,
+    Effect.sync(() => {
+      standing.leftStanding = AsyncLocalStorage.snapshot();
+    }),
+  );
+  return Effect.runPromiseExitWith(standing.context)(leaving).then((exit) =>
     Exit.isSuccess(exit) ? exit.value : Promise.reject(Cause.squash(exit.cause)),
   );
 }
@@ -192,29 +236,38 @@ function throughStandingContext(
 /**
  * The prototype the bridge mixes into Drizzle's builders. Yielding a builder
  * evaluates this: it reads the running fiber's context, stands it up for the
- * length of the builder's own `execute()`, and answers the promise that
- * settles as an Effect.
+ * length of the builder's own `execute()`, and resumes the fiber that yielded
+ * it where the statement's own run left off — in that run's async context,
+ * which is where a raw `sql` tagged template on the same client would have
+ * left it. `Effect.callback` rather than `Effect.tryPromise` for that one
+ * reason: `resume` continues the asking fiber's loop on the stack it is
+ * called from, so entering the standing context around it is what carries
+ * that context into everything the fiber does next.
  */
 const bridgePrototype = Effectable.Prototype<BridgedQuery>({
   label: BRIDGE_LABEL,
   evaluate() {
-    return Effect.flatMap(Effect.context<SqlClient.SqlClient>(), (context) =>
-      Effect.tryPromise({
-        try: () => {
-          // Note that the previous context is restored rather than cleared,
-          // because a query built and executed from inside another query's
-          // mapping would otherwise leave the outer one with none.
-          const outer = MutableRef.get(standingContext);
-          MutableRef.set(standingContext, context);
-          try {
-            return this.execute();
-          } finally {
-            MutableRef.set(standingContext, outer);
-          }
-        },
-        catch: asSqlError,
-      }),
-    );
+    return Effect.flatMap(Effect.context<SqlClient.SqlClient>(), (context) => {
+      const standing: StandingQuery = { context, leftStanding: whereItStands };
+      return Effect.callback<unknown, SqlError>((resume) => {
+        // Note that the previous query is restored rather than cleared,
+        // because a query built and executed from inside another query's
+        // mapping would otherwise leave the outer one with none.
+        const outer = MutableRef.get(standingQuery);
+        MutableRef.set(standingQuery, standing);
+        try {
+          this.execute().then(
+            (rows) => standing.leftStanding(() => resume(Effect.succeed(rows))),
+            (cause) => standing.leftStanding(() => resume(Effect.fail(asSqlError(cause)))),
+          );
+        } catch (thrown) {
+          // Guard: a builder that refuses to render throws where it stands.
+          resume(Effect.fail(asSqlError(thrown)));
+        } finally {
+          MutableRef.set(standingQuery, outer);
+        }
+      });
+    });
   },
 });
 
