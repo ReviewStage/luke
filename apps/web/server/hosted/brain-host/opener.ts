@@ -22,7 +22,7 @@ import { CONSUMED_ROSTER, type RosterSnapshotRecord } from "../store/roster-snap
 import { releasedBriefings } from "../store/speech.js";
 import { BRAIN_HOST_TURN } from "./bounds.js";
 import type { EveSessions } from "./eve-sessions.js";
-import { handToEve } from "./handover.js";
+import { handToEve, SESSION_OPENING } from "./handover.js";
 import type { HostedRoster } from "./roster.js";
 import { type HostedTranscriptReads, keepTranscriptCursor } from "./transcript.js";
 import { type DatedRosterDiff, identityKey, wakeEventsFromDiffs } from "./wake-events.js";
@@ -371,14 +371,18 @@ function offered(
   turn: ScheduledTurn,
   words: string,
 ): OpenerEffect<boolean> {
-  return Effect.catchCause(handToEve(seams, target, turn, words), (cause) => {
-    // A cancelled tick is not a refused send; it is the tick ending.
-    if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
-    seams.report(
-      `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
-    );
-    return Effect.succeed(false);
-  });
+  // Without the row lock: the visit is the one thing opening this account's observed sessions.
+  return Effect.catchCause(
+    handToEve(seams, target, turn, words, SESSION_OPENING.UNLOCKED),
+    (cause) => {
+      // A cancelled tick is not a refused send; it is the tick ending.
+      if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause);
+      seams.report(
+        `A ${turn} turn for conversation ${target.conversationId} could not be handed over: ${String(Cause.squash(cause))}.`,
+      );
+      return Effect.succeed(false);
+    },
+  );
 }
 
 /** Opens the account's observation turns for the diffs pending now, as the module comment describes. */

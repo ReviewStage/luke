@@ -39,7 +39,14 @@ import { CATALOG_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { storeWriter } from "../server/hosted/store";
 import { conversationDirectory } from "../server/hosted/store/standing-conversations";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { insertConversation, insertMessage, insertTurn, readTurnById } from "./support/store-rows";
+import {
+  insertConversation,
+  insertMessage,
+  insertTurn,
+  instantColumn,
+  readConversationById,
+  readTurnById,
+} from "./support/store-rows";
 
 /**
  * The hosted children access over the real migrations on PGlite, against a
@@ -495,7 +502,7 @@ test("a cancel reaches eve for the child's turn under way and stamps its row; a 
   assert.equal(eve.cancelled.length, 1);
 });
 
-test("a cancel eve refuses, or a child with no turn to name, is answered as remaining; an ended child as done", async () => {
+test("a cancel eve refuses is answered as remaining; an ended child as done; a child with no turn to name is dropped, so it is listed by nothing and counts against no bound", async () => {
   const fixture = await standing();
   const refusing = fakeEve({ cancel: { outcome: EVE_CANCEL_OUTCOME.FAILED, status: 502 } });
   const seams = seamsOf(fixture, refusing);
@@ -511,11 +518,23 @@ test("a cancel eve refuses, or a child with no turn to name, is answered as rema
   assert.equal((await readTurnById(database.run, running.turnId))?.cancelRequestedAt, null);
   assert.equal(seams.reports.length, 1);
 
+  // Accepted and never started, with and without the session eve's start claimed for it: no turn
+  // names anything eve can cancel, so the row is stamped as Clear stamps one and the cancel is done.
   const accepted = await childOf(fixture, { createdAt: at(20) });
-  assert.deepEqual(await withAccess(seams, (access) => access.cancel(accepted.childId)), {
-    ok: false,
-    remaining: [accepted.childId],
-  });
+  const claimed = await childOf(fixture, { createdAt: at(21), runtimeSessionId: SESSION_ID });
+  for (const child of [accepted, claimed]) {
+    assert.deepEqual(await withAccess(seams, (access) => access.cancel(child.childId)), {
+      ok: true,
+      remaining: [],
+    });
+    const rows = await readConversationById(database.run, child.childId);
+    assert.deepEqual(instantColumn(rows[0]?.deleted_at), at(0));
+    assert.equal(await withAccess(seams, (access) => access.cancel(child.childId)), undefined);
+  }
+  assert.deepEqual(
+    (await withAccess(seams, (access) => access.list())).map((child) => child.childId),
+    [running.childId],
+  );
 
   const ended = await childOf(fixture, {
     createdAt: at(30),

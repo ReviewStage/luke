@@ -21,6 +21,7 @@ import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { CATALOG_TOOL_SET } from "../brain-tool-set.js";
 import {
   type ChildRecord,
+  dropChildConversation,
   listChildren,
   listChildrenOf,
   readChild,
@@ -47,8 +48,10 @@ import { EVE_CALLER, EVE_CANCEL_OUTCOME } from "./eve-sessions.js";
  * the account does; the bounds are `HOSTED_CHILDREN`. A cancel is eve's
  * cancel of the child's turn under way, scoped to that turn by eve's own id
  * for it, and then the turn row's stamp, the same two steps the Stop route
- * takes for an ask. Nothing here reads a child's messages except the history
- * a parent asks for, bounded by the tool's own line limit.
+ * takes for an ask; a child accepted but never started has no turn to
+ * name, and its row is stamped instead, the way Clear stamps one. Nothing
+ * here reads a child's messages except the history a parent asks for,
+ * bounded by the tool's own line limit.
  */
 
 /** The bounds delegation runs under in the hosted brain; each is a product knob as much as a number. */
@@ -246,10 +249,14 @@ export function hostedChildAccess(
           if (child === undefined) return undefined;
           // A child that has ended has nothing left to cancel, and answers as already done.
           if (!isActive(child)) return { ok: true, remaining: [] };
+          // No turn row yet is a child eve took the open of and ran nothing for, under no name this
+          // build can cancel by; its row is stamped as Clear stamps one, so it counts against no
+          // bound, and a session starting for it late meets a cleared conversation and is refused.
+          if (child.turnId === null) {
+            yield* dropChildConversation(userId, childId, new Date(seams.now()));
+            return { ok: true, remaining: [] };
+          }
           const notCancelled: ChildCancellation = { ok: false, remaining: [childId] };
-          // No turn row yet is the opener's inbox with nothing eve runs under a name this build
-          // can cancel by; the child is left to its start and the cancel is answered as not done.
-          if (child.turnId === null) return notCancelled;
           if (child.eveTurnId !== null) {
             const secret = seams.opener.deploymentSecret();
             const origin = seams.opener.eveOrigin();

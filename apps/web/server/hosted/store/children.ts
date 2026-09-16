@@ -443,6 +443,37 @@ export function abandonChildConversation(
   return Effect.map(abandonChild({ userId, childId, now }), Option.isSome);
 }
 
+const dropChild = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        update conversations
+        set deleted_at = ${request.now}
+        where id = ${request.childId}
+          and user_id = ${request.userId}
+          and kind = ${CONVERSATION_KIND.CHILD}
+          and deleted_at is null
+      `,
+    ),
+});
+
+/**
+ * Stamps a standing child whatever session it records, the same stamp
+ * Clear sets: for a child accepted but never started, which eve took the
+ * open of and ran no turn for, and which a cancel could otherwise end by
+ * nothing eve names. A session that starts for it late finds a cleared
+ * conversation and is refused at admission. A child already stamped is
+ * left as it stands.
+ */
+export function dropChildConversation(
+  userId: string,
+  childId: string,
+  now: Date,
+): Effect.Effect<void, ChildReadFailure, SqlClient.SqlClient> {
+  return dropChild({ userId, childId, now });
+}
+
 /** One of the account's standing children by id, or none. */
 export function readChild(
   userId: string,
@@ -611,15 +642,17 @@ const stampCompletion = SqlSchema.void({
 });
 
 /**
- * Claims a child's completion: in one transaction, under the parent's row
- * lock, reads the child and its latest turn, and where the run has ended
- * and no completion is stamped yet stamps `completion_delivered_at` and
- * answers what the words need; nothing where the child does not stand for
- * the account, is still running, or is stamped already. The stamp is the
- * mark that precedes the send, so two callers finding the same ended child
- * — the relay on the turn's end and the sweep a minute later — claim it
- * once between them, and what is guaranteed is at most one completion turn
- * per child, never that it arrived.
+ * Claims a child's completion: in one transaction, under the account's user
+ * row lock and then the parent's row lock, reads the child and its latest
+ * turn, and where the run has ended and no completion is stamped yet stamps
+ * `completion_delivered_at` and answers what the words need; nothing where
+ * the child does not stand for the account, is still running, or is stamped
+ * already. The locks are taken in the order Clear and the child open take
+ * theirs, the user row first, so a claim beside either waits rather than
+ * deadlocks. The stamp is the mark that precedes the send, so two callers
+ * finding the same ended child — the relay on the turn's end and the sweep
+ * a minute later — claim it once between them, and what is guaranteed is at
+ * most one completion turn per child, never that it arrived.
  */
 export function claimChildCompletion(
   child: ConversationTarget,
@@ -629,6 +662,7 @@ export function claimChildCompletion(
   return Effect.flatMap(SqlClient.SqlClient, (sql) =>
     sql.withTransaction(
       Effect.gen(function* () {
+        yield* lockUser(child.userId);
         const locked = yield* lockParentOf(request);
         if (Option.isNone(locked)) return undefined;
         const read = yield* readCompletion(request);
