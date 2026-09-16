@@ -4,7 +4,7 @@ import {
   ENVELOPE_SEPARATOR,
   OBSERVED_MESSAGES_CUT,
 } from "@sidecar/brain/input-items";
-import type { ChildRead } from "@sidecar/hosted/reads-wire";
+import type { AgentRead, ChildRead } from "@sidecar/hosted/reads-wire";
 import {
   ArchiveIcon,
   BookIcon,
@@ -22,6 +22,7 @@ import {
   PencilIcon,
   PlusIcon,
   ProviderMark,
+  RobotIcon,
   SearchIcon,
   StopIcon,
   WingFace,
@@ -61,7 +62,7 @@ import {
 import { readEither } from "@sidecar/wire/effect";
 import { Result, Schema } from "effect";
 import { useState } from "react";
-import { agentSession, agentTitle, subagentTitle } from "./agent-title";
+import { agentTitle, subagentTitle } from "./agent-title";
 import { ConversationCopyButton } from "./conversation-copy";
 import type { PlacedLiveEntry } from "./conversation-live-lines";
 import { ConversationMessageMenu } from "./conversation-menu";
@@ -107,8 +108,9 @@ import { ThinkingDots } from "./thinking-dots";
  * never wears a reply's bubble, so what he decided for himself is never read
  * as something the developer asked. A turn of an observed session's own
  * conversation — a per-workspace agent's — opens on one chip naming that
- * session, a header line of the group and no part of any bubble, so what he
- * did there is never read as done in the main thread. Each of Luke's messages — a reply, a
+ * agent, a header line of the group and no part of any bubble, so what he
+ * did there is never read as done in the main thread; the chip leads to the
+ * agent's transcript here, never to the provider. Each of Luke's messages — a reply, a
  * briefing, words on his own judgment: the assistant rows the service takes a
  * verdict on — carries the rating control on its last words, behind the
  * ellipsis in that row's margin, so one message takes one control; the
@@ -400,9 +402,36 @@ function OwnWordsRow({
   );
 }
 
-/** The action chip's own class, and the one a group's source chip adds to stand on its own line. */
+/** The action chip's own class, and the ones a group's source chip and a completion's sub-agent chip add. */
 const CHIP_CLASS = "conversation-action-chip";
 const SOURCE_CHIP_CLASS = `${CHIP_CLASS} conversation-source-chip`;
+const SUBAGENT_CHIP_CLASS = `${CHIP_CLASS} conversation-subagent-chip`;
+
+/**
+ * One chip: a mark and a name in a rounded box, a press where the caller has
+ * somewhere to take it and a name alone where it has not, so every chip in
+ * the thread is a button or a span on the same terms.
+ */
+function Chip({
+  className,
+  label,
+  onPress,
+  children,
+}: {
+  className: string;
+  /** The name the press is read as opening; the face may add a mark before it. */
+  label: string;
+  onPress?: () => void;
+  children: React.ReactNode;
+}): React.JSX.Element {
+  return onPress === undefined ? (
+    <span className={className}>{children}</span>
+  ) : (
+    <button type="button" className={className} aria-label={`Open ${label}`} onClick={onPress}>
+      {children}
+    </button>
+  );
+}
 
 /**
  * The chip naming the session an action reached. Where the session has an
@@ -414,61 +443,66 @@ const SOURCE_CHIP_CLASS = `${CHIP_CLASS} conversation-source-chip`;
 function SessionChip({
   chip,
   onOpenChat,
-  className = CHIP_CLASS,
 }: {
   chip: ToolRowChip;
   onOpenChat?: (identity: SessionIdentity) => void;
-  /** The chip's classes, for a chip that stands somewhere other than in a sentence. */
-  className?: string;
 }): React.JSX.Element {
-  const face = (
-    <>
+  const identity = chip.identity;
+  const press =
+    identity !== undefined && chip.openable && onOpenChat !== undefined
+      ? () => onOpenChat(identity)
+      : undefined;
+  return (
+    <Chip className={CHIP_CLASS} label={chip.text} {...(press ? { onPress: press } : undefined)}>
       {chip.markId === undefined ? null : (
         <ProviderMark providerId={chip.markId} className="conversation-chip-mark" />
       )}
       {chip.text}
-    </>
+    </Chip>
   );
-  const identity = chip.identity;
-  return identity !== undefined && chip.openable && onOpenChat !== undefined ? (
-    <button
-      type="button"
-      className={className}
-      aria-label={`Open ${chip.text}`}
-      onClick={() => onOpenChat(identity)}
-    >
-      {face}
-    </button>
-  ) : (
-    <span className={className}>{face}</span>
+}
+
+/** The agents list's row for a session, by session identity, while the list still names it. */
+function listedAgent(
+  session: SessionIdentity,
+  agents: readonly AgentRead[],
+): AgentRead | undefined {
+  return agents.find(
+    (agent) =>
+      agent.providerId === session.providerId &&
+      agent.providerSessionId === session.providerSessionId,
   );
 }
 
 /**
  * The header line of a turn group from an observed session's own
- * conversation: one chip naming the session, worn by the group rather than
- * by any of its rows, so a reader knows whose work the rows below record. The
- * chip is the action rows' session chip on the same terms: named by the
- * roster while it holds the session and pressed exactly when its own row
- * would be, and a name alone once the roster has let the session go, since
- * there is then nothing to open. Main's own groups wear none.
+ * conversation: one chip naming the agent, worn by the group rather than by
+ * any of its rows, so a reader knows whose work the rows below record. The
+ * chip leads to the agent here rather than to the provider that runs it: it
+ * wears a robot for the mark and not the provider's, and its press is the
+ * Agents list's own row press for the agent, turning the tab to the agent's
+ * transcript page. It is named as that row is, by the roster while it holds
+ * the session and by the title the service kept once it has let it go. A
+ * session the agents list no longer names is a name alone, since the app
+ * closes a transcript of an agent the list does not name the moment it
+ * opens, and so is every chip in a thread with no press to hand. Main's own
+ * groups wear none.
  */
 function SourceRow({
   source,
   roster,
-  onOpenChat,
+  agents,
+  onOpenAgent,
 }: {
   source: Extract<ConversationViewSource, { kind: typeof CONVERSATION_VIEW_SOURCE.OBSERVED }>;
   roster: readonly SessionView[];
-  onOpenChat?: (identity: SessionIdentity) => void;
+  agents: readonly AgentRead[];
+  onOpenAgent?: (agent: AgentRead) => void;
 }): React.JSX.Element {
-  const session = agentSession(source.session, roster);
-  const chip: ToolRowChip = {
-    text: agentTitle(source.session, roster),
-    markId: session?.agentId ?? source.session.providerId,
-    identity: source.session,
-    openable: session?.openable ?? false,
-  };
+  const agent = listedAgent(source.session, agents);
+  const text = agentTitle(agent ?? source.session, roster);
+  const press =
+    agent !== undefined && onOpenAgent !== undefined ? () => onOpenAgent(agent) : undefined;
   return (
     <li
       className="conversation-entry"
@@ -477,11 +511,14 @@ function SourceRow({
     >
       <small className="visually-hidden">{VOICE.SOURCE.label}</small>
       <div className="conversation-message">
-        <SessionChip
-          chip={chip}
+        <Chip
           className={SOURCE_CHIP_CLASS}
-          {...(onOpenChat ? { onOpenChat } : undefined)}
-        />
+          label={text}
+          {...(press ? { onPress: press } : undefined)}
+        >
+          <RobotIcon className="conversation-chip-mark" />
+          {text}
+        </Chip>
       </div>
     </li>
   );
@@ -510,17 +547,16 @@ function SubagentChip({
   const child = subagents.find((row) => row.id === childId);
   const text =
     child === undefined ? SUBAGENT_CHIP_LABEL : `${SUBAGENT_CHIP_LABEL}: ${subagentTitle(child)}`;
-  return onOpenChild === undefined || child === undefined ? (
-    <span className="conversation-action-chip conversation-subagent-chip">{text}</span>
-  ) : (
-    <button
-      type="button"
-      className="conversation-action-chip conversation-subagent-chip"
-      aria-label={`Open ${text}`}
-      onClick={() => onOpenChild(childId)}
+  const press =
+    onOpenChild === undefined || child === undefined ? undefined : () => onOpenChild(childId);
+  return (
+    <Chip
+      className={SUBAGENT_CHIP_CLASS}
+      label={text}
+      {...(press ? { onPress: press } : undefined)}
     >
       {text}
-    </button>
+    </Chip>
   );
 }
 
@@ -1244,6 +1280,8 @@ export function ConversationTurns({
   subagents = [],
   onOpenChat,
   onOpenChild,
+  agents = [],
+  onOpenAgent,
   onOfferRatingFeedback,
   now,
   live = [],
@@ -1259,10 +1297,14 @@ export function ConversationTurns({
   roster?: readonly SessionView[];
   /** The account's children as the document holds them, so a completion's chip names the child by the list's own title. */
   subagents?: readonly ChildRead[];
+  /** The account's per-workspace agents as the document holds them, so a group's source chip leads to the agent the list names. */
+  agents?: readonly AgentRead[];
   /** The row's own press by identity; absent where nothing can open a session, and every chip is a name. */
   onOpenChat?: (identity: SessionIdentity) => void;
   /** The list row's own press by child id, for the chip on a completion; absent where the thread opens no transcript. */
   onOpenChild?: (childId: string) => void;
+  /** The list row's own press for an agent, for the chip heading an observed group; absent where the thread opens no transcript. */
+  onOpenAgent?: (agent: AgentRead) => void;
   /** Opens the feedback composer on the draft a thumbs down offers; absent where no composer can be offered. */
   onOfferRatingFeedback?: (draft: string) => void;
   /** The instant a running turn's wait is read against; passed down because only the app knows which clock is honest. */
@@ -1367,7 +1409,8 @@ export function ConversationTurns({
                   key={group.turnId}
                   source={group.source}
                   roster={roster}
-                  {...(onOpenChat ? { onOpenChat } : undefined)}
+                  agents={agents}
+                  {...(onOpenAgent ? { onOpenAgent } : undefined)}
                 />,
               ]
             : []),

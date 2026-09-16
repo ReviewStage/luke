@@ -103,7 +103,10 @@ export function transcriptListed(
 }
 
 /** The row an agent's transcript is opened from, named from the roster by session identity. */
-function agentTranscriptRow(agent: AgentRead, roster: readonly SessionView[]): TranscriptRow {
+export function agentTranscriptRow(
+  agent: AgentRead,
+  roster: readonly SessionView[],
+): TranscriptRow {
   return {
     conversationId: agent.id,
     kind: TRANSCRIPT_KIND.OBSERVED,

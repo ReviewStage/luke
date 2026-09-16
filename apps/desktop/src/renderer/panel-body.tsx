@@ -16,6 +16,7 @@ import {
   AgentsButton,
   AgentsPanel,
   AgentTranscriptPanel,
+  agentTranscriptRow,
   CONVERSATION_PAGE,
   type ConversationPage,
   childTranscriptRow,
@@ -475,6 +476,9 @@ export function PanelBody({
             const child = subagents.children.find((row) => row.id === childId);
             if (child !== undefined) onOpenTranscript(childTranscriptRow(child));
           }}
+          agents={agents.agents}
+          // The chip names an agent the list holds, so the row it opens is the list's own for it.
+          onOpenAgent={(agent) => onOpenTranscript(agentTranscriptRow(agent, roster))}
           onOfferRatingFeedback={onOfferRatingFeedback}
           live={liveConversationEntries}
           spokenAskPending={spokenAskPending}
