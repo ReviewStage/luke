@@ -34,12 +34,16 @@ const SPEECH_READER = "server/hosted/store/speech.ts";
 /** The children module: derives where a child stands from the latest of its turns and its task from its first line, holds a child's open to a message of its parent's, and writes neither table. */
 const CHILDREN_READER = "server/hosted/store/children.ts";
 
+/** The agents module: derives where an observed session stands from the latest of its turns, and writes nothing. */
+const AGENTS_READER = "server/hosted/store/agents.ts";
+
 /** The tables each module names at all. */
 const TABLES_NAMED: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   [WRITER, WRITTEN_TABLES],
   [READER, WRITTEN_TABLES],
   [SPEECH_READER, new Set(["messages", "events"])],
   [CHILDREN_READER, new Set(["messages", "turns"])],
+  [AGENTS_READER, new Set(["turns"])],
 ]);
 
 /** The modules that may write one of the three tables, which is the writer and nothing else. */
@@ -64,7 +68,7 @@ function matchedTables(source: string, pattern: RegExp): readonly string[] {
   );
 }
 
-test("the writer and the three readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
+test("the writer and the four readers are the server modules that name the messages, turns, or events table, and only the writer writes one", async () => {
   const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
   const named = new Map<string, ReadonlySet<string>>();
   const writers = new Set<string>();

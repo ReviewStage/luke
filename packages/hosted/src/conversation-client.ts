@@ -22,6 +22,8 @@ import {
   hostedMessageRatingRequestSchema,
 } from "./rating-wire.js";
 import {
+  type AgentsAnswer,
+  agentsAnswerSchema,
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
   CHILD_MESSAGES_QUERY,
@@ -194,6 +196,13 @@ export class HostedConversationClient {
   children(): Effect.Effect<ConversationReadResult<ChildrenAnswer>, never, HttpClient.HttpClient> {
     return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_CHILDREN, (payload) =>
       Result.getOrUndefined(readEither(childrenAnswerSchema)(payload)),
+    );
+  }
+
+  /** The account's agents as they stand, whole and latest turn first; the read takes no cursor, so there is no page to ask for. */
+  agents(): Effect.Effect<ConversationReadResult<AgentsAnswer>, never, HttpClient.HttpClient> {
+    return this.#readEffect(HOSTED_SERVICE_PATH.CONVERSATION_AGENTS, (payload) =>
+      Result.getOrUndefined(readEither(agentsAnswerSchema)(payload)),
     );
   }
 

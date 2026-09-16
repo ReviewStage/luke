@@ -3,6 +3,7 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionIdentity } from "../../core.js";
+import { type AgentRecord, type AgentsHeadPosition, agentsHead, listAgents } from "./agents.js";
 import {
   type ChildRecord,
   type ChildrenHeadPosition,
@@ -161,6 +162,10 @@ export interface HostedStore {
     paged(userId: string, conversationId: string): HostedStoreEffect<PagedConversation | undefined>;
     /** Where the children stand: the child that changed last and the instant it did, rendered to the microsecond, a Clear's stamp counted; nothing while no child was ever opened. */
     childrenHead(userId: string): HostedStoreEffect<ChildrenHeadPosition | undefined>;
+    /** The account's agents: the standing observed conversations holding a turn, latest turn first and at most `limit` of them. */
+    agents(userId: string, limit: number): HostedStoreEffect<readonly AgentRecord[]>;
+    /** Where the agents stand: the agent that changed last and the instant it did, rendered to the microsecond, a stamped row counted; nothing while no agent has a turn. */
+    agentsHead(userId: string): HostedStoreEffect<AgentsHeadPosition | undefined>;
   };
   main: {
     /** Clear: stamps the standing main and its descendants and opens a new main, in one transaction. */
@@ -283,6 +288,8 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       paged: (userId, conversationId) =>
         Effect.map(pagedConversation(userId, conversationId), Option.getOrUndefined),
       childrenHead: (userId) => Effect.map(childrenHead(userId), Option.getOrUndefined),
+      agents: (userId, limit) => listAgents(userId, limit),
+      agentsHead: (userId) => Effect.map(agentsHead(userId), Option.getOrUndefined),
     },
     main: {
       clear: (userId, now) => clearMainConversation(userId, now),
@@ -325,6 +332,7 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
   };
 }
 
+export type { AgentRecord } from "./agents.js";
 export { CHILD_STATUS, type ChildRecord } from "./children.js";
 export { promptHashOf } from "./content-addressed.js";
 export type { HostedStoreContext } from "./database.js";

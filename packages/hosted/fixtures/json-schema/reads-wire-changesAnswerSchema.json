@@ -22,6 +22,11 @@
       "minLength": 1,
       "maxLength": 32768
     },
+    "agents": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32768
+    },
     "rosterObservedAt": {
       "type": "number",
       "minimum": 0

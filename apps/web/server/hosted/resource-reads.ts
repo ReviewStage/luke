@@ -3,6 +3,9 @@ import { Data, Effect, type Schema as EffectSchema, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
+  AGENTS_READ_BOUNDS,
+  type AgentRead,
+  type AgentsAnswer,
   type BrainTurnRecord,
   type BrainTurnsAnswer,
   CHILD_MESSAGES_QUERY,
@@ -47,6 +50,7 @@ import { CATALOG_TOOL_SET, CATALOG_VIEW_TOOL_KINDS } from "./brain-tool-set.js";
 import { errorResponse, HOSTED_API_ERROR, HOSTED_HTTP_STATUS, jsonResponse } from "./http.js";
 import { makeRateBrake } from "./rate-brake.js";
 import type {
+  AgentRecord,
   ChildRecord,
   HostedStore,
   PagedConversation,
@@ -697,6 +701,42 @@ export const handleConversationChildren = /* @__PURE__ */ Effect.fn("handleConve
       CHILDREN_READ_BOUNDS.MAX_CHILDREN,
     );
     const answer: ChildrenAnswer = { children: children.map(readChild) };
+    return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+  },
+);
+
+/** One agent as the wire carries it: the store's record with its instants as epoch milliseconds and each unset column left out. */
+function readAgent(agent: AgentRecord): AgentRead {
+  return {
+    id: agent.id,
+    providerId: agent.providerId,
+    providerSessionId: agent.providerSessionId,
+    status: agent.status,
+    acceptedAt: agent.createdAt.getTime(),
+    ...(agent.startedAt ? { startedAt: agent.startedAt.getTime() } : undefined),
+    ...(agent.settledAt ? { settledAt: agent.settledAt.getTime() } : undefined),
+    ...(agent.failure !== null ? { failure: agent.failure } : undefined),
+  };
+}
+
+/**
+ * GET: the account's agents as they stand, the latest turn first and
+ * bounded, on the children read's terms: no cursor, a query accepted and
+ * ignored, and the change signal's `agents` head is what tells a device to
+ * read again.
+ */
+export const handleConversationAgents = /* @__PURE__ */ Effect.fn("handleConversationAgents")(
+  function* (
+    options: Pick<ResourceReadOptions, "request" | "resolveUserId"> & {
+      store: Pick<HostedStore, "directory">;
+    },
+  ): Effect.fn.Return<Response, SqlError | EffectSchema.SchemaError, SqlClient.SqlClient> {
+    const gate = yield* readGate(options);
+    if (gate instanceof Response) return gate;
+    const { userId } = gate;
+
+    const agents = yield* options.store.directory.agents(userId, AGENTS_READ_BOUNDS.MAX_AGENTS);
+    const answer: AgentsAnswer = { agents: agents.map(readAgent) };
     return jsonResponse(HOSTED_HTTP_STATUS.OK, answer);
   },
 );

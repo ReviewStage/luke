@@ -159,6 +159,12 @@ export {
   hostedMessageRatingRequestSchema,
 } from "./rating-wire.js";
 export {
+  AGENTS_READ_BOUNDS,
+  type AgentRead,
+  type AgentsAnswer,
+  type AgentsHead,
+  agentsAnswerSchema,
+  agentsHeadSchema,
   type BrainTurnRecord,
   type BrainTurnsAnswer,
   brainTurnsAnswerSchema,
@@ -183,6 +189,7 @@ export {
   childrenHeadSchema,
   conversationEventsAnswerSchema,
   conversationMessagesAnswerSchema,
+  encodeAgentsHead,
   encodeChildrenHead,
   encodeSequenceReadCursor,
   encodeTurnReadCursor,

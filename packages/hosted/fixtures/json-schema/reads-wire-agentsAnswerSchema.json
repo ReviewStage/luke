@@ -1,0 +1,65 @@
+{
+  "type": "object",
+  "properties": {
+    "agents": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "providerId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "providerSessionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "running",
+              "settled",
+              "cancelled",
+              "failed"
+            ]
+          },
+          "acceptedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "startedAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "settledAt": {
+            "type": "number",
+            "minimum": 0
+          },
+          "failure": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "id",
+          "providerId",
+          "providerSessionId",
+          "status",
+          "acceptedAt"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 100
+    }
+  },
+  "required": [
+    "agents"
+  ],
+  "additionalProperties": false
+}
