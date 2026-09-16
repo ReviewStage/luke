@@ -1,8 +1,6 @@
 import { CHILD_RUN_STATUS } from "@sidecar/runtime/vocabulary";
-import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
 import { maximumChildTaskLength } from "./tools/names.js";
-import type { BrainWakeEvent } from "./wake-events.js";
 
 /**
  * The words a turn opens with, each a marker naming what kind of turn it is
@@ -33,22 +31,6 @@ export const OBSERVED_MESSAGES_CUT = "(earlier messages cut)";
 
 const ENVELOPE_SEPARATOR = " \u00b7 ";
 
-/** The session fields an entry keeps: what the turn's opening renders, and never a transcript. */
-function sessionSummary(session: Session): WireRecord {
-  return {
-    provider_name: session.provider.displayName,
-    title: session.title,
-    status: session.status,
-    ...(session.holdingForDeveloper === true ? { holding_for_developer: true } : undefined),
-    ...(session.completionCause ? { completion_cause: session.completionCause } : undefined),
-    ...(session.workspace?.name ? { workspace: session.workspace.name } : undefined),
-    ...(session.detail.error ? { error: session.detail.error } : undefined),
-    ...(session.detail.activity ? { activity: session.detail.activity } : undefined),
-    ...(session.detail.branch ? { branch: session.detail.branch } : undefined),
-    updated_at: new Date(session.lastActivityAt).toISOString(),
-  };
-}
-
 export const BRAIN_INPUT_MARKER = {
   OBSERVED_MESSAGES: "[observed messages]",
   DEVELOPER_ASK: "[developer ask]",
@@ -65,29 +47,6 @@ type BrainInputMarker = (typeof BRAIN_INPUT_MARKER)[keyof typeof BRAIN_INPUT_MAR
 
 function marked(marker: BrainInputMarker, now: number, body: string): string {
   return `${marker} ${new Date(now).toISOString()}\n${body}`;
-}
-
-function eventRecord(event: BrainWakeEvent): WireRecord {
-  return {
-    kind: event.kind,
-    at: new Date(event.atMs).toISOString(),
-    provider_id: event.identity.providerId,
-    provider_session_id: event.identity.providerSessionId,
-    ...(event.session
-      ? { session: sessionSummary(event.session) }
-      : event.sessionSummary
-        ? { session: event.sessionSummary }
-        : undefined),
-    ...(event.transcriptDelta
-      ? {
-          transcript_delta: {
-            status: event.transcriptDelta.status,
-            truncated: event.transcriptDelta.truncated,
-            text: event.transcriptDelta.text,
-          },
-        }
-      : undefined),
-  };
 }
 
 /**
@@ -125,15 +84,6 @@ export function observedMessagesText(
     .join(ENVELOPE_SEPARATOR);
   const body = [`[${header}]`, ...(truncated ? [OBSERVED_MESSAGES_CUT] : []), ...lines];
   return marked(BRAIN_INPUT_MARKER.OBSERVED_MESSAGES, now, body.join("\n"));
-}
-
-/** The words the roster-diff opener's turn opens with, kept until that opener goes; the marker is the observed-messages one, since the instructions name one. */
-export function wakeInputText(events: readonly BrainWakeEvent[], now: number): string {
-  return marked(
-    BRAIN_INPUT_MARKER.OBSERVED_MESSAGES,
-    now,
-    JSON.stringify({ events: events.map(eventRecord) }),
-  );
 }
 
 /** How a child's run ended, as its completion says it: the three ends a turn can come to, in the words the run status uses for them. */

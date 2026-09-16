@@ -17,11 +17,7 @@ export interface RosterSnapshotRecord {
   readonly observedAt: number;
 }
 
-/**
- * What one pass found changed against the snapshot it replaced, as the pass
- * serialized it, waiting for the brain host to consume. The payload is
- * sealed; the two instants stand clear so a consumer can order and date it.
- */
+/** How the last scheduled pass went for a user: when it was tried, when it last read whole, and why it failed if it did. */
 export interface ObservationPassRecord {
   readonly attemptedAt: number;
   /** When the whole roster was last read, or absent for a user never yet read whole. */
@@ -132,125 +128,12 @@ const lockObservationPass = (userId: string) =>
     (sql) => sql`select user_id from observation_pass where user_id = ${userId} for update`,
   );
 
-const ConsumedRosterRowSchema = Schema.Struct({
-  sealedBody: Schema.String,
-  observedAt: EpochMillisColumnSchema,
-}).pipe(Schema.encodeKeys({ sealedBody: "sealed_body", observedAt: "observed_at" }));
-
-const findConsumedRoster = SqlSchema.findOneOption({
-  Request: Schema.String,
-  Result: ConsumedRosterRowSchema,
-  execute: (userId) =>
-    statement(
-      (sql) => sql`select sealed_body, observed_at from roster_consumed where user_id = ${userId}`,
-    ),
-});
-
-/** How the opener's bookmark stands: none yet, one this build cannot open, or one opened whole. */
-export const CONSUMED_ROSTER = {
-  ABSENT: "absent",
-  UNREADABLE: "unreadable",
-  STANDING: "standing",
-} as const;
-
-export type ConsumedRosterRead =
-  | { readonly state: typeof CONSUMED_ROSTER.ABSENT }
-  /** A row stands that this seal cannot open; its instant is what a replacement must be kept over. */
-  | { readonly state: typeof CONSUMED_ROSTER.UNREADABLE; readonly observedAt: number }
-  | { readonly state: typeof CONSUMED_ROSTER.STANDING; readonly roster: RosterSnapshotRecord };
-
-/**
- * The roster as of the last change the opener handed the brain. A row that
- * stands but cannot be opened is answered as such rather than as absent,
- * because the two call for different writes: an absent bookmark is first
- * kept where none stands, while an unreadable one must be replaced over its
- * own instant, or the replacement loses to the row it meant to replace and
- * every later visit adopts in silence.
- */
-export function readConsumedRoster(
-  seal: UserSeal,
-  userId: string,
-): Effect.Effect<ConsumedRosterRead, RosterFailure, SqlClient.SqlClient> {
-  return Effect.map(findConsumedRoster(userId), (row) => {
-    if (Option.isNone(row)) return { state: CONSUMED_ROSTER.ABSENT };
-    try {
-      return {
-        state: CONSUMED_ROSTER.STANDING,
-        roster: { body: seal.open(row.value.sealedBody), observedAt: row.value.observedAt },
-      };
-    } catch {
-      return { state: CONSUMED_ROSTER.UNREADABLE, observedAt: row.value.observedAt };
-    }
-  });
-}
-
-const ConsumedRosterWriteSchema = Schema.Struct({
-  userId: Schema.String,
-  sealedBody: Schema.String,
-  observedAt: Schema.Number,
-});
-
-const KeptRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
-
-/** A first bookmark: lands only where none stands. */
-const insertConsumedRoster = SqlSchema.findAll({
-  Request: ConsumedRosterWriteSchema,
-  Result: KeptRowSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into roster_consumed (user_id, sealed_body, observed_at)
-        values (${write.userId}, ${write.sealedBody}, ${write.observedAt})
-        on conflict (user_id) do nothing
-        returning user_id
-      `,
-    ),
-});
-
-/** A later bookmark: lands only over the one observed at `from`. */
-const updateConsumedRoster = SqlSchema.findAll({
-  Request: Schema.Struct({ ...ConsumedRosterWriteSchema.fields, from: Schema.Number }),
-  Result: KeptRowSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        update roster_consumed
-        set sealed_body = ${write.sealedBody}, observed_at = ${write.observedAt}
-        where user_id = ${write.userId} and observed_at = ${write.from}
-        returning user_id
-      `,
-    ),
-});
-
-/**
- * Moves the brain's bookmark over the roster, and only over the one the
- * read began from: a compare-and-set on the consumed roster's instant, so a
- * tick that ran long cannot put a later tick's bookmark back, and a first
- * bookmark lands only where none stands. Answers whether it landed; a keep
- * that did not leaves the change to re-derive on the next visit, which is
- * the direction this bookmark fails in.
- */
-export function keepConsumedRoster(
-  seal: UserSeal,
-  userId: string,
-  roster: RosterSnapshotRecord,
-  from: number | undefined,
-): Effect.Effect<boolean, RosterFailure, SqlClient.SqlClient> {
-  const write = { userId, sealedBody: seal.seal(roster.body), observedAt: roster.observedAt };
-  return Effect.map(
-    from === undefined ? insertConsumedRoster(write) : updateConsumedRoster({ ...write, from }),
-    (rows) => rows.length > 0,
-  );
-}
-
 /**
  * Replaces the snapshot, in one transaction under the user's pass row lock,
  * only while the snapshot standing is still the one the pass read against:
  * a compare-and-set on the observed-at instant, so one transition is
- * recorded once however many passes saw it. The change itself is not
- * recorded here; the opener derives it against the consumed roster.
+ * recorded once however many passes saw it. No change is derived from it;
+ * the opener wakes on transcript changes, kept under its own mark.
  */
 export function advanceRosterSnapshot(
   seal: UserSeal,
@@ -356,7 +239,7 @@ function ineligibleWhere(sql: SqlClient.SqlClient, eligibility: ObservationEligi
 /**
  * Drops everything the scheduled observation keeps for every user it no
  * longer runs for — no key to one of the named providers, or no device seen
- * since the instant: the snapshot, the bookmark, the transcript mark, and the pass record go
+ * since the instant: the snapshot, the transcript mark, and the pass record go
  * together, so a user whose key or account went, or who has not been seen
  * within the window, stops being observed and keeps no roster on record.
  */
@@ -367,7 +250,6 @@ export function forgetObservationIneligible(
     sql.withTransaction(
       Effect.gen(function* () {
         yield* sql`delete from roster_snapshot where ${ineligibleWhere(sql, eligibility)}`;
-        yield* sql`delete from roster_consumed where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from transcript_mark where ${ineligibleWhere(sql, eligibility)}`;
         yield* sql`delete from observation_pass where ${ineligibleWhere(sql, eligibility)}`;
       }),

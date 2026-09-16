@@ -32,13 +32,10 @@ import {
 import { standingObservedConversation } from "./observed-conversations.js";
 import {
   advanceRosterSnapshot,
-  type ConsumedRosterRead,
   forgetObservationIneligible,
-  keepConsumedRoster,
   type ObservationEligibility,
   type ObservationPassRecord,
   type RosterSnapshotRecord,
-  readConsumedRoster,
   readObservationPass,
   readRosterSnapshot,
   recordObservationPass,
@@ -225,25 +222,13 @@ export interface HostedStore {
     /**
      * Replaces the snapshot, in one transaction, only while the snapshot
      * standing is still the one observed at `previousObservedAt` (absent for
-     * none); answers whether it landed. The change is not recorded: the
-     * opener derives it against the consumed roster.
+     * none); answers whether it landed. No change is derived from it: the
+     * opener wakes on transcript changes, under its own mark.
      */
     advance(
       userId: string,
       snapshot: RosterSnapshotRecord,
       previousObservedAt: number | undefined,
-    ): HostedStoreEffect<boolean>;
-    /** The roster as of the last change the opener handed the brain: absent before its first visit, unreadable where a row stands this build cannot open, or standing. */
-    consumed(userId: string): HostedStoreEffect<ConsumedRosterRead>;
-    /**
-     * Moves that bookmark, only over the one observed at `from` (absent for
-     * none), so the opener composes it into the one transaction that also
-     * keeps its transcript cursors.
-     */
-    keepConsumed(
-      userId: string,
-      roster: RosterSnapshotRecord,
-      from: number | undefined,
     ): HostedStoreEffect<boolean>;
     /** The instant up to which every transcript change has been handed to the brain; absent before the opener's first visit. */
     mark(userId: string): HostedStoreEffect<number | undefined>;
@@ -263,7 +248,7 @@ export interface HostedStore {
       userId: string,
       attempt: { attemptedAt: number; failure?: string },
     ): HostedStoreEffect<void>;
-    /** Drops the snapshot, bookmark, transcript mark, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
+    /** Drops the snapshot, transcript mark, and pass record of every user the schedule no longer runs for, or of the named ones alone. */
     forgetIneligible(eligibility: ObservationEligibility): HostedStoreEffect<void>;
   };
   speech: {
@@ -329,9 +314,6 @@ export function hostedStore({ keys }: HostedStoreContext): HostedStore {
       write: (userId, snapshot) => writeRosterSnapshot(sealFor(userId), userId, snapshot),
       advance: (userId, snapshot, previousObservedAt) =>
         advanceRosterSnapshot(sealFor(userId), userId, snapshot, previousObservedAt),
-      consumed: (userId) => readConsumedRoster(sealFor(userId), userId),
-      keepConsumed: (userId, roster, from) =>
-        keepConsumedRoster(sealFor(userId), userId, roster, from),
       mark: (userId) => readTranscriptMark(userId),
       keepMark: (userId, mark, from, now) => keepTranscriptMark(userId, mark, from, new Date(now)),
       pass: (userId) => readObservationPass(userId),

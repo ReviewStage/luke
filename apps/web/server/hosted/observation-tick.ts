@@ -37,7 +37,6 @@ interface ObservedAccount {
 /** What one account's pass came to, as the tick counts it. */
 interface AccountPassOutcome {
   complete: boolean;
-  changed: boolean;
 }
 
 /** One read of the tick's own: a query against the store, so its requirement is the client the edge provides. */
@@ -129,8 +128,6 @@ interface ObservationTickAnswer {
   observed: number;
   /** Accounts whose pass left the previous snapshot standing. */
   failed: number;
-  /** Accounts whose roster changed against the snapshot it replaced. */
-  changed: number;
   /** Whether the tick stopped on its budget with accounts still listed. */
   exhausted: boolean;
   /** Cleared conversations the tick purged past their retention window. */
@@ -143,17 +140,16 @@ interface ObservationTickAnswer {
   push: SpeechPushOutcome;
   /** What the accounts' sweeps over their ended children owed a completion did, summed. */
   children: ChildCompletionSweepOutcome;
-  /** The turns the accounts' changes were opened as, and the bookmarks reseeded across a stale gap instead of woken from. */
+  /** The turns the accounts' changed chats were opened as. */
   turns: TurnOpeningOutcome;
 }
 
-const FAILED_PASS: AccountPassOutcome = { complete: false, changed: false };
+const FAILED_PASS: AccountPassOutcome = { complete: false };
 
 /** An opening that threw or outran the deadline, counted as one failure: what it did not consume stands for the next tick. */
 const FAILED_OPENING: TurnOpeningOutcome = {
   observation: 0,
   failed: 1,
-  reseeded: 0,
 };
 
 /** One account's pass, opening, and completion sweep as the tick counts them: each failed when it threw, and all cut short when the account outran its deadline. */
@@ -251,7 +247,6 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     accounts: 0,
     observed: 0,
     failed: 0,
-    changed: 0,
     exhausted: false,
     purged,
     abandoned,
@@ -274,11 +269,9 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
       answer.accounts += 1;
       if (pass.complete) answer.observed += 1;
       else answer.failed += 1;
-      if (pass.changed) answer.changed += 1;
       answer.turns = {
         observation: answer.turns.observation + turns.observation,
         failed: answer.turns.failed + turns.failed,
-        reseeded: answer.turns.reseeded + turns.reseeded,
       };
       answer.children = {
         delivered: answer.children.delivered + children.delivered,

@@ -1,11 +1,4 @@
 import assert from "node:assert/strict";
-import {
-  normalizeSession,
-  type ProviderSessionObservation,
-  SESSION_STATUS,
-  type Session,
-  type SessionProvider,
-} from "@sidecar/session";
 import { isWireString, unparsedWire, type WireRecord, wireRecord } from "@sidecar/wire";
 import { test } from "vitest";
 import {
@@ -15,25 +8,10 @@ import {
   childTaskInputText,
   OBSERVED_MESSAGES_CUT,
   observedMessagesText,
-  wakeInputText,
 } from "./input-items.js";
 import { maximumChildTaskLength } from "./tools/names.js";
-import { BRAIN_WAKE_KIND, type BrainWakeEvent } from "./wake-events.js";
 
 const NOW = 1_800_000_000_000;
-const claude: SessionProvider = { id: "claude-code", displayName: "Claude Code" };
-
-function session(overrides: Partial<ProviderSessionObservation> = {}): Session {
-  return normalizeSession(claude, {
-    providerSessionId: "abc",
-    title: "Fix the checkout tests",
-    status: SESSION_STATUS.WAITING,
-    lastActivityAt: NOW - 1_000,
-    detail: { activity: "Running tests", error: "exit 1" },
-    ...overrides,
-  });
-}
-
 function itemBody(text: string): WireRecord {
   const [, ...rest] = text.split("\n");
   const parsed = wireRecord(unparsedWire(JSON.parse(rest.join("\n"))));
@@ -76,36 +54,6 @@ test("an observed-messages item is the envelope, the cut line where the front wa
       ...lines,
     ].join("\n"),
   );
-});
-
-test("a wake item carries each event's observed fields and transcript delta as data", () => {
-  const event: BrainWakeEvent = {
-    kind: BRAIN_WAKE_KIND.ROSTER,
-    identity: { providerId: claude.id, providerSessionId: "abc" },
-    session: session(),
-    transcriptDelta: { text: "assistant: done", truncated: false, status: "accepted" },
-    atMs: NOW,
-  };
-  const body = itemBody(wakeInputText([event], NOW));
-  assert.deepEqual(body, {
-    events: [
-      {
-        kind: BRAIN_WAKE_KIND.ROSTER,
-        at: new Date(NOW).toISOString(),
-        provider_id: "claude-code",
-        provider_session_id: "abc",
-        session: {
-          provider_name: "Claude Code",
-          title: "Fix the checkout tests",
-          status: "waiting",
-          error: "exit 1",
-          activity: "Running tests",
-          updated_at: new Date(NOW - 1_000).toISOString(),
-        },
-        transcript_delta: { status: "accepted", truncated: false, text: "assistant: done" },
-      },
-    ],
-  });
 });
 
 test("a child task item is the subagent marker, a space, and the task as briefed", () => {

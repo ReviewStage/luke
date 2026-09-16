@@ -288,6 +288,13 @@
       "when": 1790075000000,
       "tag": "0041_transcript_mark",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1790075000000,
+      "tag": "0041_roster_bookmark_dropped",
+      "breakpoints": true
     }
   ]
 }
