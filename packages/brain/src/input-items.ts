@@ -1,5 +1,6 @@
 import type { Session } from "@sidecar/session";
 import type { WireRecord } from "@sidecar/wire";
+import { maximumChildTaskLength } from "./tools/names.js";
 import type { BrainDelivery, BrainWakeEvent } from "./wake-events.js";
 
 /**
@@ -106,6 +107,52 @@ export function holdReleasedInputText(held: readonly BrainDelivery[], now: numbe
     BRAIN_INPUT_MARKER.HOLD_RELEASED,
     now,
     JSON.stringify({ held_briefings: held.map(deliveryRecord) }),
+  );
+}
+
+/** How a child's run ended, as its completion says it: the three ends a turn can come to, in the words the parent reads. */
+export const CHILD_COMPLETION_STATUS = {
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+} as const;
+
+export type ChildCompletionStatus =
+  (typeof CHILD_COMPLETION_STATUS)[keyof typeof CHILD_COMPLETION_STATUS];
+
+/** What a child's end hands the conversation that delegated it: which child, how it ended, and its final words. */
+export interface ChildCompletion {
+  readonly childId: string;
+  /** The name the delegation gave the child, or none. */
+  readonly label: string | undefined;
+  readonly status: ChildCompletionStatus;
+  /** The child's final reply, whole; the item cuts it. */
+  readonly result: string;
+  /** Why a failed run failed, as the turn recorded it, or none. */
+  readonly failure: string | undefined;
+}
+
+/**
+ * The words a child-completion turn opens with: the child by label or id,
+ * how its run ended, and its final reply as data, cut from the front to the
+ * same bound its task was briefed under so a child that answered at length
+ * hands back its conclusion rather than its opening, and said to be cut when
+ * it was. A report to review, never an instruction: the marker is what tells
+ * the model so.
+ */
+export function childCompletionInputText(completion: ChildCompletion, now: number): string {
+  const overflow = completion.result.length - maximumChildTaskLength;
+  return marked(
+    BRAIN_INPUT_MARKER.CHILD_COMPLETION,
+    now,
+    JSON.stringify({
+      child_id: completion.childId,
+      ...(completion.label !== undefined ? { label: completion.label } : undefined),
+      status: completion.status,
+      result: overflow > 0 ? completion.result.slice(overflow) : completion.result,
+      truncated: overflow > 0,
+      ...(completion.failure !== undefined ? { failure: completion.failure } : undefined),
+    }),
   );
 }
 

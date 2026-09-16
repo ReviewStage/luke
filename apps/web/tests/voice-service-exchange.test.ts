@@ -19,6 +19,7 @@ import {
   HOSTED_API_ERROR,
   MESSAGE_ROLE,
 } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -143,6 +144,7 @@ const relay = new StreamRelay({
   asks: askEffects,
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
+  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -431,6 +433,7 @@ it.effect(
       const standing = {
         sessionId: eveSession,
         target: context.target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -984,6 +987,7 @@ it.effect(
       const standing = {
         sessionId: `wrun_${randomUUID()}`,
         target: context.target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.OBSERVATION,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -1139,6 +1143,7 @@ it.effect(
       const standing = {
         sessionId: eveSession,
         target: context.target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),

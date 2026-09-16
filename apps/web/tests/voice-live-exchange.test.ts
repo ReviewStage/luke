@@ -12,6 +12,7 @@ import { Effect, Exit, Schema, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { CONVERSATION_EVENT_KIND, DEVICE_PLATFORM, MESSAGE_ROLE } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -111,6 +112,7 @@ const relay = new StreamRelay({
   asks: askEffects,
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
+  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -285,6 +287,7 @@ it.effect(
       await play(spokenTurn(FIRST_EVE_TURN, NOW), {
         sessionId: recorded,
         target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -342,6 +345,7 @@ it.effect(
       const standing: RelayStanding = {
         sessionId: mintEveSession(),
         target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.OBSERVATION,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -398,6 +402,7 @@ it.effect(
       await play(announceTurn(FIRST_EVE_TURN, "Not for this session.", NOW), {
         sessionId: mintEveSession(),
         target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.OBSERVATION,
         model: "scripted-model",
         state: memoryRelayState(),

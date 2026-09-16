@@ -7,6 +7,7 @@ import { TestClock } from "effect/testing";
 import { test } from "vitest";
 import { FUNCTION_MAX_DURATION_SECONDS } from "../server/function-durations";
 import { APNS_REQUEST_TIMEOUT_MS } from "../server/hosted/apns";
+import type { ChildCompletionSweepOutcome } from "../server/hosted/brain-host/child-completion";
 import type { TurnOpeningOutcome } from "../server/hosted/brain-host/opener";
 import { HOSTED_API_ERROR } from "../server/hosted/http";
 import { OBSERVATION_TICK, OBSERVATION_TICK_PATH } from "../server/hosted/observation-bounds";
@@ -29,6 +30,13 @@ const PUSHED: SpeechPushOutcome = {
   unreadable: 0,
   waiting: 1,
 };
+/** What one account's completion sweep answers unless a test says otherwise; the tick sums one per account reached. */
+const COMPLETED: ChildCompletionSweepOutcome = { delivered: 1, undelivered: 0, withheld: 2 };
+const completedFor = (accounts: number): ChildCompletionSweepOutcome => ({
+  delivered: COMPLETED.delivered * accounts,
+  undelivered: 0,
+  withheld: COMPLETED.withheld * accounts,
+});
 /** What one account's opening answers unless a test says otherwise: nothing pending, nothing opened. */
 const NOTHING_OPENED: TurnOpeningOutcome = {
   observation: 0,
@@ -116,6 +124,11 @@ function tickOptions(
         recorded.ran.push(`open:${userId}`);
         return yield* opening(userId);
       }),
+    sweepChildCompletions: (userId) =>
+      Effect.sync(() => {
+        recorded.ran.push(`children:${userId}`);
+        return COMPLETED;
+      }),
     now: () => TICK_TIME,
     ...overrides,
   };
@@ -181,6 +194,7 @@ test("a tick forgets the ineligible, lists accounts seen within the week, and ob
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    children: completedFor(3),
     turns: NOTHING_OPENED,
   });
   const seenAfter = TICK_TIME - OBSERVATION_TICK.ACCOUNT_SEEN_WITHIN_MS;
@@ -211,6 +225,7 @@ test("a pass that throws is counted as failed and does not end the tick", async 
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    children: completedFor(2),
     turns: NOTHING_OPENED,
   });
 });
@@ -262,6 +277,7 @@ it.effect("a pass that outruns its deadline is counted failed and the tick moves
       purged: 2,
       speech: SWEPT,
       push: PUSHED,
+      children: completedFor(1),
       turns: { observation: 0, holdRelease: 0, failed: 1, reseeded: 0 },
     });
   }),
@@ -299,13 +315,16 @@ test("each account's opening runs after its own pass, inside the same share of t
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    children: completedFor(2),
     turns: { observation: 2, holdRelease: 1, failed: 1, reseeded: 1 },
   });
   assert.deepEqual(recorded.ran, [
     "observe:user-a",
     "observe:user-b",
     "open:user-a",
+    "children:user-a",
     "open:user-b",
+    "children:user-b",
   ]);
 });
 
@@ -332,6 +351,7 @@ test("an opening that throws is one failed opening and nothing else of the tick 
     purged: 2,
     speech: SWEPT,
     push: PUSHED,
+    children: completedFor(2),
     turns: { observation: 1, holdRelease: 0, failed: 1, reseeded: 0 },
   });
 });

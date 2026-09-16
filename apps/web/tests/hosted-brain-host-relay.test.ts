@@ -65,11 +65,17 @@ const writer = await database.run(
   }),
 );
 const refusals: string[] = [];
+/** The children whose sealed turn the relay handed to the completion seam, in order. */
+const completed: string[] = [];
 const relay = new StreamRelay({
   writer,
   asks: askRecord(),
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
+  deliverCompletion: (child) =>
+    Effect.sync(() => {
+      completed.push(child.conversationId);
+    }),
   now: () => NOW,
   report: (message) => refusals.push(message),
 });
@@ -162,10 +168,15 @@ function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
 }
 
 /** One eve session per conversation, as the host opens them; the id is eve's shape, minted afresh. */
-function standingFor(target: ConversationTarget, turn: BrainHostTurn | undefined): RelayStanding {
+function standingFor(
+  target: ConversationTarget,
+  turn: BrainHostTurn | undefined,
+  kind: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND] = CONVERSATION_KIND.MAIN,
+): RelayStanding {
   return {
     sessionId: `wrun_${randomUUID()}`,
     target,
+    kind,
     turn,
     model: "scripted-model",
     state: memoryRelayState(),
@@ -907,6 +918,7 @@ it.effect(
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -941,6 +953,7 @@ it.effect(
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -977,6 +990,7 @@ it.effect(
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1022,6 +1036,7 @@ it.effect(
           attachAskLines: (to, turnId) => writer.attachAskLines(to, turnId),
         },
         offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.void,
         now: () => NOW,
         report: (message) => refusals.push(message),
       });
@@ -1066,6 +1081,62 @@ it.effect(
         author: MESSAGE_AUTHOR.BRAIN,
         source: OBSERVATION_SOURCE.HOLD_RELEASE,
       });
+    }),
+);
+
+it.effect(
+  "a sealed turn of a child conversation hands the child to the completion seam once; a turn of any other kind of conversation hands nothing",
+  () =>
+    Effect.promise(async () => {
+      completed.length = 0;
+      const child = await conversation(CONVERSATION_KIND.CHILD);
+      await play(
+        typedTurn("turn_0", 0),
+        standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD),
+      );
+      assert.deepEqual(completed, [child.conversationId]);
+
+      // The end eve re-emits finds the turn gone from relay state and reaches the seam again by nothing here;
+      // the seam's own claim is what makes a second visit deliver nothing.
+      const [ended] = typedTurn("turn_0", 0).slice(-1);
+      assert.ok(ended);
+      await play([ended], standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD));
+      assert.deepEqual(completed, [child.conversationId]);
+
+      const main = await conversation(CONVERSATION_KIND.MAIN);
+      await play(typedTurn("turn_1", 1), standingFor(main, BRAIN_HOST_TURN.TYPED));
+      assert.deepEqual(completed, [child.conversationId]);
+    }),
+);
+
+it.effect(
+  "a completion seam that fails is said and leaves the seal standing rather than failing the hook",
+  () =>
+    Effect.promise(async () => {
+      const failing = new StreamRelay({
+        writer,
+        asks: askRecord(),
+        stopTurn: () => Effect.void,
+        offer: () => Effect.succeed(true),
+        deliverCompletion: () => Effect.die(new Error("the completion store is down")),
+        now: () => NOW,
+        report: (message) => refusals.push(message),
+      });
+      const child = await conversation(CONVERSATION_KIND.CHILD);
+      const standing = standingFor(child, BRAIN_HOST_TURN.CHILD_TASK, CONVERSATION_KIND.CHILD);
+      for (const event of typedTurn("turn_0", 0))
+        await database.run(failing.handle(event, standing));
+
+      const { turnRows } = await rows(child);
+      assert.equal(turnRows[0]?.status, TURN_STATUS.SETTLED);
+      assert.ok(
+        refusals.some((message) =>
+          message.includes(
+            `The completion of child ${child.conversationId} could not be delivered`,
+          ),
+        ),
+      );
+      assert.deepEqual(standing.state.get().turns, {});
     }),
 );
 

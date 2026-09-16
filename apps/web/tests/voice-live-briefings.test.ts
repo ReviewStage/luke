@@ -11,6 +11,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
 } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { offerBriefing } from "../server/hosted/brain-host/announce";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -63,6 +64,7 @@ const relay = new StreamRelay({
   asks: askRecord(),
   stopTurn: () => Effect.void,
   offer: (target, turnId) => offerBriefing({ writer, now: () => NOW }, target, turnId),
+  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -106,6 +108,7 @@ async function offered(target: ConversationTarget, briefing: string): Promise<st
   const standing: RelayStanding = {
     sessionId: `wrun_${randomUUID()}`,
     target,
+    kind: CONVERSATION_KIND.MAIN,
     turn: BRAIN_HOST_TURN.OBSERVATION,
     model: "scripted-model",
     state: memoryRelayState(),

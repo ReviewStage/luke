@@ -1,5 +1,9 @@
 import { Duration, Effect, Fiber } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import {
+  type ChildCompletionSweepOutcome,
+  NOTHING_DELIVERED,
+} from "./brain-host/child-completion.js";
 import { NOTHING_OPENED, type TurnOpeningOutcome } from "./brain-host/opener.js";
 import {
   bearerMatchesSecret,
@@ -86,6 +90,16 @@ interface ObservationTickReads {
    * to eve on the tick's own credential.
    */
   openTurns: (userId: string) => TickRead<TurnOpeningOutcome>;
+  /**
+   * The sweep over the account's children whose run has ended and whose
+   * completion is not stamped, delivering each to its parent on the same
+   * claim the relay makes at the turn's end: what the relay could not
+   * deliver — a hook that failed after the seal, a deployment that could not
+   * reach eve at the time — reaches the parent a tick later. It runs after
+   * the account's opening, inside the same share of the tick, and only for
+   * an account this tick listed, for the same reason the opening does.
+   */
+  sweepChildCompletions: (userId: string) => TickRead<ChildCompletionSweepOutcome>;
 }
 
 export interface ObservationTickOptions extends ObservationTickReads {
@@ -120,6 +134,8 @@ interface ObservationTickAnswer {
   speech: SpeechSweepOutcome;
   /** What the push over the briefings still on offer did. */
   push: SpeechPushOutcome;
+  /** What the accounts' sweeps over their ended children owed a completion did, summed. */
+  children: ChildCompletionSweepOutcome;
   /** The turns the accounts' changes and queued hold releases were opened as, and the bookmarks reseeded across a stale gap instead of woken from. */
   turns: TurnOpeningOutcome;
 }
@@ -134,13 +150,18 @@ const FAILED_OPENING: TurnOpeningOutcome = {
   reseeded: 0,
 };
 
-/** One account's pass and its opening as the tick counts them: each failed when it threw, and both cut short when the account outran its deadline. */
+/** One account's pass, opening, and completion sweep as the tick counts them: each failed when it threw, and all cut short when the account outran its deadline. */
 interface AccountOutcome {
   readonly pass: AccountPassOutcome;
   readonly turns: TurnOpeningOutcome;
+  readonly children: ChildCompletionSweepOutcome;
 }
 
-const TIMED_OUT_ACCOUNT: AccountOutcome = { pass: FAILED_PASS, turns: FAILED_OPENING };
+const TIMED_OUT_ACCOUNT: AccountOutcome = {
+  pass: FAILED_PASS,
+  turns: FAILED_OPENING,
+  children: NOTHING_DELIVERED,
+};
 
 /**
  * A read that failed or defected stands as the fallback; a caller ending the
@@ -177,14 +198,15 @@ const accountWithin = /* @__PURE__ */ Effect.fn("accountWithin")(function* (
   );
 });
 
-/** The pass, then the opening over what it and earlier passes left pending; a pass that throws is failed and still followed by the opening. */
+/** The pass, then the opening over what it and earlier passes left pending, then the completion sweep; a step that throws is failed and still followed by the next. */
 const accountTurn = /* @__PURE__ */ Effect.fn("accountTurn")(function* (
   options: ObservationTickReads,
   userId: string,
 ): Effect.fn.Return<AccountOutcome, never, SqlClient.SqlClient> {
   const pass = yield* withFallback(options.observe(userId), FAILED_PASS);
   const turns = yield* withFallback(options.openTurns(userId), FAILED_OPENING);
-  return { pass, turns };
+  const children = yield* withFallback(options.sweepChildCompletions(userId), NOTHING_DELIVERED);
+  return { pass, turns, children };
 });
 
 export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservationTick")(function* (
@@ -227,6 +249,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
     purged,
     speech,
     push,
+    children: NOTHING_DELIVERED,
     turns: NOTHING_OPENED,
   };
   for (let index = 0; index < accounts.length; index += OBSERVATION_TICK.CONCURRENCY) {
@@ -239,7 +262,7 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
       batch.map((account) => accountWithin(accountTurn(options, account.userId), passDeadlineMs)),
       { concurrency: "unbounded" },
     );
-    for (const { pass, turns } of outcomes) {
+    for (const { pass, turns, children } of outcomes) {
       answer.accounts += 1;
       if (pass.complete) answer.observed += 1;
       else answer.failed += 1;
@@ -249,6 +272,11 @@ export const handleObservationTick = /* @__PURE__ */ Effect.fn("handleObservatio
         holdRelease: answer.turns.holdRelease + turns.holdRelease,
         failed: answer.turns.failed + turns.failed,
         reseeded: answer.turns.reseeded + turns.reseeded,
+      };
+      answer.children = {
+        delivered: answer.children.delivered + children.delivered,
+        undelivered: answer.children.undelivered + children.undelivered,
+        withheld: answer.children.withheld + children.withheld,
       };
     }
   }

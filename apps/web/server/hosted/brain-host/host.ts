@@ -35,6 +35,7 @@ import {
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
 } from "./bounds.js";
+import { deliverChildCompletion } from "./child-completion.js";
 import { hostedChildAccess } from "./children.js";
 import { hostedStandingContext, readRecentMessages } from "./context.js";
 import {
@@ -229,6 +230,23 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           );
         }),
       offer: (target, turnId) => offerBriefing({ writer, now: seams.now }, target, turnId),
+      // A child's completion reaches its parent as the deployment acting for the account, on the
+      // same terms as the Stop above; the delivery reads the secret and the origin itself, and a
+      // deployment holding neither claims nothing, so the sweep visits the child once it has both.
+      deliverCompletion: (child) =>
+        Effect.asVoid(
+          deliverChildCompletion(
+            {
+              deploymentSecret: seams.deploymentSecret,
+              eveOrigin: seams.eveOrigin,
+              eve: eveSessions,
+              tools: CATALOG_TOOL_SET,
+              now: seams.now,
+              report: (message) => console.warn(message),
+            },
+            child,
+          ),
+        ),
       now: seams.now,
       report: (message) => console.warn(message),
     });
@@ -516,6 +534,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         yield* relayOver(writer).handle(event, {
           sessionId: session.id,
           target: admitted.target,
+          kind: admitted.kind,
           turn,
           ...(model !== undefined ? { model } : undefined),
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),

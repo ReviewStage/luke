@@ -13,6 +13,7 @@ import { Effect, Exit, Scope } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { ASK_REFUSAL } from "../server/hosted/brain-ask";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -78,6 +79,7 @@ const relay = new StreamRelay({
   asks: askEffects,
   stopTurn: () => Effect.void,
   offer: () => Effect.succeed(false),
+  deliverCompletion: () => Effect.void,
   now: () => NOW,
   report: () => undefined,
 });
@@ -218,6 +220,7 @@ it.effect(
       const standing: RelayStanding = {
         sessionId: await sessionOf(target, accepted.runId),
         target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -331,6 +334,7 @@ it.effect(
       await play(spokenTurn(FIRST_EVE_TURN, NOW), {
         sessionId: await sessionOf(target, accepted.runId),
         target,
+        kind: CONVERSATION_KIND.MAIN,
         turn: BRAIN_HOST_TURN.SPOKEN,
         model: "scripted-model",
         state: memoryRelayState(),
@@ -378,6 +382,7 @@ it.effect("stop ends every follow: a turn that completes after it reaches no lis
     await play(spokenTurn(FIRST_EVE_TURN, NOW), {
       sessionId: await sessionOf(target, accepted.runId),
       target,
+      kind: CONVERSATION_KIND.MAIN,
       turn: BRAIN_HOST_TURN.SPOKEN,
       model: "scripted-model",
       state: memoryRelayState(),

@@ -512,3 +512,207 @@ export function readSpawningMessage(
     (found) => Option.getOrUndefined(Option.map(found, (row) => row.id)),
   );
 }
+
+/** The turn statuses a child's run has ended in; a completion is owed at one of these and at nothing before. */
+const TERMINAL_TURN_STATUS = [
+  TURN_STATUS.SETTLED,
+  TURN_STATUS.CANCELLED,
+  TURN_STATUS.FAILED,
+] as const;
+
+type TerminalTurnStatus = (typeof TERMINAL_TURN_STATUS)[number];
+
+function isTerminal(status: TurnStatus): status is TerminalTurnStatus {
+  return (
+    status === TURN_STATUS.SETTLED ||
+    status === TURN_STATUS.CANCELLED ||
+    status === TURN_STATUS.FAILED
+  );
+}
+
+/** What the completion's words need of a child, read as its row is stamped. */
+export interface ClaimedChildCompletion {
+  /** The conversation that delegated, which the completion is a turn of. */
+  readonly parent: ConversationTarget;
+  readonly label: string | null;
+  /** Whether the delegation waits on the completion; a stamped row that expected none sends nothing. */
+  readonly expectsCompletion: boolean;
+  /** The child's latest turn, the run the completion reports: its id, the journal's key, and how it ended. */
+  readonly turnId: string;
+  readonly status: TerminalTurnStatus;
+  readonly failure: string | null;
+}
+
+const ParentLockRowSchema = Schema.Struct({ parentConversationId: Schema.String }).pipe(
+  Schema.encodeKeys({ parentConversationId: "parent_conversation_id" }),
+);
+
+/**
+ * The parent's row lock, the same one an ask's dispatch takes on the
+ * conversation it writes into, taken through the child so the child, its
+ * parent, and the account are one row's word; nothing where the child or
+ * its parent does not stand for the account.
+ */
+const lockParentOf = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
+  Result: ParentLockRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select parent.id as parent_conversation_id
+        from conversations child
+        join conversations parent
+          on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
+        where child.id = ${request.childId}
+          and child.user_id = ${request.userId}
+          and child.kind = ${CONVERSATION_KIND.CHILD}
+          and child.deleted_at is null
+          and parent.deleted_at is null
+        for update of parent
+      `,
+    ),
+});
+
+const CompletionRowSchema = Schema.Struct({
+  label: Schema.NullOr(Schema.String),
+  expectsCompletion: Schema.NullOr(Schema.Boolean),
+  completionDeliveredAt: Schema.NullOr(InstantColumnSchema),
+  turnId: Schema.NullOr(Schema.String),
+  turnStatus: Schema.NullOr(Schema.Literals(Object.values(TURN_STATUS))),
+  failure: Schema.NullOr(Schema.String),
+}).pipe(
+  Schema.encodeKeys({
+    expectsCompletion: "expects_completion",
+    completionDeliveredAt: "completion_delivered_at",
+    turnId: "turn_id",
+    turnStatus: "turn_status",
+  }),
+);
+
+/** The child's row and its latest turn, read under the parent's lock. */
+const readCompletion = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
+  Result: CompletionRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select child.label, child.expects_completion, child.completion_delivered_at,
+               latest.id as turn_id, latest.status as turn_status, latest.failure
+        from conversations child
+        left join lateral (
+          select id, status, failure
+          from turns
+          where turns.conversation_id = child.id and turns.user_id = child.user_id
+          order by turns.queued_at desc, turns.id desc
+          limit 1
+        ) latest on true
+        where child.id = ${request.childId} and child.user_id = ${request.userId}
+      `,
+    ),
+});
+
+const stampCompletion = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        update conversations
+        set completion_delivered_at = ${request.now}
+        where id = ${request.childId}
+          and user_id = ${request.userId}
+          and completion_delivered_at is null
+      `,
+    ),
+});
+
+/**
+ * Claims a child's completion: in one transaction, under the parent's row
+ * lock, reads the child and its latest turn, and where the run has ended
+ * and no completion is stamped yet stamps `completion_delivered_at` and
+ * answers what the words need; nothing where the child does not stand for
+ * the account, is still running, or is stamped already. The stamp is the
+ * mark that precedes the send, so two callers finding the same ended child
+ * — the relay on the turn's end and the sweep a minute later — claim it
+ * once between them, and what is guaranteed is at most one completion turn
+ * per child, never that it arrived.
+ */
+export function claimChildCompletion(
+  child: ConversationTarget,
+  now: Date,
+): Effect.Effect<ClaimedChildCompletion | undefined, ChildReadFailure, SqlClient.SqlClient> {
+  const request = { userId: child.userId, childId: child.conversationId };
+  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
+    sql.withTransaction(
+      Effect.gen(function* () {
+        const locked = yield* lockParentOf(request);
+        if (Option.isNone(locked)) return undefined;
+        const read = yield* readCompletion(request);
+        if (Option.isNone(read)) return undefined;
+        const row = read.value;
+        if (row.completionDeliveredAt !== null) return undefined;
+        if (row.turnId === null || row.turnStatus === null || !isTerminal(row.turnStatus)) {
+          return undefined;
+        }
+        yield* stampCompletion({ ...request, now });
+        return {
+          parent: { userId: child.userId, conversationId: locked.value.parentConversationId },
+          label: row.label,
+          expectsCompletion: row.expectsCompletion ?? true,
+          turnId: row.turnId,
+          status: row.turnStatus,
+          failure: row.failure,
+        };
+      }),
+    ),
+  );
+}
+
+const UndeliveredChildRowSchema = Schema.Struct({
+  id: Schema.String,
+  userId: Schema.String,
+}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+
+const findUndeliveredChildren = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
+  Result: UndeliveredChildRowSchema,
+  execute: (request) =>
+    statement(
+      (sql) => sql`
+        select child.id, child.user_id
+        from conversations child
+        join conversations parent
+          on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
+        join lateral (
+          select status, settled_at
+          from turns
+          where turns.conversation_id = child.id and turns.user_id = child.user_id
+          order by turns.queued_at desc, turns.id desc
+          limit 1
+        ) latest on true
+        where ${sql.and([
+          sql`child.user_id = ${request.userId}`,
+          sql`child.kind = ${CONVERSATION_KIND.CHILD}`,
+          sql`child.deleted_at is null`,
+          sql`parent.deleted_at is null`,
+          sql`child.completion_delivered_at is null`,
+          sql`latest.status in ${sql.in([...TERMINAL_TURN_STATUS])}`,
+        ])}
+        order by latest.settled_at asc, child.created_at asc, child.id asc
+        limit ${request.limit}
+      `,
+    ),
+});
+
+/**
+ * The account's standing children whose run has ended and whose completion
+ * is not stamped, oldest run first and at most `limit` of them: what the
+ * sweep visits for the completions the relay did not deliver.
+ */
+export function undeliveredChildren(
+  userId: string,
+  limit: number,
+): Effect.Effect<readonly ConversationTarget[], ChildReadFailure, SqlClient.SqlClient> {
+  return Effect.map(findUndeliveredChildren({ userId, limit }), (rows) =>
+    rows.map((row) => ({ userId: row.userId, conversationId: row.id })),
+  );
+}

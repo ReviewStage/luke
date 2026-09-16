@@ -7,6 +7,7 @@ import { CLOUD_AGENT_PROVIDER_ID } from "./core.js";
 import { executeConversationRead } from "./hosted/action-execute.js";
 import { ApnsSender } from "./hosted/apns.js";
 import { hostedUserId } from "./hosted/bearer.js";
+import { sweepChildCompletions } from "./hosted/brain-host/child-completion.js";
 import { eveOrigin as eveOriginFor } from "./hosted/brain-host/eve-origin.js";
 import { EVE_CALLER, eveSessions } from "./hosted/brain-host/eve-sessions.js";
 import {
@@ -354,6 +355,20 @@ const observationTickEffect = /* @__PURE__ */ Effect.fn("observationTickEffect")
         );
       });
     },
+    // The sweep reaches eve as the deployment acting for the one account the tick is passing over,
+    // under the tick's secret; a deployment without one claims nothing, as the delivery itself decides.
+    sweepChildCompletions: (userId) =>
+      sweepChildCompletions(
+        {
+          deploymentSecret: () => cronSecret,
+          eveOrigin: () => eveOrigin,
+          eve: eveSessions,
+          tools: CATALOG_TOOL_SET,
+          now: Date.now,
+          report: (message) => console.warn(message),
+        },
+        userId,
+      ),
   };
 
   return yield* Effect.ensuring(
