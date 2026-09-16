@@ -27,7 +27,8 @@ final class LiveCaptionsTests: XCTestCase {
     func testASilenceLongerThanTheGapOpensANewRow() async {
         let captions = LiveCaptions(now: { Date(timeIntervalSince1970: 0) })
         captions.append(.assistant, Self.delta("One.", 0, 500))
-        captions.append(.assistant, Self.delta("Two.", 500 + LiveTranscriptBounds.utteranceGapMs + 1, 3_000))
+        let secondStartMs = 500 + LiveTranscriptBounds.utteranceGapMs + 1
+        captions.append(.assistant, Self.delta("Two.", secondStartMs, secondStartMs + 1_000))
         XCTAssertEqual(captions.rows.map(\.rowId), [1, 2])
         XCTAssertEqual(captions.rows.map(\.words), ["One.", "Two."])
     }

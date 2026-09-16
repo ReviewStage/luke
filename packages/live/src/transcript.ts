@@ -25,10 +25,17 @@ const TRANSCRIPT_ROLE_LABEL = {
 
 /**
  * The silence between two of one speaker's fragments that starts a new
- * utterance. Ours to tune against recorded conversations, as the guide says;
- * a brief acknowledgment from the other speaker never splits one.
+ * utterance, one constant for both speakers; a brief acknowledgment from the
+ * other speaker never splits one. Ours to tune against recorded conversations,
+ * as the guide says, and tuned on 121 sessions: 91% of the developer's
+ * inter-fragment gaps are under 0.8 s, 5.6% are over 5 s, and only 51 of 2,865
+ * fall between 1.2 s and 5 s, while Luke's between-sentence pauses cluster at
+ * 3 to 5 s and above. 4.0 s sits in the trough between the two. 5.0 s was
+ * rejected because 48 of Luke's gaps fall in 4 to 5 s, some of them the pause
+ * between his acknowledgment and reading a fast brain reply, which are two
+ * sentences and not one.
  */
-export const UTTERANCE_GAP_MS = 1_200;
+export const UTTERANCE_GAP_MS = 4_000;
 
 /**
  * After the gap that ends an utterance, the margin a late fragment is still
