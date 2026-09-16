@@ -1,7 +1,11 @@
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlClient } from "effect/unstable/sql";
+import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
+import { db } from "../../db/query.js";
+import { conversations } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
@@ -44,18 +48,6 @@ export type ConversationAdmission =
 /** How a read here fails: the driver's own refusal, or a row the schema refused. */
 type ConversationFailure = SqlError | Schema.SchemaError;
 
-/**
- * A statement over the ambient client, so the query below reads as the query
- * it is. The one module of LUKE-258's sixth batch left on a raw statement:
- * `admitConversation` runs before every eve event, and a bridged statement's
- * promise door (`db/drizzle.ts`) leaves the hook's remaining steps in a
- * different `AsyncLocalStorage` context than eve's own session container, so
- * the relay's `defineState` accessors read and write the wrong one and no
- * turn ever settles. A follow-up converts this file once that door is fixed.
- */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** How a session stands to the conversation's record: it must be the recorded session, or it is the one claiming the record now. */
 export const SESSION_STANDING = {
   CURRENT: "current",
@@ -68,36 +60,34 @@ const ConversationRowSchema = Schema.Struct({
   userId: Schema.String,
   kind: Schema.Literals(Object.values(CONVERSATION_KIND)),
   runtimeSessionId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ userId: "user_id", runtimeSessionId: "runtime_session_id" }));
+});
 
-const OwnerRowSchema = Schema.Struct({
-  userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+const OwnerRowSchema = Schema.Struct({ userId: Schema.String });
 
 const findConversation = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: ConversationRowSchema,
   execute: (conversationId) =>
-    statement(
-      (sql) => sql`
-        select user_id, kind, runtime_session_id
-        from conversations
-        where id = ${conversationId} and deleted_at is null
-      `,
-    ),
+    db
+      .select({
+        userId: conversations.userId,
+        kind: conversations.kind,
+        runtimeSessionId: conversations.runtimeSessionId,
+      })
+      .from(conversations)
+      .where(and(eq(conversations.id, conversationId), isNull(conversations.deletedAt))),
 });
 
 const findRuntimeSessionOwner = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OwnerRowSchema,
   execute: (runtimeSessionId) =>
-    statement(
-      (sql) => sql`
-        select user_id
-        from conversations
-        where runtime_session_id = ${runtimeSessionId} and deleted_at is null
-      `,
-    ),
+    db
+      .select({ userId: conversations.userId })
+      .from(conversations)
+      .where(
+        and(eq(conversations.runtimeSessionId, runtimeSessionId), isNull(conversations.deletedAt)),
+      ),
 });
 
 export function admitConversation(
