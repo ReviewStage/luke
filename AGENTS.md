@@ -77,8 +77,13 @@ in for the missing job before the first release.
   account a tick with a hold's releases counted among them, as the deployment
   acting for that one account under the tick's own secret
   (`EVE_CALLER.DEPLOYMENT`), so the account named to the brain is only ever one
-  this tick enumerated, and nothing but such a diff or a hold's release opens a
-  scheduled turn. A visit that could not hand its change over leaves the
+  this tick enumerated, and nothing but such a diff, a hold's release, or a
+  settled child's undelivered completion opens a scheduled turn (the sweep in
+  `child-completion.ts` hands a child whose spawn expected a completion, whose
+  `completion_delivered_at` is null, and whose latest turn is terminal to its
+  parent as one `child-completion` turn, at most eight an account a tick, and
+  only where the relay's attempt left the row unstamped, a refused send being
+  retried nowhere). A visit that could not hand its change over leaves the
   bookmark where it was, and the next visit derives the same change again,
   wider by whatever moved since, until the two rows stand more than five
   minutes apart on their own instants (`OBSERVATION_TICK.STALE_GAP_MS`), which
