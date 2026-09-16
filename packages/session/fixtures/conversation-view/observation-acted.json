@@ -117,7 +117,7 @@
   "turns": [
     {
       "id": "1a000000-0000-4000-8000-000000000004",
-      "origin": "roster_diff",
+      "origin": "transcript_change",
       "status": "settled",
       "queuedAt": 1757505780000,
       "startedAt": 1757505780200,

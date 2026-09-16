@@ -838,7 +838,7 @@ test("a turn that failed records its failure word and detail cut to the bound, a
       timedOutTurn?.failure,
       timedOutTurn?.failureDetail,
     ],
-    [TURN_ORIGIN.ROSTER_DIFF, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
+    [TURN_ORIGIN.TRANSCRIPT_CHANGE, TURN_STATUS.FAILED, BRAIN_REQUEST_STATUS.TIMED_OUT, null],
   );
 });
 

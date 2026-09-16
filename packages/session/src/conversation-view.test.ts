@@ -406,7 +406,7 @@ test("an observation that acted crosses as its action parts, the refused one fla
   assert.equal(groups.length, 1);
   const [group] = groups;
   assert.equal(group?.turnId, TURN.ACTED);
-  assert.equal(group?.turn?.origin, TURN_ORIGIN.ROSTER_DIFF);
+  assert.equal(group?.turn?.origin, TURN_ORIGIN.TRANSCRIPT_CHANGE);
   assert.equal(group?.messages.length, 1);
   const [message] = group?.messages ?? [];
   assert.deepEqual(
