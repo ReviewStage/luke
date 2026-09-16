@@ -1,8 +1,9 @@
 import type { TextUIPart } from "ai";
+import { and, asc, desc, eq, inArray, isNull, notExists, type SQL, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { Fragment } from "effect/unstable/sql/Statement";
 import {
   CHILD_STATUS,
   CHILDREN_READ_BOUNDS,
@@ -11,6 +12,9 @@ import {
   TURN_STATUS,
   type TurnStatus,
 } from "../../core.js";
+import { user } from "../../db/auth-schema.js";
+import { db } from "../../db/query.js";
+import { conversations, messages, turns } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./database.js";
 import type { ConversationTarget } from "./writer.js";
@@ -24,6 +28,14 @@ import type { ConversationTarget } from "./writer.js";
  * queued, is a task accepted; a running turn is a child running; and
  * otherwise the child stands where its latest turn settled. A row Clear
  * stamped went with its parent and is listed by nothing here.
+ *
+ * Every statement is a Drizzle builder over the tables `db/storage-schema.ts`
+ * declares, yielded as the Effect `db/drizzle.ts`'s bridge makes it, so a
+ * read is still an `Effect<A, SqlError | SchemaError, SqlClient>` and a
+ * column renamed under `db/` is a type error here. What the builder cannot
+ * spell — the task's excerpt over a `jsonb` array, the instant a child last
+ * changed, and the guarded insert of a child — is a named `sql` fragment
+ * inside one rendered statement.
  */
 
 /** The kinds a delegation runs from: a child cannot open a child of its own, and a thread delegates nothing. */
@@ -68,12 +80,84 @@ export interface ChildrenHeadPosition {
 
 type ChildReadFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /** The SDK's own name for a text part, which is what a task's words are read from. */
 const TEXT_PART_TYPE: TextUIPart["type"] = "text";
+
+/** The child's row and its parent's: the one table under the two names every read here joins it by. */
+const child = alias(conversations, "child");
+const parent = alias(conversations, "parent");
+
+/** A lateral join's own predicate, which every lateral here holds to unconditionally. */
+const ON_TRUE = sql`true`;
+
+/**
+ * The latest of a child's turns, by the instant it was queued and the id
+ * breaking a tie. Joined to the child's own account, so a turn written under
+ * another lends the child nothing whatever id it names.
+ */
+const latest = db
+  .select({
+    id: turns.id,
+    eveTurnId: turns.eveTurnId,
+    status: turns.status,
+    queuedAt: turns.queuedAt,
+    startedAt: turns.startedAt,
+    settledAt: turns.settledAt,
+    failure: turns.failure,
+  })
+  .from(turns)
+  .where(and(eq(turns.conversationId, child.id), eq(turns.userId, child.userId)))
+  .orderBy(desc(turns.queuedAt), desc(turns.id))
+  .limit(1)
+  .as("latest");
+
+/** The child's first user line, which is the task it was handed; held to the child's own account the same way. */
+const firstLine = db
+  .select({ parts: messages.parts, createdAt: messages.createdAt })
+  .from(messages)
+  .where(
+    and(
+      eq(messages.conversationId, child.id),
+      eq(messages.userId, child.userId),
+      eq(messages.role, MESSAGE_ROLE.USER),
+    ),
+  )
+  .orderBy(asc(messages.seq))
+  .limit(1)
+  .as("first_line");
+
+/**
+ * The leading run a task's excerpt drops before it is cut: the whitespace
+ * JavaScript's `trim` drops, spelled for Postgres's regex, so a line padded
+ * with spaces of any kind spends none of the bound on them and the route's
+ * own trim then finds nothing more to drop at the front.
+ */
+const LEADING_WHITESPACE_SQL_REGEX =
+  "^[\\s\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+";
+
+/**
+ * The task's excerpt: the text parts of the child's first user line, in
+ * their order, its leading whitespace dropped so it spends none of the bound,
+ * cut to the wire's bound; null where no line stands, since a null holds no
+ * elements. The cut is in characters where the wire's is in UTF-16 units, so
+ * the read stays bounded and the route makes the exact cut. There is no
+ * builder spelling for unnesting a `jsonb` array with ordinality, so the
+ * whole projection is a fragment.
+ */
+const TASK_EXCERPT = sql<string | null>`
+  (
+    select left(
+      regexp_replace(
+        string_agg(part.value ->> 'text', ' ' order by part.ordinality),
+        ${LEADING_WHITESPACE_SQL_REGEX},
+        ''
+      ),
+      ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS}
+    )
+    from jsonb_array_elements(${firstLine.parts}) with ordinality as part(value, ordinality)
+    where part.value ->> 'type' = ${TEXT_PART_TYPE}
+  )
+`;
 
 /** The child's row joined to its parent's kind, its latest turn where one stands, and its task's excerpt. */
 const ChildRowSchema = Schema.Struct({
@@ -99,122 +183,71 @@ const ChildRowSchema = Schema.Struct({
   startedAt: Schema.NullOr(InstantColumnSchema),
   settledAt: Schema.NullOr(InstantColumnSchema),
   failure: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    parentConversationId: "parent_conversation_id",
-    parentKind: "parent_kind",
-    expectsCompletion: "expects_completion",
-    createdAt: "created_at",
-    runtimeSessionId: "runtime_session_id",
-    turnId: "turn_id",
-    eveTurnId: "eve_turn_id",
-    turnStatus: "turn_status",
-    startedAt: "started_at",
-    settledAt: "settled_at",
-  }),
-);
+});
 
 type ChildRow = typeof ChildRowSchema.Type;
 
 /**
- * The rows every read here selects from: the account's children under
- * `conditions`, each joined to its parent (a child without one, or under a
- * conversation of a kind no delegation runs from, is a row no delegation
- * wrote, and is not a child), to the latest of its turns by the instant it
- * was queued, the id breaking a tie, and to its first user line, which is
- * the task it was handed. Every join holds to the child's own account, so a
- * parent, a turn, or a line written under another lends the child nothing,
- * whatever id it names. Whether a stamped child is among the rows is
- * the caller's condition: the record reads list what stands, the head counts
- * the stamping as the change it is.
+ * The join that makes a row a child: its parent's, under the child's own
+ * account. A child without a parent, or under a conversation of a kind no
+ * delegation runs from, is a row no delegation wrote and is not a child; and
+ * a parent written under another account lends the child nothing, whatever
+ * id it names.
  */
-const childrenFrom = (sql: SqlClient.SqlClient, conditions: readonly Fragment[]) =>
-  sql`
-    from conversations child
-    join conversations parent
-      on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
-    left join lateral (
-      select id, eve_turn_id, status, queued_at, started_at, settled_at, failure
-      from turns
-      where turns.conversation_id = child.id and turns.user_id = child.user_id
-      order by turns.queued_at desc, turns.id desc
-      limit 1
-    ) latest on true
-    left join lateral (
-      select parts, created_at
-      from messages
-      where messages.conversation_id = child.id
-        and messages.user_id = child.user_id
-        and messages.role = ${MESSAGE_ROLE.USER}
-      order by messages.seq asc
-      limit 1
-    ) first_line on true
-    where ${sql.and([
-      sql`child.kind = ${CONVERSATION_KIND.CHILD}`,
-      sql.in("parent.kind", CHILD_PARENT_KINDS),
-      ...conditions,
-    ])}
-  `;
+const PARENT_OF_CHILD = and(
+  eq(parent.id, child.parentConversationId),
+  eq(parent.userId, child.userId),
+);
+
+/** A child of the account, under a parent of a kind a delegation runs from; whether a stamped one counts is the caller's. */
+const childOf = (userId: string) =>
+  and(
+    eq(child.userId, userId),
+    eq(child.kind, CONVERSATION_KIND.CHILD),
+    inArray(parent.kind, [...CHILD_PARENT_KINDS]),
+  );
 
 /** The rows the record reads list: the standing children, a Clear-stamped one gone with its parent. */
-const standingChild = (sql: SqlClient.SqlClient) => sql`child.deleted_at is null`;
+const STANDING_CHILD = isNull(child.deletedAt);
+
+/** The columns both record reads project, the task's excerpt among them. */
+const CHILD_FIELDS = {
+  id: child.id,
+  parentConversationId: child.parentConversationId,
+  parentKind: parent.kind,
+  label: child.label,
+  task: TASK_EXCERPT,
+  expectsCompletion: child.expectsCompletion,
+  createdAt: child.createdAt,
+  runtimeSessionId: child.runtimeSessionId,
+  turnId: latest.id,
+  eveTurnId: latest.eveTurnId,
+  turnStatus: latest.status,
+  startedAt: latest.startedAt,
+  settledAt: latest.settledAt,
+  failure: latest.failure,
+};
 
 /**
- * The leading run a task's excerpt drops before it is cut: the whitespace
- * JavaScript's `trim` drops, spelled for Postgres's regex, so a line padded
- * with spaces of any kind spends none of the bound on them and the route's
- * own trim then finds nothing more to drop at the front.
+ * The one select every record read here shares: the account's children under
+ * the caller's condition, each joined to its parent, to the latest of its
+ * turns, and to its first user line, newest first and at most `limit` rows.
  */
-const LEADING_WHITESPACE_SQL_REGEX =
-  "^[\\s\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF]+";
-
-/**
- * The task's excerpt: the text parts of the child's first user line, in
- * their order, its leading whitespace dropped so it spends none of the bound,
- * cut to the wire's bound; null where no line stands, since a null holds no
- * elements. The cut is in characters where the wire's is in UTF-16 units, so
- * the read stays bounded and the route makes the exact cut.
- */
-const taskExcerpt = (sql: SqlClient.SqlClient) =>
-  sql`
-    (
-      select left(
-        regexp_replace(
-          string_agg(part.value ->> 'text', ' ' order by part.ordinality),
-          ${LEADING_WHITESPACE_SQL_REGEX},
-          ''
-        ),
-        ${CHILDREN_READ_BOUNDS.TASK_EXCERPT_CHARS}
-      )
-      from jsonb_array_elements(first_line.parts) with ordinality as part(value, ordinality)
-      where part.value ->> 'type' = ${TEXT_PART_TYPE}
-    )
-  `;
-
-/** The one select both record reads share: newest first, at most `limit` rows. */
-const selectChildren = (sql: SqlClient.SqlClient, conditions: readonly Fragment[], limit: number) =>
-  sql`
-    select child.id, child.parent_conversation_id, parent.kind as parent_kind, child.label,
-           ${taskExcerpt(sql)} as task, child.expects_completion,
-           child.created_at, child.runtime_session_id,
-           latest.id as turn_id, latest.eve_turn_id, latest.status as turn_status,
-           latest.started_at, latest.settled_at, latest.failure
-    ${childrenFrom(sql, conditions)}
-    order by child.created_at desc, child.id desc
-    limit ${limit}
-  `;
+const selectChildren = (where: SQL | undefined, limit: number) =>
+  db
+    .select(CHILD_FIELDS)
+    .from(child)
+    .innerJoin(parent, PARENT_OF_CHILD)
+    .leftJoinLateral(latest, ON_TRUE)
+    .leftJoinLateral(firstLine, ON_TRUE)
+    .where(where)
+    .orderBy(desc(child.createdAt), desc(child.id))
+    .limit(limit);
 
 const findChildren = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
   Result: ChildRowSchema,
-  execute: (request) =>
-    statement((sql) =>
-      selectChildren(
-        sql,
-        [sql`child.user_id = ${request.userId}`, standingChild(sql)],
-        request.limit,
-      ),
-    ),
+  execute: (request) => selectChildren(and(childOf(request.userId), STANDING_CHILD), request.limit),
 });
 
 const findChildrenOf = SqlSchema.findAll({
@@ -225,16 +258,13 @@ const findChildrenOf = SqlSchema.findAll({
   }),
   Result: ChildRowSchema,
   execute: (request) =>
-    statement((sql) =>
-      selectChildren(
-        sql,
-        [
-          sql`child.user_id = ${request.userId}`,
-          sql`child.parent_conversation_id = ${request.parentConversationId}`,
-          standingChild(sql),
-        ],
-        request.limit,
+    selectChildren(
+      and(
+        childOf(request.userId),
+        eq(child.parentConversationId, request.parentConversationId),
+        STANDING_CHILD,
       ),
+      request.limit,
     ),
 });
 
@@ -242,17 +272,7 @@ const findChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
   Result: ChildRowSchema,
   execute: (request) =>
-    statement((sql) =>
-      selectChildren(
-        sql,
-        [
-          sql`child.user_id = ${request.userId}`,
-          sql`child.id = ${request.childId}`,
-          standingChild(sql),
-        ],
-        1,
-      ),
-    ),
+    selectChildren(and(childOf(request.userId), eq(child.id, request.childId), STANDING_CHILD), 1),
 });
 
 /**
@@ -265,35 +285,36 @@ const findChild = SqlSchema.findOneOption({
  * differently under; and the purge that removes the row thirty days on moves
  * the head once more, to whatever then stands.
  */
-const CHILD_CHANGED_AT_SQL =
-  "greatest(child.created_at, coalesce(first_line.created_at, child.created_at), " +
-  "coalesce(child.deleted_at, child.created_at), " +
-  "coalesce(child.completion_delivered_at, child.created_at), " +
-  "coalesce(latest.queued_at, child.created_at), coalesce(latest.started_at, child.created_at), " +
-  "coalesce(latest.settled_at, child.created_at))";
-
-const childChangedAt = (sql: SqlClient.SqlClient) => sql.literal(CHILD_CHANGED_AT_SQL);
+const CHILD_CHANGED_AT = sql`
+  greatest(
+    ${child.createdAt},
+    coalesce(${firstLine.createdAt}, ${child.createdAt}),
+    coalesce(${child.deletedAt}, ${child.createdAt}),
+    coalesce(${child.completionDeliveredAt}, ${child.createdAt}),
+    coalesce(${latest.queuedAt}, ${child.createdAt}),
+    coalesce(${latest.startedAt}, ${child.createdAt}),
+    coalesce(${latest.settledAt}, ${child.createdAt})
+  )
+`;
 
 // Rendered as the turn cursor's instant is: the UTC wall clock with the zone
 // spelled here, so the text is a property of the query rather than of the
 // connection's TimeZone.
-const CHILD_CHANGED_AT_TEXT_SQL = `((${CHILD_CHANGED_AT_SQL}) at time zone 'UTC')::text || '+00'`;
-const childChangedAtText = (sql: SqlClient.SqlClient) => sql.literal(CHILD_CHANGED_AT_TEXT_SQL);
+const CHILD_CHANGED_AT_TEXT = sql<string>`((${CHILD_CHANGED_AT}) at time zone 'UTC')::text || '+00'`;
 
 const findChildrenHead = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String }),
-  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }).pipe(
-    Schema.encodeKeys({ changedAt: "changed_at" }),
-  ),
+  Result: Schema.Struct({ id: Schema.String, changedAt: Schema.String }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select child.id, ${childChangedAtText(sql)} as changed_at
-        ${childrenFrom(sql, [sql`child.user_id = ${request.userId}`])}
-        order by ${childChangedAt(sql)} desc, child.id desc
-        limit 1
-      `,
-    ),
+    db
+      .select({ id: child.id, changedAt: CHILD_CHANGED_AT_TEXT })
+      .from(child)
+      .innerJoin(parent, PARENT_OF_CHILD)
+      .leftJoinLateral(latest, ON_TRUE)
+      .leftJoinLateral(firstLine, ON_TRUE)
+      .where(childOf(request.userId))
+      .orderBy(desc(CHILD_CHANGED_AT), desc(child.id))
+      .limit(1),
 });
 
 function childStatus(turnStatus: TurnStatus | null): ChildStatus {
@@ -339,9 +360,9 @@ export interface ChildOpen {
 
 const ChildIdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** Postgres reserves the word `user`, so the identity table's name is quoted wherever it is written by hand. */
+/** Takes the account's user row lock for the transaction, the same lock Clear holds. */
 const lockUser = (userId: string) =>
-  statement((sql) => sql`select id from "user" where id = ${userId} for update`);
+  db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
 
 /**
  * The insert selects from the parent's row, so a parent that does not stand
@@ -350,7 +371,59 @@ const lockUser = (userId: string) =>
  * own inserts nothing, and the delegation learns so from the empty answer
  * rather than from a child hanging under a conversation its account cannot
  * read.
+ *
+ * Note that the insert is a fragment standing as this statement's own CTE
+ * rather than a builder insert, because the builder cannot spell an
+ * `insert … select` over some of a table's columns: `PgInsertBuilder.select`
+ * holds the selected fields to every insertable column of the table, in the
+ * table's own order. The columns it names are the schema module's, so a
+ * renamed column still moves this statement; what it returns is read back
+ * through the builder's select over the CTE, which is what decodes the row.
  */
+const insertedChild = (write: {
+  readonly userId: string;
+  readonly parentConversationId: string;
+  readonly spawnedByMessageId: string;
+  readonly label: string | null;
+  readonly expectsCompletion: boolean;
+  readonly now: Date;
+}) =>
+  db.$with("inserted", { id: conversations.id }).as(
+    sql`
+      insert into ${conversations} (
+        ${sql.identifier(conversations.userId.name)},
+        ${sql.identifier(conversations.kind.name)},
+        ${sql.identifier(conversations.parentConversationId.name)},
+        ${sql.identifier(conversations.spawnedByMessageId.name)},
+        ${sql.identifier(conversations.label.name)},
+        ${sql.identifier(conversations.expectsCompletion.name)},
+        ${sql.identifier(conversations.createdAt.name)},
+        ${sql.identifier(conversations.lastActivityAt.name)}
+      )
+      select ${parent.userId}, ${CONVERSATION_KIND.CHILD}, ${parent.id},
+             ${write.spawnedByMessageId}, ${write.label}, ${write.expectsCompletion},
+             ${write.now}, ${write.now}
+      from ${conversations} ${parent}
+      where ${and(
+        eq(parent.id, write.parentConversationId),
+        eq(parent.userId, write.userId),
+        inArray(parent.kind, [...CHILD_PARENT_KINDS]),
+        isNull(parent.deletedAt),
+        sql`exists ${db
+          .select({ spawned: messages.id })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.id, write.spawnedByMessageId),
+              eq(messages.conversationId, parent.id),
+              eq(messages.userId, parent.userId),
+            ),
+          )}`,
+      )}
+      returning ${conversations.id}
+    `,
+  );
+
 const insertChild = SqlSchema.findOneOption({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -361,29 +434,10 @@ const insertChild = SqlSchema.findOneOption({
     now: Schema.Date,
   }),
   Result: ChildIdRowSchema,
-  execute: (write) =>
-    statement(
-      (sql) => sql`
-        insert into conversations (
-          user_id, kind, parent_conversation_id, spawned_by_message_id, label,
-          expects_completion, created_at, last_activity_at
-        )
-        select parent.user_id, ${CONVERSATION_KIND.CHILD}, parent.id, ${write.spawnedByMessageId},
-               ${write.label}, ${write.expectsCompletion}, ${write.now}, ${write.now}
-        from conversations parent
-        where parent.id = ${write.parentConversationId}
-          and parent.user_id = ${write.userId}
-          and ${sql.in("parent.kind", CHILD_PARENT_KINDS)}
-          and parent.deleted_at is null
-          and exists (
-            select 1 from messages
-            where messages.id = ${write.spawnedByMessageId}
-              and messages.conversation_id = parent.id
-              and messages.user_id = parent.user_id
-          )
-        returning id
-      `,
-    ),
+  execute: (write) => {
+    const inserted = insertedChild(write);
+    return db.with(inserted).select({ id: inserted.id }).from(inserted);
+  },
 });
 
 /**
@@ -397,8 +451,8 @@ const insertChild = SqlSchema.findOneOption({
 export function openChildConversation(
   open: ChildOpen,
 ): Effect.Effect<string | undefined, ChildReadFailure, SqlClient.SqlClient> {
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         yield* lockUser(open.userId);
         const inserted = yield* insertChild(open);
@@ -412,18 +466,19 @@ const abandonChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
   Result: ChildIdRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set deleted_at = ${request.now}
-        where id = ${request.childId}
-          and user_id = ${request.userId}
-          and kind = ${CONVERSATION_KIND.CHILD}
-          and deleted_at is null
-          and runtime_session_id is null
-        returning id
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ deletedAt: request.now })
+      .where(
+        and(
+          eq(conversations.id, request.childId),
+          eq(conversations.userId, request.userId),
+          eq(conversations.kind, CONVERSATION_KIND.CHILD),
+          isNull(conversations.deletedAt),
+          isNull(conversations.runtimeSessionId),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 /**
@@ -448,35 +503,42 @@ const lockChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
   Result: ChildIdRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id from conversations
-        where id = ${request.childId}
-          and user_id = ${request.userId}
-          and kind = ${CONVERSATION_KIND.CHILD}
-          and deleted_at is null
-        for update
-      `,
-    ),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, request.childId),
+          eq(conversations.userId, request.userId),
+          eq(conversations.kind, CONVERSATION_KIND.CHILD),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .for("update"),
 });
 
 const dropChild = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
   Result: ChildIdRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set deleted_at = ${request.now}
-        where id = ${request.childId}
-          and user_id = ${request.userId}
-          and not exists (
-            select 1 from turns
-            where turns.conversation_id = ${request.childId} and turns.user_id = ${request.userId}
-          )
-        returning id
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ deletedAt: request.now })
+      .where(
+        and(
+          eq(conversations.id, request.childId),
+          eq(conversations.userId, request.userId),
+          notExists(
+            db
+              .select({ ran: turns.id })
+              .from(turns)
+              .where(
+                and(eq(turns.conversationId, request.childId), eq(turns.userId, request.userId)),
+              ),
+          ),
+        ),
+      )
+      .returning({ id: conversations.id }),
 });
 
 /**
@@ -499,8 +561,8 @@ export function dropChildConversation(
   now: Date,
 ): Effect.Effect<boolean, ChildReadFailure, SqlClient.SqlClient> {
   const request = { userId, childId };
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
         if (Option.isNone(yield* lockChild(request))) return false;
         return Option.isSome(yield* dropChild({ ...request, now }));
@@ -534,17 +596,18 @@ const findSpawningMessage = SqlSchema.findOneOption({
   }),
   Result: SpawningMessageRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id
-        from messages
-        where messages.conversation_id = ${request.conversationId}
-          and messages.user_id = ${request.userId}
-          and (messages.client_id = ${request.turnId} or messages.turn_id = ${request.turnId}::uuid)
-        order by (messages.client_id = ${request.turnId}) desc, messages.seq desc
-        limit 1
-      `,
-    ),
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, request.conversationId),
+          eq(messages.userId, request.userId),
+          sql`(${eq(messages.clientId, request.turnId)} or ${eq(messages.turnId, request.turnId)})`,
+        ),
+      )
+      .orderBy(desc(eq(messages.clientId, request.turnId)), desc(messages.seq))
+      .limit(1),
 });
 
 /**
@@ -594,9 +657,7 @@ export interface ClaimedChildCompletion {
   readonly failure: string | null;
 }
 
-const ParentLockRowSchema = Schema.Struct({ parentConversationId: Schema.String }).pipe(
-  Schema.encodeKeys({ parentConversationId: "parent_conversation_id" }),
-);
+const ParentLockRowSchema = Schema.Struct({ parentConversationId: Schema.String });
 
 /**
  * The parent's row lock, the same one an ask's dispatch takes on the
@@ -608,20 +669,20 @@ const lockParentOf = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
   Result: ParentLockRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select parent.id as parent_conversation_id
-        from conversations child
-        join conversations parent
-          on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
-        where child.id = ${request.childId}
-          and child.user_id = ${request.userId}
-          and child.kind = ${CONVERSATION_KIND.CHILD}
-          and child.deleted_at is null
-          and parent.deleted_at is null
-        for update of parent
-      `,
-    ),
+    db
+      .select({ parentConversationId: parent.id })
+      .from(child)
+      .innerJoin(parent, PARENT_OF_CHILD)
+      .where(
+        and(
+          eq(child.id, request.childId),
+          eq(child.userId, request.userId),
+          eq(child.kind, CONVERSATION_KIND.CHILD),
+          isNull(child.deletedAt),
+          isNull(parent.deletedAt),
+        ),
+      )
+      .for("update", { of: parent }),
 });
 
 const CompletionRowSchema = Schema.Struct({
@@ -631,49 +692,40 @@ const CompletionRowSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   turnStatus: Schema.NullOr(Schema.Literals(Object.values(TURN_STATUS))),
   failure: Schema.NullOr(Schema.String),
-}).pipe(
-  Schema.encodeKeys({
-    expectsCompletion: "expects_completion",
-    completionDeliveredAt: "completion_delivered_at",
-    turnId: "turn_id",
-    turnStatus: "turn_status",
-  }),
-);
+});
 
 /** The child's row and its latest turn, read under the parent's lock. */
 const readCompletion = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String }),
   Result: CompletionRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select child.label, child.expects_completion, child.completion_delivered_at,
-               latest.id as turn_id, latest.status as turn_status, latest.failure
-        from conversations child
-        left join lateral (
-          select id, status, failure
-          from turns
-          where turns.conversation_id = child.id and turns.user_id = child.user_id
-          order by turns.queued_at desc, turns.id desc
-          limit 1
-        ) latest on true
-        where child.id = ${request.childId} and child.user_id = ${request.userId}
-      `,
-    ),
+    db
+      .select({
+        label: child.label,
+        expectsCompletion: child.expectsCompletion,
+        completionDeliveredAt: child.completionDeliveredAt,
+        turnId: latest.id,
+        turnStatus: latest.status,
+        failure: latest.failure,
+      })
+      .from(child)
+      .leftJoinLateral(latest, ON_TRUE)
+      .where(and(eq(child.id, request.childId), eq(child.userId, request.userId))),
 });
 
 const stampCompletion = SqlSchema.void({
   Request: Schema.Struct({ userId: Schema.String, childId: Schema.String, now: Schema.Date }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set completion_delivered_at = ${request.now}
-        where id = ${request.childId}
-          and user_id = ${request.userId}
-          and completion_delivered_at is null
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({ completionDeliveredAt: request.now })
+      .where(
+        and(
+          eq(conversations.id, request.childId),
+          eq(conversations.userId, request.userId),
+          isNull(conversations.completionDeliveredAt),
+        ),
+      ),
 });
 
 /**
@@ -690,14 +742,14 @@ const stampCompletion = SqlSchema.void({
  * most one completion turn per child, never that it arrived.
  */
 export function claimChildCompletion(
-  child: ConversationTarget,
+  target: ConversationTarget,
   now: Date,
 ): Effect.Effect<ClaimedChildCompletion | undefined, ChildReadFailure, SqlClient.SqlClient> {
-  const request = { userId: child.userId, childId: child.conversationId };
-  return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-    sql.withTransaction(
+  const request = { userId: target.userId, childId: target.conversationId };
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
       Effect.gen(function* () {
-        yield* lockUser(child.userId);
+        yield* lockUser(target.userId);
         const locked = yield* lockParentOf(request);
         if (Option.isNone(locked)) return undefined;
         const read = yield* readCompletion(request);
@@ -709,7 +761,7 @@ export function claimChildCompletion(
         }
         yield* stampCompletion({ ...request, now });
         return {
-          parent: { userId: child.userId, conversationId: locked.value.parentConversationId },
+          parent: { userId: target.userId, conversationId: locked.value.parentConversationId },
           label: row.label,
           expectsCompletion: row.expectsCompletion ?? true,
           turnId: row.turnId,
@@ -724,37 +776,29 @@ export function claimChildCompletion(
 const UndeliveredChildRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
-}).pipe(Schema.encodeKeys({ userId: "user_id" }));
+});
 
 const findUndeliveredChildren = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, limit: Schema.Number }),
   Result: UndeliveredChildRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select child.id, child.user_id
-        from conversations child
-        join conversations parent
-          on parent.id = child.parent_conversation_id and parent.user_id = child.user_id
-        join lateral (
-          select status, settled_at
-          from turns
-          where turns.conversation_id = child.id and turns.user_id = child.user_id
-          order by turns.queued_at desc, turns.id desc
-          limit 1
-        ) latest on true
-        where ${sql.and([
-          sql`child.user_id = ${request.userId}`,
-          sql`child.kind = ${CONVERSATION_KIND.CHILD}`,
-          sql`child.deleted_at is null`,
-          sql`parent.deleted_at is null`,
-          sql`child.completion_delivered_at is null`,
-          sql`latest.status in ${sql.in([...TERMINAL_TURN_STATUS])}`,
-        ])}
-        order by latest.settled_at asc, child.created_at asc, child.id asc
-        limit ${request.limit}
-      `,
-    ),
+    db
+      .select({ id: child.id, userId: child.userId })
+      .from(child)
+      .innerJoin(parent, PARENT_OF_CHILD)
+      .innerJoinLateral(latest, ON_TRUE)
+      .where(
+        and(
+          eq(child.userId, request.userId),
+          eq(child.kind, CONVERSATION_KIND.CHILD),
+          isNull(child.deletedAt),
+          isNull(parent.deletedAt),
+          isNull(child.completionDeliveredAt),
+          inArray(latest.status, [...TERMINAL_TURN_STATUS]),
+        ),
+      )
+      .orderBy(asc(latest.settledAt), asc(child.createdAt), asc(child.id))
+      .limit(request.limit),
 });
 
 /**

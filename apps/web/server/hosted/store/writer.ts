@@ -8,10 +8,11 @@ import {
   type UIMessage,
   type UITools,
 } from "ai";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type * as Statement from "effect/unstable/sql/Statement";
 import {
   type AssistantMessageMetadata,
   BRAIN_REQUEST_STATUS,
@@ -52,6 +53,9 @@ import {
   unparsedWire,
   WireValueSchema,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { asks, conversations, events, messages, turns } from "../../db/storage-schema.js";
+import { voiceSessions } from "../../db/voice-schema.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
@@ -95,9 +99,18 @@ import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./databa
  * could not be read back; the writer holds the catalog to it once, when it
  * is composed, and refuses to exist over a catalog that fails it.
  *
- * Every statement is an `Effect` over the ambient `SqlClient`, the
- * transaction is that client's own, and each row a statement answers is
- * decoded by a `Schema` rather than trusted; the `StoreWriter` methods are
+ * Every statement is a Drizzle builder over the tables
+ * `db/storage-schema.ts` declares, yielded as the `Effect` over the ambient
+ * `SqlClient` that `db/drizzle.ts`'s bridge makes it; the transaction is
+ * that client's own and the bridge reads it from the running fiber, which is
+ * what puts the sequence allocation and the writes that follow it inside the
+ * conversation's lock rather than beside it. Each row a statement answers is
+ * still decoded by a `Schema` rather than trusted, and a write's `jsonb`
+ * column is handed the value itself rather than its JSON text, since
+ * rendering one is the column's own work. What the builder cannot spell is a
+ * named `sql` fragment inside the one rendered statement: the journal
+ * revision's own data-modifying CTE, the sequence high-water mark, and the
+ * `jsonb` field tests a spoken row is found by. The `StoreWriter` methods are
  * effects too, so the edge that owns the connection is the one that runs
  * them and a caller composes a write into the request it is already on.
  */
@@ -443,10 +456,6 @@ const BRAIN_AUTHORED = { author: MESSAGE_AUTHOR.BRAIN } as const;
 /** How a statement here fails: the driver's own refusal, or a row the schema refused. */
 type WriteFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
-
 /**
  * A row a statement had to answer. Its absence is this writer's own
  * invariant broken — a conversation that vanished under its own lock, an
@@ -470,10 +479,11 @@ const readsPartsShape = Schema.is(Schema.Array(Schema.Struct({ type: Schema.Stri
  * every message before it lands and again before any amendment does. A
  * column's own schema is what refuses a row that could never be either.
  *
- * A write and a read take the same value through different sides: the column
- * takes the row's JSON text, cast to `jsonb` in the statement, so a write
- * names `Schema.parseJson` over these and a read names them directly,
- * because a `jsonb` column answers a parsed value.
+ * A write and a read name these the same way, because a `jsonb` column
+ * renders its own value: the builder hands the driver the JSON text of
+ * whatever a write carried and answers a read the parsed value back, so
+ * neither side spells the serialization and nothing casts a parameter to
+ * `jsonb` in a statement.
  */
 const StoredPartsColumnSchema: Schema.Codec<Parts> = Schema.declare((input): input is Parts =>
   readsPartsShape(input),
@@ -501,6 +511,21 @@ const TurnOriginSchema = Schema.Literals(Object.values(TURN_ORIGIN));
 
 const RowIdSchema = Schema.Struct({ id: Schema.String });
 
+/**
+ * The `jsonb` fields a row is found by or read out of, which the builder has
+ * no operator for: a spoken row's session, span, and delegation on its own
+ * metadata, what one of Luke's rows was read from, and the session and
+ * instant a briefing's speech event names. Each is one fragment, named once
+ * and embedded in the statements that need it, so the key's spelling stands
+ * in a single place.
+ */
+const SPOKEN_VOICE_SESSION_ID = sql`${messages.metadata} ->> 'voice_session_id'`;
+const SPOKEN_FROM_MS = sql`(${messages.metadata} ->> 'from_ms')::int`;
+const SPOKEN_DELEGATION_ID = sql<string | null>`${messages.metadata} ->> 'delegation_id'`;
+const SPOKEN_READ_FROM = sql`${messages.metadata} ->> 'read_from'`;
+const SPEECH_EVENT_VOICE_SESSION_ID = sql`${events.payload} ->> 'voiceSessionId'`;
+const SPEECH_EVENT_AT_MS = sql`(${events.payload} ->> 'atMs')::int`;
+
 const ConversationTargetSchema = Schema.Struct({
   userId: Schema.String,
   conversationId: Schema.String,
@@ -522,7 +547,7 @@ const MessageRowSchema = Schema.Struct({
   parts: StoredPartsColumnSchema,
   metadata: Schema.NullOr(MessageMetadataColumnSchema),
   finishedAt: Schema.NullOr(InstantColumnSchema),
-}).pipe(Schema.encodeKeys({ finishedAt: "finished_at" }));
+});
 
 type MessageRow = Schema.Schema.Type<typeof MessageRowSchema>;
 
@@ -535,8 +560,8 @@ const MessageInsertSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   clientId: Schema.String,
   role: MessageRoleSchema,
-  parts: Schema.fromJsonString(StoredPartsColumnSchema),
-  metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+  parts: StoredPartsColumnSchema,
+  metadata: Schema.NullOr(MessageMetadataColumnSchema),
   createdAt: Schema.Date,
   placedAt: Schema.Date,
   finishedAt: Schema.NullOr(Schema.Date),
@@ -546,64 +571,72 @@ const lockConversation = SqlSchema.findOneOption({
   Request: ConversationTargetSchema,
   Result: RowIdSchema,
   execute: (target) =>
-    statement(
-      (sql) => sql`
-        select id
-        from conversations
-        where id = ${target.conversationId}
-          and user_id = ${target.userId}
-          and deleted_at is null
-        for update
-      `,
-    ),
+    db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, target.conversationId),
+          eq(conversations.userId, target.userId),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .for("update"),
 });
+
+/**
+ * The first position of a conversation no row of the numbered table holds.
+ * The counter is moved to at least this, so a position taken outside the
+ * counter costs nothing but a skip; the read is served by the unique index
+ * over the table's own `(conversation_id, seq)` pair.
+ */
+const pastTheHighestMessageSeq = (conversationId: string) =>
+  db
+    .select({ free: sql<number>`coalesce(max(${messages.seq}), 0) + 1` })
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId));
+
+const pastTheHighestEventSeq = (conversationId: string) =>
+  db
+    .select({ free: sql<number>`coalesce(max(${events.seq}), 0) + 1` })
+    .from(events)
+    .where(eq(events.conversationId, conversationId));
 
 const allocateMessageSequence = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, now: Schema.Date }),
   Result: SequenceSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set next_message_seq = greatest(
-              next_message_seq,
-              (select coalesce(max(seq), 0) + 1 from messages where conversation_id = ${request.conversationId})
-            ) + 1,
-            last_activity_at = ${request.now}
-        where id = ${request.conversationId}
-        returning next_message_seq as next
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({
+        nextMessageSeq: sql`greatest(${conversations.nextMessageSeq}, ${pastTheHighestMessageSeq(request.conversationId)}) + 1`,
+        lastActivityAt: request.now,
+      })
+      .where(eq(conversations.id, request.conversationId))
+      .returning({ next: conversations.nextMessageSeq }),
 });
 
 const allocateEventSequence = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: SequenceSchema,
   execute: (conversationId) =>
-    statement(
-      (sql) => sql`
-        update conversations
-        set next_event_seq = greatest(
-              next_event_seq,
-              (select coalesce(max(seq), 0) + 1 from events where conversation_id = ${conversationId})
-            ) + 1
-        where id = ${conversationId}
-        returning next_event_seq as next
-      `,
-    ),
+    db
+      .update(conversations)
+      .set({
+        nextEventSeq: sql`greatest(${conversations.nextEventSeq}, ${pastTheHighestEventSeq(conversationId)}) + 1`,
+      })
+      .where(eq(conversations.id, conversationId))
+      .returning({ next: conversations.nextEventSeq }),
 });
 
 const findTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ turnId: Schema.String, conversationId: Schema.String }),
   Result: TurnRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select status
-        from turns
-        where id = ${request.turnId} and conversation_id = ${request.conversationId}
-      `,
-    ),
+    db
+      .select({ status: turns.status })
+      .from(turns)
+      .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
 });
 
 /** The turn's status and when it settled, for the read of whether words spoken after it were its reply read aloud. */
@@ -612,15 +645,12 @@ const findSettledTurn = SqlSchema.findOneOption({
   Result: Schema.Struct({
     status: TurnStatusSchema,
     settledAt: Schema.NullOr(InstantColumnSchema),
-  }).pipe(Schema.encodeKeys({ settledAt: "settled_at" })),
+  }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select status, settled_at
-        from turns
-        where id = ${request.turnId} and conversation_id = ${request.conversationId}
-      `,
-    ),
+    db
+      .select({ status: turns.status, settledAt: turns.settledAt })
+      .from(turns)
+      .where(and(eq(turns.id, request.turnId), eq(turns.conversationId, request.conversationId))),
 });
 
 /**
@@ -640,23 +670,22 @@ const findBriefingSpokenWithin = SqlSchema.findOneOption({
     fromMs: Schema.Int,
     toMs: Schema.Int,
   }),
-  Result: Schema.Struct({ messageId: Schema.String }).pipe(
-    Schema.encodeKeys({ messageId: "message_id" }),
-  ),
+  Result: Schema.Struct({ messageId: Schema.String }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select message_id
-        from events
-        where conversation_id = ${request.conversationId}
-          and kind = ${CONVERSATION_EVENT_KIND.SPEECH_SPOKEN}
-          and payload ->> 'voiceSessionId' = ${request.voiceSessionId}
-          and (payload ->> 'atMs')::int >= ${request.fromMs}
-          and (payload ->> 'atMs')::int <= ${request.toMs}
-        order by seq desc
-        limit 1
-      `,
-    ),
+    db
+      .select({ messageId: events.messageId })
+      .from(events)
+      .where(
+        and(
+          eq(events.conversationId, request.conversationId),
+          eq(events.kind, CONVERSATION_EVENT_KIND.SPEECH_SPOKEN),
+          sql`${SPEECH_EVENT_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
+          sql`${SPEECH_EVENT_AT_MS} >= ${request.fromMs}`,
+          sql`${SPEECH_EVENT_AT_MS} <= ${request.toMs}`,
+        ),
+      )
+      .orderBy(desc(events.seq))
+      .limit(1),
 });
 
 /**
@@ -671,13 +700,20 @@ const findMessageByClientId = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
   Result: MessageRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id, parts, metadata, finished_at
-        from messages
-        where conversation_id = ${request.conversationId} and client_id = ${request.clientId}
-      `,
-    ),
+    db
+      .select({
+        id: messages.id,
+        parts: messages.parts,
+        metadata: messages.metadata,
+        finishedAt: messages.finishedAt,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, request.conversationId),
+          eq(messages.clientId, request.clientId),
+        ),
+      ),
 });
 
 /**
@@ -688,37 +724,34 @@ const findMessageByClientId = SqlSchema.findOneOption({
  */
 const findVoiceSessionStart = SqlSchema.findOneOption({
   Request: Schema.Struct({ id: Schema.String, userId: Schema.String }),
-  Result: Schema.Struct({ startedAt: InstantColumnSchema }).pipe(
-    Schema.encodeKeys({ startedAt: "started_at" }),
-  ),
+  Result: Schema.Struct({ startedAt: InstantColumnSchema }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select started_at
-        from voice_sessions
-        where id = ${request.id} and user_id = ${request.userId}
-      `,
-    ),
+    db
+      .select({ startedAt: voiceSessions.startedAt })
+      .from(voiceSessions)
+      .where(and(eq(voiceSessions.id, request.id), eq(voiceSessions.userId, request.userId))),
 });
 
 const insertMessageRow = SqlSchema.findOneOption({
   Request: MessageInsertSchema,
   Result: RowIdSchema,
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into messages (
-          user_id, conversation_id, seq, turn_id, client_id, role, parts, metadata,
-          created_at, placed_at, finished_at
-        )
-        values (
-          ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.turnId}, ${row.clientId},
-          ${row.role}, ${row.parts}::jsonb, ${row.metadata}::jsonb,
-          ${row.createdAt}, ${row.placedAt}, ${row.finishedAt}
-        )
-        returning id
-      `,
-    ),
+    db
+      .insert(messages)
+      .values({
+        userId: row.userId,
+        conversationId: row.conversationId,
+        seq: row.seq,
+        turnId: row.turnId,
+        clientId: row.clientId,
+        role: row.role,
+        parts: row.parts,
+        metadata: row.metadata,
+        createdAt: row.createdAt,
+        placedAt: row.placedAt,
+        finishedAt: row.finishedAt,
+      })
+      .returning({ id: messages.id }),
 });
 
 /**
@@ -729,73 +762,87 @@ const insertMessageRow = SqlSchema.findOneOption({
  * The four writes below are the only ones that change a row after it is
  * numbered; a move gives a row a fresh sequence, which the sequence counter
  * already announces.
+ *
+ * Note that the bump is a fragment standing as the statement's own
+ * data-modifying CTE rather than a builder update, because a CTE's body is
+ * the one place the builder takes no statement but a select: `$with(alias,
+ * selection).as()` takes the SQL, and the update around it — the row's own
+ * write, and the read of what the bump landed on — is the builder's. The
+ * columns the fragment names are the schema module's, so a renamed column
+ * still moves it.
  */
-const bumpedRevision = (sql: SqlClient.SqlClient, conversationId: string) => sql`
-  with bumped as (
-    update conversations
-    set journal_revision = journal_revision + 1
-    where id = ${conversationId}
-    returning journal_revision
-  )
-`;
+const BUMPED_REVISION = "bumped";
+
+const bumpedRevision = (conversationId: string) =>
+  db.$with(BUMPED_REVISION, { journalRevision: conversations.journalRevision }).as(
+    sql`update ${conversations}
+        set ${sql.identifier(conversations.journalRevision.name)} = ${conversations.journalRevision} + 1
+        where ${eq(conversations.id, conversationId)}
+        returning ${conversations.journalRevision}`,
+  );
+
+/** What the bump landed on, which is the revision the row it stamps takes. */
+const landedRevision = (bumped: ReturnType<typeof bumpedRevision>) =>
+  sql<number>`(select ${bumped.journalRevision} from ${bumped})`;
 
 const updateMessageParts = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    parts: StoredPartsColumnSchema,
   }),
-  execute: (row) =>
-    statement(
-      (sql) => sql`
-        ${bumpedRevision(sql, row.conversationId)}
-        update messages
-        set parts = ${row.parts}::jsonb, revision = (select journal_revision from bumped)
-        where id = ${row.id}
-      `,
-    ),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({ parts: row.parts, revision: landedRevision(bumped) })
+      .where(eq(messages.id, row.id));
+  },
 });
 
 const finishMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.fromJsonString(StoredPartsColumnSchema),
+    parts: StoredPartsColumnSchema,
     finishedAt: Schema.Date,
   }),
-  execute: (row) =>
-    statement(
-      (sql) => sql`
-        ${bumpedRevision(sql, row.conversationId)}
-        update messages
-        set parts = ${row.parts}::jsonb,
-            finished_at = ${row.finishedAt},
-            revision = (select journal_revision from bumped)
-        where id = ${row.id}
-      `,
-    ),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({
+        parts: row.parts,
+        finishedAt: row.finishedAt,
+        revision: landedRevision(bumped),
+      })
+      .where(eq(messages.id, row.id));
+  },
 });
 
 const completeMessage = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    parts: Schema.fromJsonString(StoredPartsColumnSchema),
-    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+    parts: StoredPartsColumnSchema,
+    metadata: Schema.NullOr(MessageMetadataColumnSchema),
     finishedAt: Schema.Date,
   }),
-  execute: (row) =>
-    statement(
-      (sql) => sql`
-        ${bumpedRevision(sql, row.conversationId)}
-        update messages
-        set parts = ${row.parts}::jsonb,
-            metadata = ${row.metadata}::jsonb,
-            finished_at = ${row.finishedAt},
-            revision = (select journal_revision from bumped)
-        where id = ${row.id}
-      `,
-    ),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({
+        parts: row.parts,
+        metadata: row.metadata,
+        finishedAt: row.finishedAt,
+        revision: landedRevision(bumped),
+      })
+      .where(eq(messages.id, row.id));
+  },
 });
 
 /** A developer's row taking the delegation it is about into its metadata, in place: its words and its place stand, its revision moves. */
@@ -803,18 +850,16 @@ const delegateSpokenRow = SqlSchema.void({
   Request: Schema.Struct({
     id: Schema.String,
     conversationId: Schema.String,
-    metadata: Schema.NullOr(Schema.fromJsonString(MessageMetadataColumnSchema)),
+    metadata: Schema.NullOr(MessageMetadataColumnSchema),
   }),
-  execute: (row) =>
-    statement(
-      (sql) => sql`
-        ${bumpedRevision(sql, row.conversationId)}
-        update messages
-        set metadata = ${row.metadata}::jsonb,
-            revision = (select journal_revision from bumped)
-        where id = ${row.id}
-      `,
-    ),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({ metadata: row.metadata, revision: landedRevision(bumped) })
+      .where(eq(messages.id, row.id));
+  },
 });
 
 const insertStartedTurn = SqlSchema.void({
@@ -826,15 +871,15 @@ const insertStartedTurn = SqlSchema.void({
     startedAt: Schema.Date,
   }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into turns (id, user_id, conversation_id, origin, status, queued_at, started_at)
-        values (
-          ${row.turnId}, ${row.userId}, ${row.conversationId}, ${row.origin},
-          ${TURN_STATUS.RUNNING}, ${row.startedAt}, ${row.startedAt}
-        )
-      `,
-    ),
+    db.insert(turns).values({
+      id: row.turnId,
+      userId: row.userId,
+      conversationId: row.conversationId,
+      origin: row.origin,
+      status: TURN_STATUS.RUNNING,
+      queuedAt: row.startedAt,
+      startedAt: row.startedAt,
+    }),
 });
 
 const insertQueuedTurn = SqlSchema.void({
@@ -851,47 +896,38 @@ const insertQueuedTurn = SqlSchema.void({
     queuedAt: Schema.Date,
   }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into turns (
-          id, user_id, conversation_id, origin, status, eve_turn_id, model, reasoning_effort,
-          prompt_hash, tool_set_hash, queued_at
-        )
-        values (
-          ${row.turnId}, ${row.userId}, ${row.conversationId}, ${row.origin}, ${TURN_STATUS.QUEUED},
-          ${row.eveTurnId}, ${row.model}, ${row.reasoningEffort}, ${row.promptHash}, ${row.toolSetHash},
-          ${row.queuedAt}
-        )
-      `,
-    ),
+    db.insert(turns).values({
+      id: row.turnId,
+      userId: row.userId,
+      conversationId: row.conversationId,
+      origin: row.origin,
+      status: TURN_STATUS.QUEUED,
+      eveTurnId: row.eveTurnId,
+      model: row.model,
+      reasoningEffort: row.reasoningEffort,
+      promptHash: row.promptHash,
+      toolSetHash: row.toolSetHash,
+      queuedAt: row.queuedAt,
+    }),
 });
 
 const startTurn = SqlSchema.void({
   Request: Schema.Struct({ turnId: Schema.String, startedAt: Schema.Date }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update turns
-        set status = ${TURN_STATUS.RUNNING}, started_at = ${row.startedAt}
-        where id = ${row.turnId}
-      `,
-    ),
+    db
+      .update(turns)
+      .set({ status: TURN_STATUS.RUNNING, startedAt: row.startedAt })
+      .where(eq(turns.id, row.turnId)),
 });
 
 /**
- * A `text[]` column's value, as the two drivers will take it. A driver infers
- * a parameter's Postgres type from the value it is handed, and an empty array
- * offers no element to infer one from, so the empty case is written as the
- * literal it is rather than bound. A turn that called nothing settles with no
- * response ids, which is why this is the ordinary case and not an edge.
+ * Note that the response ids no longer need the empty array written as a
+ * literal: a driver infers a parameter's Postgres type from the value it is
+ * handed and an empty array offers no element to infer one from, but a
+ * `text[]` column renders its own value as the array literal it is, so the
+ * ordinary case — a turn that called nothing and settles with no response
+ * ids — is one more bound parameter.
  */
-function emptyTextArray(
-  sql: SqlClient.SqlClient,
-  values: readonly string[],
-): Statement.Fragment | readonly string[] {
-  return values.length === 0 ? sql.literal("'{}'::text[]") : values;
-}
-
 const settleTurn = SqlSchema.void({
   Request: Schema.Struct({
     turnId: Schema.String,
@@ -899,22 +935,21 @@ const settleTurn = SqlSchema.void({
     settledAt: Schema.Date,
     failure: Schema.NullOr(Schema.String),
     failureDetail: Schema.NullOr(Schema.String),
-    usage: Schema.NullOr(Schema.fromJsonString(TurnUsageColumnSchema)),
+    usage: Schema.NullOr(TurnUsageColumnSchema),
     responseIds: Schema.Array(Schema.String),
   }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update turns
-        set status = ${row.status},
-            settled_at = ${row.settledAt},
-            failure = ${row.failure},
-            failure_detail = ${row.failureDetail},
-            usage = ${row.usage}::jsonb,
-            response_ids = ${emptyTextArray(sql, row.responseIds)}
-        where id = ${row.turnId}
-      `,
-    ),
+    db
+      .update(turns)
+      .set({
+        status: row.status,
+        settledAt: row.settledAt,
+        failure: row.failure,
+        failureDetail: row.failureDetail,
+        usage: row.usage,
+        responseIds: [...row.responseIds],
+      })
+      .where(eq(turns.id, row.turnId)),
 });
 
 /**
@@ -932,38 +967,41 @@ const SpokenLineRequestSchema = Schema.Struct({
 const SpokenLineRowSchema = Schema.Struct({
   clientId: Schema.String,
   delegationId: Schema.NullOr(Schema.String),
-}).pipe(Schema.encodeKeys({ clientId: "client_id", delegationId: "delegation_id" }));
+});
 
 /** The latest line whose start is at or before the instant: the line a delegation at that offset is about, its end past the offset or not. */
 const findLatestSpokenLineStartingBy = SqlSchema.findOneOption({
   Request: SpokenLineRequestSchema,
   Result: SpokenLineRowSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select client_id, metadata ->> 'delegation_id' as delegation_id
-        from messages
-        where conversation_id = ${request.conversationId}
-          and role = ${MESSAGE_ROLE.USER}
-          and metadata ->> 'voice_session_id' = ${request.voiceSessionId}
-          and (metadata ->> 'from_ms')::int <= ${request.atOrBeforeMs}
-        order by (metadata ->> 'from_ms')::int desc, seq desc
-        limit 1
-      `,
-    ),
+    db
+      .select({ clientId: messages.clientId, delegationId: SPOKEN_DELEGATION_ID })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, request.conversationId),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          sql`${SPOKEN_VOICE_SESSION_ID} = ${request.voiceSessionId}`,
+          sql`${SPOKEN_FROM_MS} <= ${request.atOrBeforeMs}`,
+        ),
+      )
+      .orderBy(desc(SPOKEN_FROM_MS), desc(messages.seq))
+      .limit(1),
 });
 
 const findMessageInConversation = SqlSchema.findOneOption({
   Request: Schema.Struct({ messageId: Schema.String, conversationId: Schema.String }),
   Result: RowIdSchema,
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select id
-        from messages
-        where id = ${request.messageId} and conversation_id = ${request.conversationId}
-      `,
-    ),
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.id, request.messageId),
+          eq(messages.conversationId, request.conversationId),
+        ),
+      ),
 });
 
 const findEventKinds = SqlSchema.findAll({
@@ -973,13 +1011,12 @@ const findEventKinds = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ kind: ConversationEventKindSchema }),
   execute: (request) =>
-    statement(
-      (sql) => sql`
-        select kind
-        from events
-        where message_id = ${request.messageId} and kind in ${sql.in(request.kinds)}
-      `,
-    ),
+    db
+      .select({ kind: events.kind })
+      .from(events)
+      .where(
+        and(eq(events.messageId, request.messageId), inArray(events.kind, [...request.kinds])),
+      ),
 });
 
 const insertEvent = SqlSchema.findOneOption({
@@ -990,21 +1027,24 @@ const insertEvent = SqlSchema.findOneOption({
     messageId: Schema.String,
     kind: ConversationEventKindSchema,
     deviceId: Schema.NullOr(Schema.String),
-    payload: Schema.NullOr(Schema.fromJsonString(WireValueSchema)),
+    payload: Schema.NullOr(WireValueSchema),
     createdAt: Schema.Date,
   }),
   Result: RowIdSchema,
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        insert into events (user_id, conversation_id, seq, message_id, kind, device_id, payload, created_at)
-        values (
-          ${row.userId}, ${row.conversationId}, ${row.seq}, ${row.messageId}, ${row.kind},
-          ${row.deviceId}, ${row.payload}::jsonb, ${row.createdAt}
-        )
-        returning id
-      `,
-    ),
+    db
+      .insert(events)
+      .values({
+        userId: row.userId,
+        conversationId: row.conversationId,
+        seq: row.seq,
+        messageId: row.messageId,
+        kind: row.kind,
+        deviceId: row.deviceId,
+        payload: row.payload,
+        createdAt: row.createdAt,
+      })
+      .returning({ id: events.id }),
 });
 
 function pendingToolPart(name: string, callId: string, input: UnparsedWireValue): ToolPart {
@@ -1549,15 +1589,17 @@ const stampTurnCancel = SqlSchema.findAll({
   }),
   Result: Schema.Struct({ id: Schema.String }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update turns
-        set cancel_requested_at = ${row.at}
-        where id = ${row.turnId} and conversation_id = ${row.conversationId}
-          and cancel_requested_at is null
-        returning id
-      `,
-    ),
+    db
+      .update(turns)
+      .set({ cancelRequestedAt: row.at })
+      .where(
+        and(
+          eq(turns.id, row.turnId),
+          eq(turns.conversationId, row.conversationId),
+          isNull(turns.cancelRequestedAt),
+        ),
+      )
+      .returning({ id: turns.id }),
 });
 
 /**
@@ -1779,18 +1821,13 @@ function askTurnOf(key: {
 
 const findAskTurn = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, clientId: Schema.String }),
-  Result: Schema.Struct({
-    turnId: Schema.NullOr(Schema.String),
-  }).pipe(Schema.encodeKeys({ turnId: "turn_id" })),
+  Result: Schema.Struct({ turnId: Schema.NullOr(Schema.String) }),
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select asks.turn_id
-        from asks
-        join turns on turns.id = asks.turn_id
-        where asks.conversation_id = ${key.conversationId} and asks.client_id = ${key.clientId}
-      `,
-    ),
+    db
+      .select({ turnId: asks.turnId })
+      .from(asks)
+      .innerJoin(turns, eq(turns.id, asks.turnId))
+      .where(and(eq(asks.conversationId, key.conversationId), eq(asks.clientId, key.clientId))),
 });
 
 /**
@@ -1804,30 +1841,33 @@ const findUnattachedAskRows = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String }),
   Result: Schema.Struct({ id: Schema.String, role: MessageRoleSchema }),
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select messages.id, messages.role
-        from messages
-        join asks
-          on asks.conversation_id = messages.conversation_id
-         and asks.client_id in (messages.client_id, messages.metadata ->> 'delegation_id')
-        where asks.conversation_id = ${key.conversationId}
-          and asks.turn_id = ${key.turnId}::uuid
-          and messages.turn_id is null
-          and messages.metadata ->> 'read_from' is null
-        order by messages.seq asc
-      `,
-    ),
+    db
+      .select({ id: messages.id, role: messages.role })
+      .from(messages)
+      .innerJoin(
+        asks,
+        and(
+          eq(asks.conversationId, messages.conversationId),
+          // The ask names the row either way, so the join is one `in` over a
+          // list of two expressions, which the builder has no operator for.
+          sql`${asks.clientId} in (${messages.clientId}, ${SPOKEN_DELEGATION_ID})`,
+        ),
+      )
+      .where(
+        and(
+          eq(asks.conversationId, key.conversationId),
+          eq(asks.turnId, key.turnId),
+          isNull(messages.turnId),
+          sql`${SPOKEN_READ_FROM} is null`,
+        ),
+      )
+      .orderBy(asc(messages.seq)),
 });
 
 const placeMessageInTurn = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, turnId: Schema.String, seq: Schema.Int }),
   execute: (row) =>
-    statement(
-      (sql) => sql`
-        update messages set turn_id = ${row.turnId}::uuid, seq = ${row.seq} where id = ${row.id}
-      `,
-    ),
+    db.update(messages).set({ turnId: row.turnId, seq: row.seq }).where(eq(messages.id, row.id)),
 });
 
 /** The turn's own rows — its journal, its answer, a compaction — standing ahead of a place, in sequence. */
@@ -1835,43 +1875,44 @@ const findTurnWorkBefore = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String, turnId: Schema.String, seq: Schema.Int }),
   Result: RowIdSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id
-        from messages
-        where conversation_id = ${key.conversationId}
-          and turn_id = ${key.turnId}::uuid
-          and role <> ${MESSAGE_ROLE.USER}
-          and seq < ${key.seq}
-        order by seq asc
-      `,
-    ),
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, key.conversationId),
+          eq(messages.turnId, key.turnId),
+          ne(messages.role, MESSAGE_ROLE.USER),
+          lt(messages.seq, key.seq),
+        ),
+      )
+      .orderBy(asc(messages.seq)),
 });
+
+/** A row of the conversation and the rows standing past it: one table under the two names the join reads it by. */
+const placed = alias(messages, "placed");
+const later = alias(messages, "later");
 
 /** The first row of the conversation standing past one row's position, where any does. */
 const findMessageFollowing = SqlSchema.findOneOption({
   Request: Schema.Struct({ conversationId: Schema.String, id: Schema.String }),
   Result: RowIdSchema,
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select later.id
-        from messages placed
-        join messages later
-          on later.conversation_id = placed.conversation_id
-         and later.seq > placed.seq
-        where placed.conversation_id = ${key.conversationId}
-          and placed.id = ${key.id}
-        order by later.seq asc
-        limit 1
-      `,
-    ),
+    db
+      .select({ id: later.id })
+      .from(placed)
+      .innerJoin(
+        later,
+        and(eq(later.conversationId, placed.conversationId), gt(later.seq, placed.seq)),
+      )
+      .where(and(eq(placed.conversationId, key.conversationId), eq(placed.id, key.id)))
+      .orderBy(asc(later.seq))
+      .limit(1),
 });
 
 const moveMessage = SqlSchema.void({
   Request: Schema.Struct({ id: Schema.String, seq: Schema.Int }),
-  execute: (row) =>
-    statement((sql) => sql`update messages set seq = ${row.seq} where id = ${row.id}`),
+  execute: (row) => db.update(messages).set({ seq: row.seq }).where(eq(messages.id, row.id)),
 });
 
 /**
@@ -1958,24 +1999,30 @@ const findSpokenRowsToAttach = SqlSchema.findAll({
     delegationId: Schema.NullOr(Schema.String),
     parts: StoredPartsColumnSchema,
     metadata: Schema.NullOr(MessageMetadataColumnSchema),
-  }).pipe(
-    Schema.encodeKeys({ clientId: "client_id", turnId: "turn_id", delegationId: "delegation_id" }),
-  ),
+  }),
   execute: (key) =>
-    statement(
-      (sql) => sql`
-        select id, client_id, turn_id, metadata ->> 'delegation_id' as delegation_id, parts, metadata
-        from messages
-        where conversation_id = ${key.conversationId}
-          and role = ${MESSAGE_ROLE.USER}
-          and ${sql.in("client_id", key.clientIds)}
-          and (
-            metadata ->> 'delegation_id' is null
-            or metadata ->> 'delegation_id' = ${key.delegationId}
-          )
-        order by seq asc
-      `,
-    ),
+    db
+      .select({
+        id: messages.id,
+        clientId: messages.clientId,
+        turnId: messages.turnId,
+        delegationId: SPOKEN_DELEGATION_ID,
+        parts: messages.parts,
+        metadata: messages.metadata,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, key.conversationId),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          inArray(messages.clientId, [...key.clientIds]),
+          or(
+            sql`${SPOKEN_DELEGATION_ID} is null`,
+            sql`${SPOKEN_DELEGATION_ID} = ${key.delegationId}`,
+          ),
+        ),
+      )
+      .orderBy(asc(messages.seq)),
 });
 
 const attachSpokenAsk = /* @__PURE__ */ Effect.fn("attachSpokenAsk")(function* (
@@ -2090,8 +2137,8 @@ export function storeWriter({
     target: ConversationTarget,
     write: (context: WriterContext) => Write<Result>,
   ): Write<Result | typeof NO_CONVERSATION> {
-    return Effect.flatMap(SqlClient.SqlClient, (sql) =>
-      sql.withTransaction(
+    return Effect.flatMap(SqlClient.SqlClient, (client) =>
+      client.withTransaction(
         Effect.flatMap(
           lockConversation(target),
           (locked): Write<Result | typeof NO_CONVERSATION> =>

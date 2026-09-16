@@ -208,6 +208,30 @@ test("messages read back in sequence after the cursor, typed by role, with the r
   );
 });
 
+/**
+ * The window a read may be cut to, asked without a revision cursor: the one
+ * pairing of the message read's two optional halves the route reaches only on
+ * an observed conversation's first page, and the one a page of its own covers
+ * here so neither half stands untested beside the other.
+ */
+test("a messages read cut to a window answers the rows written at or after it, in sequence", async () => {
+  const userId = await database.createUser();
+  const main = await insertConversation(userId);
+  const before = new Date("2026-09-01T00:00:00.000Z");
+  const within = new Date("2026-09-20T00:00:00.000Z");
+  await insertMessage(userId, main, 1, { createdAt: before });
+  await insertMessage(userId, main, 2, { createdAt: within });
+  await insertMessage(userId, main, 3, { createdAt: within });
+
+  const windowed = readRecords(
+    await database.run(database.store.messages.list(userId, main, TOOLS, { since: within })),
+  );
+  assert.deepEqual(
+    windowed.map((record) => record.seq),
+    [2, 3],
+  );
+});
+
 test("events read back in sequence after the cursor, and turns in the order they last changed", async () => {
   const userId = await database.createUser();
   const { main, turn, ids } = await populateMain(userId);

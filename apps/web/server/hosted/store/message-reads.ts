@@ -1,13 +1,26 @@
 import { readEither } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  type SQL,
+  sql,
+} from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
-import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { Fragment } from "effect/unstable/sql/Statement";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_ROLE,
-  type MessageRole,
   RATING_EVENT_PAYLOAD,
   type RatingEventPayload,
   readStoredUIMessages,
@@ -16,12 +29,12 @@ import {
   type SchemaRefusal,
   type StoredUIMessage,
   TURN_STATUS,
-  type TurnOrigin,
-  type TurnStatus,
   UNREGISTERED_TOOL_PART,
   unparsedWire,
   type WireBoundaryInput,
 } from "../../core.js";
+import { db } from "../../db/query.js";
+import { conversations, events, messages, turns } from "../../db/storage-schema.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
 
 /**
@@ -48,20 +61,36 @@ import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./d
  * row silently reshaped.
  *
  * Every read below is an `Effect<A, SqlError | SchemaError, SqlClient>` over
- * the ambient client, its statement the client's own tagged template and its
- * row a `Schema` decodes rather than trusts; the standing-conversation join
- * and the turn's changed-at expression are the two fragments every query
- * needing them embeds through `sql.literal`, since neither takes a bound
- * parameter. The one thing still a `Promise` here is `readStoredUIMessages`
- * itself, an unrelated vocabulary reader a selected page is handed to.
+ * the ambient client, its statement a Drizzle builder over the tables
+ * `db/storage-schema.ts` declares and its row a `Schema` decodes rather than
+ * trusts. Two things follow from the builder. A projection names its own
+ * fields, so a result schema is spelled in the same words the rest of the
+ * module is; and the vocabulary a text column is declared to hold — a turn's
+ * origin and status, an event's kind, a message's role — is the schema
+ * module's `$type<>()` rather than a cast at the row, which is what the four
+ * `as` casts here used to stand in for. What the builder cannot spell is a
+ * named `sql` fragment inside the one rendered statement: the instant a turn
+ * last changed, its text form, the jsonb key test behind `compaction`, and
+ * the revision-first ordering of a messages page. The one thing still a
+ * `Promise` here is `readStoredUIMessages` itself, an unrelated vocabulary
+ * reader a selected page is handed to.
  */
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
 type MessageReadFailure = SqlError | Schema.SchemaError;
 
-/** A statement over the ambient client, so the query below reads as the query it is. */
-const statement = <A, E>(build: (sql: SqlClient.SqlClient) => Effect.Effect<A, E>) =>
-  Effect.flatMap(SqlClient.SqlClient, build);
+/**
+ * A text column whose vocabulary a schema module declares with `$type<>()`,
+ * read back as the union the column is declared to hold. The declaration is
+ * where the trust sits, which is where Drizzle's own `$type<>()` put it; a
+ * read below therefore holds a row's field to being text and to no more,
+ * exactly as it did when it cast one, and names the union in one place
+ * instead of at every row.
+ */
+const readsText = Schema.is(Schema.String);
+
+const declaredTextColumn = <Vocabulary extends string>(): Schema.Codec<Vocabulary> =>
+  Schema.declare((input): input is Vocabulary => readsText(input));
 
 /** The most rows one read answers; a device with more to take asks again from the last sequence it took. */
 const MAXIMUM_READ_PAGE = 200;
@@ -162,7 +191,44 @@ function pageLimit(cursor: { readonly limit?: number }): number {
   return Math.min(Math.max(cursor.limit ?? MAXIMUM_READ_PAGE, 1), MAXIMUM_READ_PAGE);
 }
 
-/** The row every message read selects, snake_case as `messages` holds it. */
+/**
+ * The join every read here makes to its conversation row, one per table
+ * reached: the conversation the row belongs to, stamped by no Clear, so a
+ * cleared conversation is read by nothing. It is spelled once per table
+ * rather than once over a column handed in, because the column the join
+ * holds to is what makes each one the join it is.
+ */
+const MESSAGE_CONVERSATION_STANDS = and(
+  eq(conversations.id, messages.conversationId),
+  isNull(conversations.deletedAt),
+);
+
+const EVENT_CONVERSATION_STANDS = and(
+  eq(conversations.id, events.conversationId),
+  isNull(conversations.deletedAt),
+);
+
+const TURN_CONVERSATION_STANDS = and(
+  eq(conversations.id, turns.conversationId),
+  isNull(conversations.deletedAt),
+);
+
+/** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
+const MESSAGE_FIELDS = {
+  id: messages.id,
+  seq: messages.seq,
+  turnId: messages.turnId,
+  clientId: messages.clientId,
+  role: messages.role,
+  parts: messages.parts,
+  metadata: messages.metadata,
+  createdAt: messages.createdAt,
+  placedAt: messages.placedAt,
+  finishedAt: messages.finishedAt,
+  revision: messages.revision,
+};
+
+/** The row every message read selects, in the fields the projection above names. */
 const SelectedMessageRowSchema = Schema.Struct({
   id: Schema.String,
   seq: EpochMillisColumnSchema,
@@ -175,29 +241,9 @@ const SelectedMessageRowSchema = Schema.Struct({
   placedAt: InstantColumnSchema,
   finishedAt: Schema.NullOr(InstantColumnSchema),
   revision: Schema.NullOr(EpochMillisColumnSchema),
-}).pipe(
-  Schema.encodeKeys({
-    turnId: "turn_id",
-    clientId: "client_id",
-    createdAt: "created_at",
-    placedAt: "placed_at",
-    finishedAt: "finished_at",
-  }),
-);
+});
 
 type SelectedMessage = typeof SelectedMessageRowSchema.Type;
-
-/** The columns a message read selects, held to the vocabulary by nothing until `readSelected` below. */
-const MESSAGE_COLUMNS =
-  "messages.id, messages.seq, messages.turn_id, messages.client_id, messages.role, " +
-  "messages.parts, messages.metadata, messages.created_at, messages.placed_at, messages.finished_at, " +
-  "messages.revision";
-
-/** The join every read here makes to its conversation row: a Clear-stamped conversation is read by nothing. */
-const standingJoin = (sql: SqlClient.SqlClient, conversationColumn: string) =>
-  sql.literal(
-    `inner join conversations on conversations.id = ${conversationColumn} and conversations.deleted_at is null`,
-  );
 
 /** Selected rows read back through the vocabulary, in the order given, or the page refused at its first unreadable row. */
 async function readSelected(
@@ -236,40 +282,44 @@ async function readSelected(
   };
 }
 
+/**
+ * The rows written in place stand at or before `after` and come first, in
+ * the order they were written; the rows past `after` follow in sequence.
+ * Either run is a prefix a cut page can name the end of. There is no builder
+ * spelling for ordering by a predicate or a `case`, so both keys are
+ * fragments over the builder's own comparison.
+ */
+const revisionFirstOrder = (after: number): readonly SQL[] => {
+  const past = gt(messages.seq, after);
+  return [
+    asc(sql`(${past})`),
+    asc(sql`case when ${past} then ${messages.seq} else ${messages.revision} end`),
+  ];
+};
+
 const selectMessages = (options: {
   readonly conversationId: string;
   readonly userId: string;
   readonly cursor: MessageCursor;
-}) =>
-  statement((sql) => {
-    const after = options.cursor.after ?? 0;
-    const { revisionAfter } = options.cursor;
-    const conditions = [
-      sql`messages.conversation_id = ${options.conversationId}`,
-      sql`messages.user_id = ${options.userId}`,
-      revisionAfter === undefined
-        ? sql`messages.seq > ${after}`
-        : sql.or([sql`messages.seq > ${after}`, sql`messages.revision > ${revisionAfter}`]),
-    ];
-    if (options.cursor.since !== undefined) {
-      conditions.push(sql`messages.created_at >= ${options.cursor.since}`);
-    }
-    // The rows written in place stand at or before `after` and come first, in
-    // the order they were written; the rows past `after` follow in sequence.
-    // Either run is a prefix a cut page can name the end of.
-    const order =
-      revisionAfter === undefined
-        ? sql`messages.seq asc`
-        : sql`(messages.seq > ${after}) asc, case when messages.seq > ${after} then messages.seq else messages.revision end asc`;
-    return sql`
-      select ${sql.literal(MESSAGE_COLUMNS)}
-      from messages
-      ${standingJoin(sql, "messages.conversation_id")}
-      where ${sql.and(conditions)}
-      order by ${order}
-      limit ${pageLimit(options.cursor)}
-    `;
-  });
+}) => {
+  const after = options.cursor.after ?? 0;
+  const { revisionAfter, since } = options.cursor;
+  const conditions = [
+    eq(messages.conversationId, options.conversationId),
+    eq(messages.userId, options.userId),
+    revisionAfter === undefined
+      ? gt(messages.seq, after)
+      : or(gt(messages.seq, after), gt(messages.revision, revisionAfter)),
+  ];
+  if (since !== undefined) conditions.push(gte(messages.createdAt, since));
+  return db
+    .select(MESSAGE_FIELDS)
+    .from(messages)
+    .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+    .where(and(...conditions))
+    .orderBy(...(revisionAfter === undefined ? [asc(messages.seq)] : revisionFirstOrder(after)))
+    .limit(pageLimit(options.cursor));
+};
 
 const findSelectedMessages = SqlSchema.findAll({
   Request: Schema.Struct({
@@ -292,25 +342,6 @@ export function listMessages(
   );
 }
 
-const selectRecentMessages = (options: {
-  readonly conversationId: string;
-  readonly userId: string;
-  readonly limit: number;
-}) =>
-  statement(
-    (sql) => sql`
-      select ${sql.literal(MESSAGE_COLUMNS)}
-      from messages
-      ${standingJoin(sql, "messages.conversation_id")}
-      where messages.conversation_id = ${options.conversationId}
-        and messages.user_id = ${options.userId}
-        and messages.finished_at is not null
-        and messages.role in ${sql.in([MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT])}
-      order by messages.seq desc
-      limit ${options.limit}
-    `,
-  );
-
 const findRecentMessages = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
@@ -318,7 +349,21 @@ const findRecentMessages = SqlSchema.findAll({
     limit: Schema.Number,
   }),
   Result: SelectedMessageRowSchema,
-  execute: selectRecentMessages,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          isNotNull(messages.finishedAt),
+          inArray(messages.role, [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT]),
+        ),
+      )
+      .orderBy(desc(messages.seq))
+      .limit(options.limit),
 });
 
 /**
@@ -348,16 +393,17 @@ const findMessageByClientIdRow = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select ${sql.literal(MESSAGE_COLUMNS)}
-        from messages
-        ${standingJoin(sql, "messages.conversation_id")}
-        where messages.conversation_id = ${options.conversationId}
-          and messages.user_id = ${options.userId}
-          and messages.client_id = ${options.clientId}
-      `,
-    ),
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          eq(messages.clientId, options.clientId),
+        ),
+      ),
 });
 
 /**
@@ -385,16 +431,17 @@ const findMessageByIdRow = SqlSchema.findAll({
   }),
   Result: SelectedMessageRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select ${sql.literal(MESSAGE_COLUMNS)}
-        from messages
-        ${standingJoin(sql, "messages.conversation_id")}
-        where messages.conversation_id = ${options.conversationId}
-          and messages.user_id = ${options.userId}
-          and messages.id = ${options.messageId}
-      `,
-    ),
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          eq(messages.id, options.messageId),
+        ),
+      ),
 });
 
 /**
@@ -423,16 +470,17 @@ const findMessageIdByClientId = SqlSchema.findOneOption({
   }),
   Result: FoundMessageIdSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select messages.id as id
-        from messages
-        ${standingJoin(sql, "messages.conversation_id")}
-        where messages.conversation_id = ${options.conversationId}
-          and messages.user_id = ${options.userId}
-          and messages.client_id = ${options.clientId}
-      `,
-    ),
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          eq(messages.clientId, options.clientId),
+        ),
+      ),
 });
 
 /** The row a writer's own client id names in a conversation, by its id alone; nothing where none stands. */
@@ -462,18 +510,11 @@ const EventRowSchema = Schema.Struct({
   conversationId: Schema.String,
   seq: EpochMillisColumnSchema,
   messageId: Schema.String,
-  kind: Schema.String,
+  kind: declaredTextColumn<(typeof events.$inferSelect)["kind"]>(),
   deviceId: Schema.NullOr(Schema.String),
   payload: Schema.NullOr(Schema.Any),
   createdAt: InstantColumnSchema,
-}).pipe(
-  Schema.encodeKeys({
-    conversationId: "conversation_id",
-    messageId: "message_id",
-    deviceId: "device_id",
-    createdAt: "created_at",
-  }),
-);
+});
 
 type EventRow = typeof EventRowSchema.Type;
 
@@ -482,18 +523,25 @@ function toStoredEvent(row: EventRow): StoredEventRecord {
     id: row.id,
     conversationId: row.conversationId,
     seq: row.seq,
+    kind: row.kind,
     messageId: row.messageId,
-    // SAFETY: the column is plain text; trusted the way Drizzle's `$type<>()` was, and no more validated here.
-    kind: row.kind as StoredEventRecord["kind"],
     ...optionalField("deviceId", row.deviceId),
     ...optionalField("payload", row.payload),
     createdAt: row.createdAt,
   };
 }
 
-const EVENT_COLUMNS =
-  "events.id, events.conversation_id, events.seq, events.message_id, events.kind, " +
-  "events.device_id, events.payload, events.created_at";
+/** The columns an event read selects, in the fields `EventRowSchema` names. */
+const EVENT_FIELDS = {
+  id: events.id,
+  conversationId: events.conversationId,
+  seq: events.seq,
+  messageId: events.messageId,
+  kind: events.kind,
+  deviceId: events.deviceId,
+  payload: events.payload,
+  createdAt: events.createdAt,
+};
 
 /**
  * The events about the given messages, wherever their conversations number
@@ -504,16 +552,14 @@ const findEventsForMessages = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, messageIds: Schema.Array(Schema.String) }),
   Result: EventRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select ${sql.literal(EVENT_COLUMNS)}
-        from events
-        ${standingJoin(sql, "events.conversation_id")}
-        where events.user_id = ${options.userId}
-          and events.message_id in ${sql.in(options.messageIds)}
-        order by events.conversation_id asc, events.seq asc
-      `,
-    ),
+    db
+      .select(EVENT_FIELDS)
+      .from(events)
+      .innerJoin(conversations, EVENT_CONVERSATION_STANDS)
+      .where(
+        and(eq(events.userId, options.userId), inArray(events.messageId, [...options.messageIds])),
+      )
+      .orderBy(asc(events.conversationId), asc(events.seq)),
 });
 
 export function eventsForMessages(
@@ -535,18 +581,19 @@ const findEvents = SqlSchema.findAll({
   }),
   Result: EventRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select ${sql.literal(EVENT_COLUMNS)}
-        from events
-        ${standingJoin(sql, "events.conversation_id")}
-        where events.conversation_id = ${options.conversationId}
-          and events.user_id = ${options.userId}
-          and events.seq > ${options.after}
-        order by events.seq asc
-        limit ${options.limit}
-      `,
-    ),
+    db
+      .select(EVENT_FIELDS)
+      .from(events)
+      .innerJoin(conversations, EVENT_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(events.conversationId, options.conversationId),
+          eq(events.userId, options.userId),
+          gt(events.seq, options.after),
+        ),
+      )
+      .orderBy(asc(events.seq))
+      .limit(options.limit),
 });
 
 export function listEvents(
@@ -585,32 +632,50 @@ export interface TurnCursor {
 }
 
 /** A turn row is mutable, so its order is the latest instant any of its stamps was set. */
-const TURN_CHANGED_AT_SQL =
-  "greatest(turns.queued_at, coalesce(turns.started_at, turns.queued_at), " +
-  "coalesce(turns.settled_at, turns.queued_at), coalesce(turns.cancel_requested_at, turns.queued_at))";
-
-const turnChangedAt = (sql: SqlClient.SqlClient) => sql.literal(TURN_CHANGED_AT_SQL);
+const TURN_CHANGED_AT = sql`
+  greatest(
+    ${turns.queuedAt},
+    coalesce(${turns.startedAt}, ${turns.queuedAt}),
+    coalesce(${turns.settledAt}, ${turns.queuedAt}),
+    coalesce(${turns.cancelRequestedAt}, ${turns.queuedAt})
+  )
+`;
 
 // The cursor's instant travels as text (a millisecond number cannot tell two
 // stamps in one millisecond apart), and `timestamptz::text` renders in the
 // session's TimeZone, so the same instant would read as two strings on two
 // connections. Rendering the UTC wall clock and spelling the zone ourselves
 // makes the text a property of the query rather than of the connection.
-const TURN_CHANGED_AT_TEXT_SQL = `((${TURN_CHANGED_AT_SQL}) at time zone 'UTC')::text || '+00'`;
-const turnChangedAtText = (sql: SqlClient.SqlClient) => sql.literal(TURN_CHANGED_AT_TEXT_SQL);
+const TURN_CHANGED_AT_TEXT = sql<string>`((${TURN_CHANGED_AT}) at time zone 'UTC')::text || '+00'`;
 
-const TURN_COLUMNS =
-  "turns.id, turns.user_id, turns.conversation_id, turns.origin, turns.status, turns.model, " +
-  "turns.reasoning_effort, turns.prompt_hash, turns.tool_set_hash, turns.response_ids, " +
-  "turns.usage, turns.queued_at, turns.started_at, turns.settled_at, turns.failure, " +
-  "turns.cancel_requested_at, turns.eve_turn_id";
+/** The columns a turn read selects, in the fields `TurnRowSchema` names. */
+const TURN_FIELDS = {
+  id: turns.id,
+  userId: turns.userId,
+  conversationId: turns.conversationId,
+  origin: turns.origin,
+  status: turns.status,
+  eveTurnId: turns.eveTurnId,
+  model: turns.model,
+  reasoningEffort: turns.reasoningEffort,
+  promptHash: turns.promptHash,
+  toolSetHash: turns.toolSetHash,
+  responseIds: turns.responseIds,
+  usage: turns.usage,
+  queuedAt: turns.queuedAt,
+  startedAt: turns.startedAt,
+  settledAt: turns.settledAt,
+  failure: turns.failure,
+  cancelRequestedAt: turns.cancelRequestedAt,
+  changedAt: TURN_CHANGED_AT_TEXT,
+};
 
 const TurnRowSchema = Schema.Struct({
   id: Schema.String,
   userId: Schema.String,
   conversationId: Schema.String,
-  origin: Schema.String,
-  status: Schema.String,
+  origin: declaredTextColumn<(typeof turns.$inferSelect)["origin"]>(),
+  status: declaredTextColumn<(typeof turns.$inferSelect)["status"]>(),
   /** eve's own id for the turn, `turn_<n>` within its session, where the relay queued the row at eve's start; the opener's inbox row and a row from before the column names none. */
   eveTurnId: Schema.NullOr(Schema.String),
   model: Schema.NullOr(Schema.String),
@@ -625,51 +690,37 @@ const TurnRowSchema = Schema.Struct({
   failure: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
   changedAt: Schema.String,
-}).pipe(
-  Schema.encodeKeys({
-    userId: "user_id",
-    conversationId: "conversation_id",
-    eveTurnId: "eve_turn_id",
-    reasoningEffort: "reasoning_effort",
-    promptHash: "prompt_hash",
-    toolSetHash: "tool_set_hash",
-    responseIds: "response_ids",
-    queuedAt: "queued_at",
-    startedAt: "started_at",
-    settledAt: "settled_at",
-    cancelRequestedAt: "cancel_requested_at",
-    changedAt: "changed_at",
-  }),
-);
+});
 
 type TurnRow = typeof TurnRowSchema.Type;
 
-export type StoredTurnRecord = Omit<TurnRow, "changedAt" | "origin" | "status"> & {
-  readonly origin: TurnOrigin;
-  readonly status: TurnStatus;
+export type StoredTurnRecord = Omit<TurnRow, "changedAt"> & {
   /** The row's place in the order of change, handed back as the next read's `after`. */
   readonly cursor: TurnCursorPosition;
 };
 
 function toStoredTurn({ changedAt, ...turn }: TurnRow): StoredTurnRecord {
-  return {
-    ...turn,
-    // SAFETY: the column is plain text; trusted the way Drizzle's `$type<>()` was, and no more validated here.
-    origin: turn.origin as TurnOrigin,
-    // SAFETY: the column is plain text; trusted the way Drizzle's `$type<>()` was, and no more validated here.
-    status: turn.status as TurnStatus,
-    cursor: { changedAt, id: turn.id },
-  };
+  return { ...turn, cursor: { changedAt, id: turn.id } };
 }
 
+const TurnRowsSchema = Schema.Array(TurnRowSchema);
+
 /** The rows past the position: changed later, or changed at the same instant with a greater id. */
-const changedAfterFragment = (sql: SqlClient.SqlClient, after: TurnCursorPosition) => {
-  const changedAt = turnChangedAt(sql);
-  return sql.or([
-    sql`${changedAt} > ${after.changedAt}::timestamptz`,
-    sql.and([sql`${changedAt} = ${after.changedAt}::timestamptz`, sql`turns.id > ${after.id}`]),
-  ]);
-};
+const changedAfter = (after: TurnCursorPosition) =>
+  or(
+    sql`${TURN_CHANGED_AT} > ${after.changedAt}::timestamptz`,
+    and(sql`${TURN_CHANGED_AT} = ${after.changedAt}::timestamptz`, gt(turns.id, after.id)),
+  );
+
+/** The rows at or before the position: changed earlier, or changed at the same instant with an id no greater. */
+const changedAtOrBefore = (position: TurnCursorPosition) =>
+  or(
+    sql`${TURN_CHANGED_AT} < ${position.changedAt}::timestamptz`,
+    and(
+      sql`${TURN_CHANGED_AT} = ${position.changedAt}::timestamptz`,
+      sql`${turns.id} <= ${position.id}`,
+    ),
+  );
 
 /**
  * A turn the record answers: one that has started, whatever it came to. A
@@ -678,30 +729,27 @@ const changedAfterFragment = (sql: SqlClient.SqlClient, after: TurnCursorPositio
  * nothing in it that then goes; it meets the turn once the relay has moved
  * it to running.
  */
-const startedTurn = (sql: SqlClient.SqlClient) => sql`turns.status <> ${TURN_STATUS.QUEUED}`;
+const STARTED_TURN = ne(turns.status, TURN_STATUS.QUEUED);
 
 /** The account's turns in the order they last changed, so a turn that settled since a device's last read is answered again with its new status; a page edge drops nothing, since the id breaks a tie. */
 export function listTurns(
   userId: string,
   cursor: TurnCursor = {},
 ): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
-  return statement((sql) => {
-    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
-    if (cursor.after !== undefined) conditions.push(changedAfterFragment(sql, cursor.after));
-    return sql`
-      select ${sql.literal(TURN_COLUMNS)}, ${turnChangedAtText(sql)} as changed_at
-      from turns
-      ${standingJoin(sql, "turns.conversation_id")}
-      where ${sql.and(conditions)}
-      order by ${turnChangedAt(sql)} asc, turns.id asc
-      limit ${pageLimit(cursor)}
-    `;
-  }).pipe(
-    Effect.flatMap((rows) =>
-      Schema.decodeUnknownEffect(Schema.Array(TurnRowSchema))(rows).pipe(
-        Effect.map((decoded) => decoded.map(toStoredTurn)),
+  const conditions: Array<SQL | undefined> = [eq(turns.userId, userId), STARTED_TURN];
+  if (cursor.after !== undefined) conditions.push(changedAfter(cursor.after));
+  return Effect.flatMap(
+    db
+      .select(TURN_FIELDS)
+      .from(turns)
+      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+      .where(and(...conditions))
+      .orderBy(asc(TURN_CHANGED_AT), asc(turns.id))
+      .limit(pageLimit(cursor)),
+    (rows) =>
+      Effect.map(Schema.decodeUnknownEffect(TurnRowsSchema)(rows), (decoded) =>
+        decoded.map(toStoredTurn),
       ),
-    ),
   );
 }
 
@@ -711,40 +759,21 @@ export function turnsNamed(
   turnIds: readonly string[],
 ): Effect.Effect<readonly StoredTurnRecord[], MessageReadFailure, SqlClient.SqlClient> {
   if (turnIds.length === 0) return Effect.succeed([]);
-  return statement(
-    (sql) => sql`
-      select ${sql.literal(TURN_COLUMNS)}, ${turnChangedAtText(sql)} as changed_at
-      from turns
-      ${standingJoin(sql, "turns.conversation_id")}
-      where turns.user_id = ${userId}
-        and turns.id in ${sql.in([...turnIds])}
-      order by ${turnChangedAt(sql)} asc, turns.id asc
-    `,
-  ).pipe(
-    Effect.flatMap((rows) =>
-      Schema.decodeUnknownEffect(Schema.Array(TurnRowSchema))(rows).pipe(
-        Effect.map((decoded) => decoded.map(toStoredTurn)),
+  return Effect.flatMap(
+    db
+      .select(TURN_FIELDS)
+      .from(turns)
+      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+      .where(and(eq(turns.userId, userId), inArray(turns.id, [...turnIds])))
+      .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
+    (rows) =>
+      Effect.map(Schema.decodeUnknownEffect(TurnRowsSchema)(rows), (decoded) =>
+        decoded.map(toStoredTurn),
       ),
-    ),
   );
 }
 
-/** The rows at or before the position: changed earlier, or changed at the same instant with an id no greater. */
-const changedAtOrBeforeFragment = (sql: SqlClient.SqlClient, position: TurnCursorPosition) => {
-  const changedAt = turnChangedAt(sql);
-  return sql.or([
-    sql`${changedAt} < ${position.changedAt}::timestamptz`,
-    sql.and([
-      sql`${changedAt} = ${position.changedAt}::timestamptz`,
-      sql`turns.id <= ${position.id}`,
-    ]),
-  ]);
-};
-
-const TurnPositionRowSchema = Schema.Struct({
-  id: Schema.String,
-  changedAt: Schema.String,
-}).pipe(Schema.encodeKeys({ changedAt: "changed_at" }));
+const TurnPositionRowSchema = Schema.Struct({ id: Schema.String, changedAt: Schema.String });
 
 /**
  * Where the account's turns stand: the cursor of the turn that changed last,
@@ -757,20 +786,21 @@ export function latestTurnPosition(
   userId: string,
   notAfter?: TurnCursorPosition,
 ): Effect.Effect<TurnCursorPosition | undefined, MessageReadFailure, SqlClient.SqlClient> {
-  return statement((sql) => {
-    const conditions: Fragment[] = [sql`turns.user_id = ${userId}`, startedTurn(sql)];
-    if (notAfter !== undefined) conditions.push(changedAtOrBeforeFragment(sql, notAfter));
-    return sql`
-      select turns.id as id, ${turnChangedAtText(sql)} as changed_at
-      from turns
-      ${standingJoin(sql, "turns.conversation_id")}
-      where ${sql.and(conditions)}
-      order by ${turnChangedAt(sql)} desc, turns.id desc
-      limit 1
-    `;
-  }).pipe(
-    Effect.flatMap((rows) => Schema.decodeUnknownEffect(Schema.Array(TurnPositionRowSchema))(rows)),
-    Effect.map((rows) => rows[0]),
+  const conditions: Array<SQL | undefined> = [eq(turns.userId, userId), STARTED_TURN];
+  if (notAfter !== undefined) conditions.push(changedAtOrBefore(notAfter));
+  return Effect.flatMap(
+    db
+      .select({ id: turns.id, changedAt: TURN_CHANGED_AT_TEXT })
+      .from(turns)
+      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+      .where(and(...conditions))
+      .orderBy(desc(TURN_CHANGED_AT), desc(turns.id))
+      .limit(1),
+    (rows) =>
+      Effect.map(
+        Schema.decodeUnknownEffect(Schema.Array(TurnPositionRowSchema))(rows),
+        (decoded) => decoded[0],
+      ),
   );
 }
 
@@ -783,45 +813,39 @@ export function latestTurnPosition(
  */
 const AuthorshipRowSchema = Schema.Struct({
   conversationId: Schema.String,
-  role: Schema.String,
+  role: declaredTextColumn<(typeof messages.$inferSelect)["role"]>(),
   compaction: Schema.Boolean,
-}).pipe(Schema.encodeKeys({ conversationId: "conversation_id" }));
+});
+
+/** Whether the row's metadata holds the compaction key at all, which the builder has no operator for. */
+const IS_COMPACTION = sql<boolean>`${messages.metadata} ? 'compaction'`;
 
 const findAuthorship = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, messageId: Schema.String }),
   Result: AuthorshipRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select
-          messages.conversation_id as conversation_id,
-          messages.role as role,
-          messages.metadata ? 'compaction' as compaction
-        from messages
-        ${standingJoin(sql, "messages.conversation_id")}
-        where messages.id = ${options.messageId}
-          and messages.user_id = ${options.userId}
-      `,
-    ),
+    db
+      .select({
+        conversationId: messages.conversationId,
+        role: messages.role,
+        compaction: IS_COMPACTION,
+      })
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(and(eq(messages.id, options.messageId), eq(messages.userId, options.userId))),
 });
 
 export function messageAuthorship(
   userId: string,
   messageId: string,
 ): Effect.Effect<
-  { conversationId: string; role: MessageRole; compaction: boolean } | undefined,
+  | { conversationId: string; role: (typeof messages.$inferSelect)["role"]; compaction: boolean }
+  | undefined,
   MessageReadFailure,
   SqlClient.SqlClient
 > {
   return Effect.map(findAuthorship({ userId, messageId }), (found) =>
-    found._tag === "Some"
-      ? {
-          conversationId: found.value.conversationId,
-          // SAFETY: the column is plain text; trusted the way Drizzle's `$type<>()` was, and no more validated here.
-          role: found.value.role as MessageRole,
-          compaction: found.value.compaction,
-        }
-      : undefined,
+    found._tag === "Some" ? found.value : undefined,
   );
 }
 
@@ -839,25 +863,31 @@ const RatingRowSchema = Schema.Struct({
   deviceId: Schema.NullOr(Schema.String),
   payload: Schema.Any,
   createdAt: InstantColumnSchema,
-}).pipe(Schema.encodeKeys({ deviceId: "device_id", createdAt: "created_at" }));
+});
 
 const findLatestRating = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, messageId: Schema.String }),
   Result: RatingRowSchema,
   execute: (options) =>
-    statement(
-      (sql) => sql`
-        select events.id as id, events.seq as seq, events.device_id as device_id,
-          events.payload as payload, events.created_at as created_at
-        from events
-        ${standingJoin(sql, "events.conversation_id")}
-        where events.message_id = ${options.messageId}
-          and events.user_id = ${options.userId}
-          and events.kind = ${CONVERSATION_EVENT_KIND.RATING}
-        order by events.seq desc
-        limit 1
-      `,
-    ),
+    db
+      .select({
+        id: events.id,
+        seq: events.seq,
+        deviceId: events.deviceId,
+        payload: events.payload,
+        createdAt: events.createdAt,
+      })
+      .from(events)
+      .innerJoin(conversations, EVENT_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(events.messageId, options.messageId),
+          eq(events.userId, options.userId),
+          eq(events.kind, CONVERSATION_EVENT_KIND.RATING),
+        ),
+      )
+      .orderBy(desc(events.seq))
+      .limit(1),
 });
 
 /**
