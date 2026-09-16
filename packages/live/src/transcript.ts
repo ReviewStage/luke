@@ -7,10 +7,11 @@
  * grouping the guide says to keep revisable, which it is, since a late
  * fragment joins the utterance its timestamps place it in. The groups draw
  * the captions, compose a delegation's ask from the transcript since the
- * previous one, and become the Conversation's lines: each opens under an
- * opaque id the ledger mints, which is the row's for life on screen and on
- * record. The ledger is the one authority on where an utterance begins and
- * ends; nothing derives an id from text, time, or a fragment's position.
+ * previous one, and are the Conversation's lines: each opens under an opaque
+ * id the ledger mints, which is the row's for life, so a row on record grows
+ * as fragments arrive rather than being cut once. The ledger is the one
+ * authority on where an utterance begins and ends; nothing derives an id
+ * from text, time, or a fragment's position.
  */
 
 export const TRANSCRIPT_SPEAKER = {
@@ -39,14 +40,6 @@ const TRANSCRIPT_ROLE_LABEL = {
  * sentences and not one.
  */
 export const UTTERANCE_GAP_MS = 4_000;
-
-/**
- * After the gap that ends an utterance, the margin a late fragment is still
- * waited for before the utterance is written to the record, and before a
- * caption row stops being drawn as still spoken. One constant, so the host's
- * lines and the renderer's captions settle on the same clock.
- */
-export const UTTERANCE_SETTLE_MARGIN_MS = 800;
 
 /**
  * The pause in the developer's own fragments after which the words so far are

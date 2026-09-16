@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS, UTTERANCE_SETTLE_MARGIN_MS } from "@sidecar/live";
+import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS } from "@sidecar/live";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import { test } from "vitest";
 import { LiveCaptions } from "#renderer/voice/live-captions";
@@ -33,14 +33,14 @@ test("nothing said is not quiet, and a greeting still arriving is not quiet", ()
   assert.equal(lukeOutputQuiet(ledger.rows(), false), false);
   ledger.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, "Hi! I'm", 0, 600);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), false);
-  ledger.advance(UTTERANCE_GAP_MS);
+  ledger.advance(UTTERANCE_GAP_MS - 1);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), false);
 });
 
-test("quiet is the gap plus the margin after the last fragment, on the arrival clock", () => {
+test("quiet is the gap after the last fragment, on the arrival clock", () => {
   const ledger = ledgerRows();
   ledger.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, "Hi! I'm Luke.", 0, 900);
-  ledger.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS - 1);
+  ledger.advance(UTTERANCE_GAP_MS - 1);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), false);
   ledger.advance(1);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), true);
@@ -49,11 +49,11 @@ test("quiet is the gap plus the margin after the last fragment, on the arrival c
 test("a late fragment reopens the wait, and the remote track speaking holds it", () => {
   const ledger = ledgerRows();
   ledger.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, "These are", 0, 500);
-  ledger.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  ledger.advance(UTTERANCE_GAP_MS);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), true);
   ledger.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, " your agents.", 500, 1_100);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), false);
-  ledger.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS);
+  ledger.advance(UTTERANCE_GAP_MS);
   assert.equal(lukeOutputQuiet(ledger.rows(), true), false);
   assert.equal(lukeOutputQuiet(ledger.rows(), false), true);
 });

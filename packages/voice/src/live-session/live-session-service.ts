@@ -38,10 +38,8 @@ import {
   type TranscriptSpeaker,
   type TranscriptUtterance,
   thinkingAppend,
-  UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
-import { CONVERSATION_ENTRY_KIND, type ConversationEntry } from "@sidecar/session";
+import type { ConversationEntry } from "@sidecar/session";
 import {
   Clock,
   Deferred,
@@ -98,7 +96,7 @@ import {
  * of a step that only read arrive as they form, and nothing is said of the
  * ask's mere acceptance, which the delegation guide has the model answer from
  * the conversation rather than from a status report; it writes both speakers'
- * settled utterances into the record; and it closes gracefully on
+ * utterances into the record as rows that grow with their fragments; and it closes gracefully on
  * idle, on the peer's hang-up, and on the drain,
  * recording the usage the final event confirms. The peer owns the microphone
  * and the hang-up; the trusted side owns every append and the close
@@ -117,7 +115,7 @@ import {
  * fiber of the same scope. So the service runs nothing on a runtime of its
  * own, and closing the scope interrupts whatever it had begun. It keeps time on that scope's `Clock` and on no seam of its own:
  * every instant it records is that clock's, and every delay it arms — the
- * idle window, an utterance's settle, the read made ahead, the desk's
+ * idle window, a row's write behind its fragments, the read made ahead, the desk's
  * refresh, an exchange's finalize — is a sleep on a fiber of the same scope,
  * given up by settling what the arming handed back. The graceful close is not the scope's: `stop` is the composition's
  * to run, since how long a quit waits on the peer is its decision.
@@ -138,6 +136,17 @@ const SLOW_STEP_NOTE: ReadonlyMap<string, string> = new Map([
   ["provider_write", "Luke is carrying out the action; this takes a moment."],
 ]);
 const SLOW_STEP_GENERAL_NOTE = "Luke is running a longer step.";
+
+/**
+ * How long after a fragment lands its row's write is put off, so a burst of
+ * deltas is one write rather than one per syllable. Each fragment re-arms it,
+ * and silence arms nothing: a row whose write has landed owes the record
+ * nothing until its next fragment, because the guide forbids reading silence
+ * into a missing event. A delegation and the session's close flush it at
+ * once, so the words said so far are on record before the ask is composed and
+ * before the socket is gone.
+ */
+export const ROW_WRITE_DEBOUNCE_MS = 300;
 
 /**
  * How long a moving roster is let settle before the voice is told about it.
@@ -250,11 +259,8 @@ interface StandingSession {
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
-  /** Utterance rows the settle timer has nothing more to write: written undelegated already, or handed to a delegated write, which a record tells from the undelegated one by the row. */
-  readonly writtenRows: Set<string>;
-  /** When each utterance's first fragment arrived, on this host's clock: the instant its line is recorded at, so a Clear's cutoff refuses what was begun before it. */
-  readonly rowBeganAt: Map<string, number>;
-  readonly settleTimers: Map<TranscriptSpeaker, SessionDelay>;
+  /** The rows with a fragment not yet on record, each by the write put off behind it; a delegation or the close writes them at once. */
+  readonly pendingRows: Map<string, SessionDelay>;
   idleReported: boolean;
   idleTimer: SessionDelay | undefined;
   /** The lines about the desk this session was actually given, so the next refresh says only what it does not already hold. */
@@ -265,7 +271,12 @@ interface StandingSession {
   anticipated: { rowId: string; text: string } | undefined;
   /** The row whose read-ahead summary was already appended; one per utterance. */
   factsAppendedFor: string | undefined;
-  /** The rows already composed as a spoken ask: a late fragment on one anticipates nothing more, and a summary read ahead for one is not appended into the exchange it opened. */
+  /**
+   * The rows already composed as a spoken ask: a late fragment on one
+   * anticipates nothing more, a summary read ahead for one is not appended
+   * into the exchange it opened, and the row is grown here no further, since
+   * the ask's own write puts it on record under the delegation.
+   */
   readonly askedRows: Set<string>;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
@@ -319,7 +330,7 @@ interface Exchange {
 interface UtteranceWrite {
   session: StandingSession;
   utterance: TranscriptUtterance;
-  delegationId: LiveDelegationId;
+  delegationId: string;
   askContext?: { sinceMs: number; untilMs: number };
   runId?: string;
 }
@@ -909,9 +920,7 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         lastDelegationOffsetMs: 0,
         claimedDelegations: new Set(),
         retained: [],
-        writtenRows: new Set(),
-        rowBeganAt: new Map(),
-        settleTimers: new Map(),
+        pendingRows: new Map(),
         idleReported: false,
         idleTimer: undefined,
         rosterTold: undefined,
@@ -1051,20 +1060,54 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   ): void {
     const utterance = session.ledger.append({ speaker, text: delta, startMs, endMs });
     if (!utterance) return;
-    if (!session.rowBeganAt.has(utterance.rowId)) {
-      session.rowBeganAt.set(utterance.rowId, this.#now());
-    }
-    this.#cancelDelay(session.settleTimers.get(speaker));
-    session.settleTimers.set(
-      speaker,
-      this.#after(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS, () => {
-        session.settleTimers.delete(speaker);
-        this.#start(this.#writeSettled(session, speaker));
+    if (session.askedRows.has(utterance.rowId)) return;
+    this.#cancelDelay(session.pendingRows.get(utterance.rowId));
+    session.pendingRows.set(
+      utterance.rowId,
+      this.#after(ROW_WRITE_DEBOUNCE_MS, () => {
+        session.pendingRows.delete(utterance.rowId);
+        if (!session.askedRows.has(utterance.rowId)) {
+          this.#start(this.#upsertRow(session, utterance.rowId));
+        }
       }),
     );
-    if (speaker === TRANSCRIPT_SPEAKER.USER && !session.askedRows.has(utterance.rowId)) {
-      this.#armAnticipation(session);
+    if (speaker === TRANSCRIPT_SPEAKER.USER) this.#armAnticipation(session);
+  }
+
+  /**
+   * Every row with a write still put off is written now, as the ledger holds
+   * it when the write runs, and nothing waits for the writes: the delegation
+   * that flushes them is composed on the next task, so its own write reaches
+   * the record behind these.
+   */
+  #flushRows(session: StandingSession): void {
+    for (const [rowId, delay] of session.pendingRows) {
+      this.#cancelDelay(delay);
+      if (!session.askedRows.has(rowId)) this.#start(this.#upsertRow(session, rowId));
     }
+    session.pendingRows.clear();
+  }
+
+  /** Writes or grows one row as the ledger holds it at the write: the record reads the words from its own segments over the span. */
+  #upsertRow(session: StandingSession, rowId: string): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const row = session.ledger.row(rowId);
+      if (row === undefined) return Effect.void;
+      return Effect.flatMap(
+        this.#record.upsertSpokenRow({
+          rowId,
+          speaker: row.speaker,
+          voiceSessionId: session.sessionId,
+          startMs: row.startMs,
+          endMs: row.endMs,
+        }),
+        (written) => (written ? Effect.void : Effect.sync(() => this.#reportUnwritten())),
+      );
+    });
+  }
+
+  #reportUnwritten(): void {
+    this.#options.report("A live utterance could not be written to the record");
   }
 
   /**
@@ -1156,44 +1199,21 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     );
   }
 
-  /** Writes every utterance of one speaker not yet on record: no fragment has joined it inside the gap plus the margin. */
-  #writeSettled(session: StandingSession, speaker: TranscriptSpeaker): Effect.Effect<void> {
-    return Effect.gen({ self: this }, function* () {
-      for (const utterance of session.ledger.utterances(speaker)) {
-        if (session.writtenRows.has(utterance.rowId)) continue;
-        session.writtenRows.add(utterance.rowId);
-        yield* this.#write({ session, utterance, delegationId: null });
-      }
-    });
-  }
-
+  /** The developer's utterance under the delegation it fed. */
   #write(write: UtteranceWrite): Effect.Effect<boolean> {
     return Effect.gen({ self: this }, function* () {
       const { session, utterance } = write;
-      const recordedAt = session.rowBeganAt.get(utterance.rowId) ?? this.#now();
-      const written =
-        utterance.speaker === TRANSCRIPT_SPEAKER.USER
-          ? yield* this.#record.writeDeveloperUtterance({
-              rowId: utterance.rowId,
-              text: utterance.text,
-              voiceSessionId: session.sessionId,
-              delegationId: write.delegationId,
-              askContext: write.askContext,
-              startMs: utterance.startMs,
-              endMs: utterance.endMs,
-              ...(write.runId !== undefined ? { runId: write.runId } : undefined),
-              recordedAt,
-            })
-          : yield* this.#record.writeLukeUtterance({
-              rowId: utterance.rowId,
-              role: CONVERSATION_ENTRY_KIND.REPLY,
-              text: utterance.text,
-              voiceSessionId: session.sessionId,
-              startMs: utterance.startMs,
-              endMs: utterance.endMs,
-              recordedAt,
-            });
-      if (!written) this.#options.report("A live utterance could not be written to the record");
+      const written = yield* this.#record.writeDeveloperUtterance({
+        rowId: utterance.rowId,
+        text: utterance.text,
+        voiceSessionId: session.sessionId,
+        delegationId: write.delegationId,
+        askContext: write.askContext,
+        startMs: utterance.startMs,
+        endMs: utterance.endMs,
+        ...(write.runId !== undefined ? { runId: write.runId } : undefined),
+      });
+      if (!written) this.#reportUnwritten();
       return written;
     });
   }
@@ -1206,6 +1226,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
   #delegation(session: StandingSession, id: string, offsetMs: number): void {
     if (session.claimedDelegations.has(id)) return;
     session.claimedDelegations.add(id);
+    // The words said so far are on record before the ask is composed on them.
+    this.#flushRows(session);
     if (!session.ledger.askContext(session.lastDelegationOffsetMs).ask) {
       session.retained.push({ id, offsetMs });
       this.#trace(LIVE_TRACE_DECISION.RETAINED);
@@ -1221,7 +1243,12 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
     // older ones asked about the same span and are answered by the same ask.
     const newest = session.retained[session.retained.length - 1];
     session.retained = [];
-    if (newest) this.#start(this.#compose(session, newest.id, newest.offsetMs));
+    if (!newest) return;
+    // The fragment that let the delegation compose was the first on its row, and its
+    // write is still put off: the row goes on record under the ledger's id ahead of
+    // the ask's write, as it does when the delegation follows the words.
+    this.#flushRows(session);
+    this.#start(this.#compose(session, newest.id, newest.offsetMs));
   }
 
   /**
@@ -1256,17 +1283,15 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
         submissionId: delegationId,
         question,
       });
-      // The delegated write runs whether or not the settle timer wrote the
-      // utterance undelegated already: an ask is on record only under its
-      // delegation, and a record that took the utterance before tells the two
-      // writes apart by the row. The settle timer, for its part, writes the row
-      // no more. What is written is the row as the ledger holds it now, not as
-      // it stood when the delegation arrived: the API delivers a delegation
-      // ahead of the transcript deltas it is about, so the ask's last fragment
-      // may land while the brain is being asked, and a row written from the
-      // span claimed then would leave that word off the record for good, since
-      // this row is written once.
-      session.writtenRows.add(ask.rowId);
+      // The delegated write runs whether or not the row's own write put the
+      // utterance on record already: an ask is on record only under its
+      // delegation, and a record that holds the row tells the two writes apart
+      // by the row's id. The row is grown here no further once claimed. What is
+      // written is the row as the ledger holds it now, not as it stood when the
+      // delegation arrived: the API delivers a delegation ahead of the
+      // transcript deltas it is about, so the ask's last fragment may land
+      // while the brain is being asked, and a row written from the span claimed
+      // then would leave that word off the record for good.
       const utterance = this.#rowNow(session, ask);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
         yield* this.#write({
@@ -1598,8 +1623,8 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    */
   #tearDown(session: StandingSession, reason: string): Effect.Effect<void> {
     session.ended = true;
-    for (const timer of session.settleTimers.values()) this.#cancelDelay(timer);
-    session.settleTimers.clear();
+    // The writes put off are the release's to make now; the delays behind them are given up here so none fires beside it.
+    for (const delay of session.pendingRows.values()) this.#cancelDelay(delay);
     this.#cancelDelay(session.idleTimer);
     this.#cancelAnticipation(session);
     session.channel.close();
@@ -1618,21 +1643,23 @@ export class LiveSessionService<Delivery extends BriefingDelivery = BriefingDeli
    * The session's scope, closed once and by the fiber that owns it: the
    * sideband's transport released, and with it whatever the source left
    * standing under it. Then what the end owes and nothing inside it waits
-   * on — the read made ahead forgotten, and whatever either speaker said
-   * last written down.
+   * on — the read made ahead forgotten, and every row with a write still put
+   * off written as it stands, so a socket closing mid-sentence leaves the
+   * words said so far on the row.
    */
   #release(session: StandingSession): Effect.Effect<void> {
     return Effect.andThen(
       Scope.close(session.scope, Exit.void),
-      Effect.all(
-        [
-          this.#drop(),
-          ...Object.values(TRANSCRIPT_SPEAKER).map((speaker) =>
-            this.#writeSettled(session, speaker),
-          ),
-        ],
-        { concurrency: "unbounded", discard: true },
-      ),
+      Effect.suspend(() => {
+        const rows = [...session.pendingRows.keys()].filter(
+          (rowId) => !session.askedRows.has(rowId),
+        );
+        session.pendingRows.clear();
+        return Effect.all([this.#drop(), ...rows.map((rowId) => this.#upsertRow(session, rowId))], {
+          concurrency: "unbounded",
+          discard: true,
+        });
+      }),
     );
   }
 

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS, UTTERANCE_SETTLE_MARGIN_MS } from "@sidecar/live";
+import { TRANSCRIPT_SPEAKER, UTTERANCE_GAP_MS } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND } from "@sidecar/session";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
 import { test } from "vitest";
@@ -56,15 +56,15 @@ test("both speakers draw at once, each as their own kind, and overlap does not m
   );
 });
 
-test("a row settles once no fragment has joined it for the gap plus the margin, on this window's clock", () => {
+test("a row settles once no fragment has joined it for the gap, on this window's clock", () => {
   const f = fixture();
   f.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, "Two sessions", 0, 800);
-  f.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS - 1);
+  f.advance(UTTERANCE_GAP_MS - 1);
   f.captions.tick();
   assert.equal(f.latest()[0]?.settled, false);
   // A late fragment re-arms the row.
   f.captions.append(TRANSCRIPT_SPEAKER.ASSISTANT, " finished.", 800, 1_200);
-  f.advance(UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS - 1);
+  f.advance(UTTERANCE_GAP_MS - 1);
   f.captions.tick();
   assert.equal(f.latest()[0]?.settled, false);
   f.advance(1);

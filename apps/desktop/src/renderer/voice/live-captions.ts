@@ -3,7 +3,6 @@ import {
   TranscriptLedger,
   type TranscriptSpeaker,
   UTTERANCE_GAP_MS,
-  UTTERANCE_SETTLE_MARGIN_MS,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, streamingConversationEntry } from "@sidecar/session";
 import type { LiveCaptionRow } from "@sidecar/voice/orchestrator";
@@ -26,11 +25,10 @@ export interface LiveCaptionsOptions {
  * an utterance is. Each fragment is appended verbatim, overlap between the
  * speakers is allowed, and a row's id is stable from the moment it opens, so
  * a late fragment grows a row in place rather than moving it. A row settles
- * once no fragment has joined it for the gap plus the margin, measured on
- * this window's clock rather than the session's, since a fragment's arrival
- * is what the drawing follows. The row ids here are the window's own: the
- * service mints the record's from its own ledger, and the two are matched by
- * nothing.
+ * once no fragment has joined it for the gap, measured on this window's
+ * clock rather than the session's, since a fragment's arrival is what the
+ * drawing follows. The row ids here are the window's own: the service mints
+ * the record's from its own ledger, and the two are matched by nothing.
  */
 export class LiveCaptions {
   readonly #options: LiveCaptionsOptions;
@@ -64,7 +62,7 @@ export class LiveCaptions {
       rows.push({
         rowId: utterance.rowId,
         entry,
-        settled: now - arrivedAt >= UTTERANCE_GAP_MS + UTTERANCE_SETTLE_MARGIN_MS,
+        settled: now - arrivedAt >= UTTERANCE_GAP_MS,
       });
     }
     return rows;

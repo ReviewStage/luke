@@ -18,6 +18,7 @@ export {
   type BriefingDelivery,
   LiveSessionService,
   type LiveSessionServiceOptions,
+  ROW_WRITE_DEBOUNCE_MS,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
 export type { BeatKind, BeatTurn } from "./proactive-queue.js";
