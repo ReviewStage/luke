@@ -11,6 +11,7 @@ import type {
   SessionIdentity,
 } from "@sidecar/session";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
+import type { ChildrenSnapshot } from "#shared/messages/children";
 import { CalendarGate, type CalendarGateControl } from "./calendar-gate";
 import { ConductorKeyGate, type ConductorKeyGateControl } from "./conductor-key-gate";
 import { ConversationClearButton, ConversationPanel } from "./conversation-panel";
@@ -58,6 +59,12 @@ import { CalendarGateReview } from "./settings/calendar-gate-review";
 import { SettingsPanel, type SettingsPanelProps } from "./settings/settings-panel";
 import { SettingsSearchButton } from "./settings-search";
 import { SignInGate } from "./sign-in-gate";
+import {
+  CONVERSATION_PAGE,
+  type ConversationPage,
+  SubagentsButton,
+  SubagentsPanel,
+} from "./subagents-panel";
 import { updateAvailable, updateRow } from "./update-row";
 import { useMeasuredHeight } from "./use-measured-height";
 
@@ -217,6 +224,13 @@ interface PanelBodyProps {
   spokenAskPending: boolean;
   /** Clears that same thread on the service, for every Mac signed in to the account. */
   onClearConversationConversation: () => void;
+  /** Which of the Conversation tab's two pages is showing: the thread, or the sub-agents list. */
+  conversationPage: ConversationPage;
+  onConversationPageChange: (page: ConversationPage) => void;
+  /** The account's sub-agents as the document holds them, for the list page. */
+  subagents: ChildrenSnapshot;
+  /** Opens one sub-agent's transcript on the host, as the list page's row press. */
+  onOpenSubagent: (childId: string) => void;
   /** Reports someone being part-way through the session search, so the panel holds for them. */
   onFieldEngaged: (engaged: boolean) => void;
   /**
@@ -271,6 +285,10 @@ export function PanelBody({
   onOfferRatingFeedback,
   spokenAskPending,
   onClearConversationConversation,
+  conversationPage,
+  onConversationPageChange,
+  subagents,
+  onOpenSubagent,
   onFieldEngaged,
   offerOptions,
   optionsOpen,
@@ -350,8 +368,11 @@ export function PanelBody({
   const settingsNote = updateAvailable(settings.updates.update)
     ? updateRow(settings.updates.update).detail
     : undefined;
-  // Clear retires recorded turns, so only a thread holding some offers it.
-  const offerConversationClear = tab === PANEL_TAB.CONVERSATION && conversation.groups.length > 0;
+  const conversationTab = tab === PANEL_TAB.CONVERSATION;
+  const subagentsPage = conversationTab && conversationPage === CONVERSATION_PAGE.SUBAGENTS;
+  // Clear retires recorded turns, so only a thread holding some, and showing, offers it.
+  const offerConversationClear =
+    conversationTab && !subagentsPage && conversation.groups.length > 0;
   return (
     <div className="body">
       {/* The tab bar says what you are looking at; the buttons beside it say
@@ -363,7 +384,7 @@ export function PanelBody({
           onTabChange={onTabChange}
           {...(settingsNote ? { settingsNote } : undefined)}
         />
-        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS || offerConversationClear ? (
+        {offerSearch || offerOptions || tab === PANEL_TAB.SETTINGS || conversationTab ? (
           <span className="header-controls">
             {offerSearch ? (
               <SessionSearchButton open={searchOpen} onToggle={onSearchToggle} />
@@ -380,6 +401,18 @@ export function PanelBody({
             {offerConversationClear ? (
               <ConversationClearButton onClear={onClearConversationConversation} />
             ) : null}
+            {/* The turn to the sub-agents list and back, offered whenever the
+                tab is showing: an empty list has its own words to say. */}
+            {conversationTab ? (
+              <SubagentsButton
+                open={subagentsPage}
+                onToggle={() =>
+                  onConversationPageChange(
+                    subagentsPage ? CONVERSATION_PAGE.THREAD : CONVERSATION_PAGE.SUBAGENTS,
+                  )
+                }
+              />
+            ) : null}
             {offerOptions ? (
               <SessionOptionsButton
                 list={list}
@@ -393,7 +426,14 @@ export function PanelBody({
       </div>
       {tab === PANEL_TAB.SETTINGS ? (
         <SettingsPanel {...settings} />
-      ) : tab === PANEL_TAB.CONVERSATION ? (
+      ) : subagentsPage ? (
+        <SubagentsPanel
+          subagents={subagents}
+          now={now}
+          onOpenChild={onOpenSubagent}
+          onBack={() => onConversationPageChange(CONVERSATION_PAGE.THREAD)}
+        />
+      ) : conversationTab ? (
         <ConversationPanel
           view={conversation}
           roster={roster}

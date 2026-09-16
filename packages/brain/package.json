@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.js",
+    "./input-items": "./src/input-items.js",
     "./tool-names": "./src/tools/names.js",
     "./tool-set": "./src/tool-set.js"
   },
