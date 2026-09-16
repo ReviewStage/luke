@@ -224,15 +224,6 @@ type TurnEnqueueResult =
 interface UserMessageWrite {
   readonly clientId: string;
   readonly turnId?: string;
-  /**
-   * The row's turn is the ask's that shares its client id, read under the same
-   * lock the row is written under: a spoken ask's transcript row and the ask
-   * the service submitted for it carry one id, the delegation's, so the row
-   * lands attached to the turn the ask already learned, placed ahead of the
-   * turn's own rows, and a turn the ask learns later takes the row at its
-   * received message.
-   */
-  readonly turnOfAsk?: true;
   readonly text: string;
   readonly metadata: UserMessageMetadata;
 }
@@ -369,9 +360,9 @@ export interface StoreWriter {
     message: UserMessageWrite,
   ): Write<UserMessageWriteResult>;
   /**
-   * Takes into the turn every user row whose client id is an ask's the turn
-   * ran, where the row stands with no turn yet: the other half of
-   * `turnOfAsk`, for a row written before the ask learned its turn. A row
+   * Takes into the turn every row of an ask the turn ran, by the ask's id on
+   * the row's metadata, where the row stands with no turn yet: the other half
+   * of `attachSpokenAsk`, for a row written before the ask learned its turn. A row
    * taken moves to a fresh place in the conversation's sequence, ahead of
    * everything the turn will write and of anything it already wrote, which
    * moves behind it, so a device that already passed its old place reads it
@@ -1647,21 +1638,12 @@ const recordUserMessage = /* @__PURE__ */ Effect.fn("recordUserMessage")(functio
     parts: [{ type: UI_PART_TYPE.TEXT, text: write.text, state: UI_PART_STATE.DONE }],
   });
   if (!read.ok) return read;
-  const turnId =
-    write.turnId ??
-    (write.turnOfAsk
-      ? yield* askTurnOf({
-          conversationId: context.target.conversationId,
-          clientId: write.clientId,
-        })
-      : undefined);
-  const { id, seq } = yield* insertMessage(context, {
+  const { id } = yield* insertMessage(context, {
     clientId: write.clientId,
-    turnId,
+    turnId: write.turnId,
     message: read.message,
     finishedAt: context.now(),
   });
-  if (write.turnOfAsk && turnId !== undefined) yield* moveTurnWorkAfter(context, turnId, seq);
   return { ok: true, id, effect: STORE_WRITE_EFFECT.WRITTEN };
 });
 

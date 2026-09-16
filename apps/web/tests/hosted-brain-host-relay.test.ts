@@ -15,6 +15,7 @@ import {
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
+  type SpokenAskMetadata,
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
@@ -64,6 +65,32 @@ const writer = await database.run(
     now: () => new Date(NOW),
   }),
 );
+
+/**
+ * The developer's spoken line as the voice writer leaves it since the ledger
+ * mints row ids: a user row under an id of its own, attached to its
+ * delegation, which takes it into the ask's turn where the turn is known and
+ * leaves it for the received message otherwise. Answers the row as the old
+ * cut did, by id.
+ */
+async function spokenLine(
+  target: ConversationTarget,
+  delegationId: string,
+  text: string,
+  metadata: SpokenAskMetadata,
+): Promise<{ readonly ok: true; readonly id: string }> {
+  const rowId = `line-${delegationId}`;
+  const written = await database.run(
+    writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
+  );
+  assert.ok(written.ok);
+  const attached = await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
+  );
+  assert.ok(attached.ok);
+  assert.deepEqual(attached.attached, [written.id]);
+  return { ok: true, id: written.id };
+}
 const refusals: string[] = [];
 /** The children whose sealed turn the relay handed to the completion seam, in order. */
 const completed: string[] = [];
@@ -291,14 +318,10 @@ it.effect(
         sessionId: spokenStanding.sessionId,
         deliveryId: "delivery-1",
       }));
-      const transcript = await database.run(
-        writer.recordUserMessage(spoken, {
-          clientId: delegationId,
-          turnOfAsk: true,
-          text: "What changed?",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-        }),
-      );
+      const transcript = await spokenLine(spoken, delegationId, "What changed?", {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+      });
       assert.ok(transcript.ok);
       // A device that read the conversation to its end before the turn: the line stands
       // outside any turn, and the cursor it holds is the line's own position.
@@ -322,7 +345,7 @@ it.effect(
           row.finishedAt !== null,
         ]),
         [
-          [MESSAGE_ROLE.USER, delegationId, spokenTurnId, true],
+          [MESSAGE_ROLE.USER, `line-${delegationId}`, spokenTurnId, true],
           [MESSAGE_ROLE.ASSISTANT, spokenTurnId, spokenTurnId, true],
         ],
       );
@@ -372,14 +395,10 @@ it.effect(
         deliveryId: "delivery-2",
         turnId: spokenTurnId,
       }));
-      const laterRow = await database.run(
-        writer.recordUserMessage(spoken, {
-          clientId: laterDelegation,
-          turnOfAsk: true,
-          text: "And now?",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-        }),
-      );
+      const laterRow = await spokenLine(spoken, laterDelegation, "And now?", {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+      });
       assert.ok(laterRow.ok);
       const written = (
         await readMessagesByConversationTyped(database.run, spoken.conversationId)
@@ -430,14 +449,10 @@ it.effect(
         [[turnId, true]],
       );
       const journalSeq = previewed[0]?.seq ?? 0;
-      const transcript = await database.run(
-        writer.recordUserMessage(spoken, {
-          clientId: delegationId,
-          turnOfAsk: true,
-          text: "What changed?",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-        }),
-      );
+      const transcript = await spokenLine(spoken, delegationId, "What changed?", {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+      });
       assert.ok(transcript.ok);
       await play(turn.slice(firstStep + 1), standing);
 

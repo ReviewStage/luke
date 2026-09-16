@@ -31,6 +31,7 @@ import {
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   RATING_WORD,
+  type SpokenAskMetadata,
   TURN_ORIGIN,
   TURN_STATUS,
   type UnparsedWireValue,
@@ -52,7 +53,7 @@ import {
   handleConversationMessages,
   type ResourceReadOptions,
 } from "../server/hosted/resource-reads";
-import { storeWriter } from "../server/hosted/store";
+import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
@@ -83,6 +84,32 @@ afterAll(() => database.close());
 const writer = await database.run(
   storeWriter({ tools: CATALOG_TOOL_SET, now: () => new Date(NOW) }),
 );
+
+/**
+ * The developer's spoken line as the voice writer leaves it since the ledger
+ * mints row ids: a user row under an id of its own, attached to its
+ * delegation, which takes it into the ask's turn where the turn is known and
+ * leaves it for the received message otherwise. Answers the row as the old
+ * cut did, by id.
+ */
+async function spokenLine(
+  target: ConversationTarget,
+  delegationId: string,
+  text: string,
+  metadata: SpokenAskMetadata,
+): Promise<{ readonly ok: true; readonly id: string }> {
+  const rowId = `line-${delegationId}`;
+  const written = await database.run(
+    writer.upsertSpokenRow(target, { role: MESSAGE_ROLE.USER, clientId: rowId, text, metadata }),
+  );
+  assert.ok(written.ok);
+  const attached = await database.run(
+    writer.attachSpokenAsk(target, { delegationId, rowIds: [rowId] }),
+  );
+  assert.ok(attached.ok);
+  assert.deepEqual(attached.attached, [written.id]);
+  return { ok: true, id: written.id };
+}
 
 const NOW = Date.parse("2026-09-10T12:00:00.000Z");
 const SESSION = {
@@ -607,20 +634,17 @@ it.effect(
         createdAt: new Date(NOW),
       });
       // The voice writer's cut of the transcript lands while the ask still waits for its turn.
-      const line = await database.run(
-        writer.recordUserMessage(target, {
-          clientId: delegationId,
-          turnOfAsk: true,
-          text: "What needs me?",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-        }),
-      );
+      const line = await spokenLine(target, delegationId, "What needs me?", {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+      });
       assert.ok(line.ok);
       const early = new Device(userId, READ_PAGE_BOUNDS.MAX_LIMIT);
       await early.catchUp();
       assert.deepEqual(early.ordered(), [[line.id, line.id]]);
       const passed = parse(sequenceReadCursorSchema, early.cursor ?? "");
-      assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1, revision: 0 }] });
+      // The attach gave the row its delegation in place, at the conversation's first revision.
+      assert.deepEqual(passed, { positions: [{ conversationId: main, seq: 1, revision: 1 }] });
 
       // The turn starts and takes the ask's line, then writes its reply.
       const turn = await insertTurn(userId, main, {
@@ -680,14 +704,10 @@ it.effect(
         createdAt: new Date(NOW),
       });
       // The voice writer's cut lands before the ask learned its turn, so it stands unattached.
-      const line = await database.run(
-        writer.recordUserMessage(target, {
-          clientId: delegationId,
-          turnOfAsk: true,
-          text: "What needs me?",
-          metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE },
-        }),
-      );
+      const line = await spokenLine(target, delegationId, "What needs me?", {
+        author: MESSAGE_AUTHOR.DEVELOPER,
+        channel: MESSAGE_CHANNEL.VOICE,
+      });
       assert.ok(line.ok);
       // The turn's first step opens the journal before the received message that takes the line in.
       const turn = await insertTurn(userId, main, {
