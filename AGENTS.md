@@ -80,8 +80,8 @@ in for the missing job before the first release.
   the snapshot's own chat ids and carrying no message body), which of those
   chats gained transcript since the account's mark (`transcript_mark`, one
   instant per account), takes the oldest under the bound of eight turns an
-  account a tick with a hold's releases counted among them, reads what each
-  gained since the cursor kept for it through the provider's documented
+  account a tick, reads what each gained since the cursor kept for it
+  through the provider's documented
   incremental read (Conductor's `transcriptSince`) under the same synced key,
   cut from the front by whole lines to 20,000 characters
   (`BRAIN_HOST.TRANSCRIPT_DELTA_CHARS`), and hands the hosted brain one
@@ -92,7 +92,7 @@ in for the missing job before the first release.
   same. Every turn goes as the deployment acting for that one account under
   the tick's own secret (`EVE_CALLER.DEPLOYMENT`), so the account named to
   the brain is only ever one this tick enumerated, and nothing but such a
-  change or a hold's release opens a scheduled turn. The cursors and the mark
+  change opens a scheduled turn. The cursors and the mark
   move in one transaction, each a compare-and-set over what the visit read,
   and only once the brain has accepted every turn; a turn the brain refused,
   or a transcript the provider would not answer, ends the visit with nothing
