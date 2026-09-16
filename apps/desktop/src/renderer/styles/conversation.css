@@ -8,8 +8,9 @@
   gap: 8px;
 }
 
-/* The clear rides the tab bar's line beside the other header controls, the
-   way each tab's search does, rather than taking a row of the thread's own. */
+/* The clear and the turn to the sub-agents ride the tab bar's line beside the
+   other header controls, the way each tab's search does, rather than taking a
+   row of the thread's own. */
 .conversation-clear-controls {
   display: inline-flex;
   flex: 0 0 auto;
@@ -18,7 +19,8 @@
 }
 
 .conversation-clear,
-.conversation-clear-cancel {
+.conversation-clear-cancel,
+.conversation-subagents {
   min-height: 28px;
   padding: 0 9px;
   border-radius: 9px;
@@ -32,7 +34,9 @@
 }
 
 .conversation-clear:hover,
-.conversation-clear-cancel:hover {
+.conversation-clear-cancel:hover,
+.conversation-subagents:hover,
+.conversation-subagents[data-active="true"] {
   background: var(--raised);
   color: var(--text-primary);
 }
@@ -421,6 +425,85 @@
 .conversation-empty strong {
   color: var(--text-primary);
   font-size: 12px;
+}
+
+/* The sub-agents page: one header line naming the way back and the page, then
+   a list of rows on the session rows' own terms, so a child reads as a thing
+   with a status and an age rather than as a line of the thread. */
+.subagents-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+}
+
+.subagents-back {
+  min-height: 28px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 620;
+}
+
+.subagents-back:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.subagents-title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.subagents-list {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 4px 12px 12px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.subagent-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.028);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.subagent-row:hover,
+.subagent-row[aria-pressed="true"] {
+  background: var(--raised);
+}
+
+.subagent-title {
+  overflow: hidden;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.subagent-meta {
+  display: flex;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10.5px;
 }
 
 /* The one thing said about a read the service refused: a quiet line under

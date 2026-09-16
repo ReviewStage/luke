@@ -56,6 +56,7 @@ import {
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
+import { CONVERSATION_PAGE, type ConversationPage } from "./subagents-panel";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { useConnections } from "./use-connections";
@@ -144,6 +145,11 @@ export function App(): React.JSX.Element {
   const display = state?.window.display;
   const [tab, setTab, tabNow] = useStateWithRef<PanelTab>(PANEL_TAB.SESSIONS);
   const [settingsView, setSettingsView] = useStateWithRef<SettingsView>(SETTINGS_VIEW.ROOT);
+  // The Conversation tab's page, on the settings page's own terms: reset by a
+  // tab change, unwound by Escape before the tab is left.
+  const [conversationPage, setConversationPage] = useState<ConversationPage>(
+    CONVERSATION_PAGE.THREAD,
+  );
   // The settings search's field, on the sessions search's own terms: the
   // magnifier beside the tab bar answers for it, and its query lives with the
   // field in the settings panel — closing here is what lets that query go.
@@ -231,6 +237,7 @@ export function App(): React.JSX.Element {
       // a credential entry returning from the key slot, the evidence run that
       // starts in it — set their page right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
+      setConversationPage(CONVERSATION_PAGE.THREAD);
       // `PanelTab` and the counted tab are the same union: the vocabulary
       // derives its set from the guide's, which is what `PANEL_TAB` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
@@ -689,7 +696,9 @@ export function App(): React.JSX.Element {
       else if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
         setSettingsView(SETTINGS_VIEW.ROOT);
       } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.SESSIONS);
-      else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
+      else if (tab === PANEL_TAB.CONVERSATION && conversationPage !== CONVERSATION_PAGE.THREAD) {
+        setConversationPage(CONVERSATION_PAGE.THREAD);
+      } else if (tab === PANEL_TAB.CONVERSATION) changeTab(PANEL_TAB.SESSIONS);
       else void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
@@ -698,6 +707,7 @@ export function App(): React.JSX.Element {
     changeMode,
     changeTab,
     closeSettingsSearch,
+    conversationPage,
     feedback.control.dismiss,
     openSettingsSearch,
     presentation,
@@ -920,6 +930,12 @@ export function App(): React.JSX.Element {
             liveConversationEntries={liveConversationEntries}
             spokenAskPending={spokenAskPending}
             onClearConversationConversation={clearConversationLines}
+            conversationPage={conversationPage}
+            onConversationPageChange={setConversationPage}
+            subagents={state.children}
+            onOpenSubagent={(childId) =>
+              tell(ACT_KIND.CONVERSATION_OPEN_CHILD_TRANSCRIPT, { childId })
+            }
             onFieldEngaged={changeAskEngagement}
             offerOptions={sessions.offerOptions}
             optionsOpen={sessions.optionsOpen}
